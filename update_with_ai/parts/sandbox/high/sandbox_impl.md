@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 06ce65f13004
+-->
+
 # sandbox_impl implementation component
 
 imports: sandbox_file_editor, dag_storage, agent_node_config
@@ -18,4 +25,3 @@ Agent sessions require guaranteed workspace state before tool execution begins a
 The sandbox delegates template materialization and file modification queries.
 
 Querying file modifications delegates to the edit manager. Materializing startup templates delegates to dag storage to write template content to missing read-write files without overwriting existing files.
-

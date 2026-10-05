@@ -1,8 +1,22 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: bbe5810e67ab
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Sandbox run control implementation grounding specification module."""
 
 from __future__ import annotations
 from typing import Any, Mapping, Optional, Sequence, Set, cast
-from support.lib.grounding_support import InTier, AgentSessionTier, key, value, only_elem
+from support.lib.grounding_support import (
+    InTier,
+    AgentSessionTier,
+    key,
+    value,
+    only_elem,
+)
 from parts.agent.grounding import agent_file_alias, agent_node_config
 from parts.dag.grounding import dag_config, dag_storage, dag_subgraph
 from parts.sandbox.grounding import sandbox_file_editor
@@ -11,15 +25,15 @@ from parts.sandbox.grounding import sandbox_run_control
 from parts.sandbox.grounding import tool_provider
 
 
-class RunController(
-    sandbox_run_control.RunController, InTier[AgentSessionTier]
-):
+class RunController(sandbox_run_control.RunController, InTier[AgentSessionTier]):
     """Coordinates session termination tools and verification caching."""
 
     def __init__(self) -> None:
         self._cached_passed: bool = False
         self._cached_feedback: str = ""
-        self._cached_hashes: Mapping[agent_file_alias.FileAlias, sandbox_file_editor.FileHash] = {}
+        self._cached_hashes: Mapping[
+            agent_file_alias.FileAlias, sandbox_file_editor.FileHash
+        ] = {}
 
     @property
     def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
@@ -28,7 +42,9 @@ class RunController(
         - MUST expose configured verification checks from node configuration.
         """
         node_cfg = self.get_singleton(agent_node_config.NodeConfig)
-        _checks: Sequence[agent_node_config.VerificationCheck] = node_cfg.verification_checks
+        _checks: Sequence[agent_node_config.VerificationCheck] = (
+            node_cfg.verification_checks
+        )
         raise NotImplementedError
 
     def update_verification(self) -> None:
@@ -39,7 +55,7 @@ class RunController(
           - Consequent knowledge: evaluate checks sequentially and update self._cached_passed, self._cached_feedback, and self._cached_hashes.
         - WHEN target file hashes have not changed since previous evaluation, MUST omit check execution and reuse cached outcome.
           - Condition knowledge: compare current hashes to self._cached_hashes.
-          - Consequent knowledge: reuse cached outcome.        """
+          - Consequent knowledge: reuse cached outcome."""
         node_cfg = self.get_singleton(agent_node_config.NodeConfig)
         edit_mgr = self.get_singleton(sandbox_file_editor.EditManager)
 
@@ -57,9 +73,7 @@ class RunController(
         raise NotImplementedError
 
 
-class CheckFilesTool(
-    sandbox_run_control.CheckFilesTool, InTier[AgentSessionTier]
-):
+class CheckFilesTool(sandbox_run_control.CheckFilesTool, InTier[AgentSessionTier]):
     """Realizes verification check execution and diagnostic aggregation."""
 
     @property
@@ -77,7 +91,9 @@ class CheckFilesTool(
         COVERED:
         - Returns tool description.
         """
-        _desc = tool_provider.ToolDescription("Inspect verification checks across session files.")
+        _desc = tool_provider.ToolDescription(
+            "Inspect verification checks across session files."
+        )
         raise NotImplementedError
 
     @property
@@ -88,12 +104,16 @@ class CheckFilesTool(
         COVERED:
         - Returns tool parameters mapping.
         """
-        _params: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {}
+        _params: Mapping[
+            tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]
+        ] = {}
         raise NotImplementedError
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -105,7 +125,7 @@ class CheckFilesTool(
           - Consequent knowledge: resolve AliasManager, sanitize diagnostic text, append guide verification failure instructions.
         - WHEN verification passes, MUST produce response presenting passing results.
           - Condition knowledge: evaluate controller._cached_passed.
-          - Consequent knowledge: construct passing ToolResponse with verification success message.        """
+          - Consequent knowledge: construct passing ToolResponse with verification success message."""
         controller = self.get_singleton(RunController)
         alias_mgr = self.get_singleton(agent_file_alias.AliasManager)
         node_cfg = self.get_singleton(agent_node_config.NodeConfig)
@@ -121,8 +141,12 @@ class CheckFilesTool(
         )
 
         # Failing verification knowledge
-        sanitized_diag = alias_mgr.sanitize_text(agent_file_alias.UnsanitizedText(controller._cached_feedback))
-        guide_vf = agent_node_config.VerificationFailureInstructions("Failure instructions.")
+        sanitized_diag = alias_mgr.sanitize_text(
+            agent_file_alias.UnsanitizedText(controller._cached_feedback)
+        )
+        guide_vf = agent_node_config.VerificationFailureInstructions(
+            "Failure instructions."
+        )
         _fail_resp = tool_provider.ToolResponse(
             is_failed=True,
             is_terminated=False,
@@ -130,7 +154,9 @@ class CheckFilesTool(
         )
 
         # Passing verification knowledge
-        success_msg = node_cfg.verification_success_message or "All verification checks passed."
+        success_msg = (
+            node_cfg.verification_success_message or "All verification checks passed."
+        )
         _pass_resp = tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
@@ -139,9 +165,7 @@ class CheckFilesTool(
         raise NotImplementedError
 
 
-class AdvanceTool(
-    sandbox_run_control.AdvanceTool, InTier[AgentSessionTier]
-):
+class AdvanceTool(sandbox_run_control.AdvanceTool, InTier[AgentSessionTier]):
     """Realizes guide milestone advancement gated by verification checks."""
 
     @property
@@ -159,7 +183,9 @@ class AdvanceTool(
         COVERED:
         - Returns tool description.
         """
-        _desc = tool_provider.ToolDescription("Advance guide milestone upon passing verification.")
+        _desc = tool_provider.ToolDescription(
+            "Advance guide milestone upon passing verification."
+        )
         raise NotImplementedError
 
     @property
@@ -170,12 +196,16 @@ class AdvanceTool(
         COVERED:
         - Returns tool parameters mapping.
         """
-        _params: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {}
+        _params: Mapping[
+            tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]
+        ] = {}
         raise NotImplementedError
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -193,7 +223,7 @@ class AdvanceTool(
           - Consequent knowledge: return failed ToolResponse reminding to call submit with change_summary.
         - WHEN verification passes, no steps remain, and no files were modified, MUST specify follow-up execution of submit without change summary.
           - Condition knowledge: test controller._cached_passed, not delivery.has_steps_remaining, not edit_mgr.has_modifications.
-          - Consequent knowledge: return ToolResponse with FollowUpToolCall for submit without change_summary.        """
+          - Consequent knowledge: return ToolResponse with FollowUpToolCall for submit without change_summary."""
         controller = self.get_singleton(RunController)
         delivery = self.get_singleton(sandbox_guide_delivery.GuideDelivery)
         edit_mgr = self.get_singleton(sandbox_file_editor.EditManager)
@@ -212,7 +242,9 @@ class AdvanceTool(
         )
 
         # 2. Passing with remaining steps knowledge
-        step_resp = delivery.advance_step(True, agent_node_config.VerificationDiagnostic(""))
+        step_resp = delivery.advance_step(
+            True, agent_node_config.VerificationDiagnostic("")
+        )
 
         # 3. Passing with no steps remaining and files modified knowledge
         _submit_needed_resp = tool_provider.ToolResponse(
@@ -238,24 +270,30 @@ class AdvanceTool(
         raise NotImplementedError
 
 
-class SubmitTool(
-    sandbox_run_control.SubmitTool, InTier[AgentSessionTier]
-):
+class SubmitTool(sandbox_run_control.SubmitTool, InTier[AgentSessionTier]):
     """Realizes node completion verification and clean submission."""
 
     def __init__(self) -> None:
-        self._target_param = tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
+        self._target_param = tool_provider.ToolParameter[
+            agent_file_alias.FileAlias, str
+        ](
             name=tool_provider.ParameterName("target"),
             description="Target file to submit",
-            parameter_type=tool_provider.SimpleParameterType[agent_file_alias.FileAlias, str](),
+            parameter_type=tool_provider.SimpleParameterType[
+                agent_file_alias.FileAlias, str
+            ](),
             is_required=False,
             default_value=None,
             missing_message=None,
         )
-        self._summary_param = tool_provider.ToolParameter[Optional[sandbox_run_control.ChangeSummary], str](
+        self._summary_param = tool_provider.ToolParameter[
+            Optional[sandbox_run_control.ChangeSummary], str
+        ](
             name=tool_provider.ParameterName("change_summary"),
             description="Summary of changes made",
-            parameter_type=tool_provider.SimpleParameterType[Optional[sandbox_run_control.ChangeSummary], str](),
+            parameter_type=tool_provider.SimpleParameterType[
+                Optional[sandbox_run_control.ChangeSummary], str
+            ](),
             is_required=False,
             default_value=None,
             missing_message=None,
@@ -280,7 +318,9 @@ class SubmitTool(
         raise NotImplementedError
 
     @property
-    def target_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
+    def target_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         """
         COVERED:
         - Exposes target parameter.
@@ -289,7 +329,9 @@ class SubmitTool(
         raise NotImplementedError
 
     @property
-    def change_summary_parameter(self) -> tool_provider.ToolParameter[Optional[sandbox_run_control.ChangeSummary], str]:
+    def change_summary_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[Optional[sandbox_run_control.ChangeSummary], str]:
         """
         COVERED:
         - Exposes change summary parameter.
@@ -313,7 +355,9 @@ class SubmitTool(
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -335,6 +379,9 @@ class SubmitTool(
         - WHEN files were modified and change summary is omitted, MUST fail.
           - Condition knowledge: test edit_mgr.has_modifications and change_summary is None.
           - Consequent knowledge: return failed ToolResponse reminding that change_summary is required.
+        - WHEN workspace files were not modified and change summary is provided, MUST fail reminding agent that change summaries are not permitted when submitting without workspace file modifications.
+          - Condition knowledge: test not edit_mgr.has_modifications and change_summary is not None.
+          - Consequent knowledge: return failed ToolResponse reminding that change summaries are not permitted without modifications.
         - MUST mark the resolve target clean in storage via dag_storage with the provided change summary so that the node is no longer dirty.
           - Condition knowledge: obtain DagStorage singleton.
           - Consequent knowledge: invoke storage.mark_node_clean and assert not storage.is_dirty.
@@ -381,12 +428,16 @@ class SubmitTool(
 
         # 4. Auditor with change summary failure knowledge
         sample_node = key(node_cfg.blame_targets_by_node)
-        _is_auditor: bool = "qa" in str(sample_node.role_address) or "coverage" in str(sample_node.role_address)
+        _is_auditor: bool = "qa" in str(sample_node.role_address) or "coverage" in str(
+            sample_node.role_address
+        )
         _auditor_summary_resp = tool_provider.ToolResponse(
             is_failed=True,
             is_terminated=False,
             content="Change summary is prohibited for audit nodes.",
-            reminder=tool_provider.ToolReminder("Do not provide change_summary for audit nodes."),
+            reminder=tool_provider.ToolReminder(
+                "Do not provide change_summary for audit nodes."
+            ),
         )
 
         # 5. Modified without change summary failure knowledge
@@ -394,11 +445,25 @@ class SubmitTool(
             is_failed=True,
             is_terminated=False,
             content="Files were modified but change_summary parameter was omitted.",
-            reminder=tool_provider.ToolReminder("Supply change_summary when files were modified."),
+            reminder=tool_provider.ToolReminder(
+                "Supply change_summary when files were modified."
+            ),
+        )
+
+        # 5b. Unmodified with change summary failure knowledge
+        _unmodified_summary_resp = tool_provider.ToolResponse(
+            is_failed=True,
+            is_terminated=False,
+            content="Workspace files were not modified, but change_summary was provided.",
+            reminder=tool_provider.ToolReminder(
+                "Omit change_summary when submitting without workspace file modifications."
+            ),
         )
 
         # 6. Clean submission knowledge via dag_storage
-        storage.mark_node_clean(sample_node, dag_storage.ChangeDescription("Summary of changes"))
+        storage.mark_node_clean(
+            sample_node, dag_storage.ChangeDescription("Summary of changes")
+        )
         _is_dirty: bool = storage.is_dirty(sample_node)
 
         _submit_resp = tool_provider.ToolResponse(
@@ -409,24 +474,30 @@ class SubmitTool(
         raise NotImplementedError
 
 
-class FailTool(
-    sandbox_run_control.FailTool, InTier[AgentSessionTier]
-):
+class FailTool(sandbox_run_control.FailTool, InTier[AgentSessionTier]):
     """Realizes task failure termination."""
 
     def __init__(self) -> None:
-        self._target_param = tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
+        self._target_param = tool_provider.ToolParameter[
+            agent_file_alias.FileAlias, str
+        ](
             name=tool_provider.ParameterName("target"),
             description="Target file that failed",
-            parameter_type=tool_provider.SimpleParameterType[agent_file_alias.FileAlias, str](),
+            parameter_type=tool_provider.SimpleParameterType[
+                agent_file_alias.FileAlias, str
+            ](),
             is_required=False,
             default_value=None,
             missing_message=None,
         )
-        self._exp_param = tool_provider.ToolParameter[sandbox_run_control.FailureExplanation, str](
+        self._exp_param = tool_provider.ToolParameter[
+            sandbox_run_control.FailureExplanation, str
+        ](
             name=tool_provider.ParameterName("explanation"),
             description="Failure explanation",
-            parameter_type=tool_provider.SimpleParameterType[sandbox_run_control.FailureExplanation, str](),
+            parameter_type=tool_provider.SimpleParameterType[
+                sandbox_run_control.FailureExplanation, str
+            ](),
             is_required=True,
             default_value=None,
             missing_message=None,
@@ -447,11 +518,15 @@ class FailTool(
         COVERED:
         - Returns tool description.
         """
-        _desc = tool_provider.ToolDescription("Terminate active node execution in failure.")
+        _desc = tool_provider.ToolDescription(
+            "Terminate active node execution in failure."
+        )
         raise NotImplementedError
 
     @property
-    def target_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
+    def target_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         """
         COVERED:
         - Exposes target parameter.
@@ -460,7 +535,9 @@ class FailTool(
         raise NotImplementedError
 
     @property
-    def explanation_parameter(self) -> tool_provider.ToolParameter[sandbox_run_control.FailureExplanation, str]:
+    def explanation_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[sandbox_run_control.FailureExplanation, str]:
         """
         COVERED:
         - Exposes explanation parameter.
@@ -484,7 +561,9 @@ class FailTool(
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -499,32 +578,42 @@ class FailTool(
         raise NotImplementedError
 
 
-class BlameTool(
-    sandbox_run_control.BlameTool, InTier[AgentSessionTier]
-):
+class BlameTool(sandbox_run_control.BlameTool, InTier[AgentSessionTier]):
     """Realizes defect attribution to upstream prerequisites."""
 
     def __init__(self) -> None:
-        self._target_param = tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
+        self._target_param = tool_provider.ToolParameter[
+            agent_file_alias.FileAlias, str
+        ](
             name=tool_provider.ParameterName("target"),
             description="Target file",
-            parameter_type=tool_provider.SimpleParameterType[agent_file_alias.FileAlias, str](),
+            parameter_type=tool_provider.SimpleParameterType[
+                agent_file_alias.FileAlias, str
+            ](),
             is_required=False,
             default_value=None,
             missing_message=None,
         )
-        self._blame_target_param = tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
+        self._blame_target_param = tool_provider.ToolParameter[
+            agent_file_alias.FileAlias, str
+        ](
             name=tool_provider.ParameterName("blame_target"),
             description="Blamed prerequisite",
-            parameter_type=tool_provider.SimpleParameterType[agent_file_alias.FileAlias, str](),
+            parameter_type=tool_provider.SimpleParameterType[
+                agent_file_alias.FileAlias, str
+            ](),
             is_required=True,
             default_value=None,
             missing_message=None,
         )
-        self._exp_param = tool_provider.ToolParameter[sandbox_run_control.BlameExplanation, str](
+        self._exp_param = tool_provider.ToolParameter[
+            sandbox_run_control.BlameExplanation, str
+        ](
             name=tool_provider.ParameterName("explanation"),
             description="Blame explanation",
-            parameter_type=tool_provider.SimpleParameterType[sandbox_run_control.BlameExplanation, str](),
+            parameter_type=tool_provider.SimpleParameterType[
+                sandbox_run_control.BlameExplanation, str
+            ](),
             is_required=True,
             default_value=None,
             missing_message=None,
@@ -545,11 +634,15 @@ class BlameTool(
         COVERED:
         - Returns tool description.
         """
-        _desc = tool_provider.ToolDescription("Attribute defect to an upstream prerequisite.")
+        _desc = tool_provider.ToolDescription(
+            "Attribute defect to an upstream prerequisite."
+        )
         raise NotImplementedError
 
     @property
-    def target_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
+    def target_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         """
         COVERED:
         - Exposes target parameter.
@@ -558,7 +651,9 @@ class BlameTool(
         raise NotImplementedError
 
     @property
-    def blame_target_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
+    def blame_target_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         """
         COVERED:
         - Exposes blame target parameter.
@@ -567,7 +662,9 @@ class BlameTool(
         raise NotImplementedError
 
     @property
-    def explanation_parameter(self) -> tool_provider.ToolParameter[sandbox_run_control.BlameExplanation, str]:
+    def explanation_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[sandbox_run_control.BlameExplanation, str]:
         """
         COVERED:
         - Exposes explanation parameter.
@@ -592,7 +689,9 @@ class BlameTool(
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -639,7 +738,9 @@ class BlameTool(
             is_failed=True,
             is_terminated=False,
             content="Error: Explanation must be a single paragraph without newline characters.",
-            reminder=tool_provider.ToolReminder("Explanation must be a single paragraph."),
+            reminder=tool_provider.ToolReminder(
+                "Explanation must be a single paragraph."
+            ),
         )
 
         # 4. Attribution and defect feedback recording knowledge via dag_storage
@@ -651,7 +752,9 @@ class BlameTool(
             ),
             to=blamed_node,
         )
-        _blame_attributed_str = f"Blamed {sample_target.relative_path}: defect detected."
+        _blame_attributed_str = (
+            f"Blamed {sample_target.relative_path}: defect detected."
+        )
 
         _blame_resp = tool_provider.ToolResponse(
             is_failed=False,
@@ -661,16 +764,18 @@ class BlameTool(
         raise NotImplementedError
 
 
-class GetWorkTool(
-    sandbox_run_control.GetWorkTool, InTier[AgentSessionTier]
-):
+class GetWorkTool(sandbox_run_control.GetWorkTool, InTier[AgentSessionTier]):
     """Realizes batch acquisition and session task prompt delivery."""
 
     def __init__(self) -> None:
-        self._batch_param = tool_provider.ToolParameter[Optional[dag_config.BatchSize], int](
+        self._batch_param = tool_provider.ToolParameter[
+            Optional[dag_config.BatchSize], int
+        ](
             name=tool_provider.ParameterName("max_batch_size"),
             description="Maximum batch size",
-            parameter_type=tool_provider.SimpleParameterType[Optional[dag_config.BatchSize], int](),
+            parameter_type=tool_provider.SimpleParameterType[
+                Optional[dag_config.BatchSize], int
+            ](),
             is_required=False,
             default_value=None,
             missing_message=None,
@@ -718,7 +823,9 @@ class GetWorkTool(
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -733,7 +840,7 @@ class GetWorkTool(
           - Consequent knowledge: return ToolResponse with task primer referencing guide file.
         - WHEN ready dirty nodes are obtained and guide step mode is active, MUST return task primer prompting advance.
           - Condition knowledge: test ready nodes obtained and node_cfg.is_step_mode.
-          - Consequent knowledge: return ToolResponse prompting advance.        """
+          - Consequent knowledge: return ToolResponse prompting advance."""
         subgraph = self.get_singleton(dag_subgraph.DagSubgraph)
         storage = self.get_singleton(dag_storage.DagStorage)
         node_cfg = self.get_singleton(agent_node_config.NodeConfig)

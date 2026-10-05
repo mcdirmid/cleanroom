@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 6167bd1384e1
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Bazel manifest loader grounding specification module."""
 
 from __future__ import annotations
@@ -18,6 +26,7 @@ class TargetManifest:
     COVERED:
     - Encapsulates label, prompt, source files, template, and dependency relations.
     """
+
     label: TargetLabel
     task_prompt: Optional[agent_storage.TaskPrompt] = None
     source_file: Optional[agent_file_alias.RelativePath] = None
@@ -44,7 +53,9 @@ class BazelManifestLoader(InTier[SystemTier], Protocol):
         DEFERRED:
         - Filesystem manifest discovery deferred to bazel_manifest_loader_impl.py.
         """
-        _manifest: Optional[TargetManifest] = TargetManifest(label=TargetLabel(str(node.unit_address)))
+        _manifest: Optional[TargetManifest] = TargetManifest(
+            label=TargetLabel(str(node.unit_address))
+        )
         raise NotImplementedError
 
     def load_manifest(self, node: dag_storage.DagNode) -> None:

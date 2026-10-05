@@ -71,9 +71,17 @@ def _check_comments(content: str, fname: str) -> list[str]:
     errors: list[str] = []
     in_triple = False
     triple_delim = ""
+    in_metadata = False
 
     for line_no, line in enumerate(content.splitlines(), start=1):
         stripped = line.strip()
+        if stripped == "# --- CLEANROOM METADATA ---":
+            in_metadata = True
+            continue
+        if in_metadata:
+            if stripped == "# --- END CLEANROOM METADATA ---":
+                in_metadata = False
+            continue
         # Track triple-quote boundary
         idx = 0
         while idx < len(stripped):
@@ -143,7 +151,12 @@ def _check_docstring_contracts(
                 cur_section = None
             continue
 
-        if cur_section in ("INVARIANTS:", "PRECONDITIONS:", "POSTCONDITIONS:", "CONSTITUENTS:"):
+        if cur_section in (
+            "INVARIANTS:",
+            "PRECONDITIONS:",
+            "POSTCONDITIONS:",
+            "CONSTITUENTS:",
+        ):
             if not line.startswith("- "):
                 errors.append(
                     f"{fname}:{line_num}: error: entry under '{cur_section}' must start with '- ': '{line}'"
@@ -287,9 +300,7 @@ def lint_low_file(file_path: Path) -> list[str]:
     # Validate module docstring if present
     module_doc = ast.get_docstring(tree)
     if module_doc:
-        d_errs, _, _ = _check_docstring_contracts(
-            module_doc, fname, "module", 1
-        )
+        d_errs, _, _ = _check_docstring_contracts(module_doc, fname, "module", 1)
         errors.extend(d_errs)
 
     for stmt in tree.body:

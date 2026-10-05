@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 01ffa6511c10
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Loop driver grounding specification module."""
 
 from __future__ import annotations
@@ -15,6 +23,7 @@ class LoopOutcome:
     COVERED:
     - Encapsulates response tool response and conversation model request.
     """
+
     response: tool_provider.ToolResponse
     conversation: loop_conversation.ModelRequest
 

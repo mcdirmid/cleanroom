@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: b71c4640b6e9
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Bazel subsystem assembly grounding specification module."""
 
 from __future__ import annotations

@@ -45,7 +45,12 @@ def load_role_manifest(content: str) -> Mapping[str, Any]:
         "star_role_deps": [],
         "silent_cross_role_deps": [],
         "feedback_role_deps": [],
-        "active_component_types": ["implementation", "assembly", "interface", "external"],
+        "active_component_types": [
+            "implementation",
+            "assembly",
+            "interface",
+            "external",
+        ],
         "verify_template": "",
         "verification_success_message": None,
         "silent_srcs": [],

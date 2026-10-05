@@ -1,7 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-04T19:49:10Z
+# LAST_CLEANED: 2026-10-05T02:07:35Z
 # LAST_CHANGED: 2026-10-04T02:03:40Z
 # CHANGE: new file
+# CODE_HASH: 27d527f53d2c
 # --- END CLEANROOM METADATA ---
 
 """Stub specification for grounding support infrastructure and static InTier capabilities."""

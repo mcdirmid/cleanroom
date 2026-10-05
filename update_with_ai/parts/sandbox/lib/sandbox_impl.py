@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: c38f35d28191
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in sandbox_impl.pyi
 from typing import Optional
 from update_with_ai.parts.agent.lib import agent_node_config

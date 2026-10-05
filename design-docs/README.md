@@ -122,8 +122,8 @@ Cleanroom supports two production cleaning paradigms, each optimized for differe
    - Traverses build graph nodes in topological dependency order (`loop_cleaner.py`), running isolated turn loops (`loop_driver.py`) with repetition guards (`loop_guard.py`).
    - Production engine for headless continuous integration and batch cleaning.
 2. **Option 3: Subagentless Cleanroom Workspaces** ([`subagentless_cleanroom_workspaces.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)):
-   - Sibling workspace directories (`../role_workspaces/<workspace-name>_<role>`) running independent conversational sessions in Antigravity.
-   - Enforces double-blind isolation via OS-level `chmod 444` read-only mounts and orchestrates role coordination via file-based mailbox IPC (`cleanroom_mailbox.py`).
+   - Sibling workspace directories (`../role_workspaces/<workspace-name>_<role>_<dir>`) running independent conversational sessions in Antigravity.
+   - Enforces double-blind isolation via OS-level `chmod 444` read-only mounts and orchestrates role coordination via in-band source metadata and omni-directional cascade synchronization (`cleanroom-sync`).
    - Production architecture for interactive AI pair programming.
 3. **Option 2 (Archived Post-Mortem): Antigravity Subagents & MCP Server** ([`antigravity_integration_failed.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)):
    - Detailed analysis of why in-tree subagents communicating with an execution server failed: token cost explosion ($30–$50 per run), multi-agent instruction degradation, and socket execution brittleness.
@@ -136,7 +136,7 @@ Cleanroom supports two production cleaning paradigms, each optimized for differe
 
 ### 4.1 Execution & Cleaning Paradigms
 - **[Custom Loop Cleanroom](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/custom_loop_cleanroom.md)** (`custom_loop_cleanroom.md`): Headless in-process autonomous runner driving the OpenAI API.
-- **[Subagentless Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)** (`subagentless_cleanroom_workspaces.md`): Primary interactive architecture with role workspaces and mailbox IPC.
+- **[Subagentless Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)** (`subagentless_cleanroom_workspaces.md`): Primary interactive architecture with directory-scoped role workspaces and in-band metadata synchronization.
 - **[Archived Post-Mortem: Antigravity Subagents](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)** (`antigravity_integration_failed.md`): Comprehensive post-mortem on why in-tree subagents failed.
 - **[Cleaning Paradigms Comparative Overview](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleaning_paradigms.md)** (`cleaning_paradigms.md`): Architectural comparison across all three paradigms.
 
@@ -148,7 +148,7 @@ Cleanroom supports two production cleaning paradigms, each optimized for differe
 - **[Static Python Grounding Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/python_grounding_architecture.md)** (`python_grounding_architecture.md`): Static Python constructive reachability proofs replacing Horn clause solvers.
 
 ### 4.3 Synchronization & Workspace Architecture
-- **[Cleanroom-Sync Architecture via In-Band Metadata](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleanroom_sync_metadata_architecture.md)** (`cleanroom_sync_metadata_architecture.md`): Declarative role workspace synchronization via in-band source metadata, simplified CLI (`--commission`, `--decommission`, default omni-directional cascade sync), directory scoping `<ws>_<role>_<dir>`, and deterministic role tools (`cleanroom-dirty`, `submit`, `blame`, `fail`).
+- **[Subagentless Workspace Upgrade Specification](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_workspace_upgrade.md)** (`subagentless_workspace_upgrade.md`): Comprehensive specification for upgrading subagentless Cleanroom workspaces to in-band source metadata synchronization, directory-scoped role commissioning (`--commission`, `--decommission`, default cascade sync), logless auditor roles, and workspace-local deterministic dirty checking (`bin/cleanroom-dirty`).
 - **[Main Workspace In-Band Metadata Experience](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/main_workspace_metadata_experience.md)** (`main_workspace_metadata_experience.md`): Direct canonical workspace authoring with guaranteed metadata integrity, deterministic directory-scoped dirty checking (`bin/cleanroom-dirty <dir>`), and symmetrical resolution tools (`cleanroom-submit`, `cleanroom-blame`, `cleanroom-fail`).
 - **[In-Band Source Metadata & State Persistence](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/in_band_source_metadata.md)** (`in_band_source_metadata.md`): Completed production architecture eliminating `.update_with_ai.textproto` in favor of comment-embedded timestamps, single-entry change summaries, unacted feedback sections, and dynamic forward dirty evaluation.
 

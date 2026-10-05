@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 94b9bd6f7bca
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Sandbox run control grounding specification module."""
 
 from __future__ import annotations
@@ -42,7 +50,9 @@ class ResolveTool(tool_provider.Tool, Protocol):
         raise NotImplementedError
 
     @property
-    def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
+    def parameters(
+        self,
+    ) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         """
         DEFERRED:
         - Tool parameters mapping.
@@ -50,7 +60,10 @@ class ResolveTool(tool_provider.Tool, Protocol):
         raise NotImplementedError
 
     def execute_tool(
-        self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]
+        self,
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         DEFERRED:
@@ -64,7 +77,9 @@ class CheckFilesTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -93,7 +108,9 @@ class AdvanceTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -123,7 +140,9 @@ class SubmitTool(ResolveTool, InTier[AgentSessionTier], Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -159,7 +178,9 @@ class FailTool(ResolveTool, InTier[AgentSessionTier], Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -199,7 +220,9 @@ class BlameTool(ResolveTool, InTier[AgentSessionTier], Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -229,7 +252,9 @@ class GetWorkTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:

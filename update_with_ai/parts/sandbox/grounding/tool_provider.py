@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 88e83cd5a783
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Tool provider grounding specification module."""
 
 from __future__ import annotations
@@ -33,6 +41,7 @@ SomeParameterActualType = NewType("SomeParameterActualType", object)
 @dataclass(frozen=True)
 class ParameterConversionError(ValueError):
     """Raised when wire value conversion to an actual type fails."""
+
     message: str
 
 
@@ -67,6 +76,7 @@ class ParameterType[ActualT, WireT](Protocol):
 @dataclass(frozen=True)
 class IdentityParameterType[T](ParameterType[T, T]):
     """Identity parameter type where actual and wire types are identical."""
+
     target_type: type[T]
 
     @property
@@ -133,6 +143,7 @@ class ListParameterType[ItemActualT, ItemWireT](
     ParameterType[Sequence[ItemActualT], Sequence[ItemWireT]]
 ):
     """Parameter type converting a wire list to an actual list."""
+
     item_type: ParameterType[ItemActualT, ItemWireT]
 
     @property
@@ -173,6 +184,7 @@ class MappingParameterType[KeyActualT, ValActualT, ValWireT](
     ParameterType[Mapping[KeyActualT, ValActualT], Mapping[str, ValWireT]]
 ):
     """Parameter type converting a wire mapping to an actual mapping."""
+
     key_type: ParameterType[KeyActualT, str]
     value_type: ParameterType[ValActualT, ValWireT]
 
@@ -182,7 +194,9 @@ class MappingParameterType[KeyActualT, ValActualT, ValWireT](
         COVERED:
         - Returns dict type for actual type.
         """
-        _actual: type[Mapping[KeyActualT, ValActualT]] = cast(type[Mapping[KeyActualT, ValActualT]], dict)
+        _actual: type[Mapping[KeyActualT, ValActualT]] = cast(
+            type[Mapping[KeyActualT, ValActualT]], dict
+        )
         raise NotImplementedError
 
     @property
@@ -194,7 +208,9 @@ class MappingParameterType[KeyActualT, ValActualT, ValWireT](
         _wire: type[Mapping[str, ValWireT]] = cast(type[Mapping[str, ValWireT]], dict)
         raise NotImplementedError
 
-    def convert(self, wire_value: Mapping[str, ValWireT]) -> Mapping[KeyActualT, ValActualT]:
+    def convert(
+        self, wire_value: Mapping[str, ValWireT]
+    ) -> Mapping[KeyActualT, ValActualT]:
         """
         COVERED:
         - MUST convert mapping keys with a key parameter type.
@@ -215,6 +231,7 @@ class MappingParameterType[KeyActualT, ValActualT, ValWireT](
 @dataclass(frozen=True)
 class ToolParameter[ActualT, WireT]:
     """Describes an input parameter accepted by a tool."""
+
     name: ParameterName
     description: str
     parameter_type: ParameterType[ActualT, WireT]
@@ -226,6 +243,7 @@ class ToolParameter[ActualT, WireT]:
 @dataclass(frozen=True)
 class FollowUpToolCall:
     """Specifies a follow-up tool call."""
+
     tool_name: ToolName
     wire_parameter_bindings: Mapping[ParameterName, WireType]
     reasoning_text: Optional[str] = None
@@ -238,6 +256,7 @@ SuppressionKey = NewType("SuppressionKey", str)
 @dataclass(frozen=True)
 class ToolResponse:
     """Communicates tool execution results to the agent."""
+
     is_failed: bool
     is_terminated: bool
     content: str
@@ -275,7 +294,9 @@ class Tool(Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[ToolParameter[Any, Any], SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            ToolParameter[Any, Any], SomeParameterActualType
+        ],
     ) -> ToolResponse:
         """
         DEFERRED:
@@ -326,7 +347,7 @@ class ToolManager(InTier[AgentSessionTier], Protocol):
           - Consequent knowledge: ToolResponse(is_failed=True, content=f"Parameter '{sample_param_name}' conversion failed: {err.message}").
         - WHEN all parameter symbols resolve, required parameters are present, defaults are applied, and wire conversions succeed, MUST call the tool with action parameter bindings and return its tool response.
           - Condition knowledge: pt.convert(sample_wire_val), action_bindings = {param: actual_val}.
-          - Consequent knowledge: tool.execute_tool(action_bindings).        """
+          - Consequent knowledge: tool.execute_tool(action_bindings)."""
         # 1. Postcondition: Unknown tool detection and diagnostic failure response
         tools: Mapping[ToolName, Tool] = self.installed_tools
         _is_unknown_tool: bool = name not in tools
@@ -362,7 +383,9 @@ class ToolManager(InTier[AgentSessionTier], Protocol):
         # 4. Postcondition: Missing required parameter specifying missing note
         _has_note: bool = param.missing_message is not None
         present_params: Set[ParameterName] = set(wire_parameter_bindings.keys())
-        note_fn: Callable[[Set[ParameterName]], str] = param.missing_message or (lambda s: "")
+        note_fn: Callable[[Set[ParameterName]], str] = param.missing_message or (
+            lambda s: ""
+        )
         evaluated_note: str = note_fn(present_params)
         _missing_with_note_resp: ToolResponse = ToolResponse(
             is_failed=True,
@@ -371,11 +394,15 @@ class ToolManager(InTier[AgentSessionTier], Protocol):
         )
 
         # 5. Postcondition: Non-required parameter specifying default value
-        _is_defaultable: bool = not param.is_required and param.default_value is not None
-        default_actual_val: SomeParameterActualType = SomeParameterActualType(param.default_value)
-        _default_action_bindings: Mapping[ToolParameter[Any, Any], SomeParameterActualType] = {
-            param: default_actual_val
-        }
+        _is_defaultable: bool = (
+            not param.is_required and param.default_value is not None
+        )
+        default_actual_val: SomeParameterActualType = SomeParameterActualType(
+            param.default_value
+        )
+        _default_action_bindings: Mapping[
+            ToolParameter[Any, Any], SomeParameterActualType
+        ] = {param: default_actual_val}
 
         # 6. Postcondition: Wire conversion failure with diagnostic feedback
         pt: ParameterType[Any, Any] = param.parameter_type

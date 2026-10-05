@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: ec835b5c2999
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in runner_logger.pyi
 from typing import NewType, Protocol
 from dataclasses import dataclass

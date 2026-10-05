@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 922aa0b24eda
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in bazel_storage_impl.pyi
 import os
 from pathlib import Path
@@ -35,8 +44,12 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
 
     def __init__(self) -> None:
         self._definitions: Dict[dag_storage.DagNode, agent_storage.NodeDefinition] = {}
-        self._dependencies: Dict[dag_storage.DagNode, Set[dag_storage.DagDependency]] = {}
-        self._feedback_dependencies: Dict[dag_storage.DagNode, Set[dag_storage.DagNode]] = {}
+        self._dependencies: Dict[
+            dag_storage.DagNode, Set[dag_storage.DagDependency]
+        ] = {}
+        self._feedback_dependencies: Dict[
+            dag_storage.DagNode, Set[dag_storage.DagNode]
+        ] = {}
         self._source_files: Dict[dag_storage.DagNode, str] = {}
         self._silent_source_files: Dict[dag_storage.DagNode, Tuple[str, ...]] = {}
         self._messages: Dict[dag_storage.DagNode, Set[dag_storage.DagMessage]] = {}
@@ -60,7 +73,14 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             if loader is not None:
                 try:
                     loader.load_manifest(node)
-                except (LookupError, AttributeError, TypeError, ValueError, KeyError, OSError):
+                except (
+                    LookupError,
+                    AttributeError,
+                    TypeError,
+                    ValueError,
+                    KeyError,
+                    OSError,
+                ):
                     pass
 
     def _resolve_source_path(self, node: dag_storage.DagNode) -> Optional[Path]:
@@ -72,7 +92,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         paths_service = get_singleton(file_paths.FilePathManager)
         root_str = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
         root = file_paths.WorkspaceRoot(file_paths.PathString(root_str))
-        resolved = paths_service.resolve_path(root, file_paths.WorkspacePath(file_paths.PathString(src_rel)))
+        resolved = paths_service.resolve_path(
+            root, file_paths.WorkspacePath(file_paths.PathString(src_rel))
+        )
         return Path(resolved.path)
 
     def get_node_definition(
@@ -80,9 +102,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
     ) -> agent_storage.NodeDefinition:
         return self._definitions.get(
             node,
-            agent_storage.NodeDefinition(
-                task_prompt=agent_storage.TaskPrompt("")
-            ),
+            agent_storage.NodeDefinition(task_prompt=agent_storage.TaskPrompt("")),
         )
 
     def store_node_definition(
@@ -106,7 +126,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
     ) -> None:
         self._silent_source_files[node] = tuple(paths)
 
-    def get_dependencies(self, node: dag_storage.DagNode) -> Set[dag_storage.DagDependency]:
+    def get_dependencies(
+        self, node: dag_storage.DagNode
+    ) -> Set[dag_storage.DagDependency]:
         self._ensure_manifest_loaded(node)
         return set(self._dependencies.get(node, set()))
 
@@ -125,7 +147,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             return set(self._feedback_dependencies[node])
         role_name = node.role_address.split(":")[-1]
         if is_auditor_role(role_name):
-            raise KeyError(f"No feedback dependencies configured for auditor node '{node}'")
+            raise KeyError(
+                f"No feedback dependencies configured for auditor node '{node}'"
+            )
         return set()
 
     def get_messages(self, node: dag_storage.DagNode) -> Set[dag_storage.DagMessage]:
@@ -135,7 +159,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             if self.is_dirty(node) and not messages:
                 messages.add(
                     dag_storage.ChangeMessage(
-                        content=dag_storage.MessageContent(f"audit {role_name} for {node.unit_address}")
+                        content=dag_storage.MessageContent(
+                            f"audit {role_name} for {node.unit_address}"
+                        )
                     )
                 )
             return messages
@@ -190,7 +216,8 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                 return False
 
             contract_deps = [
-                d for d in self.get_dependencies(node)
+                d
+                for d in self.get_dependencies(node)
                 if not d.is_silent and d.node not in feedback_deps
             ]
 
@@ -217,7 +244,11 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                     c_src = self._resolve_source_path(c_dep.node)
                     if c_src is not None and c_src.is_file():
                         c_meta = src_metadata.extract_metadata(c_src)
-                        if c_meta and c_meta.last_changed and audit_ts < c_meta.last_changed:
+                        if (
+                            c_meta
+                            and c_meta.last_changed
+                            and audit_ts < c_meta.last_changed
+                        ):
                             return True
             return False
 
@@ -263,11 +294,15 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                         return True
         return len(self._messages.get(node, set())) > 0
 
-    def add_message(self, message: dag_storage.DagMessage, to: dag_storage.DagNode) -> None:
+    def add_message(
+        self, message: dag_storage.DagMessage, to: dag_storage.DagNode
+    ) -> None:
         src_path = self._resolve_source_path(to)
         if src_path is not None and src_path.is_file():
             if isinstance(message, dag_storage.FeedbackMessage):
-                content_str = str(message.content) if message.content else "unspecified feedback"
+                content_str = (
+                    str(message.content) if message.content else "unspecified feedback"
+                )
                 src_metadata.append_feedback(src_path, content_str)
                 return
         self._messages.setdefault(to, set()).add(message)
@@ -308,24 +343,30 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                 tmpl_str = str(m.template)
                 tmpl_candidates = [
                     tmpl_str,
-                    os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), tmpl_str),
+                    os.path.join(
+                        os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), tmpl_str
+                    ),
                 ]
                 if tmpl_str.startswith("//"):
                     pkg_sub = tmpl_str[2:].replace(":", "/")
                     tmpl_candidates.append(pkg_sub)
-                    tmpl_candidates.append(os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), pkg_sub))
+                    tmpl_candidates.append(
+                        os.path.join(
+                            os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), pkg_sub
+                        )
+                    )
                     if "templates:hls" in tmpl_str:
-                        tmpl_candidates.append("update_python_with_ai/templates/hls_template.md")
+                        tmpl_candidates.append(
+                            "update_python_with_ai/templates/hls_template.md"
+                        )
                     elif "templates:lib" in tmpl_str:
-                        tmpl_candidates.append("update_python_with_ai/templates/lib_template.py")
+                        tmpl_candidates.append(
+                            "update_python_with_ai/templates/lib_template.py"
+                        )
                     elif "templates:test" in tmpl_str:
-                        tmpl_candidates.append("update_python_with_ai/templates/test_template.py")
-                    elif "templates:grounding_qa" in tmpl_str:
-                        tmpl_candidates.append("update_python_with_ai/templates/grounding_qa_template.txt")
-                    elif "templates:coverage" in tmpl_str:
-                        tmpl_candidates.append("update_python_with_ai/templates/coverage_template.txt")
-                    elif "templates:qa" in tmpl_str:
-                        tmpl_candidates.append("update_python_with_ai/templates/qa_template.txt")
+                        tmpl_candidates.append(
+                            "update_python_with_ai/templates/test_template.py"
+                        )
                 for cand in tmpl_candidates:
                     if os.path.isfile(cand):
                         try:
@@ -339,7 +380,6 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         src_path.parent.mkdir(parents=True, exist_ok=True)
         src_path.write_text(tmpl_content, encoding="utf-8")
 
-
     def delete_last_cleaned(self, node: dag_storage.DagNode) -> None:
         role_name = node.role_address.split(":")[-1]
         if is_auditor_role(role_name):
@@ -349,7 +389,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                 if fb_src is not None and fb_src.is_file():
                     meta = src_metadata.extract_metadata(fb_src)
                     if meta and audit_tag in meta.audits:
-                        new_audits = {k: v for k, v in meta.audits.items() if k != audit_tag}
+                        new_audits = {
+                            k: v for k, v in meta.audits.items() if k != audit_tag
+                        }
                         src_metadata.update_metadata(fb_src, audits=new_audits)
             return
 

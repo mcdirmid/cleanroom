@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: fe08958fcba5
+-->
+
 # loop_node_cleaner interface component
 
 imports: dag_storage
@@ -20,4 +27,4 @@ By isolating role execution and failure reporting into a polymorphic cleaner int
 
 ## Woven Contracts
 
-- A node cleaner processes supplied dirty nodes sharing a role and returns whether workflow processing can continue. [clean_nodes_supplied, clean_dirty_nodes, communicate_processing_continuation, cannot_continue_on_unhandleable_failure, continue_when_cleaning_handled, dag_storage: [expose_node_dirty]]
+- A node cleaner processes supplied dirty nodes sharing a role and returns whether workflow processing can continue. \[clean_nodes_supplied, clean_dirty_nodes, communicate_processing_continuation, cannot_continue_on_unhandleable_failure, continue_when_cleaning_handled, dag_storage: [expose_node_dirty]\]

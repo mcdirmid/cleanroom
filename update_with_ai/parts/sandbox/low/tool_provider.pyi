@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: e428e3f951f8
+# --- END CLEANROOM METADATA ---
+
 """Tool provider low-level interface specification."""
 
 from dataclasses import dataclass

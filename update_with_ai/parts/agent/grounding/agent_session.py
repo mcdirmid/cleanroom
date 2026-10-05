@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: a3c7ee77c2f0
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Agent session lifecycle grounding component."""
 
 from __future__ import annotations
@@ -15,6 +23,7 @@ class AgentSessionTier(SupportAgentSessionTier):
     - The agent session lifecycle tier is defined under the system lifecycle tier.
       - Capability knowledge: InTier[AgentSessionTier] permits resolving SystemTier singletons in grounding proofs.
     """
+
     pass
 
 

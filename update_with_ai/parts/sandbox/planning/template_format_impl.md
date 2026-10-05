@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: f292c2517ec3
+-->
+
 # template_format_impl implementation component
 
 imports: commonmark_ext
@@ -32,9 +39,9 @@ By evaluating dot-separated parameter lookups, handling line-suffix and block-le
 
 ## Woven Contracts
 
-- Line-suffix conditional comments evaluate condition keys against parameters, including or omitting the preceding line accordingly. [identify_suffix_conditional_comments, retain_suffix_line_when_condition_true, omit_suffix_line_when_condition_false, template_format: [eval_suffix_conditionals, include_condition_true, omit_condition_false]]
-- Line-suffix loop comments repeat the preceding line across sequence items with the item variable bound in the evaluation context. [identify_suffix_loop_comments, repeat_suffix_line_across_items, bind_suffix_loop_item_variables, template_format: [repeat_suffix_loops, bind_loop_item_variables]]
-- Block conditional directives evaluate enclosed multi-line content against parameter condition keys, retaining or omitting enclosed blocks. [identify_block_conditional_markers, include_block_lines_when_condition_true, omit_block_lines_when_condition_false, template_format: [eval_conditional_blocks, include_condition_true, omit_condition_false]]
-- Block loop directives repeat enclosed multi-line content for each element in a resolved sequence with the loop variable bound. [identify_block_loop_markers, repeat_block_lines_across_elements, bind_block_loop_variables, template_format: [repeat_loop_blocks, bind_loop_item_variables]]
-- Parameter replacement resolves dot-separated paths, substituting matched strings while preserving unresolvable placeholders without modification. [resolve_dot_separated_keys, replace_matching_dot_separated_placeholders, retain_unresolved_placeholder_tokens, template_format: [substitute_bound_placeholders, preserve_absent_placeholders]]
-- Document normalization removes extraneous blank lines around directive comments to maintain tight layout spacing. [normalize_directive_blank_lines, commonmark_ext: [supply_markdown_text, html_comment_metadata]]
+- Line-suffix conditional comments evaluate condition keys against parameters, including or omitting the preceding line accordingly. \[identify_suffix_conditional_comments, retain_suffix_line_when_condition_true, omit_suffix_line_when_condition_false, template_format: [eval_suffix_conditionals, include_condition_true, omit_condition_false]\]
+- Line-suffix loop comments repeat the preceding line across sequence items with the item variable bound in the evaluation context. \[identify_suffix_loop_comments, repeat_suffix_line_across_items, bind_suffix_loop_item_variables, template_format: [repeat_suffix_loops, bind_loop_item_variables]\]
+- Block conditional directives evaluate enclosed multi-line content against parameter condition keys, retaining or omitting enclosed blocks. \[identify_block_conditional_markers, include_block_lines_when_condition_true, omit_block_lines_when_condition_false, template_format: [eval_conditional_blocks, include_condition_true, omit_condition_false]\]
+- Block loop directives repeat enclosed multi-line content for each element in a resolved sequence with the loop variable bound. \[identify_block_loop_markers, repeat_block_lines_across_elements, bind_block_loop_variables, template_format: [repeat_loop_blocks, bind_loop_item_variables]\]
+- Parameter replacement resolves dot-separated paths, substituting matched strings while preserving unresolvable placeholders without modification. \[resolve_dot_separated_keys, replace_matching_dot_separated_placeholders, retain_unresolved_placeholder_tokens, template_format: [substitute_bound_placeholders, preserve_absent_placeholders]\]
+- Document normalization removes extraneous blank lines around directive comments to maintain tight layout spacing. \[normalize_directive_blank_lines, commonmark_ext: [supply_markdown_text, html_comment_metadata]\]

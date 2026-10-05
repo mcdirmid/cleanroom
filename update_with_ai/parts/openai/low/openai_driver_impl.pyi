@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 82f8ca4b0009
+# --- END CLEANROOM METADATA ---
+
 """OpenAI driver implementation low-level specification."""
 
 from framework import operation, override, singleton_type
@@ -33,4 +40,3 @@ class LoopDriver(
         - WHEN tool responses specify followups, MUST execute designated tool calls.
         """
         ...
-

@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: f612ac1fb2d3
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Dag subgraph implementation grounding specification module."""
 
 from __future__ import annotations
@@ -57,7 +65,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
         - MUST break topological sorting ties by role tier depth first.
           - Condition knowledge: evaluate role tier depth key via _role_tier(n.role_address).
         - MUST break remaining topological sorting ties by unit address.
-          - Condition knowledge: evaluate unit address key via n.unit_address.        """
+          - Condition knowledge: evaluate unit address key via n.unit_address."""
         storage: dag_storage.DagStorage = self.get_singleton(dag_storage.DagStorage)
         deps: Set[dag_storage.DagDependency] = storage.get_dependencies(target)
         sample_dep: dag_storage.DagDependency = only_elem(deps)
@@ -102,7 +110,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
         - MUST prioritize test before qa in role tier precedence.
           - Condition knowledge: _role_tier("test") < _role_tier("qa").
         - WHEN no dirty node in the target subgraph has all its dependencies clean, MUST return an empty sequence.
-          - Consequent knowledge: return empty list [].        """
+          - Consequent knowledge: return empty list []."""
         storage: dag_storage.DagStorage = self.get_singleton(dag_storage.DagStorage)
         cfg: dag_config.DagConfig = self.get_singleton(dag_config.DagConfig)
         _batch_limit: dag_config.BatchSize = cfg.batch_size
@@ -129,7 +137,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
           - Consequent knowledge: update visit count in self._visits.
         - WHEN any node in the batch exceeds the node visit limit obtained from configuration, MUST raise an unexpected failure.
           - Condition knowledge: test whether updated count exceeds cfg.node_visit_limit.
-          - Consequent knowledge: construct RuntimeError diagnostic message.        """
+          - Consequent knowledge: construct RuntimeError diagnostic message."""
         cfg: dag_config.DagConfig = self.get_singleton(dag_config.DagConfig)
         limit: dag_config.NodeVisitLimit = cfg.node_visit_limit
         sample_node: DagNode = only_elem(batch)
@@ -147,4 +155,3 @@ def __initialize__() -> None:
     instance: DagSubgraph = cast(DagSubgraph, None)
     _storage: dag_storage.DagStorage = instance.get_singleton(dag_storage.DagStorage)
     _cfg: dag_config.DagConfig = instance.get_singleton(dag_config.DagConfig)
-

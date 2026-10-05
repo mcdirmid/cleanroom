@@ -1,8 +1,22 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 1b31ea9aad4e
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in runner_logger_impl.pyi
 import os
 from typing import Optional
 from . import runner_logger
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, system
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    system,
+)
 
 
 class RunnerLogger(runner_logger.RunnerLogger, Singleton):

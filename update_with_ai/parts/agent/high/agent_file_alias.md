@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 5bc6ccf5b944
+-->
+
 # agent_file_alias interface component
 
 imports: agent_session, dag_storage, file_paths, tool_provider
@@ -16,7 +23,7 @@ Exposing raw operating system paths directly to language model agents invites ha
 
 A *regex pattern* represents a pattern used to search in files.
 
-A *file alias* represents a session file, hiding physical filesystem details and paths from the agent, having a relative path that identifies the file within an agent session. When converted to a string, a file alias displays itself by its relative path. 
+A *file alias* represents a session file, hiding physical filesystem details and paths from the agent, having a relative path that identifies the file within an agent session. When converted to a string, a file alias displays itself by its relative path.
 
 A file alias is either a *bound file* or an *unbound file*. A bound file is mapped to a workspace file with a workspace path and an owning node, and is either a *read-only file* or a *read-write file*. An unbound file is not mapped to an actual workspace file.
 

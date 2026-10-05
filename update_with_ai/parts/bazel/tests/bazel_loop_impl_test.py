@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: cbaa22f90dc2
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for bazel_loop_impl aligned with grounding specifications."""
 
 import unittest
@@ -58,14 +67,20 @@ class MockDagStorage:
     def __init__(self) -> None:
         self.dirty_nodes: Set[dag_storage.DagNode] = set()
         self.messages: dict[dag_storage.DagNode, list[dag_storage.DagMessage]] = {}
-        self.dependencies_map: dict[dag_storage.DagNode, Set[dag_storage.DagDependency]] = {}
+        self.dependencies_map: dict[
+            dag_storage.DagNode, Set[dag_storage.DagDependency]
+        ] = {}
         self._source_files: dict[dag_storage.DagNode, str] = {}
         self.manifest_loader: Optional[MockManifestLoader] = None
         self.cleaned_nodes: list[dag_storage.DagNode] = []
-        self.cleaned_changes: dict[dag_storage.DagNode, Optional[dag_storage.ChangeDescription]] = {}
+        self.cleaned_changes: dict[
+            dag_storage.DagNode, Optional[dag_storage.ChangeDescription]
+        ] = {}
         self.materialized_nodes: list[dag_storage.DagNode] = []
 
-    def get_dependencies(self, node: dag_storage.DagNode) -> Set[dag_storage.DagDependency]:
+    def get_dependencies(
+        self, node: dag_storage.DagNode
+    ) -> Set[dag_storage.DagDependency]:
         return self.dependencies_map.get(node, set())
 
     def get_messages(self, node: dag_storage.DagNode) -> Set[dag_storage.DagMessage]:
@@ -74,7 +89,9 @@ class MockDagStorage:
     def is_dirty(self, node: dag_storage.DagNode) -> bool:
         return node in self.dirty_nodes
 
-    def add_message(self, message: dag_storage.DagMessage, to: dag_storage.DagNode) -> None:
+    def add_message(
+        self, message: dag_storage.DagMessage, to: dag_storage.DagNode
+    ) -> None:
         if to not in self.messages:
             self.messages[to] = []
         self.messages[to].append(message)
@@ -172,19 +189,25 @@ class BazelLoopImplTest(unittest.TestCase):
     def test_build_result_dataclass(self) -> None:
         """CUJ: Verify BuildResult value object instantiation and property access."""
         # Requirement: MUST produce a build result upon pass completion.
-        result = loop.BuildResult(success=True, summary=loop.BuildSummary("Build finished successfully"))
+        result = loop.BuildResult(
+            success=True, summary=loop.BuildSummary("Build finished successfully")
+        )
         self.assertTrue(result.success)
         self.assertEqual(result.summary, "Build finished successfully")
 
-        failure = loop.BuildResult(success=False, summary=loop.BuildSummary("Build failed"))
+        failure = loop.BuildResult(
+            success=False, summary=loop.BuildSummary("Build failed")
+        )
         self.assertFalse(failure.success)
         self.assertEqual(failure.summary, "Build failed")
 
     def test_clean_subgraph_success(self) -> None:
         """CUJ: Successful cleaning pass execution and telemetry logging."""
         root = _make_dag_node("//pkg:target", "lib")
-        self.manifest_loader.manifests["//pkg:target"] = bazel_manifest_loader.TargetManifest(
-            label=bazel_manifest_loader.TargetLabel("//pkg:target")
+        self.manifest_loader.manifests["//pkg:target"] = (
+            bazel_manifest_loader.TargetManifest(
+                label=bazel_manifest_loader.TargetLabel("//pkg:target")
+            )
         )
         self.storage.dirty_nodes.add(root)
 
@@ -220,10 +243,18 @@ class BazelLoopImplTest(unittest.TestCase):
         dep2 = _make_dag_node("//pkg:dep2")
         dep3 = _make_dag_node("//pkg:dep3")
 
-        root_m = bazel_manifest_loader.TargetManifest(label=bazel_manifest_loader.TargetLabel("//pkg:root"))
-        dep1_m = bazel_manifest_loader.TargetManifest(label=bazel_manifest_loader.TargetLabel("//pkg:dep1"))
-        dep2_m = bazel_manifest_loader.TargetManifest(label=bazel_manifest_loader.TargetLabel("//pkg:dep2"))
-        dep3_m = bazel_manifest_loader.TargetManifest(label=bazel_manifest_loader.TargetLabel("//pkg:dep3"))
+        root_m = bazel_manifest_loader.TargetManifest(
+            label=bazel_manifest_loader.TargetLabel("//pkg:root")
+        )
+        dep1_m = bazel_manifest_loader.TargetManifest(
+            label=bazel_manifest_loader.TargetLabel("//pkg:dep1")
+        )
+        dep2_m = bazel_manifest_loader.TargetManifest(
+            label=bazel_manifest_loader.TargetLabel("//pkg:dep2")
+        )
+        dep3_m = bazel_manifest_loader.TargetManifest(
+            label=bazel_manifest_loader.TargetLabel("//pkg:dep3")
+        )
 
         self.manifest_loader.manifests["//pkg:root"] = root_m
         self.manifest_loader.manifests["//pkg:dep1"] = dep1_m
@@ -307,9 +338,13 @@ class BazelLoopImplTest(unittest.TestCase):
             dag_storage.DagDependency(node=dep, is_silent=False)
         }
 
-        self.manifest_loader.manifests["//pkg:lib"] = bazel_manifest_loader.TargetManifest(
-            label=bazel_manifest_loader.TargetLabel("//pkg:lib"),
-            template=bazel_manifest_loader.agent_file_alias.FileContent("# template content\n"),
+        self.manifest_loader.manifests["//pkg:lib"] = (
+            bazel_manifest_loader.TargetManifest(
+                label=bazel_manifest_loader.TargetLabel("//pkg:lib"),
+                template=bazel_manifest_loader.agent_file_alias.FileContent(
+                    "# template content\n"
+                ),
+            )
         )
 
         self.storage.dirty_nodes.add(root)
@@ -345,7 +380,9 @@ class BazelLoopImplTest(unittest.TestCase):
     def test_broadcast_change(self) -> None:
         """CUJ: Recording a change message on origin node in graph storage."""
         origin = _make_dag_node("//pkg:origin")
-        change = dag_storage.ChangeMessage(content=dag_storage.MessageContent("refactored api"))
+        change = dag_storage.ChangeMessage(
+            content=dag_storage.MessageContent("refactored api")
+        )
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(loop.Loop)
@@ -358,7 +395,9 @@ class BazelLoopImplTest(unittest.TestCase):
     def test_record_change(self) -> None:
         """CUJ: Recording a change message on target node in graph storage."""
         origin = _make_dag_node("//pkg:origin")
-        change = dag_storage.ChangeMessage(content=dag_storage.MessageContent("updated methods"))
+        change = dag_storage.ChangeMessage(
+            content=dag_storage.MessageContent("updated methods")
+        )
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(loop.Loop)
@@ -366,7 +405,9 @@ class BazelLoopImplTest(unittest.TestCase):
             runner.record_change(origin, change)
 
             self.assertIn(origin, self.storage.cleaned_nodes)
-            self.assertEqual(self.storage.cleaned_changes.get(origin), "updated methods")
+            self.assertEqual(
+                self.storage.cleaned_changes.get(origin), "updated methods"
+            )
 
 
 if __name__ == "__main__":

@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: f9c4a13e735d
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 from __future__ import annotations
 from typing import cast
 from parts.core.grounding import runner_logger
@@ -20,7 +28,7 @@ class RunnerLogger(runner_logger.RunnerLogger):
           - Condition knowledge: environment variable presence check.
           - Consequent knowledge: assignment of destination path string.
         - MUST clear any existing transcript log file at initialization.
-          - Consequent knowledge: reset transcript path state.        """
+          - Consequent knowledge: reset transcript path state."""
         self.transcript_file_path = "agent_loop.log"
         raise NotImplementedError
 
@@ -29,7 +37,7 @@ class RunnerLogger(runner_logger.RunnerLogger):
         COVERED:
         - MUST write unbuffered verbose entries to the transcript log file.
           - Condition knowledge: access event.transcript and event.summary.
-          - Consequent knowledge: synthesize formatted log output for self.transcript_file_path.        """
+          - Consequent knowledge: synthesize formatted log output for self.transcript_file_path."""
         _summary: runner_logger.EventSummary = event.summary
         _transcript: runner_logger.EventTranscript = event.transcript
         _formatted_entry: str = f"{_summary}\n{_transcript}\n"
@@ -40,5 +48,3 @@ class RunnerLogger(runner_logger.RunnerLogger):
 def __initialize__() -> None:
     """Initializes the RunnerLogger singleton in the system tier."""
     _instance: RunnerLogger = cast(RunnerLogger, None)
-
-

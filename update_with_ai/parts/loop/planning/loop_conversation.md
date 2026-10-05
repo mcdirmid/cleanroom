@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 7edbb62787ca
+-->
+
 # loop_conversation interface component
 
 imports: tool_provider
@@ -36,6 +43,6 @@ By tracking message roles, correlating tool calls, and stubbing obsolete tool pa
 ## Woven Contracts
 
 - Initializing conversation populates starting message history with task instructions. [initialize_with_initial_messages, initial_messages_include_task_instructions]
-- Appending updates conversation history with model messages and tool responses. [append_messages_supplied, append_messages_to_conversation, append_tool_responses_to_conversation, tool_provider: [call_by_name]]
+- Appending updates conversation history with model messages and tool responses. \[append_messages_supplied, append_messages_to_conversation, append_tool_responses_to_conversation, tool_provider: [call_by_name]\]
 - When subsequent tools matching a suppression key execute, previous tool outputs and correlating arguments are replaced with stubs in place. [stub_previous_responses_by_key, stub_correlating_tool_args_by_key]
 - Formatted conversation history is exported as a model request for provider transmission. [provide_model_request]

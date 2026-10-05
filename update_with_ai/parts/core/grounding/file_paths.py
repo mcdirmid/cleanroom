@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: ba60fea9829d
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """File paths grounding specification module."""
 
 from __future__ import annotations
@@ -16,6 +24,7 @@ class HostPath:
     COVERED:
     - The path string is non-empty.
     """
+
     path: PathString
 
 
@@ -26,6 +35,7 @@ class AbsolutePath(HostPath):
     COVERED:
     - The path is an absolute filesystem path.
     """
+
     pass
 
 
@@ -36,6 +46,7 @@ class WorkspacePath(HostPath):
     COVERED:
     - The path is a relative filesystem path anchored to a workspace root without leading path separators.
     """
+
     pass
 
 
@@ -46,12 +57,14 @@ class WorkspaceRoot(AbsolutePath):
     COVERED:
     - The path represents the root directory of a workspace.
     """
+
     pass
 
 
 @dataclass(frozen=True)
 class PathValidationError(ValueError):
     """Raised when path validation fails."""
+
     message: ValidationMessage
 
 
@@ -75,7 +88,7 @@ class FilePathManager(InTier[SystemTier], Protocol):
           - Consequent knowledge: return AbsolutePath(path=path).
         - WHEN the path is not absolute, MUST raise PathValidationError with diagnostic feedback formatted as "Path is not absolute: {path}".
           - Condition knowledge: detect non-absolute path.
-          - Consequent knowledge: construct PathValidationError with diagnostic message f"Path is not absolute: {path}".        """
+          - Consequent knowledge: construct PathValidationError with diagnostic message f"Path is not absolute: {path}"."""
         _is_abs: bool = path.startswith("/")
         _err: PathValidationError = PathValidationError(
             message=ValidationMessage(f"Path is not absolute: {path}")
@@ -91,7 +104,7 @@ class FilePathManager(InTier[SystemTier], Protocol):
           - Consequent knowledge: return WorkspacePath(path=path).
         - WHEN the path is absolute or has leading path separators, MUST raise PathValidationError with diagnostic feedback formatted as "Workspace path must be relative, got absolute: {path}".
           - Condition knowledge: detect leading path separators or absolute prefix.
-          - Consequent knowledge: construct PathValidationError with message f"Workspace path must be relative, got absolute: {path}".        """
+          - Consequent knowledge: construct PathValidationError with message f"Workspace path must be relative, got absolute: {path}"."""
         _is_leading: bool = path.startswith("/") or path.startswith("\\")
         _err: PathValidationError = PathValidationError(
             message=ValidationMessage(
@@ -101,9 +114,7 @@ class FilePathManager(InTier[SystemTier], Protocol):
         _ws_path: WorkspacePath = WorkspacePath(path=path)
         raise NotImplementedError
 
-    def resolve_path(
-        self, root: AbsolutePath, relative: WorkspacePath
-    ) -> AbsolutePath:
+    def resolve_path(self, root: AbsolutePath, relative: WorkspacePath) -> AbsolutePath:
         """
         COVERED:
         - MUST produce the combined absolute path formed by joining the workspace root and the relative workspace path.
@@ -115,4 +126,3 @@ class FilePathManager(InTier[SystemTier], Protocol):
         _joined: PathString = PathString(f"{_root_path}/{_rel_path}")
         _resolved: AbsolutePath = AbsolutePath(path=_joined)
         raise NotImplementedError
-

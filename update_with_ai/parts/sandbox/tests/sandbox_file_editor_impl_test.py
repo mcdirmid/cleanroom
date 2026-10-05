@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 2ab7fbed5064
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for sandbox_file_editor_impl aligned with grounding specifications."""
 
 import hashlib
@@ -22,6 +31,7 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
     UnboundFile,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib import src_metadata
 from update_with_ai.parts.agent.lib.agent_node_config import NodeGuide, NodeConfig
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor import (
@@ -67,7 +77,9 @@ class MockToolManager:
     def execute_tool(
         self, name: Any, wire_parameter_bindings: Mapping[ParameterName, WireType]
     ) -> ToolResponse:
-        return ToolResponse(is_failed=False, is_terminated=False, content=ToolResponseContent(""))
+        return ToolResponse(
+            is_failed=False, is_terminated=False, content=ToolResponseContent("")
+        )
 
 
 class MockStringConverter:
@@ -220,6 +232,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         self.target_path = os.path.join(self.test_dir, "file.txt")
         with open(self.target_path, "w", encoding="utf-8") as f:
             f.write("Line 1\nLine 2\nLine 3\n")
+        src_metadata.record_change(self.target_path, "Initial test content")
 
         node = MagicMock()
         self.rw_file = ReadWriteFile(
@@ -363,7 +376,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIsNotNone(resp.reminder)
             self.assertTrue(edit_mgr.has_modifications)
             with open(self.target_path, "r", encoding="utf-8") as f:
-                self.assertEqual(f.read(), "Line 1\nUpdated Line 2\nLine 3\n")
+                self.assertEqual(
+                    src_metadata.extract_code_body(f.read(), "file.txt"),
+                    "Line 1\nUpdated Line 2\nLine 3",
+                )
 
             # 3b. Fuzzy whitespace matching succeeds when exact match fails and allow_multiple is False
             with open(self.target_path, "w", encoding="utf-8") as f:
@@ -371,8 +387,14 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             b_fuzzy = ActualParameterBindings(
                 bindings={
                     (replace_tool.path_parameter, self.rw_file),
-                    (replace_tool.target_content_parameter, "def hello():\n    return True"),
-                    (replace_tool.replacement_content_parameter, "    def hello():\n        return False\n"),
+                    (
+                        replace_tool.target_content_parameter,
+                        "def hello():\n    return True",
+                    ),
+                    (
+                        replace_tool.replacement_content_parameter,
+                        "    def hello():\n        return False\n",
+                    ),
                 }
             )
             # Requirement: Tool execution matches target content using exact matching, or falls back to line-by-line whitespace-stripped matching across the search window when exact matching finds zero occurrences and allow multiple is false or not set, succeeding if and only if exactly one unique line window matches after stripping leading and trailing whitespace from each line; fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
@@ -719,6 +741,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             workspace_path=_make_workspace_path(nested_rel),
             owning_node=node,
         )
+        self.node_cfg._read_write_files.add(missing_rw_file)
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
@@ -789,10 +812,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertFalse(resp2.is_failed)
             self.assertEqual(edit_mgr.file_update_revision, 2)
 
-    def test_edit_manager_initial_content_detection_and_filesystem_modifications(
+    def test_edit_manager_code_hash_detection_and_filesystem_modifications(
         self,
     ) -> None:
-        """CUJ: EditManager records initial contents from filesystem and detects modifications."""
+        """CUJ: EditManager detects modifications against in-band code hash."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
             self.assertFalse(edit_mgr.has_modifications)
@@ -802,9 +825,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 f.write("more content\n")
             self.assertTrue(edit_mgr.has_modifications)
 
-            # Deleting file triggers has_modifications
-            os.remove(self.target_path)
-            self.assertTrue(edit_mgr.has_modifications)
+            # Stamping clean state clears has_modifications
+            src_metadata.record_change(self.target_path, "Updated content")
+            self.assertFalse(edit_mgr.has_modifications)
 
     def test_tool_parameter_converters(self) -> None:
         """CUJ: Parameter converters associated with tool parameters."""
@@ -812,9 +835,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
 
             # Parameter: The replace file content tool path parameter uses the alias manager to convert a file alias.
-            self.assertIs(
-                replace_tool.path_parameter.parameter_type, self.alias_mgr
-            )
+            self.assertIs(replace_tool.path_parameter.parameter_type, self.alias_mgr)
             self.assertFalse(replace_tool.path_parameter.is_required)
             # Parameter: The replace file content tool target content parameter uses a string parameter converter to accept text.
             self.assertEqual(
@@ -825,7 +846,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             assert replace_tool.target_content_parameter.missing_message is not None
             self.assertIn(
                 "search window",
-                replace_tool.target_content_parameter.missing_message({ParameterName("start_line")}).lower(),
+                replace_tool.target_content_parameter.missing_message(
+                    {ParameterName("start_line")}
+                ).lower(),
             )
             self.assertIn(
                 "append",
@@ -851,8 +874,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 replace_tool.allow_multiple_parameter.parameter_type.actual_type,
                 bool,
             )
-
-
 
     def test_edit_manager_tracks_last_read_or_edited_file(self) -> None:
         """CUJ: EditManager tracks last read or edited file alias across session."""
@@ -965,7 +986,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertEqual(missing_hash, hashlib.md5(b"").hexdigest())
 
             # Unbound file produces empty hash
-            unbound_hash = edit_mgr.file_hash(UnboundFile(relative_path=RelativePath("unbound.txt")))
+            unbound_hash = edit_mgr.file_hash(
+                UnboundFile(relative_path=RelativePath("unbound.txt"))
+            )
             self.assertEqual(missing_hash, unbound_hash)
 
             # String file path converts and computes hash

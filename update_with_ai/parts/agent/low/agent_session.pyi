@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: a2f2b4bf21f6
+# --- END CLEANROOM METADATA ---
+
 """Agent session lifecycle tier component."""
 
 from framework import singleton_type

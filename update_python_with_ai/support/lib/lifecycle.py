@@ -79,6 +79,7 @@ class LifecycleTier:
 
 class RootTier(LifecycleTier):
     """Base class for root lifecycle tiers in Cleanroom's hierarchy."""
+
     pass
 
 
@@ -88,11 +89,13 @@ class ChildTierOf[ParentTier: LifecycleTier](LifecycleTier):
     Subordinate tiers inherit from ChildTierOf[ParentTier] to establish
     static type-level hierarchy relationships.
     """
+
     pass
 
 
 class SystemTier(RootTier):
     """Root system tier for singleton services spanning the entire process lifecycle."""
+
     def __init__(self, name: str = "system") -> None:
         super().__init__(name=name, parent=None)
 
@@ -104,6 +107,7 @@ class InTier[T: LifecycleTier](Protocol):
     to TierType (e.g. InTier[SystemTier]), allowing static analysis, IDEs, and Groundtalk
     solvers to reason about singleton visibility and collaborator reachability.
     """
+
     pass
 
 
@@ -229,9 +233,7 @@ class LifecyclePrototype:
         """Sequence of all descriptors registered in this phase prototype."""
         return tuple(self._descriptors)
 
-    def create_child_prototype(
-        self, phase: LifecycleTier | str
-    ) -> LifecyclePrototype:
+    def create_child_prototype(self, phase: LifecycleTier | str) -> LifecyclePrototype:
         """Creates a child phase prototype inheriting from this prototype."""
         return LifecyclePrototype(phase=phase, parent=self)
 
@@ -640,9 +642,7 @@ class LifecycleScope:
 
     def __enter__(self) -> LifecycleScope:
         if self._is_closed:
-            raise LifecycleError(
-                f"Cannot enter closed lifecycle scope '{self.phase}'"
-            )
+            raise LifecycleError(f"Cannot enter closed lifecycle scope '{self.phase}'")
         self._is_open = True
         self._token = _active_scope.set(self)
         try:

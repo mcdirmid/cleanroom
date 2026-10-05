@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: a6760872eb64
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 import os
 import traceback
 from typing import Any, Optional, Sequence, Set, Tuple, cast
@@ -55,7 +64,9 @@ class _RoleConfig(agent_node_config.RoleConfig, Singleton):
 def _get_storage() -> agent_storage.AgentStorage:
     try:
         return get_singleton(agent_storage.AgentStorage)
-    except LifecycleResolutionError:  # pragma: no cover (assumption: storage registered in SystemTier)
+    except (
+        LifecycleResolutionError
+    ):  # pragma: no cover (assumption: storage registered in SystemTier)
         return cast(agent_storage.AgentStorage, get_singleton(dag_storage.DagStorage))
 
 
@@ -66,7 +77,7 @@ def _parse_target_and_exp(rest: str) -> Tuple[str, str]:
     if rest.startswith("`") and "`" in rest[1:]:
         end_idx = rest.index("`", 1)
         target = rest[1:end_idx].strip()
-        after = rest[end_idx + 1:].strip()
+        after = rest[end_idx + 1 :].strip()
         if after.startswith(":"):
             exp = after[1:].strip()
         else:  # pragma: no cover (assumption: well-formed commit message format)
@@ -81,7 +92,9 @@ def _parse_target_and_exp(rest: str) -> Tuple[str, str]:
         if rest.startswith("//"):
             parts = rest.split(":")
             if len(parts) >= 3:
-                return f"{parts[0]}:{parts[1]}".strip().strip("`"), ":".join(parts[2:]).strip()
+                return f"{parts[0]}:{parts[1]}".strip().strip("`"), ":".join(
+                    parts[2:]
+                ).strip()
             return rest.strip().strip("`"), ""
         if rest.startswith(":"):
             parts = rest[1:].split(":")
@@ -90,26 +103,36 @@ def _parse_target_and_exp(rest: str) -> Tuple[str, str]:
             return rest.strip().strip("`"), ""
         parts = rest.split(":", 1)
         return parts[0].strip().strip("`"), parts[1].strip()
-    return rest.strip().strip("`"), ""  # pragma: no cover (assumption: well-formed commit message format)
+    return rest.strip().strip(
+        "`"
+    ), ""  # pragma: no cover (assumption: well-formed commit message format)
 
 
 def _extract_blame(content: str) -> Optional[Tuple[str, str]]:
     for line in content.splitlines():
         line_s = line.strip()
         lower_line = line_s.lower()
-        if lower_line.startswith("blame ") or lower_line.startswith("blame:"):  # pragma: no cover (assumption: well-formed commit message format)
+        if lower_line.startswith("blame ") or lower_line.startswith(
+            "blame:"
+        ):  # pragma: no cover (assumption: well-formed commit message format)
             rest = line_s[6:].strip()
             return _parse_target_and_exp(rest)
         if lower_line.startswith("blamed ") or lower_line.startswith("blamed:"):
             rest = line_s[7:].strip()
             return _parse_target_and_exp(rest)
-        if " blamed " in lower_line:  # pragma: no cover (assumption: well-formed commit message format)
+        if (
+            " blamed " in lower_line
+        ):  # pragma: no cover (assumption: well-formed commit message format)
             parts = line_s.split(" blamed ", 1)
             rest = parts[1].strip()
             return _parse_target_and_exp(rest)
-        if lower_line == "blame" or lower_line == "blamed":  # pragma: no cover (assumption: well-formed commit message format)
+        if (
+            lower_line == "blame" or lower_line == "blamed"
+        ):  # pragma: no cover (assumption: well-formed commit message format)
             return "", ""
-    if "blame" in content.lower():  # pragma: no cover (assumption: well-formed commit message format)
+    if (
+        "blame" in content.lower()
+    ):  # pragma: no cover (assumption: well-formed commit message format)
         return "", content
     return None
 
@@ -125,7 +148,7 @@ def _matches_blame_target(bf: Any, target_str: str) -> bool:
     stripped_target = norm_target
     for pfx in ("staging/", "update_with_ai/", "update_python_with_ai/"):
         if stripped_target.startswith(pfx):
-            stripped_target = stripped_target[len(pfx):]
+            stripped_target = stripped_target[len(pfx) :]
 
     if norm_target in (".", "/", "") or stripped_target in (".", "/", ""):
         return False
@@ -142,7 +165,10 @@ def _matches_blame_target(bf: Any, target_str: str) -> bool:
         unit_target_name = unit_addr.split(":")[-1]
         if target_target_name == unit_target_name:
             return True
-        if os.path.splitext(target_target_name)[0] == os.path.splitext(unit_target_name)[0]:
+        if (
+            os.path.splitext(target_target_name)[0]
+            == os.path.splitext(unit_target_name)[0]
+        ):
             return True
 
     # Path matching (relative_path, workspace_path, short_name)
@@ -157,20 +183,27 @@ def _matches_blame_target(bf: Any, target_str: str) -> bool:
         stripped_p = norm_p
         for pfx in ("staging/", "update_with_ai/", "update_python_with_ai/"):
             if stripped_p.startswith(pfx):
-                stripped_p = stripped_p[len(pfx):]
+                stripped_p = stripped_p[len(pfx) :]
 
         if not stripped_p or stripped_p in (".", "/"):
             continue
 
         if norm_target == norm_p or stripped_target == stripped_p:
             return True
-        if norm_p.endswith("/" + norm_target) or stripped_p.endswith("/" + stripped_target):
+        if norm_p.endswith("/" + norm_target) or stripped_p.endswith(
+            "/" + stripped_target
+        ):
             return True
-        if norm_target.endswith("/" + norm_p) or stripped_target.endswith("/" + stripped_p):
+        if norm_target.endswith("/" + norm_p) or stripped_target.endswith(
+            "/" + stripped_p
+        ):
             return True
         if os.path.basename(norm_target) == os.path.basename(norm_p):
             return True
-        if os.path.splitext(os.path.basename(norm_target))[0] == os.path.splitext(os.path.basename(norm_p))[0]:
+        if (
+            os.path.splitext(os.path.basename(norm_target))[0]
+            == os.path.splitext(os.path.basename(norm_p))[0]
+        ):
             return True
 
     return False
@@ -190,7 +223,11 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
         defns: list[agent_storage.NodeDefinition] = []
         try:
             defns = [storage.get_node_definition(n) for n in dirty_nodes]
-        except (AttributeError, KeyError, LookupError):  # pragma: no cover (assumption: storage registered in SystemTier)
+        except (
+            AttributeError,
+            KeyError,
+            LookupError,
+        ):  # pragma: no cover (assumption: storage registered in SystemTier)
             defns = []
 
         if defns:
@@ -198,7 +235,10 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
             if not has_prompt:
                 self._last_outcome = None
                 has_changes = any(
-                    any(isinstance(m, dag_storage.ChangeMessage) for m in storage.get_messages(n))
+                    any(
+                        isinstance(m, dag_storage.ChangeMessage)
+                        for m in storage.get_messages(n)
+                    )
                     for n in dirty_nodes
                 )
                 if has_changes:
@@ -208,7 +248,9 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
         def setup_session(session: LifecycleScope) -> None:
             role_config = session.get_singleton(_RoleConfig)
             if dirty_nodes:
-                role_config.set_role(agent_node_config.RoleName(str(dirty_nodes[0].role_address)))
+                role_config.set_role(
+                    agent_node_config.RoleName(str(dirty_nodes[0].role_address))
+                )
 
         def _execute_session() -> Set[dag_storage.DagMessage]:
             with enter_phase(agent_session, setup=setup_session) as session:
@@ -217,7 +259,9 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                     [
                         loop_conversation.ConversationMessage(
                             role=loop_conversation.MessageRole("user"),
-                            content=loop_conversation.ConversationContent("Call get_work to retrieve your work."),
+                            content=loop_conversation.ConversationContent(
+                                "Call get_work to retrieve your work."
+                            ),
                         )
                     ]
                 )
@@ -227,7 +271,11 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                 self._last_outcome = outcome
 
                 messages: Set[dag_storage.DagMessage] = set()
-                content = str(outcome.response.content) if outcome.response is not None else ""
+                content = (
+                    str(outcome.response.content)
+                    if outcome.response is not None
+                    else ""
+                )
                 blame_info = _extract_blame(content)
 
                 if blame_info is not None:
@@ -254,7 +302,12 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                                     break
                         elif len(configured_targets) == 1:
                             blamed_node = next(iter(configured_targets)).owning_node
-                    except (LifecycleResolutionError, AttributeError, KeyError, LookupError):  # pragma: no cover (assumption: storage registered in SystemTier)
+                    except (
+                        LifecycleResolutionError,
+                        AttributeError,
+                        KeyError,
+                        LookupError,
+                    ):  # pragma: no cover (assumption: storage registered in SystemTier)
                         pass
 
                     if blamed_node is not None:
@@ -280,8 +333,12 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                 logger.consume(
                     runner_logger.RunnerLogEvent(
                         event_name=runner_logger.EventName("session_execution_failure"),
-                        summary=runner_logger.EventSummary(f"Unexpected execution failure cleaning nodes {node_addrs} (attempt {attempt + 1}/2): {e}"),
-                        transcript=runner_logger.EventTranscript(f"=== Unexpected Execution Failure (attempt {attempt + 1}/2) ===\n{traceback.format_exc().strip()}"),
+                        summary=runner_logger.EventSummary(
+                            f"Unexpected execution failure cleaning nodes {node_addrs} (attempt {attempt + 1}/2): {e}"
+                        ),
+                        transcript=runner_logger.EventTranscript(
+                            f"=== Unexpected Execution Failure (attempt {attempt + 1}/2) ===\n{traceback.format_exc().strip()}"
+                        ),
                     )
                 )
                 if attempt == 1:
@@ -293,15 +350,21 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
         msgs = self.clean_nodes(nodes)
         is_blame = any(isinstance(m, dag_storage.FeedbackMessage) for m in msgs)
         outcome = self._last_outcome
-        if not is_blame and outcome is not None and (
-            outcome.response is None or outcome.response.is_failed
+        if (
+            not is_blame
+            and outcome is not None
+            and (outcome.response is None or outcome.response.is_failed)
         ):
             for node in nodes:
                 if not storage.is_dirty(node):
                     storage.add_message(dag_storage.FeedbackMessage(), to=node)
             return False
 
-        outcome_content = str(outcome.response.content) if outcome is not None and outcome.response is not None else ""
+        outcome_content = (
+            str(outcome.response.content)
+            if outcome is not None and outcome.response is not None
+            else ""
+        )
         is_outcome_blame = _extract_blame(outcome_content) is not None
         if is_outcome_blame and not is_blame:
             for node in nodes:

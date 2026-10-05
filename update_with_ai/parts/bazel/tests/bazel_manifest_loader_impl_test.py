@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 20f12d850b36
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for bazel_manifest_loader_impl aligned with grounding specifications."""
 
 import json
@@ -33,7 +42,9 @@ from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
 def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
-    return DagNode(unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address))
+    return DagNode(
+        unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address)
+    )
 
 
 class FakeBazelTarget:
@@ -75,7 +86,9 @@ class FakeAgentStorage:
         self._silent_source_files: Dict[DagNode, Sequence[str]] = {}
         self._messages: Dict[DagNode, Set[DagMessage]] = {}
 
-    def store_feedback_dependencies(self, node: DagNode, feedback_dependencies: Set[DagNode]) -> None:
+    def store_feedback_dependencies(
+        self, node: DagNode, feedback_dependencies: Set[DagNode]
+    ) -> None:
         self._feedback_dependencies[node] = set(feedback_dependencies)
 
     def get_feedback_dependencies(self, node: DagNode) -> Set[DagNode]:
@@ -96,10 +109,14 @@ class FakeAgentStorage:
     def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
         return set(self._dependencies.get(node, set()))
 
-    def store_dependencies(self, node: DagNode, dependencies: Set[DagDependency]) -> None:
+    def store_dependencies(
+        self, node: DagNode, dependencies: Set[DagDependency]
+    ) -> None:
         self._dependencies[node] = set(dependencies)
 
-    def add_dependency(self, from_node: DagNode, to_node: DagNode, is_silent: bool = False) -> None:
+    def add_dependency(
+        self, from_node: DagNode, to_node: DagNode, is_silent: bool = False
+    ) -> None:
         deps = self._dependencies.setdefault(from_node, set())
         deps.add(DagDependency(node=to_node, is_silent=is_silent))
 
@@ -197,9 +214,15 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             self.assertEqual(manifest.source_file, "pkg/sub/target.py")
             self.assertEqual(list(manifest.silent_source_files), ["pkg/sub/silent.py"])
             self.assertEqual(list(manifest.dependencies), ["//dep/pkg:dep_target"])
-            self.assertEqual(list(manifest.silent_dependencies), ["//dep/pkg:silent_target"])
-            self.assertEqual(list(manifest.star_dependencies), ["//dep/pkg:star_target"])
-            self.assertEqual(list(manifest.feedback_dependencies), ["//dep/pkg:feedback_target"])
+            self.assertEqual(
+                list(manifest.silent_dependencies), ["//dep/pkg:silent_target"]
+            )
+            self.assertEqual(
+                list(manifest.star_dependencies), ["//dep/pkg:star_target"]
+            )
+            self.assertEqual(
+                list(manifest.feedback_dependencies), ["//dep/pkg:feedback_target"]
+            )
             self.assertEqual(manifest.guide_target, "//pkg/sub:guide")
             self.assertEqual(manifest.verification_check, "bazel test //pkg/sub:test")
             self.assertEqual(manifest.template, "Template text")
@@ -232,7 +255,13 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         manifest_file2 = os.path.join(pkg_path, ".custom_target.manifest.json")
         for mfile in (manifest_file1, manifest_file2):
             with open(mfile, "w", encoding="utf-8") as f:
-                json.dump({"label": "//pkg/named:custom_target", "task_prompt": "Custom prompt"}, f)
+                json.dump(
+                    {
+                        "label": "//pkg/named:custom_target",
+                        "task_prompt": "Custom prompt",
+                    },
+                    f,
+                )
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
@@ -249,9 +278,17 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         rf_pkg = os.path.join(runfiles_dir, "pkg/runfiles_node")
         os.makedirs(rf_pkg, exist_ok=True)
         with open(os.path.join(rf_pkg, ".manifest.json"), "w", encoding="utf-8") as f:
-            json.dump({"label": "//pkg/runfiles_node:target", "task_prompt": "Runfiles prompt"}, f)
+            json.dump(
+                {
+                    "label": "//pkg/runfiles_node:target",
+                    "task_prompt": "Runfiles prompt",
+                },
+                f,
+            )
 
-        with patch.dict(os.environ, {"RUNFILES_DIR": runfiles_dir, "TEST_SRCDIR": runfiles_dir}):
+        with patch.dict(
+            os.environ, {"RUNFILES_DIR": runfiles_dir, "TEST_SRCDIR": runfiles_dir}
+        ):
             with enter_phase("system", registry=self.registry) as scope:
                 loader = scope.get_singleton(BazelManifestLoader)
                 # Requirement: MUST retrieve target manifests from runfiles trees for graph nodes.
@@ -268,11 +305,14 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         os.makedirs(pkg_path, exist_ok=True)
         manifest_file = os.path.join(pkg_path, ".manifest.json")
         with open(manifest_file, "w", encoding="utf-8") as f:
-            json.dump({
-                "label": "//pkg/roles:comp",
-                "task_prompt": "Prompt for role",
-                "dependencies": ["//other/pkg:dep#lib"],
-            }, f)
+            json.dump(
+                {
+                    "label": "//pkg/roles:comp",
+                    "task_prompt": "Prompt for role",
+                    "dependencies": ["//other/pkg:dep#lib"],
+                },
+                f,
+            )
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
@@ -289,13 +329,16 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         os.makedirs(pkg_path, exist_ok=True)
         manifest_file = os.path.join(pkg_path, ".manifest.json")
         with open(manifest_file, "w", encoding="utf-8") as f:
-            json.dump({
-                "label": "//pkg/param:widget#test",
-                "source_file": "pkg/param/widget_test.py",
-                "task_prompt": "Test widget",
-                "verification_check": "bazel test //pkg/param:widget_test",
-                "dependencies": ["//dep/pkg:dep#lib"],
-            }, f)
+            json.dump(
+                {
+                    "label": "//pkg/param:widget#test",
+                    "source_file": "pkg/param/widget_test.py",
+                    "task_prompt": "Test widget",
+                    "verification_check": "bazel test //pkg/param:widget_test",
+                    "dependencies": ["//dep/pkg:dep#lib"],
+                },
+                f,
+            )
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
@@ -309,7 +352,9 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             assert manifest is not None
             self.assertEqual(manifest.source_file, "pkg/param/widget_test.py")
             self.assertEqual(manifest.task_prompt, "Test widget")
-            self.assertEqual(manifest.verification_check, "bazel test //pkg/param:widget_test")
+            self.assertEqual(
+                manifest.verification_check, "bazel test //pkg/param:widget_test"
+            )
 
     def test_load_manifest_populates_storage(self) -> None:
         """CUJ: Resolving manifest into graph structures, dependencies, and node definitions."""
@@ -351,9 +396,13 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             self.assertIn(DagDependency(node=silent_c_node, is_silent=True), deps)
             self.assertEqual(self.storage.get_source_file(node), "pkg/target_a.py")
             feedback_e_node = self.node_utils.normalize_target("//pkg:feedback_e")
-            self.assertEqual(self.storage.get_feedback_dependencies(node), {feedback_e_node})
+            self.assertEqual(
+                self.storage.get_feedback_dependencies(node), {feedback_e_node}
+            )
 
-    def test_load_manifest_synthesizes_definitions_for_unmanifested_dependencies(self) -> None:
+    def test_load_manifest_synthesizes_definitions_for_unmanifested_dependencies(
+        self,
+    ) -> None:
         """CUJ: Synthesizing node definitions for declared dependencies lacking explicit manifests."""
         node = _make_dag_node("//pkg:parent")
         pkg_path = os.path.join(self.test_dir, "pkg")
@@ -374,7 +423,9 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             # Requirement: MUST synthesize fallback node definitions for referenced targets lacking manifests.
             loader.load_manifest(node)
 
-            missing_node = self.node_utils.normalize_target("//unmanifested/pkg:missing_dep")
+            missing_node = self.node_utils.normalize_target(
+                "//unmanifested/pkg:missing_dep"
+            )
             missing_defn = self.storage.get_node_definition(missing_node)
             self.assertIsNotNone(missing_defn)
             assert missing_defn is not None
@@ -387,11 +438,14 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         os.makedirs(pkg_path, exist_ok=True)
         manifest_file = os.path.join(pkg_path, ".manifest.json")
         with open(manifest_file, "w", encoding="utf-8") as f:
-            json.dump({
-                "label": "//pkg/inactive:unit",
-                "task_prompt": "Some prompt",
-                "active_roles": ["other_role"],
-            }, f)
+            json.dump(
+                {
+                    "label": "//pkg/inactive:unit",
+                    "task_prompt": "Some prompt",
+                    "active_roles": ["other_role"],
+                },
+                f,
+            )
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
@@ -409,12 +463,15 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         os.makedirs(pkg_path, exist_ok=True)
         manifest_file = os.path.join(pkg_path, ".manifest.json")
         with open(manifest_file, "w", encoding="utf-8") as f:
-            json.dump({
-                "label": "//pkg/unit:comp",
-                "task_prompt": "Cross product prompt",
-                "dependencies": ["//dep/unit:dep_comp"],
-                "role_dependencies": {"role_b": ["role_a"]},
-            }, f)
+            json.dump(
+                {
+                    "label": "//pkg/unit:comp",
+                    "task_prompt": "Cross product prompt",
+                    "dependencies": ["//dep/unit:dep_comp"],
+                    "role_dependencies": {"role_b": ["role_a"]},
+                },
+                f,
+            )
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
@@ -428,26 +485,32 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         os.makedirs(pkg_path, exist_ok=True)
         unit_file = os.path.join(pkg_path, "mycomp_unit_manifest.json")
         with open(unit_file, "w", encoding="utf-8") as f:
-            json.dump({
-                "unit_name": "mycomp",
-                "unit_dir": "pkg/myunit",
-                "component_type": "implementation",
-                "unit_deps": [],
-            }, f)
+            json.dump(
+                {
+                    "unit_name": "mycomp",
+                    "unit_dir": "pkg/myunit",
+                    "component_type": "implementation",
+                    "unit_deps": [],
+                },
+                f,
+            )
 
         roles_path = os.path.join(self.test_dir, "roles")
         os.makedirs(roles_path, exist_ok=True)
         role_file = os.path.join(roles_path, "myrole_role_manifest.json")
         with open(role_file, "w", encoding="utf-8") as f:
-            json.dump({
-                "role_name": "myrole",
-                "active_component_types": ["implementation"],
-                "src_pattern": "{unit_dir}/low/{unit_name}.pyi",
-                "node_deps": [
-                    "//support/lib:framework_spec",
-                    ":helper_spec",
-                ],
-            }, f)
+            json.dump(
+                {
+                    "role_name": "myrole",
+                    "active_component_types": ["implementation"],
+                    "src_pattern": "{unit_dir}/low/{unit_name}.pyi",
+                    "node_deps": [
+                        "//support/lib:framework_spec",
+                        ":helper_spec",
+                    ],
+                },
+                f,
+            )
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
@@ -460,7 +523,10 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
 
     def test_load_manifest_normalizes_cross_root_staging_source_file(self) -> None:
         """CUJ: Loading manifest for staging node with canonical update_with_ai source path."""
-        node = _make_dag_node("//staging/parts/agent:agent_session", role_address="//update_python_with_ai:low")
+        node = _make_dag_node(
+            "//staging/parts/agent:agent_session",
+            role_address="//update_python_with_ai:low",
+        )
         manifest_data = {
             "label": "//staging/parts/agent:agent_session#//update_python_with_ai:low",
             "source_file": "update_with_ai/parts/agent/low/agent_session.pyi",
@@ -488,7 +554,10 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
 
     def test_load_manifest_deduplicates_redundant_package_prefix(self) -> None:
         """CUJ: Loading manifest with corrupted doubled package path segments."""
-        node = _make_dag_node("//update_with_ai/parts/agent:agent_session", role_address="//update_python_with_ai:low")
+        node = _make_dag_node(
+            "//update_with_ai/parts/agent:agent_session",
+            role_address="//update_python_with_ai:low",
+        )
         manifest_data = {
             "label": "//update_with_ai/parts/agent:agent_session#//update_python_with_ai:low",
             "source_file": "update_with_ai/parts/agent/update_with_ai/parts/agent/low/agent_session.pyi",

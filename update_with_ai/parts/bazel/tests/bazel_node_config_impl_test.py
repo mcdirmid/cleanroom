@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: b25cee114f55
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for bazel_node_config_impl aligned with grounding specifications."""
 
 import os
@@ -29,7 +38,10 @@ from update_with_ai.parts.agent.lib.agent_node_config import (
 )
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
 from update_with_ai.parts.agent.lib.agent_storage import AgentStorage
-from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader, TargetManifest
+from update_with_ai.parts.bazel.lib.bazel_manifest_loader import (
+    BazelManifestLoader,
+    TargetManifest,
+)
 from update_with_ai.parts.bazel.lib.bazel_node_config_impl import (
     AliasManager as AliasManagerImpl,
     NodeConfig as NodeConfigImpl,
@@ -57,7 +69,9 @@ from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
 def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
-    return DagNode(unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address))
+    return DagNode(
+        unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address)
+    )
 
 
 class FakeFilePaths:
@@ -78,9 +92,7 @@ class FakeFilePaths:
     def create_workspace_path(self, path: str) -> WorkspacePath:
         return WorkspacePath(path=PathString(path))
 
-    def resolve_path(
-        self, root: AbsolutePath, relative: WorkspacePath
-    ) -> AbsolutePath:
+    def resolve_path(self, root: AbsolutePath, relative: WorkspacePath) -> AbsolutePath:
         return AbsolutePath(path=PathString(f"{root.path}/{relative.path}"))
 
 
@@ -101,7 +113,9 @@ class FakeBazelTarget:
 class FakeRoleConfig:
     tier = "agent_session"
 
-    def __init__(self, role: str = "lib", nodes: Optional[Sequence[DagNode]] = None) -> None:
+    def __init__(
+        self, role: str = "lib", nodes: Optional[Sequence[DagNode]] = None
+    ) -> None:
         self._role = role
         self._nodes = list(nodes or [_make_dag_node("//pkg:target", "lib")])
         self._version = 1

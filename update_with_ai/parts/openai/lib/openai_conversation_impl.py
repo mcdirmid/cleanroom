@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 636ef8341688
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in openai_conversation_impl.pyi
 import json
 from typing import Any, List, Optional, Sequence
@@ -12,17 +21,19 @@ from support.lib.lifecycle import (
 
 _SUPPRESSION_BUFFER_LIMIT = 3
 
-_PATH_PARAM_NAMES = frozenset({
-    "path",
-    "target_file",
-    "targetfile",
-    "file",
-    "file_alias",
-    "file_path",
-    "filepath",
-    "file_name",
-    "filename",
-})
+_PATH_PARAM_NAMES = frozenset(
+    {
+        "path",
+        "target_file",
+        "targetfile",
+        "file",
+        "file_alias",
+        "file_path",
+        "filepath",
+        "file_name",
+        "filename",
+    }
+)
 
 
 def _is_path_param(name: str) -> bool:
@@ -53,7 +64,8 @@ class Conversation(loop_conversation.Conversation, Singleton):
         for msg in initial_messages:
             if msg.role == loop_conversation.MessageRole("tool"):
                 has_assistant_call = any(
-                    m.role == loop_conversation.MessageRole("assistant") and m.tool_call_id == msg.tool_call_id
+                    m.role == loop_conversation.MessageRole("assistant")
+                    and m.tool_call_id == msg.tool_call_id
                     for m in self._messages
                 )
                 if not has_assistant_call:
@@ -63,7 +75,10 @@ class Conversation(loop_conversation.Conversation, Singleton):
                             parsed = json.loads(formatted_args)
                             if isinstance(parsed, dict):
                                 formatted_args = json.dumps(parsed, sort_keys=True)
-                        except (json.JSONDecodeError, TypeError):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
+                        except (
+                            json.JSONDecodeError,
+                            TypeError,
+                        ):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
                             pass
                     self._messages.append(
                         loop_conversation.ConversationMessage(
@@ -71,7 +86,9 @@ class Conversation(loop_conversation.Conversation, Singleton):
                             content=loop_conversation.ConversationContent(""),
                             tool_call_id=msg.tool_call_id,
                             tool_name=msg.tool_name,
-                            tool_arguments=loop_conversation.SerializedArguments(formatted_args),
+                            tool_arguments=loop_conversation.SerializedArguments(
+                                formatted_args
+                            ),
                         )
                     )
                     self._suppression_keys.append(None)
@@ -90,7 +107,8 @@ class Conversation(loop_conversation.Conversation, Singleton):
         tool_arguments: loop_conversation.SerializedArguments,
     ) -> None:
         has_assistant_call = any(
-            m.role == loop_conversation.MessageRole("assistant") and m.tool_call_id == tool_call_id
+            m.role == loop_conversation.MessageRole("assistant")
+            and m.tool_call_id == tool_call_id
             for m in self._messages
         )
         if not has_assistant_call:
@@ -100,7 +118,10 @@ class Conversation(loop_conversation.Conversation, Singleton):
                     parsed = json.loads(formatted_args)
                     if isinstance(parsed, dict):
                         formatted_args = json.dumps(parsed, sort_keys=True)
-                except (json.JSONDecodeError, TypeError):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
+                except (
+                    json.JSONDecodeError,
+                    TypeError,
+                ):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
                     pass
             self._messages.append(
                 loop_conversation.ConversationMessage(
@@ -108,7 +129,9 @@ class Conversation(loop_conversation.Conversation, Singleton):
                     content=loop_conversation.ConversationContent(""),
                     tool_call_id=tool_call_id,
                     tool_name=tool_name,
-                    tool_arguments=loop_conversation.SerializedArguments(formatted_args),
+                    tool_arguments=loop_conversation.SerializedArguments(
+                        formatted_args
+                    ),
                 )
             )
             self._suppression_keys.append(None)
@@ -148,30 +171,46 @@ class Conversation(loop_conversation.Conversation, Singleton):
                 if old_msg.tool_call_id:
                     for j in range(old_idx - 1, -1, -1):
                         if (
-                            self._messages[j].role == loop_conversation.MessageRole("assistant")
+                            self._messages[j].role
+                            == loop_conversation.MessageRole("assistant")
                             and self._messages[j].tool_call_id == old_msg.tool_call_id
                         ):
                             asst_msg = self._messages[j]
-                            new_tool_args: Optional[loop_conversation.SerializedArguments] = asst_msg.tool_arguments
+                            new_tool_args: Optional[
+                                loop_conversation.SerializedArguments
+                            ] = asst_msg.tool_arguments
                             if asst_msg.tool_arguments:
                                 try:
                                     parsed = json.loads(str(asst_msg.tool_arguments))
                                     if isinstance(parsed, dict):
                                         elided: dict[str, Any] = {}
                                         for k, v in parsed.items():
-                                            if _is_path_param(k) or not isinstance(v, str):
+                                            if _is_path_param(k) or not isinstance(
+                                                v, str
+                                            ):
                                                 elided[k] = v
                                             else:
                                                 elided[k] = "[STUB]"
-                                        new_tool_args = loop_conversation.SerializedArguments(
-                                            json.dumps(elided, sort_keys=True)
+                                        new_tool_args = (
+                                            loop_conversation.SerializedArguments(
+                                                json.dumps(elided, sort_keys=True)
+                                            )
                                         )
                                     else:
-                                        new_tool_args = loop_conversation.SerializedArguments("{}")  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
-                                except (json.JSONDecodeError, TypeError):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
-                                    new_tool_args = loop_conversation.SerializedArguments("{}")  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
+                                        new_tool_args = loop_conversation.SerializedArguments(
+                                            "{}"
+                                        )  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
+                                except (
+                                    json.JSONDecodeError,
+                                    TypeError,
+                                ):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
+                                    new_tool_args = loop_conversation.SerializedArguments(
+                                        "{}"
+                                    )  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
                             else:
-                                new_tool_args = loop_conversation.SerializedArguments("{}")  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
+                                new_tool_args = loop_conversation.SerializedArguments(
+                                    "{}"
+                                )  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
 
                             self._messages[j] = loop_conversation.ConversationMessage(
                                 role=asst_msg.role,
@@ -187,7 +226,9 @@ class Conversation(loop_conversation.Conversation, Singleton):
         self._messages.append(
             loop_conversation.ConversationMessage(
                 role=loop_conversation.MessageRole("tool"),
-                content=loop_conversation.ConversationContent(str(tool_response.content)),
+                content=loop_conversation.ConversationContent(
+                    str(tool_response.content)
+                ),
                 tool_call_id=tool_call_id,
                 tool_name=tool_name,
                 reminder=effective_reminder,

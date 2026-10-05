@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 9a3bf2e0aebf
+-->
+
 # bazel_manifest_loader_impl implementation component
 
 imports: agent_storage, bazel_manifest_ext, bazel_target, dag_storage, file_paths

@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: b5979c51b059
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in sandbox_file_reader_impl.pyi
 import os
 import re
@@ -114,7 +123,10 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
         try:
             edit_mgr = get_singleton(sandbox_file_editor.EditManager)
             edit_mgr.record_file_read(target_file)
-        except (LookupError, KeyError):  # pragma: no cover (assumption: standard reader configuration)
+        except (
+            LookupError,
+            KeyError,
+        ):  # pragma: no cover (assumption: standard reader configuration)
             pass
 
         return tool_provider.ToolResponse(
@@ -160,7 +172,10 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
         try:
             cfg = get_singleton(agent_config.AgentConfig)
             is_mcp = cfg.is_mcp_mode
-        except (LookupError, KeyError):  # pragma: no cover (assumption: standard reader configuration)
+        except (
+            LookupError,
+            KeyError,
+        ):  # pragma: no cover (assumption: standard reader configuration)
             is_mcp = False
         if not is_mcp:
             tm.install_tool(self)
@@ -197,7 +212,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         target_file = cast(
             Optional[agent_file_alias.FileAlias],
@@ -326,7 +343,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
                     continue
                 if filtered_lines:
                     if not filtered_lines[-1].endswith("\n"):
-                        filtered_lines[-1] += "\n"  # pragma: no cover (assumption: posix newline terminated)
+                        filtered_lines[-1] += (
+                            "\n"  # pragma: no cover (assumption: posix newline terminated)
+                        )
                     filtered_lines.append("\n")
                 filtered_lines.extend(para)
             lines = filtered_lines
@@ -364,7 +383,10 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
         try:
             edit_mgr = get_singleton(sandbox_file_editor.EditManager)
             edit_mgr.record_file_read(target_file)
-        except (LookupError, KeyError):  # pragma: no cover (assumption: standard reader configuration)
+        except (
+            LookupError,
+            KeyError,
+        ):  # pragma: no cover (assumption: standard reader configuration)
             pass
 
         return tool_provider.ToolResponse(
@@ -417,7 +439,9 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
 
     @property
     def description(self) -> tool_provider.ToolDescription:
-        return tool_provider.ToolDescription("Searches for regex pattern matches across session files.")
+        return tool_provider.ToolDescription(
+            "Searches for regex pattern matches across session files."
+        )
 
     @property
     def regex_pattern_parameter(
@@ -439,7 +463,9 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         pat_obj = actual_parameter_bindings.get(self.regex_pattern_parameter)
         pattern_str = str(pat_obj or "")

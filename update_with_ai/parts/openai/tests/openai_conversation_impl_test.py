@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 68b49547f98a
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for openai_conversation_impl aligned with grounding specifications."""
 
 import json
@@ -43,7 +52,9 @@ def _make_msg(
         tool_call_id=ToolCallId(tool_call_id) if tool_call_id is not None else None,
         tool_name=ToolName(tool_name) if tool_name is not None else None,
         reminder=ToolReminder(reminder) if reminder is not None else None,
-        tool_arguments=SerializedArguments(tool_arguments) if tool_arguments is not None else None,
+        tool_arguments=SerializedArguments(tool_arguments)
+        if tool_arguments is not None
+        else None,
         is_stub=is_stub,
     )
 
@@ -60,7 +71,9 @@ def _make_response(
         is_terminated=is_terminated,
         content=ToolResponseContent(content),
         reminder=ToolReminder(reminder) if reminder is not None else None,
-        suppression_key=SuppressionKey(suppression_key) if suppression_key is not None else None,
+        suppression_key=SuppressionKey(suppression_key)
+        if suppression_key is not None
+        else None,
     )
 
 
@@ -74,9 +87,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
         self.agent_cfg = MockAgentConfig()
-        self.registry.register_instance(
-            self.agent_cfg, keys=[AgentConfig], tier=system
-        )
+        self.registry.register_instance(self.agent_cfg, keys=[AgentConfig], tier=system)
 
     def test_dataclasses(self) -> None:
         """CUJ: Instantiating ConversationMessage and ModelRequest records."""
@@ -146,7 +157,9 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 resp1,
                 tool_call_id=ToolCallId("call_1"),
                 tool_name=ToolName("view_file"),
-                tool_arguments=SerializedArguments('{"a_param": "first", "z_param": "last"}'),
+                tool_arguments=SerializedArguments(
+                    '{"a_param": "first", "z_param": "last"}'
+                ),
             )
 
             # A second unprompted tool response with the SAME tool name must also get its own synthetic assistant message paired by tool_call_id
@@ -239,7 +252,12 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
             # At 3 responses with the same key, none are superseded yet (all 3 in buffer)
             req_3 = history.get_model_request()
-            w_tools_3 = [m for m in req_3.messages if m.tool_call_id in ("call_w1", "call_w2", "call_w3") and m.role == "tool"]
+            w_tools_3 = [
+                m
+                for m in req_3.messages
+                if m.tool_call_id in ("call_w1", "call_w2", "call_w3")
+                and m.role == "tool"
+            ]
             self.assertEqual(len(w_tools_3), 3)
             self.assertTrue(all(not m.is_stub for m in w_tools_3))
 
@@ -307,12 +325,14 @@ class OpenAIConversationImplTest(unittest.TestCase):
                     content="",
                     tool_call_id="call_edit1",
                     tool_name="replace_file_content",
-                    tool_arguments=json.dumps({
-                        "path": "file_a.py",
-                        "count": 42,
-                        "target_content": "old_a",
-                        "replacement_content": "prefix_01234567890123456789",
-                    }),
+                    tool_arguments=json.dumps(
+                        {
+                            "path": "file_a.py",
+                            "count": 42,
+                            "target_content": "old_a",
+                            "replacement_content": "prefix_01234567890123456789",
+                        }
+                    ),
                 )
             )
             edit1_resp = _make_response(
@@ -324,12 +344,14 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 tool_name=ToolName("replace_file_content"),
                 tool_call_id=ToolCallId("call_edit1"),
                 tool_arguments=SerializedArguments(
-                    json.dumps({
-                        "path": "file_a.py",
-                        "count": 42,
-                        "target_content": "old_a",
-                        "replacement_content": "prefix_01234567890123456789",
-                    })
+                    json.dumps(
+                        {
+                            "path": "file_a.py",
+                            "count": 42,
+                            "target_content": "old_a",
+                            "replacement_content": "prefix_01234567890123456789",
+                        }
+                    )
                 ),
             )
 
@@ -379,7 +401,9 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
             # At this point, Edit 1, 2, 3 are all intact in the buffer
             edit1_asst = next(
-                m for m in history.get_model_request().messages if m.tool_call_id == "call_edit1" and m.role == "assistant"
+                m
+                for m in history.get_model_request().messages
+                if m.tool_call_id == "call_edit1" and m.role == "assistant"
             )
             self.assertFalse(edit1_asst.is_stub)
 
@@ -407,7 +431,9 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 ),
             )
 
-            tool_msgs = [m for m in history.get_model_request().messages if m.role == "tool"]
+            tool_msgs = [
+                m for m in history.get_model_request().messages if m.role == "tool"
+            ]
 
             # Verify responses without suppression keys were NOT superseded
             self.assertFalse(tool_msgs[0].is_stub)
@@ -431,13 +457,17 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
             # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message retain their parameter keys, preserving file path parameters, preserving non-string values, and replacing other string values with a stub marker.
             w1_asst = next(
-                m for m in history.get_model_request().messages if m.tool_call_id == "call_w1" and m.role == "assistant"
+                m
+                for m in history.get_model_request().messages
+                if m.tool_call_id == "call_w1" and m.role == "assistant"
             )
             self.assertTrue(w1_asst.is_stub)
             self.assertEqual(w1_asst.tool_arguments, "{}")
 
             w2_asst = next(
-                m for m in history.get_model_request().messages if m.tool_call_id == "call_w2" and m.role == "assistant"
+                m
+                for m in history.get_model_request().messages
+                if m.tool_call_id == "call_w2" and m.role == "assistant"
             )
             self.assertFalse(w2_asst.is_stub)
 
@@ -460,7 +490,9 @@ class OpenAIConversationImplTest(unittest.TestCase):
             # Verify Edit 1 was superseded: response is stubbed AND assistant arguments are stubbed all-or-nothing (preserving path and non-string count, replacing other strings with [STUB])
             # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message retain their parameter keys, preserving file path parameters, preserving non-string values, and replacing other string values with a stub marker.
             edit1_asst_after = next(
-                m for m in history.get_model_request().messages if m.tool_call_id == "call_edit1" and m.role == "assistant"
+                m
+                for m in history.get_model_request().messages
+                if m.tool_call_id == "call_edit1" and m.role == "assistant"
             )
             self.assertTrue(edit1_asst_after.is_stub)
             parsed_args = json.loads(edit1_asst_after.tool_arguments or "{}")
@@ -473,7 +505,9 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
             # Verify Edit 2, 3, 4 are intact in the buffer
             edit2_asst = next(
-                m for m in history.get_model_request().messages if m.tool_call_id == "call_edit2" and m.role == "assistant"
+                m
+                for m in history.get_model_request().messages
+                if m.tool_call_id == "call_edit2" and m.role == "assistant"
             )
             self.assertFalse(edit2_asst.is_stub)
             self.assertIn("file_b.py", edit2_asst.tool_arguments or "")
@@ -481,7 +515,9 @@ class OpenAIConversationImplTest(unittest.TestCase):
             self.assertEqual(tool_msgs[12].content, "diff b")
 
             edit3_asst = next(
-                m for m in history.get_model_request().messages if m.tool_call_id == "call_edit3" and m.role == "assistant"
+                m
+                for m in history.get_model_request().messages
+                if m.tool_call_id == "call_edit3" and m.role == "assistant"
             )
             self.assertFalse(edit3_asst.is_stub)
             self.assertIn("file_c.py", edit3_asst.tool_arguments or "")
@@ -489,12 +525,16 @@ class OpenAIConversationImplTest(unittest.TestCase):
             self.assertEqual(tool_msgs[13].content, "diff c")
 
             edit4_asst = next(
-                m for m in history.get_model_request().messages if m.tool_call_id == "call_edit4" and m.role == "assistant"
+                m
+                for m in history.get_model_request().messages
+                if m.tool_call_id == "call_edit4" and m.role == "assistant"
             )
             self.assertFalse(edit4_asst.is_stub)
             self.assertIn("file_d.py", edit4_asst.tool_arguments or "")
             self.assertFalse(tool_msgs[14].is_stub)
-            self.assertEqual(tool_msgs[14].content, "Error: target_content not found in file_d.py.")
+            self.assertEqual(
+                tool_msgs[14].content, "Error: target_content not found in file_d.py."
+            )
 
     def test_get_model_request_formats_roles_and_reminders(self) -> None:
         """CUJ: Formatting messages into ModelRequest formats OpenAI conventions and active reminders."""
@@ -557,14 +597,16 @@ class OpenAIConversationImplTest(unittest.TestCase):
                     content="",
                     tool_call_id="call_stub_1",
                     tool_name="edit_file",
-                    tool_arguments=json.dumps({
-                        "path": "parts/sandbox/lib/foo.py",
-                        "target_file": "parts/sandbox/lib/bar.py",
-                        "active": True,
-                        "count": 100,
-                        "description": "Short desc",
-                        "replacement_content": "A very long replacement string that previously got sliced to 20 chars",
-                    }),
+                    tool_arguments=json.dumps(
+                        {
+                            "path": "parts/sandbox/lib/foo.py",
+                            "target_file": "parts/sandbox/lib/bar.py",
+                            "active": True,
+                            "count": 100,
+                            "description": "Short desc",
+                            "replacement_content": "A very long replacement string that previously got sliced to 20 chars",
+                        }
+                    ),
                 )
             )
             history.append_tool_response(
@@ -572,14 +614,16 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 tool_name=ToolName("edit_file"),
                 tool_call_id=ToolCallId("call_stub_1"),
                 tool_arguments=SerializedArguments(
-                    json.dumps({
-                        "path": "parts/sandbox/lib/foo.py",
-                        "target_file": "parts/sandbox/lib/bar.py",
-                        "active": True,
-                        "count": 100,
-                        "description": "Short desc",
-                        "replacement_content": "A very long replacement string that previously got sliced to 20 chars",
-                    })
+                    json.dumps(
+                        {
+                            "path": "parts/sandbox/lib/foo.py",
+                            "target_file": "parts/sandbox/lib/bar.py",
+                            "active": True,
+                            "count": 100,
+                            "description": "Short desc",
+                            "replacement_content": "A very long replacement string that previously got sliced to 20 chars",
+                        }
+                    )
                 ),
             )
             # Add responses 2 and 3: still within the 3-response buffer
@@ -605,7 +649,9 @@ class OpenAIConversationImplTest(unittest.TestCase):
             )
 
             asst_stub = next(
-                m for m in history.get_model_request().messages if m.tool_call_id == "call_stub_1" and m.role == "assistant"
+                m
+                for m in history.get_model_request().messages
+                if m.tool_call_id == "call_stub_1" and m.role == "assistant"
             )
             parsed = json.loads(asst_stub.tool_arguments or "{}")
             # Path parameters preserved intact (no truncation or 20-char slice)
@@ -698,7 +744,9 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 tool_arguments=SerializedArguments("{}"),
             )
             asst_stub = next(
-                m for m in history.get_model_request().messages if m.tool_call_id == "call_bad_json" and m.role == "assistant"
+                m
+                for m in history.get_model_request().messages
+                if m.tool_call_id == "call_bad_json" and m.role == "assistant"
             )
             self.assertTrue(asst_stub.is_stub)
 

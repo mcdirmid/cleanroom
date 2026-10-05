@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 6ddbcd011772
+-->
+
 # sandbox_guide_delivery_impl implementation component
 
 imports: tool_provider, agent_file_alias, agent_node_config

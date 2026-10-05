@@ -1,7 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-04T19:49:10Z
+LAST_CLEANED: 2026-10-05T02:07:35Z
 LAST_CHANGED: 2026-10-04T02:03:40Z
 CHANGE: new file
+CODE_HASH: c716f56b8398
 -->
 
 # Guide: High-Level to Planning Specification Alignment
@@ -91,7 +92,6 @@ Planning specifications purge intent and design rationale into continuous prose 
 - [ ] When an operation fails under multiple conditions, each condition maps to an explicit woven contract stating the concrete diagnostic feedback string or message template
 - [ ] Woven contracts specify observable system outcomes rather than internal procedural control flow or private implementation states
 - [ ] Caller assumptions are never woven into callee failure ladders or defensive exception branches; caller assumption violations represent undefined behavior rather than handled failure outcomes
-
 
 ## Scope attribution and boundary filtering
 

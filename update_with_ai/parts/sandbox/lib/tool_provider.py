@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 3c51cd58f958
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in tool_provider.pyi
 
 from dataclasses import dataclass
@@ -172,7 +179,9 @@ class _ActionParameterBindings(dict[Any, Any]):
         *args: Any,
         items: Optional[Any] = None,
         bindings: Optional[Any] = None,
-        parameters_by_name: Optional[Mapping[ParameterName, ToolParameter[Any, Any]]] = None,
+        parameters_by_name: Optional[
+            Mapping[ParameterName, ToolParameter[Any, Any]]
+        ] = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -261,7 +270,9 @@ class Tool(Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[ToolParameter[Any, Any], SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            ToolParameter[Any, Any], SomeParameterActualType
+        ],
     ) -> ToolResponse: ...
 
 

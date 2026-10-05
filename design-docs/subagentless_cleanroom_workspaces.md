@@ -12,6 +12,11 @@ This document specifies the architecture, confinement mechanics, and orchestrati
 >   - **Option 3 (This Architecture)**: Isolated sibling workspaces (`../role_workspaces/<workspace-name>_<role-name>`) with separate conversational chats in the Antigravity IDE. It is the **primary production architecture** for interactive Cleanroom development, achieving maximum prompt-cache efficiency and zero subagent tax.
 > - **Future Subagent Integration**: If autonomous subagents are explored again in the future, they will **not** revive Option 2's in-tree server-exec harness; instead, they will be layered directly on top of this workspace architecture, dispatching subagents into these pre-confined role workspaces.
 
+> [!IMPORTANT]
+> **Modernization & Upgrade Plan**:
+> The comprehensive architectural plan for upgrading subagentless workspaces to in-band source metadata, directory-scoped commissioning, logless auditors, and omni-directional cascade synchronization is specified in:
+> **[Subagentless Workspace Upgrade Specification](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_workspace_upgrade.md)** (`subagentless_workspace_upgrade.md`).
+
 ---
 
 
@@ -412,6 +417,13 @@ The Test role workspace operates under strict double-blind constraints: `tests/B
 ## 5. Main Workspace Coordination Lifecycle
 
 The Main Workspace acts as the central coordinator. The coordination protocol is executed via `update_with_ai/support/lib/cleanroom_workspace_tool.py` (aliased as `bin/cleanroom-sync`).
+
+> [!NOTE]
+> **Operational Baseline vs. Planned Upgrade**:
+> This section documents the **current operational baseline** implemented in `update_with_ai/support/lib/cleanroom_workspace_tool.py` (which uses `.update_with_ai.textproto` files, `WORK_ORDER.md` task dispatching, and `COMPLETED.md` submissions).
+> 
+> The comprehensive plan to replace `.update_with_ai.textproto` with **in-band source metadata**, dynamic forward dirtiness evaluation, directory-scoped role commissioning, logless auditors, and workspace-local deterministic dirty checking (`bin/cleanroom-dirty`) is fully specified in:
+> **[Subagentless Workspace Upgrade Specification](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_workspace_upgrade.md)** (`subagentless_workspace_upgrade.md`).
 
 ### 5.1 Canonical Source of Truth: `.update_with_ai.textproto`
 The system does not require manual `--target` flags. Instead, package-level `.update_with_ai.textproto` files are the canonical source of truth for what is dirty across the repository.

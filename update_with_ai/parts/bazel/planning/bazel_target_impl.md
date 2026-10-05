@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: b16eeab2adc6
+-->
+
 # bazel_target_impl implementation component
 
 imports: dag_storage, file_paths, bazel_target_labels_ext
@@ -19,5 +26,5 @@ By delegating label normalization and package resolution to the bazel_target_lab
 
 ## Woven Contracts
 
-- Normalizing target labels invokes external label parsing to strip repository prefixes and expand omitted target names into canonical nodes. [strip_repository_qualifiers, expand_omitted_target_names, bazel_target: [normalize_identifier_to_node], bazel_target_labels_ext: [strip_main_repo_prefixes, expand_implicit_target_identifiers]]
-- Extracting a node directory translates package coordinates into a relative directory path anchored to the workspace root. [derive_node_directories_relative_to_root, bazel_target: [extract_node_dir_from_node], bazel_target_labels_ext: [translate_package_to_relative_path]]
+- Normalizing target labels invokes external label parsing to strip repository prefixes and expand omitted target names into canonical nodes. \[strip_repository_qualifiers, expand_omitted_target_names, bazel_target: [normalize_identifier_to_node], bazel_target_labels_ext: [strip_main_repo_prefixes, expand_implicit_target_identifiers]\]
+- Extracting a node directory translates package coordinates into a relative directory path anchored to the workspace root. \[derive_node_directories_relative_to_root, bazel_target: [extract_node_dir_from_node], bazel_target_labels_ext: [translate_package_to_relative_path]\]

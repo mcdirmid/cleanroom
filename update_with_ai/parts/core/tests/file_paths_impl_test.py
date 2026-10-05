@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: f7b623bccef4
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for file_paths_impl aligned with grounding specifications."""
 
 import unittest
@@ -42,7 +51,9 @@ class TestFilePathsImpl(unittest.TestCase):
             # Requirement: WHEN the path is not absolute, MUST raise PathValidationError with diagnostic feedback formatted as "Path is not absolute: {path}".
             with self.assertRaises(PathValidationError) as ctx:
                 service.create_absolute_path(PathString("relative/path/app.log"))
-            self.assertEqual(str(ctx.exception), "Path is not absolute: relative/path/app.log")
+            self.assertEqual(
+                str(ctx.exception), "Path is not absolute: relative/path/app.log"
+            )
 
     def test_create_workspace_path(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:

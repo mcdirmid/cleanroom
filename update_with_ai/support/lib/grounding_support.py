@@ -21,11 +21,13 @@ def only_elem[T](c: Iterable[T]) -> T:
 
 class SystemTier:
     """Marker type for system-level lifecycle tier."""
+
     pass
 
 
 class AgentSessionTier:
     """Marker type for agent-session-level lifecycle tier."""
+
     pass
 
 

@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: ff41217646bd
+-->
+
 # agent_storage interface component
 
 imports: dag_storage
@@ -28,4 +35,4 @@ By extending dag storage with manifest-backed node definitions and prompt metada
 ## Woven Contracts
 
 - When querying a declared node, the agent storage provides its task prompt and node definition. [query_node_def_supplied, query_task_prompt_supplied, provide_task_prompts, provide_node_definitions]
-- When a propagating dependency changes, dependent nodes dynamically evaluate as dirty based on dependency change timestamps. [evaluate_dirty_from_source_metadata, dag_storage: [expose_node_dirty, dirty_when_dependency_newer]]
+- When a propagating dependency changes, dependent nodes dynamically evaluate as dirty based on dependency change timestamps. \[evaluate_dirty_from_source_metadata, dag_storage: [expose_node_dirty, dirty_when_dependency_newer]\]

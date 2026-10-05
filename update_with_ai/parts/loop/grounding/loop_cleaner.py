@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: d1109a052ebb
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Loop cleaner grounding specification module."""
 
 from __future__ import annotations
@@ -28,8 +36,10 @@ class LoopCleaner(InTier[SystemTier], Protocol):
           - Consequent knowledge: return True.
 
         DEFERRED:
-        - Dynamic while loop and termination branches deferred to loop_cleaner_impl.py.        """
-        subgraph: dag_subgraph.DagSubgraph = self.get_singleton(dag_subgraph.DagSubgraph)
+        - Dynamic while loop and termination branches deferred to loop_cleaner_impl.py."""
+        subgraph: dag_subgraph.DagSubgraph = self.get_singleton(
+            dag_subgraph.DagSubgraph
+        )
         subgraph.set_target(target)
         batch: Sequence[dag_storage.DagNode] = subgraph.next_ready_batch()
         _should_continue: bool = node_cleaner.clean(batch)

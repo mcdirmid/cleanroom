@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: d4d289bee37e
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in sandbox_guide_delivery.pyi
 from typing import NewType, Optional, Protocol
 from . import tool_provider

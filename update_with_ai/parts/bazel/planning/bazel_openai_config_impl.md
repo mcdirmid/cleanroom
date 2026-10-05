@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: a1b8a79821a9
+-->
+
 # bazel_openai_config_impl implementation component
 
 imports: model_config_ext
@@ -27,4 +34,4 @@ By reading target configuration from environment variables or command-line argum
 ## Woven Contracts
 
 - Target configuration resolution selects modules specified via environment variables or command-line arguments, defaulting to standard targets. [resolve_target_from_model_config_env, resolve_target_from_agent_config_env, resolve_target_from_config_arg, default_target_to_standard]
-- Execution parameters and credentials load from resolved target modules, falling back to ambient environment variables or defaults when absent. [load_execution_params_from_target, load_auth_credentials_from_target, fallback_params_to_env_when_absent, fallback_credentials_to_env_when_absent, fallback_params_to_defaults, fallback_credentials_to_defaults, model_config_ext: [decode_config_json, parse_model_config_fields, extract_env_credentials], agent_config: [expose_execution_parameters], dag_config: [provide_node_visit_limit, provide_batch_size]]
+- Execution parameters and credentials load from resolved target modules, falling back to ambient environment variables or defaults when absent. \[load_execution_params_from_target, load_auth_credentials_from_target, fallback_params_to_env_when_absent, fallback_credentials_to_env_when_absent, fallback_params_to_defaults, fallback_credentials_to_defaults, model_config_ext: [decode_config_json, parse_model_config_fields, extract_env_credentials], agent_config: [expose_execution_parameters], dag_config: [provide_node_visit_limit, provide_batch_size]\]

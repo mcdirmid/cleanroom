@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 7b018032d267
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in tool_provider_impl.pyi
 from typing import Any, Dict, Mapping, Optional, Set
 from . import tool_provider
@@ -21,7 +30,9 @@ class ToolManager(tool_provider.ToolManager, Singleton):
     def execute_tool(
         self,
         name: tool_provider.ToolName,
-        wire_parameter_bindings: Mapping[tool_provider.ParameterName, tool_provider.WireType],
+        wire_parameter_bindings: Mapping[
+            tool_provider.ParameterName, tool_provider.WireType
+        ],
     ) -> tool_provider.ToolResponse:
         tool = self._tools.get(name)
         if tool is None:
@@ -37,16 +48,22 @@ class ToolManager(tool_provider.ToolManager, Singleton):
         raw_wire: Any = wire_parameter_bindings
         if isinstance(raw_wire, Mapping):
             wire_dict = {str(k): v for k, v in raw_wire.items()}
-        elif hasattr(raw_wire, "bindings"):  # pragma: no cover (assumption: arguments conform to Mapping interface)
+        elif hasattr(
+            raw_wire, "bindings"
+        ):  # pragma: no cover (assumption: arguments conform to Mapping interface)
             wire_dict = {str(k): v for k, v in getattr(raw_wire, "bindings")}
-        elif hasattr(raw_wire, "items"):  # pragma: no cover (assumption: arguments conform to Mapping interface)
+        elif hasattr(
+            raw_wire, "items"
+        ):  # pragma: no cover (assumption: arguments conform to Mapping interface)
             items_fn: Any = getattr(raw_wire, "items")
             raw_items: Any = items_fn() if callable(items_fn) else items_fn
             wire_dict = {str(k): v for k, v in list(raw_items)}
         else:  # pragma: no cover (assumption: arguments conform to Mapping interface)
             wire_dict = {}
 
-        params_by_name: dict[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {}
+        params_by_name: dict[
+            tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]
+        ] = {}
         for k, v in tool.parameters.items():
             params_by_name[tool_provider.ParameterName(k)] = v
 
@@ -70,7 +87,9 @@ class ToolManager(tool_provider.ToolManager, Singleton):
                 if p.is_required:
                     note = ""
                     if p.missing_message is not None:
-                        note = p.missing_message({tool_provider.ParameterName(k) for k in wire_dict.keys()})
+                        note = p.missing_message(
+                            {tool_provider.ParameterName(k) for k in wire_dict.keys()}
+                        )
                     if note:
                         content = f"Error: Required parameter '{p_name}' missing for tool '{name}'. Note: {note}"
                     else:

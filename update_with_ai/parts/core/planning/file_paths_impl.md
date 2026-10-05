@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 83fba98f46f1
+-->
+
 # file_paths_impl implementation component
 
 imports: filesystem_ext
@@ -22,6 +29,6 @@ By centralizing normalization routines and relying on host filesystem mechanics,
 
 ## Woven Contracts
 
-- When creating an absolute path, the file path manager validates against the host filesystem and produces a normalized absolute path record. [validate_with_host_fs, normalize_abs_path, file_paths: [create_abs_path, reject_relative_absolute]]
-- When creating a workspace path, the file path manager validates against the host filesystem and produces a normalized workspace path record. [validate_with_host_fs, normalize_ws_path, file_paths: [create_ws_path, reject_absolute_workspace, reject_leading_separators]]
-- When resolving a workspace path against a workspace root absolute path, paths are joined using the host filesystem into a normalized absolute path record. [resolve_with_host_fs, join_paths_with_host_fs, produce_normalized_resolved_path, file_paths: [resolve_ws_path, combine_root_and_ws_path]]
+- When creating an absolute path, the file path manager validates against the host filesystem and produces a normalized absolute path record. \[validate_with_host_fs, normalize_abs_path, file_paths: [create_abs_path, reject_relative_absolute]\]
+- When creating a workspace path, the file path manager validates against the host filesystem and produces a normalized workspace path record. \[validate_with_host_fs, normalize_ws_path, file_paths: [create_ws_path, reject_absolute_workspace, reject_leading_separators]\]
+- When resolving a workspace path against a workspace root absolute path, paths are joined using the host filesystem into a normalized absolute path record. \[resolve_with_host_fs, join_paths_with_host_fs, produce_normalized_resolved_path, file_paths: [resolve_ws_path, combine_root_and_ws_path]\]

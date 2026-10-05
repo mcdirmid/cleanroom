@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: e9730c5200ba
+# --- END CLEANROOM METADATA ---
+
 """Agent config interface component."""
 
 from typing import NewType, Protocol

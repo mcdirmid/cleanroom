@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 2931828c55f9
+# --- END CLEANROOM METADATA ---
+
 """Bazel loop implementation low-level specification."""
 
 from typing import Optional
@@ -81,4 +88,3 @@ class Loop(loop.Loop, InTier[SystemTier]):
         self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None:
         ...
-

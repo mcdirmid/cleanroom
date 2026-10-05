@@ -43,4 +43,3 @@ def is_valid_json(text: str) -> bool:
     _text: str = text
     _valid: bool = True
     raise NotImplementedError
-

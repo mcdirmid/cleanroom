@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 44b586411e15
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for loop_cleaner_impl aligned with grounding specifications."""
 
 import unittest
@@ -14,7 +23,9 @@ from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
 
 
 def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
-    return DagNode(unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address))
+    return DagNode(
+        unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address)
+    )
 
 
 class _BoolCallable:

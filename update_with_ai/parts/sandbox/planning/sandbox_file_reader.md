@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 4b3e2cfd1597
+-->
+
 # sandbox_file_reader interface component
 
 imports: agent_session, agent_file_alias, tool_provider, file_paths
@@ -34,5 +41,5 @@ By restricting access to declared read-only and read-write session files and val
 
 - When checking read access for a workspace path matching declared files, access is confirmed. [check_read_access_supplied, read_mgr_exposes_ro_files, read_mgr_exposes_rw_files, read_mgr_checks_read_access, read_access_confirms_ro, read_access_confirms_rw]
 - When checking read access for an undeclared workspace path, access fails with guidance listing readable file aliases. [check_read_access_supplied, read_mgr_exposes_ro_files, read_mgr_exposes_rw_files, read_mgr_checks_read_access, read_access_fails_with_guidance]
-- When executing the view file tool, file content is retrieved for the specified file alias path. [view_file_reads_content, tool_provider: [call_by_name, call_with_python_bindings]]
-- When executing the search tool, pattern matches are discovered across read-only and read-write files. [search_tool_searches_files, search_tool_searches_ro, search_tool_searches_rw, tool_provider: [call_by_name, call_with_python_bindings]]
+- When executing the view file tool, file content is retrieved for the specified file alias path. \[view_file_reads_content, tool_provider: [call_by_name, call_with_python_bindings]\]
+- When executing the search tool, pattern matches are discovered across read-only and read-write files. \[search_tool_searches_files, search_tool_searches_ro, search_tool_searches_rw, tool_provider: [call_by_name, call_with_python_bindings]\]

@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 5172b091ce25
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in loop_cleaner.pyi
 from typing import Protocol
 from . import loop_node_cleaner

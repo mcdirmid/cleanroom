@@ -1,8 +1,21 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 2273779d3965
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Loop node cleaner implementation grounding specification module."""
 
 from __future__ import annotations
 from typing import Mapping, Optional, Sequence, Set, cast
-from support.lib.grounding_support import InTier, SystemTier, AgentSessionTier, only_elem
+from support.lib.grounding_support import (
+    InTier,
+    SystemTier,
+    AgentSessionTier,
+    only_elem,
+)
 from parts.dag.grounding import dag_storage
 from parts.agent.grounding import agent_file_alias, agent_node_config, agent_storage
 from parts.core.grounding import runner_logger
@@ -16,7 +29,9 @@ class _RoleConfig(agent_node_config.RoleConfig, InTier[AgentSessionTier]):
     def __init__(self) -> None:
         self._role: agent_node_config.RoleName = agent_node_config.RoleName("")
         self._nodes: Sequence[dag_storage.DagNode] = ()
-        self._version: agent_node_config.ExecutionVersion = agent_node_config.ExecutionVersion(0)
+        self._version: agent_node_config.ExecutionVersion = (
+            agent_node_config.ExecutionVersion(0)
+        )
 
     @property
     def role(self) -> agent_node_config.RoleName:
@@ -88,8 +103,12 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
         - WHEN the outcome signals run failure, MUST leave nodes dirty and return false.
         - WHEN dirty nodes define no task prompt, MUST resolve pass-through changes without establishing an agent session.
         """
-        storage: agent_storage.AgentStorage = self.get_singleton(agent_storage.AgentStorage)
-        logger: runner_logger.RunnerLogger = self.get_singleton(runner_logger.RunnerLogger)
+        storage: agent_storage.AgentStorage = self.get_singleton(
+            agent_storage.AgentStorage
+        )
+        logger: runner_logger.RunnerLogger = self.get_singleton(
+            runner_logger.RunnerLogger
+        )
         sample_node: dag_storage.DagNode = only_elem(nodes)
 
         # Prompt inspection knowledge
@@ -133,10 +152,12 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
             ),
             owning_node=sample_node,
         )
-        _node_cfg_blame_targets: Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]] = {
-            sample_node: {_sample_bound_file}
-        }
-        _sample_blame_set: Set[agent_file_alias.BoundFile] = _node_cfg_blame_targets.get(sample_node, set())
+        _node_cfg_blame_targets: Mapping[
+            dag_storage.DagNode, Set[agent_file_alias.BoundFile]
+        ] = {sample_node: {_sample_bound_file}}
+        _sample_blame_set: Set[agent_file_alias.BoundFile] = (
+            _node_cfg_blame_targets.get(sample_node, set())
+        )
         _resolved_bound_file: agent_file_alias.BoundFile = only_elem(_sample_blame_set)
         _owning_node: dag_storage.DagNode = _resolved_bound_file.owning_node
 
@@ -152,7 +173,9 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
 
         # Non-feedback dependencies, guides, and fixed specs receive no feedback messages
         _feedback_deps: Set[dag_storage.DagNode] = {_owning_node}
-        _all_deps: Set[dag_storage.DagDependency] = storage.get_dependencies(sample_node)
+        _all_deps: Set[dag_storage.DagDependency] = storage.get_dependencies(
+            sample_node
+        )
         _dep_item: dag_storage.DagDependency = only_elem(_all_deps)
         _is_feedback_dep: bool = _dep_item.node in _feedback_deps
 

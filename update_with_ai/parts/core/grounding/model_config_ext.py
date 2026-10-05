@@ -26,4 +26,3 @@ def load_model_config(config_path: str) -> Mapping[str, Any]:
         "resolved_api_key": "sample-key",
     }
     raise NotImplementedError
-

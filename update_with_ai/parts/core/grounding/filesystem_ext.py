@@ -43,4 +43,3 @@ def search_directory_pattern(
         "truncated": False,
     }
     raise NotImplementedError
-

@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 372b88187734
+-->
+
 # file_paths interface component
 
 ## Purpose
@@ -18,4 +25,4 @@ A *workspace path* is a host path that represents a relative filesystem path anc
 
 Workspace and absolute paths can only be created from string paths through a system's *file path manager*, which also validates and resolves path representations. The file path manager assumes only non-empty strings are provided. The file path manager validates a given path string depending on whether an absolute or workspace path is desired.
 
-The file path manager can also resolve a workspace path into an absolute path given the absolute path of a workspace root. 
+The file path manager can also resolve a workspace path into an absolute path given the absolute path of a workspace root.

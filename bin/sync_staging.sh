@@ -95,6 +95,18 @@ python3 - << 'EOF'
 import os
 import sys
 
+repo_root = os.path.abspath(".")
+for p in [
+    os.path.join(repo_root, "update_with_ai"),
+    os.path.join(repo_root, "update_python_with_ai"),
+    os.path.join(repo_root, "update_with_ai", "support", "lib"),
+    os.path.join(repo_root, "update_python_with_ai", "support", "lib"),
+]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+from support.lib import src_metadata
+
 target_dirs_env = os.environ.get("TARGET_DIRS", "").strip()
 target_dirs = set(target_dirs_env.split()) if target_dirs_env else set()
 
@@ -141,6 +153,11 @@ for root, dirs, files in os.walk("staging/parts"):
             new_content = new_content.replace("update_with_ai.parts.", "staging.parts.")
             new_content = new_content.replace("update_with_ai.support.", "staging.support.")
             new_content = new_content.replace("//update_with_ai", "//staging")
+            meta = src_metadata.extract_metadata_from_text(new_content, file)
+            if meta and meta.code_hash:
+                new_hash = src_metadata.compute_code_hash(new_content, file)
+                if new_hash != meta.code_hash:
+                    new_content = src_metadata.rewrite_metadata_in_text(new_content, file, code_hash=new_hash)
             if new_content != content:
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(new_content)

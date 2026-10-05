@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 92903f8741e0
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for dag_subgraph_impl aligned with grounding specifications."""
 
 import unittest
@@ -19,7 +28,9 @@ from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
 
 
 def make_node(unit_address: str, role_address: str = "") -> DagNode:
-    return DagNode(unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address))
+    return DagNode(
+        unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address)
+    )
 
 
 class MockDagConfig:
@@ -127,13 +138,18 @@ class DagSubgraphImplTest(unittest.TestCase):
         test_b = make_node("//pkg:b", "//update_python_with_ai:test")
         qa_b = make_node("//pkg:b", "//update_python_with_ai:qa")
 
-        self.storage.dependencies[root] = {DagDependency(node=qa_a), DagDependency(node=qa_b)}
+        self.storage.dependencies[root] = {
+            DagDependency(node=qa_a),
+            DagDependency(node=qa_b),
+        }
         self.storage.dependencies[qa_a] = {DagDependency(node=test_a)}
         self.storage.dependencies[test_a] = {DagDependency(node=lib_a)}
         self.storage.dependencies[qa_b] = {DagDependency(node=test_b)}
         self.storage.dependencies[test_b] = {DagDependency(node=lib_b)}
 
-        self.storage.dirty_nodes.update([root, qa_a, test_a, lib_a, qa_b, test_b, lib_b])
+        self.storage.dirty_nodes.update(
+            [root, qa_a, test_a, lib_a, qa_b, test_b, lib_b]
+        )
         self.dag_cfg.batch_size = 2
 
         with enter_phase("system", registry=self.registry):
@@ -175,7 +191,10 @@ class DagSubgraphImplTest(unittest.TestCase):
         z_earlier = make_node("//pkg:z_earlier", "//update_python_with_ai:lib")
         a_later = make_node("//pkg:a_later", "//update_python_with_ai:lib")
 
-        self.storage.dependencies[root] = {DagDependency(node=z_earlier), DagDependency(node=a_later)}
+        self.storage.dependencies[root] = {
+            DagDependency(node=z_earlier),
+            DagDependency(node=a_later),
+        }
         self.storage.dependencies[a_later] = {DagDependency(node=clean_dep)}
         self.storage.dirty_nodes.update([root, z_earlier, a_later])
         self.dag_cfg.batch_size = 2

@@ -45,7 +45,16 @@ def lint_high_file(file_path: Path) -> list[str]:
         return [f"{fname}:1: error: empty specification file"]
 
     # 1. Header Check
-    first_non_empty = 0
+    start_idx = 0
+    while start_idx < len(lines) and not lines[start_idx].strip():
+        start_idx += 1
+    if start_idx < len(lines) and lines[start_idx].strip() == "<!-- CLEANROOM METADATA":
+        while start_idx < len(lines) and lines[start_idx].strip() != "-->":
+            start_idx += 1
+        if start_idx < len(lines) and lines[start_idx].strip() == "-->":
+            start_idx += 1
+
+    first_non_empty = start_idx
     while first_non_empty < len(lines) and not lines[first_non_empty].strip():
         first_non_empty += 1
 

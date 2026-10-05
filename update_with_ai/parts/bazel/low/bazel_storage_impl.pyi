@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 8bb96dc7122b
+# --- END CLEANROOM METADATA ---
+
 """Bazel storage implementation low-level specification."""
 
 from typing import Optional, Set, Tuple
@@ -220,4 +227,3 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         - WHEN node is an auditor role, MUST remove the role audit timestamp from each verified feedback target file metadata.
         """
         ...
-

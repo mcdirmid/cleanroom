@@ -33,21 +33,4 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
-filegroup(
-    name = "grounding_qa",
-    srcs = ["grounding_qa_template.txt"],
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "qa",
-    srcs = ["qa_template.txt"],
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "coverage",
-    srcs = ["coverage_template.txt"],
-    visibility = ["//visibility:public"],
-)
 

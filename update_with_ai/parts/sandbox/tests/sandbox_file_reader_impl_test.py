@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 09df317bf7c6
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for sandbox_file_reader_impl aligned with grounding specifications."""
 
 import os
@@ -71,7 +80,9 @@ class MockToolManager:
     def execute_tool(
         self, name: Any, wire_parameter_bindings: Mapping[ParameterName, WireType]
     ) -> ToolResponse:
-        return ToolResponse(is_failed=False, is_terminated=False, content=ToolResponseContent(""))
+        return ToolResponse(
+            is_failed=False, is_terminated=False, content=ToolResponseContent("")
+        )
 
 
 class MockEditManager:
@@ -214,7 +225,9 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         with open(self.ro_pyi_path, "w", encoding="utf-8") as f:
             f.write("class Stub:\n    pass\n")
 
-        node = DagNode(unit_address=UnitAddress("//pkg:test"), role_address=RoleAddress(""))
+        node = DagNode(
+            unit_address=UnitAddress("//pkg:test"), role_address=RoleAddress("")
+        )
         self.ro_file = ReadOnlyFile(
             relative_path=RelativePath("readonly.txt"),
             workspace_path=_make_workspace_path("readonly.txt"),
@@ -334,7 +347,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             view_tool = scope.get_singleton(ViewFileTool)
             self.assertEqual(view_tool.name, "view_file")
             self.assertIsInstance(view_tool.description, str)
-            self.assertEqual(view_tool.parameters, {view_tool.path_parameter.name: view_tool.path_parameter})
+            self.assertEqual(
+                view_tool.parameters,
+                {view_tool.path_parameter.name: view_tool.path_parameter},
+            )
             # Verify the view file tool path parameter uses the alias manager to convert a file alias
             self.assertIs(view_tool.path_parameter.parameter_type, self.alias_mgr)
 
@@ -395,7 +411,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             resp_py = view_tool.execute_tool(
                 ActualParameterBindings(
                     bindings={
-                        (view_tool.path_parameter, UnboundFile(relative_path=RelativePath("stub.py")))
+                        (
+                            view_tool.path_parameter,
+                            UnboundFile(relative_path=RelativePath("stub.py")),
+                        )
                     }
                 )
             )
@@ -408,7 +427,11 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                     bindings={
                         (
                             view_tool.path_parameter,
-                            UnboundFile(relative_path=RelativePath("update_with_ai.parts.pkg.stub.py")),
+                            UnboundFile(
+                                relative_path=RelativePath(
+                                    "update_with_ai.parts.pkg.stub.py"
+                                )
+                            ),
                         )
                     }
                 )
@@ -420,7 +443,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             resp_bare = view_tool.execute_tool(
                 ActualParameterBindings(
                     bindings={
-                        (view_tool.path_parameter, UnboundFile(relative_path=RelativePath("stub")))
+                        (
+                            view_tool.path_parameter,
+                            UnboundFile(relative_path=RelativePath("stub")),
+                        )
                     }
                 )
             )
@@ -431,7 +457,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             resp_mod_bare = view_tool.execute_tool(
                 ActualParameterBindings(
                     bindings={
-                        (view_tool.path_parameter, UnboundFile(relative_path=RelativePath("pkg.stub")))
+                        (
+                            view_tool.path_parameter,
+                            UnboundFile(relative_path=RelativePath("pkg.stub")),
+                        )
                     }
                 )
             )
@@ -445,7 +474,9 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                     bindings={
                         (
                             view_tool.path_parameter,
-                            UnboundFile(relative_path=RelativePath("my_target_test.py")),
+                            UnboundFile(
+                                relative_path=RelativePath("my_target_test.py")
+                            ),
                         )
                     }
                 )
@@ -455,7 +486,9 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
     def test_read_tool_missing_file_handling(self) -> None:
         """CUJ: Handling missing read-write files (treated as empty) vs missing read-only files (fails)."""
-        node = DagNode(unit_address=UnitAddress("//pkg:test"), role_address=RoleAddress(""))
+        node = DagNode(
+            unit_address=UnitAddress("//pkg:test"), role_address=RoleAddress("")
+        )
         missing_rw_file = ReadWriteFile(
             relative_path=RelativePath("missing_rw.txt"),
             workspace_path=_make_workspace_path("missing_rw.txt"),
@@ -535,7 +568,8 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             # Requirement: WHEN matches are found for read-write files, MUST state that matches were found but cannot be displayed to prevent unanchored edits.
             self.assertIn(self.rw_file.relative_path, resp.content)
             self.assertTrue(
-                "unanchored" in resp.content.lower() or "matches" in resp.content.lower()
+                "unanchored" in resp.content.lower()
+                or "matches" in resp.content.lower()
             )
 
             # Invalid regex pattern fails
@@ -591,7 +625,9 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             for cand in ["pkg.sub.stub.py", "pkg.stub", "pkg/stub.py"]:
                 resp_cand = read_mgr.can_read(RelativePath(cand))
                 self.assertFalse(resp_cand.is_failed)
-                self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.ro_pyi_file)
+                self.assertEqual(
+                    self.edit_mgr.last_read_or_edited_file, self.ro_pyi_file
+                )
 
             # 4. Cleanroom blindness: _test.py rejection
             # Requirement: WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
@@ -619,20 +655,30 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             # Requirement: WHEN wire_value is not a valid regular expression pattern, MUST raise tool_provider.ParameterConversionError with message formatted as "Invalid regex pattern '{wire_value}': {error}".
             with self.assertRaises(ParameterConversionError) as ctx:
                 converter.convert("[unclosed")
-            self.assertIn("Invalid regex pattern '[unclosed':", str(ctx.exception.message))
+            self.assertIn(
+                "Invalid regex pattern '[unclosed':", str(ctx.exception.message)
+            )
 
     def test_read_manager_initialization_tool_installation(self) -> None:
         """CUJ: Verify ReadManager installs ViewFileTool when mcp mode is inactive and no inspection tools when active."""
         reg_mcp = LifecycleRegistry()
         __initialize__(reg_mcp)
-        reg_mcp.register_instance(MockAgentConfig(is_mcp_mode=True), keys=[AgentConfig], tier=system)
+        reg_mcp.register_instance(
+            MockAgentConfig(is_mcp_mode=True), keys=[AgentConfig], tier=system
+        )
         tm_mcp = MockToolManager()
         reg_mcp.register_instance(tm_mcp, keys=[ToolManager], tier=agent_session)
-        reg_mcp.register_instance(self.alias_mgr, keys=[AliasManager], tier=agent_session)
+        reg_mcp.register_instance(
+            self.alias_mgr, keys=[AliasManager], tier=agent_session
+        )
         reg_mcp.register_instance(self.node_cfg, keys=[NodeConfig], tier=agent_session)
         reg_mcp.register_instance(self.edit_mgr, keys=[EditManager], tier=agent_session)
-        reg_mcp.register_instance(self.template_formatter, keys=[TemplateFormatter], tier=agent_session)
-        reg_mcp.register_instance(self.bool_conv, keys=[IdentityParameterType], tier=agent_session)
+        reg_mcp.register_instance(
+            self.template_formatter, keys=[TemplateFormatter], tier=agent_session
+        )
+        reg_mcp.register_instance(
+            self.bool_conv, keys=[IdentityParameterType], tier=agent_session
+        )
 
         with enter_phase(agent_session, registry=reg_mcp) as scope:
             # Requirement: WHEN agent config mcp mode is active, MUST install no read tools.

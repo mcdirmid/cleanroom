@@ -196,7 +196,11 @@ def generate_lib_skeleton(
         )
         if "agent_session" in pyi_content:
             if parts_base is None:
-                parts_base = "staging" if "staging" in pyi_path.split(os.sep) else "update_with_ai"
+                parts_base = (
+                    "staging"
+                    if "staging" in pyi_path.split(os.sep)
+                    else "update_with_ai"
+                )
             lines.append(
                 f"from {parts_base}.parts.agent.lib.agent_session import agent_session"
             )
@@ -206,9 +210,12 @@ def generate_lib_skeleton(
         if isinstance(node, ast.Import):
             for alias in node.names:
                 mod = alias.name
-                if (
-                    mod.endswith("_ext")
-                    or mod.split(".")[0] in ("typing", "dataclasses", "support", "framework", "lifecycle")
+                if mod.endswith("_ext") or mod.split(".")[0] in (
+                    "typing",
+                    "dataclasses",
+                    "support",
+                    "framework",
+                    "lifecycle",
                 ):
                     continue
                 if ".grounding." in mod:
@@ -221,31 +228,43 @@ def generate_lib_skeleton(
                     dep_imports.append(f"import {mod}")
         elif isinstance(node, ast.ImportFrom):
             mod = node.module or ""
-            if mod.split(".")[0] in ("typing", "dataclasses", "support", "framework", "lifecycle"):
+            if mod.split(".")[0] in (
+                "typing",
+                "dataclasses",
+                "support",
+                "framework",
+                "lifecycle",
+            ):
                 continue
-            filtered_names = [alias for alias in node.names if not alias.name.endswith("_ext")]
+            filtered_names = [
+                alias for alias in node.names if not alias.name.endswith("_ext")
+            ]
             if not filtered_names:
                 continue
             if node.level > 0:
                 names_str = ", ".join(
-                    f"{a.name} as {a.asname}" if a.asname else a.name for a in filtered_names
+                    f"{a.name} as {a.asname}" if a.asname else a.name
+                    for a in filtered_names
                 )
                 dep_imports.append(f"from . import {names_str}")
             elif mod.endswith(".grounding"):
                 lib_pkg = mod[:-10] + ".lib"
                 names_str = ", ".join(
-                    f"{a.name} as {a.asname}" if a.asname else a.name for a in filtered_names
+                    f"{a.name} as {a.asname}" if a.asname else a.name
+                    for a in filtered_names
                 )
                 dep_imports.append(f"from {lib_pkg} import {names_str}")
             elif ".grounding." in mod:
                 lib_pkg = mod.replace(".grounding.", ".lib.")
                 names_str = ", ".join(
-                    f"{a.name} as {a.asname}" if a.asname else a.name for a in filtered_names
+                    f"{a.name} as {a.asname}" if a.asname else a.name
+                    for a in filtered_names
                 )
                 dep_imports.append(f"from {lib_pkg} import {names_str}")
             else:
                 names_str = ", ".join(
-                    f"{a.name} as {a.asname}" if a.asname else a.name for a in filtered_names
+                    f"{a.name} as {a.asname}" if a.asname else a.name
+                    for a in filtered_names
                 )
                 dep_imports.append(f"from {mod} import {names_str}")
 
@@ -326,9 +345,7 @@ def generate_lib_skeleton(
                 tps = [ast.unparse(tp) for tp in node.type_params]
                 type_params_formatted = f"[{', '.join(tps)}]"
 
-            bases_formatted = (
-                f"({', '.join(base_strs)})" if base_strs else ""
-            )
+            bases_formatted = f"({', '.join(base_strs)})" if base_strs else ""
 
             fields: list[str] = []
             dc_methods: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
@@ -350,9 +367,7 @@ def generate_lib_skeleton(
                                     else "Any"
                                 )
                                 if i >= defaults_offset:
-                                    def_node = item.args.defaults[
-                                        i - defaults_offset
-                                    ]
+                                    def_node = item.args.defaults[i - defaults_offset]
                                     def_str = ast.unparse(def_node)
                                     fields.append(f"{arg.arg}: {ann} = {def_str}")
                                 else:
@@ -361,21 +376,17 @@ def generate_lib_skeleton(
                             isinstance(d, ast.Name) and d.id == "property"
                             for d in item.decorator_list
                         ):
-                            ann = (
-                                ast.unparse(item.returns)
-                                if item.returns
-                                else "Any"
-                            )
-                            if not any(
-                                f.startswith(f"{item.name}:") for f in fields
-                            ):
+                            ann = ast.unparse(item.returns) if item.returns else "Any"
+                            if not any(f.startswith(f"{item.name}:") for f in fields):
                                 fields.append(f"{item.name}: {ann}")
                         else:
                             dc_methods.append(item)
 
             if is_dc and (has_explicit_dataclass or fields or not base_strs):
                 lines.append("@dataclass(frozen=True)")
-                lines.append(f"class {cls_name}{type_params_formatted}{bases_formatted}:")
+                lines.append(
+                    f"class {cls_name}{type_params_formatted}{bases_formatted}:"
+                )
                 lines.append(f"    # TODO_{cls_name}_body")
                 if fields:
                     for f_line in fields:
@@ -393,9 +404,7 @@ def generate_lib_skeleton(
                             lines.append("    @property")
                         args_str = ast.unparse(item.args)
                         ret_str = (
-                            f" -> {ast.unparse(item.returns)}"
-                            if item.returns
-                            else ""
+                            f" -> {ast.unparse(item.returns)}" if item.returns else ""
                         )
                         lines.append(f"    def {item.name}({args_str}){ret_str}:")
                         lines.append(f"        # TODO_{item.name}_body")
@@ -407,7 +416,9 @@ def generate_lib_skeleton(
                 if "Protocol" not in base_strs:
                     base_strs.append("Protocol")
                     bases_formatted = f"({', '.join(base_strs)})"
-                lines.append(f"class {cls_name}{type_params_formatted}{bases_formatted}:")
+                lines.append(
+                    f"class {cls_name}{type_params_formatted}{bases_formatted}:"
+                )
                 methods = [
                     item
                     for item in node.body
@@ -426,9 +437,7 @@ def generate_lib_skeleton(
                             lines.append("    @property")
                         args_str = ast.unparse(item.args)
                         ret_str = (
-                            f" -> {ast.unparse(item.returns)}"
-                            if item.returns
-                            else ""
+                            f" -> {ast.unparse(item.returns)}" if item.returns else ""
                         )
                         lines.append(f"    def {item.name}({args_str}){ret_str}:")
                         lines.append(f"        # TODO_{item.name}_body")
@@ -436,7 +445,9 @@ def generate_lib_skeleton(
                         lines.append("")
                 lines.append("")
             elif is_impl:
-                lines.append(f"class {cls_name}{type_params_formatted}{bases_formatted}:")
+                lines.append(
+                    f"class {cls_name}{type_params_formatted}{bases_formatted}:"
+                )
                 lines.append(f"    tier = {tier_val}")
                 for item in node.body:
                     if isinstance(item, ast.AnnAssign):
@@ -461,9 +472,7 @@ def generate_lib_skeleton(
                             lines.append("    @property")
                         args_str = ast.unparse(item.args)
                         ret_str = (
-                            f" -> {ast.unparse(item.returns)}"
-                            if item.returns
-                            else ""
+                            f" -> {ast.unparse(item.returns)}" if item.returns else ""
                         )
                         lines.append(f"    def {item.name}({args_str}){ret_str}:")
                         lines.append(f"        # TODO_{item.name}_body")
@@ -479,7 +488,9 @@ def generate_lib_skeleton(
                 lines.append("")
                 lines.append("")
             else:
-                lines.append(f"class {cls_name}{type_params_formatted}{bases_formatted}:")
+                lines.append(
+                    f"class {cls_name}{type_params_formatted}{bases_formatted}:"
+                )
                 lines.append(f"    # TODO_{cls_name}_body")
                 methods = [
                     item
@@ -498,9 +509,7 @@ def generate_lib_skeleton(
                             lines.append("    @property")
                         args_str = ast.unparse(item.args)
                         ret_str = (
-                            f" -> {ast.unparse(item.returns)}"
-                            if item.returns
-                            else ""
+                            f" -> {ast.unparse(item.returns)}" if item.returns else ""
                         )
                         lines.append(f"    def {item.name}({args_str}){ret_str}:")
                         lines.append(f"        # TODO_{item.name}_body")
@@ -513,7 +522,9 @@ def generate_lib_skeleton(
         lines.append(
             "def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:"
         )
-        lines.append("    reg = get_default_registry() if registry is None else registry")
+        lines.append(
+            "    reg = get_default_registry() if registry is None else registry"
+        )
         for cls_name, bases, tier_val in singleton_classes:
             keys = [cls_name] + [b for b in bases if b != cls_name]
             keys_formatted = ", ".join(keys)
@@ -619,9 +630,7 @@ def main() -> int:
             args.build_path, dir_name, raw_deps
         )
         if os.path.exists(args.module_path) and not stem.endswith("_asm"):
-            rewrite_lib_imports(
-                args.module_path, dir_name, import_map, sibling_stems
-            )
+            rewrite_lib_imports(args.module_path, dir_name, import_map, sibling_stems)
             strip_do_not_edit_markers(args.module_path)
 
         syntax_errors = check_syntax(args.module_path)

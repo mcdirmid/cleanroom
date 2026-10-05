@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: f9333c63a84a
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 import unittest
 from typing import Any, Mapping
 from update_with_ai.parts.sandbox.lib.template_format import (
@@ -56,7 +65,9 @@ class TemplateFormatImplTest(unittest.TestCase):
                     self.username = username
 
             obj_params = {"team": Lead("charlie")}
-            obj_result = formatter.format_template(_text("Lead: <team.username>"), _params(obj_params))
+            obj_result = formatter.format_template(
+                _text("Lead: <team.username>"), _params(obj_params)
+            )
             # Requirement: Replaces parameter placeholder tokens matching dot-separated keys in the parameters with string representations of their resolved values.
             self.assertEqual(obj_result, "Lead: charlie")
 
@@ -196,7 +207,9 @@ class TemplateFormatImplTest(unittest.TestCase):
             )
             params = {"items": ["item1", "item2"]}
 
-            result = formatter.format_template(_text(formatted_template), _params(params))
+            result = formatter.format_template(
+                _text(formatted_template), _params(params)
+            )
             expected = "# Header\n\n- `item1`\n- `item2`\n\n## Footer"
             # Requirement: Normalizes extraneous blank lines introduced around block directive comments by formatting tools to preserve tight list spacing.
             self.assertEqual(result, expected)
@@ -228,7 +241,9 @@ class TemplateFormatImplTest(unittest.TestCase):
                 ]
             }
             # Requirement: Identifies block loop markers enclosing multi-line sections, repeating enclosed lines for each element in the resolved sequence with the loop variable bound in the parameter context.
-            res_nested = formatter.format_template(_text(nested_tmpl), _params(nested_params))
+            res_nested = formatter.format_template(
+                _text(nested_tmpl), _params(nested_params)
+            )
             self.assertEqual(res_nested, "Group: Admins\n- alice\n- bob")
 
             # Unbound block loop: renders body with unbound context
@@ -236,7 +251,9 @@ class TemplateFormatImplTest(unittest.TestCase):
                 "<!-- for: x in absent_list -->\nItem: <x>\n<!-- endfor -->"
             )
             # Requirement: Identifies block loop markers enclosing multi-line sections, repeating enclosed lines for each element in the resolved sequence with the loop variable bound in the parameter context.
-            res_unbound_block = formatter.format_template(_text(unbound_block_tmpl), _params({}))
+            res_unbound_block = formatter.format_template(
+                _text(unbound_block_tmpl), _params({})
+            )
             self.assertEqual(res_unbound_block, "Item: <x>")
 
     def test_nested_and_unbound_conditionals(self) -> None:
@@ -262,7 +279,9 @@ class TemplateFormatImplTest(unittest.TestCase):
             # Unbound block if: retains body content
             unbound_if_tmpl = "<!-- if: absent_flag -->\nDefault text\n<!-- endif -->"
             # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true or is absent from parameters and omitting enclosed lines when false.
-            res_unbound_if = formatter.format_template(_text(unbound_if_tmpl), _params({}))
+            res_unbound_if = formatter.format_template(
+                _text(unbound_if_tmpl), _params({})
+            )
             self.assertEqual(res_unbound_if, "Default text")
 
 

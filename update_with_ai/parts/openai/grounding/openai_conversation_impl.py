@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 0255f6bf6e0c
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """OpenAI conversation implementation grounding specification module."""
 
 from __future__ import annotations
@@ -32,7 +40,7 @@ class Conversation(loop_conversation.Conversation, InTier[AgentSessionTier]):
           - Condition knowledge: evaluate msg.role == loop_conversation.MessageRole("tool").
           - Consequent knowledge: invoke json_ext.parse_json and json_ext.dump_json to format sorted arguments.
           - Consequent knowledge: construct synthetic assistant tool call ConversationMessage.
-          - Consequent knowledge: append synthetic assistant message and tool message to history.        """
+          - Consequent knowledge: append synthetic assistant message and tool message to history."""
         self._messages = []
         self._suppression_keys = []
 
@@ -58,9 +66,7 @@ class Conversation(loop_conversation.Conversation, InTier[AgentSessionTier]):
         self._suppression_keys.append(None)
         raise NotImplementedError
 
-    def append_message(
-        self, message: loop_conversation.ConversationMessage
-    ) -> None:
+    def append_message(self, message: loop_conversation.ConversationMessage) -> None:
         """
         COVERED:
         - MUST append message to conversation history.
@@ -147,11 +153,13 @@ class Conversation(loop_conversation.Conversation, InTier[AgentSessionTier]):
           - Consequent knowledge: construct ModelRequest with formatted ConversationMessage sequence.
         - MUST include active reminders and tool execution notes in visible content.
           - Condition knowledge: evaluate m.reminder is not None.
-          - Consequent knowledge: format visible content incorporating reminder text.        """
+          - Consequent knowledge: format visible content incorporating reminder text."""
         m = only_elem(self._messages)
         clean_content = str(m.content)
         _has_reminder: bool = m.reminder is not None
-        visible_content = loop_conversation.ConversationContent(f"{clean_content}\n\nReminder: {m.reminder}")
+        visible_content = loop_conversation.ConversationContent(
+            f"{clean_content}\n\nReminder: {m.reminder}"
+        )
         formatted_msg = loop_conversation.ConversationMessage(
             role=m.role,
             content=visible_content,

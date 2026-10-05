@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 34b4a5a81cd6
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Bazel storage implementation grounding specification module."""
 
 from __future__ import annotations
@@ -16,7 +24,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
 
     def __init__(self) -> None:
         self._definitions: Dict[dag_storage.DagNode, agent_storage.NodeDefinition] = {}
-        self._dependencies: Dict[dag_storage.DagNode, Set[dag_storage.DagDependency]] = {}
+        self._dependencies: Dict[
+            dag_storage.DagNode, Set[dag_storage.DagDependency]
+        ] = {}
         self._messages: Dict[dag_storage.DagNode, Set[dag_storage.DagMessage]] = {}
         self._source_files: Dict[dag_storage.DagNode, str] = {}
         self._silent_source_files: Dict[dag_storage.DagNode, Tuple[str, ...]] = {}
@@ -180,7 +190,6 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         """
         _node = node
         raise NotImplementedError
-
 
 
 def __initialize__() -> None:

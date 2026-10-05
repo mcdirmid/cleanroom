@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 21873d5ab4d0
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in file_paths.pyi
 from dataclasses import dataclass
 from typing import NewType, Protocol

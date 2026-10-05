@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 7e040d8d275a
+-->
+
 # bazel_loop_impl implementation component
 
 imports: bazel_manifest_loader, dag_storage, loop_cleaner, loop_node_cleaner, runner_logger
@@ -31,8 +38,8 @@ By resolving targets from workspace directories or runfiles trees, halting execu
 
 ## Woven Contracts
 
-- Targets are resolved from workspace or runfiles directories to initialize graph storage before topological cleaning starts. [resolve_targets_from_workspace_directories, resolve_targets_from_runfiles_trees, bazel_manifest_loader: [retrieve_manifest_for_node, populate_agent_storage], dag_storage: [access_dag_dependencies]]
-- If node cleaning fails, reachable nodes remain dirty, or unexpected errors occur, cleaning halts immediately and emits a failed build result with summary diagnostics. [halt_and_fail_when_node_cleaning_fails, halt_and_fail_when_node_remains_dirty, halt_and_fail_on_unexpected_failure, capture_failure_reason_in_summary, loop: [produce_build_result]]
-- Execution events, duration, and final results stream continuously to stdout and transcript files through the runner logger. [stream_telemetry_events_to_stdout, stream_telemetry_events_to_transcript, stream_pass_duration_telemetry, stream_build_outcome_telemetry, runner_logger: [consume_log_events]]
-- Marking an acyclic subgraph clean materializes missing source files from declared templates, stamps clean timestamps, and clears feedback across all reachable nodes. [materialize_subgraph_templates_on_mark_clean, stamp_last_cleaned_on_mark_clean, initialize_missing_metadata_on_mark_clean, clear_feedback_on_mark_clean, bazel_manifest_loader: [retrieve_manifest_for_node], dag_storage: [access_dag_dependencies, clear_node_messages], loop: [mark_subgraph_clean]]
-- Marking a target node dirty removes its last cleaned timestamp from in-band source metadata. [delete_last_cleaned_marks_target_dirty, dag_storage: [mark_node_dirty], loop: [mark_node_dirty]]
+- Targets are resolved from workspace or runfiles directories to initialize graph storage before topological cleaning starts. \[resolve_targets_from_workspace_directories, resolve_targets_from_runfiles_trees, bazel_manifest_loader: [retrieve_manifest_for_node, populate_agent_storage], dag_storage: [access_dag_dependencies]\]
+- If node cleaning fails, reachable nodes remain dirty, or unexpected errors occur, cleaning halts immediately and emits a failed build result with summary diagnostics. \[halt_and_fail_when_node_cleaning_fails, halt_and_fail_when_node_remains_dirty, halt_and_fail_on_unexpected_failure, capture_failure_reason_in_summary, loop: [produce_build_result]\]
+- Execution events, duration, and final results stream continuously to stdout and transcript files through the runner logger. \[stream_telemetry_events_to_stdout, stream_telemetry_events_to_transcript, stream_pass_duration_telemetry, stream_build_outcome_telemetry, runner_logger: [consume_log_events]\]
+- Marking an acyclic subgraph clean materializes missing source files from declared templates, stamps clean timestamps, and clears feedback across all reachable nodes. \[materialize_subgraph_templates_on_mark_clean, stamp_last_cleaned_on_mark_clean, initialize_missing_metadata_on_mark_clean, clear_feedback_on_mark_clean, bazel_manifest_loader: [retrieve_manifest_for_node], dag_storage: [access_dag_dependencies, clear_node_messages], loop: [mark_subgraph_clean]\]
+- Marking a target node dirty removes its last cleaned timestamp from in-band source metadata. \[delete_last_cleaned_marks_target_dirty, dag_storage: [mark_node_dirty], loop: [mark_node_dirty]\]

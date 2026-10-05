@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 2eb6ef994aad
+-->
+
 # bazel_openai_loop_asm assembly component
 
 assembles: bazel_asm, bazel_loop_impl, bazel_openai_config_impl, dag_asm, loop_asm, runner_logger_impl, sandbox_asm

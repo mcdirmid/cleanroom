@@ -40,7 +40,7 @@ Every guide follows this structure:
 - [ ] The Summary states the guide's subject declaratively: an alignment guide names the artifact and its source ("The module implements `low/<name>.md`"); a conformance guide names the artifact ("The artifact conforms to this guide")
 - [ ] The Summary is concise (one or at most two paragraphs), stating complete high-level requirements so the initial write or edit is accurate in substance, while leaving fine-grained rules to checklist sections
 - [ ] The Summary serves two purposes: (a) preserving an already working artifact without edits when contracts and verification pass, and (b) establishing a minimal valid artifact that passes initial verification when starting from scratch or a template, delegating expanded coverage to checklist steps
-- [ ] File references and multi-node session targets use package-relative file alias relative paths (e.g. `high/<name>.md`, `grounding/<name>.pyi`, `lib/<name>.py`, `tests/<name>_test.py`, `logs/<name>_qa.log`) and never expose host repository filesystem paths
+- [ ] File references and multi-node session targets use package-relative file alias relative paths (e.g. `high/<name>.md`, `grounding/<name>.pyi`, `lib/<name>.py`, `tests/<name>_test.py`) and never expose host repository filesystem paths
 - [ ] Rules governing the editing process, tool usage, incremental editing strategy, or write permissions belong in the `## Summary` (which is visible before editing begins and throughout all steps in step mode); checklist items verify the artifact after changes are made and show up too late to control how editing is done; rules that apply specifically and exclusively to recovering from verification failure belong in `## Verification failure`
 - [ ] Applicability restrictions and not-applicable conditions (e.g. only applying to implementation specs whose name ends in `_impl.md`) are never in the Summary; they belong in `## Lint checks`
 - [ ] No directive framing — never "ensure", "produce", "transform" (the file pre-exists; the prompt triggers, the guide constrains)
@@ -117,7 +117,7 @@ Every guide follows this structure:
 - [ ] No-trigger test: no sentence directs the reader to do something the prompt already drives ("ensure", "produce", "call advance")
 - [ ] Capability test: every action the guide names is one the reader can perform with its tools — no test runs, no shell, no unreadable files
 - [ ] Perspective test: all environmental communications to the agent are declarative and impersonal without second-person pronouns ("you", "your"); injected assistant reasoning uses the first-person perspective ("I", "let me")
-- [ ] Path test: no host filesystem paths appear anywhere in the guide; only package-relative file alias relative paths appear (such as `high/<name>.md`, `grounding/<name>.pyi`, `lib/<name>.py`, `tests/<name>_test.py`, `logs/<name>_qa.log`)
+- [ ] Path test: no host filesystem paths appear anywhere in the guide; only package-relative file alias relative paths appear (such as `high/<name>.md`, `grounding/<name>.pyi`, `lib/<name>.py`, `tests/<name>_test.py`)
 - [ ] Linter test: if a linter exists for the artifact, a section titled `## Lint checks` lists all automated and applicability checks, and no applicability rules appear in the Summary
 - [ ] Deterministic test: every check verifiable by verifying presence or absence of a specific string or token is listed in `## Lint checks`
 

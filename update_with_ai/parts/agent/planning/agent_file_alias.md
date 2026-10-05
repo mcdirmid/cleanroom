@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: e83571785cf0
+-->
+
 # agent_file_alias interface component
 
 imports: agent_session, dag_storage, file_paths, tool_provider
@@ -36,5 +43,5 @@ By acting as a converter for tool parameters, the alias manager maps wire-level 
 
 ## Woven Contracts
 
-- Converting a wire string produces a matching bound file if declared in session, or an unbound file otherwise without failure. [supply_wire_alias_string, convert_alias_without_failure, convert_matching_bound_file, convert_unmatched_unbound_file, tool_provider: [convert_wire_val, convert_identity]]
+- Converting a wire string produces a matching bound file if declared in session, or an unbound file otherwise without failure. \[supply_wire_alias_string, convert_alias_without_failure, convert_matching_bound_file, convert_unmatched_unbound_file, tool_provider: [convert_wire_val, convert_identity]\]
 - When sanitizing text, relative workspace paths and preceding path prefixes are masked to present file alias relative paths. [supply_text_to_sanitize, sanitize_mask_ws_paths, sanitize_mask_preceding_prefixes]

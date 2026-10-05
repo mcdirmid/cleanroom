@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 42daaaaaaf04
+-->
+
 # openai_conversation_impl implementation component
 
 imports: agent_config, json_ext, openai_ext, tool_provider
@@ -31,8 +38,8 @@ By pruning redundant previous tool outputs, maintaining reminders, and ordering 
 
 ## Woven Contracts
 
-- Messages are formatted to OpenAI system, user, assistant, and tool role conventions. [format_messages_to_openai_conventions, loop_conversation: [provide_model_request], openai_ext: [include_ordered_messages]]
-- Tool responses sharing a suppression key retain a rolling buffer of up to three recent responses while replacing older responses with stubs. [retain_recent_responses_in_buffer, replace_older_responses_with_stubs, preserve_unmatched_responses_intact, retain_reminder_in_stub, inherit_reminder_when_omitted, loop_conversation: [stub_previous_responses_by_key]]
-- Superseded assistant invocations retain parameter keys, file paths, and non-string arguments while replacing other strings with a stub marker. [retain_parameter_keys_in_stub, preserve_file_path_parameters_in_stub, preserve_non_string_values_in_stub, stub_other_string_values_in_stub, loop_conversation: [stub_correlating_tool_args_by_key], json_ext: [parse_valid_json, serialize_sorted_keys]]
-- Assembled model requests bundle execution notes, content, and active reminders into tool messages. [include_notes_content_reminders_in_tool_messages, format_active_reminders_in_request, tool_provider: [call_by_name]]
-- Unprompted starter responses are paired with synthetic antecedent assistant tool calls with sorted argument keys. [precede_unprompted_response_with_synthetic_invocation, correlate_synthetic_invocation_tool_call_id, order_synthetic_invocation_arguments, loop_conversation: [initialize_with_initial_messages], json_ext: [serialize_sorted_keys]]
+- Messages are formatted to OpenAI system, user, assistant, and tool role conventions. \[format_messages_to_openai_conventions, loop_conversation: [provide_model_request], openai_ext: [include_ordered_messages]\]
+- Tool responses sharing a suppression key retain a rolling buffer of up to three recent responses while replacing older responses with stubs. \[retain_recent_responses_in_buffer, replace_older_responses_with_stubs, preserve_unmatched_responses_intact, retain_reminder_in_stub, inherit_reminder_when_omitted, loop_conversation: [stub_previous_responses_by_key]\]
+- Superseded assistant invocations retain parameter keys, file paths, and non-string arguments while replacing other strings with a stub marker. \[retain_parameter_keys_in_stub, preserve_file_path_parameters_in_stub, preserve_non_string_values_in_stub, stub_other_string_values_in_stub, loop_conversation: [stub_correlating_tool_args_by_key], json_ext: [parse_valid_json, serialize_sorted_keys]\]
+- Assembled model requests bundle execution notes, content, and active reminders into tool messages. \[include_notes_content_reminders_in_tool_messages, format_active_reminders_in_request, tool_provider: [call_by_name]\]
+- Unprompted starter responses are paired with synthetic antecedent assistant tool calls with sorted argument keys. \[precede_unprompted_response_with_synthetic_invocation, correlate_synthetic_invocation_tool_call_id, order_synthetic_invocation_arguments, loop_conversation: [initialize_with_initial_messages], json_ext: [serialize_sorted_keys]\]

@@ -1,10 +1,23 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: d57df4084838
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for sandbox_run_control_impl aligned with grounding specifications."""
 
 import unittest
 from dataclasses import dataclass
 from typing import Any, cast, List, Mapping, Optional, Sequence, Set, Tuple
 
-from update_with_ai.parts.dag.lib.dag_storage import DagDependency, DagNode, MessageContent
+from update_with_ai.parts.dag.lib.dag_storage import (
+    DagDependency,
+    DagNode,
+    MessageContent,
+)
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
@@ -88,7 +101,9 @@ class MockToolManager:
     def execute_tool(
         self, name: Any, wire_parameter_bindings: Mapping[ParameterName, WireType]
     ) -> ToolResponse:
-        return ToolResponse(is_failed=False, is_terminated=False, content=ToolResponseContent(""))
+        return ToolResponse(
+            is_failed=False, is_terminated=False, content=ToolResponseContent("")
+        )
 
 
 class MockStringConverter:
@@ -132,7 +147,10 @@ def _make_workspace_root(path: str) -> Any:
 
 
 def _make_dag_node(unit_address: str, role_address: str = "lib") -> DagNode:
-    return DagNode(unit_address=dag_storage.UnitAddress(unit_address), role_address=dag_storage.RoleAddress(role_address))
+    return DagNode(
+        unit_address=dag_storage.UnitAddress(unit_address),
+        role_address=dag_storage.RoleAddress(role_address),
+    )
 
 
 class MockAliasManager:
@@ -200,21 +218,25 @@ class MockNodeConfig:
     ) -> None:
         self._blame_targets = blame_targets or set()
         self.blame_targets_by_node: Mapping[DagNode, Set[BoundFile]] = (
-            _MockBlameTargetsDict(dict(blame_targets_by_node or {}), self._blame_targets)
+            _MockBlameTargetsDict(
+                dict(blame_targets_by_node or {}), self._blame_targets
+            )
         )
         self._verification_checks: Sequence[VerificationCheck] = (
             verification_checks or []
         )
-        self.verification_checks_by_node: Mapping[DagNode, Sequence[VerificationCheck]] = (
-            verification_checks_by_node or {}
-        )
+        self.verification_checks_by_node: Mapping[
+            DagNode, Sequence[VerificationCheck]
+        ] = verification_checks_by_node or {}
         self._guide = guide
         self.is_step_mode = is_step_mode
         self._feedback: Sequence[str] = feedback or ()
         self._read_write_files: Set[BoundFile] = read_write_files or set()
         self._read_only_files: Set[BoundFile] = read_only_files or set()
         self._verification_success_message = verification_success_message
-        self.src_file_alias_by_node: Mapping[DagNode, str] = src_file_alias_by_node or {}
+        self.src_file_alias_by_node: Mapping[DagNode, str] = (
+            src_file_alias_by_node or {}
+        )
         self._guide_file = guide_file
 
     @property
@@ -287,16 +309,22 @@ class MockGuideDelivery:
         self.last_verification_passed = verification_passed
         self.last_failure_diagnostics = failure_diagnostics
         if not verification_passed:
-            summary = self.initial_primer or (self._guide.summary if self._guide else "NodeGuide Summary")
+            summary = self.initial_primer or (
+                self._guide.summary if self._guide else "NodeGuide Summary"
+            )
             return ToolResponse(
                 is_failed=True,
                 is_terminated=False,
-                content=ToolResponseContent(f"{summary}\n\nVerification failed:\n{failure_diagnostics}"),
+                content=ToolResponseContent(
+                    f"{summary}\n\nVerification failed:\n{failure_diagnostics}"
+                ),
             )
         if self.has_steps_remaining:
             if self.next_step_content:
                 return ToolResponse(
-                    is_failed=False, is_terminated=False, content=ToolResponseContent(self.next_step_content or "")
+                    is_failed=False,
+                    is_terminated=False,
+                    content=ToolResponseContent(self.next_step_content or ""),
                 )
         return None
 
@@ -316,7 +344,9 @@ class MockEditManager:
         self._file_hashes: dict[Any, str] = {}
 
     def file_hash(self, file: Any) -> str:
-        path_str = getattr(file, "relative_path", getattr(file, "short_name", str(file)))
+        path_str = getattr(
+            file, "relative_path", getattr(file, "short_name", str(file))
+        )
         if file in self._file_hashes:
             return self._file_hashes[file]
         if path_str in self._file_hashes:
@@ -379,7 +409,9 @@ class MockDagStorage:
     def is_dirty(self, node: DagNode) -> bool:
         return node in self.dirty_nodes
 
-    def mark_node_clean(self, node: DagNode, change_description: Optional[str] = None) -> None:
+    def mark_node_clean(
+        self, node: DagNode, change_description: Optional[str] = None
+    ) -> None:
         self.dirty_nodes.discard(node)
         self.cleaned_nodes.append((node, change_description))
 
@@ -473,7 +505,9 @@ class MockTemplateFormatter:
             lines = ["Process the following files:"]
             for n in nodes:
                 lines.append(f"- `{n['src_alias']}`: {n['task_prompt']}")
-            lines.append("\nCall submit(target='<file_name>') to submit each file individually.")
+            lines.append(
+                "\nCall submit(target='<file_name>') to submit each file individually."
+            )
             if parameters.get("has_guide"):
                 lines.append(f"\n{parameters.get('guide_instruction')}")
             return "\n".join(lines)
@@ -502,9 +536,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.storage, keys=[dag_storage.DagStorage], tier=system
         )
         self.subgraph = MockDagSubgraph()
-        self.registry.register_instance(
-            self.subgraph, keys=[DagSubgraph], tier=system
-        )
+        self.registry.register_instance(self.subgraph, keys=[DagSubgraph], tier=system)
 
         self.tool_mgr = MockToolManager()
         self.str_conv = MockStringConverter()
@@ -547,9 +579,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.registry.register_instance(
             self.role_cfg, keys=[RoleConfig], tier=agent_session
         )
-        self.registry.register_instance(
-            self.sb, keys=[Sandbox], tier=agent_session
-        )
+        self.registry.register_instance(self.sb, keys=[Sandbox], tier=agent_session)
         self.registry.register_instance(
             self.agent_cfg, keys=[AgentConfig], tier=agent_session
         )
@@ -588,12 +618,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
         __initialize__(reg)
         tool_mgr = MockToolManager()
         cfg = MockNodeConfig(blame_targets=set(), is_step_mode=False, guide=None)
-        reg.register_instance(
-            self.storage, keys=[dag_storage.DagStorage], tier=system
-        )
-        reg.register_instance(
-            self.subgraph, keys=[DagSubgraph], tier=system
-        )
+        reg.register_instance(self.storage, keys=[dag_storage.DagStorage], tier=system)
+        reg.register_instance(self.subgraph, keys=[DagSubgraph], tier=system)
         reg.register_instance(tool_mgr, keys=[ToolManager], tier=agent_session)
         reg.register_instance(self.alias_mgr, keys=[AliasManager], tier=agent_session)
         reg.register_instance(
@@ -602,19 +628,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
             tier=agent_session,
         )
         reg.register_instance(cfg, keys=[NodeConfig], tier=agent_session)
-        reg.register_instance(
-            self.guide_del, keys=[GuideDelivery], tier=agent_session
-        )
+        reg.register_instance(self.guide_del, keys=[GuideDelivery], tier=agent_session)
         reg.register_instance(self.edit_mgr, keys=[EditManager], tier=agent_session)
-        reg.register_instance(
-            self.role_cfg, keys=[RoleConfig], tier=agent_session
-        )
-        reg.register_instance(
-            self.sb, keys=[Sandbox], tier=agent_session
-        )
-        reg.register_instance(
-            self.agent_cfg, keys=[AgentConfig], tier=agent_session
-        )
+        reg.register_instance(self.role_cfg, keys=[RoleConfig], tier=agent_session)
+        reg.register_instance(self.sb, keys=[Sandbox], tier=agent_session)
+        reg.register_instance(self.agent_cfg, keys=[AgentConfig], tier=agent_session)
 
         with enter_phase(agent_session, registry=reg) as scope:
             ctrl: Any = scope.get_singleton(RunControllerImpl)
@@ -778,9 +796,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn(
                 "verification", resp.follow_up_tool_call.reasoning_text.lower()
             )
-            self.assertIn(
-                "advanc", resp.follow_up_tool_call.reasoning_text.lower()
-            )
+            self.assertIn("advanc", resp.follow_up_tool_call.reasoning_text.lower())
 
     def test_advance_tool_steps_remaining_delivers_next_step(self) -> None:
         """CUJ: AdvanceTool advances guide step and delivers next step section when verification passes."""
@@ -851,9 +867,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNotNone(resp.follow_up_tool_call)
             assert resp.follow_up_tool_call is not None
             self.assertEqual(resp.follow_up_tool_call.tool_name, "submit")
-            self.assertEqual(
-                len(resp.follow_up_tool_call.wire_parameter_bindings), 0
-            )
+            self.assertEqual(len(resp.follow_up_tool_call.wire_parameter_bindings), 0)
             self.assertTrue(resp.follow_up_tool_call.reasoning_text)
             assert resp.follow_up_tool_call.reasoning_text is not None
             self.assertIn("guide step", resp.follow_up_tool_call.reasoning_text.lower())
@@ -875,7 +889,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             self.assertEqual(submit.target_parameter.name, "target")
             self.assertEqual(submit.change_summary_parameter.name, "change_summary")
-            self.assertTrue(callable(submit.change_summary_parameter.parameter_type.convert))
+            self.assertTrue(
+                callable(submit.change_summary_parameter.parameter_type.convert)
+            )
             self.assertIs(submit.target_parameter.parameter_type, self.alias_mgr)
 
     def test_submit_tool_fails_when_steps_remain_specifies_advance_followup(
@@ -899,9 +915,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNotNone(resp.follow_up_tool_call)
             assert resp.follow_up_tool_call is not None
             self.assertEqual(resp.follow_up_tool_call.tool_name, "advance")
-            self.assertEqual(
-                len(resp.follow_up_tool_call.wire_parameter_bindings), 0
-            )
+            self.assertEqual(len(resp.follow_up_tool_call.wire_parameter_bindings), 0)
             self.assertTrue(resp.follow_up_tool_call.reasoning_text)
             assert resp.follow_up_tool_call.reasoning_text is not None
             self.assertIn("guide step", resp.follow_up_tool_call.reasoning_text.lower())
@@ -942,9 +956,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn(
                 "verification", resp.follow_up_tool_call.reasoning_text.lower()
             )
-            self.assertIn(
-                "submit", resp.follow_up_tool_call.reasoning_text.lower()
-            )
+            self.assertIn("submit", resp.follow_up_tool_call.reasoning_text.lower())
             self.assertEqual(resp.suppression_key, "submit")
 
     def test_submit_tool_fails_when_feedback_present_and_no_files_modified(
@@ -982,7 +994,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             rc: Any = scope.get_singleton(RunControllerImpl)
             open_node = rc.open_nodes()[0]
             self.storage.messages[open_node] = [
-                dag_storage.ChangeMessage(content=MessageContent("implement lib/target.py"))
+                dag_storage.ChangeMessage(
+                    content=MessageContent("implement lib/target.py")
+                )
             ]
             b = ActualParameterBindings(bindings=set())
             # Requirement: Tool execution fails when an initial implementation change is assigned to the target node and no workspace files were modified, reminding the agent that workspace files must be modified to implement the change before submitting.
@@ -990,7 +1004,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             self.assertTrue(resp.is_failed)
             self.assertFalse(resp.is_terminated)
-            self.assertIn("Initial implementation task requires workspace file modifications", resp.content)
+            self.assertIn(
+                "Initial implementation task requires workspace file modifications",
+                resp.content,
+            )
             self.assertIsNotNone(resp.reminder)
             self.assertEqual(resp.suppression_key, "submit")
 
@@ -1012,10 +1029,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNotNone(resp.reminder)
             self.assertEqual(resp.suppression_key, "submit")
 
-    def test_submit_tool_succeeds_when_no_files_modified_and_summary_provided(
+    def test_submit_tool_fails_when_no_files_modified_and_summary_provided(
         self,
     ) -> None:
-        """CUJ: SubmitTool succeeds and terminates when no workspace files modified but change summary provided."""
+        """CUJ: SubmitTool fails when no workspace files modified but change summary provided."""
         self.guide_del.has_steps_remaining = False
         self.edit_mgr.has_modifications = False
         vcheck = MockVerificationCheck(passes=True)
@@ -1026,14 +1043,29 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b = ActualParameterBindings(
                 bindings={(submit.change_summary_parameter, "Unneeded change summary")}
             )
-            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+            resp = submit.execute_tool(b)
+
+            self.assertTrue(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
+            self.assertIn("Workspace files were not modified", resp.content)
+            self.assertEqual(resp.suppression_key, "submit")
+
+    def test_submit_tool_succeeds_when_no_files_modified_and_no_summary_provided(
+        self,
+    ) -> None:
+        """CUJ: SubmitTool succeeds and terminates when no workspace files modified and no change summary provided."""
+        self.guide_del.has_steps_remaining = False
+        self.edit_mgr.has_modifications = False
+        vcheck = MockVerificationCheck(passes=True)
+        self.node_cfg._verification_checks = [vcheck]
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            submit = scope.get_singleton(SubmitToolImpl)
+            b = ActualParameterBindings(bindings=set())
             resp = submit.execute_tool(b)
 
             self.assertFalse(resp.is_failed)
             self.assertTrue(resp.is_terminated)
-            self.assertIn("Unneeded change summary", resp.content)
             self.assertEqual(resp.suppression_key, "submit")
 
     def test_submit_tool_succeeds_and_terminates_session(self) -> None:
@@ -1067,7 +1099,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Verify the fail tool is named fail
             self.assertEqual(fail_tool.name, "fail")
             self.assertEqual(fail_tool.explanation_parameter.name, "explanation")
-            self.assertTrue(callable(fail_tool.explanation_parameter.parameter_type.convert))
+            self.assertTrue(
+                callable(fail_tool.explanation_parameter.parameter_type.convert)
+            )
 
             b = ActualParameterBindings(
                 bindings={(fail_tool.explanation_parameter, "Cannot solve bug")}
@@ -1090,15 +1124,21 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertGreater(len(blame_tool.parameters), 0)
             # Verify the blame tool is named blame
             self.assertEqual(blame_tool.name, "blame")
-            self.assertIs(blame_tool.blame_target_parameter.parameter_type, self.alias_mgr)
+            self.assertIs(
+                blame_tool.blame_target_parameter.parameter_type, self.alias_mgr
+            )
             self.assertEqual(blame_tool.explanation_parameter.name, "explanation")
-            self.assertTrue(callable(blame_tool.explanation_parameter.parameter_type.convert))
+            self.assertTrue(
+                callable(blame_tool.explanation_parameter.parameter_type.convert)
+            )
 
             # Invalid target fails
             unrecognized = ReadOnlyFile(
                 relative_path=RelativePath("unknown.py"),
                 workspace_path=_make_workspace_path("unknown.py"),
-                owning_node=_make_dag_node(unit_address="//pkg:unknown", role_address="lib"),
+                owning_node=_make_dag_node(
+                    unit_address="//pkg:unknown", role_address="lib"
+                ),
             )
             b_invalid = ActualParameterBindings(
                 bindings={
@@ -1123,8 +1163,14 @@ class SandboxRunControlImplTest(unittest.TestCase):
             resp_multi = blame_tool.execute_tool(b_multiline)
             self.assertTrue(resp_multi.is_failed)
             self.assertFalse(resp_multi.is_terminated)
-            self.assertEqual(resp_multi.content, "Error: Blame explanation must be a single paragraph without newlines.")
-            self.assertEqual(resp_multi.reminder, "Provide the blame explanation as a single continuous paragraph without line breaks or bulleted lists.")
+            self.assertEqual(
+                resp_multi.content,
+                "Error: Blame explanation must be a single paragraph without newlines.",
+            )
+            self.assertEqual(
+                resp_multi.reminder,
+                "Provide the blame explanation as a single continuous paragraph without line breaks or bulleted lists.",
+            )
 
             # Valid target terminates with Blamed attribution
             b_valid = ActualParameterBindings(
@@ -1169,6 +1215,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck2 = MockVerificationCheck(passes=True)
         self.node_cfg.verification_checks_by_node = {node1: [vcheck1], node2: [vcheck2]}
         self.guide_del.has_steps_remaining = False
+        self.edit_mgr.has_modifications = True
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
@@ -1231,6 +1278,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn("- `unit2.py`", resp4.content)
 
             # 5. Submitting when only one unsubmitted target remains defaults to that target
+            self.edit_mgr.has_modifications = False
             # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
             # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
             # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
@@ -1295,7 +1343,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp1.is_terminated)
             self.assertEqual(rc.get_node_state(node1), "FAILED")
             self.assertEqual(rc.get_node_state(node2), "FAILED")
-            self.assertIn("Remaining submit targets to handle:\n- `f_unit3.py`", resp1.content)
+            self.assertIn(
+                "Remaining submit targets to handle:\n- `f_unit3.py`", resp1.content
+            )
             self.edit_mgr.last_read_or_edited_file = None
 
             # 2. Failing already-failed node fails because it is not an open target
@@ -1350,12 +1400,16 @@ class SandboxRunControlImplTest(unittest.TestCase):
         bt1 = ReadOnlyFile(
             relative_path=RelativePath("upstream_spec1.md"),
             workspace_path=_make_workspace_path("pkg/upstream_spec1.md"),
-            owning_node=_make_dag_node(unit_address="//pkg:upstream_unit1", role_address="spec"),
+            owning_node=_make_dag_node(
+                unit_address="//pkg:upstream_unit1", role_address="spec"
+            ),
         )
         bt3 = ReadOnlyFile(
             relative_path=RelativePath("upstream_spec3.md"),
             workspace_path=_make_workspace_path("pkg/upstream_spec3.md"),
-            owning_node=_make_dag_node(unit_address="//pkg:upstream_unit3", role_address="spec"),
+            owning_node=_make_dag_node(
+                unit_address="//pkg:upstream_unit3", role_address="spec"
+            ),
         )
         self.node_cfg.blame_targets_by_node = {node1: {bt1}, node3: {bt3}}
 
@@ -1394,7 +1448,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.get_node_state(node2), "FAILED")
             self.assertEqual(rc.get_node_state(node3), "OPEN")
             self.assertEqual(len(self.storage.get_messages(bt1.owning_node)), 1)
-            self.assertEqual(self.storage.get_messages(bt1.owning_node)[0].content, "Spec defect")
+            self.assertEqual(
+                self.storage.get_messages(bt1.owning_node)[0].content, "Spec defect"
+            )
             self.assertIn(
                 "Target `b_unit1.py` blamed `upstream_spec1.md`: Spec defect",
                 resp_ok.content,
@@ -1416,7 +1472,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertTrue(resp_ok3.is_terminated)
             self.assertEqual(rc.get_node_state(node3), "BLAME")
             self.assertEqual(len(self.storage.get_messages(bt3.owning_node)), 1)
-            self.assertEqual(self.storage.get_messages(bt3.owning_node)[0].content, "Spec defect 3")
+            self.assertEqual(
+                self.storage.get_messages(bt3.owning_node)[0].content, "Spec defect 3"
+            )
             self.assertIn("Blamed upstream_spec3.md: Spec defect 3", resp_ok3.content)
 
     def test_resolve_tool_types_and_parameters(self) -> None:
@@ -1459,6 +1517,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg.verification_checks_by_node = {node1: [vcheck], node2: [vcheck]}
         self.guide_del.has_steps_remaining = False
+        self.edit_mgr.has_modifications = True
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
@@ -1774,7 +1833,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             rw2 = ReadWriteFile(
                 relative_path=RelativePath("src2.py"),
                 workspace_path=_make_workspace_path("/workspace/src2.py"),
-                owning_node=_make_dag_node(unit_address="//pkg:target2", role_address="lib"),
+                owning_node=_make_dag_node(
+                    unit_address="//pkg:target2", role_address="lib"
+                ),
             )
             self.node_cfg._read_write_files = {rw_file, rw2}
             self.edit_mgr.file_update_revision = 3
@@ -1931,6 +1992,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             node3: [vcheck3],
         }
         self.guide_del.has_steps_remaining = False
+        self.edit_mgr.has_modifications = True
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
@@ -2107,7 +2169,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
             node_b: MockNodeDefinition(task_prompt="Clean unit B"),
         }
         self.storage.messages = {
-            node_a: [dag_storage.FeedbackMessage(content=MessageContent("Fix linter in unit A"))],
+            node_a: [
+                dag_storage.FeedbackMessage(
+                    content=MessageContent("Fix linter in unit A")
+                )
+            ],
             node_b: [],
         }
 
@@ -2143,7 +2209,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(self.role_cfg.active_nodes, [node_a])
             self.assertEqual(self.role_cfg.execution_version, initial_version + 1)
             self.assertIn("unit_a.py with grounding/unit_a.pyi", resp.content)
-            self.assertIn("Fix unit_a.py based on feedback: Fix linter in unit A", resp.content)
+            self.assertIn(
+                "Fix unit_a.py based on feedback: Fix linter in unit A", resp.content
+            )
             self.assertEqual(rc.open_nodes(), [node_a])
 
     def test_get_work_step_mode_specifies_advance_followup(self) -> None:
@@ -2183,7 +2251,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn("Call advance() when done making edits.", resp.content)
             self.assertEqual(self.guide_del.initial_primer, resp.content)
 
-
     def test_check_files_tool_properties(self) -> None:
         """CUJ: CheckFilesTool exposes its name, description, and empty parameters set."""
         with enter_phase(agent_session, registry=self.registry) as scope:
@@ -2192,7 +2259,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(check_files.name, "check_files")
             self.assertEqual(check_files.parameters, {})
             self.assertIsInstance(check_files.description, str)
-
 
     def test_get_work_max_batch_size_zero_and_role_mismatch(self) -> None:
         """CUJ: GetWorkTool accepts max_batch_size=0 and filters nodes by role mismatch."""
@@ -2213,12 +2279,18 @@ class SandboxRunControlImplTest(unittest.TestCase):
             get_work = scope.get_singleton(GetWorkToolImpl)
 
             # Resolve open target
-            submit.execute_tool(ActualParameterBindings(bindings={(submit.change_summary_parameter, "Done")}))
+            submit.execute_tool(
+                ActualParameterBindings(
+                    bindings={(submit.change_summary_parameter, "Done")}
+                )
+            )
             self.assertEqual(len(rc.open_nodes()), 0)
 
             # 1. Role mismatch filters batch to empty, returning idle response
             # Requirement: Tool execution produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
-            resp_mismatch = get_work.execute_tool(ActualParameterBindings(bindings=set()))
+            resp_mismatch = get_work.execute_tool(
+                ActualParameterBindings(bindings=set())
+            )
             self.assertFalse(resp_mismatch.is_failed)
             self.assertTrue(resp_mismatch.content)
 
@@ -2226,11 +2298,15 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.role_cfg.set_role("other_role")
             self.subgraph.ready_batches = [[node_diff]]
             self.subgraph.batch_index = 0
-            self.storage.node_definitions = {node_diff: MockNodeDefinition(task_prompt="Diff prompt")}
+            self.storage.node_definitions = {
+                node_diff: MockNodeDefinition(task_prompt="Diff prompt")
+            }
             self.storage.messages = {node_diff: []}
             # Verify the get work tool max_batch_size parameter
             resp_zero = get_work.execute_tool(
-                ActualParameterBindings(bindings={(get_work.max_batch_size_parameter, 0)})
+                ActualParameterBindings(
+                    bindings={(get_work.max_batch_size_parameter, 0)}
+                )
             )
             self.assertFalse(resp_zero.is_failed)
 
@@ -2268,14 +2344,25 @@ class SandboxRunControlImplTest(unittest.TestCase):
         node_b = _make_dag_node(unit_address="//pkg:unit_b", role_address="lib")
         guide_file = UnboundFile(relative_path=RelativePath("guide.md"))
         self.node_cfg._guide_file = guide_file
-        self.node_cfg.src_file_alias_by_node = {node_a: "unit_a.py", node_b: "unit_b.py"}
+        self.node_cfg.src_file_alias_by_node = {
+            node_a: "unit_a.py",
+            node_b: "unit_b.py",
+        }
         self.storage.node_definitions = {
             node_a: MockNodeDefinition(task_prompt="Implement unit A"),
             node_b: MockNodeDefinition(task_prompt="Implement unit B"),
         }
         self.storage.messages = {
-            node_a: [dag_storage.ChangeMessage(content=MessageContent("Updated types in upstream"))],
-            node_b: [dag_storage.ChangeMessage(content=MessageContent("Renamed method in dependency"))],
+            node_a: [
+                dag_storage.ChangeMessage(
+                    content=MessageContent("Updated types in upstream")
+                )
+            ],
+            node_b: [
+                dag_storage.ChangeMessage(
+                    content=MessageContent("Renamed method in dependency")
+                )
+            ],
         }
 
         with enter_phase(agent_session, registry=self.registry) as scope:
@@ -2294,11 +2381,19 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.node_cfg.is_step_mode = False
             # Requirement: Tool execution materializes startup templates on disk, initializes guide delivery and resets guide advance state for the assigned batch, and returns the rendered task primer mapping source files to grounding files with guide file attribution, incoming messages, and instructions to read the guide file for alignment guidance when ready dirty nodes are obtained and guide step mode is inactive.
             prompt_multi = rc.format_task_prompt([node_a, node_b])
-            self.assertIn("The following files are supposed to be aligned according to guide guide.md:", prompt_multi)
+            self.assertIn(
+                "The following files are supposed to be aligned according to guide guide.md:",
+                prompt_multi,
+            )
             self.assertIn("unit_a.py with grounding/unit_a.pyi", prompt_multi)
             self.assertIn("unit_b.py with grounding/unit_b.pyi", prompt_multi)
-            self.assertIn("Incoming change for unit_a.py: Updated types in upstream", prompt_multi)
-            self.assertIn("Incoming change for unit_b.py: Renamed method in dependency", prompt_multi)
+            self.assertIn(
+                "Incoming change for unit_a.py: Updated types in upstream", prompt_multi
+            )
+            self.assertIn(
+                "Incoming change for unit_b.py: Renamed method in dependency",
+                prompt_multi,
+            )
             self.assertIn("Read guide.md for alignment guidance.", prompt_multi)
 
             # 3. NodeGuide file resolved via read_only_files markdown fallback
@@ -2310,7 +2405,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             self.node_cfg._read_only_files = {md_guide}
             prompt_fallback = rc.format_task_prompt([node_a])
-            self.assertIn("The following files are supposed to be aligned according to guide spec_guide.md:", prompt_fallback)
+            self.assertIn(
+                "The following files are supposed to be aligned according to guide spec_guide.md:",
+                prompt_fallback,
+            )
             self.assertIn("Read spec_guide.md for alignment guidance.", prompt_fallback)
 
             # 4. DagNode with empty definition and fallback alias from read_write_files
@@ -2321,7 +2419,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 owning_node=node_c,
             )
             self.node_cfg._read_write_files = {rw_c}
-            self.storage.messages[node_c] = [dag_storage.ChangeMessage(content=MessageContent(""))]
+            self.storage.messages[node_c] = [
+                dag_storage.ChangeMessage(content=MessageContent(""))
+            ]
             prompt_c_single = rc.format_task_prompt([node_c])
             self.assertIn("Incoming change", prompt_c_single)
             prompt_c_multi = rc.format_task_prompt([node_a, node_c])
@@ -2329,8 +2429,14 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_format_task_prompt_qa_node_with_spec(self) -> None:
         """CUJ: format_task_prompt includes associated grounding specification path for qa nodes."""
-        node_qa1 = _make_dag_node(unit_address="//parts/pkg:unit1_impl", role_address="//update_python_with_ai:qa")
-        node_qa2 = _make_dag_node(unit_address="//parts/pkg:unit2_impl", role_address="//update_python_with_ai:qa")
+        node_qa1 = _make_dag_node(
+            unit_address="//parts/pkg:unit1_impl",
+            role_address="//update_python_with_ai:qa",
+        )
+        node_qa2 = _make_dag_node(
+            unit_address="//parts/pkg:unit2_impl",
+            role_address="//update_python_with_ai:qa",
+        )
         self.node_cfg.src_file_alias_by_node = {
             node_qa1: "logs/unit1_impl_qa.log",
             node_qa2: "logs/unit2_impl_qa.log",
@@ -2347,8 +2453,12 @@ class SandboxRunControlImplTest(unittest.TestCase):
         )
         self.node_cfg._read_only_files = {spec1, spec2}
         self.storage.node_definitions = {
-            node_qa1: MockNodeDefinition(task_prompt="Evaluate test execution and arbitrate failures per the guide."),
-            node_qa2: MockNodeDefinition(task_prompt="Evaluate test execution and arbitrate failures per the guide."),
+            node_qa1: MockNodeDefinition(
+                task_prompt="Evaluate test execution and arbitrate failures per the guide."
+            ),
+            node_qa2: MockNodeDefinition(
+                task_prompt="Evaluate test execution and arbitrate failures per the guide."
+            ),
         }
 
         with enter_phase(agent_session, registry=self.registry) as scope:
@@ -2356,18 +2466,26 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # Single QA node
             prompt_single = rc.format_task_prompt([node_qa1])
-            self.assertIn("logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_single)
+            self.assertIn(
+                "logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_single
+            )
 
             # Multi QA nodes
             self.node_cfg.is_step_mode = False
             prompt_multi = rc.format_task_prompt([node_qa1, node_qa2])
-            self.assertIn("logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_multi)
-            self.assertIn("logs/unit2_impl_qa.log with grounding/unit2_impl.pyi", prompt_multi)
+            self.assertIn(
+                "logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_multi
+            )
+            self.assertIn(
+                "logs/unit2_impl_qa.log with grounding/unit2_impl.pyi", prompt_multi
+            )
 
             # Fallback spec resolution without read_only_files
             self.node_cfg._read_only_files = set()
             prompt_fallback = rc.format_task_prompt([node_qa1])
-            self.assertIn("logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_fallback)
+            self.assertIn(
+                "logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_fallback
+            )
 
     def test_reset_nodes_empty_list_triggers_ensure_nodes_and_tool_installation(
         self,
@@ -2412,7 +2530,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.resolve_default_target(), node1)
             self.edit_mgr.last_read_or_edited_file = "unit2.py"
             self.assertEqual(rc.resolve_default_target(), node2)
-            self.edit_mgr.last_read_or_edited_file = UnboundFile(relative_path=RelativePath("unit1.py"))
+            self.edit_mgr.last_read_or_edited_file = UnboundFile(
+                relative_path=RelativePath("unit1.py")
+            )
             self.assertEqual(rc.resolve_default_target(), node1)
 
             # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
@@ -2507,12 +2627,16 @@ class SandboxRunControlImplTest(unittest.TestCase):
         bt1: BoundFile = ReadOnlyFile(
             relative_path=RelativePath("dep1.py"),
             workspace_path=_make_workspace_path("pkg/dep1.py"),
-            owning_node=_make_dag_node(unit_address="//pkg:upstream1", role_address="lib"),
+            owning_node=_make_dag_node(
+                unit_address="//pkg:upstream1", role_address="lib"
+            ),
         )
         bt_shared: BoundFile = ReadOnlyFile(
             relative_path=RelativePath("shared_dep.py"),
             workspace_path=_make_workspace_path("pkg/shared_dep.py"),
-            owning_node=_make_dag_node(unit_address="//pkg:upstream_shared", role_address="lib"),
+            owning_node=_make_dag_node(
+                unit_address="//pkg:upstream_shared", role_address="lib"
+            ),
         )
         blame_targets: Set[BoundFile] = {bt1, bt_shared}
         self.node_cfg._blame_targets = blame_targets
@@ -2590,7 +2714,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 owning_node=node3,
             )
             self.node_cfg._read_write_files = {rw1, rw2, rw3}
-            self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py", node3: "unit3.py"}
+            self.node_cfg.src_file_alias_by_node = {
+                node1: "unit1.py",
+                node2: "unit2.py",
+                node3: "unit3.py",
+            }
             rc.reset_nodes([node1, node2, node3])
             self.edit_mgr.last_read_or_edited_file = rw3
             b_def_notin = ActualParameterBindings(
@@ -2621,7 +2749,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b_res_blame = ActualParameterBindings(
                 bindings={
                     (blame.target_parameter, bt_shared),
-                    (blame.explanation_parameter, "resolve_target matching blame target"),
+                    (
+                        blame.explanation_parameter,
+                        "resolve_target matching blame target",
+                    ),
                 }
             )
             resp_res_blame = blame.execute_tool(b_res_blame)
@@ -2636,7 +2767,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             resp_both_omitted = blame.execute_tool(b_both_omitted)
             self.assertTrue(resp_both_omitted.is_failed)
 
-    def test_blame_tool_resolve_target_defaulting_when_uninferrable_from_blame_target(self) -> None:
+    def test_blame_tool_resolve_target_defaulting_when_uninferrable_from_blame_target(
+        self,
+    ) -> None:
         """CUJ: BlameTool defaults resolve target using resolve target defaulting rules when uninferrable from blame target."""
         node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
         node2 = _make_dag_node(unit_address="//pkg:unit2", role_address="lib")
@@ -2653,7 +2786,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
         bt_unmapped: BoundFile = ReadOnlyFile(
             relative_path=RelativePath("unmapped_dep.py"),
             workspace_path=_make_workspace_path("pkg/unmapped_dep.py"),
-            owning_node=_make_dag_node(unit_address="//pkg:upstream", role_address="lib"),
+            owning_node=_make_dag_node(
+                unit_address="//pkg:upstream", role_address="lib"
+            ),
         )
         self.node_cfg._read_write_files = {rw1, rw2}
         self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py"}
@@ -2674,7 +2809,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b1 = ActualParameterBindings(
                 bindings={
                     (blame.blame_target_parameter, bt_unmapped),
-                    (blame.explanation_parameter, "Blame when resolve_target uninferrable and last_read set"),
+                    (
+                        blame.explanation_parameter,
+                        "Blame when resolve_target uninferrable and last_read set",
+                    ),
                 }
             )
             # Requirement: Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
@@ -2688,7 +2826,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b2 = ActualParameterBindings(
                 bindings={
                     (blame.blame_target_parameter, bt_unmapped),
-                    (blame.explanation_parameter, "Blame when resolve_target uninferrable single open node"),
+                    (
+                        blame.explanation_parameter,
+                        "Blame when resolve_target uninferrable single open node",
+                    ),
                 }
             )
             # Requirement: Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
@@ -2701,7 +2842,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
         bt: BoundFile = ReadOnlyFile(
             relative_path=RelativePath("dep.py"),
             workspace_path=_make_workspace_path("pkg/dep.py"),
-            owning_node=_make_dag_node(unit_address="//pkg:upstream", role_address="lib"),
+            owning_node=_make_dag_node(
+                unit_address="//pkg:upstream", role_address="lib"
+            ),
         )
         bt_targets: Set[BoundFile] = {bt}
         self.node_cfg._blame_targets = bt_targets
@@ -2730,7 +2873,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNotNone(resp.reminder)
             self.assertTrue(resp.reminder)
 
-    def test_check_files_repeated_defaults_view_file_to_last_read_or_earliest(self) -> None:
+    def test_check_files_repeated_defaults_view_file_to_last_read_or_earliest(
+        self,
+    ) -> None:
         """CUJ: CheckFilesTool defaults follow-up view_file to last read or edited file or earliest read-write file when repeated."""
         node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
         rw_b = ReadWriteFile(
@@ -2779,7 +2924,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
         """CUJ: Executing check_files tool evaluates open in-batch dependencies and surfaces failures."""
         node_dep = _make_dag_node(unit_address="//pkg:dep", role_address="lib")
         node_tgt = _make_dag_node(unit_address="//pkg:target", role_address="lib")
-        vcheck_dep = MockVerificationCheck(passes=False, diagnostic="SyntaxError in dep.py")
+        vcheck_dep = MockVerificationCheck(
+            passes=False, diagnostic="SyntaxError in dep.py"
+        )
         vcheck_tgt = MockVerificationCheck(passes=True, diagnostic="target.py OK")
 
         self.node_cfg.verification_checks_by_node = {
@@ -2793,7 +2940,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc: Any = scope.get_singleton(RunControllerImpl)
-            self.storage.dependencies[node_tgt] = {dag_storage.DagDependency(node=node_dep)}
+            self.storage.dependencies[node_tgt] = {
+                dag_storage.DagDependency(node=node_dep)
+            }
             rc.reset_nodes([node_dep, node_tgt])
 
             check_files = scope.get_singleton(CheckFilesToolImpl)
@@ -2803,12 +2952,13 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertTrue(resp.is_failed)
             self.assertIn("SyntaxError in dep.py", resp.content)
 
-
     def test_format_task_prompt_qa_and_target_stem_variations(self) -> None:
         """CUJ: format_task_prompt handles QA prompt defaulting, target stem variations (_test, _coverage), companions, and fallback targets."""
         node_qa = _make_dag_node(unit_address="//pkg:unit_qa", role_address="qa")
         node_test = _make_dag_node(unit_address="//pkg:unit_test", role_address="test")
-        node_cov = _make_dag_node(unit_address="//pkg:unit_coverage", role_address="coverage")
+        node_cov = _make_dag_node(
+            unit_address="//pkg:unit_coverage", role_address="coverage"
+        )
         node_lib = _make_dag_node(unit_address="//pkg:unit", role_address="lib")
 
         self.storage.node_definitions = {
@@ -2870,7 +3020,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
         # 4. Incoming feedback when src_file_alias_by_node and read_write_files are empty
         self.node_cfg.src_file_alias_by_node = {}
         self.node_cfg._read_write_files = set()
-        self.storage.messages[node_lib] = [dag_storage.FeedbackMessage(content=MessageContent("Fix syntax error"))]
+        self.storage.messages[node_lib] = [
+            dag_storage.FeedbackMessage(content=MessageContent("Fix syntax error"))
+        ]
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc: Any = scope.get_singleton(RunControllerImpl)
             prompt_fb = rc.format_task_prompt([node_lib])
@@ -2886,7 +3038,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
         )
         self.node_cfg._read_write_files = {rw1}
         self.node_cfg.src_file_alias_by_node = {node1: "unit1.py"}
-        self.node_cfg.verification_checks_by_node = {node1: [MockVerificationCheck(passes=True)]}
+        self.node_cfg.verification_checks_by_node = {
+            node1: [MockVerificationCheck(passes=True)]
+        }
         self.edit_mgr._file_hashes = {"unit1.py": "h1"}
 
         with enter_phase(agent_session, registry=self.registry) as scope:
@@ -2958,7 +3112,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
             owning_node=cast(Any, None),
         )
         self.node_cfg._read_write_files = {rw1_unowned, rw2_owned, rw3_unowned}
-        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py", node3: "unit3.py"}
+        self.node_cfg.src_file_alias_by_node = {
+            node1: "unit1.py",
+            node2: "unit2.py",
+            node3: "unit3.py",
+        }
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc: Any = scope.get_singleton(RunControllerImpl)
             rc.reset_nodes([node1, node2, node3])
@@ -3007,7 +3165,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNotNone(resp2.reminder)
 
             # 3. No open nodes and verification fails
-            vcheck_fail = MockVerificationCheck(passes=False, diagnostic="Failure in check")
+            vcheck_fail = MockVerificationCheck(
+                passes=False, diagnostic="Failure in check"
+            )
             self.node_cfg._verification_checks = [vcheck_fail]
             self.edit_mgr._file_hashes["unit1.py"] = "h_changed"
             resp_fail = check_files.execute_tool(b)
@@ -3023,7 +3183,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
         bt_nested = ReadOnlyFile(
             relative_path=RelativePath("a/b/dep.py"),
             workspace_path=_make_workspace_path("pkg/a/b/dep.py"),
-            owning_node=_make_dag_node(unit_address="//pkg:upstream", role_address="lib"),
+            owning_node=_make_dag_node(
+                unit_address="//pkg:upstream", role_address="lib"
+            ),
         )
         rw1 = ReadWriteFile(
             relative_path=RelativePath("unit1.py"),
@@ -3137,8 +3299,12 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_unit_name_matching_and_target_omission(self) -> None:
         """CUJ: Resolve tools match short unit names, package-qualified names, and support target omission and blame attribution from blame_target."""
-        node1 = _make_dag_node(unit_address="//my_pkg:unit_foo_lib_qa", role_address="qa")
-        node2 = _make_dag_node(unit_address="//my_pkg:unit_bar_lib_qa", role_address="qa")
+        node1 = _make_dag_node(
+            unit_address="//my_pkg:unit_foo_lib_qa", role_address="qa"
+        )
+        node2 = _make_dag_node(
+            unit_address="//my_pkg:unit_bar_lib_qa", role_address="qa"
+        )
         vcheck1 = MockVerificationCheck(passes=True)
         vcheck2 = MockVerificationCheck(passes=True)
         self.node_cfg.verification_checks_by_node = {node1: [vcheck1], node2: [vcheck2]}
@@ -3175,18 +3341,31 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.open_nodes(), [])
 
             # 3. Ambiguous short unit name fails when duplicate
-            node_a = _make_dag_node(unit_address="//pkg_a:widget_coverage", role_address="coverage")
-            node_b = _make_dag_node(unit_address="//pkg_b:widget_coverage", role_address="coverage")
+            node_a = _make_dag_node(
+                unit_address="//pkg_a:widget_coverage", role_address="coverage"
+            )
+            node_b = _make_dag_node(
+                unit_address="//pkg_b:widget_coverage", role_address="coverage"
+            )
             vcheck_a = MockVerificationCheck(passes=True)
             vcheck_b = MockVerificationCheck(passes=True)
-            self.node_cfg.verification_checks_by_node = {node_a: [vcheck_a], node_b: [vcheck_b]}
+            self.node_cfg.verification_checks_by_node = {
+                node_a: [vcheck_a],
+                node_b: [vcheck_b],
+            }
             rc.reset_nodes([node_a, node_b])
 
             # Verify prompt instructions generated by format_task_prompt
             prompt_multi = rc.format_task_prompt([node_a, node_b])
-            self.assertIn("specify target as <unit_name> (if unique among session units) or <relative_path>/<unit_name> (if ambiguous)", prompt_multi)
+            self.assertIn(
+                "specify target as <unit_name> (if unique among session units) or <relative_path>/<unit_name> (if ambiguous)",
+                prompt_multi,
+            )
             prompt_single = rc.format_task_prompt([node_b])
-            self.assertIn("When calling submit or fail for a single unit, the target parameter may be omitted.", prompt_single)
+            self.assertIn(
+                "When calling submit or fail for a single unit, the target parameter may be omitted.",
+                prompt_single,
+            )
 
             b_ambig = ActualParameterBindings(
                 bindings={
@@ -3195,7 +3374,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             resp_ambig = submit.execute_tool(b_ambig)
             self.assertTrue(resp_ambig.is_failed)
-            self.assertIn("Error: Target 'widget' is not an open target.", resp_ambig.content)
+            self.assertIn(
+                "Error: Target 'widget' is not an open target.", resp_ambig.content
+            )
 
             # 4. Fully qualified unit address fails, relative_path/unit_name resolves duplicate
             b_fq_invalid = ActualParameterBindings(
@@ -3205,7 +3386,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             resp_fq = submit.execute_tool(b_fq_invalid)
             self.assertTrue(resp_fq.is_failed)
-            self.assertIn("Error: Target '//pkg_a:widget_coverage' is not an open target.", resp_fq.content)
+            self.assertIn(
+                "Error: Target '//pkg_a:widget_coverage' is not an open target.",
+                resp_fq.content,
+            )
 
             b_rel = ActualParameterBindings(
                 bindings={
@@ -3219,12 +3403,18 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # 5. Providing change_summary for auditor node fails
             b_auditor_with_summary = ActualParameterBindings(
                 bindings={
-                    (submit.change_summary_parameter, "Should not be allowed for auditor"),
+                    (
+                        submit.change_summary_parameter,
+                        "Should not be allowed for auditor",
+                    ),
                 }
             )
             resp_auditor_fail = submit.execute_tool(b_auditor_with_summary)
             self.assertTrue(resp_auditor_fail.is_failed)
-            self.assertIn("Change summary is prohibited for audit nodes", resp_auditor_fail.content)
+            self.assertIn(
+                "Change summary is prohibited for audit nodes",
+                resp_auditor_fail.content,
+            )
 
             # 5b. Target omission when only 1 node remains open without change summary
             b_omit = ActualParameterBindings(bindings=set())
@@ -3234,7 +3424,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.open_nodes(), [])
 
             # 6. Target omission with fail tool when single node is active
-            solo_node = _make_dag_node(unit_address="//pkg:solo_unit_qa", role_address="qa")
+            solo_node = _make_dag_node(
+                unit_address="//pkg:solo_unit_qa", role_address="qa"
+            )
             rc.reset_nodes([solo_node])
             b_fail_omit = ActualParameterBindings(
                 bindings={
@@ -3246,7 +3438,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.open_nodes(), [])
 
             # 7. Blame identification using just blame_target in multi-node session
-            node_upstream = _make_dag_node(unit_address="//pkg:upstream_spec", role_address="high")
+            node_upstream = _make_dag_node(
+                unit_address="//pkg:upstream_spec", role_address="high"
+            )
             n1 = _make_dag_node(unit_address="//pkg:calc_lib", role_address="lib")
             n2 = _make_dag_node(unit_address="//pkg:parser_lib", role_address="lib")
             bt1 = ReadOnlyFile(

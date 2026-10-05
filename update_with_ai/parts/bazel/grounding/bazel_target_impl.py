@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: d093770e8f5a
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Bazel target implementation grounding specification module."""
 
 from __future__ import annotations
@@ -24,7 +32,7 @@ class BazelTarget(bazel_target.BazelTarget, InTier[SystemTier]):
         COVERED:
         - MUST strip repository qualifiers and expand omitted target names into canonical nodes.
           - Condition knowledge: call bazel_target_labels_ext.parse_and_normalize_label.
-          - Consequent knowledge: construct DagNode with canonical unit and role addresses.        """
+          - Consequent knowledge: construct DagNode with canonical unit and role addresses."""
         raw = str(target_identifier)
         pkg, tgt = bazel_target_labels_ext.parse_and_normalize_label(raw)
         norm_label = f"{pkg}:{tgt}"
@@ -34,9 +42,7 @@ class BazelTarget(bazel_target.BazelTarget, InTier[SystemTier]):
         )
         raise NotImplementedError
 
-    def extract_node_dir(
-        self, node: dag_storage.DagNode
-    ) -> bazel_target.NodeDirectory:
+    def extract_node_dir(self, node: dag_storage.DagNode) -> bazel_target.NodeDirectory:
         """
         COVERED:
         - MUST derive node directories by extracting package directory paths relative to a workspace root.

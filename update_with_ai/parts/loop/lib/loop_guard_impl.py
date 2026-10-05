@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 75f51a30ce3e
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 from typing import Any, Mapping, Optional, Tuple, Union
 from . import loop_guard
 from update_with_ai.parts.agent.lib.agent_session import agent_session
@@ -17,14 +26,20 @@ class LoopGuard(loop_guard.LoopGuard, Singleton):
     def evaluate(
         self,
         tool_name: tool_provider.ToolName,
-        arguments: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        arguments: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> Optional[Union[loop_guard.LoopReminder, loop_guard.LoopFailure]]:
         params = {getattr(name, "name", str(name)): v for name, v in arguments.items()}
         if tool_name in ("replace_file_content", "edit_file", "edit"):
             target_file = (
                 params.get("path")
-                or params.get("target_file")  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
-                or params.get("file_name")  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
+                or params.get(
+                    "target_file"
+                )  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
+                or params.get(
+                    "file_name"
+                )  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
                 or ""  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
             )
             start_line = params.get("start_line")
@@ -39,12 +54,18 @@ class LoopGuard(loop_guard.LoopGuard, Singleton):
             else:  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
                 call_key = (
                     str(tool_name),
-                    frozenset((getattr(name, "name", str(name)), str(v)) for name, v in arguments.items()),
+                    frozenset(
+                        (getattr(name, "name", str(name)), str(v))
+                        for name, v in arguments.items()
+                    ),
                 )
         else:
             call_key = (
                 str(tool_name),
-                frozenset((getattr(name, "name", str(name)), str(v)) for name, v in arguments.items()),
+                frozenset(
+                    (getattr(name, "name", str(name)), str(v))
+                    for name, v in arguments.items()
+                ),
             )
         if self._last_call == call_key:
             self._consecutive_count += 1

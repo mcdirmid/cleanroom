@@ -83,25 +83,11 @@ py_binary(
 )
 
 py_library(
-    name = "cleanroom_mailbox_lib",
-    srcs = ["cleanroom_mailbox.py"],
-    visibility = ["//visibility:public"],
-)
-
-py_binary(
-    name = "cleanroom_mailbox",
-    srcs = ["cleanroom_mailbox.py"],
-    main = "cleanroom_mailbox.py",
-    deps = [":cleanroom_mailbox_lib"],
-    visibility = ["//visibility:public"],
-)
-
-py_library(
     name = "cleanroom_workspace_tool_lib",
     srcs = ["cleanroom_workspace_tool.py"],
     deps = [
-        ":cleanroom_mailbox_lib",
         ":lib_lint",
+        ":src_metadata",
     ],
     visibility = ["//visibility:public"],
 )
@@ -111,5 +97,23 @@ py_binary(
     srcs = ["cleanroom_workspace_tool.py"],
     main = "cleanroom_workspace_tool.py",
     deps = [":cleanroom_workspace_tool_lib"],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "cleanroom_role_tool_lib",
+    srcs = ["cleanroom_role_tool.py"],
+    deps = [
+        ":cleanroom_workspace_tool_lib",
+        ":src_metadata",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "cleanroom_role_tool",
+    srcs = ["cleanroom_role_tool.py"],
+    main = "cleanroom_role_tool.py",
+    deps = [":cleanroom_role_tool_lib"],
     visibility = ["//visibility:public"],
 )

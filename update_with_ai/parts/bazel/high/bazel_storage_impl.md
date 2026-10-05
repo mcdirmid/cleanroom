@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: ed3e42e6c9d8
+-->
+
 # bazel_storage_impl implementation component
 
 imports: bazel_target, file_paths, src_metadata_ext
@@ -52,5 +59,3 @@ Deleting the last cleaned timestamp from an auditor role node removes the audito
 Materializing template for a node writes configured template content into its declared source file if the file is missing from the workspace root without overwriting existing files.
 
 Recording a feedback message against a dependency target node updates the target node's source file in-band metadata header in-place, appending an unacted feedback entry carrying the current timestamp, blaming node address, and feedback explanation.
-
-

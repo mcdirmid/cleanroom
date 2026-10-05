@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 74ad5c52bbad
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Loop guard implementation grounding specification module."""
 
 from __future__ import annotations
@@ -24,7 +32,9 @@ class LoopGuard(loop_guard.LoopGuard, InTier[AgentSessionTier]):
     def evaluate(
         self,
         tool_name: tool_provider.ToolName,
-        arguments: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        arguments: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> Optional[Union[loop_guard.LoopReminder, loop_guard.LoopFailure]]:
         """
         COVERED:
@@ -39,7 +49,7 @@ class LoopGuard(loop_guard.LoopGuard, InTier[AgentSessionTier]):
           - Consequent knowledge: construct LoopReminder.
         - WHEN consecutive edits target the same file and line range at the fatal threshold, MUST produce a loop failure.
           - Condition knowledge: evaluate call_key and self._consecutive_count >= self._fatal_threshold.
-          - Consequent knowledge: construct LoopFailure.        """
+          - Consequent knowledge: construct LoopFailure."""
         sample_param = key(arguments)
         sample_val = value(arguments)
         call_key = (str(tool_name), (str(sample_param.name), str(sample_val)))
@@ -53,12 +63,18 @@ class LoopGuard(loop_guard.LoopGuard, InTier[AgentSessionTier]):
         _reaches_fatal: bool = self._consecutive_count >= self._fatal_threshold
 
         reminder = loop_guard.LoopReminder(
-            feedback=loop_guard.LoopFeedback(f"Warning: tool '{tool_name}' has been executed 2 times consecutively.")
+            feedback=loop_guard.LoopFeedback(
+                f"Warning: tool '{tool_name}' has been executed 2 times consecutively."
+            )
         )
         failure = loop_guard.LoopFailure(
-            explanation=loop_guard.FailureExplanation(f"Fatal loop detected: tool '{tool_name}' executed 5 times consecutively.")
+            explanation=loop_guard.FailureExplanation(
+                f"Fatal loop detected: tool '{tool_name}' executed 5 times consecutively."
+            )
         )
-        _res: Optional[Union[loop_guard.LoopReminder, loop_guard.LoopFailure]] = reminder
+        _res: Optional[Union[loop_guard.LoopReminder, loop_guard.LoopFailure]] = (
+            reminder
+        )
         raise NotImplementedError
 
     def reset(self) -> None:

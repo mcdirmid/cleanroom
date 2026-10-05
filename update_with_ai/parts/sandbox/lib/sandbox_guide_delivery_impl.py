@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: dcd44f38c1f0
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in sandbox_guide_delivery_impl.pyi
 from typing import List, Optional
 from update_with_ai.parts.agent.lib.agent_session import agent_session
@@ -39,7 +48,12 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             try:
                 cfg = get_singleton(agent_node_config.NodeConfig)
                 self._guide = cfg.guide
-            except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):  # pragma: no cover (assumption: NodeConfig registered in AgentSessionTier)
+            except (
+                LifecycleResolutionError,
+                KeyError,
+                RuntimeError,
+                ValueError,
+            ):  # pragma: no cover (assumption: NodeConfig registered in AgentSessionTier)
                 pass
         return self._guide
 
@@ -114,9 +128,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
         )
 
         return agent_node_config.NodeGuide(
-            summary=agent_node_config.GuideSummary(
-                "\n".join(summary_lines).strip()
-            ),
+            summary=agent_node_config.GuideSummary("\n".join(summary_lines).strip()),
             sections=sections,
             verification_failure=vf_text,
         )
@@ -134,9 +146,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             diag_text = failure_diagnostics or ""
             vf_block = ""
             if g.verification_failure:
-                vf_block = (
-                    f"\n\n## Verification failure\n{g.verification_failure}"
-                )
+                vf_block = f"\n\n## Verification failure\n{g.verification_failure}"
             if self._step_index == 0:
                 base_text = self._initial_primer if self._initial_primer else g.summary
                 content = f"{base_text}{vf_block}\n\nVerification failed:\n{diag_text}".strip()

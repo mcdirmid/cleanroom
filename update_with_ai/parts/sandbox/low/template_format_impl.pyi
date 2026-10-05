@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 79f17314394e
+# --- END CLEANROOM METADATA ---
+
 """Template format implementation low-level specification."""
 
 from typing import Any, Mapping

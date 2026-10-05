@@ -450,10 +450,7 @@ def _new_target(
     """A new rule block: name, srcs, deps (external deps), pyright_deps (the known deps), and public visibility."""
     if rule == "pyright_library":
         want = [
-            d
-            if (d.startswith("//") or d.startswith(":"))
-            else (":" + d)
-            for d in deps
+            d if (d.startswith("//") or d.startswith(":")) else (":" + d) for d in deps
         ]
     else:
         want = [
@@ -498,7 +495,11 @@ def ensure_target(
         want_list = []
         for d in deps:
             if d.startswith("//"):
-                if rule == "pyright_library" and package and d.startswith("//" + package + ":"):
+                if (
+                    rule == "pyright_library"
+                    and package
+                    and d.startswith("//" + package + ":")
+                ):
                     want_list.append(":" + d.split(":")[-1])
                 else:
                     want_list.append(d)
@@ -777,7 +778,9 @@ def check_framework_imports(file_path: str) -> list[str]:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name == "framework" or alias.name.endswith(".framework"):
-                    framework_module_aliases[alias.asname or alias.name.split(".")[-1]] = node.lineno
+                    framework_module_aliases[
+                        alias.asname or alias.name.split(".")[-1]
+                    ] = node.lineno
         elif isinstance(node, ast.ImportFrom):
             if node.module == "framework" or (
                 node.module and node.module.endswith(".framework")
@@ -905,12 +908,15 @@ def check_no_stubs(file_path: str) -> list[str]:
     # Check for TODO stub comments in implementation modules
     if is_impl:
         import io
+
         try:
             tokens = tokenize.tokenize(io.BytesIO(content.encode("utf-8")).readline)
             for tok in tokens:
                 if tok.type == tokenize.COMMENT:
                     comment_text = tok.string
-                    if "TODO_" in comment_text or re.search(r"#\s*TODO\b", comment_text, re.IGNORECASE):
+                    if "TODO_" in comment_text or re.search(
+                        r"#\s*TODO\b", comment_text, re.IGNORECASE
+                    ):
                         errors.append(
                             f"{file_path}:{tok.start[0]}: error: unfinished stub comment found: '{comment_text.strip()}'"
                         )
@@ -952,9 +958,15 @@ def check_no_stubs(file_path: str) -> list[str]:
                         return node.lineno
                     if isinstance(exc, ast.Call):
                         func = exc.func
-                        if isinstance(func, ast.Name) and func.id == "NotImplementedError":
+                        if (
+                            isinstance(func, ast.Name)
+                            and func.id == "NotImplementedError"
+                        ):
                             return node.lineno
-                        if isinstance(func, ast.Attribute) and func.attr == "NotImplementedError":
+                        if (
+                            isinstance(func, ast.Attribute)
+                            and func.attr == "NotImplementedError"
+                        ):
                             return node.lineno
         return None
 
@@ -1552,9 +1564,7 @@ def check_pyi_no_aliases(pyi_path: str) -> list[str]:
             if _is_allowed_nominal_or_typevar(node.value) or _is_union_type(node.value):
                 continue
             for t in node.targets:
-                target_name = (
-                    t.id if isinstance(t, ast.Name) else ast.unparse(t)
-                )
+                target_name = t.id if isinstance(t, ast.Name) else ast.unparse(t)
                 if target_name.startswith("__"):
                     continue
                 errors.append(
@@ -1928,7 +1938,9 @@ def build_module_resolution_map(
                 if pkg_prefix.startswith("update_with_ai.parts."):
                     pkg_prefix = "staging." + pkg_prefix[len("staging.") :]
                 elif pkg_prefix.startswith("update_with_ai.parts."):
-                    pkg_prefix = "update_with_ai." + pkg_prefix[len("update_with_ai.") :]
+                    pkg_prefix = (
+                        "update_with_ai." + pkg_prefix[len("update_with_ai.") :]
+                    )
                 pkg_label = modules_dir.lstrip("./").rstrip("/")
                 import_map[stem] = f"{pkg_prefix}.{stem}" if pkg_prefix else stem
                 label_map[stem] = f"//{pkg_label}:{stem}" if pkg_label else f":{stem}"
@@ -2285,7 +2297,7 @@ def rewrite_lib_imports(
                     continue
                 if ".grounding" in node.module:
                     if node.module.endswith(".grounding"):
-                        domain_pkg = node.module[:-len(".grounding")] + ".lib"
+                        domain_pkg = node.module[: -len(".grounding")] + ".lib"
                         replacements.append(
                             (node.lineno, "from", node.module, domain_pkg)
                         )
@@ -2316,7 +2328,9 @@ def rewrite_lib_imports(
                     full = import_map[m]
                     if node.module != full:
                         replacements.append((node.lineno, "from", node.module, full))
-                elif last in import_map and node.module.startswith("update_with_ai.parts."):
+                elif last in import_map and node.module.startswith(
+                    "update_with_ai.parts."
+                ):
                     imported_cross_parts.append(last)
                     full = import_map[last]
                     replacements.append((node.lineno, "from", node.module, full))
@@ -2450,7 +2464,11 @@ def parse_pyi_dependencies(
                 if isinstance(node, ast.Import):
                     for alias in node.names:
                         stem = alias.name.split(".")[0]
-                        if stem not in stdlib and stem not in ignored and not stem.endswith("_ext"):
+                        if (
+                            stem not in stdlib
+                            and stem not in ignored
+                            and not stem.endswith("_ext")
+                        ):
                             deps.add(stem)
                 elif isinstance(node, ast.ImportFrom):
                     if node.module:
@@ -2459,17 +2477,29 @@ def parse_pyi_dependencies(
                         elif node.module.endswith(".grounding"):
                             for alias in node.names:
                                 stem = alias.name.split(".")[0]
-                                if stem not in stdlib and stem not in ignored and not stem.endswith("_ext"):
+                                if (
+                                    stem not in stdlib
+                                    and stem not in ignored
+                                    and not stem.endswith("_ext")
+                                ):
                                     deps.add(stem)
                             continue
                         else:
                             stem = node.module.split(".")[0]
-                        if stem not in stdlib and stem not in ignored and not stem.endswith("_ext"):
+                        if (
+                            stem not in stdlib
+                            and stem not in ignored
+                            and not stem.endswith("_ext")
+                        ):
                             deps.add(stem)
                     elif node.level > 0:
                         for alias in node.names:
                             stem = alias.name.split(".")[0]
-                            if stem not in stdlib and stem not in ignored and not stem.endswith("_ext"):
+                            if (
+                                stem not in stdlib
+                                and stem not in ignored
+                                and not stem.endswith("_ext")
+                            ):
                                 deps.add(stem)
             for build_dep in parse_spec_build_dependencies(p):
                 m = re.search(r'requirement\(["\']([^"\']+)["\']\)', build_dep)
@@ -2717,7 +2747,9 @@ def strip_do_not_edit_markers(file_path: str) -> bool:
         if re.match(r"^#\s*Dependencies:\s*", s):
             changed = True
             continue
-        if re.search(r"\b\w+_ext\b", s) and (s.startswith("import ") or s.startswith("from ")):
+        if re.search(r"\b\w+_ext\b", s) and (
+            s.startswith("import ") or s.startswith("from ")
+        ):
             cleaned = _clean_ext_import_line(line)
             if cleaned is None:
                 changed = True
@@ -3036,9 +3068,7 @@ def parse_part_units(pkg_build_path: str) -> dict[str, list[str]]:
     return units
 
 
-def parse_targets_by_rule(
-    build_path: str, rule_name: str
-) -> dict[str, list[str]]:
+def parse_targets_by_rule(build_path: str, rule_name: str) -> dict[str, list[str]]:
     """Parse targets of a specific rule from a BUILD file, returning name -> pyright_deps."""
     if not os.path.isfile(build_path):
         return {}
@@ -3136,9 +3166,7 @@ def compute_lib_derived_info(
         if d.startswith("//"):
             raw = d[2:]
             p_part, t_part = (
-                raw.split(":", 1)
-                if ":" in raw
-                else (raw, os.path.basename(raw))
+                raw.split(":", 1) if ":" in raw else (raw, os.path.basename(raw))
             )
             if p_part == parent_pkg:
                 lib_label = f":{t_part}"
@@ -3160,7 +3188,9 @@ def compute_lib_derived_info(
         lib_deps.append(lifecycle_label)
         allowed_deps.add("lifecycle")
         if stem != "agent_session":
-            agent_base = parent_pkg.split("/")[0] if "/" in parent_pkg else "update_with_ai"
+            agent_base = (
+                parent_pkg.split("/")[0] if "/" in parent_pkg else "update_with_ai"
+            )
             lib_deps.append(f"//{agent_base}/parts/agent/lib:agent_session")
             allowed_deps.add("agent_session")
 
@@ -3179,8 +3209,12 @@ def compute_lib_derived_info(
     expected_deps = sorted(set(want_list), key=_dep_sort_key)
 
     search_base = os.path.join(part_dir, "lib")
-    ext_pyi_paths = find_ext_spec_paths(sorted(ext_stems), search_base, workspace_root=workspace_root)
-    all_pyi_paths = ([pyi_path] if pyi_path and os.path.isfile(pyi_path) else []) + ext_pyi_paths
+    ext_pyi_paths = find_ext_spec_paths(
+        sorted(ext_stems), search_base, workspace_root=workspace_root
+    )
+    all_pyi_paths = (
+        [pyi_path] if pyi_path and os.path.isfile(pyi_path) else []
+    ) + ext_pyi_paths
 
     target_deps: list[str] = []
     for p in all_pyi_paths:
@@ -3317,9 +3351,7 @@ def compute_test_derived_info(
             reachable_map[iface_stem] = iface_target
             direct_deps_list.append(iface_target)
 
-    allowed_deps: set[str] = {
-        d for d in reachable_map.keys() if not d.endswith("_ext")
-    }
+    allowed_deps: set[str] = {d for d in reachable_map.keys() if not d.endswith("_ext")}
     if uses_lifecycle:
         allowed_deps.add("lifecycle")
     if pyi_path and os.path.isfile(pyi_path):
@@ -3420,9 +3452,9 @@ def check_lib_targets(
     package = package_of(build_file)
 
     # 1. Existence checks (exclude _ext units which do not produce lib implementations)
-    missing_units = {
-        u for u in units.keys() if not u.endswith("_ext")
-    } - set(actual_targets.keys())
+    missing_units = {u for u in units.keys() if not u.endswith("_ext")} - set(
+        actual_targets.keys()
+    )
     if missing_units:
         errors.append(
             f"Missing pyright_library target(s) in {build_file} for unit(s) declared in {parent_build_file}: "
@@ -3500,7 +3532,7 @@ def generate_lib_build_content(
             span = _find_block(existing_content, "pyright_library", stem)
             if span:
                 target_deps.extend(
-                    _attr_expr_list(existing_content[span[0]:span[1]], "deps")
+                    _attr_expr_list(existing_content[span[0] : span[1]], "deps")
                 )
 
         for dep_expr in info.target_deps:
@@ -3592,11 +3624,7 @@ def check_test_targets(
     test_dir = os.path.dirname(os.path.abspath(build_file))
 
     # 1. Existence checks: only _impl units have tests.
-    expected_test_stems = {
-        u
-        for u in units.keys()
-        if u.endswith("_impl")
-    }
+    expected_test_stems = {u for u in units.keys() if u.endswith("_impl")}
     expected_test_names = {f"{stem}_test" for stem in expected_test_stems}
 
     missing_tests = expected_test_names - set(actual_targets.keys())
@@ -3669,11 +3697,7 @@ def generate_test_build_content(
     lib_pkg = f"{parent_pkg}/lib" if parent_pkg else "lib"
     test_dir = os.path.dirname(os.path.abspath(build_file))
 
-    expected_test_stems = sorted([
-        u
-        for u in units.keys()
-        if u.endswith("_impl")
-    ])
+    expected_test_stems = sorted([u for u in units.keys() if u.endswith("_impl")])
 
     targets: list[str] = []
     has_pip = False
@@ -3701,7 +3725,7 @@ def generate_test_build_content(
             span = _find_block(existing_content, "pyright_test", test_name)
             if span:
                 target_deps.extend(
-                    _attr_expr_list(existing_content[span[0]:span[1]], "deps")
+                    _attr_expr_list(existing_content[span[0] : span[1]], "deps")
                 )
 
         for dep_expr in info.target_deps:
@@ -3805,7 +3829,9 @@ def compute_grounding_derived_info(
             deps.add(d)
         elif d.startswith("//"):
             raw = d[2:]
-            p_part, t_part = raw.split(":", 1) if ":" in raw else (raw, os.path.basename(raw))
+            p_part, t_part = (
+                raw.split(":", 1) if ":" in raw else (raw, os.path.basename(raw))
+            )
             if p_part == parent_pkg:
                 deps.add(f":{t_part}")
             else:
@@ -3824,17 +3850,24 @@ def compute_grounding_derived_info(
                             deps.add(f":{n.name}")
                 elif isinstance(node, ast.ImportFrom):
                     if node.module:
-                        if node.module.startswith("parts.") and ".grounding" in node.module:
+                        if (
+                            node.module.startswith("parts.")
+                            and ".grounding" in node.module
+                        ):
                             parts = node.module.split(".")
                             mod_part = parts[1]
                             for n in node.names:
                                 if mod_part == cur_part:
                                     deps.add(f":{n.name}")
                                 else:
-                                    deps.add(f"//update_with_ai/parts/{mod_part}/grounding:{n.name}")
+                                    deps.add(
+                                        f"//update_with_ai/parts/{mod_part}/grounding:{n.name}"
+                                    )
                         elif node.module.startswith("."):
                             sibling = node.module.lstrip(".")
-                            if sibling and os.path.isfile(os.path.join(grounding_dir, f"{sibling}.py")):
+                            if sibling and os.path.isfile(
+                                os.path.join(grounding_dir, f"{sibling}.py")
+                            ):
                                 deps.add(f":{sibling}")
                             for n in node.names:
                                 cand = os.path.join(grounding_dir, f"{n.name}.py")
@@ -3859,7 +3892,9 @@ def compute_grounding_derived_info(
         if d == f":{stem}":
             continue
         if d.startswith("//"):
-            if current_grounding_pkg and d.startswith("//" + current_grounding_pkg + ":"):
+            if current_grounding_pkg and d.startswith(
+                "//" + current_grounding_pkg + ":"
+            ):
                 canonical_deps.append(":" + d.split(":")[-1])
             else:
                 canonical_deps.append(d)
@@ -3922,9 +3957,7 @@ def check_grounding_targets(
 
     content = read_text(build_file)
     if "targets_derived_test" not in content:
-        errors.append(
-            f"Missing 'targets_derived_test' in {build_file}."
-        )
+        errors.append(f"Missing 'targets_derived_test' in {build_file}.")
 
     # 2. Dependency derivation checks
     for stem, actual_deps in actual_targets.items():
@@ -4039,4 +4072,3 @@ def ensure_or_update_grounding_build(
     except OSError:
         pass
     return True
-

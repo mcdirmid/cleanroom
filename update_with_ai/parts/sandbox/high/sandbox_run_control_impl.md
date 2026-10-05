@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 116a0c94afa0
+-->
+
 # sandbox_run_control_impl implementation component
 
 imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config, template_format, agent_config, dag_subgraph, sandbox
@@ -78,6 +85,8 @@ The submit tool:
 - Fails if a change summary is provided when resolving an auditor node, reminding the agent that change summaries are not permitted for audit nodes.
 
 - Fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
+
+- Fails if workspace files were not modified and a change summary is provided, reminding the agent that change summaries are not permitted when submitting without workspace file modifications.
 
 - Marks the resolve target clean in graph storage with the provided change summary, marks the resolve target clean and submitted in the current get work turn, and resolves the active node.
 

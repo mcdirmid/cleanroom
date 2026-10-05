@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 8753ad53c8c8
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in bazel_manifest_loader_impl.pyi
 import json
 import os
@@ -20,7 +29,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
     tier = system
 
     def __init__(self) -> None:
-        self._manifests: Dict[dag_storage.DagNode, bazel_manifest_loader.TargetManifest] = {}
+        self._manifests: Dict[
+            dag_storage.DagNode, bazel_manifest_loader.TargetManifest
+        ] = {}
 
     def _find_file(self, pkg_path: str, filename: str) -> Optional[str]:
         pkg_norm = os.path.normpath(pkg_path).replace("\\", "/") if pkg_path else ""
@@ -28,7 +39,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         pkg_variants: List[str] = []
         for i in range(len(pkg_parts)):
             pkg_variants.append("/".join(pkg_parts[i:]))
-        if pkg_norm and pkg_norm not in pkg_variants:  # pragma: no cover (assumption: manifest resides in package directory)
+        if (
+            pkg_norm and pkg_norm not in pkg_variants
+        ):  # pragma: no cover (assumption: manifest resides in package directory)
             pkg_variants.append(pkg_norm.strip("/"))
         if "" not in pkg_variants:
             pkg_variants.append("")
@@ -50,14 +63,18 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         if sys.argv and sys.argv[0]:
             argv0 = os.path.abspath(sys.argv[0])
             bases.append(f"{argv0}.runfiles")
-            if ".runfiles" in argv0:  # pragma: no cover (assumption: manifest resides in package directory)
+            if (
+                ".runfiles" in argv0
+            ):  # pragma: no cover (assumption: manifest resides in package directory)
                 rf_idx = argv0.find(".runfiles")
                 bases.append(argv0[: rf_idx + len(".runfiles")])
         bases.append(".runfiles")
         bases.append(os.path.abspath(".runfiles"))
 
         for base in bases:
-            if base and os.path.exists(base):  # pragma: no cover (assumption: manifest resides in package directory)
+            if base and os.path.exists(
+                base
+            ):  # pragma: no cover (assumption: manifest resides in package directory)
                 candidates.append(os.path.join(base, filename))
                 candidates.append(os.path.join(base, "_main", filename))
                 candidates.append(os.path.join(base, "cleanroom", filename))
@@ -67,7 +84,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                         candidates.append(os.path.join(base, "_main", p, filename))
                         candidates.append(os.path.join(base, "cleanroom", p, filename))
                         candidates.append(os.path.join(base, "bazel-bin", p, filename))
-                        candidates.append(os.path.join(base, "_main", "bazel-bin", p, filename))
+                        candidates.append(
+                            os.path.join(base, "_main", "bazel-bin", p, filename)
+                        )
                 try:
                     for entry in os.listdir(base):
                         sub = os.path.join(base, entry)
@@ -76,7 +95,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                             for p in pkg_variants:
                                 if p:
                                     candidates.append(os.path.join(sub, p, filename))
-                                    candidates.append(os.path.join(sub, "bazel-bin", p, filename))
+                                    candidates.append(
+                                        os.path.join(sub, "bazel-bin", p, filename)
+                                    )
                 except OSError:
                     pass
 
@@ -99,14 +120,18 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         unit_name = (
             node.unit_address.split(":")[-1]
             if ":" in node.unit_address
-            else os.path.basename(node.unit_address)  # pragma: no cover (assumption: manifest resides in package directory)
+            else os.path.basename(
+                node.unit_address
+            )  # pragma: no cover (assumption: manifest resides in package directory)
         )
 
         if node.role_address:
             role_name = (
                 node.role_address.split(":")[-1]
                 if ":" in node.role_address
-                else os.path.basename(node.role_address)  # pragma: no cover (assumption: manifest resides in package directory)
+                else os.path.basename(
+                    node.role_address
+                )  # pragma: no cover (assumption: manifest resides in package directory)
             )
             node_manifest_files = [
                 f"{unit_name}_{role_name}_manifest.json",
@@ -132,7 +157,11 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                                 )
                                 self._manifests[node] = m
                                 return m
-                    except (OSError, UnicodeDecodeError, json.JSONDecodeError):  # pragma: no cover (assumption: manifest resides in package directory)
+                    except (
+                        OSError,
+                        UnicodeDecodeError,
+                        json.JSONDecodeError,
+                    ):  # pragma: no cover (assumption: manifest resides in package directory)
                         pass
 
             unit_manifest_candidates = [
@@ -168,7 +197,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 if role_file:  # pragma: no cover (assumption: manifest resides in package directory)
                     break
 
-            if unit_file and role_file:  # pragma: no cover (assumption: manifest resides in package directory)
+            if (
+                unit_file and role_file
+            ):  # pragma: no cover (assumption: manifest resides in package directory)
                 try:
                     with open(unit_file, "r", encoding="utf-8") as uf:
                         unit_data = json.load(uf)
@@ -232,7 +263,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 targets: List[Dict[str, Any]] = []
-                if isinstance(data, list):  # pragma: no cover (assumption: manifest resides in package directory)
+                if isinstance(
+                    data, list
+                ):  # pragma: no cover (assumption: manifest resides in package directory)
                     targets = [item for item in data if isinstance(item, dict)]
                 elif isinstance(data, dict):
                     if "targets" in data and isinstance(data["targets"], list):
@@ -270,7 +303,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
 
                 for t in targets:
                     t_label = str(t.get("label") or node_label_fallback)
-                    t_node = node_util.normalize_target(bazel_target.TargetIdentifier(t_label))
+                    t_node = node_util.normalize_target(
+                        bazel_target.TargetIdentifier(t_label)
+                    )
 
                     raw_src = (
                         t.get("source_file")
@@ -288,9 +323,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                         else t.get("deps")
                     )
                     raw_deps: Sequence[Any] = (
-                        raw_deps_val
-                        if isinstance(raw_deps_val, (list, tuple))
-                        else ()
+                        raw_deps_val if isinstance(raw_deps_val, (list, tuple)) else ()
                     )
                     raw_silent_srcs_val = (
                         t.get("silent_source_files")
@@ -352,7 +385,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                             else None
                         ),
                         source_file=(
-                            bazel_manifest_loader.agent_file_alias.RelativePath(str(raw_src))
+                            bazel_manifest_loader.agent_file_alias.RelativePath(
+                                str(raw_src)
+                            )
                             if raw_src is not None
                             else None
                         ),
@@ -361,7 +396,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                             for s in raw_silent_srcs
                         ),
                         template=(
-                            bazel_manifest_loader.agent_file_alias.FileContent(str(raw_template))
+                            bazel_manifest_loader.agent_file_alias.FileContent(
+                                str(raw_template)
+                            )
                             if raw_template is not None
                             else None
                         ),
@@ -369,13 +406,16 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                             bazel_manifest_loader.TargetLabel(str(d)) for d in raw_deps
                         ),
                         silent_dependencies=tuple(
-                            bazel_manifest_loader.TargetLabel(str(d)) for d in raw_silent_deps
+                            bazel_manifest_loader.TargetLabel(str(d))
+                            for d in raw_silent_deps
                         ),
                         star_dependencies=tuple(
-                            bazel_manifest_loader.TargetLabel(str(d)) for d in raw_star_deps
+                            bazel_manifest_loader.TargetLabel(str(d))
+                            for d in raw_star_deps
                         ),
                         feedback_dependencies=tuple(
-                            bazel_manifest_loader.TargetLabel(str(d)) for d in raw_feedback_deps
+                            bazel_manifest_loader.TargetLabel(str(d))
+                            for d in raw_feedback_deps
                         ),
                         guide_target=(
                             bazel_manifest_loader.TargetLabel(str(raw_guide))
@@ -432,9 +472,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             or node.unit_address.split(":")[-1]
         )
         unit_dir = (
-            unit_data.get("dir")
-            or unit_data.get("unit_dir")
-            or pkg_path.lstrip("/")
+            unit_data.get("dir") or unit_data.get("unit_dir") or pkg_path.lstrip("/")
         )
         component_type = unit_data.get("component_type", "implementation")
         active_types = role_data.get(
@@ -451,7 +489,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         def _resolve_role_label(r_label: str) -> str:
             if r_label.startswith(":"):
                 return f"{role_pkg}{r_label}"
-            return node_util.normalize_target(bazel_target.TargetIdentifier(r_label)).unit_address
+            return node_util.normalize_target(
+                bazel_target.TargetIdentifier(r_label)
+            ).unit_address
 
         deps_list: List[str] = []
         feedback_deps_list: List[str] = []
@@ -539,7 +579,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 if n_dep.startswith(":"):
                     norm_n_dep = f"{role_pkg}{n_dep}"
                 else:
-                    norm_n_dep = node_util.normalize_target(bazel_target.TargetIdentifier(n_dep)).unit_address
+                    norm_n_dep = node_util.normalize_target(
+                        bazel_target.TargetIdentifier(n_dep)
+                    ).unit_address
                 if norm_n_dep not in deps_list:
                     deps_list.append(norm_n_dep)
         else:
@@ -570,7 +612,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         resolved_silent_srcs: List[str] = []
         for s in silent_srcs:
             try:
-                resolved_silent_srcs.append(s.format(unit_dir=unit_dir, unit_name=unit_name))
+                resolved_silent_srcs.append(
+                    s.format(unit_dir=unit_dir, unit_name=unit_name)
+                )
             except (KeyError, ValueError, IndexError):
                 resolved_silent_srcs.append(s)
 
@@ -582,15 +626,34 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         return bazel_manifest_loader.TargetManifest(
             label=bazel_manifest_loader.TargetLabel(node_label),
             task_prompt=agent_storage.TaskPrompt(prompt_text) if prompt_text else None,
-            source_file=bazel_manifest_loader.agent_file_alias.RelativePath(src_val) if src_val is not None else None,
-            silent_source_files=tuple(bazel_manifest_loader.agent_file_alias.RelativePath(s) for s in resolved_silent_srcs),
-            template=bazel_manifest_loader.agent_file_alias.FileContent(str(role_data["template"])) if role_data.get("template") is not None else None,
+            source_file=bazel_manifest_loader.agent_file_alias.RelativePath(src_val)
+            if src_val is not None
+            else None,
+            silent_source_files=tuple(
+                bazel_manifest_loader.agent_file_alias.RelativePath(s)
+                for s in resolved_silent_srcs
+            ),
+            template=bazel_manifest_loader.agent_file_alias.FileContent(
+                str(role_data["template"])
+            )
+            if role_data.get("template") is not None
+            else None,
             dependencies=tuple(bazel_manifest_loader.TargetLabel(d) for d in deps_list),
-            silent_dependencies=tuple(bazel_manifest_loader.TargetLabel(d) for d in silent_deps_list),
-            star_dependencies=tuple(bazel_manifest_loader.TargetLabel(d) for d in star_deps_list),
-            feedback_dependencies=tuple(bazel_manifest_loader.TargetLabel(d) for d in feedback_deps_list),
-            guide_target=bazel_manifest_loader.TargetLabel(role_data["guide"]) if role_data.get("guide") is not None else None,
-            verification_check=bazel_manifest_loader.VerificationCommand(verify_val) if verify_val is not None else None,
+            silent_dependencies=tuple(
+                bazel_manifest_loader.TargetLabel(d) for d in silent_deps_list
+            ),
+            star_dependencies=tuple(
+                bazel_manifest_loader.TargetLabel(d) for d in star_deps_list
+            ),
+            feedback_dependencies=tuple(
+                bazel_manifest_loader.TargetLabel(d) for d in feedback_deps_list
+            ),
+            guide_target=bazel_manifest_loader.TargetLabel(role_data["guide"])
+            if role_data.get("guide") is not None
+            else None,
+            verification_check=bazel_manifest_loader.VerificationCommand(verify_val)
+            if verify_val is not None
+            else None,
             allows_step_mode=role_data.get("allows_step_mode", True),
         )
 
@@ -600,22 +663,35 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         node_util = get_singleton(bazel_target.BazelTarget)
         storage_any = cast(Any, storage)
 
-        def _get_definition(n: dag_storage.DagNode) -> Optional[agent_storage.NodeDefinition]:
+        def _get_definition(
+            n: dag_storage.DagNode,
+        ) -> Optional[agent_storage.NodeDefinition]:
             if hasattr(storage_any, "get_node_definition"):
                 try:
                     res = storage_any.get_node_definition(n)
                     if res is not None:
                         return res
-                except (KeyError, LookupError, AttributeError, TypeError):  # pragma: no cover (assumption: manifest resides in package directory)
+                except (
+                    KeyError,
+                    LookupError,
+                    AttributeError,
+                    TypeError,
+                ):  # pragma: no cover (assumption: manifest resides in package directory)
                     pass
-            if hasattr(storage_any, "_definitions") and n in storage_any._definitions:  # pragma: no cover (assumption: manifest resides in package directory)
+            if (
+                hasattr(storage_any, "_definitions") and n in storage_any._definitions
+            ):  # pragma: no cover (assumption: manifest resides in package directory)
                 return storage_any._definitions[n]
             return None
 
-        def _store_definition(n: dag_storage.DagNode, d: agent_storage.NodeDefinition) -> None:
+        def _store_definition(
+            n: dag_storage.DagNode, d: agent_storage.NodeDefinition
+        ) -> None:
             if hasattr(storage_any, "store_node_definition"):
                 storage_any.store_node_definition(n, d)
-            elif hasattr(storage_any, "_definitions"):  # pragma: no cover (assumption: manifest resides in package directory)
+            elif hasattr(
+                storage_any, "_definitions"
+            ):  # pragma: no cover (assumption: manifest resides in package directory)
                 storage_any._definitions[n] = d
 
         def _record_source_file(n: dag_storage.DagNode, p: str) -> None:
@@ -624,7 +700,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             elif hasattr(storage_any, "store_source_file"):
                 storage_any.store_source_file(n, p)
 
-        if m is None:  # pragma: no cover (assumption: manifest resides in package directory)
+        if (
+            m is None
+        ):  # pragma: no cover (assumption: manifest resides in package directory)
             prompt = agent_storage.TaskPrompt("")
             defn = agent_storage.NodeDefinition(task_prompt=prompt)
             _store_definition(node, defn)
@@ -639,12 +717,12 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             p_str = p_path.strip("/")
             # Handle staging vs update_with_ai cross-root mirroring
             if p_str.startswith("staging/") and s_str.startswith("update_with_ai/"):
-                s_str = "staging/" + s_str[len("update_with_ai/"):]
+                s_str = "staging/" + s_str[len("update_with_ai/") :]
             elif p_str.startswith("update_with_ai/") and s_str.startswith("staging/"):
-                s_str = "update_with_ai/" + s_str[len("staging/"):]
+                s_str = "update_with_ai/" + s_str[len("staging/") :]
             # Deduplicate redundant/doubled package prefixes if present
             if p_str and s_str.startswith(f"{p_str}/{p_str}/"):
-                s_str = s_str[len(p_str) + 1:]
+                s_str = s_str[len(p_str) + 1 :]
             if p_str and (s_str == p_str or s_str.startswith(p_str + "/")):
                 return os.path.normpath(s_str)
             if s_str.startswith("update_with_ai/") or s_str.startswith("staging/"):
@@ -666,10 +744,14 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
 
         deps: Set[dag_storage.DagDependency] = set()
         for dep_label in m.dependencies:
-            dep_node = node_util.normalize_target(bazel_target.TargetIdentifier(dep_label))
+            dep_node = node_util.normalize_target(
+                bazel_target.TargetIdentifier(dep_label)
+            )
             deps.add(dag_storage.DagDependency(node=dep_node, is_silent=False))
         for dep_label in m.silent_dependencies:
-            dep_node = node_util.normalize_target(bazel_target.TargetIdentifier(dep_label))
+            dep_node = node_util.normalize_target(
+                bazel_target.TargetIdentifier(dep_label)
+            )
             deps.add(dag_storage.DagDependency(node=dep_node, is_silent=True))
 
         if hasattr(storage_any, "store_dependencies"):
@@ -677,7 +759,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
 
         fb_nodes: Set[dag_storage.DagNode] = set()
         for fb_label in m.feedback_dependencies:
-            fb_node = node_util.normalize_target(bazel_target.TargetIdentifier(fb_label))
+            fb_node = node_util.normalize_target(
+                bazel_target.TargetIdentifier(fb_label)
+            )
             fb_nodes.add(fb_node)
 
         if hasattr(storage_any, "store_feedback_dependencies"):
@@ -690,7 +774,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         all_dep_labels.extend(m.feedback_dependencies)
 
         for dep_label in all_dep_labels:
-            dep_node = node_util.normalize_target(bazel_target.TargetIdentifier(dep_label))
+            dep_node = node_util.normalize_target(
+                bazel_target.TargetIdentifier(dep_label)
+            )
             dep_m = self.retrieve_manifest(dep_node)
             if _get_definition(dep_node) is None:
                 if dep_m is not None and dep_m.task_prompt:
@@ -703,16 +789,22 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 )
             if dep_m is not None and dep_m.source_file:
                 dep_pkg_path = node_util.extract_node_dir(dep_node).path
-                dep_norm_rel = _normalize_source_file_path(dep_pkg_path, dep_m.source_file)
+                dep_norm_rel = _normalize_source_file_path(
+                    dep_pkg_path, dep_m.source_file
+                )
                 _record_source_file(dep_node, dep_norm_rel)
-            if dep_m is not None and hasattr(dep_m, "silent_source_files") and dep_m.silent_source_files:
+            if (
+                dep_m is not None
+                and hasattr(dep_m, "silent_source_files")
+                and dep_m.silent_source_files
+            ):
                 dep_pkg_path = node_util.extract_node_dir(dep_node).path
                 dep_norm_silents = tuple(
-                    _normalize_source_file_path(dep_pkg_path, s) for s in dep_m.silent_source_files
+                    _normalize_source_file_path(dep_pkg_path, s)
+                    for s in dep_m.silent_source_files
                 )
                 if hasattr(storage_any, "store_silent_source_files"):
                     storage_any.store_silent_source_files(dep_node, dep_norm_silents)
-
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

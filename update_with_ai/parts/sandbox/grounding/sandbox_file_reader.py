@@ -1,8 +1,22 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 7d8cd267c795
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Sandbox file reader grounding specification module."""
 
 from __future__ import annotations
 from typing import Any, Mapping, Protocol, Set, Union
-from support.lib.grounding_support import InTier, AgentSessionTier, only_elem, key, value
+from support.lib.grounding_support import (
+    InTier,
+    AgentSessionTier,
+    only_elem,
+    key,
+    value,
+)
 from parts.agent.grounding import agent_file_alias
 from parts.sandbox.grounding import tool_provider
 
@@ -65,7 +79,9 @@ class ViewFileTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
         COVERED:
         - MUST describe viewing workspace file content with line numbers using the file alias short name.
         """
-        _desc = tool_provider.ToolDescription("View file content with line numbers using the file alias short name.")
+        _desc = tool_provider.ToolDescription(
+            "View file content with line numbers using the file alias short name."
+        )
         raise NotImplementedError
 
     @property
@@ -80,7 +96,9 @@ class ViewFileTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -89,7 +107,7 @@ class ViewFileTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
           - Consequent knowledge: construct ToolResponse carrying file contents.
 
         DEFERRED:
-        - Line slicing, line numbering, and window bounds deferred to sandbox_file_reader_impl.py.        """
+        - Line slicing, line numbering, and window bounds deferred to sandbox_file_reader_impl.py."""
         sample_param = key(actual_parameter_bindings)
         sample_val = value(actual_parameter_bindings)
         _resp = tool_provider.ToolResponse(
@@ -128,7 +146,9 @@ class SearchTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
         COVERED:
         - MUST describe searching for regex pattern matches across session files.
         """
-        _desc = tool_provider.ToolDescription("Search files for regex matches across session files.")
+        _desc = tool_provider.ToolDescription(
+            "Search files for regex matches across session files."
+        )
         raise NotImplementedError
 
     @property
@@ -143,7 +163,9 @@ class SearchTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -152,7 +174,7 @@ class SearchTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
           - Consequent knowledge: construct ToolResponse with match results.
 
         DEFERRED:
-        - Regex compilation, multi-file searching, and result truncation deferred to sandbox_file_reader_impl.py.        """
+        - Regex compilation, multi-file searching, and result truncation deferred to sandbox_file_reader_impl.py."""
         sample_param = key(actual_parameter_bindings)
         sample_val = value(actual_parameter_bindings)
         _resp = tool_provider.ToolResponse(

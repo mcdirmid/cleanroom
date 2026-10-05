@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 9cf06828f4df
+-->
+
 # bazel_target interface component
 
 imports: dag_storage, file_paths
@@ -24,5 +31,5 @@ By normalizing target strings and deriving package directories, the component en
 
 ## Woven Contracts
 
-- Normalizing target identifiers converts arbitrary string representations into canonical dag nodes. [normalize_target_identifier_supplied, normalize_identifier_to_node, dag_storage: [access_dag_dependencies]]
-- Extracting a node directory derives the package workspace path corresponding to a node. [extract_node_dir_node_supplied, extract_node_dir_from_node, file_paths: [create_ws_path]]
+- Normalizing target identifiers converts arbitrary string representations into canonical dag nodes. \[normalize_target_identifier_supplied, normalize_identifier_to_node, dag_storage: [access_dag_dependencies]\]
+- Extracting a node directory derives the package workspace path corresponding to a node. \[extract_node_dir_node_supplied, extract_node_dir_from_node, file_paths: [create_ws_path]\]

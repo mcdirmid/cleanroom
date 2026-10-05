@@ -123,25 +123,24 @@ Option 3 replaces subagents entirely by moving the isolation boundary from the *
          ┌─────────────────────────┴─────────────────────────┐
          ▼                                                   ▼
 ROLE WORKSPACE: lib                                 ROLE WORKSPACE: test
-(../role_workspaces/cleanroom_lib)                  (../role_workspaces/cleanroom_test)
+(../role_workspaces/cleanroom_lib_<dir>)             (../role_workspaces/cleanroom_test_<dir>)
 ├── AGENTS.md (Lib Engineer)                        ├── AGENTS.md (Test Engineer)
-├── WORK_ORDER.md (Assigned tasks)                  ├── WORK_ORDER.md (Assigned tasks)
-├── COMPLETED.md (Submissions)                      ├── COMPLETED.md (Submissions)
-├── bin/submit, bin/fail                            ├── bin/submit, bin/blame, bin/fail
-├── parts/<unit>/lib/ (Read/Write)                  ├── parts/<unit>/tests/ (Read/Write)
+├── .cleanroom_role.json (Role config)              ├── .cleanroom_role.json (Role config)
+├── bin/cleanroom-dirty, bin/submit, bin/fail       ├── bin/cleanroom-dirty, bin/submit, bin/blame, bin/fail
+├── parts/<unit>/lib/ (Read/Write, In-Band Meta)    ├── parts/<unit>/tests/ (Read/Write, In-Band Meta)
 ├── parts/<unit>/grounding/ (chmod 444)             ├── parts/<unit>/grounding/ (chmod 444)
-└── (tests/ completely omitted)                     ├── parts/<unit>/lib/ (READ-ONLY STUBS)
+└── (tests/ completely omitted)                     ├── parts/<unit>/lib/ (READ-ONLY STUBS, chmod 444)
                                                     └── (real lib/ code completely omitted)
-         ▲                                                   ▲
-         │                                                   │
+          ▲                                                   ▲
+          │                                                   │
 Interactive Chat: Lib                               Interactive Chat: Test
 (User/Agent pair session)                           (User/Agent pair session)
 ```
 
 ### 4.2 Core Confinement & Verification Mechanics
 
-1. **Physical Directory Isolation (`../role_workspaces/<workspace-name>_<role>/`)**:
-   Workspaces are provisioned as visible sibling folders. They contain no `.git` metadata and no paths back to the canonical repository, completely preventing git sniffing or shell traversal leaks.
+1. **Physical Directory Isolation (`../role_workspaces/<workspace-name>_<role>_<dir>/`)**:
+   Workspaces are provisioned as visible sibling folders scoped strictly to a single directory. They contain no `.git` metadata and no paths back to the canonical repository, completely preventing git sniffing or shell traversal leaks.
 2. **Four-Tier Confinement Defense**:
    - *Tier 1 (Structural Oblivion)*: Unreferenced roles are not copied; real `lib` code never enters `test`, and `test` code never enters `lib`.
    - *Tier 2 (Antigravity Policy)*: `fileAccessPolicy: AGENT_SETTING_POLICY_DENY` blocks tool calls targeting paths outside the workspace.
@@ -151,8 +150,8 @@ Interactive Chat: Lib                               Interactive Chat: Test
    To allow the Test role to compile and type-check tests (`bazel test ..._test_type_check`) without seeing the real implementation, the workspace generator derives pure interface stubs from `.pyi` grounding specifications (`raise NotImplementedError`). Symbols match exactly, but real code is completely absent.
 4. **Stage 0 Hermetic Tool Bundles**:
    Meta-tools like `bin/grounding_tool` are packaged as frozen standalone zipapp bundles, decoupling verifier execution from mutable local workspace files.
-5. **Declarative Synchronization (`bin/cleanroom-sync`)**:
-   Operates via atomic POSIX `fcntl.flock` mailboxes (`WORK_ORDER.md` and `COMPLETED.md`), automatically updating `.update_with_ai.textproto` records, clearing finished tasks, and propagating downstream change messages.
+5. **Declarative Synchronization via In-Band Metadata (`bin/cleanroom-sync`)**:
+   Operates via in-band comment headers (`LAST_CLEANED`, `LAST_CHANGED`, `<ROLE>_AUDIT`) and omni-directional cascade synchronization, eliminating fragile filesystem modification times and external sidecar textprotos.
 
 ### 4.3 Why Option 3 is Dramatically More Cost-Efficient
 
@@ -189,36 +188,36 @@ flowchart TD
     subgraph MainWorkspace ["Main Canonical Workspace (cleanroom/)"]
         SuperAgent["Supervisor Agent / Coordinator"]
         SyncTool["cleanroom-sync Tool"]
-        DAG["DagStorage (.update_with_ai.textproto)"]
+        Meta["In-Band Source Metadata (src_metadata.py)"]
         
-        SuperAgent -->|"1. Inspect dirty nodes"| DAG
-        SuperAgent -->|"2. Dispatch work orders"| SyncTool
+        SuperAgent -->|"1. Inspect dirty status (cleanroom-dirty)"| Meta
+        SuperAgent -->|"2. Cascade sync"| SyncTool
     end
 
     subgraph SiblingWorkspaces ["Sibling Role Workspaces (role_workspaces/)"]
         LibWS["lib/ Workspace<br/>(Physical chmod 444 sandbox)"]
         TestWS["test/ Workspace<br/>(Interface stubs sandbox)"]
-        QAWS["qa/ Workspace<br/>(Full assembly verification)"]
+        QAWS["qa/ Workspace<br/>(Logless assembly auditor)"]
     end
 
     SyncTool -->|"Prepare & Harden"| LibWS
     SyncTool -->|"Prepare & Harden"| TestWS
     SyncTool -->|"Prepare & Harden"| QAWS
 
-    SuperAgent -->|"3. invoke_subagent(Workspace='../role_workspaces/cleanroom_lib')"| LibAgent["Lib Subagent"]
-    SuperAgent -->|"4. invoke_subagent(Workspace='../role_workspaces/cleanroom_test')"| TestAgent["Test Subagent"]
+    SuperAgent -->|"3. invoke_subagent(Workspace='../role_workspaces/cleanroom_lib_dir')"| LibAgent["Lib Subagent"]
+    SuperAgent -->|"4. invoke_subagent(Workspace='../role_workspaces/cleanroom_test_dir')"| TestAgent["Test Subagent"]
 
     LibAgent -->|"Edit & submit"| LibWS
     TestAgent -->|"Edit & submit"| TestWS
 
     LibWS -->|"5. bin/cleanroom-sync"| SyncTool
     TestWS -->|"5. bin/cleanroom-sync"| SyncTool
-    SyncTool -->|"Update state & propagate"| DAG
+    SyncTool -->|"Harvest & cascade"| Meta
 ```
 
 #### Why This Future Architecture is Superior:
-1. **Natural OS Confinement**: The subagent runs inside `../role_workspaces/<workspace-name>_<role>/`. The operating system and directory structure enforce Cleanroom blindness natively. No hook interceptors or daemon sentinels are required.
-2. **Simplified Agent Tooling**: The subagent does not need special MCP tools or shell CLI wrappers. It uses standard native file tools (`view_file`, `replace_file_content`) and simply calls `bin/submit` when finished.
+1. **Natural OS Confinement**: The subagent runs inside `../role_workspaces/<workspace-name>_<role>_<dir>/`. The operating system and directory structure enforce Cleanroom blindness natively. No hook interceptors or daemon sentinels are required.
+2. **Simplified Agent Tooling**: The subagent does not need special MCP tools or shell CLI wrappers. It uses standard native file tools (`view_file`, `replace_file_content`), inspects tasks with `bin/cleanroom-dirty`, and simply calls `bin/submit` when finished.
 3. **No In-Tree Contamination**: The main repository remains completely untouched until verified changes are cleanly synchronized back via `cleanroom-sync`.
 4. **Graceful Fallback**: If subagent quota is exhausted, the developer simply opens the workspace directory in Antigravity and continues the work in an interactive conversation chat without altering a single configuration.
 
@@ -236,9 +235,9 @@ flowchart TD
 | **Token Cost Profile** | Pay-per-token (API rates) | **Extremely High** (Subagent tax, prompt repeats) | **Lowest / Most Efficient** (High KV cache hit rates) | Moderate (Isolated subagent turns without daemon tax) |
 | **Quota Sustainability** | Depends on API credit balance | **Poor** (Bursts exhaust 5h Ultra quota in minutes) | **Excellent** (Runs comfortably within standard quota) | Good (Targeted spawns without nested polling) |
 | **Verification Gate** | In-process Bazel check before submit | Python client calls server `check-files` | Local Bazel/linter check before `bin/submit` | Local Bazel/linter check before `bin/submit` |
-| **Synchronization** | Direct memory mutation to `DagStorage` | Server mutates memory & `.update_with_ai.textproto` | POSIX `flock` mailbox synced via `cleanroom-sync` | POSIX `flock` mailbox synced via `cleanroom-sync` |
+| **Synchronization** | Direct in-band metadata updates | Server mutates memory (Decommissioned) | In-band source metadata synced via `cleanroom-sync` | In-band source metadata synced via `cleanroom-sync` |
 | **Human Steerability** | None (Headless batch runner) | Low (Autonomous subagent tree) | **High** (Interactive conversational pair-programming) | High (Supervisor oversight in Main Workspace) |
-| **Code Locations** | `parts/loop/`, `parts/openai/` | `parts/antigravity/`, `parts/mcp/` | `bin/cleanroom-sync`, `cleanroom_mailbox.py` | Built on `bin/cleanroom-sync` |
+| **Code Locations** | `parts/loop/`, `parts/openai/` | `parts/antigravity/`, `parts/mcp/` | `bin/cleanroom-sync`, `src_metadata.py` | Built on `bin/cleanroom-sync` |
 | **Current Status** | **Production (Headless)** | **Candidate for Turn-Down** | **Primary (Interactive Antigravity)** | **Architectural Roadmap** |
 
 ---

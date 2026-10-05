@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: f13b684bacb6
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Loop conversation grounding specification module."""
 
 from __future__ import annotations
@@ -19,6 +27,7 @@ class ConversationMessage:
     COVERED:
     - Encapsulates role, content, correlation identifiers, and suppression stub state.
     """
+
     role: MessageRole
     content: ConversationContent
     tool_call_id: Optional[ToolCallId] = None
@@ -35,6 +44,7 @@ class ModelRequest:
     COVERED:
     - Encapsulates sequence of conversation messages.
     """
+
     messages: Sequence[ConversationMessage]
 
 

@@ -36,4 +36,3 @@ def substitute_parameters(text: str, context: Mapping[str, Any]) -> str:
     _first_match: Optional[re.Match[str]] = PLACEHOLDER_PATTERN.search(text)
     _keys: Sequence[str] = list(context.keys())
     raise NotImplementedError
-

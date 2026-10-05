@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: b65fe518eda7
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in bazel_openai_config_impl.pyi
 import json
 import os
@@ -93,7 +102,11 @@ class _ConfigData:
             try:
                 with open(config_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError):  # pragma: no cover (assumption: valid workspace config file)
+            except (
+                OSError,
+                UnicodeDecodeError,
+                json.JSONDecodeError,
+            ):  # pragma: no cover (assumption: valid workspace config file)
                 pass
 
         self.model_name = (

@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 9c3f73efa335
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Tool provider grounding implementation module."""
 
 from __future__ import annotations
@@ -39,7 +47,9 @@ class ToolManager(tool_provider.ToolManager):
     def execute_tool(
         self,
         name: tool_provider.ToolName,
-        wire_parameter_bindings: Mapping[tool_provider.ParameterName, tool_provider.WireType],
+        wire_parameter_bindings: Mapping[
+            tool_provider.ParameterName, tool_provider.WireType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -63,7 +73,7 @@ class ToolManager(tool_provider.ToolManager):
           - Consequent knowledge: format error content and reminder.
         - WHEN parameter mappings are successfully resolved, MUST execute the matching tool with the resolved actual parameter bindings and return the tool's response.
           - Condition knowledge: convert wire value and construct action bindings.
-          - Consequent knowledge: invoke tool.execute_tool(action_bindings) and return response.        """
+          - Consequent knowledge: invoke tool.execute_tool(action_bindings) and return response."""
         # 1. Unknown tool detection
         _is_unknown: bool = name not in self._tools
         _installed_list: str = ", ".join(self._tools.keys())
@@ -74,29 +84,41 @@ class ToolManager(tool_provider.ToolManager):
         )
 
         tool: tool_provider.Tool = self._tools[name]
-        params: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = tool.parameters
+        params: Mapping[
+            tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]
+        ] = tool.parameters
         _valid_params_str: str = ", ".join(params.keys())
 
         # 2. Unknown parameter detection
-        sample_wire_param_name: tool_provider.ParameterName = key(wire_parameter_bindings)
+        sample_wire_param_name: tool_provider.ParameterName = key(
+            wire_parameter_bindings
+        )
         _is_param_unknown: bool = sample_wire_param_name not in params
         _unknown_param_resp = tool_provider.ToolResponse(
             is_failed=True,
             is_terminated=False,
             content=f"Error: Unknown parameter '{sample_wire_param_name}' for tool '{name}'. Valid parameters: {_valid_params_str}",
-            reminder=tool_provider.ToolReminder("Only declared parameters of the tool can be provided."),
+            reminder=tool_provider.ToolReminder(
+                "Only declared parameters of the tool can be provided."
+            ),
         )
 
         # 3. Missing required parameter with note
         sample_param: tool_provider.ToolParameter[Any, Any] = value(params)
-        present_params: Set[tool_provider.ParameterName] = set(wire_parameter_bindings.keys())
-        note_fn: Callable[[Set[tool_provider.ParameterName]], str] = sample_param.missing_message or (lambda s: "")
+        present_params: Set[tool_provider.ParameterName] = set(
+            wire_parameter_bindings.keys()
+        )
+        note_fn: Callable[[Set[tool_provider.ParameterName]], str] = (
+            sample_param.missing_message or (lambda s: "")
+        )
         evaluated_note: str = note_fn(present_params)
         _missing_with_note_resp = tool_provider.ToolResponse(
             is_failed=True,
             is_terminated=False,
             content=f"Error: Required parameter '{sample_param.name}' missing for tool '{name}'. Note: {evaluated_note}",
-            reminder=tool_provider.ToolReminder("Required parameters of the tool must be supplied."),
+            reminder=tool_provider.ToolReminder(
+                "Required parameters of the tool must be supplied."
+            ),
         )
 
         # 4. Missing required parameter without note
@@ -104,13 +126,17 @@ class ToolManager(tool_provider.ToolManager):
             is_failed=True,
             is_terminated=False,
             content=f"Error: Required parameter '{sample_param.name}' missing for tool '{name}'.",
-            reminder=tool_provider.ToolReminder("Required parameters of the tool must be supplied."),
+            reminder=tool_provider.ToolReminder(
+                "Required parameters of the tool must be supplied."
+            ),
         )
 
         # 5. Default value binding
-        _has_default: bool = not sample_param.is_required and sample_param.default_value is not None
-        default_actual: tool_provider.SomeParameterActualType = tool_provider.SomeParameterActualType(
-            sample_param.default_value
+        _has_default: bool = (
+            not sample_param.is_required and sample_param.default_value is not None
+        )
+        default_actual: tool_provider.SomeParameterActualType = (
+            tool_provider.SomeParameterActualType(sample_param.default_value)
         )
         _default_bindings = {sample_param: default_actual}
 
@@ -121,7 +147,9 @@ class ToolManager(tool_provider.ToolManager):
             is_failed=True,
             is_terminated=False,
             content=f"Error: Invalid argument for parameter '{sample_param.name}': {dummy_err.message}",
-            reminder=tool_provider.ToolReminder("Parameters must match their declared wire types."),
+            reminder=tool_provider.ToolReminder(
+                "Parameters must match their declared wire types."
+            ),
         )
 
         # 7. Successful conversion and execution

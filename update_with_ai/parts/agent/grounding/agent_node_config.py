@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: e9f222434b55
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Agent node config grounding specification module."""
 
 from __future__ import annotations
@@ -23,6 +31,7 @@ TemplateParamKey = NewType("TemplateParamKey", str)
 @dataclass(frozen=True)
 class StepSection:
     """Discrete milestone section within a guide."""
+
     index: StepIndex
     title: StepTitle
     content: StepContent
@@ -31,6 +40,7 @@ class StepSection:
 @dataclass(frozen=True)
 class NodeGuide:
     """Structured instructional text containing a summary, sequential step sections, and verification failure instructions."""
+
     summary: GuideSummary
     sections: List[StepSection]
     verification_failure: Optional[VerificationFailureInstructions] = None
@@ -50,13 +60,17 @@ class VerificationCheck(Protocol):
         _failure_diagnostic: VerificationDiagnostic = VerificationDiagnostic(
             "Criterion check failed"
         )
-        _result: Tuple[bool, VerificationDiagnostic] = (True, VerificationDiagnostic(""))
+        _result: Tuple[bool, VerificationDiagnostic] = (
+            True,
+            VerificationDiagnostic(""),
+        )
         raise NotImplementedError
 
 
 @dataclass(frozen=True)
 class PerNodeInfo:
     """Cached configuration and metadata for a single session node."""
+
     read_only_files: Set[agent_file_alias.ReadOnlyFile]
     read_write_files: Set[agent_file_alias.ReadWriteFile]
     templates: Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent]
@@ -158,7 +172,9 @@ class NodeConfig(InTier[AgentSessionTier], Protocol):
         raise NotImplementedError
 
     @property
-    def templates(self) -> Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent]:
+    def templates(
+        self,
+    ) -> Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent]:
         """
         DEFERRED:
         - Templates mapping read-write files to initial file content.
@@ -182,7 +198,9 @@ class NodeConfig(InTier[AgentSessionTier], Protocol):
         raise NotImplementedError
 
     @property
-    def blame_targets_by_node(self) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
+    def blame_targets_by_node(
+        self,
+    ) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
         """
         DEFERRED:
         - Bound files owned by upstream dependency nodes mapped by session node.
@@ -198,7 +216,9 @@ class NodeConfig(InTier[AgentSessionTier], Protocol):
         raise NotImplementedError
 
     @property
-    def verification_checks_by_node(self) -> Mapping[dag_storage.DagNode, Sequence[VerificationCheck]]:
+    def verification_checks_by_node(
+        self,
+    ) -> Mapping[dag_storage.DagNode, Sequence[VerificationCheck]]:
         """
         DEFERRED:
         - Session verification checks mapped by session node.
@@ -206,7 +226,9 @@ class NodeConfig(InTier[AgentSessionTier], Protocol):
         raise NotImplementedError
 
     @property
-    def src_file_alias_by_node(self) -> Mapping[dag_storage.DagNode, agent_file_alias.RelativePath]:
+    def src_file_alias_by_node(
+        self,
+    ) -> Mapping[dag_storage.DagNode, agent_file_alias.RelativePath]:
         """
         DEFERRED:
         - Relative path of the declared source file alias mapped by session node.
@@ -236,4 +258,3 @@ class NodeConfig(InTier[AgentSessionTier], Protocol):
         - Mapping each active node to its per node info.
         """
         raise NotImplementedError
-

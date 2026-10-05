@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 859821db8d82
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """OpenAI driver implementation grounding specification module."""
 
 from __future__ import annotations
@@ -54,7 +62,7 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
           - Condition knowledge: evaluate resp.follow_up_tool_call is not None.
           - Consequent knowledge: invoke tool_mgr.execute_tool(followup.tool_name, followup.wire_parameter_bindings).
         - Terminal outcome.
-          - Consequent knowledge: return LoopOutcome(response=resp, conversation=history.get_model_request()).        """
+          - Consequent knowledge: return LoopOutcome(response=resp, conversation=history.get_model_request())."""
         openai_cfg = self.get_singleton(openai_config.OpenAIConfig)
         agent_cfg = self.get_singleton(agent_config.AgentConfig)
         logger = self.get_singleton(runner_logger.RunnerLogger)
@@ -89,7 +97,9 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
             runner_logger.RunnerLogEvent(
                 event_name=runner_logger.EventName("model_request"),
                 summary=runner_logger.EventSummary("[Turn 1] Request"),
-                transcript=runner_logger.EventTranscript(f"Request with {len(model_req.messages)} messages"),
+                transcript=runner_logger.EventTranscript(
+                    f"Request with {len(model_req.messages)} messages"
+                ),
             )
         )
 
@@ -114,7 +124,9 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
         _is_incomplete_call: bool = True
         incomplete_recovery_msg = loop_conversation.ConversationMessage(
             role=loop_conversation.MessageRole("user"),
-            content=loop_conversation.ConversationContent("Output truncated: please make smaller edits."),
+            content=loop_conversation.ConversationContent(
+                "Output truncated: please make smaller edits."
+            ),
         )
         history.append_message(incomplete_recovery_msg)
 
@@ -136,12 +148,12 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
         history.append_message(no_tools_msg)
 
         # 8. Guard evaluation before tool execution
-        sample_wire_bindings: Mapping[tool_provider.ParameterName, tool_provider.WireType] = {
-            sample_param.name: "test_val"
-        }
-        sample_actual_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType] = {
-            sample_param: tool_provider.SomeParameterActualType("test_val")
-        }
+        sample_wire_bindings: Mapping[
+            tool_provider.ParameterName, tool_provider.WireType
+        ] = {sample_param.name: "test_val"}
+        sample_actual_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ] = {sample_param: tool_provider.SomeParameterActualType("test_val")}
         guard_outcome = guard.evaluate(sample_tool_name, sample_actual_bindings)
         _is_fail: bool = isinstance(guard_outcome, loop_guard.LoopFailure)
         _is_rem: bool = isinstance(guard_outcome, loop_guard.LoopReminder)
@@ -175,7 +187,9 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
             tool_name=sample_tool_name,
             wire_parameter_bindings=sample_wire_bindings,
         )
-        follow_resp = tool_mgr.execute_tool(followup.tool_name, followup.wire_parameter_bindings)
+        follow_resp = tool_mgr.execute_tool(
+            followup.tool_name, followup.wire_parameter_bindings
+        )
         history.append_tool_response(
             tool_response=follow_resp,
             tool_call_id=loop_conversation.ToolCallId("call_followup_1"),

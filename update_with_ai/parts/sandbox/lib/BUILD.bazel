@@ -85,7 +85,9 @@ pyright_library(
 pyright_library(
     name = "sandbox_file_editor_impl",
     srcs = ["sandbox_file_editor_impl.py"],
-    deps = [],
+    deps = [
+        "//update_python_with_ai/support/lib:src_metadata",
+    ],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",

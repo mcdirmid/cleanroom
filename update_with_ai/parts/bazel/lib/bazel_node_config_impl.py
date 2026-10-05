@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 4fb121c57f61
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in bazel_node_config_impl.pyi
 
 import json
@@ -48,13 +57,17 @@ class _CommandVerificationCheck(agent_node_config.VerificationCheck):
             if res.stderr:  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
                 output = f"{output}\n{res.stderr}".strip() if output else res.stderr
             return passed, agent_node_config.VerificationDiagnostic(output)
-        except (OSError, subprocess.SubprocessError) as e:  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+        except (
+            OSError,
+            subprocess.SubprocessError,
+        ) as e:  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
             return False, agent_node_config.VerificationDiagnostic(str(e))
 
 
-
 def _make_host_path(cls: Any, path: str) -> Any:
-    if issubclass(cls, str):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+    if issubclass(
+        cls, str
+    ):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
         return cls(path)
     obj = object.__new__(cls)
     object.__setattr__(obj, "path", path)
@@ -83,9 +96,7 @@ def _parse_guide_markdown(content: str) -> agent_node_config.NodeGuide:
                 agent_node_config.StepSection(
                     index=agent_node_config.StepIndex(len(sections)),
                     title=agent_node_config.StepTitle(title),
-                    content=agent_node_config.StepContent(
-                        "\n".join(sec_lines).strip()
-                    ),
+                    content=agent_node_config.StepContent("\n".join(sec_lines).strip()),
                 )
             )
 
@@ -108,7 +119,9 @@ def _parse_guide_markdown(content: str) -> agent_node_config.NodeGuide:
     clean_preamble = [l for l in preamble_lines if not l.startswith("# ")]
     combined_summary_lines: List[str] = []
     if any(l.strip() for l in clean_preamble):
-        combined_summary_lines.extend(clean_preamble)  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+        combined_summary_lines.extend(
+            clean_preamble
+        )  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
     if summary_lines:
         combined_summary_lines.extend(summary_lines)
     if not combined_summary_lines:  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
@@ -141,18 +154,33 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
             for m in msgs
             if isinstance(m, dag_storage.FeedbackMessage) and m.content
         )
-    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+    except (
+        LifecycleResolutionError,
+        KeyError,
+        RuntimeError,
+        ValueError,
+    ):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
         pass
     feedback = tuple(all_feedback)
 
     try:
         loader = get_singleton(bazel_manifest_loader.BazelManifestLoader)
-    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+    except (
+        LifecycleResolutionError,
+        KeyError,
+        RuntimeError,
+        ValueError,
+    ):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
         loader = None
 
     try:
         node_util = get_singleton(bazel_target.BazelTarget)
-    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+    except (
+        LifecycleResolutionError,
+        KeyError,
+        RuntimeError,
+        ValueError,
+    ):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
         node_util = None
 
     manifest = loader.retrieve_manifest(n) if loader is not None else None
@@ -167,8 +195,14 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
 
     src = manifest.source_file if manifest is not None else None
     if src:
-        if src.startswith(pkg_path + "/") or (
-            pkg_path and src.startswith("/" + pkg_path + "/")  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+        if (
+            src.startswith(pkg_path + "/")
+            or (
+                pkg_path
+                and src.startswith(
+                    "/" + pkg_path + "/"
+                )  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+            )
         ):
             norm_rel = os.path.normpath(src.lstrip("/"))
         else:  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
@@ -193,17 +227,13 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
         )
         rw_files.add(rw)
 
-    templates: Dict[
-        agent_file_alias.BoundFile, agent_file_alias.FileContent
-    ] = {}
+    templates: Dict[agent_file_alias.BoundFile, agent_file_alias.FileContent] = {}
     template_rel = manifest.template if manifest is not None else None
     if template_rel and rw_files:
         content_str: Optional[str] = None
         cand_paths = [
             template_rel,
-            os.path.join(
-                os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), template_rel
-            ),
+            os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), template_rel),
         ]
         for base in (
             os.environ.get("RUNFILES_DIR", ""),
@@ -417,9 +447,7 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
                     for pv in pkg_variants:
                         if pv:
                             guide_cand_paths.append(os.path.join(base, pv, cr))
-                            guide_cand_paths.append(
-                                os.path.join(base, "_main", pv, cr)
-                            )
+                            guide_cand_paths.append(os.path.join(base, "_main", pv, cr))
                             guide_cand_paths.append(
                                 os.path.join(base, pv, "guides", os.path.basename(cr))
                             )
@@ -448,7 +476,9 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
     deps = list(manifest.dependencies) if manifest is not None else []
     star_deps = list(manifest.star_dependencies) if manifest is not None else []
     silent_deps = set(manifest.silent_dependencies) if manifest is not None else set()
-    feedback_deps = set(manifest.feedback_dependencies) if manifest is not None else set()
+    feedback_deps = (
+        set(manifest.feedback_dependencies) if manifest is not None else set()
+    )
 
     star_closure: List[str] = []
     star_seen: Set[str] = set()
@@ -524,7 +554,6 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
             target_name = dep_label.split(":")[-1]
             dep_srcs.append(f"{target_name}.py")
 
-
         for ds in dep_srcs:
             if ds.startswith(dep_pkg + "/") or (
                 dep_pkg and ds.startswith("/" + dep_pkg + "/")
@@ -533,9 +562,7 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
             else:
                 norm_rel = os.path.normpath(os.path.join(dep_pkg, ds))
 
-            ws_path = _make_host_path(
-                agent_file_alias.WorkspacePath, norm_rel
-            )
+            ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
             bound_file = agent_file_alias.ReadOnlyFile(
                 relative_path=agent_file_alias.RelativePath(norm_rel),
                 workspace_path=ws_path,
@@ -552,9 +579,7 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
     node_checks: List[agent_node_config.VerificationCheck] = []
 
     if verify_cmd and str(verify_cmd).strip():
-        check = _CommandVerificationCheck(
-            command=str(verify_cmd).strip(), cwd=ws_dir
-        )
+        check = _CommandVerificationCheck(command=str(verify_cmd).strip(), cwd=ws_dir)
         node_checks.append(check)
     verification_checks = tuple(node_checks)
 
@@ -579,10 +604,10 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
 class NodeConfig(agent_node_config.NodeConfig, Singleton):
     tier = agent_session
 
-
-
     def __init__(self) -> None:
-        self._per_node_cache: Dict[dag_storage.DagNode, agent_node_config.PerNodeInfo] = {}
+        self._per_node_cache: Dict[
+            dag_storage.DagNode, agent_node_config.PerNodeInfo
+        ] = {}
         self._cached_version: int = -1
         self._allows_step_mode_override: Optional[bool] = None
         self._is_step_mode_override: Optional[bool] = None
@@ -690,11 +715,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             pass
         model_step_mode = m_cfg.is_step_mode if m_cfg is not None else False
-        return (
-            model_step_mode
-            and self.allows_step_mode
-            and not bool(self.feedback)
-        )
+        return model_step_mode and self.allows_step_mode and not bool(self.feedback)
 
     @property
     def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
@@ -717,7 +738,6 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         for pni in self._active_per_node_infos():
             res.update(pni.templates)
         return res
-
 
     @property
     def template_parameters(self) -> Mapping[agent_node_config.TemplateParamKey, Any]:
@@ -744,9 +764,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         self,
     ) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
         self._sync_cache()
-        return {
-            n: set(pni.blame_targets) for n, pni in self._per_node_cache.items()
-        }
+        return {n: set(pni.blame_targets) for n, pni in self._per_node_cache.items()}
 
     @property
     def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
@@ -762,8 +780,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     ) -> Mapping[dag_storage.DagNode, Sequence[agent_node_config.VerificationCheck]]:
         self._sync_cache()
         return {
-            n: tuple(pni.verification_checks)
-            for n, pni in self._per_node_cache.items()
+            n: tuple(pni.verification_checks) for n, pni in self._per_node_cache.items()
         }
 
     @property
@@ -776,7 +793,6 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
             if pni.src_file_alias is not None:
                 res[n] = pni.src_file_alias
         return res
-
 
     @property
     def verification_success_message(
@@ -808,7 +824,8 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         res: Dict[agent_file_alias.ReadWriteFile, agent_file_alias.ReadOnlyFile] = {}
         for pni in self._active_per_node_infos():
             ro_targets = [
-                bt for bt in pni.blame_targets
+                bt
+                for bt in pni.blame_targets
                 if isinstance(bt, agent_file_alias.ReadOnlyFile)
             ]
             if ro_targets:
@@ -828,7 +845,6 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
             for rw in pni.read_write_files:
                 res[rw] = msgs
         return res
-
 
 
 _EXECROOT_PATTERN: re.Pattern[str] = re.compile(
@@ -853,16 +869,28 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         try:
             fp_mgr: Any = get_singleton(file_paths.FilePathManager)
             if hasattr(fp_mgr, "get_workspace_root"):
-                self._workspace_root: file_paths.WorkspaceRoot = fp_mgr.get_workspace_root()
+                self._workspace_root: file_paths.WorkspaceRoot = (
+                    fp_mgr.get_workspace_root()
+                )
             else:
                 env_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-                root_path = env_root if env_root and os.path.isabs(env_root) else os.getcwd()
+                root_path = (
+                    env_root if env_root and os.path.isabs(env_root) else os.getcwd()
+                )
                 self._workspace_root = _make_host_path(
                     file_paths.WorkspaceRoot, os.path.normpath(root_path)
                 )
-        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError, AttributeError):
+        except (
+            LifecycleResolutionError,
+            KeyError,
+            RuntimeError,
+            ValueError,
+            AttributeError,
+        ):
             env_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-            root_path = env_root if env_root and os.path.isabs(env_root) else os.getcwd()
+            root_path = (
+                env_root if env_root and os.path.isabs(env_root) else os.getcwd()
+            )
             self._workspace_root = _make_host_path(
                 file_paths.WorkspaceRoot, os.path.normpath(root_path)
             )
@@ -984,4 +1012,3 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         ],
         tier=agent_session,
     )
-

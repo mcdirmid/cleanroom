@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: f4248fdbc8b6
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Dag storage grounding specification."""
 
 from __future__ import annotations
@@ -92,7 +100,9 @@ class DagStorage(InTier[SystemTier], Protocol):
         """
         raise NotImplementedError
 
-    def mark_node_clean(self, node: DagNode, change_description: Optional[ChangeDescription] = None) -> None:
+    def mark_node_clean(
+        self, node: DagNode, change_description: Optional[ChangeDescription] = None
+    ) -> None:
         """
         DEFERRED:
         - WHEN node has a source file and change description is provided, MUST update last changed timestamp, last cleaned timestamp, and change description, and clear unacted feedback.

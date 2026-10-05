@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 11923857ca12
+-->
+
 # loop_cleaner interface component
 
 imports: dag_storage, loop_node_cleaner

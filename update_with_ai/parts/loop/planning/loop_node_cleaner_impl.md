@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 375a7c5eef5c
+-->
+
 # loop_node_cleaner_impl implementation component
 
 imports: agent_node_config, agent_storage, dag_storage, loop_conversation, loop_driver, runner_logger, sandbox
@@ -36,6 +43,6 @@ By retrying transient session failures once before propagation, isolating prompt
 
 ## Woven Contracts
 
-- The node cleaner establishes session roles, seeds get work instructions, drives agent turns, and retries once on unexpected failures before aborting. [clean_within_agent_session_phase, role_config_presents_node_role, initialize_conversation_with_get_work, log_unexpected_failures_to_logger, retry_session_phase_once_on_failure, propagate_failure_after_retry, agent_node_config: [role_config_set_role, role_config_set_nodes], loop_conversation: [initialize_with_initial_messages], loop_driver: [drive_turns_executing_tools]]
-- Evaluating loop driver outcomes updates graph storage, marking nodes clean when files are modified, routing blame feedback, or halting on failure. [resolve_nodes_evaluating_loop_outcome, mark_nodes_clean_with_summary_on_advancement_with_mods, mark_nodes_clean_without_change_when_unmodified, produce_feedback_messages_on_blame, omit_feedback_messages_on_unconfigured_blame, omit_messages_on_run_failure, leave_nodes_dirty_on_run_failure, signal_cannot_continue_on_run_failure, mark_cleaned_nodes_clean_in_storage, deliver_feedback_messages_to_target, omit_feedback_delivery_to_non_feedback_dependencies, loop_node_cleaner: [communicate_processing_continuation, cannot_continue_on_unhandleable_failure], dag_storage: [record_feedback_messages, access_node_messages]]
-- Nodes lacking task prompts resolve pass-through changes directly without agent sessions, marking nodes clean based on incoming update presence. [resolve_promptless_nodes_without_session, mark_promptless_clean_with_summary_when_incoming_changes, mark_promptless_clean_without_changes_when_no_incoming_changes, agent_storage: [query_node_def_supplied, provide_node_definitions]]
+- The node cleaner establishes session roles, seeds get work instructions, drives agent turns, and retries once on unexpected failures before aborting. \[clean_within_agent_session_phase, role_config_presents_node_role, initialize_conversation_with_get_work, log_unexpected_failures_to_logger, retry_session_phase_once_on_failure, propagate_failure_after_retry, agent_node_config: [role_config_set_role, role_config_set_nodes], loop_conversation: [initialize_with_initial_messages], loop_driver: [drive_turns_executing_tools]\]
+- Evaluating loop driver outcomes updates graph storage, marking nodes clean when files are modified, routing blame feedback, or halting on failure. \[resolve_nodes_evaluating_loop_outcome, mark_nodes_clean_with_summary_on_advancement_with_mods, mark_nodes_clean_without_change_when_unmodified, produce_feedback_messages_on_blame, omit_feedback_messages_on_unconfigured_blame, omit_messages_on_run_failure, leave_nodes_dirty_on_run_failure, signal_cannot_continue_on_run_failure, mark_cleaned_nodes_clean_in_storage, deliver_feedback_messages_to_target, omit_feedback_delivery_to_non_feedback_dependencies, loop_node_cleaner: [communicate_processing_continuation, cannot_continue_on_unhandleable_failure], dag_storage: [record_feedback_messages, access_node_messages]\]
+- Nodes lacking task prompts resolve pass-through changes directly without agent sessions, marking nodes clean based on incoming update presence. \[resolve_promptless_nodes_without_session, mark_promptless_clean_with_summary_when_incoming_changes, mark_promptless_clean_without_changes_when_no_incoming_changes, agent_storage: [query_node_def_supplied, provide_node_definitions]\]

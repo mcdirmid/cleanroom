@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+export PYTHONPATH="$REPO_ROOT:$REPO_ROOT/update_python_with_ai:$REPO_ROOT/update_with_ai:$REPO_ROOT/update_with_ai/support/lib:$REPO_ROOT/update_python_with_ai/support/lib:$PYTHONPATH"
+exec python3 "$REPO_ROOT/update_with_ai/support/lib/cleanroom_workspace_tool.py" "$@"

@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: a0c289743da0
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Sandbox implementation grounding specification module."""
 
 from __future__ import annotations
@@ -22,7 +30,9 @@ class Sandbox(sandbox.Sandbox, InTier[AgentSessionTier]):
         COVERED:
         - Information accessibility: resolves EditManager and accesses has_modifications.
         """
-        edit_mgr: sandbox_file_editor.EditManager = self.get_singleton(sandbox_file_editor.EditManager)
+        edit_mgr: sandbox_file_editor.EditManager = self.get_singleton(
+            sandbox_file_editor.EditManager
+        )
         _has_mods: bool = edit_mgr.has_modifications
         raise NotImplementedError
 
@@ -32,11 +42,12 @@ class Sandbox(sandbox.Sandbox, InTier[AgentSessionTier]):
         - Information accessibility: resolves DagStorage and invokes materialize_template.
         """
         storage: dag_storage.DagStorage = self.get_singleton(dag_storage.DagStorage)
-        node_cfg: agent_node_config.NodeConfig = self.get_singleton(agent_node_config.NodeConfig)
+        node_cfg: agent_node_config.NodeConfig = self.get_singleton(
+            agent_node_config.NodeConfig
+        )
         sample_node = key(node_cfg.blame_targets_by_node)
         storage.materialize_template(sample_node)
         raise NotImplementedError
-
 
 
 def __initialize__() -> None:

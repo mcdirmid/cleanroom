@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 8ea72635b1ab
+-->
+
 # sandbox_file_editor interface component
 
 imports: agent_session, agent_file_alias, tool_provider
@@ -20,7 +27,7 @@ An agent session's *edit manager* writes to workspace files and tracks session e
 
 The edit manager:
 
-- Exposes whether workspace file writes occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
+- Exposes whether workspace file writes occurred during the session, determined by whether workspace file contents differ from their in-band code hash.
 
 - Computes a *file hash* for a read-write file from its content.
 

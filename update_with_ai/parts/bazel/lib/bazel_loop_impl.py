@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 13fb04746c77
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in bazel_loop_impl.pyi
 import time
 from typing import Any, Optional, Set, cast
@@ -63,7 +72,6 @@ class Loop(loop.Loop, Singleton):
                 if dep.node not in visited:
                     queue.append(dep.node)
 
-
         # Requirement: [Loop] The loop executes a cleaning pass over an acyclic subgraph rooted at a target node in graph storage.
         failure_reason: Optional[str] = None
         try:
@@ -105,10 +113,7 @@ class Loop(loop.Loop, Singleton):
                 ),
             )
         )
-        return loop.BuildResult(
-            success=success, summary=loop.BuildSummary(summary)
-        )
-
+        return loop.BuildResult(success=success, summary=loop.BuildSummary(summary))
 
     run_cleaning_pass = clean_subgraph
 
@@ -142,7 +147,9 @@ class Loop(loop.Loop, Singleton):
     mark_clean = mark_subgraph_clean
 
     def mark_dirty(
-        self, target: dag_storage.DagNode, message: Optional[dag_storage.ChangeMessage] = None
+        self,
+        target: dag_storage.DagNode,
+        message: Optional[dag_storage.ChangeMessage] = None,
     ) -> None:
         storage = get_singleton(dag_storage.DagStorage)
         if hasattr(storage, "delete_last_cleaned"):
@@ -175,8 +182,6 @@ class Loop(loop.Loop, Singleton):
         self.record_change(source, message)
 
     broadcast_node_change = broadcast_change
-
-
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

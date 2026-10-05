@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 4d0eedecaf72
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for tool_provider_impl aligned with grounding specifications."""
 
 import unittest
@@ -29,7 +38,9 @@ from update_with_ai.parts.sandbox.lib.tool_provider_impl import (
 
 
 class MockParameterType(ParameterType[Any, Any]):
-    def __init__(self, actual_type: type[Any] = str, wire_type: type[Any] = str) -> None:
+    def __init__(
+        self, actual_type: type[Any] = str, wire_type: type[Any] = str
+    ) -> None:
         self._actual_type = actual_type
         self._wire_type = wire_type
 
@@ -68,7 +79,9 @@ class DummyTool:
     def __init__(self, name: str, parameters: Set[ToolParameter[Any, Any]]) -> None:
         self._name = name
         self._parameters = parameters
-        self.last_bindings: Mapping[ToolParameter[Any, Any], SomeParameterActualType] | None = None
+        self.last_bindings: (
+            Mapping[ToolParameter[Any, Any], SomeParameterActualType] | None
+        ) = None
 
     @property
     def name(self) -> ToolName:
@@ -84,7 +97,9 @@ class DummyTool:
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[ToolParameter[Any, Any], SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            ToolParameter[Any, Any], SomeParameterActualType
+        ],
     ) -> ToolResponse:
         self.last_bindings = actual_parameter_bindings
         return ToolResponse(
@@ -140,7 +155,9 @@ class ToolProviderImplTest(unittest.TestCase):
             self.assertIn(tool.name, manager.installed_tools)
             self.assertEqual(manager.installed_tools[tool.name], tool)
 
-            wire_bindings: Mapping[ParameterName, WireType] = {ParameterName("arg1"): "val1"}
+            wire_bindings: Mapping[ParameterName, WireType] = {
+                ParameterName("arg1"): "val1"
+            }
             resp = manager.execute_tool(ToolName("my_tool"), wire_bindings)
 
             # Requirement: When parameter mappings are successfully resolved, executing a tool by name executes the matching tool with the resolved actual parameter bindings and returns the tool's response.
@@ -155,9 +172,7 @@ class ToolProviderImplTest(unittest.TestCase):
         """CUJ: Executing a tool that is not installed fails."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
-            resp = manager.execute_tool(
-                ToolName("nonexistent"), {}
-            )
+            resp = manager.execute_tool(ToolName("nonexistent"), {})
             # Requirement: Executing a tool by name fails if no installed tool matches the requested name.
             self.assertTrue(resp.is_failed)
 
@@ -188,9 +203,7 @@ class ToolProviderImplTest(unittest.TestCase):
             tool = DummyTool("tool_req", {param})
             manager.install_tool(tool)
 
-            resp = manager.execute_tool(
-                ToolName("tool_req"), {}
-            )
+            resp = manager.execute_tool(ToolName("tool_req"), {})
             # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminds the agent that required parameters of the tool must be supplied.
             self.assertTrue(resp.is_failed)
             self.assertIsNotNone(resp.reminder)
@@ -209,9 +222,7 @@ class ToolProviderImplTest(unittest.TestCase):
             tool = DummyTool("tool_req_msg", {param})
             manager.install_tool(tool)
 
-            resp = manager.execute_tool(
-                ToolName("tool_req_msg"), {}
-            )
+            resp = manager.execute_tool(ToolName("tool_req_msg"), {})
             # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminds the agent that required parameters of the tool must be supplied.
             self.assertTrue(resp.is_failed)
             self.assertIn("custom guidance", resp.content)
@@ -226,7 +237,9 @@ class ToolProviderImplTest(unittest.TestCase):
                 description=ParameterDescription("required"),
                 parameter_type=STRING_PARAMETER_TYPE,
                 is_required=True,
-                missing_message=lambda s: MissingMessage("flag present" if ParameterName("flag") in s else "flag omitted"),
+                missing_message=lambda s: MissingMessage(
+                    "flag present" if ParameterName("flag") in s else "flag omitted"
+                ),
             )
             opt_param = ToolParameter(
                 name=ParameterName("flag"),
@@ -238,9 +251,7 @@ class ToolProviderImplTest(unittest.TestCase):
             manager.install_tool(tool)
 
             # Test 1: flag omitted
-            resp1 = manager.execute_tool(
-                ToolName("tool_dyn_msg"), {}
-            )
+            resp1 = manager.execute_tool(ToolName("tool_dyn_msg"), {})
             # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminds the agent that required parameters of the tool must be supplied.
             self.assertTrue(resp1.is_failed)
             self.assertIn("flag omitted", resp1.content)
@@ -267,9 +278,7 @@ class ToolProviderImplTest(unittest.TestCase):
             tool = DummyTool("tool_with_default", {param})
             manager.install_tool(tool)
 
-            resp = manager.execute_tool(
-                ToolName("tool_with_default"), {}
-            )
+            resp = manager.execute_tool(ToolName("tool_with_default"), {})
             # Requirement: When an argument is omitted for a parameter that is not required and has a default value, the tool manager binds the default value as the actual parameter value.
             self.assertFalse(resp.is_failed)
             assert tool.last_bindings is not None
@@ -302,7 +311,9 @@ class ToolProviderImplTest(unittest.TestCase):
             tool = DummyTool("dummy_tool", set())
             manager.install_tool(tool)
             # Requirement: Executing a tool by name with raw arguments produces the tool response.
-            resp = cast(Any, manager).execute_tool_with_arguments(ToolName("dummy_tool"), {})
+            resp = cast(Any, manager).execute_tool_with_arguments(
+                ToolName("dummy_tool"), {}
+            )
             self.assertFalse(resp.is_failed)
             self.assertEqual(resp.content, "dummy executed")
 

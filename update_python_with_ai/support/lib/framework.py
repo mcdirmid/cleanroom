@@ -35,6 +35,7 @@ LifecycleTier = Literal["system", "agent_session"]
 
 class LifecycleScope:
     """Represents an active lifecycle scope managing singleton instances and cleanup."""
+
     pass
 
 
@@ -119,4 +120,3 @@ def operation(func: F) -> F:
     Operations define preconditions (PRECONDITIONS:) and postconditions (POSTCONDITIONS:).
     """
     return func
-

@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: bf655fe47afe
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for sandbox_impl aligned with grounding specifications."""
 
 import unittest
@@ -55,9 +64,7 @@ class SandboxImplTest(unittest.TestCase):
         rw_file.owning_node = node
         node_cfg = MagicMock()
         node_cfg.read_write_files = [rw_file]
-        self.registry.register_instance(
-            node_cfg, keys=[NodeConfig], tier=agent_session
-        )
+        self.registry.register_instance(node_cfg, keys=[NodeConfig], tier=agent_session)
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)

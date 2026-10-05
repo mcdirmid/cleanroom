@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: a70b56bb1d5f
+# --- END CLEANROOM METADATA ---
+
 """File paths implementation low-level specification."""
 
 from framework import operation, override, singleton_type

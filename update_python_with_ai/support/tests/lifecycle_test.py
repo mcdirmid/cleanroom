@@ -26,7 +26,6 @@ from support.lib.lifecycle import (
 agent_session_tier: LifecycleTier = system.create_child("agent_session")
 
 
-
 class Logger(Protocol):
     def log(self, msg: str) -> None: ...
 

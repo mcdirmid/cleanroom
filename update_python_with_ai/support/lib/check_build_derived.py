@@ -175,7 +175,9 @@ def main() -> int:
         if updated:
             print(f"UPDATED: {args.build_file} from {parent_build_file}.")
         else:
-            print(f"UP TO DATE: {args.build_file} is already derived from {parent_build_file}.")
+            print(
+                f"UP TO DATE: {args.build_file} is already derived from {parent_build_file}."
+            )
         return 0
 
     if args.kind == "lib":

@@ -342,7 +342,9 @@ def format_spans_report(cov: ModuleCoverage, max_spans: Optional[int] = None) ->
     with open(cov.file_path, "r", encoding="utf-8") as f:
         src_lines = f.readlines()
 
-    shown_spans = cov.missing_spans[:max_spans] if max_spans is not None else cov.missing_spans
+    shown_spans = (
+        cov.missing_spans[:max_spans] if max_spans is not None else cov.missing_spans
+    )
     lines: List[str] = []
     lines.append(f"Uncovered statement spans in {cov.module_name}:")
     for idx, (start, end) in enumerate(shown_spans, 1):

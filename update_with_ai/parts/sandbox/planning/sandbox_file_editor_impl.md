@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 85f09ed6ca17
+-->
+
 # sandbox_file_editor_impl implementation component
 
 imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config
@@ -15,8 +22,7 @@ Furthermore, the implementation tracks revision counters and emits structured di
 
 - The edit manager provides the replace file content tool when mcp mode is inactive. [provide_tool_when_mcp_inactive]
 - The edit manager installs no editing tools when mcp mode is active. [install_no_tools_when_mcp_active]
-- At session initialization, initial content baselines are recorded for active read-write files. [record_initial_content_baselines]
-- The edit manager compares current workspace file content against initial content before editing. [compare_current_against_initial_content]
+- The edit manager compares current workspace file content against their in-band code hash. [compare_current_against_code_hash]
 - The edit manager increments the file update revision whenever workspace files are updated. [increment_revision_on_file_update]
 - The edit manager computes the file hash by returning an MD5 hexadecimal digest of content read from the filesystem. [compute_md5_file_hash]
 - Editing tool execution fails when the target file is not a read-write file. [fail_when_target_not_read_write]
@@ -57,9 +63,10 @@ Furthermore, the implementation tracks revision counters and emits structured di
 
 ## Woven Contracts
 
-- Validating write access confirms access and records file edits for declared read-write files, but rejects undeclared targets. [can_write_fails_when_not_read_write, can_write_records_file_edit, can_write_produces_success_response, remind_only_read_write_writable, sandbox_file_editor: [can_write_validates_access]]
-- Missing path arguments default to the last read or edited read-write file with an advisory warning, failing if no valid file history exists. [implicitly_bind_last_read_or_edited_file, warn_when_path_implicitly_bound, fail_when_path_omitted_and_no_last_file, fail_when_path_omitted_and_last_not_read_write, sandbox_file_editor: [track_last_read_or_edited]]
+- Validating write access confirms access and records file edits for declared read-write files, but rejects undeclared targets. \[can_write_fails_when_not_read_write, can_write_records_file_edit, can_write_produces_success_response, remind_only_read_write_writable, sandbox_file_editor: [can_write_validates_access]\]
+- Missing path arguments default to the last read or edited read-write file with an advisory warning, failing if no valid file history exists. \[implicitly_bind_last_read_or_edited_file, warn_when_path_implicitly_bound, fail_when_path_omitted_and_no_last_file, fail_when_path_omitted_and_last_not_read_write, sandbox_file_editor: [track_last_read_or_edited]\]
 - Line search windows are validated against file bounds, rejecting non-positive or inverted bounds before matching proceeds. [fail_when_start_line_less_than_one, fail_when_start_line_exceeds_line_count_plus_one, fail_when_end_line_less_than_one, fail_when_end_line_exceeds_line_count, fail_when_start_exceeds_end]
 - Target content matching attempts exact matching first, falling back to whitespace-tolerant matching when single replacements are requested. [match_target_content_exactly, fallback_whitespace_stripped_matching, whitespace_fallback_succeeds_on_single_match]
 - Ambiguous or missing target content triggers detailed line location diagnostics to guide correction. [fail_when_not_found_single, fail_when_multiple_matches_single, feedback_first_two_matching_lines, feedback_relocated_lines_when_outside_range]
-- Successful replacements update the filesystem, advance the update revision, and emit reminders to verify syntax with check file. [write_updated_content_on_success, create_missing_parent_dirs_on_success, record_writes_occurred_on_success, remind_call_check_file, increment_revision_on_file_update, share_replace_file_content_suppression_key, sandbox_file_editor: [replace_content_in_line_range, replace_multiple_when_permitted]]
+- Successful replacements update the filesystem, advance the update revision, and emit reminders to verify syntax with check file. \[write_updated_content_on_success, create_missing_parent_dirs_on_success, record_writes_occurred_on_success, remind_call_check_file, increment_revision_on_file_update, share_replace_file_content_suppression_key, sandbox_file_editor: [replace_content_in_line_range, replace_multiple_when_permitted]\]
+- Workspace file writes tracking reflects whether workspace file contents differ from their in-band code hash. \[compare_current_against_code_hash, sandbox_file_editor: [expose_workspace_writes_occurred, writes_occurred_true_on_diff, writes_occurred_false_on_match]\]

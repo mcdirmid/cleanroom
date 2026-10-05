@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: f1b5604efbc4
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for bazel_storage_impl aligned with grounding specifications."""
 
 import os
@@ -39,7 +48,9 @@ from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
 def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
-    return DagNode(unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address))
+    return DagNode(
+        unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address)
+    )
 
 
 class FakeBazelTarget:
@@ -74,9 +85,7 @@ class FakeFilePaths:
     def create_workspace_path(self, path: str) -> WorkspacePath:
         return WorkspacePath(path=PathString(path))
 
-    def resolve_path(
-        self, root: AbsolutePath, relative: WorkspacePath
-    ) -> AbsolutePath:
+    def resolve_path(self, root: AbsolutePath, relative: WorkspacePath) -> AbsolutePath:
         joined = os.path.join(root.path, relative.path)
         return AbsolutePath(path=PathString(joined))
 
@@ -156,8 +165,13 @@ class BazelStorageImplTest(unittest.TestCase):
             # Add ChangeMessage and FeedbackMessage messages
             # Requirement: WHEN message is a feedback message, MUST append an unacted feedback entry to the target source file metadata.
             # Requirement: MUST add the message to the node.
-            storage.add_message(ChangeMessage(content=MessageContent("Need refactor")), to=node)
-            storage.add_message(FeedbackMessage(content=MessageContent("Syntax error on line 5")), to=node)
+            storage.add_message(
+                ChangeMessage(content=MessageContent("Need refactor")), to=node
+            )
+            storage.add_message(
+                FeedbackMessage(content=MessageContent("Syntax error on line 5")),
+                to=node,
+            )
 
             # Requirement: WHEN source file metadata is missing or contains unacted feedback entries, MUST return true.
             # Requirement: MUST return the set of messages recorded for the node.
@@ -175,7 +189,9 @@ class BazelStorageImplTest(unittest.TestCase):
             # Clear messages resets in-memory messages but does not alter source file metadata on disk
             storage.clear_messages(node)
             self.assertEqual(len(storage.get_messages(node)), 1)
-            self.assertTrue(all(isinstance(m, FeedbackMessage) for m in storage.get_messages(node)))
+            self.assertTrue(
+                all(isinstance(m, FeedbackMessage) for m in storage.get_messages(node))
+            )
             with open(abs_src, "r", encoding="utf-8") as f:
                 self.assertIn("Syntax error on line 5", f.read())
 
@@ -438,7 +454,6 @@ class BazelStorageImplTest(unittest.TestCase):
                 )
             self.assertTrue(storage.is_dirty(auditor_node))
 
-
     def test_auditor_dual_target_qa_evaluation(self) -> None:
         """CUJ: Dual-target QA auditor checks both lib and test files and stamps both on clean."""
         lib_node = _make_dag_node("//pkg/mod:item", "lib")
@@ -650,9 +665,7 @@ class BazelStorageImplTest(unittest.TestCase):
             # Register non-silent dependency on guide_node (which has no source file)
             storage.store_dependencies(
                 node,
-                {
-                    DagDependency(node=guide_node, is_silent=False)
-                },
+                {DagDependency(node=guide_node, is_silent=False)},
             )
 
             self.assertFalse(storage.is_dirty(node))
@@ -694,7 +707,9 @@ class BazelStorageImplTest(unittest.TestCase):
             storage.record_source_file(test_node, test_file)
 
             storage.store_feedback_dependencies(qa_node, {lib_node, test_node})
-            self.assertEqual(storage.get_feedback_dependencies(qa_node), {lib_node, test_node})
+            self.assertEqual(
+                storage.get_feedback_dependencies(qa_node), {lib_node, test_node}
+            )
 
             self.assertTrue(storage.is_dirty(qa_node))
             storage.mark_node_clean(qa_node)
@@ -705,4 +720,3 @@ if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements: None
-

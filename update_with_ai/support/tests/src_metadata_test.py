@@ -7,11 +7,16 @@ from support.lib.src_metadata import (
     FileMetadata,
     append_feedback,
     clear_audits,
+    compute_code_hash,
+    compute_file_code_hash,
     delete_last_cleaned,
+    extract_code_body,
     extract_metadata,
     extract_metadata_from_text,
     format_metadata_block,
+    is_code_modified,
     mark_clean,
+    mark_dirty,
     record_change,
     rewrite_metadata_in_text,
     stamp_audit,
@@ -20,7 +25,6 @@ from support.lib.src_metadata import (
 
 
 class SrcMetadataTest(unittest.TestCase):
-
     def test_extract_python_metadata(self) -> None:
         text = """# --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-02T14:55:48Z
@@ -258,12 +262,17 @@ x = 1
             self.assertIn("from user]: First defect", meta.feedback[0])
 
             # Append pre-formatted feedback
-            append_feedback(file_path, "[2026-10-02T14:52:10Z from //other:test]: Contract error")
+            append_feedback(
+                file_path, "[2026-10-02T14:52:10Z from //other:test]: Contract error"
+            )
             meta2 = extract_metadata(file_path)
             self.assertIsNotNone(meta2)
             assert meta2 is not None
             self.assertEqual(len(meta2.feedback), 2)
-            self.assertEqual(meta2.feedback[1], "[2026-10-02T14:52:10Z from //other:test]: Contract error")
+            self.assertEqual(
+                meta2.feedback[1],
+                "[2026-10-02T14:52:10Z from //other:test]: Contract error",
+            )
 
     def test_extract_audit_tags(self) -> None:
         text = """# --- CLEANROOM METADATA ---
@@ -291,7 +300,10 @@ x = 1
             last_changed="2026-10-02T14:50:00Z",
             change_summary="Feature implementation.",
             feedback=[],
-            audits={"QA_AUDIT": "2026-10-02T15:00:00Z", "COVERAGE_AUDIT": "2026-10-02T15:02:00Z"},
+            audits={
+                "QA_AUDIT": "2026-10-02T15:00:00Z",
+                "COVERAGE_AUDIT": "2026-10-02T15:02:00Z",
+            },
         )
         lines = format_metadata_block(meta, is_html=False)
         formatted = "\n".join(lines)
@@ -370,7 +382,188 @@ x = 1
             assert meta is not None
             self.assertEqual(meta.audits, {})
 
+    def test_parse_and_format_dirty_tag(self) -> None:
+        text = """# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-04T16:00:00Z
+# LAST_CHANGED: 2026-10-04T15:00:00Z
+# CHANGE: Added feature
+# DIRTY: Explicit nudge from user
+# --- END CLEANROOM METADATA ---
+
+x = 1
+"""
+        meta = extract_metadata_from_text(text, "foo.py")
+        self.assertIsNotNone(meta)
+        assert meta is not None
+        self.assertEqual(meta.dirty, "Explicit nudge from user")
+        self.assertEqual(meta.last_cleaned, "2026-10-04T16:00:00Z")
+
+        # HTML formatting
+        lines_html = format_metadata_block(meta, is_html=True)
+        self.assertIn("DIRTY: Explicit nudge from user", "\n".join(lines_html))
+
+        # Hash comment formatting
+        lines_hash = format_metadata_block(meta, is_html=False)
+        self.assertIn("# DIRTY: Explicit nudge from user", "\n".join(lines_hash))
+
+    def test_mark_dirty_and_clear_dirty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "mod_dirty.py"
+            file_path.write_text(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-04T15:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-04T15:00:00Z\n"
+                "# CHANGE: Initial clean.\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "x = 42\n",
+                encoding="utf-8",
+            )
+            # Mark dirty
+            mark_dirty(file_path, "Manual check needed")
+            meta = extract_metadata(file_path)
+            self.assertIsNotNone(meta)
+            assert meta is not None
+            self.assertEqual(meta.dirty, "Manual check needed")
+            self.assertIsNotNone(meta.last_cleaned)
+            # LAST_CHANGED preserved
+            self.assertEqual(meta.last_changed, "2026-10-04T15:00:00Z")
+
+            # Mark clean clears DIRTY tag and updates LAST_CLEANED
+            mark_clean(file_path)
+            meta_clean = extract_metadata(file_path)
+            self.assertIsNotNone(meta_clean)
+            assert meta_clean is not None
+            self.assertIsNone(meta_clean.dirty)
+            self.assertIsNotNone(meta_clean.last_cleaned)
+
+            # Record change also clears DIRTY tag
+            mark_dirty(file_path, "Dirtied again")
+            record_change(file_path, "Fixed it")
+            meta_changed = extract_metadata(file_path)
+            self.assertIsNotNone(meta_changed)
+            assert meta_changed is not None
+            self.assertIsNone(meta_changed.dirty)
+            self.assertEqual(meta_changed.change_summary, "Fixed it")
+
+    def test_code_hash_mechanics(self) -> None:
+        """Verifies code hash computation excluding header, formatting, parsing, and modification checks."""
+        py_content = (
+            "# --- CLEANROOM METADATA ---\n"
+            "# LAST_CLEANED: 2026-10-04T15:00:00Z\n"
+            "# LAST_CHANGED: 2026-10-04T15:00:00Z\n"
+            "# CHANGE: Initial.\n"
+            "# --- END CLEANROOM METADATA ---\n"
+            "\n"
+            "def add(a: int, b: int) -> int:\n"
+            "    return a + b\n"
+        )
+        body = extract_code_body(py_content, "math_utils.py")
+        self.assertEqual(body, "def add(a: int, b: int) -> int:\n    return a + b")
+
+        hash1 = compute_code_hash(py_content, "math_utils.py")
+        self.assertEqual(len(hash1), 12)
+
+        # Modifying metadata does NOT change the code hash
+        py_content_different_meta = (
+            "# --- CLEANROOM METADATA ---\n"
+            "# LAST_CLEANED: 2026-10-04T16:00:00Z\n"
+            "# LAST_CHANGED: 2026-10-04T16:00:00Z\n"
+            "# CHANGE: Updated summary.\n"
+            "# --- END CLEANROOM METADATA ---\n"
+            "\n"
+            "def add(a: int, b: int) -> int:\n"
+            "    return a + b\n"
+        )
+        hash2 = compute_code_hash(py_content_different_meta, "math_utils.py")
+        self.assertEqual(hash1, hash2)
+
+        # Modifying code body DOES change the code hash
+        py_content_diff_code = py_content.replace("a + b", "a + b + 1")
+        hash3 = compute_code_hash(py_content_diff_code, "math_utils.py")
+        self.assertNotEqual(hash1, hash3)
+
+        # Markdown format
+        md_content = (
+            "<!-- CLEANROOM METADATA\n"
+            "LAST_CLEANED: 2026-10-04T15:00:00Z\n"
+            "LAST_CHANGED: 2026-10-04T15:00:00Z\n"
+            "CHANGE: Spec.\n"
+            "CODE_HASH: abcd1234efgh\n"
+            "-->\n"
+            "\n"
+            "# Heading\n"
+            "Body paragraph.\n"
+        )
+        md_meta = extract_metadata_from_text(md_content, "spec.md")
+        self.assertIsNotNone(md_meta)
+        assert md_meta is not None
+        self.assertEqual(md_meta.code_hash, "abcd1234efgh")
+
+        # File modification check with disk operations
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fpath = Path(tmp_dir) / "test_mod.py"
+            fpath.write_text(py_content, encoding="utf-8")
+
+            # Initially no CODE_HASH in file -> is_code_modified returns True
+            self.assertTrue(is_code_modified(fpath))
+
+            # Mark clean stamps CODE_HASH
+            mark_clean(fpath)
+            meta = extract_metadata(fpath)
+            self.assertIsNotNone(meta)
+            assert meta is not None
+            self.assertEqual(meta.code_hash, hash1)
+            self.assertFalse(is_code_modified(fpath))
+
+            # Modify code body -> is_code_modified returns True
+            fpath.write_text(
+                fpath.read_text(encoding="utf-8") + "\n# Extra line\n", encoding="utf-8"
+            )
+            self.assertTrue(is_code_modified(fpath))
+
+            # Record change updates CODE_HASH to match modified body
+            record_change(fpath, "Added extra line")
+            meta_after = extract_metadata(fpath)
+            self.assertIsNotNone(meta_after)
+            assert meta_after is not None
+            self.assertFalse(is_code_modified(fpath))
+            self.assertNotEqual(meta_after.code_hash, hash1)
+
+    def test_preamble_and_docstring_hash_exclusion(self) -> None:
+        """Verifies that files with docstrings or comments before the metadata block properly exclude metadata."""
+        py_with_docstring = '''"""This is a module docstring."""
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-01T10:00:00Z
+# CODE_HASH: 1234567890ab
+# --- END CLEANROOM METADATA ---
+
+def hello():
+    return "world"
+'''
+        hash1 = compute_code_hash(py_with_docstring, "hello.py")
+
+        # Mutating metadata inside the block must not alter the hash
+        py_mutated_meta = '''"""This is a module docstring."""
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2099-01-01T00:00:00Z
+# LAST_CHANGED: 2099-01-01T00:00:00Z
+# CHANGE: some change
+# CODE_HASH: 999999999999
+# --- END CLEANROOM METADATA ---
+
+def hello():
+    return "world"
+'''
+        hash2 = compute_code_hash(py_mutated_meta, "hello.py")
+        self.assertEqual(hash1, hash2)
+
+        # But changing code outside metadata block changes the hash
+        py_mutated_code = py_with_docstring.replace('"world"', '"universe"')
+        hash3 = compute_code_hash(py_mutated_code, "hello.py")
+        self.assertNotEqual(hash1, hash3)
+
 
 if __name__ == "__main__":
     unittest.main()
-

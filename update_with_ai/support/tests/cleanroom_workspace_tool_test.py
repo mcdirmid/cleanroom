@@ -10,11 +10,17 @@ import tempfile
 import unittest
 
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
-for _p in [_repo_root, os.path.join(_repo_root, "update_python_with_ai"), os.path.join(_repo_root, "update_with_ai"), os.path.join(_repo_root, "update_with_ai/support/lib")]:
+for _p in [
+    _repo_root,
+    os.path.join(_repo_root, "update_python_with_ai"),
+    os.path.join(_repo_root, "update_with_ai"),
+    os.path.join(_repo_root, "update_with_ai/support/lib"),
+    os.path.join(_repo_root, "update_python_with_ai/support/lib"),
+]:
     if _p not in sys.path and os.path.isdir(_p):
         sys.path.insert(0, _p)
 
-from update_with_ai.support.lib import cleanroom_mailbox
+import src_metadata
 from update_with_ai.support.lib import cleanroom_workspace_tool
 
 
@@ -23,7 +29,6 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
         self.test_dir = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
-        # Restore write permissions on any read-only files so cleanup succeeds
         for root, dirs, files in os.walk(self.test_dir):
             for d in dirs:
                 try:
@@ -37,42 +42,12 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
                     pass
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def test_mailbox_atomic_lifecycle(self) -> None:
-        """Tests submit, blame, fail, and atomic read_and_clear in mailbox."""
-        mb_dir = os.path.join(self.test_dir, "mailbox")
-        os.makedirs(mb_dir, exist_ok=True)
-
-        # 1. Submit
-        cleanroom_mailbox.submit("update_with_ai/parts/core/lib/test_impl.py", "Added feature", mailbox_dir=mb_dir)
-
-        # 2. Blame
-        cleanroom_mailbox.blame("update_with_ai/parts/core/tests/test_test.py", "update_with_ai/parts/core/lib/test_impl.py", "Contract mismatch", mailbox_dir=mb_dir)
-
-        # 3. Fail
-        cleanroom_mailbox.fail("update_with_ai/parts/core/lib/test_impl.py", "Unsolvable dependency", mailbox_dir=mb_dir)
-
-        # 4. Read and clear
-        entries = cleanroom_mailbox.read_and_clear(mb_dir)
-        self.assertEqual(len(entries), 3)
-        self.assertEqual(entries[0]["type"], "SUBMIT")
-        self.assertEqual(entries[0]["target"], "update_with_ai/parts/core/lib/test_impl.py")
-        self.assertEqual(entries[0]["change"], "Added feature")
-
-        self.assertEqual(entries[1]["type"], "BLAME")
-        self.assertEqual(entries[1]["target"], "update_with_ai/parts/core/tests/test_test.py")
-        self.assertEqual(entries[1]["blame_target"], "update_with_ai/parts/core/lib/test_impl.py")
-
-        self.assertEqual(entries[2]["type"], "FAIL")
-        self.assertEqual(entries[2]["reason"], "Unsolvable dependency")
-
-        # 5. Subsequent read should be empty
-        subsequent = cleanroom_mailbox.read_and_clear(mb_dir)
-        self.assertEqual(len(subsequent), 0)
-
-    def test_setup_lib_workspace_permissions_and_structure(self) -> None:
-        """Verifies setup of a Lib role workspace: lib is writable, grounding/BUILD are read-only."""
+    def test_commission_lib_workspace_permissions_and_structure(self) -> None:
+        """Verifies commissioning of a Lib role workspace: lib writable, grounding/BUILD read-only, no mailboxes."""
         lib_ws = os.path.join(self.test_dir, "lib_ws")
-        cleanroom_workspace_tool.setup_workspace("lib", dest=lib_ws)
+        cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", dest=lib_ws, repo_root=self.test_dir
+        )
 
         # AGENTS.md exists
         agents_md = os.path.join(lib_ws, "AGENTS.md")
@@ -80,50 +55,38 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
         with open(agents_md, "r", encoding="utf-8") as f:
             content = f.read()
         self.assertIn("Lib Engineer", content)
-        self.assertTrue("CRITICAL" in content or "Mandatory Behavioral Constraints" in content)
-        self.assertIn("The user may also ask you to align units directly", content)
-        self.assertIn("<parts-dir>/parts/lib", content)
+        self.assertIn("In-Band Source Metadata", content)
+        self.assertIn("Early Exit", content)
+        self.assertIn("No Unsolicited Work Discovery", content)
+        self.assertNotIn("WORK_ORDER.md", content)
+        self.assertNotIn("COMPLETED.md", content)
 
-        # Mailbox files exist
-        self.assertTrue(os.path.exists(os.path.join(lib_ws, "WORK_ORDER.md")))
-        self.assertTrue(os.path.exists(os.path.join(lib_ws, "COMPLETED.md")))
+        # Mailbox files must NOT exist
+        self.assertFalse(os.path.exists(os.path.join(lib_ws, "WORK_ORDER.md")))
+        self.assertFalse(os.path.exists(os.path.join(lib_ws, "COMPLETED.md")))
 
-        # Helper scripts
+        # .cleanroom_role.json exists and has last_sync_timestamp
+        role_json = os.path.join(lib_ws, ".cleanroom_role.json")
+        self.assertTrue(os.path.exists(role_json))
+        meta = cleanroom_workspace_tool.load_role_metadata(lib_ws)
+        self.assertIsNotNone(meta)
+        self.assertEqual(meta["role_name"], "lib")
+        self.assertEqual(meta["parts_dir"], "staging")
+        self.assertIn("last_sync_timestamp", meta)
+
+        # Helper scripts exist in bin/ (get_work, submit, blame, fail)
+        self.assertTrue(os.path.exists(os.path.join(lib_ws, "bin/get_work")))
         self.assertTrue(os.path.exists(os.path.join(lib_ws, "bin/submit")))
         self.assertTrue(os.path.exists(os.path.join(lib_ws, "bin/fail")))
-        # Lib cannot blame!
-        self.assertFalse(os.path.exists(os.path.join(lib_ws, "bin/blame")))
-
-        # Check permissions on grounding vs lib files
-        pyi_path = os.path.join(lib_ws, "update_with_ai/parts/core/grounding/file_paths_impl.pyi")
-        if os.path.exists(pyi_path):
-            st = os.stat(pyi_path)
-            self.assertEqual(st.st_mode & stat.S_IWUSR, 0, "Grounding pyi must be read-only")
-
-        lib_py = os.path.join(lib_ws, "update_with_ai/parts/core/lib/file_paths_impl.py")
-        if os.path.exists(lib_py):
-            st = os.stat(lib_py)
-            self.assertNotEqual(st.st_mode & stat.S_IWUSR, 0, "Lib file must be read-write")
-
-        # Tests directory should not exist in lib workspace (double-blind separation)
-        tests_dir = os.path.join(lib_ws, "update_with_ai/parts/core/tests")
-        self.assertFalse(os.path.exists(tests_dir), "tests/ must be completely excluded from lib workspace")
+        self.assertTrue(os.path.exists(os.path.join(lib_ws, "bin/blame")))
 
     def test_setup_test_workspace_stubs_and_permissions(self) -> None:
-        """Verifies setup of a Test role workspace: tests writable, lib has read-only stubs."""
+        """Verifies commissioning of a Test role workspace: tests writable, lib has read-only stubs."""
         test_ws = os.path.join(self.test_dir, "test_ws")
-        cleanroom_workspace_tool.setup_workspace("test", dest=test_ws)
+        cleanroom_workspace_tool.commission_workspace(
+            "test", dir_scope="staging", dest=test_ws, repo_root=self.test_dir
+        )
 
-        # Helper scripts: test can blame
-        self.assertTrue(os.path.exists(os.path.join(test_ws, "bin/blame")))
-
-        # Tests file should be writable
-        test_py = os.path.join(test_ws, "update_with_ai/parts/core/tests/file_paths_impl_test.py")
-        if os.path.exists(test_py):
-            st = os.stat(test_py)
-            self.assertNotEqual(st.st_mode & stat.S_IWUSR, 0, "Test file must be read-write")
-
-        # Test direct stub generation on a sample pyi contract
         synthetic_pyi = os.path.join(self.test_dir, "sample_impl.pyi")
         with open(synthetic_pyi, "w", encoding="utf-8") as f:
             f.write(
@@ -135,7 +98,9 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
                 "    def process_data(self, item: str) -> bool: ...\n"
             )
         synthetic_stub = os.path.join(test_ws, "sample_impl.py")
-        cleanroom_workspace_tool.generate_readonly_test_stub(synthetic_pyi, "sample_impl", synthetic_stub)
+        cleanroom_workspace_tool.generate_readonly_test_stub(
+            synthetic_pyi, "sample_impl", synthetic_stub
+        )
         self.assertTrue(os.path.exists(synthetic_stub))
         st = os.stat(synthetic_stub)
         self.assertEqual(st.st_mode & stat.S_IWUSR, 0, "Test stub must be read-only")
@@ -143,60 +108,42 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
             stub_content = f.read()
         self.assertIn("CLEANROOM TEST STUB", stub_content)
         self.assertIn("raise NotImplementedError", stub_content)
-        self.assertIn("def __init__(self)", stub_content)
 
     def test_tamper_detection(self) -> None:
-        """Verifies that modifying a read-only file triggers PermissionError on sync."""
+        """Verifies that tamper checks are retired and verify_integrity does not raise."""
         lib_ws = os.path.join(self.test_dir, "tamper_ws")
-        cleanroom_workspace_tool.setup_workspace("lib", dest=lib_ws)
+        cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", dest=lib_ws, repo_root=self.test_dir
+        )
 
-        # Tamper with a read-only contract
-        pyi_path = os.path.join(lib_ws, "update_with_ai/parts/core/grounding/file_paths_impl.pyi")
-        if os.path.exists(pyi_path):
-            os.chmod(pyi_path, 0o644)
-            with open(pyi_path, "a", encoding="utf-8") as f:
-                f.write("\n# rogue edit\n")
-            os.chmod(pyi_path, 0o444)
+        # Create a mock read-only file
+        ro_file = os.path.join(lib_ws, "read_only_contract.pyi")
+        cleanroom_workspace_tool.write_file_with_perms(
+            ro_file, "# original contract\n", readonly=True
+        )
+        cleanroom_workspace_tool.record_baseline_hashes(lib_ws)
 
-            with self.assertRaises(PermissionError):
-                cleanroom_workspace_tool.sync_workspace("lib", dest=lib_ws)
+        # Modify the read-only contract
+        os.chmod(ro_file, 0o644)
+        with open(ro_file, "a", encoding="utf-8") as f:
+            f.write("\n# rogue edit\n")
+        os.chmod(ro_file, 0o444)
 
-    def test_textproto_load_and_save(self) -> None:
-        """Verifies parsing and serialization of .update_with_ai.textproto files."""
-        tp_path = os.path.join(self.test_dir, ".update_with_ai.textproto")
-        records = {
-            "//update_with_ai/parts/core:filesystem_ext#//update_python_with_ai:low": {
-                "messages": [
-                    {"kind": "change", "content": "Updated contract", "sender": "//upstream:spec"}
-                ],
-                "reverse_dependencies": ["//update_with_ai/parts/core:filesystem_ext#//update_python_with_ai:lib"],
-            }
-        }
-        self.assertTrue(cleanroom_workspace_tool.save_package_textproto(tp_path, records))
-        loaded = cleanroom_workspace_tool.load_package_textproto(tp_path)
-        self.assertEqual(len(loaded), 1)
-        node_id = "//update_with_ai/parts/core:filesystem_ext#//update_python_with_ai:low"
-        self.assertIn(node_id, loaded)
-        self.assertEqual(len(loaded[node_id]["messages"]), 1)
-        self.assertEqual(loaded[node_id]["messages"][0]["kind"], "change")
-        self.assertEqual(loaded[node_id]["messages"][0]["content"], "Updated contract")
-        self.assertEqual(loaded[node_id]["messages"][0]["sender"], "//upstream:spec")
-        self.assertEqual(loaded[node_id]["reverse_dependencies"], ["//update_with_ai/parts/core:filesystem_ext#//update_python_with_ai:lib"])
+        # Tamper checks are retired: verify_integrity is a no-op and does not raise
+        cleanroom_workspace_tool.verify_integrity(lib_ws)
 
     def test_phase_ordering(self) -> None:
-        """Verifies Cleanroom phase ordering: requirements -> grounding -> lib/test -> qa."""
+        """Verifies Cleanroom phase ordering: high -> planning -> low -> grounding -> lib/test -> qa."""
         nodes = [
             {"pkg": "pkg1", "unit_name": "mod1", "role": "qa"},
             {"pkg": "pkg1", "unit_name": "mod1", "role": "lib"},
             {"pkg": "pkg1", "unit_name": "mod1", "role": "test"},
             {"pkg": "pkg1", "unit_name": "mod1", "role": "grounding"},
         ]
-        # When grounding is dirty, only grounding is ready
         ready = cleanroom_workspace_tool.get_ready_dirty_nodes(nodes)
         self.assertEqual(len(ready), 1)
         self.assertEqual(ready[0]["role"], "grounding")
 
-        # Once grounding is clean, both lib and test are ready concurrently
         nodes_no_grounding = [
             {"pkg": "pkg1", "unit_name": "mod1", "role": "qa"},
             {"pkg": "pkg1", "unit_name": "mod1", "role": "lib"},
@@ -207,735 +154,883 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
         roles2 = {n["role"] for n in ready2}
         self.assertEqual(roles2, {"lib", "test"})
 
-        # Once lib and test are clean, qa is ready
-        nodes_qa = [{"pkg": "pkg1", "unit_name": "mod1", "role": "qa"}]
-        ready3 = cleanroom_workspace_tool.get_ready_dirty_nodes(nodes_qa)
-        self.assertEqual(len(ready3), 1)
-        self.assertEqual(ready3[0]["role"], "qa")
+    def test_in_band_forward_dirty_evaluation(self) -> None:
+        """Verifies dynamic forward dirtiness detection: timestamps and unacted feedback."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_dirty")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
 
-    def test_textproto_dispatch_and_sync_lifecycle(self) -> None:
-        """Verifies complete dispatch, work order generation, submission, sync, and message clearing."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo")
-        pkg_dir = os.path.join(fake_repo, "update_with_ai/parts/sandbox")
-        os.makedirs(os.path.join(pkg_dir, "lib"), exist_ok=True)
-        os.makedirs(os.path.join(pkg_dir, "grounding"), exist_ok=True)
-
-        # 1. Setup .update_with_ai.textproto with a dirty lib node
-        tp_path = os.path.join(pkg_dir, ".update_with_ai.textproto")
-        lib_node = "//update_with_ai/parts/sandbox:tool_provider#//update_python_with_ai:lib"
-        qa_node = "//update_with_ai/parts/sandbox:tool_provider#//update_python_with_ai:qa"
-        records = {
-            lib_node: {
-                "messages": [
-                    {
-                        "kind": "change",
-                        "content": "updated with new operation for checking read file access.",
-                        "sender": "update_with_ai/parts/sandbox/grounding/tool_provider.pyi",
-                    }
-                ],
-                "reverse_dependencies": [qa_node],
-            },
-            qa_node: {
-                "messages": [],
-                "reverse_dependencies": [],
-            },
-        }
-        cleanroom_workspace_tool.save_package_textproto(tp_path, records)
-
-        # Canonical file
-        lib_file = os.path.join(pkg_dir, "lib/tool_provider.py")
-        with open(lib_file, "w", encoding="utf-8") as f:
-            f.write("# original lib\n")
-
-        # 2. Dispatch to lib role workspace
-        role_ws = os.path.join(self.test_dir, "cleanroom_lib_ws")
-        res = cleanroom_workspace_tool.dispatch_dirty_work(
-            role_filter="lib",
-            dest=role_ws,
-            repo_root=fake_repo,
-        )
-        self.assertEqual(res, 0)
-
-        # Verify WORK_ORDER.md
-        wo_path = os.path.join(role_ws, "WORK_ORDER.md")
-        self.assertTrue(os.path.exists(wo_path))
-        with open(wo_path, "r", encoding="utf-8") as f:
-            wo_content = f.read()
-        self.assertIn("CLEAN update_with_ai/parts/sandbox/lib/tool_provider.py", wo_content)
-        self.assertIn("REASON: Change from update_with_ai/parts/sandbox/grounding/tool_provider.pyi: updated with new operation for checking read file access.", wo_content)
-
-        # 3. Simulate role worker submission
-        ws_lib_file = os.path.join(role_ws, "update_with_ai/parts/sandbox/lib/tool_provider.py")
-        with open(ws_lib_file, "w", encoding="utf-8") as f:
-            f.write("# updated lib with new check operation\n")
-        cleanroom_mailbox.submit(
-            "update_with_ai/parts/sandbox/lib/tool_provider.py",
-            "added new methods to deal with checking read file access.",
-            mailbox_dir=role_ws,
-        )
-
-        # 4. Sync workspace back to repo
-        synced = cleanroom_workspace_tool.sync_workspace("lib", dest=role_ws, repo_root=fake_repo)
-        self.assertEqual(len(synced), 1)
-
-        # Verify file synced
-        with open(lib_file, "r", encoding="utf-8") as f:
-            synced_content = f.read()
-        self.assertIn("# updated lib with new check operation", synced_content)
-
-        # Verify messages cleared for lib node in .update_with_ai.textproto
-        updated_data = cleanroom_workspace_tool.load_package_textproto(tp_path)
-        self.assertEqual(len(updated_data[lib_node]["messages"]), 0, "Lib node messages must be cleared after sync")
-
-        # Verify change message propagated to reverse dependency (qa node)
-        qa_msgs = updated_data[qa_node]["messages"]
-        self.assertEqual(len(qa_msgs), 1, "Reverse dependency must receive change notification")
-        self.assertEqual(qa_msgs[0]["kind"], "change")
-        self.assertIn("added new methods to deal with checking read file access", qa_msgs[0]["content"])
-
-        # Verify WORK_ORDER.md updated
-        with open(wo_path, "r", encoding="utf-8") as f:
-            updated_wo = f.read()
-        self.assertNotIn("CLEAN update_with_ai/parts/sandbox/lib/tool_provider.py", updated_wo)
-
-    def test_blame_feedback_recording(self) -> None:
-        """Verifies BLAME submissions record feedback messages in the blamed target's textproto."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo2")
-        pkg_dir = os.path.join(fake_repo, "update_with_ai/parts/sandbox")
-        os.makedirs(pkg_dir, exist_ok=True)
-
-        tp_path = os.path.join(pkg_dir, ".update_with_ai.textproto")
-        lib_node = "//update_with_ai/parts/sandbox:sandbox_cleanroom_impl#//update_python_with_ai:lib"
-        cleanroom_workspace_tool.save_package_textproto(
-            tp_path,
-            {lib_node: {"messages": [], "reverse_dependencies": []}},
-        )
-
-        qa_ws = os.path.join(self.test_dir, "qa_ws")
-        cleanroom_workspace_tool.setup_workspace("qa", dest=qa_ws, repo_root=fake_repo)
-
-        # QA submits a BLAME on lib
-        cleanroom_mailbox.blame(
-            "update_with_ai/parts/sandbox/logs/sandbox_cleanroom_impl_qa.log",
-            "update_with_ai/parts/sandbox/lib/sandbox_cleanroom_impl.py",
-            "implemented read file access methods do not implement contract because ...",
-            mailbox_dir=qa_ws,
-        )
-
-        # Sync QA workspace
-        cleanroom_workspace_tool.sync_workspace("qa", dest=qa_ws, repo_root=fake_repo)
-
-        # Check that blamed target received feedback message in textproto
-        data = cleanroom_workspace_tool.load_package_textproto(tp_path)
-        self.assertIn(lib_node, data)
-        msgs = data[lib_node]["messages"]
-        self.assertEqual(len(msgs), 1)
-        self.assertEqual(msgs[0]["kind"], "feedback")
-        self.assertIn("implemented read file access methods do not implement contract because ...", msgs[0]["content"])
-
-    def test_parts_dir_isolation_in_setup(self) -> None:
-        """Verifies that specifying a parts directory isolates workspace setup (e.g. staging vs update_with_ai)."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_parts")
-        up_dir = os.path.join(fake_repo, "update_with_ai/parts/core/lib")
-        staging_dir = os.path.join(fake_repo, "staging/parts/sandbox/lib")
-        os.makedirs(up_dir, exist_ok=True)
-        os.makedirs(staging_dir, exist_ok=True)
-
-        with open(os.path.join(up_dir, "up_mod.py"), "w", encoding="utf-8") as f:
-            f.write("# update_with_ai mod\n")
-        with open(os.path.join(staging_dir, "test_mod.py"), "w", encoding="utf-8") as f:
-            f.write("# staging mod\n")
-
-        # 1. Setup workspace specifying ONLY 'staging'
-        staging_ws = os.path.join(self.test_dir, "ws_staging_only")
-        cleanroom_workspace_tool.setup_workspace("lib", dest=staging_ws, repo_root=fake_repo, parts_dirs=["staging"])
-
-        # Must contain staging parts
-        self.assertTrue(os.path.exists(os.path.join(staging_ws, "staging/parts/sandbox/lib/test_mod.py")))
-        # Must NOT contain update_with_ai parts
-        self.assertFalse(os.path.exists(os.path.join(staging_ws, "update_with_ai/parts/core/lib/up_mod.py")))
-        self.assertFalse(os.path.exists(os.path.join(staging_ws, "update_with_ai/parts")))
-
-        # 2. Setup workspace specifying ONLY 'update_with_ai'
-        update_ws = os.path.join(self.test_dir, "ws_update_only")
-        cleanroom_workspace_tool.setup_workspace("lib", dest=update_ws, repo_root=fake_repo, parts_dirs=["update_with_ai"])
-
-        # Must contain update_with_ai parts
-        self.assertTrue(os.path.exists(os.path.join(update_ws, "update_with_ai/parts/core/lib/up_mod.py")))
-        # Must NOT contain staging parts
-        self.assertFalse(os.path.exists(os.path.join(update_ws, "staging/parts/sandbox/lib/test_mod.py")))
-        self.assertFalse(os.path.exists(os.path.join(update_ws, "staging/parts")))
-
-    def test_parts_dir_in_dispatch(self) -> None:
-        """Verifies dispatch filters dirty nodes and provisions workspaces according to parts_dirs."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_dispatch_parts")
-        up_dir = os.path.join(fake_repo, "update_with_ai/parts/core")
-        test_dir = os.path.join(fake_repo, "staging/parts/sandbox")
-        os.makedirs(os.path.join(up_dir, "lib"), exist_ok=True)
-        os.makedirs(os.path.join(test_dir, "lib"), exist_ok=True)
-
-        with open(os.path.join(up_dir, "lib/up_mod.py"), "w", encoding="utf-8") as f:
-            f.write("# up mod\n")
-        with open(os.path.join(test_dir, "lib/test_mod.py"), "w", encoding="utf-8") as f:
-            f.write("# test mod\n")
-
-        # Dirty node in update_with_ai
-        cleanroom_workspace_tool.save_package_textproto(
-            os.path.join(up_dir, ".update_with_ai.textproto"),
-            {"//update_with_ai/parts/core:up_mod#//update_python_with_ai:lib": {
-                "messages": [{"kind": "change", "content": "Update core"}],
-                "reverse_dependencies": [],
-            }},
-        )
-        # Dirty node in staging
-        cleanroom_workspace_tool.save_package_textproto(
-            os.path.join(test_dir, ".update_with_ai.textproto"),
-            {"//staging/parts/sandbox:test_mod#//update_python_with_ai:lib": {
-                "messages": [{"kind": "change", "content": "Update sandbox"}],
-                "reverse_dependencies": [],
-            }},
-        )
-
-        # Dispatch with parts_dirs=["staging"]
-        staging_ws = os.path.join(self.test_dir, "ws_dispatch_staging")
-        res = cleanroom_workspace_tool.dispatch_dirty_work(
-            parts_dirs=["staging"],
-            dest=staging_ws,
-            repo_root=fake_repo,
-        )
-        self.assertEqual(res, 0)
-
-        # WORK_ORDER.md should contain staging/parts/sandbox/lib/test_mod.py
-        wo_path = os.path.join(staging_ws, "WORK_ORDER.md")
-        with open(wo_path, "r", encoding="utf-8") as f:
-            wo_content = f.read()
-        self.assertIn("CLEAN staging/parts/sandbox/lib/test_mod.py", wo_content)
-        self.assertNotIn("CLEAN update_with_ai/parts/core/lib/up_mod.py", wo_content)
-        # update_with_ai parts must NOT be in workspace
-        self.assertFalse(os.path.exists(os.path.join(staging_ws, "update_with_ai/parts")))
-
-    def test_high_role_workspace_setup(self) -> None:
-        """Tests that setup with role //update_python_with_ai:high copies high/ and HLS linter, excluding downstream."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_high")
-        test_part = os.path.join(fake_repo, "staging/parts/sandbox")
-        os.makedirs(os.path.join(test_part, "high"), exist_ok=True)
-        os.makedirs(os.path.join(test_part, "requirements"), exist_ok=True)
-        os.makedirs(os.path.join(test_part, "grounding"), exist_ok=True)
-        os.makedirs(os.path.join(test_part, "lib"), exist_ok=True)
-        os.makedirs(os.path.join(test_part, "tests"), exist_ok=True)
-
-        with open(os.path.join(test_part, "high/sample.md"), "w") as f:
-            f.write("# sample\n\n## Purpose\nSample spec.\n")
-        with open(os.path.join(test_part, "requirements/sample.md"), "w") as f:
-            f.write("# sample requirements\n")
-        with open(os.path.join(test_part, "grounding/sample.pyi"), "w") as f:
-            f.write("class Sample: pass\n")
-        with open(os.path.join(test_part, "lib/sample.py"), "w") as f:
-            f.write("class Sample: pass\n")
-        with open(os.path.join(test_part, "tests/sample_test.py"), "w") as f:
-            f.write("def test_sample(): pass\n")
-
-        # Setup with target label //update_python_with_ai:high
-        high_ws = os.path.join(self.test_dir, "high_ws")
-        cleanroom_workspace_tool.setup_workspace(
-            role="//update_python_with_ai:high",
-            dest=high_ws,
-            repo_root=fake_repo,
-            parts_dirs=["staging"],
-        )
-
-        # 1. High spec is present and writable
-        h_file = os.path.join(high_ws, "staging/parts/sandbox/high/sample.md")
-        self.assertTrue(os.path.exists(h_file))
-        st = os.stat(h_file)
-        self.assertTrue(bool(st.st_mode & stat.S_IWUSR))
-
-        # 2. Downstream requirements, grounding, lib, and tests are excluded
-        self.assertFalse(os.path.exists(os.path.join(high_ws, "staging/parts/sandbox/requirements")))
-        self.assertFalse(os.path.exists(os.path.join(high_ws, "staging/parts/sandbox/grounding")))
-        self.assertFalse(os.path.exists(os.path.join(high_ws, "staging/parts/sandbox/lib")))
-        self.assertFalse(os.path.exists(os.path.join(high_ws, "staging/parts/sandbox/tests")))
-
-        # 3. Bazel scaffolding is excluded (not declared in workspace_files)
-        self.assertFalse(os.path.exists(os.path.join(high_ws, "MODULE.bazel")))
-        self.assertFalse(os.path.exists(os.path.join(high_ws, ".bazelversion")))
-        self.assertFalse(os.path.exists(os.path.join(high_ws, "bin/pyright_library.bzl")))
-
-        # 4. High linter and guide are present
-        self.assertTrue(os.path.exists(os.path.join(high_ws, "update_python_with_ai/support/lib/high_lint.py")))
-        self.assertTrue(os.path.exists(os.path.join(high_ws, "update_python_with_ai/guides/high_level_spec.md")))
-
-        # 5. AGENTS.md references HLS persona, guide, and high_lint.py
-        with open(os.path.join(high_ws, "AGENTS.md"), "r", encoding="utf-8") as f:
-            agents_md = f.read()
-        self.assertIn("High-Level Spec Engineer", agents_md)
-        self.assertIn("//update_python_with_ai:high", agents_md)
-        self.assertIn("high_lint.py", agents_md)
-
-    def test_planning_role_workspace_setup(self) -> None:
-        """Tests that planning setup copies upstream high/ as read-only, planning/ as writable."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_plan")
-        test_part = os.path.join(fake_repo, "staging/parts/sandbox")
-        os.makedirs(os.path.join(test_part, "high"), exist_ok=True)
-        os.makedirs(os.path.join(test_part, "planning"), exist_ok=True)
-        os.makedirs(os.path.join(test_part, "grounding"), exist_ok=True)
-
-        with open(os.path.join(test_part, "high/sample.md"), "w") as f:
-            f.write("# sample HLS\n")
-        with open(os.path.join(test_part, "planning/sample.md"), "w") as f:
-            f.write("# sample planning\n")
-        with open(os.path.join(test_part, "grounding/sample.pyi"), "w") as f:
-            f.write("class Sample: pass\n")
-
-        plan_ws = os.path.join(self.test_dir, "plan_ws")
-        cleanroom_workspace_tool.setup_workspace(
-            role="//update_python_with_ai:planning",
-            dest=plan_ws,
-            repo_root=fake_repo,
-            parts_dirs=["staging"],
-        )
-
-        # 1. Planning is writable
-        p_file = os.path.join(plan_ws, "staging/parts/sandbox/planning/sample.md")
-        self.assertTrue(os.path.exists(p_file))
-        st_p = os.stat(p_file)
-        self.assertTrue(bool(st_p.st_mode & stat.S_IWUSR))
-
-        # 2. Upstream high is read-only
-        h_file = os.path.join(plan_ws, "staging/parts/sandbox/high/sample.md")
-        self.assertTrue(os.path.exists(h_file))
-        st_h = os.stat(h_file)
-        self.assertFalse(bool(st_h.st_mode & stat.S_IWUSR))
-
-        # 3. Downstream grounding is excluded
-        self.assertFalse(os.path.exists(os.path.join(plan_ws, "staging/parts/sandbox/grounding")))
-
-        # 4. Tool is present
-        self.assertTrue(os.path.exists(os.path.join(plan_ws, "update_with_ai/support/lib/build_lint_common.py")))
-
-        # 5. Bazel scaffolding is excluded
-        self.assertFalse(os.path.exists(os.path.join(plan_ws, "MODULE.bazel")))
-
-        # 6. feedback_role_deps is non-empty -> bin/blame IS present
-        self.assertTrue(os.path.exists(os.path.join(plan_ws, "bin/blame")))
-
-    def test_grounding_role_workspace_setup(self) -> None:
-        """Tests that grounding setup copies low as read-only, grounding as writable, and provisions bin/blame."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_grounding")
-        test_part = os.path.join(fake_repo, "staging/parts/sandbox")
-        os.makedirs(os.path.join(test_part, "low"), exist_ok=True)
-        os.makedirs(os.path.join(test_part, "grounding"), exist_ok=True)
-        os.makedirs(os.path.join(test_part, "lib"), exist_ok=True)
-
-        with open(os.path.join(test_part, "low/sample.pyi"), "w") as f:
-            f.write("class Sample: pass\n")
-        with open(os.path.join(test_part, "grounding/sample.py"), "w") as f:
-            f.write("# sample Grounding Python\n")
-        with open(os.path.join(test_part, "grounding/sample.gt"), "w") as f:
-            f.write("# sample Groundtalk\n")
-        with open(os.path.join(test_part, "lib/sample.py"), "w") as f:
-            f.write("class Sample: pass\n")
-
-        g_ws = os.path.join(self.test_dir, "grounding_ws")
-        cleanroom_workspace_tool.setup_workspace(
-            role="//update_python_with_ai:grounding",
-            dest=g_ws,
-            repo_root=fake_repo,
-            parts_dirs=["staging"],
-        )
-
-        # 1. Grounding is writable (.py)
-        g_file = os.path.join(g_ws, "staging/parts/sandbox/grounding/sample.py")
-        self.assertTrue(os.path.exists(g_file))
-        st_g = os.stat(g_file)
-        self.assertTrue(bool(st_g.st_mode & stat.S_IWUSR))
-
-        # 2. Upstream low is read-only
-        low_file = os.path.join(g_ws, "staging/parts/sandbox/low/sample.pyi")
-        self.assertTrue(os.path.exists(low_file))
-        st_low = os.stat(low_file)
-        self.assertFalse(bool(st_low.st_mode & stat.S_IWUSR))
-
-        # 3. Downstream lib is excluded
-        self.assertFalse(os.path.exists(os.path.join(g_ws, "staging/parts/sandbox/lib")))
-
-        # 4. feedback_role_deps is non-empty -> bin/blame IS present
-        self.assertTrue(os.path.exists(os.path.join(g_ws, "bin/blame")))
-
-    def test_qa_role_workspace_setup(self) -> None:
-        """Tests that QA setup copies grounding, lib, and tests as read-only, has Bazel scaffolding, and can blame."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_qa")
-        os.makedirs(fake_repo, exist_ok=True)
-        with open(os.path.join(fake_repo, "MODULE.bazel"), "w") as f:
-            f.write("# mock module.bazel\n")
-        test_part = os.path.join(fake_repo, "staging/parts/sandbox")
-        os.makedirs(os.path.join(test_part, "low"), exist_ok=True)
-        os.makedirs(os.path.join(test_part, "grounding"), exist_ok=True)
-        os.makedirs(os.path.join(test_part, "lib"), exist_ok=True)
-        os.makedirs(os.path.join(test_part, "tests"), exist_ok=True)
-
-        with open(os.path.join(test_part, "low/sample.pyi"), "w") as f:
-            f.write("class Sample: pass\n")
-        with open(os.path.join(test_part, "grounding/sample.py"), "w") as f:
-            f.write("# sample Grounding Python\n")
-        with open(os.path.join(test_part, "lib/sample.py"), "w") as f:
-            f.write("class Sample: pass\n")
-        with open(os.path.join(test_part, "tests/sample_test.py"), "w") as f:
-            f.write("def test_sample(): pass\n")
-
-        qa_ws = os.path.join(self.test_dir, "qa_full_ws")
-        cleanroom_workspace_tool.setup_workspace(
-            role="//update_python_with_ai:qa",
-            dest=qa_ws,
-            repo_root=fake_repo,
-            parts_dirs=["staging"],
-        )
-
-        # 1. All code files are read-only
-        for sub, fname in [("low", "sample.pyi"), ("grounding", "sample.py"), ("lib", "sample.py"), ("tests", "sample_test.py")]:
-            f_path = os.path.join(qa_ws, "staging/parts/sandbox", sub, fname)
-            self.assertTrue(os.path.exists(f_path), f"Expected {sub}/{fname} to exist")
-            st = os.stat(f_path)
-            self.assertFalse(bool(st.st_mode & stat.S_IWUSR), f"Expected {sub}/{fname} to be read-only")
-
-        # 2. Bazel scaffolding is present (declared in workspace_files)
-        self.assertTrue(os.path.exists(os.path.join(qa_ws, "MODULE.bazel")))
-
-        # 3. QA can blame
-        self.assertTrue(os.path.exists(os.path.join(qa_ws, "bin/blame")))
-
-        # 4. AGENTS.md specifies Strict Read-Only Mode
-        with open(os.path.join(qa_ws, "AGENTS.md"), "r", encoding="utf-8") as f:
-            content = f.read()
-        self.assertIn("Strict Read-Only Mode", content)
-
-    def test_sync_out_of_band_changes(self) -> None:
-        """Verifies that out-of-band changes to read-write files in role workspace are synced back to canonical repo."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_oob")
-        pkg_dir = os.path.join(fake_repo, "update_with_ai/parts/core")
-        os.makedirs(os.path.join(pkg_dir, "high"), exist_ok=True)
-
-        # 1. Canonical file & textproto
-        high_file = os.path.join(pkg_dir, "high/my_spec.md")
-        with open(high_file, "w", encoding="utf-8") as f:
-            f.write("# original high spec\n")
-
-        tp_path = os.path.join(pkg_dir, ".update_with_ai.textproto")
-        high_node = "//update_with_ai/parts/core:my_spec#//update_python_with_ai:high"
-        grounding_node = "//update_with_ai/parts/core:my_spec#//update_python_with_ai:grounding"
-        cleanroom_workspace_tool.save_package_textproto(
-            tp_path,
-            {
-                high_node: {
-                    "messages": [{"kind": "change", "content": "Initial dirty message"}],
-                    "reverse_dependencies": [grounding_node],
-                },
-                grounding_node: {
-                    "messages": [],
-                    "reverse_dependencies": [],
-                },
-            },
-        )
-
-        # 2. Setup high role workspace
-        high_ws = os.path.join(self.test_dir, "ws_high_oob")
-        cleanroom_workspace_tool.setup_workspace("high", dest=high_ws, repo_root=fake_repo)
-
-        # 3. Simulate out-of-band edit (no bin/submit, COMPLETED.md stays empty)
-        ws_high_file = os.path.join(high_ws, "update_with_ai/parts/core/high/my_spec.md")
-        with open(ws_high_file, "w", encoding="utf-8") as f:
-            f.write("# modified high spec out of band\n")
-
-        # 4. Sync workspace with default submitted mode (sync_all=False) -> should NOT sync unsubmitted files
-        submitted_synced = cleanroom_workspace_tool.sync_workspace("high", dest=high_ws, repo_root=fake_repo, sync_all=False)
-        self.assertEqual(len(submitted_synced), 0)
-
-        # Canonical file should still have original content
-        with open(high_file, "r", encoding="utf-8") as f:
-            self.assertEqual(f.read(), "# original high spec\n")
-
-        # 5. Sync workspace with all read-write files mode (sync_all=True / --all) -> should sync file by edit time
-        synced = cleanroom_workspace_tool.sync_workspace("high", dest=high_ws, repo_root=fake_repo, sync_all=True)
-        self.assertEqual(len(synced), 1)
-        self.assertEqual(synced[0]["target"], "update_with_ai/parts/core/high/my_spec.md")
-
-        # Verify file synced in canonical repo
-        with open(high_file, "r", encoding="utf-8") as f:
-            canonical_content = f.read()
-        self.assertIn("# modified high spec out of band", canonical_content)
-
-        # 6. In --all mode, .update_with_ai.textproto is NOT touched
-        data_after_all = cleanroom_workspace_tool.load_package_textproto(tp_path)
-        self.assertEqual(len(data_after_all[high_node]["messages"]), 1)
-        self.assertEqual(len(data_after_all[grounding_node]["messages"]), 0)
-
-        # 7. Now submit via mailbox and sync without --all -> updates textproto
-        cleanroom_mailbox.submit("update_with_ai/parts/core/high/my_spec.md", "Finalized spec", mailbox_dir=high_ws)
-        submit_synced = cleanroom_workspace_tool.sync_workspace("high", dest=high_ws, repo_root=fake_repo, sync_all=False)
-        self.assertEqual(len(submit_synced), 1)
-
-        updated_data = cleanroom_workspace_tool.load_package_textproto(tp_path)
-        self.assertEqual(len(updated_data[high_node]["messages"]), 0)
-        self.assertEqual(len(updated_data[grounding_node]["messages"]), 1)
-        self.assertIn("Finalized spec", updated_data[grounding_node]["messages"][0]["content"])
-
-        # 8. Running sync again without further changes produces nothing
-        subsequent = cleanroom_workspace_tool.sync_workspace("high", dest=high_ws, repo_root=fake_repo, sync_all=True)
-        self.assertEqual(len(subsequent), 0)
-
-    def test_cleanroom_sync_lifecycle(self) -> None:
-        """Tests unified cleanroom_sync with --role: auto-creates workspace and populates WORK_ORDER.md."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_sync")
-        pkg_dir = os.path.join(fake_repo, "staging/parts/sandbox")
-        os.makedirs(os.path.join(pkg_dir, "low"), exist_ok=True)
-
-        low_file = os.path.join(pkg_dir, "low/sandbox_file_editor.pyi")
-        with open(low_file, "w", encoding="utf-8") as f:
-            f.write("# low spec\n")
-
-        # Dirty low node in textproto
-        tp_path = os.path.join(pkg_dir, ".update_with_ai.textproto")
-        low_node = "//staging/parts/sandbox:sandbox_file_editor#//update_python_with_ai:low"
-        cleanroom_workspace_tool.save_package_textproto(
-            tp_path,
-            {
-                low_node: {
-                    "messages": [{"kind": "change", "content": "check"}],
-                    "reverse_dependencies": [],
-                },
-            },
-        )
-
-        role_dir = cleanroom_workspace_tool.get_default_role_dir("low", repo_root=fake_repo)
-        self.assertEqual(role_dir, os.path.join(self.test_dir, "role_workspaces", "fake_repo_sync_low"))
-        self.assertFalse(os.path.exists(role_dir))
-
-        # Run cleanroom_sync without explicit dest (uses default role dir)
-        ret = cleanroom_workspace_tool.cleanroom_sync(
-            role="//update_python_with_ai:low",
-            parts_dirs=["staging"],
-            repo_root=fake_repo,
-        )
-        self.assertEqual(ret, 0)
-        self.assertTrue(os.path.exists(role_dir))
-
-        # Check metadata
-        meta = cleanroom_workspace_tool.load_role_metadata(role_dir)
-        self.assertIsNotNone(meta)
-        self.assertEqual(meta["role_name"], "low")
-
-        # Check WORK_ORDER.md populated
-        wo_path = os.path.join(role_dir, "WORK_ORDER.md")
-        self.assertTrue(os.path.exists(wo_path))
-        with open(wo_path, "r", encoding="utf-8") as f:
-            wo_content = f.read()
-        self.assertIn("CLEAN staging/parts/sandbox/low/sandbox_file_editor.pyi", wo_content)
-        self.assertIn("REASON: Change: check", wo_content)
-
-    def test_cleanroom_sync_all_existing_workspaces(self) -> None:
-        """Tests that cleanroom_sync without role syncs all existing role workspaces found via metadata."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_multi")
-        pkg_dir = os.path.join(fake_repo, "staging/parts/sandbox")
-        os.makedirs(os.path.join(pkg_dir, "low"), exist_ok=True)
-        os.makedirs(os.path.join(pkg_dir, "grounding"), exist_ok=True)
-
-        low_file = os.path.join(pkg_dir, "low/sample.pyi")
-        with open(low_file, "w") as f:
-            f.write("# initial low\n")
-        gt_file = os.path.join(pkg_dir, "grounding/sample.gt")
-        with open(gt_file, "w") as f:
-            f.write("# initial gt\n")
-
-        # Set up two role workspaces in default workspaces container
-        ws_low = cleanroom_workspace_tool.setup_workspace("//update_python_with_ai:low", repo_root=fake_repo, parts_dirs=["staging"])
-        ws_grounding = cleanroom_workspace_tool.setup_workspace("//update_python_with_ai:grounding", repo_root=fake_repo, parts_dirs=["staging"])
-        self.assertEqual(ws_low, os.path.join(self.test_dir, "role_workspaces", "fake_repo_multi_low"))
-        self.assertEqual(ws_grounding, os.path.join(self.test_dir, "role_workspaces", "fake_repo_multi_grounding"))
-
-        # Submit change from low workspace
-        cleanroom_mailbox.submit("staging/parts/sandbox/low/sample.pyi", "Updated low spec", mailbox_dir=ws_low)
-
-        # Run cleanroom_sync without role
-        ret = cleanroom_workspace_tool.cleanroom_sync(role=None, repo_root=fake_repo)
-        self.assertEqual(ret, 0)
-
-        # Submitted file should have been synced to canonical repo
-        self.assertTrue(os.path.exists(low_file))
-
-    def test_find_existing_role_workspaces_new_and_legacy(self) -> None:
-        """Tests that find_existing_role_workspaces finds both new role_workspaces/<repo>_<role> and legacy <repo>_workspaces/<role>."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_discovery")
-        os.makedirs(fake_repo, exist_ok=True)
-
-        # 1. Create a workspace in new location: role_workspaces/fake_repo_discovery_low
-        new_ws = os.path.join(self.test_dir, "role_workspaces", "fake_repo_discovery_low")
-        os.makedirs(new_ws, exist_ok=True)
-        cleanroom_workspace_tool.save_role_metadata(new_ws, "//update_python_with_ai:low", "low", ["staging"])
-
-        # 2. Create a workspace in legacy location: fake_repo_discovery_workspaces/test
-        legacy_ws = os.path.join(self.test_dir, "fake_repo_discovery_workspaces", "test")
-        os.makedirs(legacy_ws, exist_ok=True)
-        cleanroom_workspace_tool.save_role_metadata(legacy_ws, "//update_python_with_ai:test", "test", ["staging"])
-
-        found = cleanroom_workspace_tool.find_existing_role_workspaces(repo_root=fake_repo)
-        found_dirs = [f[0] for f in found]
-        self.assertIn(new_ws, found_dirs)
-        self.assertIn(legacy_ws, found_dirs)
-
-    def test_outbound_read_write_sync(self) -> None:
-        """Tests that newer read-write files in canonical workspace are synced to role workspace."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_outbound")
-        pkg_dir = os.path.join(fake_repo, "update_with_ai/parts/core/high")
-        os.makedirs(pkg_dir, exist_ok=True)
-
-        high_file = os.path.join(pkg_dir, "doc.md")
-        with open(high_file, "w") as f:
-            f.write("# version 1\n")
-
-        high_ws = os.path.join(self.test_dir, "ws_high_outbound")
-        cleanroom_workspace_tool.setup_workspace("high", dest=high_ws, repo_root=fake_repo)
-
-        ws_file = os.path.join(high_ws, "update_with_ai/parts/core/high/doc.md")
-        with open(ws_file, "r") as f:
-            self.assertEqual(f.read(), "# version 1\n")
-
-        # Update canonical repo file with later timestamp
-        import time
-        time.sleep(0.05)
-        with open(high_file, "w") as f:
-            f.write("# version 2 from workspace\n")
-
-        # Converge workspace
-        cleanroom_workspace_tool.converge_role_workspace(high_ws, fake_repo, "high")
-
-        # Role workspace should receive updated file
-        with open(ws_file, "r") as f:
-            self.assertEqual(f.read(), "# version 2 from workspace\n")
-
-
-    def test_lib_workspace_templates_and_build_update(self) -> None:
-        """Verifies that lib workspace setup materializes missing templates and updates out-of-date lib/BUILD.bazel."""
-        fake_repo = os.path.join(self.test_dir, "fake_lib_repo")
-        part_dir = os.path.join(fake_repo, "update_with_ai/parts/my_feature")
-        os.makedirs(os.path.join(part_dir, "grounding"), exist_ok=True)
-
-        # 1. Author parent BUILD.bazel with update_python_with_ai
         with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write(
-                'load("//update_python_with_ai/support/lib:update_python_with_ai.bzl", "update_python_with_ai")\n\n'
-                'update_python_with_ai(\n'
-                '    name = "feature_engine",\n'
-                '    module_deps = [],\n'
-                ')\n'
-            )
+            f.write('update_python_with_ai(name = "config")\n')
 
-        # 2. Author grounding spec .pyi
-        with open(os.path.join(part_dir, "grounding/feature_engine.pyi"), "w", encoding="utf-8") as f:
-            f.write(
-                'from typing import Protocol\n\n'
-                'class FeatureEngine(Protocol):\n'
-                '    def process(self, data: str) -> bool: ...\n'
-            )
+        low_file = os.path.join(part_dir, "low/config.pyi")
+        lib_file = os.path.join(part_dir, "lib/config.py")
 
-        # Ensure lib/BUILD.bazel and lib/feature_engine.py do NOT exist initially
-        self.assertFalse(os.path.exists(os.path.join(part_dir, "lib/feature_engine.py")))
-        self.assertFalse(os.path.exists(os.path.join(part_dir, "lib/BUILD.bazel")))
-
-        # 3. Setup lib workspace
-        ws_lib = os.path.join(self.test_dir, "ws_lib_auto")
-        cleanroom_workspace_tool.setup_workspace(
-            role="lib",
-            dest=ws_lib,
-            repo_root=fake_repo,
-            parts_dirs=["update_with_ai"],
+        # 1. Initially lib file is missing -> DIRTY
+        low_role_def = cleanroom_workspace_tool.resolve_role_definition(
+            "low", fake_repo
+        )
+        lib_role_def = cleanroom_workspace_tool.resolve_role_definition(
+            "lib", fake_repo
         )
 
-        # Canonical repo assertions: template materialized and BUILD.bazel generated
-        repo_lib_py = os.path.join(part_dir, "lib/feature_engine.py")
-        repo_lib_b = os.path.join(part_dir, "lib/BUILD.bazel")
-        self.assertTrue(os.path.exists(repo_lib_py), "Empty/missing lib source file must be materialized with template")
-        self.assertTrue(os.path.exists(repo_lib_b), "lib/BUILD.bazel must be generated directly from part BUILD.bazel")
+        res = cleanroom_workspace_tool.eval_unit_dirty(
+            fake_repo, "staging/parts/agent", "config", "lib", lib_role_def
+        )
+        self.assertTrue(res["is_dirty"])
 
-        with open(repo_lib_py, "r", encoding="utf-8") as f:
-            py_content = f.read()
-        self.assertIn("class FeatureEngine", py_content)
-        self.assertIn("def process(self", py_content)
+        # 2. Both files stamped clean at T1 -> CLEAN
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:05:00Z",
+            last_changed="2026-10-04T12:05:00Z",
+        )
 
-        with open(repo_lib_b, "r", encoding="utf-8") as f:
-            b_content = f.read()
-        self.assertIn('name = "feature_engine"', b_content)
+        res_clean = cleanroom_workspace_tool.eval_unit_dirty(
+            fake_repo, "staging/parts/agent", "config", "lib", lib_role_def
+        )
+        self.assertFalse(res_clean["is_dirty"])
 
-        # Workspace assertions: files copied with proper permissions
-        ws_lib_py = os.path.join(ws_lib, "update_with_ai/parts/my_feature/lib/feature_engine.py")
-        ws_lib_b = os.path.join(ws_lib, "update_with_ai/parts/my_feature/lib/BUILD.bazel")
-        self.assertTrue(os.path.exists(ws_lib_py))
-        self.assertTrue(os.path.exists(ws_lib_b))
-
-        st_py = os.stat(ws_lib_py)
-        self.assertNotEqual(st_py.st_mode & stat.S_IWUSR, 0, "Workspace lib source file must be writable")
-        st_b = os.stat(ws_lib_b)
-        self.assertEqual(st_b.st_mode & stat.S_IWUSR, 0, "Workspace BUILD file must be read-only")
-
-        # 4. Out of date update test: add a second unit to parent BUILD.bazel
-        with open(os.path.join(part_dir, "BUILD.bazel"), "a", encoding="utf-8") as f:
-            f.write(
-                '\nupdate_python_with_ai(\n'
-                '    name = "feature_helper",\n'
-                '    module_deps = [":feature_engine"],\n'
-                ')\n'
+        # 3. Upstream contract changed at T2 > T1 -> DIRTY
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T12:10:00Z",
+            last_changed="2026-10-04T12:10:00Z",
+            change_summary="Added timeout",
+        )
+        res_after_upstream = cleanroom_workspace_tool.eval_unit_dirty(
+            fake_repo, "staging/parts/agent", "config", "lib", lib_role_def
+        )
+        self.assertTrue(res_after_upstream["is_dirty"])
+        self.assertTrue(
+            any(
+                "modified" in r or "changed" in r for r in res_after_upstream["reasons"]
             )
-        with open(os.path.join(part_dir, "grounding/feature_helper.pyi"), "w", encoding="utf-8") as f:
-            f.write(
-                'class FeatureHelper:\n'
-                '    def help_me(self) -> None: ...\n'
-            )
+        )
 
-        # Converge role workspace
-        cleanroom_workspace_tool.converge_role_workspace(
+        # 4. Unacted feedback on lib file -> DIRTY
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:15:00Z",
+            last_changed="2026-10-04T12:15:00Z",
+        )
+        src_metadata.append_feedback(lib_file, "Missing docstring")
+        res_fb = cleanroom_workspace_tool.eval_unit_dirty(
+            fake_repo, "staging/parts/agent", "config", "lib", lib_role_def
+        )
+        self.assertTrue(res_fb["is_dirty"])
+
+    def test_auditor_dirty_evaluation_and_stamping(self) -> None:
+        """Verifies logless auditor dirtiness evaluation and <ROLE>_AUDIT tag stamping."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_auditor")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "tests"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config_impl")\n')
+
+        lib_file = os.path.join(part_dir, "lib/config_impl.py")
+        test_file = os.path.join(part_dir, "tests/config_impl_test.py")
+        low_file = os.path.join(part_dir, "low/config_impl.pyi")
+
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:05:00Z",
+            last_changed="2026-10-04T12:05:00Z",
+        )
+        src_metadata.update_metadata(
+            test_file,
+            last_cleaned="2026-10-04T12:05:00Z",
+            last_changed="2026-10-04T12:05:00Z",
+        )
+
+        qa_role_def = cleanroom_workspace_tool.resolve_role_definition("qa", fake_repo)
+
+        # 1. QA not yet audited -> DIRTY
+        res = cleanroom_workspace_tool.eval_unit_dirty(
+            fake_repo, "staging/parts/agent", "config_impl", "qa", qa_role_def
+        )
+        self.assertTrue(res["is_dirty"])
+
+        # 2. Stamp QA_AUDIT -> CLEAN
+        src_metadata.stamp_audit(lib_file, "qa")
+        src_metadata.stamp_audit(test_file, "qa")
+
+        res_after_audit = cleanroom_workspace_tool.eval_unit_dirty(
+            fake_repo, "staging/parts/agent", "config_impl", "qa", qa_role_def
+        )
+        self.assertFalse(res_after_audit["is_dirty"])
+
+        # 3. Lib modified after audit -> DIRTY again
+        import time
+
+        time.sleep(0.01)
+        src_metadata.record_change(lib_file, "Updated implementation")
+        res_after_mod = cleanroom_workspace_tool.eval_unit_dirty(
+            fake_repo, "staging/parts/agent", "config_impl", "qa", qa_role_def
+        )
+        self.assertTrue(res_after_mod["is_dirty"])
+
+    def test_read_only_blame_buffer_and_harvest(self) -> None:
+        """Verifies blaming read-only upstream contracts buffers in .cleanroom_blame_buffer.json and harvests on sync."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_blame")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+
+        low_file = os.path.join(part_dir, "low/config.pyi")
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+
+        # Commission lib workspace
+        lib_ws = cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", repo_root=fake_repo
+        )
+
+        # Upstream contract in workspace is read-only
+        ws_low = os.path.join(lib_ws, "staging/parts/agent/low/config.pyi")
+        if os.path.exists(ws_low):
+            st = os.stat(ws_low)
+            self.assertEqual(st.st_mode & stat.S_IWUSR, 0)
+
+        # Run blame from inside the workspace directory
+        orig_cwd = os.getcwd()
+        try:
+            os.chdir(lib_ws)
+            ret = cleanroom_workspace_tool.run_blame_command(
+                "staging/parts/agent/lib/config.py",
+                "staging/parts/agent/low/config.pyi",
+                "Contract missing timeout parameter",
+                repo_root=fake_repo,
+            )
+            self.assertEqual(ret, 0)
+
+            # Blame buffer file must exist in role workspace root
+            buf_path = os.path.join(lib_ws, ".cleanroom_blame_buffer.json")
+            self.assertTrue(os.path.isfile(buf_path))
+            with open(buf_path, "r", encoding="utf-8") as bf:
+                entries = json.load(bf)
+            self.assertEqual(len(entries), 1)
+            self.assertIn(
+                "Contract missing timeout parameter", entries[0]["explanation"]
+            )
+        finally:
+            os.chdir(orig_cwd)
+
+        # Run cleanroom_sync to harvest blame into canonical main
+        cleanroom_workspace_tool.converge_role_workspace(lib_ws, fake_repo, "lib")
+
+        # Canonical file header must have FEEDBACK appended
+        canon_meta = src_metadata.extract_metadata(low_file)
+        self.assertIsNotNone(canon_meta)
+        self.assertEqual(len(canon_meta.feedback), 1)
+        self.assertIn("Contract missing timeout parameter", canon_meta.feedback[0])
+
+        # Blame buffer in role workspace must be cleared
+        with open(buf_path, "r", encoding="utf-8") as bf:
+            buf_cleared = json.load(bf)
+        self.assertEqual(len(buf_cleared), 0)
+
+    def test_inbound_harvest_and_outbound_cascade(self) -> None:
+        """Verifies complete cascade sync: role changes harvested to main, main specs cascaded to role."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_cascade")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+
+        low_file = os.path.join(part_dir, "low/config.pyi")
+        lib_file = os.path.join(part_dir, "lib/config.py")
+
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+
+        # 1. Commission lib workspace
+        lib_ws = cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", repo_root=fake_repo
+        )
+
+        # 2. Worker edits lib/config.py in role workspace
+        ws_lib_file = os.path.join(lib_ws, "staging/parts/agent/lib/config.py")
+        src_metadata.update_metadata(
+            ws_lib_file,
+            last_cleaned="2026-10-04T12:30:00Z",
+            last_changed="2026-10-04T12:30:00Z",
+            change_summary="Implemented timeout handling",
+        )
+
+        # 3. Synchronize
+        cleanroom_workspace_tool.converge_role_workspace(lib_ws, fake_repo, "lib")
+
+        # Canonical file must receive the updated change summary
+        canon_meta = src_metadata.extract_metadata(lib_file)
+        self.assertIsNotNone(canon_meta)
+        self.assertEqual(canon_meta.change_summary, "Implemented timeout handling")
+
+        # 4. Canonical low contract is updated in main
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T13:00:00Z",
+            last_changed="2026-10-04T13:00:00Z",
+            change_summary="Expanded protocol methods",
+        )
+
+        # 5. Outbound cascade sync down to role workspace
+        cleanroom_workspace_tool.converge_role_workspace(lib_ws, fake_repo, "lib")
+
+        ws_low = os.path.join(lib_ws, "staging/parts/agent/low/config.pyi")
+        ws_low_meta = src_metadata.extract_metadata(ws_low)
+        self.assertIsNotNone(ws_low_meta)
+        self.assertEqual(ws_low_meta.change_summary, "Expanded protocol methods")
+
+    def test_conflict_detection(self) -> None:
+        """Verifies that concurrent edits in role and canonical main after last_sync trigger conflict detection."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_conflict")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+
+        lib_file = os.path.join(part_dir, "lib/config.py")
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+
+        # Commission workspace and set known last_sync
+        lib_ws = cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", repo_root=fake_repo
+        )
+        cleanroom_workspace_tool.save_role_metadata(
+            lib_ws,
+            "//update_python_with_ai:lib",
+            "lib",
+            dir_scope="staging",
+            last_sync_timestamp="2026-10-04T12:00:00Z",
+            repo_root=fake_repo,
+        )
+
+        # Mutate canonical main at T = 12:10:00Z
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:10:00Z",
+            last_changed="2026-10-04T12:10:00Z",
+            change_summary="Edit in main",
+        )
+
+        # Mutate role workspace at T = 12:15:00Z with differing content
+        ws_lib = os.path.join(lib_ws, "staging/parts/agent/lib/config.py")
+        src_metadata.update_metadata(
             ws_lib,
-            repo_root=fake_repo,
-            role="lib",
-            parts_dirs=["update_with_ai"],
+            last_cleaned="2026-10-04T12:15:00Z",
+            last_changed="2026-10-04T12:15:00Z",
+            change_summary="Conflicting edit in role",
         )
 
-        # Both canonical and workspace BUILD files must now have feature_helper
-        with open(repo_lib_b, "r", encoding="utf-8") as f:
-            b_updated = f.read()
-        self.assertIn('name = "feature_helper"', b_updated)
-        self.assertIn(':feature_engine', b_updated)
+        # Converge role workspace: conflict detection should prevent overwriting main
+        cleanroom_workspace_tool.converge_role_workspace(lib_ws, fake_repo, "lib")
 
-        with open(ws_lib_b, "r", encoding="utf-8") as f:
-            ws_b_updated = f.read()
-        self.assertIn('name = "feature_helper"', ws_b_updated)
+        canon_meta = src_metadata.extract_metadata(lib_file)
+        self.assertIsNotNone(canon_meta)
+        self.assertEqual(
+            canon_meta.change_summary,
+            "Edit in main",
+            "Main file should not be overwritten on conflict",
+        )
 
-    def test_workspace_copies_node_deps_as_readonly(self) -> None:
-        """Verifies that node_deps declared in define_role are copied to workspace as read-only files."""
-        fake_repo = os.path.join(self.test_dir, "fake_repo_node_deps")
-        pkg_dir = os.path.join(fake_repo, "update_python_with_ai/support/lib")
-        os.makedirs(pkg_dir, exist_ok=True)
-        with open(os.path.join(pkg_dir, "framework.pyi"), "w", encoding="utf-8") as f:
-            f.write("# framework stubs\n")
-        with open(os.path.join(pkg_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_with_ai(name = "framework_spec", src = "framework.pyi")\n')
+    def test_decommission_workspace_safety(self) -> None:
+        """Verifies decommission_workspace safety check: refuses when dirty unless force=True."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_decomm")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
 
-        role_def = {
-            "name": "low",
-            "pkg": "update_python_with_ai",
-            "src_pattern": "{unit_dir}/low/{unit_name}.pyi",
-            "node_deps": ["//update_python_with_ai/support/lib:framework_spec"],
-            "workspace_files": [],
-            "tools": [],
-        }
-        ws_dir = os.path.join(self.test_dir, "ws_low")
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+
+        lib_file = os.path.join(part_dir, "lib/config.py")
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+
+        lib_ws = cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", repo_root=fake_repo
+        )
+
+        # Mutate file in role workspace without syncing
+        ws_lib = os.path.join(lib_ws, "staging/parts/agent/lib/config.py")
+        with open(ws_lib, "a") as f:
+            f.write("\n# uncommitted change\n")
+
+        # Decommission without force should fail
+        refused = cleanroom_workspace_tool.decommission_workspace(
+            "lib", dir_scope="staging", dest=lib_ws, force=False, repo_root=fake_repo
+        )
+        self.assertFalse(refused)
+        self.assertTrue(os.path.exists(lib_ws))
+
+        # Decommission with force should succeed
+        succeeded = cleanroom_workspace_tool.decommission_workspace(
+            "lib", dir_scope="staging", dest=lib_ws, force=True, repo_root=fake_repo
+        )
+        self.assertTrue(succeeded)
+        self.assertFalse(os.path.exists(lib_ws))
+
+    def test_find_existing_role_workspaces_directory_scoped(self) -> None:
+        """Tests that find_existing_role_workspaces finds directory-scoped workspaces."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_disc")
+        os.makedirs(fake_repo, exist_ok=True)
+
+        ws_dir = os.path.join(
+            self.test_dir, "role_workspaces", "fake_repo_disc_lib_staging"
+        )
         os.makedirs(ws_dir, exist_ok=True)
-        cleanroom_workspace_tool.copy_readonly_files_and_stubs(ws_dir, fake_repo, role_def, parts_bases=[])
-        copied_file = os.path.join(ws_dir, "update_python_with_ai/support/lib/framework.pyi")
-        self.assertTrue(os.path.isfile(copied_file))
-        st = os.stat(copied_file)
-        self.assertFalse(bool(st.st_mode & stat.S_IWUSR), "Expected framework.pyi to be read-only")
+        cleanroom_workspace_tool.save_role_metadata(
+            ws_dir,
+            "//update_python_with_ai:lib",
+            "lib",
+            dir_scope="staging",
+            repo_root=fake_repo,
+        )
+
+        found = cleanroom_workspace_tool.find_existing_role_workspaces(
+            repo_root=fake_repo
+        )
+        found_dirs = [f[0] for f in found]
+        self.assertIn(ws_dir, found_dirs)
+
+    def test_commission_decommission_registry_tracking(self) -> None:
+        """Verifies that commission and decommission accurately update .cleanroom_workspaces.json."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_registry")
+        os.makedirs(fake_repo, exist_ok=True)
+        lib_ws = os.path.join(self.test_dir, "ws_lib_reg")
+
+        cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", dest=lib_ws, repo_root=fake_repo
+        )
+        registered = cleanroom_workspace_tool.load_registered_workspaces(fake_repo)
+        self.assertEqual(len(registered), 1)
+        self.assertEqual(registered[0]["role"], "lib")
+        self.assertEqual(registered[0]["dir"], "staging")
+        self.assertEqual(registered[0]["workspace_dir"], os.path.abspath(lib_ws))
+
+        cleanroom_workspace_tool.decommission_workspace(
+            "lib", dir_scope="staging", dest=lib_ws, force=True, repo_root=fake_repo
+        )
+        registered_after = cleanroom_workspace_tool.load_registered_workspaces(
+            fake_repo
+        )
+        self.assertEqual(len(registered_after), 0)
+
+    def test_cli_positional_commands(self) -> None:
+        """Verifies that positional commission and decommission subcommands work via main()."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_cli")
+        os.makedirs(fake_repo, exist_ok=True)
+        ws_dest = os.path.join(self.test_dir, "ws_cli")
+
+        # Positional: cleanroom-sync commission lib staging --dest <dest>
+        ret_comm = cleanroom_workspace_tool.main(
+            ["commission", "lib", "staging", "--dest", ws_dest]
+        )
+        self.assertEqual(ret_comm, 0)
+        self.assertTrue(os.path.isdir(ws_dest))
+
+        # Positional: cleanroom-sync decommission lib staging --dest <dest> --force
+        ret_decomm = cleanroom_workspace_tool.main(
+            ["decommission", "lib", "staging", "--dest", ws_dest, "--force"]
+        )
+        self.assertEqual(ret_decomm, 0)
+        self.assertFalse(os.path.exists(ws_dest))
+
+    def test_two_way_sync_and_audit_sync(self) -> None:
+        """Verifies two-way synchronization: role changes harvested, main specs pushed, audits synchronized."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_twoway")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+
+        lib_file = os.path.join(part_dir, "lib/config.py")
+        low_file = os.path.join(part_dir, "low/config.pyi")
+
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T10:00:00Z",
+            last_changed="2026-10-04T10:00:00Z",
+        )
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T10:00:00Z",
+            last_changed="2026-10-04T10:00:00Z",
+        )
+
+        # Commission workspace
+        lib_ws = cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", repo_root=fake_repo
+        )
+
+        # 1. Role workspace modifies lib/config.py with newer LAST_CHANGED and stamps QA_AUDIT
+        ws_lib = os.path.join(lib_ws, "staging/parts/agent/lib/config.py")
+        src_metadata.update_metadata(
+            ws_lib,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+            change_summary="Role updated config",
+            audits={"QA_AUDIT": "2026-10-04T12:00:00Z"},
+        )
+
+        # 2. Canonical main updates low/config.pyi with newer LAST_CHANGED
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T13:00:00Z",
+            last_changed="2026-10-04T13:00:00Z",
+            change_summary="Main updated spec",
+        )
+
+        # 3. Zero-argument sync across all commissioned workspaces
+        ret = cleanroom_workspace_tool.cleanroom_sync(repo_root=fake_repo)
+        self.assertEqual(ret, 0)
+
+        # Verify role change and audit were harvested into main
+        main_lib_meta = src_metadata.extract_metadata(lib_file)
+        self.assertIsNotNone(main_lib_meta)
+        self.assertEqual(main_lib_meta.last_changed, "2026-10-04T12:00:00Z")
+        self.assertEqual(main_lib_meta.change_summary, "Role updated config")
+        self.assertEqual(main_lib_meta.audits.get("QA_AUDIT"), "2026-10-04T12:00:00Z")
+
+        # Verify main spec change was pushed into role workspace
+        ws_low = os.path.join(lib_ws, "staging/parts/agent/low/config.pyi")
+        ws_low_meta = src_metadata.extract_metadata(ws_low)
+        self.assertIsNotNone(ws_low_meta)
+        self.assertEqual(ws_low_meta.last_changed, "2026-10-04T13:00:00Z")
+        self.assertEqual(ws_low_meta.change_summary, "Main updated spec")
+
+    def test_cleanroom_sync_sys_flag_and_opaque_tools(self) -> None:
+        """Verifies that bin tools are opaque zipapps and --sys refreshes non-parts system files."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_sys")
+        os.makedirs(fake_repo, exist_ok=True)
+        pyright_cfg = os.path.join(fake_repo, "pyrightconfig.json")
+        with open(pyright_cfg, "w", encoding="utf-8") as f:
+            f.write('{"version": 1}\n')
+
+        lib_ws = cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", repo_root=fake_repo
+        )
+
+        # 1. Verify bin/ tools are opaque zipapp binaries (starts with shebang + zip magic bytes PK)
+        get_work_bin = os.path.join(lib_ws, "bin/get_work")
+        self.assertTrue(os.path.isfile(get_work_bin))
+        with open(get_work_bin, "rb") as f:
+            header = f.read(30)
+        self.assertTrue(header.startswith(b"#!/usr/bin/env python3\nPK"))
+
+        # Verify no loose python scripts or orchestrator tools in bin/
+        self.assertFalse(
+            os.path.exists(os.path.join(lib_ws, "bin/cleanroom_workspace_tool.py"))
+        )
+        self.assertFalse(
+            os.path.exists(os.path.join(lib_ws, "bin/cleanroom_role_tool.py"))
+        )
+
+        # 2. Update system config in main repo
+        with open(pyright_cfg, "w", encoding="utf-8") as f:
+            f.write('{"version": 2}\n')
+
+        # 3. Run sync with sys_refresh=True
+        ret = cleanroom_workspace_tool.cleanroom_sync(
+            repo_root=fake_repo, sys_refresh=True
+        )
+        self.assertEqual(ret, 0)
+
+        # 4. Verify system file was refreshed in role workspace
+        ws_pyright = os.path.join(lib_ws, "pyrightconfig.json")
+        with open(ws_pyright, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read().strip(), '{"version": 2}')
+
+    def test_dirty_propagation_from_main_to_role_workspaces(self) -> None:
+        """Verifies that clearing LAST_CLEANED or removing AUDIT tags in main propagates to role workspaces."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_dirty_prop")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+
+        lib_file = os.path.join(part_dir, "lib/config.py")
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+            audits={"QA_AUDIT": "2026-10-04T12:00:00Z"},
+        )
+
+        # Commission both lib workspace and qa workspace
+        lib_ws = cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", repo_root=fake_repo
+        )
+        qa_ws = cleanroom_workspace_tool.commission_workspace(
+            "qa", dir_scope="staging", repo_root=fake_repo
+        )
+
+        # Initially, role workspaces have LAST_CLEANED and QA_AUDIT
+        ws_lib = os.path.join(lib_ws, "staging/parts/agent/lib/config.py")
+        ws_qa = os.path.join(qa_ws, "staging/parts/agent/lib/config.py")
+        self.assertIsNotNone(src_metadata.extract_metadata(ws_lib).last_cleaned)
+        self.assertIn("QA_AUDIT", src_metadata.extract_metadata(ws_lib).audits)
+        self.assertIn("QA_AUDIT", src_metadata.extract_metadata(ws_qa).audits)
+
+        # 1. Dirty producer node in main: clear LAST_CLEANED
+        src_metadata.delete_last_cleaned(lib_file)
+        self.assertIsNone(src_metadata.extract_metadata(lib_file).last_cleaned)
+
+        # 2. Dirty auditor node in main: remove QA_AUDIT
+        src_metadata.update_metadata(lib_file, clear_audits=True)
+        self.assertNotIn("QA_AUDIT", src_metadata.extract_metadata(lib_file).audits)
+
+        # 3. Synchronize
+        cleanroom_workspace_tool.cleanroom_sync(repo_root=fake_repo)
+
+        # 4. Verify main DID NOT resurrect QA_AUDIT
+        main_meta = src_metadata.extract_metadata(lib_file)
+        self.assertIsNone(main_meta.last_cleaned)
+        self.assertNotIn("QA_AUDIT", main_meta.audits)
+
+        # 5. Verify lib workspace had LAST_CLEANED cleared and QA_AUDIT removed
+        lib_meta = src_metadata.extract_metadata(ws_lib)
+        self.assertIsNone(lib_meta.last_cleaned)
+        self.assertNotIn("QA_AUDIT", lib_meta.audits)
+
+        # 6. Verify qa workspace had QA_AUDIT removed
+        qa_meta = src_metadata.extract_metadata(ws_qa)
+        self.assertNotIn("QA_AUDIT", qa_meta.audits)
+
+    def test_dirty_tag_two_way_sync_lifecycle(self) -> None:
+        """Verifies producer node dirtying with DIRTY tag propagates to workspace,
+        and cleaning in workspace removes DIRTY tag and propagates back to main.
+        """
+        fake_repo = os.path.join(self.test_dir, "fake_repo_dirty_tag")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+
+        lib_file = os.path.join(part_dir, "lib/config.py")
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+
+        lib_ws = cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", repo_root=fake_repo
+        )
+        ws_lib = os.path.join(lib_ws, "staging/parts/agent/lib/config.py")
+
+        # 1. Main marks dirty with DIRTY tag
+        src_metadata.mark_dirty(lib_file, reason="Manual dirty verification needed")
+        main_meta = src_metadata.extract_metadata(lib_file)
+        self.assertIsNotNone(main_meta)
+        assert main_meta is not None
+        self.assertEqual(main_meta.dirty, "Manual dirty verification needed")
+
+        # 2. Sync to role workspace
+        cleanroom_workspace_tool.cleanroom_sync(repo_root=fake_repo)
+
+        # 3. Workspace should have the DIRTY tag and be evaluated as dirty
+        ws_meta = src_metadata.extract_metadata(ws_lib)
+        self.assertIsNotNone(ws_meta)
+        assert ws_meta is not None
+        self.assertEqual(ws_meta.dirty, "Manual dirty verification needed")
+        eval_res = cleanroom_workspace_tool.eval_unit_dirty(
+            lib_ws,
+            "staging/parts/agent",
+            "config",
+            "lib",
+            cleanroom_workspace_tool.resolve_role_definition("lib", fake_repo),
+        )
+        self.assertTrue(eval_res["is_dirty"])
+        self.assertTrue(any("DIRTY" in r for r in eval_res["reasons"]))
+
+        # 4. Workspace cleans the file (simulating bin/submit)
+        src_metadata.mark_clean(ws_lib)
+        ws_meta_clean = src_metadata.extract_metadata(ws_lib)
+        self.assertIsNotNone(ws_meta_clean)
+        assert ws_meta_clean is not None
+        self.assertIsNone(ws_meta_clean.dirty)
+
+        # 5. Sync back to main
+        cleanroom_workspace_tool.cleanroom_sync(repo_root=fake_repo)
+
+        # 6. Main receives the clean file without DIRTY tag
+        main_meta_clean = src_metadata.extract_metadata(lib_file)
+        self.assertIsNotNone(main_meta_clean)
+        assert main_meta_clean is not None
+        self.assertIsNone(main_meta_clean.dirty)
+        self.assertEqual(main_meta_clean.last_cleaned, ws_meta_clean.last_cleaned)
+
+    def test_auditor_buffer_harvesting_and_dirty_handling(self) -> None:
+        """Verifies auditor workspace buffering via .cleanroom_audit_buffer.json,
+        harvesting into main, and mark_node_dirty behavior on auditor nodes.
+        """
+        fake_repo = os.path.join(self.test_dir, "fake_repo_auditor_buf")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "tests"), exist_ok=True)
+
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+
+        lib_file = os.path.join(part_dir, "lib/config.py")
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+
+        qa_ws = cleanroom_workspace_tool.commission_workspace(
+            "qa", dir_scope="staging", repo_root=fake_repo
+        )
+        ws_lib = os.path.join(qa_ws, "staging/parts/agent/lib/config.py")
+
+        # In qa workspace, lib/config.py is read-only
+        st = os.stat(ws_lib)
+        self.assertFalse(bool(st.st_mode & stat.S_IWUSR))
+
+        # 1. QA writes an audit entry into .cleanroom_audit_buffer.json (without touching read-only file)
+        audit_buf_path = os.path.join(qa_ws, cleanroom_workspace_tool.AUDIT_BUFFER_FILE)
+        entries = [
+            {
+                "target": "staging/parts/agent/lib/config.py",
+                "audited_by": "qa",
+                "audit_tag": "QA_AUDIT",
+                "timestamp": "2026-10-04T15:00:00Z",
+            }
+        ]
+        with open(audit_buf_path, "w", encoding="utf-8") as f:
+            json.dump(entries, f)
+
+        # 2. Sync harvests the buffer into main
+        cleanroom_workspace_tool.cleanroom_sync(repo_root=fake_repo)
+
+        # 3. Verify main received QA_AUDIT and buffer was cleared
+        main_meta = src_metadata.extract_metadata(lib_file)
+        self.assertIsNotNone(main_meta)
+        assert main_meta is not None
+        self.assertEqual(main_meta.audits.get("QA_AUDIT"), "2026-10-04T15:00:00Z")
+        with open(audit_buf_path, "r", encoding="utf-8") as f:
+            self.assertEqual(json.load(f), [])
+
+        # 4. Calling mark_node_dirty on auditor node when target is clean -> removes audit tag
+        res = cleanroom_workspace_tool.mark_node_dirty(
+            "staging/parts/agent", "config", "qa", repo_root=fake_repo
+        )
+        self.assertTrue(res)
+        main_meta_after_dirty = src_metadata.extract_metadata(lib_file)
+        self.assertIsNotNone(main_meta_after_dirty)
+        assert main_meta_after_dirty is not None
+        self.assertNotIn("QA_AUDIT", main_meta_after_dirty.audits)
+
+        # 5. Calling mark_node_dirty on auditor node when target is ALREADY dirty -> no-op
+        # Mark target dirty first:
+        src_metadata.mark_dirty(lib_file, "Target broken")
+        res_noop = cleanroom_workspace_tool.mark_node_dirty(
+            "staging/parts/agent", "config", "qa", repo_root=fake_repo
+        )
+        self.assertFalse(res_noop)
+
+    def test_classify_unit_type(self) -> None:
+        """Verifies cleanroom component classification: _ext, _asm, _impl, and interface default."""
+        self.assertEqual(
+            cleanroom_workspace_tool.classify_unit_type("commonmark_ext"), "external"
+        )
+        self.assertEqual(
+            cleanroom_workspace_tool.classify_unit_type("dag_asm"), "assembly"
+        )
+        self.assertEqual(
+            cleanroom_workspace_tool.classify_unit_type("sandbox_file_reader_impl"),
+            "implementation",
+        )
+        self.assertEqual(
+            cleanroom_workspace_tool.classify_unit_type("agent_config"), "interface"
+        )
+        self.assertEqual(
+            cleanroom_workspace_tool.classify_unit_type("dag_storage"), "interface"
+        )
+        self.assertEqual(
+            cleanroom_workspace_tool.classify_unit_type("runner_logger"), "interface"
+        )
+
+    def test_commission_qa_workspace_build_files(self) -> None:
+        """Verifies QA auditor workspace receives BUILD.bazel for feedback deps (lib and tests), not star_role_deps."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_qa_build")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "tests"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config_impl")\n')
+        with open(
+            os.path.join(part_dir, "lib/BUILD.bazel"), "w", encoding="utf-8"
+        ) as f:
+            f.write("# lib build\n")
+        with open(
+            os.path.join(part_dir, "tests/BUILD.bazel"), "w", encoding="utf-8"
+        ) as f:
+            f.write("# tests build\n")
+        with open(
+            os.path.join(part_dir, "low/BUILD.bazel"), "w", encoding="utf-8"
+        ) as f:
+            f.write("# low build\n")
+
+        lib_file = os.path.join(part_dir, "lib/config_impl.py")
+        test_file = os.path.join(part_dir, "tests/config_impl_test.py")
+        low_file = os.path.join(part_dir, "low/config_impl.pyi")
+
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:05:00Z",
+            last_changed="2026-10-04T12:05:00Z",
+        )
+        src_metadata.update_metadata(
+            test_file,
+            last_cleaned="2026-10-04T12:05:00Z",
+            last_changed="2026-10-04T12:05:00Z",
+        )
+
+        qa_ws = cleanroom_workspace_tool.commission_workspace(
+            "qa", dir_scope="staging", repo_root=fake_repo
+        )
+
+        # lib and tests are feedback_role_deps for QA -> MUST have BUILD.bazel
+        self.assertTrue(
+            os.path.isfile(os.path.join(qa_ws, "staging/parts/agent/lib/BUILD.bazel"))
+        )
+        self.assertTrue(
+            os.path.isfile(os.path.join(qa_ws, "staging/parts/agent/tests/BUILD.bazel"))
+        )
+
+        # low is star_role_deps for QA -> must NOT have BUILD.bazel
+        self.assertFalse(
+            os.path.exists(os.path.join(qa_ws, "staging/parts/agent/low/BUILD.bazel"))
+        )
+
+    def test_write_role_agents_md_loosely_specified(self) -> None:
+        """Verifies AGENTS.md instructs following companion guide rather than prescribing rigid view_file sequence."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_agents_md")
+        qa_ws = os.path.join(fake_repo, "qa_ws")
+        lib_ws = os.path.join(fake_repo, "lib_ws")
+        os.makedirs(qa_ws, exist_ok=True)
+        os.makedirs(lib_ws, exist_ok=True)
+
+        cleanroom_workspace_tool.write_role_agents_md(qa_ws, "qa", repo_root=fake_repo)
+        cleanroom_workspace_tool.write_role_agents_md(
+            lib_ws, "lib", repo_root=fake_repo
+        )
+
+        with open(os.path.join(qa_ws, "AGENTS.md"), "r", encoding="utf-8") as f:
+            qa_content = f.read()
+        self.assertIn("Follow the companion guide", qa_content)
+        self.assertNotIn(
+            "call view_file on target implementation, test, and contract files",
+            qa_content,
+        )
+
+        with open(os.path.join(lib_ws, "AGENTS.md"), "r", encoding="utf-8") as f:
+            lib_content = f.read()
+        self.assertIn("Follow the companion guide", lib_content)
+        self.assertNotIn(
+            "call view_file on both the upstream contract and the target file",
+            lib_content,
+        )
+
+    def test_find_all_dirty_in_scope_auditor_target_file(self) -> None:
+        """Verifies find_all_dirty_in_scope sets target_file to primary feedback target for auditor roles."""
+        fake_repo = os.path.join(self.test_dir, "fake_repo_dirty_scope")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "tests"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config_impl")\n')
+
+        lib_file = os.path.join(part_dir, "lib/config_impl.py")
+        test_file = os.path.join(part_dir, "tests/config_impl_test.py")
+        low_file = os.path.join(part_dir, "low/config_impl.pyi")
+
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:05:00Z",
+            last_changed="2026-10-04T12:05:00Z",
+        )
+        src_metadata.update_metadata(
+            test_file,
+            last_cleaned="2026-10-04T12:05:00Z",
+            last_changed="2026-10-04T12:05:00Z",
+        )
+
+        dirty_items = cleanroom_workspace_tool.find_all_dirty_in_scope(
+            fake_repo, dir_scope="staging", role_filter="qa"
+        )
+        self.assertEqual(len(dirty_items), 1)
+        item = dirty_items[0]
+        # Target file must be lib/config_impl.py, NOT virtual qa/config_impl
+        self.assertEqual(item["target_file"], "staging/parts/agent/lib/config_impl.py")
+        # Reasons must only list the primary target as uncertified
+        self.assertEqual(len(item["reasons"]), 1)
+        self.assertIn(
+            "staging/parts/agent/lib/config_impl.py has not been certified with QA_AUDIT",
+            item["reasons"][0],
+        )
 
 
 if __name__ == "__main__":
     unittest.main()
-
-

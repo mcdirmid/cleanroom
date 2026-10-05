@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 4abc72f8c662
+# --- END CLEANROOM METADATA ---
+
 """Agent storage low-level interface specification."""
 
 from dataclasses import dataclass

@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: e4beec8d2156
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Sandbox file editor grounding specification module."""
 
 from __future__ import annotations
@@ -34,7 +42,9 @@ class EditingTool(tool_provider.Tool, Protocol):
         raise NotImplementedError
 
     @property
-    def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
+    def parameters(
+        self,
+    ) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         """
         DEFERRED:
         - Parameters accepted by editing tool.
@@ -43,7 +53,9 @@ class EditingTool(tool_provider.Tool, Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         DEFERRED:
@@ -125,7 +137,9 @@ class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
     """Editing tool that replaces target content in a read-write file."""
 
     @property
-    def path_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
+    def path_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         """
         DEFERRED:
         - Path parameter specification.
@@ -133,7 +147,9 @@ class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
         raise NotImplementedError
 
     @property
-    def target_content_parameter(self) -> tool_provider.ToolParameter[TargetContent, str]:
+    def target_content_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[TargetContent, str]:
         """
         DEFERRED:
         - Target content parameter specification.
@@ -141,7 +157,9 @@ class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
         raise NotImplementedError
 
     @property
-    def replacement_content_parameter(self) -> tool_provider.ToolParameter[ReplacementContent, str]:
+    def replacement_content_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[ReplacementContent, str]:
         """
         DEFERRED:
         - Replacement content parameter specification.
@@ -149,7 +167,9 @@ class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
         raise NotImplementedError
 
     @property
-    def start_line_parameter(self) -> tool_provider.ToolParameter[Optional[LineNumber], int]:
+    def start_line_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[Optional[LineNumber], int]:
         """
         DEFERRED:
         - Start line parameter specification.
@@ -157,7 +177,9 @@ class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
         raise NotImplementedError
 
     @property
-    def end_line_parameter(self) -> tool_provider.ToolParameter[Optional[LineNumber], int]:
+    def end_line_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[Optional[LineNumber], int]:
         """
         DEFERRED:
         - End line parameter specification.
@@ -165,7 +187,9 @@ class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
         raise NotImplementedError
 
     @property
-    def allow_multiple_parameter(self) -> tool_provider.ToolParameter[AllowMultiple, bool]:
+    def allow_multiple_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[AllowMultiple, bool]:
         """
         DEFERRED:
         - Allow multiple parameter specification.
@@ -174,7 +198,9 @@ class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -186,7 +212,7 @@ class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
           - Consequent knowledge: replace all occurrences in content.
 
         DEFERRED:
-        - In-place text replacement algorithm, line bounds checks, and exact match fallback deferred to sandbox_file_editor_impl.py.        """
+        - In-place text replacement algorithm, line bounds checks, and exact match fallback deferred to sandbox_file_editor_impl.py."""
         sample_param = key(actual_parameter_bindings)
         sample_val = value(actual_parameter_bindings)
         _resp = tool_provider.ToolResponse(

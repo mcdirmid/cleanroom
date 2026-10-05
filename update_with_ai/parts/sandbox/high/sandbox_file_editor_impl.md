@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: bfea105abe5b
+-->
+
 # sandbox_file_editor_impl implementation component
 
 imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config
@@ -13,9 +20,9 @@ Unchecked writes to source code can introduce partial edits, exceed LLM window c
 
 ## Types and Behavior
 
-The edit manager provides the replace file content tool for the agent session when mcp mode is inactive, installs no editing tools when mcp mode is active, and provides a can write operation validating write access for a read-write file. At session initialization, the edit manager records initial content baselines for active read-write files.
+The edit manager provides the replace file content tool for the agent session when mcp mode is inactive, installs no editing tools when mcp mode is active, and provides a can write operation validating write access for a read-write file.
 
-The edit manager exposes whether workspace file writes occurred during the session by comparing current workspace file content against initial content before editing, tracks a file update revision that increments whenever workspace files are updated, and computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of the content. The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
+The edit manager exposes whether workspace file writes occurred during the session by comparing current workspace file content against their in-band code hash, tracks a file update revision that increments whenever workspace files are updated, and computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of the content. The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
 
 Editing tools write to read-write files in the workspace.
 
@@ -68,4 +75,3 @@ Executing can write:
 - Fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be written.
 
 - Records the file edit in the edit manager and produces a successful response indicating that write access is permitted, when a declared read-write file is supplied.
-

@@ -1,7 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-04T19:49:10Z
+LAST_CLEANED: 2026-10-05T02:07:35Z
 LAST_CHANGED: 2026-10-04T02:03:40Z
 CHANGE: new file
+CODE_HASH: df1e18791f13
 -->
 
 # Guide: Grounding QA Arbiter
@@ -23,9 +24,13 @@ The Grounding QA arbiter's sole responsibility is auditing the grounding feasibi
 - [ ] In multi-node sessions, each target grounding specification is identified by its file alias relative path (`grounding/<name>.py`), evaluated independently for its corresponding module, and submitted individually via `submit(target="<target_file>")`
 
 - [ ] Every class, protocol, data type, parameter type, and variant declared in `low/<name>.pyi` is verified to exist in `grounding/<name>.py` with identical naming
+
 - [ ] In implementation specifications (`grounding/<name>_impl.py`), every class declared in `low/<name>_impl.pyi` is verified to be declared and implemented
+
 - [ ] Every method, property, and initialization sequence declared in `low/<name>.pyi` is verified to be declared on the corresponding grounding class, and implemented in non-interface modules
+
 - [ ] Parameter names, default values, and type annotations in grounding method signatures match their declarations in `low/<name>.pyi`
+
 - [ ] Missing classes, missing variants, missing parameter types, or missing methods are flagged as completeness defects, resulting in blame attributed to the grounding module citing the missing symbols
 
 ## Contract clause accountability audit

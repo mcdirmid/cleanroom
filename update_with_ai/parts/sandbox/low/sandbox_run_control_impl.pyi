@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 00de0252800a
+# --- END CLEANROOM METADATA ---
+
 """Sandbox run control implementation low-level specification."""
 
 from typing import Any, Mapping, Optional, Sequence, Set
@@ -92,6 +99,7 @@ class SubmitTool(
         - WHEN session feedback is present and no files were modified, MUST fail.
         - WHEN target is an auditor node and change summary is provided, MUST fail reminding agent that change summary is prohibited for audit nodes.
         - WHEN files were modified and change summary is omitted, MUST fail.
+        - WHEN workspace files were not modified and change summary is provided, MUST fail reminding agent that change summaries are not permitted when submitting without workspace file modifications.
         - MUST mark the resolve target clean in storage via dag_storage with the provided change summary so that the node is no longer dirty.
         - MUST mark resolve target clean in current turn.
         """

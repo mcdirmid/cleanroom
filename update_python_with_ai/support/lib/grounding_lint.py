@@ -89,7 +89,9 @@ def _check_docstring_contracts(
             cur_section = None
             continue
 
-        if (line.endswith(":") and re.match(r"^[A-Z_ ]+(\([A-Z_ ]+\))?:$", line)) or line in (
+        if (
+            line.endswith(":") and re.match(r"^[A-Z_ ]+(\([A-Z_ ]+\))?:$", line)
+        ) or line in (
             "Args:",
             "Returns:",
             "Raises:",
@@ -444,9 +446,7 @@ def lint_grounding_file(file_path: Path) -> list[str]:
                         errors.extend(d_errs)
 
                     # Check terminal raise
-                    errors.extend(
-                        _check_terminal_raise(member, fname, m_has_covered)
-                    )
+                    errors.extend(_check_terminal_raise(member, fname, m_has_covered))
 
                     # Check self recursion
                     errors.extend(_check_self_recursion(member, fname))

@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: fde7d42c7f61
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Bazel manifest loader implementation grounding specification module."""
 
 from __future__ import annotations
@@ -67,7 +75,9 @@ class BazelManifestLoader(
 
         unit_data: Mapping[str, Any] = bazel_manifest_ext.load_unit_manifest(unit_text)
         role_data: Mapping[str, Any] = bazel_manifest_ext.load_role_manifest(role_text)
-        _target_data: Mapping[str, Any] = bazel_manifest_ext.load_target_manifest(target_text)
+        _target_data: Mapping[str, Any] = bazel_manifest_ext.load_target_manifest(
+            target_text
+        )
 
         _unit_name: str = str(unit_data["name"])
         _unit_dir: str = str(unit_data["dir"])
@@ -76,24 +86,32 @@ class BazelManifestLoader(
         _is_active: bool = _component_type in _active_types
 
         src_pattern: str = str(role_data["src_pattern"])
-        resolved_src: str = src_pattern.replace("{unit_dir}", _unit_dir).replace("{unit_name}", _unit_name)
+        resolved_src: str = src_pattern.replace("{unit_dir}", _unit_dir).replace(
+            "{unit_name}", _unit_name
+        )
 
         prompt_pattern: str = str(role_data["prompt_template"])
-        resolved_prompt: str = prompt_pattern.replace("{unit_dir}", _unit_dir).replace("{unit_name}", _unit_name)
+        resolved_prompt: str = prompt_pattern.replace("{unit_dir}", _unit_dir).replace(
+            "{unit_name}", _unit_name
+        )
 
         check_template: str = str(role_data.get("check_template", "{unit_name}_check"))
-        _resolved_check: str = check_template.replace("{unit_name}", _unit_name).replace("{unit_dir}", _unit_dir)
+        _resolved_check: str = check_template.replace(
+            "{unit_name}", _unit_name
+        ).replace("{unit_dir}", _unit_dir)
 
         _unit_dep: str = only_elem(unit_data["unit_deps"])
         _role_dep: str = str(role_data["name"])
-        synthesized_dep: bazel_manifest_loader.TargetLabel = bazel_manifest_loader.TargetLabel(
-            f"{_unit_dep}#{_role_dep}"
+        synthesized_dep: bazel_manifest_loader.TargetLabel = (
+            bazel_manifest_loader.TargetLabel(f"{_unit_dep}#{_role_dep}")
         )
 
-        _pass_through_manifest: bazel_manifest_loader.TargetManifest = bazel_manifest_loader.TargetManifest(
-            label=bazel_manifest_loader.TargetLabel(str(node.unit_address)),
-            task_prompt=None,
-            source_file=None,
+        _pass_through_manifest: bazel_manifest_loader.TargetManifest = (
+            bazel_manifest_loader.TargetManifest(
+                label=bazel_manifest_loader.TargetLabel(str(node.unit_address)),
+                task_prompt=None,
+                source_file=None,
+            )
         )
 
         _target_manifest = bazel_manifest_loader.TargetManifest(
@@ -122,14 +140,23 @@ class BazelManifestLoader(
           - Condition knowledge: access manifest.silent_dependencies via only_elem.
           - Consequent knowledge: register silent dependent edge.
         - MUST synthesize fallback node definitions for referenced targets lacking manifests.
-          - Consequent knowledge: store fallback NodeDefinition with empty task prompt.        """
-        storage: bazel_storage_impl.AgentStorage = self.get_singleton(bazel_storage_impl.AgentStorage)
-        manifest: Optional[bazel_manifest_loader.TargetManifest] = self.retrieve_manifest(node)
-        sample_manifest: bazel_manifest_loader.TargetManifest = manifest or bazel_manifest_loader.TargetManifest(
-            label=bazel_manifest_loader.TargetLabel(str(node.unit_address))
+          - Consequent knowledge: store fallback NodeDefinition with empty task prompt."""
+        storage: bazel_storage_impl.AgentStorage = self.get_singleton(
+            bazel_storage_impl.AgentStorage
+        )
+        manifest: Optional[bazel_manifest_loader.TargetManifest] = (
+            self.retrieve_manifest(node)
+        )
+        sample_manifest: bazel_manifest_loader.TargetManifest = (
+            manifest
+            or bazel_manifest_loader.TargetManifest(
+                label=bazel_manifest_loader.TargetLabel(str(node.unit_address))
+            )
         )
 
-        prompt_val: agent_storage.TaskPrompt = sample_manifest.task_prompt or agent_storage.TaskPrompt("")
+        prompt_val: agent_storage.TaskPrompt = (
+            sample_manifest.task_prompt or agent_storage.TaskPrompt("")
+        )
         node_def: agent_storage.NodeDefinition = agent_storage.NodeDefinition(
             task_prompt=prompt_val
         )
@@ -137,20 +164,26 @@ class BazelManifestLoader(
 
         _src: Optional[agent_file_alias.RelativePath] = sample_manifest.source_file
 
-        dep_label: bazel_manifest_loader.TargetLabel = only_elem(sample_manifest.dependencies)
+        dep_label: bazel_manifest_loader.TargetLabel = only_elem(
+            sample_manifest.dependencies
+        )
         dep_node: dag_storage.DagNode = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress(str(dep_label)),
             role_address=dag_storage.RoleAddress(""),
         )
 
-        feedback_dep_label: bazel_manifest_loader.TargetLabel = only_elem(sample_manifest.feedback_dependencies)
+        feedback_dep_label: bazel_manifest_loader.TargetLabel = only_elem(
+            sample_manifest.feedback_dependencies
+        )
         feedback_dep_node: dag_storage.DagNode = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress(str(feedback_dep_label)),
             role_address=dag_storage.RoleAddress(""),
         )
         storage.store_feedback_dependencies(node, {feedback_dep_node})
 
-        silent_dep_label: bazel_manifest_loader.TargetLabel = only_elem(sample_manifest.silent_dependencies)
+        silent_dep_label: bazel_manifest_loader.TargetLabel = only_elem(
+            sample_manifest.silent_dependencies
+        )
         silent_dep_node: dag_storage.DagNode = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress(str(silent_dep_label)),
             role_address=dag_storage.RoleAddress(""),

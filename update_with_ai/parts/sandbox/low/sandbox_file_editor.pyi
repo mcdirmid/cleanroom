@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 998b60a3fe78
+# --- END CLEANROOM METADATA ---
+
 """Sandbox file editor low-level interface specification."""
 
 from typing import Any, Mapping, NewType, Optional, Protocol, Set, Union
@@ -52,8 +59,8 @@ class EditManager(InTier[AgentSessionTier], Protocol):
         """Exposes whether workspace file modifications occurred during the session.
 
         POSTCONDITIONS:
-        - WHEN workspace file contents differ from their initial state prior to editing, MUST return true.
-        - WHEN workspace file contents match their initial state prior to editing, MUST return false.
+        - WHEN workspace file contents differ from their in-band code hash, MUST return true.
+        - WHEN workspace file contents match their in-band code hash, MUST return false.
         """
         ...
 

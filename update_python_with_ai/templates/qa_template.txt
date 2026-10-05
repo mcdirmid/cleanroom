@@ -1,2 +1,0 @@
-# QA Arbiter Log
-# Unresolved test failures will be recorded below.

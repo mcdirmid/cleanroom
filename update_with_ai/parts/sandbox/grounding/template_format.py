@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: fc8097545d49
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Template format grounding specification module."""
 
 from __future__ import annotations
@@ -30,7 +38,7 @@ class TemplateFormatter(InTier[AgentSessionTier], Protocol):
         - WHEN a condition key in parameters is falsy, MUST omit enclosed conditional content.
         - Deferred to template_format_impl.py.
         - WHEN a collection key in parameters resolves to a sequence, MUST repeat loop blocks binding loop item variables.
-        - Deferred to template_format_impl.py.        """
+        - Deferred to template_format_impl.py."""
         sample_key: TemplateKey = key(parameters)
         sample_val: Any = value(parameters)
         _rendered: str = str(text).replace(f"{{{{{sample_key}}}}}", str(sample_val))

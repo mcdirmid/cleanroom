@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: d23f51c9431f
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Bazel loop implementation grounding specification module."""
 
 from __future__ import annotations
@@ -42,7 +50,7 @@ class Loop(loop.Loop, InTier[SystemTier]):
         - MUST stream telemetry capturing pass duration to standard output and transcript files.
           - Consequent knowledge: stream RunnerLogEvent recording pass elapsed duration.
         - MUST stream telemetry capturing build outcome to standard output and transcript files.
-          - Consequent knowledge: stream RunnerLogEvent recording build result outcome.        """
+          - Consequent knowledge: stream RunnerLogEvent recording build result outcome."""
         loader = self.get_singleton(bazel_manifest_loader.BazelManifestLoader)
         loader.load_manifest(target)
 
@@ -50,8 +58,12 @@ class Loop(loop.Loop, InTier[SystemTier]):
         logger.consume(
             runner_logger.RunnerLogEvent(
                 event_name=runner_logger.EventName("cleaning_pass_started"),
-                summary=runner_logger.EventSummary(f"Starting cleaning pass for target {target.unit_address}"),
-                transcript=runner_logger.EventTranscript("Manifest loaded into graph storage."),
+                summary=runner_logger.EventSummary(
+                    f"Starting cleaning pass for target {target.unit_address}"
+                ),
+                transcript=runner_logger.EventTranscript(
+                    "Manifest loaded into graph storage."
+                ),
             )
         )
 
@@ -69,11 +81,15 @@ class Loop(loop.Loop, InTier[SystemTier]):
         )
         _dirty_remaining_result = loop.BuildResult(
             success=False,
-            summary=loop.BuildSummary("Reachable nodes remain dirty after cleaning pass"),
+            summary=loop.BuildSummary(
+                "Reachable nodes remain dirty after cleaning pass"
+            ),
         )
         _unexpected_failure_result = loop.BuildResult(
             success=False,
-            summary=loop.BuildSummary("Unexpected failure during cleaning pass: runtime error"),
+            summary=loop.BuildSummary(
+                "Unexpected failure during cleaning pass: runtime error"
+            ),
         )
 
         # Duration and outcome telemetry knowledge
@@ -81,15 +97,21 @@ class Loop(loop.Loop, InTier[SystemTier]):
         logger.consume(
             runner_logger.RunnerLogEvent(
                 event_name=runner_logger.EventName("pass_duration"),
-                summary=runner_logger.EventSummary(f"Cleaning pass completed in {duration_seconds:.2f}s"),
-                transcript=runner_logger.EventTranscript(f"Pass duration: {duration_seconds} seconds"),
+                summary=runner_logger.EventSummary(
+                    f"Cleaning pass completed in {duration_seconds:.2f}s"
+                ),
+                transcript=runner_logger.EventTranscript(
+                    f"Pass duration: {duration_seconds} seconds"
+                ),
             )
         )
         logger.consume(
             runner_logger.RunnerLogEvent(
                 event_name=runner_logger.EventName("build_outcome"),
                 summary=runner_logger.EventSummary("Build succeeded"),
-                transcript=runner_logger.EventTranscript("All reachable nodes in target subgraph are clean."),
+                transcript=runner_logger.EventTranscript(
+                    "All reachable nodes in target subgraph are clean."
+                ),
             )
         )
 
@@ -114,7 +136,9 @@ class Loop(loop.Loop, InTier[SystemTier]):
         raise NotImplementedError
 
     def mark_dirty(
-        self, target: dag_storage.DagNode, message: Optional[dag_storage.ChangeMessage] = None
+        self,
+        target: dag_storage.DagNode,
+        message: Optional[dag_storage.ChangeMessage] = None,
     ) -> None:
         """
         COVERED:
@@ -142,7 +166,9 @@ class Loop(loop.Loop, InTier[SystemTier]):
         - MUST mark the target node clean in graph storage with the change description from the change message.
         """
         storage = self.get_singleton(dag_storage.DagStorage)
-        storage.mark_node_clean(source, dag_storage.ChangeDescription(str(message.content)))
+        storage.mark_node_clean(
+            source, dag_storage.ChangeDescription(str(message.content))
+        )
         raise NotImplementedError
 
     def record_change(
@@ -153,7 +179,9 @@ class Loop(loop.Loop, InTier[SystemTier]):
         - MUST mark the target node clean in graph storage with the change description from the change message.
         """
         storage = self.get_singleton(dag_storage.DagStorage)
-        storage.mark_node_clean(target, dag_storage.ChangeDescription(str(message.content)))
+        storage.mark_node_clean(
+            target, dag_storage.ChangeDescription(str(message.content))
+        )
         raise NotImplementedError
 
 

@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 4b540f71cacf
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in dag_storage.pyi
 from dataclasses import dataclass
 from typing import NewType, Optional, Protocol, Set
@@ -46,5 +53,7 @@ class DagStorage(Protocol):
     def add_message(self, message: DagMessage, to: DagNode) -> None: ...
 
     def clear_messages(self, node: DagNode) -> None: ...
-    def mark_node_clean(self, node: DagNode, change_description: Optional[ChangeDescription] = None) -> None: ...
+    def mark_node_clean(
+        self, node: DagNode, change_description: Optional[ChangeDescription] = None
+    ) -> None: ...
     def materialize_template(self, node: DagNode) -> None: ...

@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 98b206e1615d
+-->
+
 # sandbox_file_reader_impl implementation component
 
 imports: agent_session, filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config, template_format, sandbox_file_editor, file_paths
@@ -35,11 +42,11 @@ By formatting lines with right-aligned line numbers, filtering metadata paragrap
 
 ## Woven Contracts
 
-- When mcp mode is inactive, view_file is installed for the session, whereas installation is omitted when mcp mode is active. [view_file_name, view_file_installed_non_mcp, view_file_omitted_mcp, tool_provider: [install_tools]]
+- When mcp mode is inactive, view_file is installed for the session, whereas installation is omitted when mcp mode is active. \[view_file_name, view_file_installed_non_mcp, view_file_omitted_mcp, tool_provider: [install_tools]\]
 - Search tool search_files is defined but omitted from installation across all session modes. [search_files_name, search_files_omitted]
-- Read file content formats lines with one-indexed right-aligned line numbers, filters metadata paragraphs, and renders markdown templates for read-only files. [format_numbered_lines, filter_meta_paragraphs, render_markdown_templates, template_format: [format_template_text, substitute_bound_placeholders], filesystem_ext: [read_utf8_content]]
-- Responses for read-write files carry suppression keys to supersede earlier turns, while read-only responses omit suppression keys and sanitize host paths. [rw_response_suppression_key, ro_response_omit_suppression_key, ro_response_sanitize_paths, tool_provider: [supersede_by_key], agent_file_alias: [sanitize_mask_ws_paths, sanitize_mask_preceding_prefixes]]
-- When reading a missing read-write file, empty content is returned, whereas a missing read-only file fails with recovery guidance. [read_missing_rw_empty, missing_ro_file_fails, filesystem_ext: [inspect_path_exists], tool_provider: [call_improper_fails, failed_call_feedback]]
-- Upon successful file reading, the file is recorded as the session's last read or written file. [record_read_file, sandbox_file_editor: [track_last_read_or_edited, record_file_read_op]]
-- When converting an invalid regex search pattern, conversion fails with diagnostic feedback. [convert_regex_pattern, invalid_regex_pattern_fails, tool_provider: [convert_failure_error]]
-- When searching declared files, read-only matches return sanitized lines while read-write matches withhold line contents to enforce edit safety. [search_ro_returns_contents, search_ro_returns_line_numbers, search_rw_withholds_contents, filesystem_ext: [traverse_regex_scan, collect_regex_line_numbers, collect_regex_line_contents], agent_file_alias: [sanitize_mask_ws_paths]]
+- Read file content formats lines with one-indexed right-aligned line numbers, filters metadata paragraphs, and renders markdown templates for read-only files. \[format_numbered_lines, filter_meta_paragraphs, render_markdown_templates, template_format: [format_template_text, substitute_bound_placeholders], filesystem_ext: [read_utf8_content]\]
+- Responses for read-write files carry suppression keys to supersede earlier turns, while read-only responses omit suppression keys and sanitize host paths. \[rw_response_suppression_key, ro_response_omit_suppression_key, ro_response_sanitize_paths, tool_provider: [supersede_by_key], agent_file_alias: [sanitize_mask_ws_paths, sanitize_mask_preceding_prefixes]\]
+- When reading a missing read-write file, empty content is returned, whereas a missing read-only file fails with recovery guidance. \[read_missing_rw_empty, missing_ro_file_fails, filesystem_ext: [inspect_path_exists], tool_provider: [call_improper_fails, failed_call_feedback]\]
+- Upon successful file reading, the file is recorded as the session's last read or written file. \[record_read_file, sandbox_file_editor: [track_last_read_or_edited, record_file_read_op]\]
+- When converting an invalid regex search pattern, conversion fails with diagnostic feedback. \[convert_regex_pattern, invalid_regex_pattern_fails, tool_provider: [convert_failure_error]\]
+- When searching declared files, read-only matches return sanitized lines while read-write matches withhold line contents to enforce edit safety. \[search_ro_returns_contents, search_ro_returns_line_numbers, search_rw_withholds_contents, filesystem_ext: [traverse_regex_scan, collect_regex_line_numbers, collect_regex_line_contents], agent_file_alias: [sanitize_mask_ws_paths]\]

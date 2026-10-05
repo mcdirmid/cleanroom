@@ -1,9 +1,23 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 0d5d419b55e2
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Sandbox file reader implementation grounding specification module."""
 
 from __future__ import annotations
 import re
 from typing import Any, Mapping, Optional, Set, Type, Union, cast
-from support.lib.grounding_support import InTier, AgentSessionTier, key, value, only_elem
+from support.lib.grounding_support import (
+    InTier,
+    AgentSessionTier,
+    key,
+    value,
+    only_elem,
+)
 from parts.agent.grounding import agent_config, agent_file_alias, agent_node_config
 from parts.core.grounding import filesystem_ext, file_paths
 from parts.dag.grounding import dag_storage
@@ -52,7 +66,7 @@ class ReadManager(sandbox_file_reader.ReadManager, InTier[AgentSessionTier]):
           - Consequent knowledge: construct failing ToolResponse citing available files.
         - WHEN path matches a declared file workspace path, MUST produce a successful ToolResponse indicating access is permitted with content "Access permitted for '{path}'.".
           - Condition knowledge: path matches declared file.
-          - Consequent knowledge: construct successful ToolResponse.        """
+          - Consequent knowledge: construct successful ToolResponse."""
         node_cfg = self.get_singleton(agent_node_config.NodeConfig)
         ro_files = node_cfg.read_only_files
         rw_files = node_cfg.read_write_files
@@ -65,7 +79,9 @@ class ReadManager(sandbox_file_reader.ReadManager, InTier[AgentSessionTier]):
             is_failed=True,
             is_terminated=False,
             content=f"Error: Unknown file '{path_str}'. Available files: {available_str}",
-            reminder=tool_provider.ToolReminder("Only declared files can be inspected."),
+            reminder=tool_provider.ToolReminder(
+                "Only declared files can be inspected."
+            ),
         )
 
         # Declared file success path knowledge
@@ -85,7 +101,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
         self._path_param = tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
             name=tool_provider.ParameterName("path"),
             description="File alias to view",
-            parameter_type=tool_provider.SimpleParameterType[agent_file_alias.FileAlias, str](),
+            parameter_type=tool_provider.SimpleParameterType[
+                agent_file_alias.FileAlias, str
+            ](),
             is_required=True,
             default_value=None,
             missing_message=None,
@@ -106,7 +124,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
         COVERED:
         - Returns tool description.
         """
-        _desc = tool_provider.ToolDescription("View workspace file content with line numbers.")
+        _desc = tool_provider.ToolDescription(
+            "View workspace file content with line numbers."
+        )
         raise NotImplementedError
 
     @property
@@ -139,7 +159,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
           - Consequent knowledge: resolve ToolManager and invoke tool_mgr.install_tool(self).
         - WHEN mcp mode is active, MUST install no read tools.
           - Condition knowledge: check agent_cfg.is_mcp_mode.
-        - MUST omit the search tool.        """
+        - MUST omit the search tool."""
         agent_cfg = self.get_singleton(agent_config.AgentConfig)
         tool_mgr = self.get_singleton(tool_provider.ToolManager)
 
@@ -149,7 +169,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -175,7 +197,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
           - Condition knowledge: resolve AliasManager and invoke sanitize_text.
           - Consequent knowledge: suppression_key = None.
         - WHEN reading a file succeeds, MUST record the read file to establish the session's last read or written file.
-          - Consequent knowledge: resolve EditManager and invoke record_file_read(target_file).        """
+          - Consequent knowledge: resolve EditManager and invoke record_file_read(target_file)."""
         read_mgr = self.get_singleton(sandbox_file_reader.ReadManager)
         alias_mgr = self.get_singleton(agent_file_alias.AliasManager)
         edit_mgr = self.get_singleton(sandbox_file_editor.EditManager)
@@ -184,7 +206,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
 
         sample_bound = agent_file_alias.ReadOnlyFile(
             relative_path=agent_file_alias.RelativePath("guide.md"),
-            workspace_path=file_paths.WorkspacePath(file_paths.PathString("docs/guide.md")),
+            workspace_path=file_paths.WorkspacePath(
+                file_paths.PathString("docs/guide.md")
+            ),
             owning_node=dag_storage.DagNode(
                 unit_address=dag_storage.UnitAddress("u"),
                 role_address=dag_storage.RoleAddress("r"),
@@ -195,7 +219,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
         )
         sample_rw = agent_file_alias.ReadWriteFile(
             relative_path=agent_file_alias.RelativePath("code.py"),
-            workspace_path=file_paths.WorkspacePath(file_paths.PathString("src/code.py")),
+            workspace_path=file_paths.WorkspacePath(
+                file_paths.PathString("src/code.py")
+            ),
             owning_node=dag_storage.DagNode(
                 unit_address=dag_storage.UnitAddress("u"),
                 role_address=dag_storage.RoleAddress("r"),
@@ -208,7 +234,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
             is_failed=True,
             is_terminated=False,
             content=f"Error: Unknown file '{sample_unbound.relative_path}'. Available files: guide.md, code.py",
-            reminder=tool_provider.ToolReminder("Only declared files can be inspected."),
+            reminder=tool_provider.ToolReminder(
+                "Only declared files can be inspected."
+            ),
         )
 
         # 2. Missing read-only file knowledge
@@ -216,11 +244,15 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
             is_failed=True,
             is_terminated=False,
             content=f"Error: File '{sample_bound.relative_path}' does not exist on disk.",
-            reminder=tool_provider.ToolReminder("Only declared files can be inspected."),
+            reminder=tool_provider.ToolReminder(
+                "Only declared files can be inspected."
+            ),
         )
 
         # 3. Read content from filesystem
-        _exists, raw_content = filesystem_ext.read_text_file(str(sample_bound.relative_path))
+        _exists, raw_content = filesystem_ext.read_text_file(
+            str(sample_bound.relative_path)
+        )
 
         # 4. Markdown META filtering knowledge
         _is_md: bool = str(sample_bound.relative_path).endswith(".md")
@@ -229,7 +261,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
 
         # 5. Template parameter formatting knowledge for read-only markdown
         tmpl_params = {
-            template_format.TemplateKey(str(key(node_cfg.template_parameters))): value(node_cfg.template_parameters)
+            template_format.TemplateKey(str(key(node_cfg.template_parameters))): value(
+                node_cfg.template_parameters
+            )
         }
         formatted_md = formatter.format_template(
             template_format.TemplateText(_clean_md_content),
@@ -241,7 +275,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
         formatted_line = f"{line_num:4d}: {formatted_md}\n"
 
         # 7. Read-only sanitization and suppression key omission knowledge
-        sanitized_content = alias_mgr.sanitize_text(agent_file_alias.UnsanitizedText(formatted_line))
+        sanitized_content = alias_mgr.sanitize_text(
+            agent_file_alias.UnsanitizedText(formatted_line)
+        )
         _ro_suppression: Optional[tool_provider.SuppressionKey] = None
 
         # 8. Read-write empty content fallback and suppression key assignment knowledge
@@ -290,9 +326,11 @@ class RegexPatternParameterType(
           - Condition knowledge: evaluate re.compile(wire_value).
           - Consequent knowledge: construct ParameterConversionError formatted as "Invalid regex pattern '{wire_value}': {error}".
         - WHEN wire_value is a valid regular expression pattern, MUST return the constructed RegexPattern.
-          - Consequent knowledge: return RegexPattern(wire_value).        """
-        _err: tool_provider.ParameterConversionError = tool_provider.ParameterConversionError(
-            message=f"Invalid regex pattern '{wire_value}': invalid syntax"
+          - Consequent knowledge: return RegexPattern(wire_value)."""
+        _err: tool_provider.ParameterConversionError = (
+            tool_provider.ParameterConversionError(
+                message=f"Invalid regex pattern '{wire_value}': invalid syntax"
+            )
         )
         _pat = agent_file_alias.RegexPattern(wire_value)
         raise NotImplementedError
@@ -302,7 +340,9 @@ class SearchTool(sandbox_file_reader.SearchTool, InTier[AgentSessionTier]):
     """Searches regex patterns across workspace files."""
 
     def __init__(self) -> None:
-        self._regex_param = tool_provider.ToolParameter[agent_file_alias.RegexPattern, str](
+        self._regex_param = tool_provider.ToolParameter[
+            agent_file_alias.RegexPattern, str
+        ](
             name=tool_provider.ParameterName("regex_pattern"),
             description="Regex pattern to search",
             parameter_type=RegexPatternParameterType(),
@@ -326,7 +366,9 @@ class SearchTool(sandbox_file_reader.SearchTool, InTier[AgentSessionTier]):
         COVERED:
         - Returns search tool description.
         """
-        _desc = tool_provider.ToolDescription("Search for regex pattern matches across session files.")
+        _desc = tool_provider.ToolDescription(
+            "Search for regex pattern matches across session files."
+        )
         raise NotImplementedError
 
     @property
@@ -353,7 +395,9 @@ class SearchTool(sandbox_file_reader.SearchTool, InTier[AgentSessionTier]):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -365,7 +409,7 @@ class SearchTool(sandbox_file_reader.SearchTool, InTier[AgentSessionTier]):
           - Consequent knowledge: include line numbers and sanitized contents in ToolResponse.
         - WHEN matches are found for read-write files, MUST state that matches were found with "{relative_path}: matches found (details hidden to prevent unanchored edits)".
           - Condition knowledge: evaluate match on read-write file.
-          - Consequent knowledge: format placeholder summary string.        """
+          - Consequent knowledge: format placeholder summary string."""
         read_mgr = self.get_singleton(sandbox_file_reader.ReadManager)
         alias_mgr = self.get_singleton(agent_file_alias.AliasManager)
 
@@ -378,7 +422,9 @@ class SearchTool(sandbox_file_reader.SearchTool, InTier[AgentSessionTier]):
 
         # 2. Read-only search matches and sanitization knowledge
         sample_ro_match = "sample_ro.py:10: def foo():"
-        sanitized_ro_match = alias_mgr.sanitize_text(agent_file_alias.UnsanitizedText(sample_ro_match))
+        sanitized_ro_match = alias_mgr.sanitize_text(
+            agent_file_alias.UnsanitizedText(sample_ro_match)
+        )
 
         # 3. Read-write search matches summary knowledge
         sample_rw_path = "sample_rw.py"

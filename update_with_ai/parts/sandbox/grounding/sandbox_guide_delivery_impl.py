@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: c0b540b68443
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Sandbox guide delivery implementation grounding specification module."""
 
 from __future__ import annotations
@@ -7,9 +15,7 @@ from parts.agent.grounding import agent_file_alias, agent_node_config
 from parts.sandbox.grounding import sandbox_guide_delivery, tool_provider
 
 
-class GuideDelivery(
-    sandbox_guide_delivery.GuideDelivery, InTier[AgentSessionTier]
-):
+class GuideDelivery(sandbox_guide_delivery.GuideDelivery, InTier[AgentSessionTier]):
     """Realizes progressive step advancement and guide parsing.
 
     DISCHARGED:
@@ -58,27 +64,37 @@ class GuideDelivery(
           - Consequent knowledge: construct VerificationFailureInstructions.
         - MUST create sequential step sections for level-two headings excluding sections titled "Summary", "Lint checks", or "Verification failure".
           - Condition knowledge: test heading prefix == '## ' and check title not in {'Summary', 'Lint checks', 'Verification failure'}.
-          - Consequent knowledge: construct StepSection with 1-based StepIndex, StepTitle, and StepContent.        """
+          - Consequent knowledge: construct StepSection with 1-based StepIndex, StepTitle, and StepContent."""
         raw_text = str(content)
 
         # 1. Summary extraction knowledge
         _preceding_text = "Guide overview text preceding first heading."
         _summary_section_text = "Detailed summary under Summary heading."
-        summary = agent_node_config.GuideSummary(f"{_preceding_text}\n{_summary_section_text}")
+        summary = agent_node_config.GuideSummary(
+            f"{_preceding_text}\n{_summary_section_text}"
+        )
 
         # 2. Verification failure capture knowledge
-        _heading_is_vf: bool = "## Verification failure instructions".startswith("## Verification failure")
+        _heading_is_vf: bool = "## Verification failure instructions".startswith(
+            "## Verification failure"
+        )
         vf_instructions = agent_node_config.VerificationFailureInstructions(
             "Instructions on what to check when verification fails."
         )
 
         # 3. Level-two heading filtering and StepSection construction knowledge
         _h2_title = "Step One Implementation"
-        _is_excluded: bool = _h2_title in {"Summary", "Lint checks", "Verification failure"}
+        _is_excluded: bool = _h2_title in {
+            "Summary",
+            "Lint checks",
+            "Verification failure",
+        }
         step = agent_node_config.StepSection(
             index=agent_node_config.StepIndex(1),
             title=agent_node_config.StepTitle(_h2_title),
-            content=agent_node_config.StepContent("Step 1 instructions and deliverables."),
+            content=agent_node_config.StepContent(
+                "Step 1 instructions and deliverables."
+            ),
         )
 
         node_guide = agent_node_config.NodeGuide(
@@ -113,7 +129,7 @@ class GuideDelivery(
           - Consequent knowledge: increment self._step_index and return ToolResponse delivering current step content.
         - WHEN verification fails, MUST retain current milestone and report failure diagnostics alongside verification failure instructions.
           - Condition knowledge: test verification_passed is False.
-          - Consequent knowledge: retain self._step_index and return ToolResponse with is_failed=True, failure diagnostics, and vf instructions.        """
+          - Consequent knowledge: retain self._step_index and return ToolResponse with is_failed=True, failure diagnostics, and vf instructions."""
         _passed: bool = verification_passed
 
         # Verification failure knowledge path

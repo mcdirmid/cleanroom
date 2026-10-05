@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 3f30c8e6a791
+# --- END CLEANROOM METADATA ---
+
 """OpenAI configuration low-level interface specification."""
 
 from typing import NewType, Optional, Protocol

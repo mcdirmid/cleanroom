@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: d96b0cbe48c8
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in sandbox_file_editor.pyi
 from typing import Any, Mapping, NewType, Optional, Protocol, Set, Union
 from update_with_ai.parts.agent.lib import agent_file_alias
@@ -21,11 +28,15 @@ class EditingTool(tool_provider.Tool, Protocol):
     @property
     def parameters(
         self,
-    ) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]: ...
+    ) -> Mapping[
+        tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]
+    ]: ...
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse: ...
 
 
@@ -83,5 +94,7 @@ class ReplaceFileContentTool(EditingTool, Protocol):
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse: ...

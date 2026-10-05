@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 17942bfbd4f5
+-->
+
 # sandbox_guide_delivery_impl implementation component
 
 imports: tool_provider, agent_file_alias, agent_node_config
@@ -35,7 +42,7 @@ By isolating milestone sections, maintaining current step offsets, and synthesiz
 
 ## Woven Contracts
 
-- Guide markdown parsing extracts summaries, verification failure instructions, and sequential step sections while filtering out metadata sections. [extract_summary_preceding_first_heading, extract_summary_under_summary_heading, capture_verification_failure_instructions, create_sequential_step_sections, exclude_summary_sections_from_steps, exclude_lint_check_sections_from_steps, exclude_verification_failure_sections_from_steps, sandbox_guide_delivery: [parse_file_content_into_guide]]
-- Advancing a step upon passing verification transitions to the next milestone, prompting careful inspection and self-correction before subsequent progression. [emit_next_step_on_pass, instruct_check_carefully_on_pass, instruct_make_edits_on_nonconformance, instruct_call_advance_when_conforming, transition_to_next_step_on_pass, sandbox_guide_delivery: [deliver_instructions_on_pass]]
-- Advancing a step upon failed verification retains the current milestone, formatting contextual guidance, failure instructions, and failure diagnostics. [emit_primer_failure_response_when_inactive, substitute_summary_when_primer_omitted, emit_current_step_failure_response, preserve_current_step_on_fail, sandbox_guide_delivery: [retain_milestone_on_fail, report_diagnostics_on_fail, report_failure_instructions_on_fail]]
-- When no guide is configured or all sections have been completed, step delivery indicates completion and emits no further responses. [indicate_no_steps_when_no_guide, indicate_no_steps_when_completed, produce_no_response_when_no_steps_remain, sandbox_guide_delivery: [expose_steps_remain]]
+- Guide markdown parsing extracts summaries, verification failure instructions, and sequential step sections while filtering out metadata sections. \[extract_summary_preceding_first_heading, extract_summary_under_summary_heading, capture_verification_failure_instructions, create_sequential_step_sections, exclude_summary_sections_from_steps, exclude_lint_check_sections_from_steps, exclude_verification_failure_sections_from_steps, sandbox_guide_delivery: [parse_file_content_into_guide]\]
+- Advancing a step upon passing verification transitions to the next milestone, prompting careful inspection and self-correction before subsequent progression. \[emit_next_step_on_pass, instruct_check_carefully_on_pass, instruct_make_edits_on_nonconformance, instruct_call_advance_when_conforming, transition_to_next_step_on_pass, sandbox_guide_delivery: [deliver_instructions_on_pass]\]
+- Advancing a step upon failed verification retains the current milestone, formatting contextual guidance, failure instructions, and failure diagnostics. \[emit_primer_failure_response_when_inactive, substitute_summary_when_primer_omitted, emit_current_step_failure_response, preserve_current_step_on_fail, sandbox_guide_delivery: [retain_milestone_on_fail, report_diagnostics_on_fail, report_failure_instructions_on_fail]\]
+- When no guide is configured or all sections have been completed, step delivery indicates completion and emits no further responses. \[indicate_no_steps_when_no_guide, indicate_no_steps_when_completed, produce_no_response_when_no_steps_remain, sandbox_guide_delivery: [expose_steps_remain]\]

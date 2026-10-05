@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+CODE_HASH: 6f747fd6eed9
+-->
+
 # agent_config interface component
 
 ## Purpose
@@ -25,5 +32,3 @@ The agent config also provides whether the agent:
 - Operates in mcp mode.
 
 - Expects editing tools to produce delta output.
-
-

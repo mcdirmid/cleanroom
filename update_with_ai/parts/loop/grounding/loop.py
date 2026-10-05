@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: dc7847e61160
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Loop grounding specification module."""
 
 from __future__ import annotations
@@ -16,6 +24,7 @@ class BuildResult:
     COVERED:
     - Encapsulates success boolean and summary description.
     """
+
     success: bool
     summary: BuildSummary
 
@@ -48,7 +57,9 @@ class Loop(InTier[SystemTier], Protocol):
         raise NotImplementedError
 
     def mark_dirty(
-        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage = cast(dag_storage.ChangeMessage, None)
+        self,
+        target: dag_storage.DagNode,
+        message: dag_storage.ChangeMessage = cast(dag_storage.ChangeMessage, None),
     ) -> None:
         """
         COVERED:
@@ -78,7 +89,9 @@ class Loop(InTier[SystemTier], Protocol):
         - MUST mark the target node clean in graph storage with the change description from the change message.
         """
         storage: dag_storage.DagStorage = self.get_singleton(dag_storage.DagStorage)
-        storage.mark_node_clean(source, dag_storage.ChangeDescription(str(message.content)))
+        storage.mark_node_clean(
+            source, dag_storage.ChangeDescription(str(message.content))
+        )
         raise NotImplementedError
 
     def record_change(
@@ -89,6 +102,7 @@ class Loop(InTier[SystemTier], Protocol):
         - MUST mark the target node clean in graph storage with the change description from the change message.
         """
         storage: dag_storage.DagStorage = self.get_singleton(dag_storage.DagStorage)
-        storage.mark_node_clean(target, dag_storage.ChangeDescription(str(message.content)))
+        storage.mark_node_clean(
+            target, dag_storage.ChangeDescription(str(message.content))
+        )
         raise NotImplementedError
-

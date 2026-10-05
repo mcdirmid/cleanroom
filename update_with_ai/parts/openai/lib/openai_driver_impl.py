@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: afc7002dbb23
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 import json
 import time
 import traceback
@@ -19,6 +28,7 @@ from support.lib.lifecycle import (
 
 try:  # pragma: no cover
     import importlib
+
     _openai: Any = importlib.import_module("openai")
     OpenAI = _openai.OpenAI
     OpenAIError = _openai.OpenAIError
@@ -67,18 +77,24 @@ def _repair_json(raw: str) -> str:
             if not in_string:
                 if ch in "{[":
                     stack.append("}" if ch == "{" else "]")
-                elif ch in "}]":  # pragma: no cover (assumption: model response conforms to json syntax)
+                elif (
+                    ch in "}]"
+                ):  # pragma: no cover (assumption: model response conforms to json syntax)
                     if stack and stack[-1] == ch:
                         stack.pop()
 
         if escape:
-            cand = cand[:-1]  # pragma: no cover (assumption: model response conforms to json syntax)
+            cand = cand[
+                :-1
+            ]  # pragma: no cover (assumption: model response conforms to json syntax)
         if in_string:
             cand += '"'
 
         trimmed = cand.rstrip()
         while trimmed and trimmed[-1] == ",":
-            trimmed = trimmed[:-1].rstrip()  # pragma: no cover (assumption: model response conforms to json syntax)
+            trimmed = (
+                trimmed[:-1].rstrip()
+            )  # pragma: no cover (assumption: model response conforms to json syntax)
 
         c1 = trimmed
         for close_char in reversed(stack):
@@ -95,7 +111,9 @@ def _repair_json(raw: str) -> str:
             c2 += close_char
         try:
             v = json.loads(c2, strict=False)
-            if isinstance(v, dict):  # pragma: no cover (assumption: model response conforms to json syntax)
+            if isinstance(
+                v, dict
+            ):  # pragma: no cover (assumption: model response conforms to json syntax)
                 return c2
         except (json.JSONDecodeError, ValueError):
             pass
@@ -206,7 +224,9 @@ def _call_append_tool_response(
     tool_call_id: str,
     tool_name: str,
     tool_arguments: str,
-    wire_parameter_bindings: Optional[Mapping[tool_provider.ParameterName, tool_provider.WireType]] = None,
+    wire_parameter_bindings: Optional[
+        Mapping[tool_provider.ParameterName, tool_provider.WireType]
+    ] = None,
 ) -> None:
     history.append_tool_response(
         tool_response=tool_response,
@@ -238,9 +258,13 @@ def _conv_msg(
     return loop_conversation.ConversationMessage(
         role=loop_conversation.MessageRole(role),
         content=loop_conversation.ConversationContent(content),
-        tool_call_id=loop_conversation.ToolCallId(tool_call_id) if tool_call_id is not None else None,
+        tool_call_id=loop_conversation.ToolCallId(tool_call_id)
+        if tool_call_id is not None
+        else None,
         tool_name=tool_provider.ToolName(tool_name) if tool_name is not None else None,
-        tool_arguments=loop_conversation.SerializedArguments(tool_arguments) if tool_arguments is not None else None,
+        tool_arguments=loop_conversation.SerializedArguments(tool_arguments)
+        if tool_arguments is not None
+        else None,
     )
 
 
@@ -257,7 +281,9 @@ def _make_tool_response(
         is_terminated=is_terminated,
         content=tool_provider.ToolResponseContent(content),
         reminder=tool_provider.ToolReminder(reminder) if reminder is not None else None,
-        suppression_key=tool_provider.SuppressionKey(suppression_key) if suppression_key is not None else None,
+        suppression_key=tool_provider.SuppressionKey(suppression_key)
+        if suppression_key is not None
+        else None,
         follow_up_tool_call=follow_up_tool_call,
     )
 
@@ -265,8 +291,12 @@ def _make_tool_response(
 def _build_actual_bindings(
     tool: Optional[tool_provider.Tool],
     args_dict: dict[str, Any],
-) -> Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]:
-    res: dict[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType] = {}
+) -> Mapping[
+    tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+]:
+    res: dict[
+        tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+    ] = {}
     if tool is not None:
         tool_params = getattr(tool, "parameters", {})
         for k, v in args_dict.items():
@@ -408,7 +438,10 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     if isinstance(error_payload, dict):
                         code = error_payload.get("code")
                         msg = str(error_payload.get("message", ""))
-                        if code == "incomplete_tool_call" or "unrecoverable tool call" in msg.lower():
+                        if (
+                            code == "incomplete_tool_call"
+                            or "unrecoverable tool call" in msg.lower()
+                        ):
                             is_incomplete = True
                             err_msg = msg or str(code)
                     if is_incomplete:
@@ -442,11 +475,14 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                             )
                         )
                         continue
-                    raise RuntimeError("Model returned no choices in completion response")
+                    raise RuntimeError(
+                        "Model returned no choices in completion response"
+                    )
             except (OpenAIError, OSError, RuntimeError, ValueError) as e:
                 err_str = str(e).lower()
                 if isinstance(e, OpenAIError) and (
-                    "incomplete_tool_call" in err_str or "unrecoverable tool call" in err_str
+                    "incomplete_tool_call" in err_str
+                    or "unrecoverable tool call" in err_str
                 ):
                     consecutive_truncations += 1
                     if consecutive_truncations > 3:
@@ -523,7 +559,10 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                         if tc_func is not None:
                             try:
                                 tc_func.arguments = raw_args
-                            except (AttributeError, TypeError):  # pragma: no cover (assumption: tool call arguments are valid JSON)
+                            except (
+                                AttributeError,
+                                TypeError,
+                            ):  # pragma: no cover (assumption: tool call arguments are valid JSON)
                                 pass
                     history.append_message(
                         _conv_msg(
@@ -566,7 +605,10 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                             )
                         else:  # pragma: no cover (assumption: standard completion response format)
                             formatted_args = str(tc_args)
-                    except (json.JSONDecodeError, ValueError):  # pragma: no cover (assumption: tool call arguments are valid JSON)
+                    except (
+                        json.JSONDecodeError,
+                        ValueError,
+                    ):  # pragma: no cover (assumption: tool call arguments are valid JSON)
                         formatted_args = tc_raw_args
                     if len(formatted_args) > 60:
                         formatted_args = formatted_args[:57] + "..."
@@ -591,13 +633,18 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
             if finish_reason == "length":
                 if tool_calls:
                     for tc in tool_calls:
-                        if not tc or not getattr(tc, "function", None):  # pragma: no cover (assumption: standard completion response format)
+                        if (
+                            not tc or not getattr(tc, "function", None)
+                        ):  # pragma: no cover (assumption: standard completion response format)
                             continue
                         fn_name = tc.function.name or ""
                         repaired_raw = _repair_json(tc.function.arguments or "")
                         try:
                             salvaged = json.loads(repaired_raw, strict=False)
-                        except (json.JSONDecodeError, ValueError):  # pragma: no cover (assumption: tool call arguments are valid JSON)
+                        except (
+                            json.JSONDecodeError,
+                            ValueError,
+                        ):  # pragma: no cover (assumption: tool call arguments are valid JSON)
                             salvaged = {}
                         salvaged_args: Optional[dict[str, Any]] = (
                             salvaged if isinstance(salvaged, dict) else None
@@ -628,19 +675,13 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                                     non_empty_lines[-1] if non_empty_lines else ""
                                 )
                                 indent = len(last_line) - len(last_line.lstrip())
-                                salvaged_repl = (
-                                    raw_repl + f"{' ' * indent}{sentinel}\n"
-                                )
+                                salvaged_repl = raw_repl + f"{' ' * indent}{sentinel}\n"
                             else:
                                 repl_lines = raw_repl.splitlines(keepends=True)
                                 if repl_lines:
                                     last_line = repl_lines[-1]
-                                    indent = len(last_line) - len(
-                                        last_line.lstrip()
-                                    )
-                                    repl_lines[-1] = (
-                                        f"{' ' * indent}{sentinel}\n"
-                                    )
+                                    indent = len(last_line) - len(last_line.lstrip())
+                                    repl_lines[-1] = f"{' ' * indent}{sentinel}\n"
                                     salvaged_repl = "".join(repl_lines)
                                 else:
                                     salvaged_repl = f"{sentinel}\n"
@@ -708,11 +749,14 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                             ):
                                 supp_key = fn_name
                             else:
-                                if (
-                                    salvaged_args is not None
-                                    and ("path" in salvaged_args or "target_file" in salvaged_args)
+                                if salvaged_args is not None and (
+                                    "path" in salvaged_args
+                                    or "target_file" in salvaged_args
                                 ):
-                                    p = str(salvaged_args.get("path") or salvaged_args.get("target_file"))
+                                    p = str(
+                                        salvaged_args.get("path")
+                                        or salvaged_args.get("target_file")
+                                    )
                                     supp_key = p.split("/")[-1]
                                 if supp_key is None:
                                     supp_key = fn_name
@@ -759,7 +803,9 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                 continue
 
             for tc in tool_calls:
-                if not tc or not getattr(tc, "function", None):  # pragma: no cover (assumption: standard completion response format)
+                if not tc or not getattr(
+                    tc, "function", None
+                ):  # pragma: no cover (assumption: standard completion response format)
                     continue
                 fn_name = tc.function.name or ""
                 fn_args_str = tc.function.arguments
@@ -769,19 +815,26 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                         if fn_args_str
                         else {}  # pragma: no cover (assumption: standard completion response format)
                     )
-                    if not isinstance(args_dict, dict):  # pragma: no cover (assumption: standard completion response format)
+                    if not isinstance(
+                        args_dict, dict
+                    ):  # pragma: no cover (assumption: standard completion response format)
                         args_dict = {}
-                except (json.JSONDecodeError, ValueError):  # pragma: no cover (assumption: tool call arguments are valid JSON)
+                except (
+                    json.JSONDecodeError,
+                    ValueError,
+                ):  # pragma: no cover (assumption: tool call arguments are valid JSON)
                     args_dict = {}
 
-                wire_bindings: Mapping[tool_provider.ParameterName, tool_provider.WireType] = {
-                    tool_provider.ParameterName(k): v for k, v in args_dict.items()
-                }
+                wire_bindings: Mapping[
+                    tool_provider.ParameterName, tool_provider.WireType
+                ] = {tool_provider.ParameterName(k): v for k, v in args_dict.items()}
 
                 tool = _find_tool(tool_mgr, fn_name)
                 actual_bindings = _build_actual_bindings(tool, args_dict)
 
-                guard_outcome = guard.evaluate(tool_provider.ToolName(fn_name), actual_bindings)
+                guard_outcome = guard.evaluate(
+                    tool_provider.ToolName(fn_name), actual_bindings
+                )
                 if isinstance(guard_outcome, loop_guard.LoopFailure):
                     logger.consume(
                         _log_event(
@@ -792,7 +845,9 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     )
                     raise RuntimeError(f"Loop failure: {guard_outcome.explanation}")
 
-                resp = tool_mgr.execute_tool(tool_provider.ToolName(fn_name), wire_bindings)
+                resp = tool_mgr.execute_tool(
+                    tool_provider.ToolName(fn_name), wire_bindings
+                )
 
                 tool_status_summary, transcript_rep = _format_tool_log(
                     fn_name, args_dict, resp, turns, is_followup=False
@@ -849,7 +904,9 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     followup = curr_resp.follow_up_tool_call
                     followup_count += 1
                     synth_call_id = f"{curr_call_id}_followup_{followup_count}"
-                    args_dict = {str(k): v for k, v in followup.wire_parameter_bindings.items()}
+                    args_dict = {
+                        str(k): v for k, v in followup.wire_parameter_bindings.items()
+                    }
                     history.append_message(
                         _conv_msg(
                             role="assistant",
@@ -862,7 +919,9 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     follow_resp = tool_mgr.execute_tool(
                         followup.tool_name, followup.wire_parameter_bindings
                     )
-                    follow_args = {str(k): v for k, v in followup.wire_parameter_bindings.items()}
+                    follow_args = {
+                        str(k): v for k, v in followup.wire_parameter_bindings.items()
+                    }
                     status_sum, t_rep = _format_tool_log(
                         followup.tool_name,
                         follow_args,

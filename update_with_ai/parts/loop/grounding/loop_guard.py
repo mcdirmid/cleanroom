@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 907ba900124f
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Loop guard grounding specification module."""
 
 from __future__ import annotations
@@ -17,6 +25,7 @@ class LoopReminder:
     COVERED:
     - Encapsulates feedback string attribute.
     """
+
     feedback: LoopFeedback
 
 
@@ -27,6 +36,7 @@ class LoopFailure:
     COVERED:
     - Encapsulates explanation string attribute.
     """
+
     explanation: FailureExplanation
 
 
@@ -36,7 +46,9 @@ class LoopGuard(InTier[AgentSessionTier], Protocol):
     def evaluate(
         self,
         tool_name: tool_provider.ToolName,
-        arguments: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        arguments: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> Optional[Union[LoopReminder, LoopFailure]]:
         """
         COVERED:
@@ -51,11 +63,17 @@ class LoopGuard(InTier[AgentSessionTier], Protocol):
           - Consequent knowledge: return LoopFailure.
 
         DEFERRED:
-        - Repetition counter tracking and threshold comparison deferred to loop_guard_impl.py.        """
+        - Repetition counter tracking and threshold comparison deferred to loop_guard_impl.py."""
         _sample_param = key(arguments)
         _sample_val = value(arguments)
-        _sample_reminder = LoopReminder(feedback=LoopFeedback(f"Warning: tool '{tool_name}' repetition"))
-        _sample_failure = LoopFailure(explanation=FailureExplanation(f"Fatal loop detected for tool '{tool_name}'"))
+        _sample_reminder = LoopReminder(
+            feedback=LoopFeedback(f"Warning: tool '{tool_name}' repetition")
+        )
+        _sample_failure = LoopFailure(
+            explanation=FailureExplanation(
+                f"Fatal loop detected for tool '{tool_name}'"
+            )
+        )
         _res: Optional[Union[LoopReminder, LoopFailure]] = _sample_reminder
         raise NotImplementedError
 

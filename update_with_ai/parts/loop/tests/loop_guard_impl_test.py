@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: d8848090d777
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for loop_guard_impl aligned with grounding specifications."""
 
 import unittest
@@ -35,7 +44,11 @@ def _make_param(name: str) -> tool_provider.ToolParameter[Any, Any]:
     )
 
 
-def _make_bindings(d: Mapping[tool_provider.ToolParameter[Any, Any], Any]) -> Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]:
+def _make_bindings(
+    d: Mapping[tool_provider.ToolParameter[Any, Any], Any],
+) -> Mapping[
+    tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+]:
     return {k: tool_provider.SomeParameterActualType(v) for k, v in d.items()}
 
 
@@ -97,9 +110,7 @@ class LoopGuardImplTest(unittest.TestCase):
                 tool_name = tool_provider.ToolName("replace_file_content")
 
                 # Call 1 -> None
-                self.assertIsNone(
-                    guard.evaluate(tool_name, bindings)
-                )
+                self.assertIsNone(guard.evaluate(tool_name, bindings))
                 # Call 2 -> LoopReminder at threshold of 2
                 # Requirement: WHEN consecutive edits target the same file and line range at two repetitions, MUST produce a loop reminder.
                 self.assertIsInstance(
@@ -125,9 +136,7 @@ class LoopGuardImplTest(unittest.TestCase):
 
                 # 2 calls reaching reminder
                 self.assertIsNone(guard.evaluate(tool_name, bindings))
-                self.assertIsInstance(
-                    guard.evaluate(tool_name, bindings), LoopReminder
-                )
+                self.assertIsInstance(guard.evaluate(tool_name, bindings), LoopReminder)
 
                 # Reset progress
                 # Requirement: MUST reset repetition counters in the loop guard.

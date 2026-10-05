@@ -1,9 +1,23 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 0c3161e8191a
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Sandbox file editor implementation grounding specification module."""
 
 from __future__ import annotations
 import hashlib
 from typing import Any, Mapping, Optional, Set, Union, cast
-from support.lib.grounding_support import InTier, AgentSessionTier, key, value, only_elem
+from support.lib.grounding_support import (
+    InTier,
+    AgentSessionTier,
+    key,
+    value,
+    only_elem,
+)
 from parts.agent.grounding import agent_file_alias, agent_node_config
 from parts.core.grounding import filesystem_ext, file_paths
 from parts.dag.grounding import dag_storage
@@ -110,7 +124,9 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
             is_failed=True,
             is_terminated=False,
             content=f"Error: File '{path}' is not a declared read-write file.",
-            reminder=tool_provider.ToolReminder("Only declared read-write files can be written."),
+            reminder=tool_provider.ToolReminder(
+                "Only declared read-write files can be written."
+            ),
         )
 
         # Declared read-write file success knowledge
@@ -132,47 +148,69 @@ class ReplaceFileContentTool(
         self._path_param = tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
             name=tool_provider.ParameterName("path"),
             description="File path",
-            parameter_type=tool_provider.SimpleParameterType[agent_file_alias.FileAlias, str](),
+            parameter_type=tool_provider.SimpleParameterType[
+                agent_file_alias.FileAlias, str
+            ](),
             is_required=False,
             default_value=None,
             missing_message=None,
         )
-        self._target_param = tool_provider.ToolParameter[sandbox_file_editor.TargetContent, str](
+        self._target_param = tool_provider.ToolParameter[
+            sandbox_file_editor.TargetContent, str
+        ](
             name=tool_provider.ParameterName("target_content"),
             description="Target text",
-            parameter_type=tool_provider.SimpleParameterType[sandbox_file_editor.TargetContent, str](),
+            parameter_type=tool_provider.SimpleParameterType[
+                sandbox_file_editor.TargetContent, str
+            ](),
             is_required=True,
             default_value=None,
             missing_message=None,
         )
-        self._replacement_param = tool_provider.ToolParameter[sandbox_file_editor.ReplacementContent, str](
+        self._replacement_param = tool_provider.ToolParameter[
+            sandbox_file_editor.ReplacementContent, str
+        ](
             name=tool_provider.ParameterName("replacement_content"),
             description="Replacement text",
-            parameter_type=tool_provider.SimpleParameterType[sandbox_file_editor.ReplacementContent, str](),
+            parameter_type=tool_provider.SimpleParameterType[
+                sandbox_file_editor.ReplacementContent, str
+            ](),
             is_required=True,
             default_value=None,
             missing_message=None,
         )
-        self._start_param = tool_provider.ToolParameter[Optional[sandbox_file_editor.LineNumber], int](
+        self._start_param = tool_provider.ToolParameter[
+            Optional[sandbox_file_editor.LineNumber], int
+        ](
             name=tool_provider.ParameterName("start_line"),
             description="Start line",
-            parameter_type=tool_provider.SimpleParameterType[Optional[sandbox_file_editor.LineNumber], int](),
+            parameter_type=tool_provider.SimpleParameterType[
+                Optional[sandbox_file_editor.LineNumber], int
+            ](),
             is_required=False,
             default_value=None,
             missing_message=None,
         )
-        self._end_param = tool_provider.ToolParameter[Optional[sandbox_file_editor.LineNumber], int](
+        self._end_param = tool_provider.ToolParameter[
+            Optional[sandbox_file_editor.LineNumber], int
+        ](
             name=tool_provider.ParameterName("end_line"),
             description="End line",
-            parameter_type=tool_provider.SimpleParameterType[Optional[sandbox_file_editor.LineNumber], int](),
+            parameter_type=tool_provider.SimpleParameterType[
+                Optional[sandbox_file_editor.LineNumber], int
+            ](),
             is_required=False,
             default_value=None,
             missing_message=None,
         )
-        self._allow_param = tool_provider.ToolParameter[sandbox_file_editor.AllowMultiple, bool](
+        self._allow_param = tool_provider.ToolParameter[
+            sandbox_file_editor.AllowMultiple, bool
+        ](
             name=tool_provider.ParameterName("allow_multiple"),
             description="Allow multiple occurrences",
-            parameter_type=tool_provider.SimpleParameterType[sandbox_file_editor.AllowMultiple, bool](),
+            parameter_type=tool_provider.SimpleParameterType[
+                sandbox_file_editor.AllowMultiple, bool
+            ](),
             is_required=False,
             default_value=sandbox_file_editor.AllowMultiple(False),
             missing_message=None,
@@ -197,7 +235,9 @@ class ReplaceFileContentTool(
         raise NotImplementedError
 
     @property
-    def path_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
+    def path_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         """
         COVERED:
         - Returns path parameter definition.
@@ -206,7 +246,9 @@ class ReplaceFileContentTool(
         raise NotImplementedError
 
     @property
-    def target_content_parameter(self) -> tool_provider.ToolParameter[sandbox_file_editor.TargetContent, str]:
+    def target_content_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[sandbox_file_editor.TargetContent, str]:
         """
         COVERED:
         - Returns target content parameter definition.
@@ -215,7 +257,9 @@ class ReplaceFileContentTool(
         raise NotImplementedError
 
     @property
-    def replacement_content_parameter(self) -> tool_provider.ToolParameter[sandbox_file_editor.ReplacementContent, str]:
+    def replacement_content_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[sandbox_file_editor.ReplacementContent, str]:
         """
         COVERED:
         - Returns replacement content parameter definition.
@@ -224,7 +268,9 @@ class ReplaceFileContentTool(
         raise NotImplementedError
 
     @property
-    def start_line_parameter(self) -> tool_provider.ToolParameter[Optional[sandbox_file_editor.LineNumber], int]:
+    def start_line_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[Optional[sandbox_file_editor.LineNumber], int]:
         """
         COVERED:
         - Returns start line parameter definition.
@@ -233,7 +279,9 @@ class ReplaceFileContentTool(
         raise NotImplementedError
 
     @property
-    def end_line_parameter(self) -> tool_provider.ToolParameter[Optional[sandbox_file_editor.LineNumber], int]:
+    def end_line_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[Optional[sandbox_file_editor.LineNumber], int]:
         """
         COVERED:
         - Returns end line parameter definition.
@@ -242,7 +290,9 @@ class ReplaceFileContentTool(
         raise NotImplementedError
 
     @property
-    def allow_multiple_parameter(self) -> tool_provider.ToolParameter[sandbox_file_editor.AllowMultiple, bool]:
+    def allow_multiple_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[sandbox_file_editor.AllowMultiple, bool]:
         """
         COVERED:
         - Returns allow multiple parameter definition.
@@ -270,7 +320,9 @@ class ReplaceFileContentTool(
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
@@ -303,7 +355,7 @@ class ReplaceFileContentTool(
           - Consequent knowledge: return failed ToolResponse with reminder "No-op edits will fail.".
         - WHEN the replacement succeeds, MUST write updated content creating missing parent directories and record workspace file writes.
           - Condition knowledge: edit_mgr.can_write confirmed.
-          - Consequent knowledge: filesystem_ext.write_text_file and edit_mgr.record_file_edit.        """
+          - Consequent knowledge: filesystem_ext.write_text_file and edit_mgr.record_file_edit."""
         edit_mgr = self.get_singleton(sandbox_file_editor.EditManager)
 
         # 1. Path omission resolution knowledge
@@ -364,7 +416,9 @@ class ReplaceFileContentTool(
         # 7. Write access, parent directory creation, and recording edit knowledge
         sample_rw = agent_file_alias.ReadWriteFile(
             relative_path=agent_file_alias.RelativePath("foo.py"),
-            workspace_path=file_paths.WorkspacePath(path=file_paths.PathString("src/foo.py")),
+            workspace_path=file_paths.WorkspacePath(
+                path=file_paths.PathString("src/foo.py")
+            ),
             owning_node=dag_storage.DagNode(
                 unit_address=dag_storage.UnitAddress("sample_unit"),
                 role_address=dag_storage.RoleAddress("sample_role"),

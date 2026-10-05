@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: eeb0dba8345a
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Bazel node config implementation grounding specification module."""
 
 from __future__ import annotations
@@ -9,9 +17,7 @@ from parts.dag.grounding import dag_storage
 from parts.bazel.grounding import bazel_manifest_loader, bazel_target
 
 
-class NodeConfig(
-    agent_node_config.NodeConfig, InTier[AgentSessionTier]
-):
+class NodeConfig(agent_node_config.NodeConfig, InTier[AgentSessionTier]):
     """Realizes session configuration by resolving Bazel target manifests.
 
     DISCHARGED:
@@ -29,18 +35,27 @@ class NodeConfig(
         role_cfg = self.get_singleton(agent_node_config.RoleConfig)
         manifest_loader = self.get_singleton(bazel_manifest_loader.BazelManifestLoader)
         sample_node: dag_storage.DagNode = only_elem(role_cfg.nodes)
-        manifest: Optional[bazel_manifest_loader.TargetManifest] = manifest_loader.retrieve_manifest(sample_node)
-        sample_manifest: bazel_manifest_loader.TargetManifest = manifest or bazel_manifest_loader.TargetManifest(
-            label=bazel_manifest_loader.TargetLabel(str(sample_node.unit_address))
+        manifest: Optional[bazel_manifest_loader.TargetManifest] = (
+            manifest_loader.retrieve_manifest(sample_node)
         )
-        dep_label: bazel_manifest_loader.TargetLabel = only_elem(sample_manifest.dependencies)
+        sample_manifest: bazel_manifest_loader.TargetManifest = (
+            manifest
+            or bazel_manifest_loader.TargetManifest(
+                label=bazel_manifest_loader.TargetLabel(str(sample_node.unit_address))
+            )
+        )
+        dep_label: bazel_manifest_loader.TargetLabel = only_elem(
+            sample_manifest.dependencies
+        )
         dep_node: dag_storage.DagNode = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress(str(dep_label)),
             role_address=dag_storage.RoleAddress("lib"),
         )
         ro_file: agent_file_alias.ReadOnlyFile = agent_file_alias.ReadOnlyFile(
             relative_path=agent_file_alias.RelativePath(f"{dep_label}.py"),
-            workspace_path=file_paths.WorkspacePath(file_paths.PathString(f"src/{dep_label}.py")),
+            workspace_path=file_paths.WorkspacePath(
+                file_paths.PathString(f"src/{dep_label}.py")
+            ),
             owning_node=dep_node,
         )
         rw_file: agent_file_alias.ReadWriteFile = only_elem(self.read_write_files)
@@ -59,14 +74,23 @@ class NodeConfig(
         role_cfg = self.get_singleton(agent_node_config.RoleConfig)
         manifest_loader = self.get_singleton(bazel_manifest_loader.BazelManifestLoader)
         sample_node: dag_storage.DagNode = only_elem(role_cfg.nodes)
-        manifest: Optional[bazel_manifest_loader.TargetManifest] = manifest_loader.retrieve_manifest(sample_node)
-        sample_manifest: bazel_manifest_loader.TargetManifest = manifest or bazel_manifest_loader.TargetManifest(
-            label=bazel_manifest_loader.TargetLabel(str(sample_node.unit_address))
+        manifest: Optional[bazel_manifest_loader.TargetManifest] = (
+            manifest_loader.retrieve_manifest(sample_node)
         )
-        src_path: agent_file_alias.RelativePath = sample_manifest.source_file or agent_file_alias.RelativePath("src.py")
+        sample_manifest: bazel_manifest_loader.TargetManifest = (
+            manifest
+            or bazel_manifest_loader.TargetManifest(
+                label=bazel_manifest_loader.TargetLabel(str(sample_node.unit_address))
+            )
+        )
+        src_path: agent_file_alias.RelativePath = (
+            sample_manifest.source_file or agent_file_alias.RelativePath("src.py")
+        )
         rw_file: agent_file_alias.ReadWriteFile = agent_file_alias.ReadWriteFile(
             relative_path=src_path,
-            workspace_path=file_paths.WorkspacePath(file_paths.PathString(f"src/{src_path}")),
+            workspace_path=file_paths.WorkspacePath(
+                file_paths.PathString(f"src/{src_path}")
+            ),
             owning_node=sample_node,
         )
         _files = {rw_file}
@@ -83,9 +107,14 @@ class NodeConfig(
         role_cfg = self.get_singleton(agent_node_config.RoleConfig)
         manifest_loader = self.get_singleton(bazel_manifest_loader.BazelManifestLoader)
         sample_node: dag_storage.DagNode = only_elem(role_cfg.nodes)
-        manifest: Optional[bazel_manifest_loader.TargetManifest] = manifest_loader.retrieve_manifest(sample_node)
-        sample_manifest: bazel_manifest_loader.TargetManifest = manifest or bazel_manifest_loader.TargetManifest(
-            label=bazel_manifest_loader.TargetLabel(str(sample_node.unit_address))
+        manifest: Optional[bazel_manifest_loader.TargetManifest] = (
+            manifest_loader.retrieve_manifest(sample_node)
+        )
+        sample_manifest: bazel_manifest_loader.TargetManifest = (
+            manifest
+            or bazel_manifest_loader.TargetManifest(
+                label=bazel_manifest_loader.TargetLabel(str(sample_node.unit_address))
+            )
         )
         _res: bool = sample_manifest.guide_target is not None
         raise NotImplementedError
@@ -104,7 +133,9 @@ class NodeConfig(
         _node_allows: bool = self.allows_step_mode
         _single_node: bool = len(role_cfg.nodes) == 1
         _feedback_absent: bool = len(self.feedback) == 0
-        _res: bool = _agent_allows and _node_allows and _single_node and _feedback_absent
+        _res: bool = (
+            _agent_allows and _node_allows and _single_node and _feedback_absent
+        )
         raise NotImplementedError
 
     @property
@@ -120,12 +151,19 @@ class NodeConfig(
         role_cfg = self.get_singleton(agent_node_config.RoleConfig)
         manifest_loader = self.get_singleton(bazel_manifest_loader.BazelManifestLoader)
         sample_node: dag_storage.DagNode = only_elem(role_cfg.nodes)
-        manifest: Optional[bazel_manifest_loader.TargetManifest] = manifest_loader.retrieve_manifest(sample_node)
-        sample_manifest: bazel_manifest_loader.TargetManifest = manifest or bazel_manifest_loader.TargetManifest(
-            label=bazel_manifest_loader.TargetLabel(str(sample_node.unit_address))
+        manifest: Optional[bazel_manifest_loader.TargetManifest] = (
+            manifest_loader.retrieve_manifest(sample_node)
+        )
+        sample_manifest: bazel_manifest_loader.TargetManifest = (
+            manifest
+            or bazel_manifest_loader.TargetManifest(
+                label=bazel_manifest_loader.TargetLabel(str(sample_node.unit_address))
+            )
         )
         _is_active: bool = self.is_step_mode
-        guide_label: Optional[bazel_manifest_loader.TargetLabel] = sample_manifest.guide_target
+        guide_label: Optional[bazel_manifest_loader.TargetLabel] = (
+            sample_manifest.guide_target
+        )
         guide_label_str: str = str(guide_label or "GUIDE.md")
         _file = agent_file_alias.UnboundFile(
             relative_path=agent_file_alias.RelativePath(guide_label_str)
@@ -133,7 +171,9 @@ class NodeConfig(
         raise NotImplementedError
 
     @property
-    def templates(self) -> Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent]:
+    def templates(
+        self,
+    ) -> Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent]:
         """
         COVERED:
         - MUST aggregate read-write files and templates across active nodes.
@@ -141,7 +181,9 @@ class NodeConfig(
           - Consequent knowledge: return mapping from ReadWriteFile to FileContent.
         """
         rw_file: agent_file_alias.ReadWriteFile = only_elem(self.read_write_files)
-        tmpl_content: agent_file_alias.FileContent = agent_file_alias.FileContent("# Initial boilerplate")
+        tmpl_content: agent_file_alias.FileContent = agent_file_alias.FileContent(
+            "# Initial boilerplate"
+        )
         _res = {rw_file: tmpl_content}
         raise NotImplementedError
 
@@ -156,8 +198,12 @@ class NodeConfig(
         role_cfg = self.get_singleton(agent_node_config.RoleConfig)
         sample_node: dag_storage.DagNode = only_elem(role_cfg.nodes)
         _res = {
-            agent_node_config.TemplateParamKey("unit_name"): str(sample_node.unit_address),
-            agent_node_config.TemplateParamKey("role_name"): str(sample_node.role_address),
+            agent_node_config.TemplateParamKey("unit_name"): str(
+                sample_node.unit_address
+            ),
+            agent_node_config.TemplateParamKey("role_name"): str(
+                sample_node.role_address
+            ),
         }
         raise NotImplementedError
 
@@ -189,12 +235,16 @@ class NodeConfig(
         section = agent_node_config.StepSection(
             index=agent_node_config.StepIndex(1),
             title=agent_node_config.StepTitle("Initial Implementation"),
-            content=agent_node_config.StepContent("Implement declared module interface."),
+            content=agent_node_config.StepContent(
+                "Implement declared module interface."
+            ),
         )
         _res = agent_node_config.NodeGuide(
             summary=agent_node_config.GuideSummary("Task Guide Overview"),
             sections=[section],
-            verification_failure=agent_node_config.VerificationFailureInstructions("Rerun verification to inspect errors."),
+            verification_failure=agent_node_config.VerificationFailureInstructions(
+                "Rerun verification to inspect errors."
+            ),
         )
         raise NotImplementedError
 
@@ -216,7 +266,9 @@ class NodeConfig(
         )
         blame_file: agent_file_alias.BoundFile = agent_file_alias.ReadOnlyFile(
             relative_path=agent_file_alias.RelativePath("upstream.py"),
-            workspace_path=file_paths.WorkspacePath(file_paths.PathString("src/upstream.py")),
+            workspace_path=file_paths.WorkspacePath(
+                file_paths.PathString("src/upstream.py")
+            ),
             owning_node=dep_node,
         )
         _res = {sample_node: {blame_file}}
@@ -230,7 +282,9 @@ class NodeConfig(
           - Condition knowledge: inspect active nodes from RoleConfig.
           - Consequent knowledge: return aggregated sequence containing VerificationCheck.
         """
-        check: agent_node_config.VerificationCheck = cast(agent_node_config.VerificationCheck, None)
+        check: agent_node_config.VerificationCheck = cast(
+            agent_node_config.VerificationCheck, None
+        )
         _res = [check]
         raise NotImplementedError
 
@@ -250,7 +304,9 @@ class NodeConfig(
         raise NotImplementedError
 
     @property
-    def src_file_alias_by_node(self) -> Mapping[dag_storage.DagNode, agent_file_alias.RelativePath]:
+    def src_file_alias_by_node(
+        self,
+    ) -> Mapping[dag_storage.DagNode, agent_file_alias.RelativePath]:
         """
         COVERED:
         - MUST map each active node to the relative path of its declared source file alias.
@@ -264,7 +320,9 @@ class NodeConfig(
         raise NotImplementedError
 
     @property
-    def verification_success_message(self) -> Optional[agent_node_config.VerificationSuccessMessage]:
+    def verification_success_message(
+        self,
+    ) -> Optional[agent_node_config.VerificationSuccessMessage]:
         """
         COVERED:
         - WHEN exactly one node is active, MUST provide the verification success message from the active node.
@@ -273,7 +331,9 @@ class NodeConfig(
         """
         role_cfg = self.get_singleton(agent_node_config.RoleConfig)
         _is_single_node: bool = len(role_cfg.nodes) == 1
-        _res = agent_node_config.VerificationSuccessMessage("Verification checks passed.")
+        _res = agent_node_config.VerificationSuccessMessage(
+            "Verification checks passed."
+        )
         raise NotImplementedError
 
     @property
@@ -289,7 +349,9 @@ class NodeConfig(
         sample_node: dag_storage.DagNode = only_elem(role_cfg.nodes)
         messages: Set[dag_storage.DagMessage] = storage.get_messages(sample_node)
         sample_msg: dag_storage.DagMessage = only_elem(messages)
-        fb_msg: dag_storage.FeedbackMessage = cast(dag_storage.FeedbackMessage, sample_msg)
+        fb_msg: dag_storage.FeedbackMessage = cast(
+            dag_storage.FeedbackMessage, sample_msg
+        )
         _res = [agent_node_config.NodeFeedback(str(fb_msg.content))]
         raise NotImplementedError
 
@@ -362,35 +424,57 @@ class NodeConfig(
 
         _version: agent_node_config.ExecutionVersion = role_cfg.version
         sample_node: dag_storage.DagNode = only_elem(role_cfg.nodes)
-        manifest: Optional[bazel_manifest_loader.TargetManifest] = manifest_loader.retrieve_manifest(sample_node)
-        sample_manifest: bazel_manifest_loader.TargetManifest = manifest or bazel_manifest_loader.TargetManifest(
-            label=bazel_manifest_loader.TargetLabel(str(sample_node.unit_address))
+        manifest: Optional[bazel_manifest_loader.TargetManifest] = (
+            manifest_loader.retrieve_manifest(sample_node)
+        )
+        sample_manifest: bazel_manifest_loader.TargetManifest = (
+            manifest
+            or bazel_manifest_loader.TargetManifest(
+                label=bazel_manifest_loader.TargetLabel(str(sample_node.unit_address))
+            )
         )
 
-        _dep_label: bazel_manifest_loader.TargetLabel = only_elem(sample_manifest.dependencies)
-        _silent_dep: bazel_manifest_loader.TargetLabel = only_elem(sample_manifest.silent_dependencies)
+        _dep_label: bazel_manifest_loader.TargetLabel = only_elem(
+            sample_manifest.dependencies
+        )
+        _silent_dep: bazel_manifest_loader.TargetLabel = only_elem(
+            sample_manifest.silent_dependencies
+        )
         _is_excluded_silent: bool = _dep_label != _silent_dep
 
-        _guide_label: Optional[bazel_manifest_loader.TargetLabel] = sample_manifest.guide_target
+        _guide_label: Optional[bazel_manifest_loader.TargetLabel] = (
+            sample_manifest.guide_target
+        )
         guide_node: dag_storage.DagNode = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress(str(_guide_label or "//pkg:guide")),
             role_address=dag_storage.RoleAddress("doc"),
         )
-        _guide_manifest: Optional[bazel_manifest_loader.TargetManifest] = manifest_loader.retrieve_manifest(guide_node)
-        sample_guide_manifest: bazel_manifest_loader.TargetManifest = _guide_manifest or bazel_manifest_loader.TargetManifest(
-            label=bazel_manifest_loader.TargetLabel(str(guide_node.unit_address)),
-            source_file=agent_file_alias.RelativePath("guide.md"),
+        _guide_manifest: Optional[bazel_manifest_loader.TargetManifest] = (
+            manifest_loader.retrieve_manifest(guide_node)
+        )
+        sample_guide_manifest: bazel_manifest_loader.TargetManifest = (
+            _guide_manifest
+            or bazel_manifest_loader.TargetManifest(
+                label=bazel_manifest_loader.TargetLabel(str(guide_node.unit_address)),
+                source_file=agent_file_alias.RelativePath("guide.md"),
+            )
         )
         _guide_src_cand: str = str(sample_guide_manifest.source_file or "guide.md")
         _guide_label_cand: str = f"{guide_node.unit_address}.md"
         _resolved_guide_path: str = f"/workspace/{_guide_src_cand}"
         _guide_content: str = "# Guide Title\n\n## Step 1\nStep content\n"
 
-        check: agent_node_config.VerificationCheck = cast(agent_node_config.VerificationCheck, None)
+        check: agent_node_config.VerificationCheck = cast(
+            agent_node_config.VerificationCheck, None
+        )
         messages: Set[dag_storage.DagMessage] = storage.get_messages(sample_node)
         sample_msg: dag_storage.DagMessage = only_elem(messages)
-        fb_msg: dag_storage.FeedbackMessage = cast(dag_storage.FeedbackMessage, sample_msg)
-        node_feedback: agent_node_config.NodeFeedback = agent_node_config.NodeFeedback(str(fb_msg.content))
+        fb_msg: dag_storage.FeedbackMessage = cast(
+            dag_storage.FeedbackMessage, sample_msg
+        )
+        node_feedback: agent_node_config.NodeFeedback = agent_node_config.NodeFeedback(
+            str(fb_msg.content)
+        )
 
         info: agent_node_config.PerNodeInfo = agent_node_config.PerNodeInfo(
             read_only_files=self.read_only_files,
@@ -406,14 +490,14 @@ class NodeConfig(
             verification_success_message=self.verification_success_message,
             feedback=[node_feedback],
         )
-        _cached_info: Mapping[dag_storage.DagNode, agent_node_config.PerNodeInfo] = {sample_node: info}
+        _cached_info: Mapping[dag_storage.DagNode, agent_node_config.PerNodeInfo] = {
+            sample_node: info
+        }
         _res = _cached_info
         raise NotImplementedError
 
 
-class AliasManager(
-    agent_file_alias.AliasManager, InTier[AgentSessionTier]
-):
+class AliasManager(agent_file_alias.AliasManager, InTier[AgentSessionTier]):
     """Realizes minimal file alias resolution and safe path masking.
 
     DISCHARGED:

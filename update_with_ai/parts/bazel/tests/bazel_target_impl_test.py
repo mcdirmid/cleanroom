@@ -1,7 +1,20 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: e65e5c3ac3ba
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for bazel_target_impl aligned with grounding specifications."""
 
 import unittest
-from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory, TargetIdentifier
+from update_with_ai.parts.bazel.lib.bazel_target import (
+    BazelTarget,
+    NodeDirectory,
+    TargetIdentifier,
+)
 from update_with_ai.parts.bazel.lib.bazel_target_impl import (
     BazelTarget as BazelTargetImpl,
     __initialize__,
@@ -12,7 +25,9 @@ from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
 def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
-    return DagNode(unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address))
+    return DagNode(
+        unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address)
+    )
 
 
 class TestBazelTargetImpl(unittest.TestCase):
@@ -51,7 +66,9 @@ class TestBazelTargetImpl(unittest.TestCase):
                 _make_dag_node("//pkg:target"),
             )
             self.assertEqual(
-                utils.normalize_target(TargetIdentifier("//pkg/sub:target#//roles:lib")),
+                utils.normalize_target(
+                    TargetIdentifier("//pkg/sub:target#//roles:lib")
+                ),
                 _make_dag_node("//pkg/sub:target", "//roles:lib"),
             )
             self.assertEqual(
@@ -66,15 +83,11 @@ class TestBazelTargetImpl(unittest.TestCase):
             # Requirement: MUST derive node directories by extracting package directory paths relative to a workspace root.
             # Requirement: MUST extract a node directory from a node.
             self.assertEqual(
-                utils.extract_node_dir(
-                    _make_dag_node("//pkg/sub:target")
-                ),
+                utils.extract_node_dir(_make_dag_node("//pkg/sub:target")),
                 NodeDirectory(path=PathString("pkg/sub")),
             )
             self.assertEqual(
-                utils.extract_node_dir(
-                    _make_dag_node("//:root_target")
-                ),
+                utils.extract_node_dir(_make_dag_node("//:root_target")),
                 NodeDirectory(path=PathString("")),
             )
 

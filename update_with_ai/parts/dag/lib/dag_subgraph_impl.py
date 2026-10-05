@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 2e01f1710774
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in dag_subgraph_impl.pyi
 from collections import deque
 from typing import Dict, List, Optional, Sequence, Set
@@ -61,15 +70,21 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
     ) -> List[dag_storage.DagNode]:
         sorted_nodes = sorted(nodes, key=_node_sort_key)
         in_degree: Dict[dag_storage.DagNode, int] = {n: 0 for n in sorted_nodes}
-        adj: Dict[dag_storage.DagNode, List[dag_storage.DagNode]] = {n: [] for n in sorted_nodes}
+        adj: Dict[dag_storage.DagNode, List[dag_storage.DagNode]] = {
+            n: [] for n in sorted_nodes
+        }
 
         for n in sorted_nodes:
-            for dep in sorted(storage.get_dependencies(n), key=lambda d: _node_sort_key(d.node)):
+            for dep in sorted(
+                storage.get_dependencies(n), key=lambda d: _node_sort_key(d.node)
+            ):
                 if dep.node in nodes:
                     adj[dep.node].append(n)
                     in_degree[n] += 1
 
-        ready = sorted([n for n, deg in in_degree.items() if deg == 0], key=_node_sort_key)
+        ready = sorted(
+            [n for n, deg in in_degree.items() if deg == 0], key=_node_sort_key
+        )
         order: List[dag_storage.DagNode] = []
 
         while ready:
@@ -94,7 +109,9 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
         self._visits = {n: 0 for n in self._nodes}
 
     def is_complete(self) -> bool:
-        if self._target is None or not self._nodes:  # pragma: no cover (assumption: target set before completion check)
+        if (
+            self._target is None or not self._nodes
+        ):  # pragma: no cover (assumption: target set before completion check)
             return False
         storage = get_singleton(dag_storage.DagStorage)
         return not any(storage.is_dirty(n) for n in self._nodes)
@@ -121,7 +138,9 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
             return []
 
         best_tier = min(_role_tier(c.role_address) for c in ready_candidates)
-        curr = next(c for c in ready_candidates if _role_tier(c.role_address) == best_tier)
+        curr = next(
+            c for c in ready_candidates if _role_tier(c.role_address) == best_tier
+        )
 
         batch: List[dag_storage.DagNode] = [curr]
         batch_set: Set[dag_storage.DagNode] = {curr}

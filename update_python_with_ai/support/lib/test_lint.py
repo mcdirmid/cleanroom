@@ -67,10 +67,9 @@ def is_uninitialized_test_module(content: str) -> bool:
         test_methods: list[ast.AST] = []
         for cls in test_classes:
             for item in cls.body:
-                if (
-                    isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
-                    and item.name.startswith("test_")
-                ):
+                if isinstance(
+                    item, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ) and item.name.startswith("test_"):
                     test_methods.append(item)
         if not test_classes or not test_methods:
             return True
@@ -115,7 +114,11 @@ def extract_requirements_from_pyi(
         current_section = None
         for line in doc.splitlines():
             stripped = line.strip()
-            if stripped in ("FRESH_REQUIREMENTS:", "REQUIREMENTS:", "PROSE_REQUIREMENTS:"):
+            if stripped in (
+                "FRESH_REQUIREMENTS:",
+                "REQUIREMENTS:",
+                "PROSE_REQUIREMENTS:",
+            ):
                 current_section = "FRESH_REQUIREMENTS"
                 continue
             elif stripped == "INHERITED_REQUIREMENTS:":
@@ -235,9 +238,15 @@ def generate_test_skeleton(
             classes_str = ", ".join(sorted(impl_classes))
             lines.append(f"        for cls in [{classes_str}]:")
             lines.append("            self.assertIsNotNone(cls)")
-            lines.append("        # Singletons are resolved within an active phase scope:")
-            lines.append('        # with enter_phase(agent_session, registry=self.registry) as scope:')
-            lines.append(f"        #     instance = scope.get_singleton({sorted(impl_classes)[0]})")
+            lines.append(
+                "        # Singletons are resolved within an active phase scope:"
+            )
+            lines.append(
+                "        # with enter_phase(agent_session, registry=self.registry) as scope:"
+            )
+            lines.append(
+                f"        #     instance = scope.get_singleton({sorted(impl_classes)[0]})"
+            )
     else:
         lines.append("    def test_initialization(self) -> None:")
         lines.append('        """CUJ: Verify initial component presence."""')
@@ -433,7 +442,9 @@ def main() -> int:
             d = os.path.dirname(args.build_path)
             if d:
                 os.makedirs(d, exist_ok=True)
-            header = "# " + (package + "/BUILD.bazel" if package else "BUILD.bazel") + "\n"
+            header = (
+                "# " + (package + "/BUILD.bazel" if package else "BUILD.bazel") + "\n"
+            )
             write_text(args.build_path, header + load_line(["pyright_test"]) + "\n")
         orig_text = read_text(args.build_path)
         text = orig_text
@@ -453,9 +464,15 @@ def main() -> int:
                         if d.startswith("//"):
                             expected_labels.add(d)
                         elif d.startswith(":"):
-                            expected_labels.add(f"//{args.lib_pkg}:{d.lstrip(':')}" if args.lib_pkg else d)
+                            expected_labels.add(
+                                f"//{args.lib_pkg}:{d.lstrip(':')}"
+                                if args.lib_pkg
+                                else d
+                            )
                         else:
-                            expected_labels.add(f"//{args.lib_pkg}:{d}" if args.lib_pkg else f":{d}")
+                            expected_labels.add(
+                                f"//{args.lib_pkg}:{d}" if args.lib_pkg else f":{d}"
+                            )
                     missing = expected_labels - set(actual_deps)
                     if not missing:
                         pass

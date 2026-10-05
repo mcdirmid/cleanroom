@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: c0d8239daca3
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Loop cleaner implementation grounding specification module."""
 
 from __future__ import annotations
@@ -30,8 +38,10 @@ class LoopCleaner(loop_cleaner.LoopCleaner, InTier[SystemTier]):
           - Consequent knowledge: return False.
         - WHEN dag subgraph is complete, MUST return true.
           - Condition knowledge: test subgraph.is_complete().
-          - Consequent knowledge: return True.        """
-        subgraph: dag_subgraph.DagSubgraph = self.get_singleton(dag_subgraph.DagSubgraph)
+          - Consequent knowledge: return True."""
+        subgraph: dag_subgraph.DagSubgraph = self.get_singleton(
+            dag_subgraph.DagSubgraph
+        )
         subgraph.set_target(target)
         batch: Sequence[dag_storage.DagNode] = subgraph.next_ready_batch()
 
@@ -45,4 +55,6 @@ class LoopCleaner(loop_cleaner.LoopCleaner, InTier[SystemTier]):
 def __initialize__() -> None:
     """Initializes the LoopCleaner singleton in the system tier."""
     instance: LoopCleaner = cast(LoopCleaner, None)
-    _subgraph: dag_subgraph.DagSubgraph = instance.get_singleton(dag_subgraph.DagSubgraph)
+    _subgraph: dag_subgraph.DagSubgraph = instance.get_singleton(
+        dag_subgraph.DagSubgraph
+    )

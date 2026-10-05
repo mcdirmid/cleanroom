@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: d0ee01568ae0
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in sandbox_file_editor_impl.pyi
 import difflib
 import hashlib
@@ -14,6 +23,7 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
+from support.lib import src_metadata
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 
 
@@ -30,7 +40,9 @@ def _make_tool_response(
         is_terminated=is_terminated,
         content=tool_provider.ToolResponseContent(content),
         reminder=tool_provider.ToolReminder(reminder) if reminder is not None else None,
-        suppression_key=tool_provider.SuppressionKey(suppression_key) if suppression_key is not None else None,
+        suppression_key=tool_provider.SuppressionKey(suppression_key)
+        if suppression_key is not None
+        else None,
         follow_up_tool_call=follow_up_tool_call,
     )
 
@@ -39,7 +51,6 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
-        self._initial_contents: dict[str, Optional[str]] = {}
         self._file_update_revision: int = 0
         self._last_read_or_edited_file: Optional[agent_file_alias.FileAlias] = None
 
@@ -48,20 +59,13 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
         try:
             cfg = get_singleton(agent_config.AgentConfig)
             is_mcp = cfg.is_mcp_mode
-        except (LookupError, KeyError):  # pragma: no cover (assumption: standard non-mcp session)
+        except (
+            LookupError,
+            KeyError,
+        ):  # pragma: no cover (assumption: standard non-mcp session)
             is_mcp = False
         if not is_mcp:
             tm.install_tool(get_singleton(ReplaceFileContentTool))
-        try:
-            n_cfg = get_singleton(agent_node_config.NodeConfig)
-            alias_mgr = get_singleton(agent_file_alias.AliasManager)
-            for rw_file in getattr(n_cfg, "read_write_files", []):
-                host_path = os.path.join(
-                    alias_mgr.workspace_root.path, rw_file.workspace_path.path
-                )
-                self.record_initial_content(host_path)
-        except (LookupError, KeyError):  # pragma: no cover (assumption: standard non-mcp session)
-            pass
 
     def can_write(
         self, path: Union[agent_file_alias.RelativePath, agent_file_alias.FileAlias]
@@ -93,28 +97,10 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
             content=f"Modification permitted for '{target_file.relative_path}'.",
         )
 
-    def record_initial_content(
-        self,
-        host_path: str,
-        content: Optional[str] = None,
-        force: bool = False,
-    ) -> None:
-        if force or host_path not in self._initial_contents:
-            if content is not None:
-                self._initial_contents[host_path] = content
-            elif os.path.exists(host_path):
-                try:
-                    with open(host_path, "r", encoding="utf-8") as f:
-                        self._initial_contents[host_path] = f.read()
-                except OSError:  # pragma: no cover (assumption: workspace filesystem accessible)
-                    self._initial_contents[host_path] = None
-            else:
-                self._initial_contents[host_path] = None
-
     @property
     def has_modifications(self) -> bool:
-        # Requirement: The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing.
-        # Requirement: [EditManager] The edit manager exposes whether workspace file modifications occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
+        # Requirement: The edit manager exposes whether workspace file writes occurred during the session by comparing current workspace file content against their in-band code hash.
+        # Requirement: [EditManager] The edit manager exposes whether workspace file writes occurred during the session, determined by whether workspace file contents differ from their in-band code hash.
         try:
             n_cfg = get_singleton(agent_node_config.NodeConfig)
             alias_mgr = get_singleton(agent_file_alias.AliasManager)
@@ -122,25 +108,16 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
                 host_path = os.path.join(
                     alias_mgr.workspace_root.path, rw_file.workspace_path.path
                 )
-                if host_path not in self._initial_contents:
-                    self.record_initial_content(host_path)
-        except (LookupError, KeyError):  # pragma: no cover (assumption: session singletons present)
-            pass  # pragma: no cover
-
-        for host_path, initial in self._initial_contents.items():
-            if not os.path.exists(host_path):
-                if initial is not None:
+                if not os.path.exists(host_path):
+                    continue
+                if src_metadata.is_code_modified(host_path):
                     return True
-            else:
-                if initial is None:
-                    return True
-                try:
-                    with open(host_path, "r", encoding="utf-8") as f:
-                        current = f.read()
-                    if current != initial:
-                        return True
-                except OSError:  # pragma: no cover (assumption: workspace filesystem accessible)
-                    return True
+        except (
+            LookupError,
+            KeyError,
+            OSError,
+        ):  # pragma: no cover (assumption: session singletons present)
+            pass
         return False
 
     def file_hash(
@@ -181,8 +158,6 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
 
     def record_modification(self, host_path: Optional[str] = None) -> None:
         self._file_update_revision += 1
-        if host_path is not None:
-            self.record_initial_content(host_path)
 
 
 def _target_content_missing_message(
@@ -260,7 +235,9 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             name=tool_provider.ParameterName("replacement_content"),
             description=tool_provider.ParameterDescription("Replacement text content"),
             parameter_type=cast(
-                tool_provider.ParameterType[sandbox_file_editor.ReplacementContent, str],
+                tool_provider.ParameterType[
+                    sandbox_file_editor.ReplacementContent, str
+                ],
                 tool_provider.STRING_PARAMETER_TYPE,
             ),
             is_required=True,
@@ -276,7 +253,9 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                 "Optional 1-based starting line number of the search window (inclusive). Note: target_content is still required and searched for within this range."
             ),
             parameter_type=cast(
-                tool_provider.ParameterType[Optional[sandbox_file_editor.LineNumber], int],
+                tool_provider.ParameterType[
+                    Optional[sandbox_file_editor.LineNumber], int
+                ],
                 tool_provider.INTEGER_PARAMETER_TYPE,
             ),
             is_required=False,
@@ -292,7 +271,9 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                 "Optional 1-based ending line number of the search window (inclusive). Note: target_content is still required and searched for within this range."
             ),
             parameter_type=cast(
-                tool_provider.ParameterType[Optional[sandbox_file_editor.LineNumber], int],
+                tool_provider.ParameterType[
+                    Optional[sandbox_file_editor.LineNumber], int
+                ],
                 tool_provider.INTEGER_PARAMETER_TYPE,
             ),
             is_required=False,
@@ -329,10 +310,14 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
 
     def execute_tool(
         self,
-        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
+        ],
     ) -> tool_provider.ToolResponse:
         target_file = actual_parameter_bindings.get(self.path_parameter)
-        target_content = str(actual_parameter_bindings.get(self.target_content_parameter) or "")
+        target_content = str(
+            actual_parameter_bindings.get(self.target_content_parameter) or ""
+        )
         replacement_content = str(
             actual_parameter_bindings.get(self.replacement_content_parameter) or ""
         )
@@ -344,7 +329,9 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         end_line: Optional[int] = (
             int(cast(Any, end_line_val)) if end_line_val is not None else None
         )
-        allow_multiple_val = actual_parameter_bindings.get(self.allow_multiple_parameter)
+        allow_multiple_val = actual_parameter_bindings.get(
+            self.allow_multiple_parameter
+        )
         allow_multiple: bool = (
             bool(allow_multiple_val) if allow_multiple_val is not None else False
         )
@@ -502,9 +489,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     suppression_key="replace_file_content",
                 )
             first_idx = region.find(target_content)
-            second_idx = region.find(
-                target_content, first_idx + len(target_content)
-            )
+            second_idx = region.find(target_content, first_idx + len(target_content))
             first_line = content[:first_idx].count("\n") + 1
             second_line = content[:second_idx].count("\n") + 1
             return _make_tool_response(
@@ -536,7 +521,6 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             )
 
         edit_mgr = get_singleton(EditManager)
-        edit_mgr.record_initial_content(host_path, content)
 
         os.makedirs(os.path.dirname(host_path), exist_ok=True)
         with open(host_path, "w", encoding="utf-8") as f:
@@ -548,7 +532,11 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         try:
             cfg = get_singleton(agent_config.AgentConfig)
             delta_output = cfg.edit_delta_output
-        except (LookupError, KeyError, AttributeError):  # pragma: no cover (assumption: standard non-mcp session)
+        except (
+            LookupError,
+            KeyError,
+            AttributeError,
+        ):  # pragma: no cover (assumption: standard non-mcp session)
             delta_output = True
 
         content_msg = "Successfully replaced content."
@@ -565,9 +553,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             content_msg = f"Successfully replaced content.\n\n```diff\n{diff_text}```"
 
         if is_implicit_path:
-            content_msg = (
-                f"Warning: 'path' was not specified; implicitly editing last accessed file '{target_file.relative_path}'.\n\n{content_msg}"
-            )
+            content_msg = f"Warning: 'path' was not specified; implicitly editing last accessed file '{target_file.relative_path}'.\n\n{content_msg}"
 
         return _make_tool_response(
             is_failed=False,
@@ -596,4 +582,3 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         ],
         tier=agent_session,
     )
-

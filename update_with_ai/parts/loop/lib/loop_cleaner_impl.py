@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 83d9243493cd
+# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
+# QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 # Requirements specified in loop_cleaner_impl.pyi
 from typing import Optional
 from . import loop_cleaner
@@ -31,7 +40,9 @@ class LoopCleaner(loop_cleaner.LoopCleaner, Singleton):
 
         while not _is_complete():
             batch = subgraph.next_ready_batch()
-            if not batch:  # pragma: no cover (assumption: acyclic graph progress guaranteed)
+            if (
+                not batch
+            ):  # pragma: no cover (assumption: acyclic graph progress guaranteed)
                 break
             should_continue = node_cleaner.clean(batch)
             subgraph.record_visit(batch)

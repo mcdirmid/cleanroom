@@ -1,7 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-04T17:19:46Z
+LAST_CLEANED: 2026-10-05T02:07:35Z
 LAST_CHANGED: 2026-10-04T02:03:40Z
 CHANGE: new file
+CODE_HASH: c2510b321906
 -->
 
 # Guide: Coverage Arbiter
@@ -32,8 +33,8 @@ Blame feedback is strictly a single paragraph containing no newline characters; 
 - [ ] Blame feedback delivered to the library module never diagnoses functional bugs, contract deviations, or algorithmic logic errors, and never prescribes functional code fixes; functional defect arbitration belongs exclusively to QA
 - [ ] When coverage cannot be achieved without violating the grounding contract and the code cannot be eliminated by restructuring or justified by an assumption pragma, the session concludes via the `fail` tool
 - [ ] When 100% statement coverage is achieved and verified, calling the `blame` tool is prohibited, and the target concludes via the `submit` tool
- 
+
 ## Lint checks
 
 - [ ] Applies only to implementation modules ending in `_impl`
-- [ ] The verified target files (lib/<name>.py and tests/<name>_test.py) contain valid COVERAGE_AUDIT metadata tags upon successful completion
+- [ ] The verified target files (lib/<name>.py and tests/<name>\_test.py) contain valid COVERAGE_AUDIT metadata tags upon successful completion

@@ -1,2 +1,0 @@
-# Coverage Arbiter Log
-# Unresolved coverage deficits will be recorded below.

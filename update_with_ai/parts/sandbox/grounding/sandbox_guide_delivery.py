@@ -1,3 +1,11 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# CODE_HASH: 6df0c9de2efd
+# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# --- END CLEANROOM METADATA ---
+
 """Sandbox guide delivery grounding specification module."""
 
 from __future__ import annotations
@@ -73,7 +81,7 @@ class GuideDelivery(InTier[AgentSessionTier], Protocol):
           - Consequent knowledge: construct failed ToolResponse carrying failure_diagnostics.
 
         DEFERRED:
-        - Step index pointer advancement deferred to sandbox_guide_delivery_impl.py.        """
+        - Step index pointer advancement deferred to sandbox_guide_delivery_impl.py."""
         _passed: bool = verification_passed
         _failure_resp: tool_provider.ToolResponse = tool_provider.ToolResponse(
             is_failed=True,
