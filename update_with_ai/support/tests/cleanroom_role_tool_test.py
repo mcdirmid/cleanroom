@@ -474,6 +474,73 @@ class CleanroomRoleToolTest(unittest.TestCase):
         # Topological order: prerequisite "base" appears before "derived"!
         self.assertEqual(ready_names2, ["base", "derived"])
 
+    def test_get_work_pending_work_blocking_and_clearing(self) -> None:
+        """Verifies that get_work blocks when prior work is pending, --force bypasses, and submit/blame clear it."""
+        part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+        low_file = os.path.join(part_dir, "low/config.pyi")
+        with open(low_file, "w", encoding="utf-8") as f:
+            f.write("def get_config() -> str: ...\n")
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+
+        lib_ws = cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", repo_root=self.fake_repo
+        )
+        os.chdir(lib_ws)
+
+        # 1. Initial get_work detects dirty task and records it in pending work
+        ret1 = cleanroom_role_tool.main(["get_work"])
+        self.assertEqual(ret1, 1)
+        pending = cleanroom_role_tool.get_pending_work(lib_ws)
+        self.assertEqual(len(pending), 1)
+        self.assertIn("config.py", pending[0])
+
+        # 2. Second get_work call without submit or blame is BLOCKED with exit code 1
+        ret2 = cleanroom_role_tool.main(["get_work"])
+        self.assertEqual(ret2, 1)
+
+        # 3. get_work --force bypasses the pending work block
+        ret_force = cleanroom_role_tool.main(["get_work", "--force"])
+        self.assertEqual(ret_force, 1)
+
+        # 4. Modify and submit the target -> clears pending work
+        ws_lib = os.path.join(lib_ws, "staging/parts/agent/lib/config.py")
+        with open(ws_lib, "w", encoding="utf-8") as f:
+            f.write("def get_config() -> str: return 'ok'\n")
+        ret_sub = cleanroom_role_tool.main(
+            ["submit", "staging/parts/agent/lib/config.py", "implemented get_config"]
+        )
+        self.assertEqual(ret_sub, 0)
+        self.assertEqual(cleanroom_role_tool.get_pending_work(lib_ws), [])
+
+        # 5. get_work now succeeds and reports clean
+        ret_clean = cleanroom_role_tool.main(["get_work"])
+        self.assertEqual(ret_clean, 0)
+
+        # 6. Mark dirty again by updating upstream low contract
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2099-01-01T00:00:00Z",
+            last_changed="2099-01-01T00:00:00Z",
+        )
+        ret3 = cleanroom_role_tool.main(["get_work"])
+        self.assertEqual(ret3, 1)
+        self.assertEqual(len(cleanroom_role_tool.get_pending_work(lib_ws)), 1)
+
+        # 7. Blaming upstream contract clears pending work
+        ret_blame = cleanroom_role_tool.main(
+            ["blame", "staging/parts/agent/low/config.pyi", "Changed spec broken"]
+        )
+        self.assertEqual(ret_blame, 0)
+        self.assertEqual(cleanroom_role_tool.get_pending_work(lib_ws), [])
+
 
 if __name__ == "__main__":
     unittest.main()

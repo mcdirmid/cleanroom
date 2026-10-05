@@ -7,6 +7,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import sys
 from typing import Dict, List, Optional, Tuple
 
 
@@ -168,7 +169,10 @@ def extract_metadata(file_path: Path | str) -> Optional[FileMetadata]:
     try:
         content = p.read_text(encoding="utf-8")
         return extract_metadata_from_text(content, p.name)
-    except OSError:
+    except OSError as e:
+        sys.stderr.write(
+            f"Warning: Failed reading metadata from '{file_path}': {e}\n"
+        )
         return None
 
 
@@ -199,7 +203,10 @@ def compute_file_code_hash(file_path: Path | str) -> Optional[str]:
     try:
         content = p.read_text(encoding="utf-8")
         return compute_code_hash(content, p.name)
-    except OSError:
+    except OSError as e:
+        sys.stderr.write(
+            f"Warning: Failed reading '{file_path}' for code hash: {e}\n"
+        )
         return None
 
 

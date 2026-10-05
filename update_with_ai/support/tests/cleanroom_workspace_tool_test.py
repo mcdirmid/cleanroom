@@ -1406,6 +1406,56 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
             self.assertIn("CLEANROOM TEST STUB", restored_stub)
             self.assertNotIn("LeakedCalculator", restored_stub)
 
+    def test_pull_workspace_from_main_deletes_file_missing_from_main(self) -> None:
+        """Verifies that when a file is deleted from main, pull_workspace_from_main deletes it from the role workspace."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            main_repo = os.path.join(tmp_dir, "cleanroom_main")
+            part_dir = os.path.join(main_repo, "staging/parts/agent")
+            os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+            os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+
+            with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+                f.write('update_python_with_ai(name = "config")\n')
+
+            low_file = os.path.join(part_dir, "low/config.pyi")
+            with open(low_file, "w", encoding="utf-8") as f:
+                f.write("def get_config() -> str: ...\n")
+            src_metadata.update_metadata(
+                low_file,
+                last_cleaned="2026-10-04T12:00:00Z",
+                last_changed="2026-10-04T12:00:00Z",
+            )
+
+            # Commission lib role workspace
+            lib_ws = cleanroom_workspace_tool.commission_workspace(
+                "lib", dir_scope="staging", repo_root=main_repo
+            )
+            ws_lib = os.path.join(lib_ws, "staging/parts/agent/lib/config.py")
+            self.assertTrue(os.path.isfile(ws_lib))
+
+            # Create an arbitrary extra file in main and role workspace
+            extra_main = os.path.join(main_repo, "staging/parts/agent/low/extra.pyi")
+            extra_ws = os.path.join(lib_ws, "staging/parts/agent/low/extra.pyi")
+            with open(extra_main, "w", encoding="utf-8") as f:
+                f.write("# extra contract\n")
+            with open(extra_ws, "w", encoding="utf-8") as f:
+                f.write("# extra contract\n")
+
+            # Delete extra_main in main repo
+            os.remove(extra_main)
+            self.assertFalse(os.path.isfile(extra_main))
+            self.assertTrue(os.path.isfile(extra_ws))
+
+            # pull_workspace_from_main must delete extra_ws from role workspace
+            synced = cleanroom_workspace_tool.pull_workspace_from_main(
+                lib_ws, main_repo, "lib", dir_scope="staging"
+            )
+            delete_records = [
+                s for s in synced if s.get("type") == "DELETE" and "extra.pyi" in s.get("target", "")
+            ]
+            self.assertEqual(len(delete_records), 1)
+            self.assertFalse(os.path.isfile(extra_ws))
+
 
 if __name__ == "__main__":
     unittest.main()

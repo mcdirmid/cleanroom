@@ -84,7 +84,11 @@ def _resolve_main_root(
             cleanroom_workspace_tool.resolve_main_workspace_from_convention(ws_root)
         )
         return os.path.realpath(main_cand)
-    except Exception:
+    except Exception as e:
+        if meta:
+            sys.stderr.write(
+                f"Warning: could not resolve canonical main workspace for '{ws_root}': {e}\n"
+            )
         return ws_root
 
 
@@ -243,6 +247,117 @@ def resolve_submit_target(
     return None, None
 
 
+PENDING_WORK_FILE = ".cleanroom_pending_work.json"
+
+
+def get_pending_work(ws_root: str) -> List[str]:
+    """Returns list of pending target paths assigned in previous get_work calls."""
+    p = os.path.join(ws_root, PENDING_WORK_FILE)
+    if os.path.isfile(p):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return list(data.get("targets", []))
+            elif isinstance(data, list):
+                return list(data)
+        except Exception as e:
+            sys.stderr.write(f"Warning: Failed reading pending work file '{p}': {e}\n")
+    return []
+
+
+def set_pending_work(ws_root: str, targets: List[str]) -> None:
+    """Records pending target paths assigned to the workspace."""
+    p = os.path.join(ws_root, PENDING_WORK_FILE)
+    if not targets:
+        clear_pending_work(ws_root)
+        return
+    try:
+        cleanroom_workspace_tool.write_file_with_perms(
+            p,
+            json.dumps(
+                {
+                    "assigned_at": src_metadata.current_utc_timestamp(),
+                    "targets": targets,
+                },
+                indent=2,
+            )
+            + "\n",
+            readonly=False,
+        )
+    except Exception as e:
+        sys.stderr.write(f"Warning: Failed saving pending work file '{p}': {e}\n")
+
+
+def clear_pending_work(ws_root: str) -> None:
+    """Clears pending work tracking file."""
+    p = os.path.join(ws_root, PENDING_WORK_FILE)
+    if os.path.isfile(p):
+        try:
+            os.remove(p)
+        except OSError as e:
+            sys.stderr.write(f"Warning: Failed removing pending work file '{p}': {e}\n")
+
+
+def remove_pending_target(ws_root: str, submitted_target: str) -> None:
+    """Removes a submitted or resolved target from pending work."""
+    targets = get_pending_work(ws_root)
+    if not targets:
+        return
+    norm_sub = submitted_target.strip().lstrip("/")
+    sub_stem = os.path.splitext(os.path.basename(norm_sub))[0]
+    if sub_stem.endswith("_test"):
+        sub_stem = sub_stem[:-5]
+    remaining = []
+    for t in targets:
+        norm_t = t.strip().lstrip("/")
+        t_stem = os.path.splitext(os.path.basename(norm_t))[0]
+        if t_stem.endswith("_test"):
+            t_stem = t_stem[:-5]
+        if (
+            norm_t == norm_sub
+            or norm_t.endswith(f"/{norm_sub}")
+            or norm_sub.endswith(f"/{norm_t}")
+            or t_stem == sub_stem
+        ):
+            continue
+        remaining.append(t)
+    if len(remaining) == len(targets) and len(targets) == 1:
+        # If single target was pending and didn't match stem (e.g. cross-unit blame/resolution), clear it
+        remaining = []
+    set_pending_work(ws_root, remaining)
+
+
+def is_pending_target_dirty(
+    pt: str, ws_root: str, main_root: str, role_name: str
+) -> bool:
+    """Checks whether a pending target file is still dirty in ws_root or main."""
+    full_ws = os.path.join(ws_root, pt) if not os.path.isabs(pt) else pt
+    ref_root = ws_root
+    part_dir, unit_name, r_name = parse_unit_from_file_path(full_ws, ref_root)
+    eval_role = role_name or r_name
+    role_def = cleanroom_workspace_tool.resolve_role_definition(
+        eval_role, main_root or ws_root
+    )
+    if not cleanroom_workspace_tool.is_auditor_role(eval_role):
+        if not os.path.isfile(full_ws):
+            return True
+        meta_ws = src_metadata.extract_metadata(full_ws)
+        if (
+            meta_ws is None
+            or not meta_ws.last_cleaned
+            or meta_ws.dirty
+            or meta_ws.feedback
+        ):
+            return True
+    if not unit_name:
+        return False
+    res = cleanroom_workspace_tool.eval_unit_dirty(
+        ws_root, part_dir, unit_name, eval_role, role_def
+    )
+    return res.get("is_dirty", False)
+
+
 # ==============================================================================
 # Role Commands: get_work, submit, blame, fail
 # ==============================================================================
@@ -251,6 +366,7 @@ def resolve_submit_target(
 def run_get_work(
     dir_scope: Optional[str] = None,
     repo_root: Optional[str] = None,
+    force: bool = False,
 ) -> int:
     """Evaluates dirtiness in local workspace scope and prints next ready tasks for this role."""
     ws_root = os.path.realpath(find_workspace_root())
@@ -259,6 +375,40 @@ def run_get_work(
     d_scope = dir_scope or (meta.get("parts_dir", "staging") if meta else "staging")
 
     main_root = _resolve_main_root(ws_root, meta, repo_root)
+
+    # Check if pending work exists from a previous get_work call
+    if meta and not force:
+        pending = get_pending_work(ws_root)
+        if pending:
+            still_dirty = [
+                pt
+                for pt in pending
+                if is_pending_target_dirty(pt, ws_root, main_root, role_name)
+            ]
+            if still_dirty:
+                print(
+                    f"\nError: Cannot call get_work while work is pending in this role workspace."
+                )
+                print(f"Pending dirty target(s) from previous get_work call:")
+                for pt in still_dirty:
+                    print(f"  • {pt}")
+                if cleanroom_workspace_tool.is_auditor_role(role_name):
+                    print(
+                        f"\nComplete the pending work before getting new work:\n"
+                        f"  bin/submit <target_file> (attests {role_name.upper()}_AUDIT)\n"
+                        f"Or attribute defect to an upstream contract:\n"
+                        f"  bin/blame <culprit-file> \"<actionable critique>\"\n"
+                    )
+                else:
+                    print(
+                        f"\nComplete the pending work before getting new work:\n"
+                        f"  bin/submit <target_file> \"<summary>\" (or bin/submit <target_file> if no changes)\n"
+                        f"Or attribute defect to an upstream contract:\n"
+                        f"  bin/blame <culprit-file> \"<actionable critique>\"\n"
+                    )
+                return 1
+            else:
+                clear_pending_work(ws_root)
 
     # 1 & 2: Inbound pull and fast system refresh from main if in a distinct role workspace
     if main_root and os.path.isdir(main_root) and main_root != ws_root:
@@ -269,8 +419,16 @@ def run_get_work(
             cleanroom_workspace_tool.refresh_system_files_fast(
                 ws_root, main_root, role_name, dir_scope=d_scope, silent=True
             )
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write(f"Warning: automatic sync from main failed: {e}\n")
+    elif meta and main_root == ws_root:
+        sys.stderr.write(
+            f"Warning: In role workspace '{ws_root}' but canonical main workspace could not be resolved. Inbound sync skipped.\n"
+        )
+    elif main_root and not os.path.isdir(main_root):
+        sys.stderr.write(
+            f"Warning: Canonical main workspace '{main_root}' is not an accessible directory. Inbound sync skipped.\n"
+        )
 
     # 3: Scope-wide dependency evaluation on the build graph
     eval_root = ws_root if (not repo_root and os.path.isdir(ws_root)) else main_root
@@ -282,10 +440,17 @@ def run_get_work(
         f"\n=== Cleanroom Work Queue [Role: {(role_name or 'ALL').upper()} | Scope: {d_scope}] ==="
     )
     if not ready_items and not blocked_items:
+        if meta:
+            clear_pending_work(ws_root)
         print(
             f"✔ CLEAN: All units in scope '{d_scope}' are clean for role '{role_name}'.\n"
         )
         return 0
+
+    if ready_items and meta:
+        set_pending_work(ws_root, [item["target_file"] for item in ready_items])
+    elif meta:
+        clear_pending_work(ws_root)
 
     total_dirty = len(ready_items) + len(blocked_items)
     print(f"Found {total_dirty} dirty unit(s) ({len(ready_items)} ready to clean):")
@@ -407,6 +572,13 @@ def run_submit(
                 if os.path.isfile(tf) and os.path.isfile(wt):
                     cleanroom_workspace_tool.copy_file_with_perms(tf, wt, readonly=True)
 
+        if meta:
+            remove_pending_target(ws_root, target)
+            if target_path:
+                remove_pending_target(ws_root, target_path)
+            if active_unit:
+                remove_pending_target(ws_root, active_unit)
+
         return 0
 
     # --- PRODUCER ROLE SUBMIT ---
@@ -488,6 +660,12 @@ def run_submit(
             cleanroom_workspace_tool.copy_file_with_perms(
                 main_file, target_path, readonly=False
             )
+        if meta:
+            remove_pending_target(ws_root, target)
+            if target_path:
+                remove_pending_target(ws_root, target_path)
+            if active_unit:
+                remove_pending_target(ws_root, active_unit)
         return 0
     else:
         # Direct mutation on main_file
@@ -505,6 +683,12 @@ def run_submit(
             cleanroom_workspace_tool.copy_file_with_perms(
                 main_file, target_path, readonly=False
             )
+        if meta:
+            remove_pending_target(ws_root, target)
+            if target_path:
+                remove_pending_target(ws_root, target_path)
+            if active_unit:
+                remove_pending_target(ws_root, active_unit)
         return 0
 
 
@@ -547,6 +731,8 @@ def run_blame(
                 cleanroom_workspace_tool.copy_file_with_perms(
                     main_dep_path, ws_dep, readonly=True
                 )
+        if meta:
+            remove_pending_target(ws_root, culprit_file)
         return 0
     else:
         target_to_mutate = main_dep_path if os.path.exists(main_dep_path) else dep_path
@@ -562,6 +748,8 @@ def run_blame(
                 cleanroom_workspace_tool.copy_file_with_perms(
                     main_dep_path, ws_dep, readonly=True
                 )
+        if meta:
+            remove_pending_target(ws_root, culprit_file)
         return 0
 
 
@@ -605,6 +793,9 @@ def run_fail(
             is_ro = not bool(os.stat(ws_p).st_mode & stat.S_IWUSR)
             cleanroom_workspace_tool.copy_file_with_perms(main_p, ws_p, readonly=is_ro)
 
+    if meta:
+        remove_pending_target(ws_root, file_path)
+
     return 0
 
 
@@ -627,6 +818,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "get_work", help="Get ready dirty tasks in workspace scope"
     )
     p_work.add_argument("dir", nargs="?", default=None, help="Directory scope override")
+    p_work.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Force get_work even if work is pending",
+    )
 
     # submit
     p_submit = subparsers.add_parser(
@@ -662,7 +859,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(raw_args)
 
     if args.command == "get_work":
-        return run_get_work(dir_scope=args.dir)
+        return run_get_work(dir_scope=args.dir, force=args.force)
     elif args.command == "submit":
         return run_submit(args.target, summary=args.summary)
     elif args.command == "blame":

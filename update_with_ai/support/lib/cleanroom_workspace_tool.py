@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import ast
 import copy
+import errno
 import hashlib
 import json
 import os
@@ -179,8 +180,10 @@ def resolve_main_workspace_from_convention(
                 role_address = data.get("role_address", "")
                 dir_scope = data.get("parts_dir", "")
                 legacy_main_root = data.get("main_workspace_root")
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write(
+                f"Warning: Failed to parse role descriptor '{cfg_file}': {e}\n"
+            )
 
     # 3. Match candidate main workspace directories in projects_root
     main_root: Optional[str] = None
@@ -301,10 +304,15 @@ def load_role_metadata(workspace_dir: str) -> Optional[Dict[str, Any]]:
                     )
                     data["main_workspace_root"] = main_root
                     data["main_workspace"] = ws_name
-                except Exception:
-                    pass
+                except Exception as e:
+                    sys.stderr.write(
+                        f"Warning: Could not resolve main workspace by convention for '{workspace_dir}': {e}\n"
+                    )
             return data
-        except Exception:
+        except Exception as e:
+            sys.stderr.write(
+                f"Warning: Failed loading role metadata from '{meta_path}': {e}\n"
+            )
             return None
     return None
 
@@ -329,8 +337,10 @@ def load_registered_workspaces(repo_root: Optional[str] = None) -> List[Dict[str
                 return list(data["workspaces"])
             elif isinstance(data, list):
                 return list(data)
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write(
+                f"Warning: Failed reading registered workspaces from '{path}': {e}\n"
+            )
     return []
 
 
@@ -342,8 +352,10 @@ def save_registered_workspaces(
         path = get_workspaces_registry_path(repo_root)
         content = json.dumps({"workspaces": workspaces}, indent=2) + "\n"
         write_file_with_perms(path, content, readonly=False)
-    except (PermissionError, OSError):
-        pass
+    except (PermissionError, OSError) as e:
+        sys.stderr.write(
+            f"Warning: Failed saving registered workspaces to '{path}': {e}\n"
+        )
 
 
 def record_commissioned_workspace(
@@ -706,7 +718,10 @@ def load_defined_roles(repo_root: Optional[str] = None) -> Dict[str, Dict[str, A
         with open(build_file, "r", encoding="utf-8") as f:
             try:
                 tree = ast.parse(f.read(), filename=build_file)
-            except Exception:
+            except Exception as e:
+                sys.stderr.write(
+                    f"Warning: Failed parsing BUILD file '{build_file}': {e}\n"
+                )
                 continue
 
         env: Dict[str, Any] = {}
@@ -1047,8 +1062,8 @@ def sync_stub_dep_file(
                 content = f.read(500)
                 if "CLEANROOM TEST STUB" in content:
                     is_valid_stub = True
-        except OSError:
-            pass
+        except OSError as e:
+            sys.stderr.write(f"Warning: Failed reading stub '{ws_f}': {e}\n")
 
     # Check if pyi changed since stub was generated
     needs_generation = not is_valid_stub
@@ -1056,8 +1071,10 @@ def sync_stub_dep_file(
         try:
             if os.path.getmtime(pyi_path) > os.path.getmtime(ws_f):
                 needs_generation = True
-        except OSError:
-            pass
+        except OSError as e:
+            sys.stderr.write(
+                f"Warning: Failed checking stub timestamp for '{ws_f}': {e}\n"
+            )
 
     if needs_generation:
         os.makedirs(os.path.dirname(ws_f), exist_ok=True)
@@ -1232,7 +1249,10 @@ def ensure_role_templates_in_place(
         try:
             with open(tmpl_path, "r", encoding="utf-8") as tf:
                 raw_template_content = tf.read()
-        except OSError:
+        except OSError as e:
+            sys.stderr.write(
+                f"Warning: Failed reading template '{tmpl_path}': {e}\n"
+            )
             raw_template_content = None
 
     for stem, raw_deps in units.items():
@@ -1247,8 +1267,10 @@ def ensure_role_templates_in_place(
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     mod_content = f.read()
-            except OSError:
-                pass
+            except OSError as e:
+                sys.stderr.write(
+                    f"Warning: Failed reading file '{file_path}': {e}\n"
+                )
 
         if mod_exists and mod_content.strip():
             continue
@@ -1304,8 +1326,10 @@ def ensure_role_templates_in_place(
 
             write_file_with_perms(file_path, new_content, readonly=False)
             materialized.append(file_path)
-        except (PermissionError, OSError):
-            pass
+        except (PermissionError, OSError) as e:
+            sys.stderr.write(
+                f"Warning: Failed materializing template to '{file_path}': {e}\n"
+            )
 
     return materialized
 
@@ -1916,8 +1940,8 @@ while ws_dir and ws_dir != os.path.dirname(ws_dir):
             with open(cfg, "r", encoding="utf-8") as f:
                 meta = json.load(f)
                 main_root = meta.get("main_workspace_root") or meta.get("repo_root")
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write(f"Warning: Failed parsing role config '{{cfg}}': {{e}}\\n")
         break
     ws_dir = os.path.dirname(ws_dir)
 
@@ -1976,8 +2000,10 @@ if __name__ == "__main__":
                     os.unlink(p)
                 elif os.path.isdir(p):
                     shutil.rmtree(p, ignore_errors=True)
-            except OSError:
-                pass
+            except OSError as e:
+                sys.stderr.write(
+                    f"Warning: Failed cleaning non-tool file '{p}': {e}\n"
+                )
 
 
 def refresh_system_files(
@@ -2012,8 +2038,10 @@ def record_baseline_hashes(workspace_dir: str) -> None:
     if os.path.isfile(hash_file):
         try:
             os.unlink(hash_file)
-        except OSError:
-            pass
+        except OSError as e:
+            sys.stderr.write(
+                f"Warning: Could not remove legacy hash file '{hash_file}': {e}\n"
+            )
 
 
 def verify_integrity(workspace_dir: str) -> None:
@@ -2680,13 +2708,17 @@ def decommission_workspace(
         for d in dirs:
             try:
                 os.chmod(os.path.join(r, d), 0o755)
-            except OSError:
-                pass
+            except OSError as e:
+                sys.stderr.write(
+                    f"Warning: Failed to restore write permissions for dir '{os.path.join(r, d)}': {e}\n"
+                )
         for f in files:
             try:
                 os.chmod(os.path.join(r, f), 0o644)
-            except OSError:
-                pass
+            except OSError as e:
+                sys.stderr.write(
+                    f"Warning: Failed to restore write permissions for file '{os.path.join(r, f)}': {e}\n"
+                )
 
     shutil.rmtree(workspace_dir, ignore_errors=True)
     unrecord_commissioned_workspace(clean_role, dir_scope, repo_root=root)
@@ -2756,7 +2788,10 @@ def find_modified_read_write_files(
                         st = os.stat(src_file)
                         if not (st.st_mode & stat.S_IWUSR):
                             continue
-                    except OSError:
+                    except OSError as e:
+                        sys.stderr.write(
+                            f"Warning: Failed to stat '{src_file}': {e}\n"
+                        )
                         continue
                     rel_path = os.path.relpath(src_file, workspace_dir)
                     dst_file = os.path.join(repo_root, rel_path)
@@ -2932,18 +2967,25 @@ def prune_out_of_scope_files(
             if rel_p not in allowed:
                 try:
                     os.chmod(full_p, 0o644)
-                except OSError:
-                    pass
+                except OSError as e:
+                    sys.stderr.write(
+                        f"Warning: Failed to chmod untracked file '{full_p}': {e}\n"
+                    )
                 try:
                     os.remove(full_p)
                     pruned.append(rel_p)
-                except OSError:
-                    pass
+                except OSError as e:
+                    sys.stderr.write(
+                        f"Warning: Failed to remove untracked file '{full_p}': {e}\n"
+                    )
         if root_dir != target_dir:
             try:
                 os.rmdir(root_dir)
-            except OSError:
-                pass
+            except OSError as e:
+                if getattr(e, "errno", None) not in (errno.ENOTEMPTY, errno.EEXIST):
+                    sys.stderr.write(
+                        f"Warning: Failed removing directory '{root_dir}': {e}\n"
+                    )
     return pruned
 
 
@@ -3381,8 +3423,10 @@ def converge_role_workspace(
                                 "change": f"Updated {os.path.basename(rel_path)}",
                             }
                         )
-                except Exception:
-                    pass
+                except Exception as e:
+                    sys.stderr.write(
+                        f"Warning: Failed pushing non-metadata file '{rel_path}' to workspace: {e}\n"
+                    )
 
         # Propagate lack of LAST_CLEANED when timestamps match
         if ws_ts == main_ts:
@@ -3521,8 +3565,14 @@ def pull_workspace_from_main(
     silent: bool = True,
 ) -> List[Dict[str, Any]]:
     """Silently pulls updated files in dir_scope from main into workspace_dir (one-way push)."""
-    if not os.path.isdir(main_repo_root) or not os.path.isdir(workspace_dir):
-        return []
+    if not os.path.isdir(main_repo_root):
+        raise ValueError(
+            f"main_repo_root does not exist or is not a directory: {main_repo_root}"
+        )
+    if not os.path.isdir(workspace_dir):
+        raise ValueError(
+            f"workspace_dir does not exist or is not a directory: {workspace_dir}"
+        )
     clean_role = normalize_role_arg(role_name) or role_name
     role_def = resolve_role_definition(clean_role, main_repo_root)
     active_pattern = role_def.get("src_pattern", "")
@@ -3557,6 +3607,22 @@ def pull_workspace_from_main(
         main_f = os.path.join(main_repo_root, rel)
         ws_f = os.path.join(workspace_dir, rel)
         if not os.path.isfile(main_f):
+            if os.path.isfile(ws_f) or os.path.islink(ws_f):
+                try:
+                    os.chmod(ws_f, 0o644)
+                except OSError as e:
+                    sys.stderr.write(
+                        f"Warning: Failed to chmod '{ws_f}' before removal: {e}\n"
+                    )
+                try:
+                    os.remove(ws_f)
+                    synced.append(
+                        {"type": "DELETE", "target": rel, "dest": "workspace"}
+                    )
+                except OSError as e:
+                    sys.stderr.write(
+                        f"Warning: Failed to remove deleted file '{ws_f}' from role workspace: {e}\n"
+                    )
             continue
         role_writable = _is_role_writable(rel)
 
@@ -3586,8 +3652,10 @@ def pull_workspace_from_main(
             try:
                 if os.path.getmtime(main_f) > os.path.getmtime(ws_f):
                     needs_pull = True
-            except OSError:
-                pass
+            except OSError as e:
+                sys.stderr.write(
+                    f"Warning: Failed checking mtimes for '{rel}': {e}\n"
+                )
         elif main_ev > ws_ev:
             needs_pull = True
         elif not role_writable and ws_meta and main_meta:
@@ -3602,6 +3670,9 @@ def pull_workspace_from_main(
         if needs_pull:
             copy_file_with_perms(main_f, ws_f, readonly=not role_writable)
             synced.append({"type": "PULL", "target": rel, "dest": "workspace"})
+
+    # Ensure role templates/skeletons are materialized in the role workspace if missing
+    prepare_role_artifacts(role_def, workspace_dir, [dir_scope])
 
     # Update last_sync_timestamp
     save_role_metadata(
@@ -3968,7 +4039,10 @@ def run_blame_command(
             try:
                 with open(buffer_path, "r", encoding="utf-8") as bf:
                     entries = json.load(bf)
-            except Exception:
+            except Exception as e:
+                sys.stderr.write(
+                    f"Warning: Failed loading blame buffer '{buffer_path}': {e}\n"
+                )
                 entries = []
         entries.append(
             {
@@ -4143,8 +4217,10 @@ Commands:
                         ws_role = rdata.get("role_name") or normalize_role_arg(
                             rdata.get("role_address", "")
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        sys.stderr.write(
+                            f"Warning: Failed reading role descriptor '{desc_path}': {e}\n"
+                        )
             if target_role and ws_role != target_role:
                 continue
             if target_dir and ws_dir != target_dir:
