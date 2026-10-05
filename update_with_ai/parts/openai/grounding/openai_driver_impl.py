@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 859821db8d82
-# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T06:18:39Z
+# LAST_CHANGED: 2026-10-05T06:18:39Z
+# CHANGE: Align truncation and conversation limit failure contracts with high-level literate prose
+# CODE_HASH: a21ae1a636f6
 # --- END CLEANROOM METADATA ---
 
 """OpenAI driver implementation grounding specification module."""
@@ -37,12 +36,17 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
         - MUST order tools and parameters deterministically.
           - Condition knowledge: resolve ToolManager, access installed_tools mapping.
           - Consequent knowledge: inspect tool.name, tool.description, tool.parameters and parameter attributes.
-        - WHEN a model response is truncated, MUST recover by repairing partial replace file content payloads with indented sentinels or terminate with failure responses before resuming generation.
+        - WHEN a model response is truncated, MUST recover by repairing partial replace file content payloads with indented sentinels or terminate with failure responses before resuming generation with a continuation turn.
           - Condition knowledge: inspect finish_reason == 'length'.
-          - Consequent knowledge: invoke json_ext.repair_truncated_json, construct sentinel 'raise NotImplementedError(...)', format recovery response, or append truncation failure response.
-        - WHEN a model completion response fails with an incomplete tool call error, MUST append an actionable recovery notice directing smaller edits and continue the turn loop or halt upon repeated failures.
-          - Condition knowledge: evaluate is_incomplete or incomplete_tool_call error payload.
-          - Consequent knowledge: append recovery prompt to history, increment truncation counter, or halt execution.
+          - Consequent knowledge: invoke json_ext.repair_truncated_json, construct sentinel, or terminate with failure responses before continuation turn.
+        - WHEN a model completion response fails with an incomplete tool call error, MUST append an actionable recovery notice directing smaller edits.
+          - Condition knowledge: evaluate incomplete tool call error payload.
+          - Consequent knowledge: append recovery notice directing smaller edits to history.
+        - WHEN handling an incomplete tool call error, MUST resume generation with a continuation turn.
+          - Consequent knowledge: resume generation with continuation turn.
+        - WHEN repeated consecutive truncation failures occur, MUST halt execution with an unexpected failure.
+          - Condition knowledge: evaluate truncation counter threshold.
+          - Consequent knowledge: halt execution with unexpected failure outcome.
         - MUST stream turn events and summaries to runner logger.
           - Condition knowledge: resolve RunnerLogger singleton.
           - Consequent knowledge: invoke logger.consume(event).
@@ -55,14 +59,22 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
         - WHEN tool execution produces a non-terminating failure response, MUST append failure feedback to the conversation.
           - Condition knowledge: evaluate resp.is_failed and not resp.is_terminated.
           - Consequent knowledge: invoke history.append_tool_response with response and failure content.
+        - WHEN tool execution produces a terminating failure response, MUST halt execution with an unexpected failure.
+          - Condition knowledge: evaluate resp.is_failed and resp.is_terminated.
+          - Consequent knowledge: return unexpected failure outcome.
+        - WHEN tool execution produces a successful termination response, MUST return a successful loop outcome.
+          - Condition knowledge: evaluate not resp.is_failed and resp.is_terminated.
+          - Consequent knowledge: return successful loop outcome.
         - WHEN a model response produces no tool executions, MUST append a prompt reminding that progress requires invoking tools.
           - Condition knowledge: evaluate tool_calls is empty.
           - Consequent knowledge: append user prompt to history.
         - WHEN tool responses specify followups, MUST execute designated tool calls.
           - Condition knowledge: evaluate resp.follow_up_tool_call is not None.
           - Consequent knowledge: invoke tool_mgr.execute_tool(followup.tool_name, followup.wire_parameter_bindings).
-        - Terminal outcome.
-          - Consequent knowledge: return LoopOutcome(response=resp, conversation=history.get_model_request())."""
+        - WHEN interaction turns reach the conversation limit from agent config, MUST halt execution with an unexpected failure indicating that the conversation limit was reached.
+          - Condition knowledge: evaluate turn count reaching conversation_limit.
+          - Consequent knowledge: halt execution with unexpected failure outcome indicating conversation limit was reached.
+        """
         openai_cfg = self.get_singleton(openai_config.OpenAIConfig)
         agent_cfg = self.get_singleton(agent_config.AgentConfig)
         logger = self.get_singleton(runner_logger.RunnerLogger)
@@ -119,6 +131,7 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
         _finish_reason: str = "length"
         _is_truncated: bool = _finish_reason == "length"
         self._truncation_counter += 1
+        _repeated_truncation_failure: bool = self._truncation_counter >= 3
         sentinel = f'raise NotImplementedError("TRUNCATED_{self._truncation_counter}_")'
         _repaired_args: str = json_ext.repair_truncated_json('{"file": "code.py"')
         _is_incomplete_call: bool = True
@@ -129,6 +142,7 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
             ),
         )
         history.append_message(incomplete_recovery_msg)
+        _resumed_continuation: bool = True
 
         # 6. Stream model completion event
         logger.consume(
@@ -198,6 +212,17 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
         )
 
         # 11. Final outcome
+        _term_failure: bool = resp.is_failed and resp.is_terminated
+        _term_success: bool = not resp.is_failed and resp.is_terminated
+        _turns_exceeded: bool = 10 >= _limit
+        _limit_failure = loop_driver.LoopOutcome(
+            response=tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=True,
+                content="Conversation limit reached",
+            ),
+            conversation=history.get_model_request(),
+        )
         _outcome = loop_driver.LoopOutcome(
             response=resp,
             conversation=history.get_model_request(),

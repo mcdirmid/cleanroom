@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 0b5e536a4063
+LAST_CLEANED: 2026-10-05T05:19:36Z
+LAST_CHANGED: 2026-10-05T05:19:36Z
+CHANGE: Add delegated collaborator statement and missing feedback and change message operations
+CODE_HASH: 2d9eae3f629a
 -->
 
 # bazel_loop_impl implementation component
@@ -17,6 +17,8 @@ The bazel_loop_impl implementation component realizes workspace target loading, 
 Executing multi-stage agent workflows requires coordinating target loading, dirty state evaluation, and topological cleaning across the graph. The bazel_loop_impl implementation component coordinates this end-to-end lifecycle: loading workspace targets into graph storage, dispatching topological cleaning passes using loop cleaner and node cleaner, routing feedback across node boundaries, and capturing execution progress through structured runner logging.
 
 **Out of scope:** The bazel_loop_impl implementation component does not parse manifest JSON files, execute individual agent turns, or render user interfaces; these are handled by other components.
+
+**Delegated:** Target manifest loading is delegated to bazel_manifest_loader; graph state storage and dirty evaluation are delegated to dag_storage; topological execution is delegated to loop_cleaner; single-node execution is delegated to loop_node_cleaner; execution telemetry and event streaming are delegated to runner_logger.
 
 ## Types and Behavior
 
@@ -37,5 +39,13 @@ When marking an acyclic subgraph clean:
 - Node metadata headers are stamped with the current timestamp as the last cleaned timestamp, initializing missing last changed timestamps and default change descriptions, and clearing unacted feedback.
 
 Deleting the last cleaned timestamp from a target node's source file metadata header marks the target node dirty.
+
+When recording feedback:
+
+- Injects caller-supplied feedback into the target node's source file metadata in graph storage, identifying the blamed dependency node and diagnostic reason.
+
+When recording changes:
+
+- Records a caller-supplied change message against a target node in graph storage, clearing the last cleaned timestamp and updating the change description to dynamically invalidate downstream dependencies.
 
 > META: "Cycles are only guarded by an assumption and a node visitation limit; cycle detection is never to be turned into a requirement."

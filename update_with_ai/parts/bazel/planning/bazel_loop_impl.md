@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 7e040d8d275a
+LAST_CLEANED: 2026-10-05T05:28:31Z
+LAST_CHANGED: 2026-10-05T05:28:31Z
+CHANGE: Add feedback and change recording contracts and woven interactions
+CODE_HASH: e1380aca5e6f
 -->
 
 # bazel_loop_impl implementation component
@@ -35,6 +35,12 @@ By resolving targets from workspace directories or runfiles trees, halting execu
 - Missing last changed timestamps and default change descriptions are initialized when marking a subgraph clean. [initialize_missing_metadata_on_mark_clean]
 - Unacted feedback is cleared when marking a subgraph clean. [clear_feedback_on_mark_clean]
 - Deleting the last cleaned timestamp from a target node source file metadata header marks the target node dirty. [delete_last_cleaned_marks_target_dirty]
+- Caller-supplied feedback is injected into the target node source file metadata in graph storage when recording feedback. [inject_caller_feedback_on_record_feedback]
+- Injected feedback identifies the blamed dependency node. [injected_feedback_identifies_blamed_dependency]
+- Injected feedback identifies the diagnostic reason. [injected_feedback_identifies_diagnostic_reason]
+- A caller-supplied change message is recorded against a target node in graph storage when recording changes. [record_change_message_against_target]
+- Recording changes clears the last cleaned timestamp of the target node in graph storage. [record_changes_clears_last_cleaned]
+- Recording changes updates the change description of the target node in graph storage to dynamically invalidate downstream dependencies. [record_changes_updates_change_description]
 
 ## Woven Contracts
 
@@ -43,3 +49,5 @@ By resolving targets from workspace directories or runfiles trees, halting execu
 - Execution events, duration, and final results stream continuously to stdout and transcript files through the runner logger. \[stream_telemetry_events_to_stdout, stream_telemetry_events_to_transcript, stream_pass_duration_telemetry, stream_build_outcome_telemetry, runner_logger: [consume_log_events]\]
 - Marking an acyclic subgraph clean materializes missing source files from declared templates, stamps clean timestamps, and clears feedback across all reachable nodes. \[materialize_subgraph_templates_on_mark_clean, stamp_last_cleaned_on_mark_clean, initialize_missing_metadata_on_mark_clean, clear_feedback_on_mark_clean, bazel_manifest_loader: [retrieve_manifest_for_node], dag_storage: [access_dag_dependencies, clear_node_messages], loop: [mark_subgraph_clean]\]
 - Marking a target node dirty removes its last cleaned timestamp from in-band source metadata. \[delete_last_cleaned_marks_target_dirty, dag_storage: [mark_node_dirty], loop: [mark_node_dirty]\]
+- Recording feedback injects caller-supplied feedback into target node source file metadata identifying the blamed dependency node and diagnostic reason. [inject_caller_feedback_on_record_feedback, injected_feedback_identifies_blamed_dependency, injected_feedback_identifies_diagnostic_reason, loop: [inject_feedback_message], dag_storage: [record_feedback_messages]]
+- Recording changes writes a change message against a target node in graph storage, clearing its clean timestamp and invalidating downstream dependencies. [record_change_message_against_target, record_changes_clears_last_cleaned, record_changes_updates_change_description, loop: [record_node_change_message], dag_storage: [record_change_messages, mark_dirty_on_change_message]]

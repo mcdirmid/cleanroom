@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 467d67f2fecd
+LAST_CLEANED: 2026-10-05T04:57:08Z
+LAST_CHANGED: 2026-10-05T04:57:08Z
+CHANGE: Standardize on canonical mapping parameter type over dictionary parameter type
+CODE_HASH: 2b6d8d81fbe3
 -->
 
 # tool_provider_impl implementation component
@@ -39,4 +39,4 @@ The identity parameter type converts wire type values to produce identical actua
 
 The list parameter type converts wire type lists to actual type lists by converting each element with its item parameter type.
 
-The dictionary parameter type converts wire type dictionaries to actual type dictionaries by converting each key with its key parameter type and each value with its value parameter type.
+The mapping parameter type converts wire type mappings to actual type mappings by converting each key with its key parameter type and each value with its value parameter type.

@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: faa107a36495
+# LAST_CLEANED: 2026-10-05T05:40:38Z
+# LAST_CHANGED: 2026-10-05T05:40:38Z
+# CHANGE: Eliminate regex and cache mechanics, decompose step mode, and align parameter catalog
+# CODE_HASH: fd3e6dbc3536
 # --- END CLEANROOM METADATA ---
 
 """Bazel node config implementation low-level specification."""
@@ -46,6 +46,11 @@ class NodeConfig(
     @property
     @override
     def allows_step_mode(self) -> bool:
+        """Whether step mode is permitted for the session.
+
+        POSTCONDITIONS:
+        - WHEN a session has a single node and the target node allows step mode, MUST permit step mode eligibility.
+        """
         ...
 
     @property
@@ -54,7 +59,7 @@ class NodeConfig(
         """Whether session step mode is active.
 
         POSTCONDITIONS:
-        - WHEN agent config enables step mode, exactly one node is active, that node allows step mode, and session feedback is absent, MUST activate step mode.
+        - WHEN permitted by agent config with an eligible session lacking feedback, MUST activate step mode.
         """
         ...
 
@@ -176,9 +181,6 @@ class NodeConfig(
         """Mapping each active node to its per node info.
 
         POSTCONDITIONS:
-        - MUST cache per node info loaded for active nodes from role config.
-        - MUST check the role config version to unload cached info when nodes are no longer being cleaned.
-        - MUST load per node info for newly active nodes from target node manifests.
         - MUST resolve declared source files and templates into node read-write files and templates.
         - MUST resolve declared template parameters into node template parameters.
         - MUST resolve direct dependencies and transitive star dependencies into node read-only files.
@@ -250,17 +252,8 @@ class AliasManager(
             Sanitized text with masked workspace paths.
 
         POSTCONDITIONS:
-        - MUST mask relative workspace paths and preceding path prefixes with relative paths using backtracking-safe regex patterns.
-        - MUST strip workspace root path prefixes when sanitizing output text.
-        - MUST strip execution root path prefixes when sanitizing output text.
+        - MUST replace matching host paths with relative workspace paths when sanitizing output text.
+        - MUST mask occurrences of workspace root path prefixes when sanitizing output text.
+        - MUST mask occurrences of execution root path prefixes when sanitizing output text.
         """
         ...
-
-
-def __orphan__() -> None:
-    """Orphan contracts for bazel node config implementation.
-
-    POSTCONDITIONS:
-    - MUST update file aliases and path masking when the role config version changes.
-    """
-    ...

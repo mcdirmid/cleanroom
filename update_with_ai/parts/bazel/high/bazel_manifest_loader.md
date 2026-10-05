@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: b4c87427cca2
+LAST_CLEANED: 2026-10-05T05:18:30Z
+LAST_CHANGED: 2026-10-05T05:18:30Z
+CHANGE: Streamline manifest resolution to eliminate redundant dependency statements
+CODE_HASH: 225982be0fea
 -->
 
 # bazel_manifest_loader interface component
@@ -27,7 +27,7 @@ The bazel manifest loader:
 
 - Retrieves the manifest for a node.
 
-- Resolves manifests into target nodes, dependencies, node definitions, task prompts, and dependency graph edges, populating the agent storage.
+- Resolves manifests into target nodes, node definitions, and task prompts, populating agent storage.
 
 - Resolves declared direct dependencies into dependency graph edges in agent storage.
 

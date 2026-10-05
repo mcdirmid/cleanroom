@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 83fba98f46f1
+LAST_CLEANED: 2026-10-05T05:32:13Z
+LAST_CHANGED: 2026-10-05T05:32:13Z
+CHANGE: Add empty path rejection and separator/segment normalization contracts
+CODE_HASH: 8c5ad5f8c5af
 -->
 
 # file_paths_impl implementation component
@@ -20,8 +20,12 @@ By centralizing normalization routines and relying on host filesystem mechanics,
 
 ### Contracts
 
+- The file path manager rejects empty path strings. [reject_empty_path_strings]
+- Rejecting empty path strings fails indicating that a path cannot be empty. [fail_path_cannot_be_empty]
 - The file path manager validates path representations using the host filesystem. [validate_with_host_fs]
 - The file path manager resolves path representations using the host filesystem. [resolve_with_host_fs]
+- Validating paths normalizes redundant separators into encapsulated path records. [normalize_redundant_separators]
+- Validating paths resolves relative directory segments into encapsulated path records. [resolve_relative_directory_segments]
 - Absolute path creation normalizes path representations into encapsulated records. [normalize_abs_path]
 - Workspace path creation normalizes relative path representations into encapsulated records. [normalize_ws_path]
 - Path resolution joins the relative workspace path to the workspace root absolute path using the host filesystem. [join_paths_with_host_fs]
@@ -29,6 +33,7 @@ By centralizing normalization routines and relying on host filesystem mechanics,
 
 ## Woven Contracts
 
-- When creating an absolute path, the file path manager validates against the host filesystem and produces a normalized absolute path record. \[validate_with_host_fs, normalize_abs_path, file_paths: [create_abs_path, reject_relative_absolute]\]
-- When creating a workspace path, the file path manager validates against the host filesystem and produces a normalized workspace path record. \[validate_with_host_fs, normalize_ws_path, file_paths: [create_ws_path, reject_absolute_workspace, reject_leading_separators]\]
+- When given an empty path string, the file path manager rejects the path with a failure indicating that a path cannot be empty. \[reject_empty_path_strings, fail_path_cannot_be_empty, file_paths: [raise_validation_error]\]
+- When creating an absolute path, the file path manager validates against the host filesystem, normalizes redundant separators and relative segments, and produces a normalized absolute path record. \[validate_with_host_fs, normalize_redundant_separators, resolve_relative_directory_segments, normalize_abs_path, file_paths: [create_abs_path, reject_relative_absolute]\]
+- When creating a workspace path, the file path manager validates against the host filesystem, normalizes redundant separators and relative segments, and produces a normalized workspace path record. \[validate_with_host_fs, normalize_redundant_separators, resolve_relative_directory_segments, normalize_ws_path, file_paths: [create_ws_path, reject_absolute_workspace, reject_leading_separators]\]
 - When resolving a workspace path against a workspace root absolute path, paths are joined using the host filesystem into a normalized absolute path record. \[resolve_with_host_fs, join_paths_with_host_fs, produce_normalized_resolved_path, file_paths: [resolve_ws_path, combine_root_and_ws_path]\]

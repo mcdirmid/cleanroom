@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 5774ff632424
+# LAST_CLEANED: 2026-10-05T05:39:33Z
+# LAST_CHANGED: 2026-10-05T05:39:33Z
+# CHANGE: Streamline manifest resolution by removing redundant dependency contract
+# CODE_HASH: a98631a93804
 # --- END CLEANROOM METADATA ---
 
 """Bazel manifest loader low-level interface specification."""
@@ -74,13 +74,13 @@ class BazelManifestLoader(InTier[SystemTier], Protocol):
 
     @operation
     def load_manifest(self, node: dag_storage.DagNode) -> None:
-        """Resolves manifests into target nodes, dependencies, definitions, and prompts.
+        """Resolves manifests into target nodes, definitions, and prompts.
 
         Args:
             node: The target node to load and resolve.
 
         POSTCONDITIONS:
-        - MUST resolve manifests into target nodes, dependencies, node definitions, task prompts, and dependency graph edges.
+        - MUST resolve manifests into target nodes, node definitions, task prompts, and dependency graph edges.
         - MUST populate agent storage with resolved structures.
         - MUST resolve declared direct dependencies into dependency graph edges in agent storage.
         - MUST resolve declared silent dependencies as non-propagating dependencies in agent storage.

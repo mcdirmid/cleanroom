@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 0c3161e8191a
-# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T06:19:22Z
+# LAST_CHANGED: 2026-10-05T06:19:22Z
+# CHANGE: Standardize on check files tool in editing contracts
+# CODE_HASH: 45076be360d5
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file editor implementation grounding specification module."""
@@ -355,7 +354,9 @@ class ReplaceFileContentTool(
           - Consequent knowledge: return failed ToolResponse with reminder "No-op edits will fail.".
         - WHEN the replacement succeeds, MUST write updated content creating missing parent directories and record workspace file writes.
           - Condition knowledge: edit_mgr.can_write confirmed.
-          - Consequent knowledge: filesystem_ext.write_text_file and edit_mgr.record_file_edit."""
+          - Consequent knowledge: filesystem_ext.write_text_file and edit_mgr.record_file_edit.
+        - WHEN the replacement succeeds, MUST remind the agent to call check files to verify syntax and types.
+          - Consequent knowledge: return ToolResponse with reminder to call check files."""
         edit_mgr = self.get_singleton(sandbox_file_editor.EditManager)
 
         # 1. Path omission resolution knowledge
@@ -432,6 +433,9 @@ class ReplaceFileContentTool(
             is_failed=False,
             is_terminated=False,
             content="Replacement succeeded.",
+            reminder=tool_provider.ToolReminder(
+                "Call check files to verify syntax and types."
+            ),
         )
         raise NotImplementedError
 

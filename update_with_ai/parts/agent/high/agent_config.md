@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 6f747fd6eed9
+LAST_CLEANED: 2026-10-05T04:50:29Z
+LAST_CHANGED: 2026-10-05T04:50:29Z
+CHANGE: Symmetrically introduce conversation limit in italics and refine operational policies lead-in
+CODE_HASH: c9add413856e
 -->
 
 # agent_config interface component
@@ -19,9 +19,9 @@ Autonomous agent workflows require explicit bounds on conversational depth, auto
 
 A system's *agent config* provides execution parameters for agent sessions.
 
-The agent config provides a conversation limit bounding the maximum number of model interaction turns permitted in an agent run. The agent config also provides a *supersede arg keep* limit bounding trailing characters of string arguments preserved when tool responses are superseded.
+The agent config provides a *conversation limit* bounding the maximum number of model interaction turns permitted in an agent run, and a *supersede arg keep* limit bounding trailing characters of string arguments preserved when tool responses are superseded.
 
-The agent config also provides whether the agent:
+The agent config provides operational policies governing whether the agent:
 
 - Injects followups to execute follow-up tool calls specified by tool responses.
 

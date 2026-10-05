@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 72f117541d16
+LAST_CLEANED: 2026-10-05T04:45:49Z
+LAST_CHANGED: 2026-10-05T04:45:49Z
+CHANGE: Make log opening declarative and specify concrete unbuffered flush mechanics
+CODE_HASH: 79be16ba3400
 -->
 
 # runner_logger_impl implementation component
@@ -19,6 +19,6 @@ Unbuffered write guarantees ensure diagnostic logs are preserved even when proce
 
 ## Types and Behavior
 
-The runner logger clears any existing transcript log file at initialization. The transcript log file destination defaults to `agent_loop.log` or is resolved from configured environment variables.
+The transcript log file is truncated at opening so that each execution session starts with a clean transcript log. The transcript log file destination defaults to `agent_loop.log` or is resolved from configured environment variables.
 
-When consuming runner log events, the runner logger writes single-line compact summaries to standard output and writes unbuffered verbose entries to the transcript log file.
+Standard output lines format single-line summaries with timestamps and event names for live terminal visibility. Transcript log entries append verbose records with immediate flushing after each write, guaranteeing unbuffered persistence across unexpected crashes.

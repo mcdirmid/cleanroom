@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: ee833044d1c6
+LAST_CLEANED: 2026-10-05T05:33:23Z
+LAST_CHANGED: 2026-10-05T05:33:23Z
+CHANGE: Add caller acyclic subgraph assumption contract
+CODE_HASH: 1562b541dcda
 -->
 
 # loop_cleaner interface component
@@ -20,6 +20,7 @@ By guaranteeing dependency-first evaluation order and halting promptly on unreco
 ### Contracts
 
 - A caller supplies a target node when cleaning a target node. [clean_target_supplied]
+- A caller guarantees that the target node roots an acyclic subgraph. [caller_guarantees_target_roots_acyclic_subgraph]
 - A caller supplies a node cleaner when cleaning a target node. [clean_node_cleaner_supplied]
 - The loop cleaner cleans dirty nodes in dependency-first topological order. [clean_nodes_topological_order]
 - The loop cleaner ensures all dependencies of a node are clean before that node is cleaned. [ensure_dependencies_clean_first]
@@ -28,4 +29,4 @@ By guaranteeing dependency-first evaluation order and halting promptly on unreco
 
 ## Woven Contracts
 
-- The loop cleaner traverses dirty nodes in topological dependency order using the supplied node cleaner, halting if cleaning fails or concluding when all subgraph nodes are clean. \[clean_target_supplied, clean_node_cleaner_supplied, clean_nodes_topological_order, ensure_dependencies_clean_first, halt_when_node_cleaner_cannot_continue, conclude_when_all_nodes_clean, loop_node_cleaner: [clean_dirty_nodes, communicate_processing_continuation], dag_storage: [access_dag_dependencies, expose_node_dirty]\]
+- The loop cleaner traverses dirty nodes in topological dependency order using the supplied node cleaner, halting if cleaning fails or concluding when all subgraph nodes are clean. \[caller_guarantees_target_roots_acyclic_subgraph, clean_target_supplied, clean_node_cleaner_supplied, clean_nodes_topological_order, ensure_dependencies_clean_first, halt_when_node_cleaner_cannot_continue, conclude_when_all_nodes_clean, loop_node_cleaner: [clean_dirty_nodes, communicate_processing_continuation], dag_storage: [access_dag_dependencies, expose_node_dirty]\]

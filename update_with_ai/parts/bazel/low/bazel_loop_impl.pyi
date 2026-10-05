@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 2931828c55f9
+# LAST_CLEANED: 2026-10-05T05:39:08Z
+# LAST_CHANGED: 2026-10-05T05:39:08Z
+# CHANGE: Add feedback and change recording contracts
+# CODE_HASH: 6bf7b26347f8
 # --- END CLEANROOM METADATA ---
 
 """Bazel loop implementation low-level specification."""
@@ -80,6 +80,17 @@ class Loop(loop.Loop, InTier[SystemTier]):
     def inject_feedback(
         self, target: dag_storage.DagNode, message: dag_storage.FeedbackMessage
     ) -> None:
+        """Injects caller feedback into target node source file metadata in graph storage.
+
+        Args:
+            target: The target node receiving feedback.
+            message: The feedback message explaining defects detected.
+
+        POSTCONDITIONS:
+        - MUST inject caller-supplied feedback into the target node source file metadata in graph storage.
+        - MUST identify the blamed dependency node in injected feedback.
+        - MUST identify the diagnostic reason in injected feedback.
+        """
         ...
 
     @operation
@@ -87,4 +98,22 @@ class Loop(loop.Loop, InTier[SystemTier]):
     def broadcast_change(
         self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None:
+        ...
+
+    @operation
+    @override
+    def record_change(
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
+    ) -> None:
+        """Records a change message against a target node in graph storage.
+
+        Args:
+            target: The target node recorded with changes.
+            message: The change message informing of changes made.
+
+        POSTCONDITIONS:
+        - MUST record a caller-supplied change message against a target node in graph storage.
+        - MUST clear the last cleaned timestamp of the target node in graph storage.
+        - MUST update the change description of the target node in graph storage to dynamically invalidate downstream dependencies.
+        """
         ...

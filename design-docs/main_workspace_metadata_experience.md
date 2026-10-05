@@ -30,11 +30,13 @@ flowchart TD
         User -->|"3. Verify & submit"| SubmitTool
         User -->|"4. Critique upstream"| BlameTool
         SubmitTool -->|"Updates LAST_CHANGED / LAST_CLEANED"| SourceFile
-        BlameTool -->|"Appends FEEDBACK: block"| UpstreamFile["Upstream File (e.g. high/foo.md)"]
+        BlameTool -->|"Appends FEEDBACK: & advances LAST_CLEANED"| UpstreamFile["Upstream File (e.g. high/foo.md)"]
     end
 
-    subgraph SyncEngine["cleanroom-sync"]
-        Cascade["Omni-Directional Cascade"]
+    subgraph SyncEngine["cleanroom-sync (Two-Phase Sweep)"]
+        Harvest["Phase 1: Inbound Harvest"]
+        Cascade["Phase 2: Outbound Cascade"]
+        Harvest --> Cascade
     end
 
     subgraph RoleWorkspaces["Active Role Workspaces (../role_workspaces/)"]
@@ -42,9 +44,9 @@ flowchart TD
         RoleTest["cleanroom_test_staging\n(Receives updated low/foo.pyi stub)"]
     end
 
-    SourceFile -->|"cleanroom-sync"| Cascade
-    Cascade --> RoleLib
-    Cascade --> RoleTest
+    SourceFile -->|"1. Harvest"| Harvest
+    Cascade -->|"2. Cascade"| RoleLib
+    Cascade -->|"2. Cascade"| RoleTest
 ```
 
 ---
@@ -240,6 +242,16 @@ sequenceDiagram
    - Inside `cleanroom_lib_staging`, the role agent runs `bin/cleanroom-dirty`.
    - The tool detects that `low/agent_config.pyi` has `LAST_CHANGED = T_1`, while local `lib/agent_config.py` was cleaned earlier ($T_0 < T_1$).
    - The role agent immediately receives an actionable directive to update the implementation.
+
+### 5.2 Propagation of Main Workspace Critique & Feedback
+1. **Developer Blames or Critiques a Node in Main**:
+   - The developer runs `bin/cleanroom-blame staging/parts/agent/tests/agent_config_test.py staging/parts/agent/lib/agent_config.py "Missing error handling"`.
+   - `append_feedback` injects the critique into `FEEDBACK:` and advances `LAST_CLEANED = T_now`.
+   - `mark_dirty` stamps `DIRTY: <reason>` and advances `LAST_CLEANED = T_now`.
+2. **"One and Done" Synchronization**:
+   - When `bin/cleanroom-sync` runs, Phase 2 (Outbound Cascade) detects that $T_{\text{main\_event}} = \max(T_{\text{changed}}, T_{\text{cleaned}}) = T_{\text{now}} > T_{\text{ws\_event}}$.
+   - The sync engine immediately pushes `lib/agent_config.py` with its `DIRTY:` tag and `FEEDBACK:` block down into `cleanroom_lib_staging`.
+   - Inside `cleanroom_lib_staging`, `bin/cleanroom-dirty` flags the file as dirty with the critique. No second sync sweep is required.
 
 ---
 

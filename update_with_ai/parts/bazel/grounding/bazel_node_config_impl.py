@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: eeb0dba8345a
-# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T06:16:06Z
+# LAST_CHANGED: 2026-10-05T06:16:06Z
+# CHANGE: Eliminate regex and cache mechanics, decompose step mode, and align parameter catalog
+# CODE_HASH: 3606558b860d
 # --- END CLEANROOM METADATA ---
 
 """Bazel node config implementation grounding specification module."""
@@ -100,8 +99,8 @@ class NodeConfig(agent_node_config.NodeConfig, InTier[AgentSessionTier]):
     def allows_step_mode(self) -> bool:
         """
         COVERED:
-        - MUST resolve whether the node allows step mode.
-          - Condition knowledge: evaluate guide target presence on active node manifest.
+        - WHEN a session has a single node and the target node allows step mode, MUST permit step mode eligibility.
+          - Condition knowledge: evaluate len(role_cfg.nodes) == 1 and sample_manifest.allows_step_mode.
           - Consequent knowledge: return boolean indicator.
         """
         role_cfg = self.get_singleton(agent_node_config.RoleConfig)
@@ -116,26 +115,24 @@ class NodeConfig(agent_node_config.NodeConfig, InTier[AgentSessionTier]):
                 label=bazel_manifest_loader.TargetLabel(str(sample_node.unit_address))
             )
         )
-        _res: bool = sample_manifest.guide_target is not None
+        _single_node: bool = len(role_cfg.nodes) == 1
+        _node_allows: bool = bool(sample_manifest.allows_step_mode)
+        _res: bool = _single_node and _node_allows
         raise NotImplementedError
 
     @property
     def is_step_mode(self) -> bool:
         """
         COVERED:
-        - WHEN agent config enables step mode, exactly one node is active, that node allows step mode, and session feedback is absent, MUST activate step mode.
-          - Condition knowledge: resolve AgentConfig and RoleConfig; evaluate is_step_mode, allows_step_mode, len(nodes) == 1, len(feedback) == 0.
+        - WHEN permitted by agent config with an eligible session lacking feedback, MUST activate step mode.
+          - Condition knowledge: resolve AgentConfig; evaluate is_step_mode, allows_step_mode, and len(feedback) == 0.
           - Consequent knowledge: return conjunction boolean indicator.
         """
         agent_cfg = self.get_singleton(agent_config.AgentConfig)
-        role_cfg = self.get_singleton(agent_node_config.RoleConfig)
         _agent_allows: bool = agent_cfg.is_step_mode
-        _node_allows: bool = self.allows_step_mode
-        _single_node: bool = len(role_cfg.nodes) == 1
+        _node_eligible: bool = self.allows_step_mode
         _feedback_absent: bool = len(self.feedback) == 0
-        _res: bool = (
-            _agent_allows and _node_allows and _single_node and _feedback_absent
-        )
+        _res: bool = _agent_allows and _node_eligible and _feedback_absent
         raise NotImplementedError
 
     @property
@@ -361,15 +358,6 @@ class NodeConfig(agent_node_config.NodeConfig, InTier[AgentSessionTier]):
     ) -> Mapping[dag_storage.DagNode, agent_node_config.PerNodeInfo]:
         """
         COVERED:
-        - MUST cache per node info loaded for active nodes from role config.
-          - Condition knowledge: resolve active nodes from RoleConfig.
-          - Consequent knowledge: store and look up PerNodeInfo in cache dictionary.
-        - MUST check the role config version to unload cached info when nodes are no longer being cleaned.
-          - Condition knowledge: inspect RoleConfig version.
-          - Consequent knowledge: invalidate cached info when version increments.
-        - MUST load per node info for newly active nodes from target node manifests.
-          - Condition knowledge: retrieve TargetManifest via BazelManifestLoader.
-          - Consequent knowledge: construct PerNodeInfo for active nodes.
         - MUST resolve declared source files and templates into node read-write files and templates.
           - Condition knowledge: access manifest source_file and template.
           - Consequent knowledge: populate read_write_files and templates.
@@ -557,12 +545,12 @@ class AliasManager(agent_file_alias.AliasManager, InTier[AgentSessionTier]):
     ) -> agent_file_alias.SanitizedText:
         """
         COVERED:
-        - MUST mask relative workspace paths and preceding path prefixes with relative paths using backtracking-safe regex patterns.
+        - MUST replace matching host paths with relative workspace paths when sanitizing output text.
           - Condition knowledge: resolve NodeConfig; inspect read_write_files for workspace paths.
-          - Consequent knowledge: perform backtracking-safe regex substitution with relative path aliases.
-        - MUST strip workspace root path prefixes when sanitizing output text.
+          - Consequent knowledge: perform path substitution with relative path aliases.
+        - MUST mask occurrences of workspace root path prefixes when sanitizing output text.
           - Consequent knowledge: remove workspace root prefix from text.
-        - MUST strip execution root path prefixes when sanitizing output text.
+        - MUST mask occurrences of execution root path prefixes when sanitizing output text.
           - Consequent knowledge: remove execution root prefix from text.
         """
         node_cfg = self.get_singleton(agent_node_config.NodeConfig)
@@ -576,20 +564,6 @@ class AliasManager(agent_file_alias.AliasManager, InTier[AgentSessionTier]):
         stripped_exec: str = stripped_ws.replace(exec_root, "")
         _res = agent_file_alias.SanitizedText(stripped_exec)
         raise NotImplementedError
-
-
-def __orphan__() -> None:
-    """Orphan contracts for bazel node config implementation.
-
-    COVERED:
-    - MUST update file aliases and path masking when the role config version changes.
-      - Condition knowledge: inspect role config version changes.
-      - Consequent knowledge: refresh file aliases and path masking.
-    """
-    role_cfg: agent_node_config.RoleConfig = cast(agent_node_config.RoleConfig, None)
-    _version: agent_node_config.ExecutionVersion = role_cfg.version
-    _alias_mgr: AliasManager = cast(AliasManager, None)
-    raise NotImplementedError
 
 
 def __initialize__() -> None:

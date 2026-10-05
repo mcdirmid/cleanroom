@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 4482c5a6bc02
+LAST_CLEANED: 2026-10-05T04:42:50Z
+LAST_CHANGED: 2026-10-05T04:42:50Z
+CHANGE: Add delegated collaborator and refine validation and normalization behavior
+CODE_HASH: 5fa8c593ef32
 -->
 
 # file_paths_impl implementation component
@@ -18,12 +18,12 @@ Manipulating filesystem paths directly without boundary validation risks format 
 
 **Out of scope:** The file_paths_impl implementation component does not create file aliases, read file contents, or execute filesystem mutations; these are handled by other components.
 
+**Delegated:** Native path inspection and host filesystem checks are delegated to filesystem_ext.
+
 ## Types and Behavior
 
-The file path manager validates and resolves path representations using the host filesystem.
+The file path manager rejects empty path strings with a failure indicating that a path cannot be empty.
 
-Host paths encapsulate non-empty path strings. Absolute paths validate that path strings are absolute according to the host filesystem, raising a failure when relative, and normalize path representations into encapsulated records.
+When validating an absolute path, the file path manager checks that the path is absolute according to the host filesystem, failing with an error if given a relative path. When validating a workspace path, it checks that the path is relative without leading separators, failing with an error if given an absolute path.
 
-Workspace paths validate that path strings are relative without leading separators, raising a failure when absolute, and normalize relative path representations into encapsulated records.
-
-Resolving a workspace path against the absolute path of a workspace root joins the relative workspace path to the root path using the host filesystem, producing a normalized absolute path record.
+Validating paths normalizes redundant separators and resolves relative directory segments into encapsulated path records. Resolving a workspace path against the absolute path of a workspace root joins the relative path string to the root and normalizes the resulting path into an absolute path record.

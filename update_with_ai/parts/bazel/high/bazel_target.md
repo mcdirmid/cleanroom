@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 39160b12d0ad
+LAST_CLEANED: 2026-10-05T05:17:47Z
+LAST_CHANGED: 2026-10-05T05:17:47Z
+CHANGE: Remove code-level constructor constraint and introduce callable operations in infinitive form
+CODE_HASH: b0424439f038
 -->
 
 # bazel_target interface component
@@ -19,6 +19,6 @@ Multi-step workflows require deterministic node addressing and durable state sto
 
 ## Types and Behavior
 
-A *node directory* is a workspace path addressing the workspace package directory of a node. A node directory is constructed exclusively through service operations rather than direct public constructors.
+A *node directory* is a workspace path addressing the workspace package directory of a node.
 
-A system's *bazel target* *normalizes* an arbitrary Bazel target identifier string into a canonical node and *extracts* a node directory from a node.
+A system's *bazel target* can *normalize* an arbitrary Bazel target identifier string into a canonical node and *extract* a node directory from a node.

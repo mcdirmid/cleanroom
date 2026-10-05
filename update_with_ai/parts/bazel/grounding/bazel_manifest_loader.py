@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 6167bd1384e1
-# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T06:13:46Z
+# LAST_CHANGED: 2026-10-05T06:13:46Z
+# CHANGE: Align postconditions and class docstrings with low-level contract
+# CODE_HASH: 0ba92064695f
 # --- END CLEANROOM METADATA ---
 
 """Bazel manifest loader grounding specification module."""
@@ -42,7 +41,7 @@ class TargetManifest:
 
 
 class BazelManifestLoader(InTier[SystemTier], Protocol):
-    """Discovers and translates build system target manifests into runtime graph structures."""
+    """Discovers and translates build system target manifests into runtime graph structures and node definitions."""
 
     def retrieve_manifest(self, node: dag_storage.DagNode) -> Optional[TargetManifest]:
         """
@@ -61,7 +60,7 @@ class BazelManifestLoader(InTier[SystemTier], Protocol):
     def load_manifest(self, node: dag_storage.DagNode) -> None:
         """
         DEFERRED:
-        - MUST resolve manifests into target nodes, dependencies, node definitions, task prompts, and dependency graph edges.
+        - MUST resolve manifests into target nodes, node definitions, task prompts, and dependency graph edges.
         - MUST populate agent storage with resolved structures.
         - MUST resolve declared direct dependencies into dependency graph edges in agent storage.
         - MUST resolve declared silent dependencies as non-propagating dependencies in agent storage.

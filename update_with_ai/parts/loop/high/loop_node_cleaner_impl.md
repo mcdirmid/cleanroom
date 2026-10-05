@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 349e3e4de107
+LAST_CLEANED: 2026-10-05T05:06:19Z
+LAST_CHANGED: 2026-10-05T05:06:19Z
+CHANGE: Add delegated collaborator statement and eliminate redundant outcome sentence
+CODE_HASH: 0bfb9c80e86b
 -->
 
 # loop_node_cleaner_impl implementation component
@@ -17,6 +17,8 @@ The loop_node_cleaner_impl implementation component realizes node clean executio
 Driving node execution requires bridging abstract graph clean directives to concrete multi-turn turn loops and translating tool termination responses back into graph updates. The loop_node_cleaner_impl implementation component configures session roles for dirty nodes, initializes conversation history with get work directives, executes the agent loop, and converts termination responses into in-band graph state updates.
 
 **Out of scope:** The loop_node_cleaner_impl implementation component does not parse JSON build manifests, enforce repetition thresholds, or write transcript logs to disk; these are handled by other components.
+
+**Delegated:** Turn loop execution is delegated to loop_driver; session services are delegated to sandbox; graph storage updates are delegated to dag_storage.
 
 ## Types and Behavior
 
@@ -36,4 +38,4 @@ Resolving dirty nodes results in:
 
 When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, marking the nodes clean with a change summary when incoming pending messages indicate changes from upstream dependencies, and marking the nodes clean without changes otherwise.
 
-Cleaning dirty nodes marks the nodes clean in graph storage, delivering feedback messages strictly to their addressed feedback dependency node. Delivering feedback messages to arbitrary dependencies, non-feedback dependencies, guides, or fixed node specifications is prohibited.
+Delivering feedback messages to arbitrary dependencies, non-feedback dependencies, guides, or fixed node specifications is prohibited.

@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: b700095e6a9a
+# LAST_CLEANED: 2026-10-05T05:43:34Z
+# LAST_CHANGED: 2026-10-05T05:43:34Z
+# CHANGE: Add caller acyclic subgraph assumption contract
+# CODE_HASH: 8747b0adf920
 # --- END CLEANROOM METADATA ---
 
 """Loop cleaner low-level interface specification."""
@@ -30,6 +30,9 @@ class LoopCleaner(InTier[SystemTier], Protocol):
 
         Returns:
             True if all nodes in the target subgraph are clean, or False if processing halted.
+
+        PRECONDITIONS:
+        - A caller guarantees that the target node roots an acyclic subgraph.
 
         POSTCONDITIONS:
         - MUST clean dirty nodes in dependency-first topological order.

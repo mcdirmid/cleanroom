@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 596aa3720485
+LAST_CLEANED: 2026-10-05T04:57:48Z
+LAST_CHANGED: 2026-10-05T04:57:48Z
+CHANGE: Standardize on canonical check files tool over singular check file tool in assembly description
+CODE_HASH: 250b3b84336d
 -->
 
 # sandbox_asm assembly component
@@ -31,7 +31,7 @@ The sandbox assembly aggregates the following implementation components:
 
 - The sandbox file editor implementation from sandbox_file_editor_impl, closing the sandbox file editor interface to provide text replacement and line update tools with template materialization.
 
-- The sandbox run control implementation from sandbox_run_control_impl, closing the sandbox run control interface to provide advance, finish, fail, blame, and check file execution control tools with sequential verification checks.
+- The sandbox run control implementation from sandbox_run_control_impl, closing the sandbox run control interface to provide advance, finish, fail, blame, and check files execution control tools with sequential verification checks.
 
 - The sandbox guide delivery implementation from sandbox_guide_delivery_impl, closing the sandbox guide delivery interface to parse markdown instructions and deliver progressive milestone steps.
 

@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 85f09ed6ca17
+LAST_CLEANED: 2026-10-05T05:35:00Z
+LAST_CHANGED: 2026-10-05T05:35:00Z
+CHANGE: Standardize on check files tool in editing contracts
+CODE_HASH: 4fc1975697ce
 -->
 
 # sandbox_file_editor_impl implementation component
@@ -32,7 +32,7 @@ Furthermore, the implementation tracks revision counters and emits structured di
 - Successful editing tool execution writes updated file content to the filesystem. [write_updated_content_on_success]
 - Successful editing tool execution creates missing parent directories. [create_missing_parent_dirs_on_success]
 - Successful editing tool execution records that workspace file writes occurred. [record_writes_occurred_on_success]
-- Successful editing tool execution reminds the agent to call check file to verify syntax and types. [remind_call_check_file]
+- Successful editing tool execution reminds the agent to call check files to verify syntax and types. [remind_call_check_files]
 - Successful editing tool execution includes a diff delta representation in the response content when configured to produce delta output. [include_diff_delta_when_configured]
 - Editing tool responses share the constant suppression key "replace_file_content". [share_replace_file_content_suppression_key]
 - The missing message function explains that start line and end line only restrict the search window when line range arguments are supplied. [explain_line_range_restrictions]
@@ -68,5 +68,5 @@ Furthermore, the implementation tracks revision counters and emits structured di
 - Line search windows are validated against file bounds, rejecting non-positive or inverted bounds before matching proceeds. [fail_when_start_line_less_than_one, fail_when_start_line_exceeds_line_count_plus_one, fail_when_end_line_less_than_one, fail_when_end_line_exceeds_line_count, fail_when_start_exceeds_end]
 - Target content matching attempts exact matching first, falling back to whitespace-tolerant matching when single replacements are requested. [match_target_content_exactly, fallback_whitespace_stripped_matching, whitespace_fallback_succeeds_on_single_match]
 - Ambiguous or missing target content triggers detailed line location diagnostics to guide correction. [fail_when_not_found_single, fail_when_multiple_matches_single, feedback_first_two_matching_lines, feedback_relocated_lines_when_outside_range]
-- Successful replacements update the filesystem, advance the update revision, and emit reminders to verify syntax with check file. \[write_updated_content_on_success, create_missing_parent_dirs_on_success, record_writes_occurred_on_success, remind_call_check_file, increment_revision_on_file_update, share_replace_file_content_suppression_key, sandbox_file_editor: [replace_content_in_line_range, replace_multiple_when_permitted]\]
+- Successful replacements update the filesystem, advance the update revision, and emit reminders to verify syntax with check files. \[write_updated_content_on_success, create_missing_parent_dirs_on_success, record_writes_occurred_on_success, remind_call_check_files, increment_revision_on_file_update, share_replace_file_content_suppression_key, sandbox_file_editor: [replace_content_in_line_range, replace_multiple_when_permitted]\]
 - Workspace file writes tracking reflects whether workspace file contents differ from their in-band code hash. \[compare_current_against_code_hash, sandbox_file_editor: [expose_workspace_writes_occurred, writes_occurred_true_on_diff, writes_occurred_false_on_match]\]

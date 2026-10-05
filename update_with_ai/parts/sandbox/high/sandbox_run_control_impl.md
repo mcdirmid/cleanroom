@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 116a0c94afa0
+LAST_CLEANED: 2026-10-05T04:57:36Z
+LAST_CHANGED: 2026-10-05T04:57:36Z
+CHANGE: Standardize on canonical check files tool over singular check file tool in Purpose
+CODE_HASH: 9d070541868a
 -->
 
 # sandbox_run_control_impl implementation component
@@ -12,7 +12,7 @@ implements: sandbox_run_control
 
 ## Purpose
 
-The sandbox_run_control_impl implementation component realizes self-contained outcome evaluation, guide step mode advancement, and verification checks for advance, submit, fail, blame, check file, and get work tools.
+The sandbox_run_control_impl implementation component realizes self-contained outcome evaluation, guide step mode advancement, and verification checks for advance, submit, fail, blame, check files, and get work tools.
 
 Autonomous agents reaching task completion require strict verification enforcement to ensure dirty files are documented, progressive milestones are completed, and broken builds are caught before terminating a turn. The sandbox_run_control_impl implementation component coordinates milestone progression with guide delivery, inspects edit manager modification state, evaluates installed verification checks, and validates blame targets, converting outcome decisions into structured tool responses.
 

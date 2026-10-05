@@ -1,10 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: b11cd39f0eb0
-# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
-# QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T17:04:51Z
+# LAST_CHANGED: 2026-10-05T06:00:02Z
+# CHANGE: Align log opening and unbuffered flush mechanics with low/runner_logger_impl.pyi
+# CODE_HASH: 083b03e78689
+# QA_AUDIT: 2026-10-05T17:04:51Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for runner_logger_impl per its grounding specification."""
@@ -113,10 +112,9 @@ class RunnerLoggerTest(unittest.TestCase):
         with open(self.log_file, "w", encoding="utf-8") as f:
             f.write("Old previous run log content\n")
         with enter_phase(system, registry=self.registry) as scope:
-            # Requirement: MUST clear any existing transcript log file at initialization.
-            # Requirement: The runner logger clears any existing transcript log file at initialization.
+            # Requirement: MUST truncate the transcript log file at opening.
             logger = scope.get_singleton(RunnerLogger)
-            logger.initialize()
+            self.assertIsNotNone(logger)
         with open(self.log_file, "r", encoding="utf-8") as f:
             content = f.read()
         self.assertEqual(content, "")
@@ -132,9 +130,9 @@ class RunnerLoggerTest(unittest.TestCase):
         __initialize__(registry)
         with enter_phase(system, registry=registry) as scope:
             logger = scope.get_singleton(RunnerLogger)
-            # Requirement: MUST resolve the transcript log destination from configured environment variables when present, defaulting to 'agent_loop.log'.
-            # Requirement: The transcript log file destination defaults to `agent_loop.log` or is resolved from configured environment variables.
-            logger.initialize()
+            # Requirement: MUST default the transcript log file destination to 'agent_loop.log'.
+            # Requirement: MUST resolve the transcript log file destination from configured environment variables when present.
+            self.assertIsNotNone(logger)
 
         with open(default_file, "r", encoding="utf-8") as f:
             content = f.read()

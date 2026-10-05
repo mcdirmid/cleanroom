@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 67b22eae5c55
+# LAST_CLEANED: 2026-10-05T05:44:34Z
+# LAST_CHANGED: 2026-10-05T05:44:34Z
+# CHANGE: Standardize on check files tool in editing contracts
+# CODE_HASH: 25605a157588
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file editor implementation low-level specification."""
@@ -117,5 +117,6 @@ class ReplaceFileContentTool(
         - WHEN target content is not found in the search window but exists elsewhere, MUST fail indicating the line numbers where target content was located.
         - WHEN the edit produces no change to file content, MUST fail reminding the agent that no-op edits will fail.
         - WHEN the replacement succeeds, MUST write updated content creating missing parent directories and record workspace file writes.
+        - WHEN the replacement succeeds, MUST remind the agent to call check files to verify syntax and types.
         """
         ...

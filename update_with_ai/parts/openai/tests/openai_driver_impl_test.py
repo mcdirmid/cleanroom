@@ -1,10 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 4c82ba53511d
-# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
-# QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T17:02:27Z
+# LAST_CHANGED: 2026-10-05T17:02:27Z
+# CHANGE: Use completion error payload for incomplete tool call recovery test
+# CODE_HASH: c3a2c3e58ec8
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for openai_driver_impl aligned with grounding specifications."""
@@ -36,7 +34,6 @@ from update_with_ai.parts.loop.lib.loop_driver import (
 )
 from update_with_ai.parts.openai.lib.openai_driver_impl import (
     LoopDriver,
-    OpenAIError,
     __initialize__,
 )
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
@@ -2059,6 +2056,13 @@ class OpenAIDriverImplTest(unittest.TestCase):
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
 
+        comp_err = DummyCompletion(
+            choices=[],
+            error={
+                "code": "incomplete_tool_call",
+                "message": "Tool call generation failed: code=incomplete_tool_call",
+            },
+        )
         comp_done = DummyCompletion(
             choices=[
                 DummyChoice(
@@ -2079,7 +2083,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
 
         mock_client.chat.completions.create.side_effect = [
-            OpenAIError("Tool call generation failed: code=incomplete_tool_call"),
+            comp_err,
             comp_done,
         ]
 

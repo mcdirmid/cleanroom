@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 7dda0e111630
+LAST_CLEANED: 2026-10-05T04:52:49Z
+LAST_CHANGED: 2026-10-05T04:52:49Z
+CHANGE: Remove forbidden optional keyword from change description condition
+CODE_HASH: f67cefe8fd65
 -->
 
 # dag_storage interface component
@@ -35,4 +35,4 @@ Recording a change message against a target node marks it dirty by updating its 
 
 Materializing a template for a node writes initial template content to disk if its source artifact is missing on disk, preserving existing files without overwriting.
 
-Marking a node clean clears messages for the node and updates in-band metadata with a clean timestamp. When an optional change description is provided for a node with a source artifact, marking the node clean updates its last changed timestamp and change description in its in-band metadata, and clears unacted feedback. When marking an auditor node clean, audit metadata is stamped across all of its feedback dependencies.
+Marking a node clean clears messages for the node and updates in-band metadata with a clean timestamp. When a change description is provided for a node with a source artifact, marking the node clean updates its last changed timestamp and change description in its in-band metadata, and clears unacted feedback. When marking an auditor node clean, audit metadata is stamped across all of its feedback dependencies.

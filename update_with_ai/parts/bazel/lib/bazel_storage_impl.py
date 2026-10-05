@@ -1,10 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 922aa0b24eda
-# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
-# QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T17:28:49Z
+# LAST_CHANGED: 2026-10-05T17:28:49Z
+# CHANGE: Add dirty tag checks to get_messages and is_dirty
+# CODE_HASH: 313622a0527c
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in bazel_storage_impl.pyi
@@ -178,6 +176,12 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             else:
                 meta = src_metadata.extract_metadata(src_path)
                 if meta is not None:
+                    if meta.dirty:
+                        messages.add(
+                            dag_storage.ChangeMessage(
+                                content=dag_storage.MessageContent(meta.dirty)
+                            )
+                        )
                     for fb in meta.feedback:
                         messages.add(
                             dag_storage.FeedbackMessage(
@@ -278,6 +282,8 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
 
         meta = src_metadata.extract_metadata(src_path)
         if meta is None or not meta.last_cleaned:
+            return True
+        if meta.dirty:
             return True
         if meta.feedback:
             return True

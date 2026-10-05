@@ -484,31 +484,34 @@ Every role workspace persists its canonical role address and configuration in `.
 * **Explicit `--role`**: Provisions the workspace if it does not yet exist, persists/updates `.cleanroom_role.json`, and converges that role workspace.
 * **Omitted `--role`**: **Does not create any new role workspaces**. Scans existing role workspaces in `../role_workspaces/` for `.cleanroom_role.json`, reads each role address, and synchronizes all existing role workspaces.
 
-#### Lifecycle & Synchronization Protocol
-Every convergence run executes in this exact sequence:
+#### Modern Two-Phase "One and Done" Synchronization Protocol
+All legacy mailboxes (`COMPLETED.md`, `WORK_ORDER.md`) and `.textproto` mutation targets have been permanently retired in favor of native in-band source metadata (`src_metadata.py`), lockless blame buffering (`.cleanroom_blame_buffer.json`), and a **two-phase "one and done" synchronization sweep**.
 
-1. **Workspace Discovery & Provisioning**:
-   - If `--role` is specified and the role workspace does not exist: creates directory structure, writes `.cleanroom_role.json`, deploys helper scripts (`bin/submit`, `bin/fail`, `bin/blame`), and authors role-tailored `AGENTS.md`.
-   - If `--role` is omitted: skips non-existent workspaces and only syncs existing ones containing `.cleanroom_role.json`.
-2. **Process Submissions Inbound (`COMPLETED.md`) [Standard Mode Only]**:
-   - When `--all` is **not** specified:
-     - Reads `COMPLETED.md` first.
-     - For each `SUBMIT` entry or `BLAME` submit target: copies the file from role workspace $\to$ canonical workspace.
-     - Updates `.update_with_ai.textproto` files in the canonical workspace: clears messages for the submitted node, propagates change messages to declared `reverse_dependencies`, and routes blame feedback to blamed targets.
-     - Clears `COMPLETED.md`.
-3. **Inbound Read-Write Sync (`--all` Mode)**:
-   - When `--all` **is** specified:
-     - Compares file modification times directly: if the role workspace read-write file was edited later than the canonical workspace file ($mtime_{\text{role}} > mtime_{\text{workspace}}$), copies it from role workspace $\to$ canonical workspace.
-     - Offers **no clobber protection** (latest edit time wins).
-     - **Does not modify `.update_with_ai.textproto` files**.
-4. **Outbound Read-Only Sync**:
-   - Always copies read-only files (tools, linters, configs, dependency specs) from canonical workspace $\to$ role workspace with `chmod 444`.
-   - For `stub_role_deps` (such as `lib` in a `test` workspace), synthesizes pure read-only interface stubs from specifications.
-5. **Outbound Read-Write Sync**:
-   - If a canonical workspace read-write file was edited later than the role workspace file ($mtime_{\text{workspace}} > mtime_{\text{role}}$), copies it from canonical workspace $\to$ role workspace (latest edit time wins).
-6. **Work Order Convergence (`WORK_ORDER.md`)**:
-   - Re-evaluates `.update_with_ai.textproto` in the canonical workspace against Cleanroom phase ordering.
-   - Rewrites `WORK_ORDER.md` in the role workspace with active ready tasks. Completed tasks are automatically pruned.
+When `bin/cleanroom-sync` is executed without arguments, it sweeps all commissioned workspaces in two discrete, decoupled phases:
+
+1. **Phase 1: Inbound Harvest Across ALL Workspaces**:
+   - Sweeps every commissioned workspace in topological phase order.
+   - Harvests `.cleanroom_blame_buffer.json` into canonical contracts in main, marking blamed targets `DIRTY:` and appending `FEEDBACK:`.
+   - Harvests `.cleanroom_audit_buffer.json` into canonical contracts in main, updating `<ROLE>_AUDIT` timestamps.
+   - For role-writable source files:
+     - Collects newly created files into main.
+     - Collects verified submissions ($T_{\text{ws\_event}} > T_{\text{main\_event}}$) into main.
+     - Collects files cleaned locally ($T_{\text{ws\_event}} = T_{\text{main\_event}}$ with `DIRTY` cleared) into main.
+     - Propagates local dirty flags into main.
+   - Harvests local auditor timestamps ($T_{\text{ws\_audit}} > T_{\text{main\_audit}}$) into main.
+   - Clears consumed blame and audit buffers in the role workspaces.
+   - *Result*: Canonical main incorporates all work, blame, and audit attestations from all workspaces before any outbound cascade begins.
+
+2. **Phase 2: Outbound Cascade Across ALL Workspaces ("One and Done")**:
+   - Sweeps every commissioned workspace in topological phase order.
+   - For every source file in scope:
+     - Pushes new files created in main out to role workspaces.
+     - For role-writable files: pushes updates from main if $T_{\text{main\_event}} > T_{\text{ws\_event}}$ (e.g. file was blamed, marked dirty, or updated in main) or if metadata differs. Because `append_feedback` advances `LAST_CLEANED` to $T_{\text{now}}$, blamed files are immediately pushed to their home workspace in this phase.
+     - For read-only upstream contracts: pushes latest contracts (`chmod 444`) whenever main is newer or metadata differs.
+   - Synchronizes audit certs: removes revoked audit tags and pushes fresh `<ROLE>_AUDIT` tags to all consumers.
+   - Synthesizes fresh read-only interface stubs, copies build package files (`BUILD.bazel`), and updates `AGENTS.md`.
+   - Re-records baseline hashes and saves `last_sync_timestamp = T_now`.
+   - *Result*: Role workers (such as Lib) immediately see newly blamed units ready to fix in `bin/get_work` in a single invocation of `cleanroom-sync`.
 
 #### Node Lifecycle Transitions via Bazel Targets
 

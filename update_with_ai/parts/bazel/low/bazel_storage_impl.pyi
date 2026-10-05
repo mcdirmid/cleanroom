@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 8bb96dc7122b
+# LAST_CLEANED: 2026-10-05T17:30:16Z
+# LAST_CHANGED: 2026-10-05T17:30:16Z
+# CHANGE: Align is_dirty postcondition with dirty tag
+# CODE_HASH: 44674c858f07
 # --- END CLEANROOM METADATA ---
 
 """Bazel storage implementation low-level specification."""
@@ -109,6 +109,7 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         - WHEN a declared source file is missing from the workspace root, MUST return true and record a change message to implement the source file.
         - WHEN source file metadata is missing or its last cleaned timestamp is missing, MUST return true.
         - WHEN source file metadata contains unacted feedback entries, MUST return true.
+        - WHEN source file metadata contains a dirty tag, MUST return true.
         - WHEN a non-silent forward dependency has a last changed timestamp newer than the node's last cleaned timestamp, MUST return true.
         - WHEN an auditor node has any verified feedback target file missing or any feedback target node dirty, MUST return true.
         - WHEN an auditor node has any verified feedback target file metadata missing, unparseable, or missing the auditor role audit timestamp, MUST return true.
@@ -194,8 +195,8 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST clear all messages for the node.
-        - WHEN change_description is provided and node has a source artifact, MUST update the last changed timestamp and change description, and clear unacted feedback.
-        - WHEN change_description is omitted and node has a source artifact, MUST update the last cleaned timestamp and clear unacted feedback.
+        - WHEN change_description is provided and node has a source artifact, MUST update the last changed timestamp and change description, and clear unacted feedback and dirty tag.
+        - WHEN change_description is omitted and node has a source artifact, MUST update the last cleaned timestamp and clear unacted feedback and dirty tag.
         - WHEN node is an auditor role, MUST stamp audit metadata on all feedback dependencies without updating last changed timestamp.
         - MUST update metadata such that the node is no longer dirty.
         """

@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: d07df85ea595
+LAST_CLEANED: 2026-10-05T05:19:49Z
+LAST_CHANGED: 2026-10-05T05:19:49Z
+CHANGE: Add delegated collaborator statement for model configuration schema evaluation
+CODE_HASH: 441512b5780e
 -->
 
 # bazel_openai_config_impl implementation component
@@ -17,6 +17,8 @@ The bazel_openai_config_impl implementation component realizes model configurati
 Connecting declarative build targets to concrete language model parameters requires loading configuration modules from workspace build artifacts and binding runtime environment secrets without hardcoding credentials into source code. The bazel_openai_config_impl implementation component resolves execution settings from a target module in the workspace runfiles tree or build output directory and binds authentication credentials from designated process environment variables.
 
 **Out of scope:** The bazel_openai_config_impl implementation component does not transmit network requests to model providers, format conversation history, or track loop repetition; these are handled by other components.
+
+**Delegated:** Model configuration module schema validation and evaluation are delegated to model_config_ext.
 
 ## Types and Behavior
 

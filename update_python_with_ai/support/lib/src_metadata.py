@@ -477,13 +477,13 @@ def record_change(
 def append_feedback(
     file_path: Path | str, explanation: str, sender: str = "user"
 ) -> None:
-    """Appends an unacted feedback item to the file's in-band metadata block."""
+    """Appends an unacted feedback item to the file's in-band metadata block and advances LAST_CLEANED."""
+    now = current_utc_timestamp()
     if explanation.startswith("[") and "]:" in explanation:
         entry = explanation
     else:
-        now = current_utc_timestamp()
         entry = f"[{now} from {sender}]: {explanation}"
-    update_metadata(file_path, append_feedback=entry)
+    update_metadata(file_path, append_feedback=entry, last_cleaned=now)
 
 
 def stamp_audit(file_path: Path | str, role_name: str) -> None:

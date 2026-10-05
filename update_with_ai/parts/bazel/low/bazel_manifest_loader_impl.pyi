@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 36c3f9b1f124
+# LAST_CLEANED: 2026-10-05T05:39:52Z
+# LAST_CHANGED: 2026-10-05T05:39:52Z
+# CHANGE: Add silent source file path contract to load_manifest
+# CODE_HASH: 5e3c3d5195d6
 # --- END CLEANROOM METADATA ---
 
 """Bazel manifest loader implementation low-level specification."""
@@ -61,6 +61,7 @@ class BazelManifestLoader(
         POSTCONDITIONS:
         - MUST populate agent storage with node definitions carrying task prompts.
         - MUST record declared primary source file paths in agent storage without duplicating package path segments.
+        - MUST record silent source file paths in agent storage without duplicating package path segments.
         - MUST register declared direct dependencies in agent storage.
         - MUST register declared feedback dependencies in agent storage.
         - MUST register declared silent dependencies as non-propagating dependencies in agent storage.

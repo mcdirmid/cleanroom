@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: ed3e42e6c9d8
+LAST_CLEANED: 2026-10-05T17:29:31Z
+LAST_CHANGED: 2026-10-05T17:29:31Z
+CHANGE: Incorporate dirty tag dirty evaluation
+CODE_HASH: e8e7d62b088e
 -->
 
 # bazel_storage_impl implementation component
@@ -14,9 +14,11 @@ implements: agent_storage, dag_storage
 
 The bazel_storage_impl implementation component realizes in-memory graph indexing, in-band source file metadata persistence, dynamic forward dirty node evaluation, and silent dependency filtering for Bazel targets.
 
-Coordinating multi-node builds requires fast in-memory access to target metadata alongside durable on-disk persistence of inter-node communication records. Storing inter-node communication records in sidecar package files causes state desynchronization, ghost records, and merge conflicts across branches. The bazel_storage_impl implementation component resolves declared source files against the workspace root, extracts and updates in-band comment headers using src_metadata_ext, evaluates dirty status dynamically from forward dependency timestamps and unacted feedback, and filters silent dependencies from dirty propagation.
+Coordinating multi-node builds requires fast in-memory access to target metadata alongside durable on-disk persistence of inter-node communication records. Storing inter-node communication records in sidecar package files causes state desynchronization, ghost records, and merge conflicts across branches. The bazel_storage_impl implementation component resolves declared source files against the workspace root, extracts and updates in-band comment headers, evaluates dirty status dynamically from forward dependency timestamps and unacted feedback, and filters silent dependencies from dirty propagation.
 
 **Out of scope:** The bazel_storage_impl implementation component does not deserialize JSON manifests, drive agent loops, or execute verification commands; these are handled by other components.
+
+**Delegated:** Target label normalization is delegated to bazel_target; workspace path resolution and validation are delegated to file_paths; in-band comment header parsing and serialization are delegated to src_metadata_ext.
 
 ## Types and Behavior
 
@@ -34,27 +36,29 @@ A node evaluates as dirty when:
 
 - Its source file metadata contains unacted feedback entries, synthesizing feedback messages for the unacted entries.
 
+- Its source file metadata contains a dirty tag, synthesizing a change message for the dirty condition.
+
 - Any non-silent forward dependency has a last changed timestamp strictly newer than the node's last cleaned timestamp, synthesizing a change message describing the dependency update.
 
-Marking a node clean clears messages for the node and updates in-band metadata with a clean timestamp. When an optional change description is provided for a node with a source artifact, marking the node clean updates its last changed timestamp and change description in its in-band metadata, and clears unacted feedback.
+Marking a node clean clears messages for the node and updates in-band metadata with a clean timestamp. When a change description is provided for a node with a source artifact, marking the node clean updates its last changed timestamp and change description in its in-band metadata, and clears unacted feedback and dirty tags.
 
 Deleting the last cleaned timestamp from a node's source file metadata header marks the node dirty without modifying its change description or last changed timestamp.
 
-Evaluating whether an auditor role node is dirty in dag storage inspects the in-band metadata of its verified feedback target files. Querying feedback dependencies or evaluating dirty status for an auditor role node without configured feedback dependencies fails fast with an error.
+Evaluating whether an auditor node is dirty in dag storage inspects the in-band metadata of its verified feedback target files. Querying feedback dependencies or evaluating dirty status for an auditor node without configured feedback dependencies fails fast with an error.
 
-An auditor role node evaluates as dirty when:
+An auditor node evaluates as dirty when:
 
 - Any verified feedback target file is missing from the workspace root, or any verified feedback target node evaluates as dirty.
 
-- Any verified feedback target file metadata is missing, unparseable, or missing the auditor role audit timestamp.
+- Any verified feedback target file metadata is missing, unparseable, or missing the audit timestamp for the auditor node.
 
-- Any verified feedback target file has a last changed timestamp strictly newer than its audit timestamp for that auditor role.
+- Any verified feedback target file has a last changed timestamp strictly newer than its audit timestamp for that auditor node.
 
-- Any non-silent contract dependency has a last changed timestamp strictly newer than any verified feedback target file audit timestamp for that auditor role.
+- Any non-silent contract dependency has a last changed timestamp strictly newer than any verified feedback target file audit timestamp for that auditor node.
 
-Marking an auditor role node clean records the current timestamp as the auditor role audit timestamp on each verified feedback target file in-band metadata header without modifying the target file last changed timestamp.
+Marking an auditor node clean records the current timestamp as the audit timestamp on each verified feedback target file in-band metadata header without modifying the target file last changed timestamp.
 
-Deleting the last cleaned timestamp from an auditor role node removes the auditor role audit timestamp from each verified feedback target file in-band metadata header.
+Deleting the last cleaned timestamp from an auditor node removes the audit timestamp from each verified feedback target file in-band metadata header.
 
 Materializing template for a node writes configured template content into its declared source file if the file is missing from the workspace root without overwriting existing files.
 

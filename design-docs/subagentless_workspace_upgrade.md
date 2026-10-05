@@ -145,18 +145,79 @@ bin/cleanroom-sync sync
   2. If unsubmitted changes or unacted feedback exist, halts with dirty warning unless `--force` is supplied.
   3. Safely removes the workspace folder from `../role_workspaces/` and unregisters it from `.cleanroom_workspaces.json`.
 
-### 3.3 Omni-Directional Cascading Sync (Default Execution)
-Invoking `bin/cleanroom-sync` without arguments triggers a complete, topologically ordered sweep across all commissioned workspaces:
-1. **Phase 1: Inbound Harvest**:
-   - Compares in-band timestamps (`LAST_CLEANED`, `LAST_CHANGED`, `<ROLE>_AUDIT`) across all active role workspaces against canonical main.
-   - Copies newer verified files into the canonical repository.
-2. **Phase 2: Outbound Cascade (In the same atomic pass)**:
-   - Pushes newly updated canonical files and specifications down into all active dependent role workspaces:
-     - Spec roles receive updated upstream specs (`chmod 444`).
-     - Implementation roles receive updated contracts (`chmod 444`).
-     - Test roles receive regenerated read-only interface stubs (`chmod 444`).
+### 3.3 Two-Phase "One and Done" Synchronization Architecture
+Invoking `bin/cleanroom-sync` without arguments triggers a declarative, two-phase synchronization sweep across all commissioned workspaces. 
+
+#### The Problem with Single-Pass Sequential Sync
+In a single-pass loop iterating through workspaces in topological order (`high` $\to$ `planning` $\to$ `low` $\to$ `grounding` $\to$ `lib` / `test` $\to$ `qa` $\to$ `coverage`), an architectural ordering latency occurs:
+- When a downstream auditor (such as `qa`) blames an upstream producer (`lib`), the blame buffer is only harvested into main *after* `lib` has already completed its convergence in that pass.
+- In earlier versions, this forced developers to run `bin/cleanroom-sync` twice (once to harvest feedback into main, and a second time to push it down to the culprit's workspace).
+- Furthermore, because `FEEDBACK:` previously left `LAST_CLEANED` untouched, files receiving feedback did not advance their lifecycle event timestamp ($T_{\text{event}} = \max(T_{\text{changed}}, T_{\text{cleaned}})$), causing role workspaces to fail to recognize that main had newer feedback.
+
+#### The Two-Phase "One and Done" Sweep
+To make `bin/cleanroom-sync` a true "one and done" tool, convergence is split into two distinct, decoupled phases executed across **all** active workspaces:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev as Developer / Coordinator
+    participant QA_WS as Role Workspace: QA
+    participant Sync as bin/cleanroom-sync
+    participant MainWS as Canonical Main
+    participant LibWS as Role Workspace: Lib
+
+    Note over QA_WS: QA runs tests, detects bug in Lib
+    QA_WS->>QA_WS: bin/blame lib/config.py "Index out of bounds"
+    Note over QA_WS: Buffered in .cleanroom_blame_buffer.json
+
+    Dev->>Sync: Run bin/cleanroom-sync (Single Execution)
+    
+    rect rgb(240, 248, 255)
+    Note over Sync,MainWS: Phase 1: Inbound Harvest Across ALL Workspaces
+    Sync->>QA_WS: Harvest .cleanroom_blame_buffer.json & clear buffer
+    Sync->>MainWS: mark_dirty(lib/config.py) + append_feedback(lib/config.py)
+    Note over MainWS: lib/config.py stamped with DIRTY, FEEDBACK, and LAST_CLEANED = T_now
+    end
+
+    rect rgb(255, 250, 240)
+    Note over Sync,LibWS: Phase 2: Outbound Cascade Across ALL Workspaces
+    Sync->>LibWS: Push lib/config.py (Main T_now > Role T_old)
+    Note over LibWS: lib/config.py updated with DIRTY and FEEDBACK
+    Sync->>LibWS: Refresh stubs & write AGENTS.md
+    end
+
+    Note over LibWS: Lib runs bin/get_work: immediately sees READY task with feedback!
+```
+
+1. **Phase 1: Inbound Harvest across ALL Workspaces**:
+   - Sweeps every commissioned workspace in topological order.
+   - Harvests `.cleanroom_blame_buffer.json` into canonical contracts in main, marking blamed targets `DIRTY:` and appending `FEEDBACK:`.
+   - Harvests `.cleanroom_audit_buffer.json` into canonical contracts in main, updating `<ROLE>_AUDIT` tags.
+   - For role-writable source files:
+     - Collects newly created files ($ws\_exists \land \neg main\_exists$) into main.
+     - Collects verified submissions ($T_{\text{ws\_event}} > T_{\text{main\_event}}$) into main.
+     - Propagates local dirtying ($ws\_dirty \land \neg main\_dirty$, or cleared `LAST_CLEANED`) into main.
+     - Collects cleaned files where $T_{\text{ws\_event}} = T_{\text{main\_event}}$ and `DIRTY` was cleared into main.
+   - Harvests local auditor timestamps ($T_{\text{ws\_audit}} > T_{\text{main\_audit}}$) into main.
+   - Clears consumed blame and audit buffers in the role workspaces.
+   - *Result*: Main contains the complete, authoritative, and consolidated state of the entire project.
+
+2. **Phase 2: Outbound Cascade across ALL Workspaces**:
+   - Sweeps every commissioned workspace in topological order.
+   - For every source file in scope:
+     - Pushes new files created in main out to role workspaces.
+     - For role-writable files:
+       - Pushes updates from main if $T_{\text{main\_event}} > T_{\text{ws\_event}}$ (e.g. file was blamed, marked dirty, or modified in main).
+       - If $T_{\text{main\_event}} = T_{\text{ws\_event}}$: pushes if main was dirtied or received feedback not present in the workspace ($main\_dirty \land \neg ws\_dirty \lor main\_feedback \neq ws\_feedback$), or if main's `code_hash` changed.
+       - Propagates cleared `LAST_CLEANED` if main was dirtied without a timestamp advance.
+     - For read-only upstream contracts:
+       - Main is always authoritative; pushes latest contracts (`chmod 444`) whenever $T_{\text{main\_event}} > T_{\text{ws\_event}}$ or metadata differs (`DIRTY`, `FEEDBACK`, `AUDIT`, `code_hash`).
+   - Synchronizes audit tags: removes revoked audit certs and pushes newly harvested `<ROLE>_AUDIT` tags to all consumer workspaces.
+   - Prepares role artifacts, synthesizes read-only stubs, copies build package files (`BUILD.bazel`), and updates `AGENTS.md`.
+   - Records baseline hashes and updates `.cleanroom_role.json` with `last_sync_timestamp = T_now`.
+
 3. **Phase 3: Conflict Detection**:
-   - If both the role file and the canonical file were modified independently after the last sync ($T_{\text{role}} > T_{\text{last\_sync}} \land T_{\text{canonical}} > T_{\text{last\_sync}} \land \text{Hash}_{\text{role}} \neq \text{Hash}_{\text{canonical}}$), halts synchronization for that unit with actionable conflict diagnostics.
+   - If both the role file and the canonical file were modified independently after the last sync ($T_{\text{ws\_changed}} > T_{\text{last\_sync}} \land T_{\text{main\_changed}} > T_{\text{last\_sync}} \land T_{\text{ws\_changed}} \neq T_{\text{main\_changed}}$), halts synchronization for that unit with actionable conflict diagnostics.
 
 ---
 
@@ -169,7 +230,7 @@ When invoked inside a role workspace:
 1. Reads `.cleanroom_role.json` to identify its assigned role and directory scope.
 2. Parses in-band headers of all files matching that role in the directory scope.
 3. Evaluates forward dependency dirtiness:
-   $$\text{is\_dirty}(N) \iff (\exists D \in \text{ForwardDeps}(N) : N.\text{last\_cleaned} < D.\text{last\_changed}) \quad \lor \quad \text{has\_feedback}(N)$$
+   $$\text{is\_dirty}(N) \iff (\exists D \in \text{ForwardDeps}(N) : N.\text{last\_cleaned} < D.\text{last\_changed}) \quad \lor \quad \text{has\_feedback}(N) \quad \lor \quad N.\text{dirty is not None}$$
 4. For auditor roles, evaluates verification dirtiness:
    $$\text{is\_auditor\_dirty}(T) \iff T.\text{last\_changed} > T.\text{<ROLE>\_AUDIT} \quad \lor \quad T.\text{<ROLE>\_AUDIT is None}$$
 5. Outputs an actionable queue listing ready units for the role, or indicates cleanly that all units are clean.
@@ -180,8 +241,8 @@ When invoked inside a role workspace:
 | Command | Usage | Behavior & In-Band Metadata Stamping |
 | :--- | :--- | :--- |
 | **`bin/get_work`** / **`bin/cleanroom-dirty`** | `bin/get_work [dir]` | Deterministically lists all ready dirty units in the workspace requiring cleaning, citing exact timestamps and feedback reasons. |
-| **`bin/submit`** | `bin/submit <file_or_target> "<summary>"` | **Producer Roles** (`high`, `planning`, `low`, `grounding`, `lib`, `test`):<br/>Stamps `LAST_CLEANED = T_now`, `LAST_CHANGED = T_now`, `CHANGE = "<summary>"`, and clears resolved `FEEDBACK:` entries.<br/><br/>**Auditor Roles** (`grounding_qa`, `qa`, `coverage`):<br/>Stamps `<ROLE>_AUDIT: T_now` into the target file header (temporarily elevating read-only permissions if needed) without altering `LAST_CHANGED`. |
-| **`bin/blame`** | `bin/blame <file> <blame_dep> "<critique>"` | 1. If `blame_dep` is writable, appends `- [<timestamp> from <file>]: <critique>` to its `FEEDBACK:` section.<br/>2. If `blame_dep` is an immutable upstream contract (`chmod 444`), appends to `.cleanroom_blame_buffer.json` at the role workspace root. |
+| **`bin/submit`** | `bin/submit <file_or_target> "<summary>"` | **Producer Roles** (`high`, `planning`, `low`, `grounding`, `lib`, `test`):<br/>Stamps `LAST_CLEANED = T_now`, `LAST_CHANGED = T_now`, `CHANGE = "<summary>"`, and clears resolved `FEEDBACK:` and `DIRTY:` entries.<br/><br/>**Auditor Roles** (`grounding_qa`, `qa`, `coverage`):<br/>Stamps `<ROLE>_AUDIT: T_now` into the target file header without altering `LAST_CHANGED`. |
+| **`bin/blame`** | `bin/blame <file> <blame_dep> "<critique>"` | 1. If `blame_dep` is writable, appends feedback to its `FEEDBACK:` section and advances `LAST_CLEANED` to $T_{\text{now}}$.<br/>2. If `blame_dep` is an immutable upstream contract (`chmod 444`), appends to `.cleanroom_blame_buffer.json` at the role workspace root. |
 | **`bin/fail`** | `bin/fail <file> "<reason>"` | Clears `LAST_CLEANED` from the file's in-band header (forcing persistent dirty status) and appends failure diagnostics. |
 
 #### 4.2.1 The Read-Only Blame Buffer (`.cleanroom_blame_buffer.json`)
@@ -192,15 +253,20 @@ Because upstream contracts and specifications are mounted read-only (`chmod 444`
     "target": "staging/parts/agent/low/agent_config.pyi",
     "blamed_by": "staging/parts/agent/tests/agent_config_test.py",
     "explanation": "Contract missing max_retry_count parameter.",
+    "dirty_reason": "Blamed by staging/parts/agent/tests/agent_config_test.py: Contract missing max_retry_count parameter.",
     "timestamp": "2026-10-04T12:00:00Z"
   }
 ]
 ```
 During **Phase 1 (Harvest Inbound)** of `bin/cleanroom-sync`:
 1. The sync engine checks for `.cleanroom_blame_buffer.json` across active role workspaces.
-2. For each entry, it appends the feedback directly into the canonical file header in the main workspace via `src_metadata.append_feedback()`.
+2. For each entry:
+   - Sets the `DIRTY:` tag with `dirty_reason` and advances `LAST_CLEANED = T_now` via `src_metadata.mark_dirty()`.
+   - Appends the critique to `FEEDBACK:` and advances `LAST_CLEANED = T_now` via `src_metadata.append_feedback()`.
 3. The buffer file in the role workspace is cleared.
-This guarantees robust defect attribution without requiring file mailbox queues or POSIX file locks.
+4. Because `LAST_CLEANED` is advanced to $T_{\text{now}}$, $T_{\text{main\_event}} = \max(T_{\text{changed}}, T_{\text{cleaned}}) = T_{\text{now}} > T_{\text{ws\_event}}$, guaranteeing that **Phase 2 (Outbound Cascade)** in the very same sync run automatically replicates the updated, blamed file to the culprit's role workspace.
+This guarantees robust, "one and done" defect attribution without requiring file mailbox queues or POSIX file locks.
+
 
 
 ## 5. Logless Auditor Role Workspaces

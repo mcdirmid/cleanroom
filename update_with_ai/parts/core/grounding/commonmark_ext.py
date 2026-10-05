@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T04:28:01Z
+# LAST_CHANGED: 2026-10-05T04:26:30Z
+# CHANGE: new file
+# CODE_HASH: a2238a9549eb
+# --- END CLEANROOM METADATA ---
+
 """CommonMark external boundary grounding specification."""
 
 from __future__ import annotations

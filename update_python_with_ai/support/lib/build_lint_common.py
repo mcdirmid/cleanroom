@@ -3850,18 +3850,39 @@ def compute_grounding_derived_info(
                             deps.add(f":{n.name}")
                 elif isinstance(node, ast.ImportFrom):
                     if node.module:
+                        mod_part = None
+                        target_names = [n.name for n in node.names]
                         if (
                             node.module.startswith("parts.")
                             and ".grounding" in node.module
                         ):
                             parts = node.module.split(".")
                             mod_part = parts[1]
-                            for n in node.names:
+                            if len(parts) >= 4 and parts[2] == "grounding":
+                                target_names = [parts[3]]
+                        elif (
+                            node.module.startswith(
+                                ("update_with_ai.parts.", "staging.parts.")
+                            )
+                            and ".grounding" in node.module
+                        ):
+                            parts = node.module.split(".")
+                            mod_part = parts[2]
+                            if len(parts) >= 5 and parts[3] == "grounding":
+                                target_names = [parts[4]]
+
+                        if mod_part:
+                            parts_base = (
+                                parent_pkg.rsplit("/", 1)[0]
+                                if "/" in parent_pkg
+                                else "update_with_ai/parts"
+                            )
+                            for tname in target_names:
                                 if mod_part == cur_part:
-                                    deps.add(f":{n.name}")
+                                    deps.add(f":{tname}")
                                 else:
                                     deps.add(
-                                        f"//update_with_ai/parts/{mod_part}/grounding:{n.name}"
+                                        f"//{parts_base}/{mod_part}/grounding:{tname}"
                                     )
                         elif node.module.startswith("."):
                             sibling = node.module.lstrip(".")

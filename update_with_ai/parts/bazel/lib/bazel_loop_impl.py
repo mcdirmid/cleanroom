@@ -1,10 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 13fb04746c77
-# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
-# QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T16:07:09Z
+# LAST_CHANGED: 2026-10-05T05:58:15Z
+# CHANGE: Implement change recording and last cleaned timestamp clearing
+# CODE_HASH: 852a992b9bb6
+# QA_AUDIT: 2026-10-05T16:07:09Z
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in bazel_loop_impl.pyi
@@ -173,6 +172,9 @@ class Loop(loop.Loop, Singleton):
         storage = get_singleton(dag_storage.DagStorage)
         change_text = str(message.content) if message.content else "updated"
         storage.mark_node_clean(target, dag_storage.ChangeDescription(change_text))
+        if hasattr(storage, "delete_last_cleaned"):
+            getattr(storage, "delete_last_cleaned")(target)
+        storage.add_message(message, to=target)
 
     record_node_change = record_change
 

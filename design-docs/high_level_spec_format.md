@@ -30,7 +30,7 @@ In the high-level specification, we do not call out or label whether an entity i
 - Potential properties or states (e.g., `*dependencies*`, `*dependents*`, `*messages*`, `*dirty*`, `*silent*`).
 - Potential sub-types / variants (e.g., `*change*`, `*feedback*`, `*read-only file*`, `*read-write file*`).
 - Potential operations / actions (e.g., `*registered*`, `*cleared*`, `*added*`, `*read*`, `*execute*`, `*convert*`).
-- Operation arguments (e.g., executing by `*name*` with `*wire parameter bindings*`, converting a `*wire type*` value). The arguments of an operation must be italicized upon introduction so that the extraction phase can cleanly capture the operation's parameter names and signatures.
+- Formal tool parameters and explicit action inputs (e.g., executing a tool by `*name*` with `*wire parameter bindings*`, or accepting a `*change summary*` parameter). Only formal parameters introduced on callable tools or dedicated execution actions are italicized upon initial introduction; general service capabilities express inputs, criteria, and context in natural prose without artificial parameter italics.
 
 Common scalar attributes (such as `*name*` and `*description*`) must be italicized whenever they represent properties of an entity (e.g., on a `*tool*` or a `*parameter*`), ensuring that the extraction phase recognizes them as constituent properties rather than ambient prose.
 

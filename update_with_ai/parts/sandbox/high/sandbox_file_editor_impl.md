@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: bfea105abe5b
+LAST_CLEANED: 2026-10-05T04:57:18Z
+LAST_CHANGED: 2026-10-05T04:57:18Z
+CHANGE: Standardize on canonical check files tool over singular check file tool
+CODE_HASH: 31a40e95cf5a
 -->
 
 # sandbox_file_editor_impl implementation component
@@ -32,7 +32,7 @@ Editing tool execution fails if:
 
 - The edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
 
-On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file writes occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further writes. When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content. Editing tool responses share a constant suppression key replace_file_content.
+On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file writes occurred, and reminds the agent to call the check files tool to verify syntax and type correctness before making further writes. When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content. Editing tool responses share a constant suppression key replace_file_content.
 
 The replace file content tool is named `replace_file_content`, accepting in sequence a file alias *path* parameter, an integer *start_line* parameter defining the starting line of the search window, an integer *end_line* parameter defining the ending line of the search window, a boolean *allow_multiple* parameter, a text *target_content* parameter specifying the exact text to replace within the search window, and a text *replacement_content* parameter.
 

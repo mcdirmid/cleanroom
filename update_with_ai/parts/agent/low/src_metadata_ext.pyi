@@ -15,11 +15,12 @@ The `src_metadata_ext` external component specifies the grammar, comment convent
   ```
 - Python (`.py`, `.pyi`), Starlark (`BUILD`, `BUILD.bazel`, `.bzl`), Shell (`.sh`): Enclosed in line hash comments:
   ```python
-  # --- CLEANROOM METADATA ---
-  # LAST_CLEANED: 2026-10-02T14:55:48Z
-  # LAST_CHANGED: 2026-10-02T14:50:12Z
-  # CHANGE: Change summary text.
-  # --- END CLEANROOM METADATA ---
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T04:28:01Z
+# LAST_CHANGED: 2026-10-02T14:50:12Z
+# CHANGE: Change summary text.
+# CODE_HASH: 3f7eec2be07d
+# --- END CLEANROOM METADATA ---
   ```
 
 **Header Placement Rules**

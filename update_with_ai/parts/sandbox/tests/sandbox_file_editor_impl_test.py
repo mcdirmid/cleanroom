@@ -1,10 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 2ab7fbed5064
-# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
-# QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T06:01:53Z
+# LAST_CHANGED: 2026-10-05T06:01:53Z
+# CHANGE: Standardize on check files tool in editing contracts
+# CODE_HASH: 327e15bbd765
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_file_editor_impl aligned with grounding specifications."""
@@ -365,9 +363,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 }
             )
             # Requirement: Tool execution reads the file content from the filesystem, treating missing files as empty.
-            # Requirement: Tool execution writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred on success.
-            # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
-            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further modifications.
+            # Requirement: WHEN the replacement succeeds, MUST write updated content creating missing parent directories and record workspace file writes.
+            # Requirement: WHEN the replacement succeeds, MUST remind the agent to call check files to verify syntax and types.
             # Requirement: Editing tool responses share a constant suppression key replace_file_content.
             resp = replace_tool.execute_tool(b_ok)
             self.assertFalse(resp.is_failed)

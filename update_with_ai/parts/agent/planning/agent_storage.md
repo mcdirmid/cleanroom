@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: ff41217646bd
+LAST_CLEANED: 2026-10-05T05:27:47Z
+LAST_CHANGED: 2026-10-05T05:27:47Z
+CHANGE: Update node definition typing to reflect execution configuration, role attributes, and task prompts
+CODE_HASH: dd32f582e505
 -->
 
 # agent_storage interface component
@@ -20,7 +20,7 @@ By extending dag storage with manifest-backed node definitions and prompt metada
 ### Typing
 
 - A task prompt is an instruction describing the work required to clean a node.
-- A node definition is metadata describing task prompts for a node.
+- A node definition encapsulates a declared target's execution configuration, role attributes, and task prompts.
 
 ### Contracts
 

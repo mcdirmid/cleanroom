@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 8fc6483c6793
+LAST_CLEANED: 2026-10-05T04:50:31Z
+LAST_CHANGED: 2026-10-05T04:50:31Z
+CHANGE: Eliminate redundant gloss and tautological repetition in role config description
+CODE_HASH: 4b3be258c912
 -->
 
 # agent_node_config interface component
@@ -25,7 +25,7 @@ A *node guide* provides structured instructional text containing a summary, sequ
 
 A *verification check* can verify session criteria, communicating whether verification passed and diagnostic feedback on failure.
 
-The *role config* of an agent session provides the role of the session, the sequence of nodes currently being cleaned, and an execution version that increments whenever the cleaned nodes change. The role config can set role to configure the role of the session, and can set nodes to configure the nodes currently being cleaned in the agent session and increment the execution version.
+The *role config* of an agent session maintains the active session role, the sequence of nodes currently being cleaned, and an execution version that increments whenever the cleaned nodes change. The role config provides operations to set the role and update the sequence of nodes being cleaned.
 
 An agent session's *session config* provides resolved configuration parameters for the active session.
 

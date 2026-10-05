@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-05T04:28:01Z
+# LAST_CHANGED: 2026-10-05T04:26:30Z
+# CHANGE: new file
+# CODE_HASH: bbb5da1a8ad1
+# --- END CLEANROOM METADATA ---
+
 """
 ## External Mechanics & API Documentation
 

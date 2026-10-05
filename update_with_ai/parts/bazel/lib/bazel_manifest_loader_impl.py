@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T16:11:48Z
 # LAST_CHANGED: 2026-10-04T23:01:55Z
 # CHANGE: new file
-# CODE_HASH: 8753ad53c8c8
-# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
-# QA_AUDIT: 2026-10-05T02:07:35Z
+# CODE_HASH: a684fd16f2b1
+# COVERAGE_AUDIT: 2026-10-05T04:28:01Z
+# QA_AUDIT: 2026-10-05T16:11:48Z
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in bazel_manifest_loader_impl.pyi
@@ -561,8 +561,6 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                     star_deps_list.append(f"{u_norm}#{sr_norm}")
                 for scr in role_data.get("silent_cross_role_deps", []):
                     scr_norm = _resolve_role_label(scr)
-                    if scr_norm.endswith("lib") and u_norm.endswith("_ext"):
-                        continue
                     silent_deps_list.append(f"{u_norm}#{scr_norm}")
 
             for sr in role_data.get("star_role_deps", []):

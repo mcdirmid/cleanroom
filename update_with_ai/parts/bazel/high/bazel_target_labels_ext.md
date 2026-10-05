@@ -1,10 +1,17 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T05:18:17Z
+LAST_CHANGED: 2026-10-05T05:18:17Z
+CHANGE: Remove internal file alias component reference from external boundary specification
+CODE_HASH: 9915fbba9557
+-->
+
 # bazel_target_labels_ext external component
 
 ## Purpose
 
 The bazel_target_labels_ext external component normalizes raw Bazel target labels into canonical syntax and resolves package filesystem directories.
 
-Bazel targets can be addressed using apparent, repository-qualified, or shorthand label syntax, causing duplicate graph nodes and broken lookups if compared as raw strings. The bazel_target_labels_ext external component defines the external boundary for normalizing diverse Bazel label formats into canonical package and target coordinates and resolving package directories against a workspace root from file alias.
+Bazel targets can be addressed using apparent, repository-qualified, or shorthand label syntax, causing duplicate graph nodes and broken lookups if compared as raw strings. The bazel_target_labels_ext external component defines the external boundary for normalizing diverse Bazel label formats into canonical package and target coordinates and resolving package directories against a workspace root.
 
 **Out of scope:** The bazel_target_labels_ext external component does not resolve build dependencies, inspect disk contents, or track message queues; these are handled by other components.
 

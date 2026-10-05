@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: fde7d42c7f61
-# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T06:14:40Z
+# LAST_CHANGED: 2026-10-05T06:14:40Z
+# CHANGE: Add silent source file path contract and proof to load_manifest
+# CODE_HASH: 538090d2f75f
 # --- END CLEANROOM METADATA ---
 
 """Bazel manifest loader implementation grounding specification module."""
@@ -130,6 +129,8 @@ class BazelManifestLoader(
           - Consequent knowledge: store NodeDefinition with task_prompt.
         - MUST record declared primary source file paths in agent storage without duplicating package path segments.
           - Consequent knowledge: access manifest.source_file.
+        - MUST record silent source file paths in agent storage without duplicating package path segments.
+          - Consequent knowledge: access manifest.silent_source_files via only_elem and store in agent storage.
         - MUST register declared direct dependencies in agent storage.
           - Condition knowledge: access manifest.dependencies via only_elem.
           - Consequent knowledge: register dependent edge in storage.
@@ -163,6 +164,10 @@ class BazelManifestLoader(
         storage.store_node_definition(node, node_def)
 
         _src: Optional[agent_file_alias.RelativePath] = sample_manifest.source_file
+        silent_src: agent_file_alias.RelativePath = only_elem(
+            sample_manifest.silent_source_files
+        )
+        storage.store_silent_source_files(node, (str(silent_src),))
 
         dep_label: bazel_manifest_loader.TargetLabel = only_elem(
             sample_manifest.dependencies

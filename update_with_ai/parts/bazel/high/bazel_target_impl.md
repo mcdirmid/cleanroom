@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: c12cf0039c87
+LAST_CLEANED: 2026-10-05T05:18:02Z
+LAST_CHANGED: 2026-10-05T05:18:02Z
+CHANGE: Add delegated collaborator statement for external label parser, file paths, and graph storage
+CODE_HASH: 809cff4f6926
 -->
 
 # bazel_target_impl implementation component
@@ -17,6 +17,8 @@ The bazel_target_impl implementation component realizes Bazel label canonicaliza
 Bazel targets can be addressed using apparent, repository-qualified, or shorthand syntax, creating potential node duplication and broken package lookups. The bazel_target_impl implementation component strips repository prefixes, infers implicit target basenames, and resolves package directory locations against the workspace root.
 
 **Out of scope:** The bazel_target_impl implementation component does not parse protobuf records, track message queues, or configure agent sandboxes; these are handled by other components.
+
+**Delegated:** Label syntax normalization and package resolution rules are delegated to bazel_target_labels_ext; workspace path representation is delegated to file_paths; graph node referencing is delegated to dag_storage.
 
 ## Types and Behavior
 

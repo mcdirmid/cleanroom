@@ -1,10 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: f1b5604efbc4
-# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
-# QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T17:29:02Z
+# LAST_CHANGED: 2026-10-05T17:29:02Z
+# CHANGE: Add test for dirty tag dirty state
+# CODE_HASH: a2c0cc68661e
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for bazel_storage_impl aligned with grounding specifications."""
@@ -45,6 +43,10 @@ from update_with_ai.parts.dag.lib.dag_storage import (
     UnitAddress,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+try:
+    from support.lib import src_metadata
+except ImportError:
+    from update_with_ai.support.lib import src_metadata
 
 
 def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
@@ -238,6 +240,40 @@ class BazelStorageImplTest(unittest.TestCase):
             # Marking node clean once the source file exists writes valid cleaned metadata and clears the dirty state
             storage.mark_node_clean(node)
             self.assertFalse(storage.is_dirty(node))
+
+    def test_dirty_tag_dirty_state(self) -> None:
+        """CUJ: A node is dirty when marked dirty."""
+        node = _make_dag_node("//pkg/src:dirty_test", "lib")
+        with enter_phase("system", registry=self.registry) as scope:
+            storage = scope.get_singleton(AgentStorage)
+            assert isinstance(storage, AgentStorageImpl)
+
+            rel_path = "pkg/src/dirty_test.py"
+            storage.record_source_file(node, rel_path)
+            abs_src = os.path.join(self.test_dir, rel_path)
+            os.makedirs(os.path.dirname(abs_src), exist_ok=True)
+            with open(abs_src, "w", encoding="utf-8") as f:
+                f.write("x = 1\n")
+
+            # Initially clean after marking clean
+            storage.mark_node_clean(node)
+            self.assertFalse(storage.is_dirty(node))
+            self.assertEqual(storage.get_messages(node), set())
+
+            # Mark dirty via src_metadata.mark_dirty
+            src_metadata.mark_dirty(abs_src, "test manual dirty")
+            # Requirement: WHEN source file metadata contains a dirty tag, MUST return true.
+            self.assertTrue(storage.is_dirty(node))
+            msgs = storage.get_messages(node)
+            self.assertEqual(len(msgs), 1)
+            msg = next(iter(msgs))
+            assert isinstance(msg, ChangeMessage)
+            self.assertEqual(msg.content, "test manual dirty")
+
+            # Marking clean clears dirty tag and makes node clean
+            storage.mark_node_clean(node)
+            self.assertFalse(storage.is_dirty(node))
+            self.assertEqual(storage.get_messages(node), set())
 
     def test_dependency_timestamps_dirty_state(self) -> None:
         """CUJ: Dynamic dirty evaluation from dependency timestamps."""

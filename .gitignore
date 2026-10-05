@@ -15,4 +15,6 @@ __pycache__/
 .DS_Store
 /.cleanroom_workspaces.json
 /.cleanroom_blame_buffer.json
+*.bak
+*.bak/
 

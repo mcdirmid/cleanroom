@@ -1,8 +1,15 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-05T05:31:50Z
+LAST_CHANGED: 2026-10-05T05:31:50Z
+CHANGE: Remove internal file alias reference from intent
+CODE_HASH: 622e23a4e328
+-->
+
 # bazel_target_labels_ext external component
 
 ## Intent
 
-Bazel targets can be addressed using apparent, repository-qualified, or shorthand label syntax, causing duplicate graph nodes and broken lookups if compared as raw strings. The bazel_target_labels_ext external component defines the external boundary for normalizing diverse Bazel label formats into canonical package and target coordinates and resolving package directories against a workspace root from file alias.
+Bazel targets can be addressed using apparent, repository-qualified, or shorthand label syntax, causing duplicate graph nodes and broken lookups if compared as raw strings. The bazel_target_labels_ext external component defines the external boundary for normalizing diverse Bazel label formats into canonical package and target coordinates and resolving package directories against a workspace root.
 
 By encapsulating external label grammar parsing, syntax validation, and package directory resolution, the external component guarantees deterministic target identity across Bazel build specifications.
 

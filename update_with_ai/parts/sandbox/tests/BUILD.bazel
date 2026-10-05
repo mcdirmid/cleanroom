@@ -10,7 +10,6 @@ pyright_test(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_python_with_ai/support/lib:src_metadata",
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",

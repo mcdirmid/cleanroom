@@ -1545,6 +1545,14 @@ def copy_readonly_files_and_stubs(
                 continue
 
             part_b_src = os.path.join(part_path, "BUILD.bazel")
+            if is_build_enabled and os.path.exists(part_b_src):
+                copy_file_with_perms(
+                    part_b_src,
+                    os.path.join(
+                        workspace_dir, base, "parts", part_name, "BUILD.bazel"
+                    ),
+                    readonly=True,
+                )
 
             init_file = os.path.join(part_path, "__init__.py")
             if os.path.exists(init_file):
@@ -2535,8 +2543,20 @@ def converge_role_workspace(
     role: str,
     parts_dirs: Optional[Sequence[str]] = None,
     sync_all: bool = False,
+    phase: str = "both",
 ) -> List[Dict[str, Any]]:
-    """Executes high-efficiency two-way synchronization between role workspace and main."""
+    """Executes high-efficiency synchronization between role workspace and main.
+
+    Args:
+        workspace_dir: Path to role workspace.
+        repo_root: Root of main workspace.
+        role: Role name or address.
+        parts_dirs: Scoped directories.
+        sync_all: Whether to sync all files.
+        phase: 'harvest' (inbound only: buffers, edits, local dirty tags to main),
+               'cascade' (outbound only: main specs, stubs, feedback, dirty tags to ws),
+               or 'both' (default, two-way convergence).
+    """
     root = repo_root
     clean_role = normalize_role_arg(role) or role
     role_def = resolve_role_definition(clean_role, root)
@@ -2548,68 +2568,8 @@ def converge_role_workspace(
     verify_integrity(workspace_dir)
     synced_events: List[Dict[str, Any]] = []
 
-    # 1. Harvest .cleanroom_blame_buffer.json into canonical contracts in main
-    blame_buffer_path = os.path.join(workspace_dir, BLAME_BUFFER_FILE)
-    if os.path.isfile(blame_buffer_path):
-        try:
-            with open(blame_buffer_path, "r", encoding="utf-8") as bf:
-                buffer_entries = json.load(bf)
-            if isinstance(buffer_entries, list) and buffer_entries:
-                for b_item in buffer_entries:
-                    b_target = b_item.get("target", "").lstrip("/")
-                    b_sender = b_item.get("blamed_by", f"{role_name} workspace")
-                    b_explanation = b_item.get("explanation", "")
-                    target_canonical = os.path.join(root, b_target)
-                    if os.path.isfile(target_canonical):
-                        if b_item.get("dirty_reason"):
-                            src_metadata.mark_dirty(
-                                target_canonical, reason=b_item["dirty_reason"]
-                            )
-                        src_metadata.append_feedback(
-                            target_canonical, b_explanation, sender=b_sender
-                        )
-                        print(
-                            f"HARVESTED FEEDBACK [{role_name}]: Appended blame to {b_target}"
-                        )
-                        synced_events.append(
-                            {
-                                "type": "BLAME",
-                                "target": b_target,
-                                "explanation": b_explanation,
-                            }
-                        )
-            write_file_with_perms(blame_buffer_path, "[]\n", readonly=False)
-        except Exception as e:
-            print(f"Warning: could not process blame buffer {blame_buffer_path}: {e}")
-
-    # 1b. Harvest .cleanroom_audit_buffer.json into canonical contracts in main
-    audit_buffer_path = os.path.join(workspace_dir, AUDIT_BUFFER_FILE)
-    if os.path.isfile(audit_buffer_path):
-        try:
-            with open(audit_buffer_path, "r", encoding="utf-8") as abf:
-                audit_entries = json.load(abf)
-            if isinstance(audit_entries, list) and audit_entries:
-                for a_item in audit_entries:
-                    a_target = a_item.get("target", "").lstrip("/")
-                    a_tag = a_item.get("audit_tag", "")
-                    a_ts = (
-                        a_item.get("timestamp") or src_metadata.current_utc_timestamp()
-                    )
-                    target_canonical = os.path.join(root, a_target)
-                    if os.path.isfile(target_canonical):
-                        meta = src_metadata.extract_metadata(target_canonical)
-                        curr_audits = dict(meta.audits) if meta else {}
-                        curr_audits[a_tag] = a_ts
-                        src_metadata.update_metadata(
-                            target_canonical, audits=curr_audits, last_cleaned=a_ts
-                        )
-                        print(f"HARVESTED AUDIT [{role_name}]: {a_tag} on {a_target}")
-                        synced_events.append(
-                            {"type": "AUDIT", "target": a_target, "dest": "main"}
-                        )
-            write_file_with_perms(audit_buffer_path, "[]\n", readonly=False)
-        except Exception as e:
-            print(f"Warning: could not process audit buffer {audit_buffer_path}: {e}")
+    is_harvest = phase in ("harvest", "both")
+    is_cascade = phase in ("cascade", "both")
 
     # Determine which files in dir_scope are role-writable vs read-only
     active_pattern = role_def.get("src_pattern", "")
@@ -2627,7 +2587,219 @@ def converge_role_workspace(
             and fname != "BUILD.bazel"
         )
 
-    # 2. Scoped file discovery in dir_scope (fast and isolated)
+    # =========================================================================
+    # PHASE 1: INBOUND HARVEST (Role Workspace -> Main)
+    # =========================================================================
+    if is_harvest:
+        # 1. Harvest .cleanroom_blame_buffer.json into canonical contracts in main
+        blame_buffer_path = os.path.join(workspace_dir, BLAME_BUFFER_FILE)
+        if os.path.isfile(blame_buffer_path):
+            try:
+                with open(blame_buffer_path, "r", encoding="utf-8") as bf:
+                    buffer_entries = json.load(bf)
+                if isinstance(buffer_entries, list) and buffer_entries:
+                    for b_item in buffer_entries:
+                        b_target = b_item.get("target", "").lstrip("/")
+                        b_sender = b_item.get("blamed_by", f"{role_name} workspace")
+                        b_explanation = b_item.get("explanation", "")
+                        dirty_reason = (
+                            b_item.get("dirty_reason")
+                            or f"Blamed by {b_sender}: {b_explanation}"
+                        )
+                        target_canonical = os.path.join(root, b_target)
+                        if not os.path.isfile(target_canonical):
+                            alt = os.path.join(root, dir_scope, b_target)
+                            if os.path.isfile(alt):
+                                target_canonical = alt
+                        if os.path.isfile(target_canonical):
+                            src_metadata.mark_dirty(
+                                target_canonical, reason=dirty_reason
+                            )
+                            src_metadata.append_feedback(
+                                target_canonical, b_explanation, sender=b_sender
+                            )
+                            print(
+                                f"HARVESTED FEEDBACK [{role_name}]: Appended blame to {b_target}"
+                            )
+                            synced_events.append(
+                                {
+                                    "type": "BLAME",
+                                    "target": b_target,
+                                    "explanation": b_explanation,
+                                }
+                            )
+                write_file_with_perms(blame_buffer_path, "[]\n", readonly=False)
+            except Exception as e:
+                print(
+                    f"Warning: could not process blame buffer {blame_buffer_path}: {e}"
+                )
+
+        # 1b. Harvest .cleanroom_audit_buffer.json into canonical contracts in main
+        audit_buffer_path = os.path.join(workspace_dir, AUDIT_BUFFER_FILE)
+        if os.path.isfile(audit_buffer_path):
+            try:
+                with open(audit_buffer_path, "r", encoding="utf-8") as abf:
+                    audit_entries = json.load(abf)
+                if isinstance(audit_entries, list) and audit_entries:
+                    for a_item in audit_entries:
+                        a_target = a_item.get("target", "").lstrip("/")
+                        a_tag = a_item.get("audit_tag", "")
+                        a_ts = (
+                            a_item.get("timestamp")
+                            or src_metadata.current_utc_timestamp()
+                        )
+                        target_canonical = os.path.join(root, a_target)
+                        if not os.path.isfile(target_canonical):
+                            alt = os.path.join(root, dir_scope, a_target)
+                            if os.path.isfile(alt):
+                                target_canonical = alt
+                        if os.path.isfile(target_canonical):
+                            meta_f = src_metadata.extract_metadata(target_canonical)
+                            curr_audits = dict(meta_f.audits) if meta_f else {}
+                            curr_audits[a_tag] = a_ts
+                            src_metadata.update_metadata(
+                                target_canonical, audits=curr_audits, last_cleaned=a_ts
+                            )
+                            print(
+                                f"HARVESTED AUDIT [{role_name}]: {a_tag} on {a_target}"
+                            )
+                            synced_events.append(
+                                {"type": "AUDIT", "target": a_target, "dest": "main"}
+                            )
+                write_file_with_perms(audit_buffer_path, "[]\n", readonly=False)
+            except Exception as e:
+                print(
+                    f"Warning: could not process audit buffer {audit_buffer_path}: {e}"
+                )
+
+        # 2. Harvest role-writable source files and local audits into main
+        ws_files = find_scoped_source_files(
+            workspace_dir, dir_scope, role_def=role_def, repo_root=root
+        )
+        main_files = find_scoped_source_files(
+            root, dir_scope, role_def=role_def, repo_root=root
+        )
+        all_rel_files = sorted(ws_files | main_files)
+
+        for rel_path in all_rel_files:
+            ws_f = os.path.join(workspace_dir, rel_path)
+            main_f = os.path.join(root, rel_path)
+            role_writable = _is_role_writable(rel_path)
+
+            ws_exists = os.path.isfile(ws_f)
+            main_exists = os.path.isfile(main_f)
+
+            if ws_exists and not main_exists:
+                if role_writable:
+                    copy_file_with_perms(ws_f, main_f, readonly=False)
+                    print(f"COLLECTED NEW [{role_name}]: {rel_path} -> main")
+                    synced_events.append(
+                        {"type": "NEW_FILE", "target": rel_path, "dest": "main"}
+                    )
+                continue
+
+            if not (ws_exists and main_exists):
+                continue
+
+            ws_meta = src_metadata.extract_metadata(ws_f)
+            main_meta = src_metadata.extract_metadata(main_f)
+
+            ws_cleaned = (ws_meta.last_cleaned if ws_meta else None) or ""
+            main_cleaned = (main_meta.last_cleaned if main_meta else None) or ""
+            ws_ts = (ws_meta.last_changed if ws_meta else None) or ""
+            main_ts = (main_meta.last_changed if main_meta else None) or ""
+            ws_dirty = ws_meta.dirty if ws_meta else None
+            main_dirty = main_meta.dirty if main_meta else None
+            ws_audits = dict(ws_meta.audits) if ws_meta else {}
+            main_audits = dict(main_meta.audits) if main_meta else {}
+
+            # Conflict check if both were modified after last sync with differing timestamps
+            if last_sync and ws_ts and main_ts:
+                if ws_ts > last_sync and main_ts > last_sync and ws_ts != main_ts:
+                    print(
+                        f"CONFLICT DETECTED: Both {rel_path} in role workspace and canonical main were modified after last sync ({last_sync}). Skipping!"
+                    )
+                    continue
+
+            ws_event = max(ws_ts, ws_cleaned)
+            main_event = max(main_ts, main_cleaned)
+
+            if role_writable:
+                if ws_event > main_event:
+                    copy_file_with_perms(ws_f, main_f, readonly=False)
+                    print(
+                        f"COLLECTED [{role_name}]: {rel_path} -> main (Role: {ws_event} > Main: {main_event})"
+                    )
+                    synced_events.append(
+                        {
+                            "type": "SUBMIT",
+                            "target": rel_path,
+                            "change": ws_meta.change_summary if ws_meta else "",
+                        }
+                    )
+                elif ws_event == main_event:
+                    if main_dirty and not ws_dirty:
+                        # Workspace was cleaned (DIRTY cleared in workspace): collect into main
+                        copy_file_with_perms(ws_f, main_f, readonly=False)
+                        print(
+                            f"COLLECTED [{role_name}]: {rel_path} -> main (DIRTY tag cleared in workspace)"
+                        )
+                        synced_events.append(
+                            {
+                                "type": "SUBMIT",
+                                "target": rel_path,
+                                "change": ws_meta.change_summary if ws_meta else "",
+                            }
+                        )
+                    elif ws_dirty and not main_dirty:
+                        copy_file_with_perms(ws_f, main_f, readonly=False)
+                        print(
+                            f"DIRTIED [main]: {rel_path} -> main (Propagated DIRTY tag from workspace)"
+                        )
+                        synced_events.append(
+                            {"type": "DIRTIED", "target": rel_path, "dest": "main"}
+                        )
+                    elif (
+                        not ws_cleaned
+                        and main_cleaned
+                        and (not last_sync or main_cleaned <= last_sync)
+                    ):
+                        src_metadata.delete_last_cleaned(main_f)
+                        print(
+                            f"DIRTIED [main]: Cleared LAST_CLEANED in {rel_path} (propagated from {role_name} workspace)"
+                        )
+                        synced_events.append(
+                            {"type": "DIRTIED", "target": rel_path, "dest": "main"}
+                        )
+                    elif ws_meta is None or main_meta is None:
+                        ws_stat = os.stat(ws_f)
+                        main_stat = os.stat(main_f)
+                        if ws_stat.st_mtime > main_stat.st_mtime:
+                            copy_file_with_perms(ws_f, main_f, readonly=False)
+
+            # Harvest direct auditor certifications
+            role_audit_tag = (
+                f"{role_name.upper()}_AUDIT" if is_auditor_role(role_name) else None
+            )
+            if role_audit_tag:
+                t_ws = ws_audits.get(role_audit_tag, "")
+                t_main = main_audits.get(role_audit_tag, "")
+                if t_ws and t_ws > last_sync and t_ws > t_main:
+                    main_audits[role_audit_tag] = t_ws
+                    src_metadata.update_metadata(main_f, audits=main_audits)
+                    print(
+                        f"AUDIT HARVESTED [{role_name}]: {rel_path} (Tagged: {role_audit_tag})"
+                    )
+                    synced_events.append(
+                        {"type": "AUDIT", "target": rel_path, "dest": "main"}
+                    )
+
+    if not is_cascade:
+        return synced_events
+
+    # =========================================================================
+    # PHASE 2: OUTBOUND CASCADE (Main -> Role Workspace)
+    # =========================================================================
     ws_files = find_scoped_source_files(
         workspace_dir, dir_scope, role_def=role_def, repo_root=root
     )
@@ -2644,17 +2816,7 @@ def converge_role_workspace(
         ws_exists = os.path.isfile(ws_f)
         main_exists = os.path.isfile(main_f)
 
-        if ws_exists and not main_exists:
-            # File created in role workspace: collect to main
-            copy_file_with_perms(ws_f, main_f, readonly=False)
-            print(f"COLLECTED NEW [{role_name}]: {rel_path} -> main")
-            synced_events.append(
-                {"type": "NEW_FILE", "target": rel_path, "dest": "main"}
-            )
-            continue
-
         if main_exists and not ws_exists:
-            # File created in main workspace: push out to role workspace
             copy_file_with_perms(main_f, ws_f, readonly=not role_writable)
             print(f"PUSHED NEW [{role_name}]: {rel_path} -> workspace")
             synced_events.append(
@@ -2662,7 +2824,9 @@ def converge_role_workspace(
             )
             continue
 
-        # Extract metadata from in-band headers (timestamps, audits, feedback, dirty)
+        if not (ws_exists and main_exists):
+            continue
+
         ws_meta = src_metadata.extract_metadata(ws_f)
         main_meta = src_metadata.extract_metadata(main_f)
 
@@ -2679,7 +2843,7 @@ def converge_role_workspace(
         ws_code_hash = ws_meta.code_hash if ws_meta else None
         main_code_hash = main_meta.code_hash if main_meta else None
 
-        # Short-circuit: identical timestamps (changed and cleaned), dirty flags, audits, feedback, and code_hash
+        # Short-circuit: identical timestamps, dirty flags, audits, feedback, and code_hash
         if ws_meta and main_meta:
             if (
                 ws_ts == main_ts
@@ -2691,37 +2855,11 @@ def converge_role_workspace(
             ):
                 continue
 
-        # Conflict check if both were modified after last sync with differing timestamps
-        if last_sync and ws_ts and main_ts:
-            if ws_ts > last_sync and main_ts > last_sync and ws_ts != main_ts:
-                print(
-                    f"CONFLICT DETECTED: Both {rel_path} in role workspace and canonical main were modified after last sync ({last_sync}). Skipping!"
-                )
-                continue
-
-        copied_to_main = False
-        copied_to_ws = False
-
         ws_event = max(ws_ts, ws_cleaned)
         main_event = max(main_ts, main_cleaned)
 
         if role_writable:
-            if ws_event > main_event:
-                # Role workspace copy has later lifecycle timestamp: collect into main
-                copy_file_with_perms(ws_f, main_f, readonly=False)
-                print(
-                    f"COLLECTED [{role_name}]: {rel_path} -> main (Role: {ws_event} > Main: {main_event})"
-                )
-                synced_events.append(
-                    {
-                        "type": "SUBMIT",
-                        "target": rel_path,
-                        "change": ws_meta.change_summary if ws_meta else "",
-                    }
-                )
-                copied_to_main = True
-            elif main_event > ws_event:
-                # Main workspace copy has later lifecycle timestamp: push out to role workspace
+            if main_event > ws_event:
                 copy_file_with_perms(main_f, ws_f, readonly=False)
                 print(
                     f"PUSHED [{role_name}]: {rel_path} -> workspace (Main: {main_event} > Role: {ws_event})"
@@ -2733,43 +2871,38 @@ def converge_role_workspace(
                         "change": main_meta.change_summary if main_meta else "",
                     }
                 )
-                copied_to_ws = True
-            else:
-                # Monotonic event timestamps are equal. Check dirty flag differences and code hash:
-                if ws_dirty != main_dirty:
-                    if main_dirty and not ws_dirty:
-                        # Workspace was cleaned (DIRTY cleared): collect into main
-                        copy_file_with_perms(ws_f, main_f, readonly=False)
-                        copied_to_main = True
-                        print(
-                            f"COLLECTED [{role_name}]: {rel_path} -> main (DIRTY tag cleared in workspace)"
-                        )
-                        synced_events.append(
-                            {
-                                "type": "SUBMIT",
-                                "target": rel_path,
-                                "change": ws_meta.change_summary if ws_meta else "",
-                            }
-                        )
-                    elif ws_dirty and not main_dirty:
-                        # Workspace was dirtied (e.g. bin/fail): propagate to main
-                        copy_file_with_perms(ws_f, main_f, readonly=False)
-                        copied_to_main = True
-                        print(
-                            f"DIRTIED [main]: {rel_path} -> main (Propagated DIRTY tag from workspace)"
-                        )
-                        synced_events.append(
-                            {"type": "DIRTIED", "target": rel_path, "dest": "main"}
-                        )
+            elif ws_event == main_event:
+                if (main_dirty and not ws_dirty) or (main_feedback != ws_feedback):
+                    copy_file_with_perms(main_f, ws_f, readonly=False)
+                    print(
+                        f"PUSHED [{role_name}]: {rel_path} -> workspace (Dirty/Feedback update from main)"
+                    )
+                    synced_events.append(
+                        {
+                            "type": "CASCADE",
+                            "target": rel_path,
+                            "change": "Dirty/Feedback update",
+                        }
+                    )
+                elif not main_dirty and ws_dirty:
+                    copy_file_with_perms(main_f, ws_f, readonly=False)
+                    print(
+                        f"PUSHED [{role_name}]: {rel_path} -> workspace (Cleaned in main)"
+                    )
+                    synced_events.append(
+                        {
+                            "type": "CASCADE",
+                            "target": rel_path,
+                            "change": "Cleaned in main",
+                        }
+                    )
                 elif (
                     main_meta
                     and ws_meta
                     and main_meta.code_hash
                     and main_meta.code_hash != ws_meta.code_hash
                 ):
-                    # Main has updated code_hash (e.g. from sync_staging.sh refresh): push to ws
                     copy_file_with_perms(main_f, ws_f, readonly=False)
-                    copied_to_ws = True
                     print(
                         f"PUSHED [{role_name}]: {rel_path} -> workspace (Updated CODE_HASH: {rel_path})"
                     )
@@ -2781,15 +2914,10 @@ def converge_role_workspace(
                         }
                     )
                 elif ws_meta is None or main_meta is None:
-                    # Fallback to mtime if neither has in-band metadata timestamp
-                    ws_stat = os.stat(ws_f)
                     main_stat = os.stat(main_f)
-                    if ws_stat.st_mtime > main_stat.st_mtime:
-                        copy_file_with_perms(ws_f, main_f, readonly=False)
-                        copied_to_main = True
-                    elif main_stat.st_mtime > ws_stat.st_mtime:
+                    ws_stat = os.stat(ws_f)
+                    if main_stat.st_mtime > ws_stat.st_mtime:
                         copy_file_with_perms(main_f, ws_f, readonly=False)
-                        copied_to_ws = True
         else:
             # Read-only files in role workspace: Main is always authoritative
             if main_event > ws_event or (
@@ -2803,7 +2931,6 @@ def converge_role_workspace(
                 )
             ):
                 copy_file_with_perms(main_f, ws_f, readonly=True)
-                copied_to_ws = True
                 print(
                     f"PUSHED [{role_name}]: {rel_path} -> workspace (Main: {main_event} >= Role: {ws_event})"
                 )
@@ -2818,7 +2945,6 @@ def converge_role_workspace(
                 try:
                     if compute_file_hash(main_f) != compute_file_hash(ws_f):
                         copy_file_with_perms(main_f, ws_f, readonly=True)
-                        copied_to_ws = True
                         print(
                             f"PUSHED [{role_name}]: {rel_path} -> workspace (Updated {os.path.basename(rel_path)})"
                         )
@@ -2832,14 +2958,13 @@ def converge_role_workspace(
                 except Exception:
                     pass
 
-        # Propagate lack of LAST_CLEANED when timestamps match (dirtying without code change / legacy delete)
-        if not copied_to_main and not copied_to_ws and ws_ts == main_ts:
+        # Propagate lack of LAST_CLEANED when timestamps match
+        if ws_ts == main_ts:
             if (
                 not main_cleaned
                 and ws_cleaned
                 and (not last_sync or ws_cleaned <= last_sync)
             ):
-                # Main dirtied the node: clear LAST_CLEANED in role workspace
                 is_ro = not role_writable
                 if is_ro:
                     os.chmod(ws_f, 0o644)
@@ -2852,42 +2977,17 @@ def converge_role_workspace(
                 synced_events.append(
                     {"type": "DIRTIED", "target": rel_path, "dest": "workspace"}
                 )
-            elif (
-                not ws_cleaned
-                and main_cleaned
-                and (not last_sync or main_cleaned <= last_sync)
-            ):
-                # Role workspace ran bin/fail: clear LAST_CLEANED in main
-                src_metadata.delete_last_cleaned(main_f)
-                print(
-                    f"DIRTIED [main]: Cleared LAST_CLEANED in {rel_path} (propagated from {role_name} workspace)"
-                )
-                synced_events.append(
-                    {"type": "DIRTIED", "target": rel_path, "dest": "main"}
-                )
 
         # AUDIT Timestamps Synchronization
         role_audit_tag = (
             f"{role_name.upper()}_AUDIT" if is_auditor_role(role_name) else None
         )
 
-        # 1. If this workspace IS the auditor for role_audit_tag:
         if role_audit_tag:
             t_ws = ws_audits.get(role_audit_tag, "")
             t_main = main_audits.get(role_audit_tag, "")
             if t_ws:
-                if t_ws > last_sync and t_ws > t_main:
-                    # New audit performed directly in role workspace -> harvest to main
-                    main_audits[role_audit_tag] = t_ws
-                    src_metadata.update_metadata(main_f, audits=main_audits)
-                    print(
-                        f"AUDIT HARVESTED [{role_name}]: {rel_path} (Tagged: {role_audit_tag})"
-                    )
-                    synced_events.append(
-                        {"type": "AUDIT", "target": rel_path, "dest": "main"}
-                    )
-                elif not t_main and t_ws <= last_sync:
-                    # Main deleted the audit tag (dirtied auditor node): propagate removal to role workspace
+                if not t_main and t_ws <= last_sync:
                     del ws_audits[role_audit_tag]
                     is_ro = not role_writable
                     if is_ro:
@@ -2907,7 +3007,6 @@ def converge_role_workspace(
                     )
             else:
                 if t_main:
-                    # Main has audit tag (e.g. harvested from audit buffer): push to workspace
                     ws_audits[role_audit_tag] = t_main
                     is_ro = not role_writable
                     if is_ro:
@@ -2922,8 +3021,6 @@ def converge_role_workspace(
                         {"type": "AUDIT", "target": rel_path, "dest": "workspace"}
                     )
 
-        # 2. For all other audit tags (or non-auditor roles):
-        # Role workspace is purely a consumer of audit tags from main!
         updated_ws_audits = False
         for tag in list(ws_audits.keys()):
             if tag != role_audit_tag and tag not in main_audits:
@@ -2987,6 +3084,7 @@ def sync_workspace(
         role=clean_role,
         parts_dirs=parts_dirs,
         sync_all=sync_all,
+        phase="both",
     )
 
 
@@ -2998,7 +3096,7 @@ def cleanroom_sync(
     dest: Optional[str] = None,
     sys_refresh: bool = False,
 ) -> int:
-    """Zero-argument Cleanroom sync command: two-way synchronization across all commissioned workspaces."""
+    """Cleanroom sync command: two-phase 'one and done' synchronization across all commissioned workspaces."""
     root = os.path.abspath(repo_root or _repo_root)
 
     if role:
@@ -3024,6 +3122,7 @@ def cleanroom_sync(
             repo_root=root,
             role=clean_role,
             parts_dirs=[primary_dir],
+            phase="both",
         )
         return 0
 
@@ -3035,7 +3134,7 @@ def cleanroom_sync(
         return 0
 
     print(
-        f"Found {len(existing_workspaces)} commissioned role workspace(s) for two-way synchronization."
+        f"Found {len(existing_workspaces)} commissioned role workspace(s) for two-phase synchronization."
     )
 
     phase_order = compute_role_phase_order(root)
@@ -3046,21 +3145,52 @@ def cleanroom_sync(
 
     sorted_workspaces = sorted(existing_workspaces, key=_phase_key)
 
+    if sys_refresh:
+        for ws_dir, meta in sorted_workspaces:
+            r_name = meta.get("role_name", "")
+            r_addr = meta.get("role_address") or r_name
+            d_scope = meta.get("parts_dir", "staging")
+            role_def = resolve_role_definition(r_addr, root)
+            refresh_system_files(ws_dir, root, role_def, dir_scope=d_scope)
+
+    # Phase 1: Inbound Harvest across ALL commissioned workspaces
+    # Pulls blame buffers, audit buffers, submissions, and local dirty flags from all workspaces into main
+    print(
+        f"\n--- Phase 1: Inbound Harvest across {len(sorted_workspaces)} workspace(s) ---"
+    )
     for ws_dir, meta in sorted_workspaces:
         r_name = meta.get("role_name", "")
         r_addr = meta.get("role_address") or r_name
         d_scope = meta.get("parts_dir", "staging")
-        role_def = resolve_role_definition(r_addr, root)
-        if sys_refresh:
-            refresh_system_files(ws_dir, root, role_def, dir_scope=d_scope)
         print(
-            f"\n>>> Synchronizing commissioned workspace: {ws_dir} (Role: {r_name}, Scope: {d_scope})"
+            f">>> Harvesting from workspace: {ws_dir} (Role: {r_name}, Scope: {d_scope})"
         )
         converge_role_workspace(
             workspace_dir=ws_dir,
             repo_root=root,
             role=r_addr,
             parts_dirs=[d_scope],
+            phase="harvest",
+        )
+
+    # Phase 2: Outbound Cascade from main out to ALL commissioned workspaces
+    # Redistributes harvested feedback, dirty flags, updated specs, stubs, and audit tags to workspaces
+    print(
+        f"\n--- Phase 2: Outbound Cascade across {len(sorted_workspaces)} workspace(s) ---"
+    )
+    for ws_dir, meta in sorted_workspaces:
+        r_name = meta.get("role_name", "")
+        r_addr = meta.get("role_address") or r_name
+        d_scope = meta.get("parts_dir", "staging")
+        print(
+            f">>> Cascading to workspace: {ws_dir} (Role: {r_name}, Scope: {d_scope})"
+        )
+        converge_role_workspace(
+            workspace_dir=ws_dir,
+            repo_root=root,
+            role=r_addr,
+            parts_dirs=[d_scope],
+            phase="cascade",
         )
 
     return 0
@@ -3242,6 +3372,7 @@ def run_blame_command(
                 "target": clean_dep,
                 "blamed_by": file_path,
                 "explanation": critique,
+                "dirty_reason": f"Blamed by {file_path}: {critique}",
                 "timestamp": src_metadata.current_utc_timestamp(),
             }
         )

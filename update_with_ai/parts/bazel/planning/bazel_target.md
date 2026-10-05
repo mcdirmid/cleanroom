@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 9cf06828f4df
+LAST_CLEANED: 2026-10-05T05:31:13Z
+LAST_CHANGED: 2026-10-05T05:31:13Z
+CHANGE: Remove code-level constructor constraint from typing
+CODE_HASH: 7a65d6d14ebf
 -->
 
 # bazel_target interface component
@@ -20,7 +20,6 @@ By normalizing target strings and deriving package directories, the component en
 ### Typing
 
 - A node directory is a workspace path addressing the workspace package directory of a node.
-- A node directory is constructed exclusively through service operations.
 
 ### Contracts
 

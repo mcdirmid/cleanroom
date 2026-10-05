@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 6fa533f95a8c
+LAST_CLEANED: 2026-10-05T04:50:34Z
+LAST_CHANGED: 2026-10-05T04:50:34Z
+CHANGE: Broaden node definition to encapsulate build target attributes, role boundaries, and prompts
+CODE_HASH: bc3420fa6c49
 -->
 
 # agent_storage interface component
@@ -21,7 +21,7 @@ Task execution across structured projects requires maintaining target dependency
 
 A *task prompt* is an instruction describing the work required to clean a node.
 
-A *node definition* is metadata describing task prompts for a node.
+A *node definition* encapsulates a declared target's execution configuration, role attributes, and task prompts.
 
 A system's *agent storage* is a dag storage backed by workspace build target manifests. Target manifest metadata configures node execution and dependency structures.
 

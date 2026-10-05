@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
+LAST_CLEANED: 2026-10-05T15:59:00Z
 LAST_CHANGED: 2026-10-04T02:03:40Z
 CHANGE: new file
-CODE_HASH: 9d052e6fc370
+CODE_HASH: 8954564f670a
 -->
 
 # Guide: High-Level Specifications
@@ -65,7 +65,7 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] Once introduced, all subsequent references to that term anywhere within the specification remain in plain text without italics
 - [ ] Terms imported from upstream components remain in plain text without italics
 - [ ] Built-in architecture constructs, lifecycle tiers, execution phases, and runtime framework concepts are not introduced by the specification and remain in plain text without italics
-- [ ] Operation arguments are italicized upon introduction so that operation signatures and parameter names can be cleanly extracted
+- [ ] Formal parameters of callable tools or explicit execution actions are italicized only upon initial introduction as newly defined parameter entities; general service capabilities express inputs, criteria, and operational context in natural plain-text prose without artificial parameter italics
 - [ ] Literal tokens, method names, and identifiers mentioned in message feedback or naming are enclosed in backticks
 - [ ] External boundary specifications (`high/<name>_ext.md`) use zero semantic italics throughout the document
 - [ ] No bolding (`**term**`) is used anywhere in the specification, except for the `**Out of scope:**` and `**Delegated:**` prefixes
@@ -101,7 +101,7 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] Complete sentences terminate with a period (`.`) and never terminate with a colon (`:`)
 - [ ] Bullets are preceded by a complete sentence ending with a period, followed by a separate sentence fragment header ending with a colon (`:`)
 - [ ] Every bullet point grammatically completes the preceding fragment lead-in into a coherent English sentence
-- [ ] Pseudo-code jargon is avoided: the term "optional" is never used, and parameters state their purpose directly
+- [ ] Pseudo-code jargon is avoided: the term "optional" is never used, parameters state their purpose directly, and conceptual service capabilities describe inputs and outcomes in natural prose rather than procedural method signatures
 - [ ] The term "flag" is avoided; boolean choices express domain actions or conditions directly
 - [ ] Features, modes, and options express purpose rather than enablement; phrasing requirements around whether a feature is "enabled" or "disabled" is prohibited
 - [ ] Requirements state capabilities and invariants declaratively, avoiding procedural step-by-step recipes or chronological narratives
@@ -116,14 +116,15 @@ Specifications define domain concepts through a disciplined term ontology where 
 
 - [ ] Dual-term divergence — using different terms for different sides or polarities of the same concept instead of a single canonical term with negation
 - [ ] Synonym drift — alternating between competing verbs or nouns for the same concept
-- [ ] Over-italicization — italicizing common descriptive adjectives or outcome states that do not represent newly introduced domain concepts
+- [ ] Over-italicization — italicizing common descriptive adjectives, outcome states, or general service inputs that do not represent newly introduced domain concepts or formal tool parameters
 - [ ] Re-italicizing references — italicizing terms on subsequent mentions or when imported from upstream components
 - [ ] Italicizing built-in constructs — italicizing lifecycle tiers, execution phases, or framework concepts that are built-in rather than introduced by the component
 - [ ] Definition-only phantoms — introducing an entity, property, or configuration without a concrete derivation path for its runtime value
 - [ ] Omitted edge-case branches — leaving non-standard outcomes, empty inputs, or boundary cases unhandled in the specification, forcing downstream implementations to guess behavior
 - [ ] Floating directives — specifying that a component loads or resolves data without identifying the source or the mechanism that binds it
 - [ ] Tier custody violations — an ancestor tier service holding direct references to descendant tier services without parameter passing
-- [ ] Pseudo-code jargon — using "optional", "flags", or procedural method signatures instead of declarative literate prose
+- [ ] Pseudo-code jargon — using "optional", "flags", or procedural method signatures with artificial parameter italics for conceptual services instead of declarative literate prose
+- [ ] Artificial parameter signatures — inventing procedural method signatures or italicizing parameter names for conceptual service capabilities instead of expressing inputs in declarative prose
 - [ ] Enablement phrasing — writing "whether X is enabled" instead of stating the purpose or domain action of the feature
 - [ ] Listing type names or polymorphic types in implements — including type names or polymorphic types rather than concrete interface component names in front-matter
 - [ ] Incomplete interface closure — declaring an interface in implements without implementing all of its singleton types

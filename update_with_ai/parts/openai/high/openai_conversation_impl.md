@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 8c6fecce2c13
+LAST_CLEANED: 2026-10-05T05:11:14Z
+LAST_CHANGED: 2026-10-05T05:11:14Z
+CHANGE: Add delegated collaborator statement for imported external and peer components
+CODE_HASH: bd167a457883
 -->
 
 # openai_conversation_impl implementation component
@@ -17,6 +17,8 @@ The openai_conversation_impl implementation component realizes provider role for
 Language model APIs impose strict role alternation invariants and reject uncoordinated orchestration fields. The openai_conversation_impl implementation component formats messages according to provider role schemas, stubs superseded tool responses, preserves visible diagnostic notes, and pairs unprompted tool responses with antecedent synthetic assistant invocations to preserve API protocol compliance.
 
 **Out of scope:** The openai_conversation_impl implementation component does not transmit network payloads to remote endpoints, enforce repetition guards, or record unbuffered log files; these are handled by other components.
+
+**Delegated:** Wire payload schema definitions are delegated to openai_ext; JSON serialization mechanics are delegated to json_ext; tool response notes and reminders are delegated to tool_provider; session configuration is delegated to agent_config.
 
 ## Types and Behavior
 

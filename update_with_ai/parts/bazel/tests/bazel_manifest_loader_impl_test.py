@@ -1,10 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 20f12d850b36
-# COVERAGE_AUDIT: 2026-10-05T02:07:35Z
-# QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T16:11:48Z
+# LAST_CHANGED: 2026-10-05T16:05:47Z
+# CHANGE: Fix node address in redundant package prefix deduplication test
+# CODE_HASH: 28df621b1e32
+# QA_AUDIT: 2026-10-05T16:11:48Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for bazel_manifest_loader_impl aligned with grounding specifications."""
@@ -561,6 +560,9 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         manifest_data = {
             "label": "//update_with_ai/parts/agent:agent_session#//update_python_with_ai:low",
             "source_file": "update_with_ai/parts/agent/update_with_ai/parts/agent/low/agent_session.pyi",
+            "silent_source_files": [
+                "update_with_ai/parts/agent/update_with_ai/parts/agent/low/silent_stub.pyi"
+            ],
             "deps": [],
         }
         pkg_path = os.path.join(self.test_dir, "update_with_ai/parts/agent")
@@ -571,10 +573,16 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
+            # Requirement: MUST record declared primary source file paths in agent storage without duplicating package path segments.
+            # Requirement: MUST record silent source file paths in agent storage without duplicating package path segments.
             loader.load_manifest(node)
             self.assertEqual(
                 self.storage.get_source_file(node),
                 "update_with_ai/parts/agent/low/agent_session.pyi",
+            )
+            self.assertEqual(
+                list(self.storage._silent_source_files.get(node) or []),
+                ["update_with_ai/parts/agent/low/silent_stub.pyi"],
             )
 
 

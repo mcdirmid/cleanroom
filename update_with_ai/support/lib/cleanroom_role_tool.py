@@ -425,6 +425,7 @@ def run_blame(
                 "target": rel_t.strip().lstrip("/"),
                 "blamed_by": file_path,
                 "explanation": critique,
+                "dirty_reason": f"Blamed by {file_path}: {critique}",
                 "timestamp": src_metadata.current_utc_timestamp(),
             }
         )

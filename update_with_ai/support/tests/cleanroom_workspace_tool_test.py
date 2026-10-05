@@ -1031,6 +1031,127 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
             item["reasons"][0],
         )
 
+    def test_one_and_done_blame_distribution(self) -> None:
+        """Verifies one-and-done synchronization: QA blames a Lib contract in qa_ws,
+        and a single cleanroom_sync() harvests blame into main AND cascades DIRTY tag
+        and FEEDBACK into lib_ws where Lib can immediately fix it.
+        """
+        fake_repo = os.path.join(self.test_dir, "fake_repo_one_and_done")
+        part_dir = os.path.join(fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "tests"), exist_ok=True)
+
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+
+        low_file = os.path.join(part_dir, "low/config.pyi")
+        lib_file = os.path.join(part_dir, "lib/config.py")
+        test_file = os.path.join(part_dir, "tests/config_test.py")
+
+        with open(low_file, "w", encoding="utf-8") as f:
+            f.write("# Specification\n")
+        with open(lib_file, "w", encoding="utf-8") as f:
+            f.write("def get_config(): return {}\n")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write("def test_config(): pass\n")
+
+        init_ts = "2026-10-04T12:00:00Z"
+        src_metadata.update_metadata(low_file, last_cleaned=init_ts, last_changed=init_ts)
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned=init_ts,
+            last_changed=init_ts,
+            audits={"QA_AUDIT": init_ts},
+        )
+        src_metadata.update_metadata(
+            test_file,
+            last_cleaned=init_ts,
+            last_changed=init_ts,
+            audits={"QA_AUDIT": init_ts},
+        )
+
+        # Commission lib workspace and qa workspace
+        lib_ws = cleanroom_workspace_tool.commission_workspace(
+            "lib", dir_scope="staging", repo_root=fake_repo
+        )
+        qa_ws = cleanroom_workspace_tool.commission_workspace(
+            "qa", dir_scope="staging", repo_root=fake_repo
+        )
+
+        ws_lib_file = os.path.join(lib_ws, "staging/parts/agent/lib/config.py")
+        ws_qa_lib_file = os.path.join(qa_ws, "staging/parts/agent/lib/config.py")
+
+        # In qa_ws, lib/config.py is read-only
+        st = os.stat(ws_qa_lib_file)
+        self.assertEqual(st.st_mode & stat.S_IWUSR, 0)
+
+        # QA records blame on read-only lib/config.py
+        critique = "get_config() crashes on missing environment variable"
+        orig_cwd = os.getcwd()
+        try:
+            os.chdir(qa_ws)
+            ret = cleanroom_workspace_tool.run_blame_command(
+                "staging/parts/agent/tests/config_test.py",
+                "staging/parts/agent/lib/config.py",
+                critique,
+                repo_root=fake_repo,
+            )
+            self.assertEqual(ret, 0)
+            qa_blame_buf = os.path.join(qa_ws, ".cleanroom_blame_buffer.json")
+            self.assertTrue(os.path.isfile(qa_blame_buf))
+            with open(qa_blame_buf, "r", encoding="utf-8") as bf:
+                entries = json.load(bf)
+            self.assertEqual(len(entries), 1)
+            self.assertIn("dirty_reason", entries[0])
+        finally:
+            os.chdir(orig_cwd)
+
+        # Before sync: lib_ws does NOT have feedback or dirty tag yet
+        pre_sync_lib_meta = src_metadata.extract_metadata(ws_lib_file)
+        self.assertIsNotNone(pre_sync_lib_meta)
+        assert pre_sync_lib_meta is not None
+        self.assertIsNone(pre_sync_lib_meta.dirty)
+        self.assertEqual(len(pre_sync_lib_meta.feedback), 0)
+
+        # ONE AND DONE SYNC: run cleanroom_sync() once!
+        sync_ret = cleanroom_workspace_tool.cleanroom_sync(repo_root=fake_repo)
+        self.assertEqual(sync_ret, 0)
+
+        # 1. Main workspace: harvested blame, marked dirty, appended feedback, advanced LAST_CLEANED
+        main_meta = src_metadata.extract_metadata(lib_file)
+        self.assertIsNotNone(main_meta)
+        assert main_meta is not None
+        self.assertIsNotNone(main_meta.dirty)
+        self.assertIn("staging/parts/agent/tests/config_test.py", main_meta.dirty)
+        self.assertEqual(len(main_meta.feedback), 1)
+        self.assertIn(critique, main_meta.feedback[0])
+        self.assertGreater(main_meta.last_cleaned, init_ts)
+
+        # 2. QA workspace: blame buffer was consumed and cleared
+        with open(qa_blame_buf, "r", encoding="utf-8") as bf:
+            qa_buf_after = json.load(bf)
+        self.assertEqual(len(qa_buf_after), 0)
+
+        # 3. Lib workspace: IN THE SAME RUN, received DIRTY tag, FEEDBACK, and updated LAST_CLEANED!
+        lib_meta = src_metadata.extract_metadata(ws_lib_file)
+        self.assertIsNotNone(lib_meta)
+        assert lib_meta is not None
+        self.assertIsNotNone(lib_meta.dirty)
+        self.assertEqual(lib_meta.dirty, main_meta.dirty)
+        self.assertEqual(len(lib_meta.feedback), 1)
+        self.assertIn(critique, lib_meta.feedback[0])
+        self.assertEqual(lib_meta.last_cleaned, main_meta.last_cleaned)
+
+        # 4. Lib workspace dirty evaluation: reports dirty and ready to fix!
+        lib_dirty = cleanroom_workspace_tool.find_all_dirty_in_scope(
+            lib_ws, dir_scope="staging", role_filter="lib"
+        )
+        self.assertEqual(len(lib_dirty), 1)
+        self.assertEqual(lib_dirty[0]["target_file"], "staging/parts/agent/lib/config.py")
+        self.assertTrue(any("DIRTY" in r for r in lib_dirty[0]["reasons"]))
+        self.assertTrue(any(critique in r for r in lib_dirty[0]["reasons"]))
+
 
 if __name__ == "__main__":
     unittest.main()

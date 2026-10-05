@@ -410,48 +410,68 @@ Cleanroom does **not** use an intermediate submission mailbox (such as `COMPLETE
     - Any existing `FEEDBACK:` section in that file is automatically stripped (as the file has been cleaned).
 - By eliminating `COMPLETED.md` for submits, the file system itself is the single source of truth, removing an entire layer of redundant submission book-keeping.
 
-#### 3. Feedback Indirection via `FEEDBACK.md`
-Because upstream specifications and implementations are read-only (`chmod 444` or interface stubs) inside a role workspace, an agent **cannot edit an upstream file directly**, and `cleanroom-sync` will never copy non-role files back. 
+#### 3. Feedback Indirection via `.cleanroom_blame_buffer.json`
+Because upstream specifications and implementations are mounted read-only (`chmod 444` or interface stubs) inside a role workspace, an agent **cannot edit an upstream file directly**, and `cleanroom-sync` will never copy non-role files back. 
 
-Therefore, feedback/blame targeting upstream files must be indirected through a dedicated mailbox file: **`FEEDBACK.md`**:
-- When an agent in a role workspace (e.g. Test or QA) discovers a defect in an upstream file, it runs `bin/blame <blame_target> "<explanation>"` or writes to `FEEDBACK.md`.
-- `bin/blame` appends an atomic record to `FEEDBACK.md` under POSIX `fcntl.flock`:
-  ```text
-  TARGET: parts/agent/lib/agent_config.py
-  FEEDBACK: Contract violation: temperature parameter must accept float values between 0.0 and 2.0 inclusive
+Therefore, feedback/blame targeting immutable upstream files is buffered into a lockless JSON buffer at the workspace root: **`.cleanroom_blame_buffer.json`**:
+- When an agent in a role workspace (e.g. Test or QA) discovers a defect in an upstream contract, it runs `bin/blame <file> <blame_dep> "<critique>"`.
+- `bin/blame` appends an entry to `.cleanroom_blame_buffer.json`:
+  ```json
+  [
+    {
+      "target": "staging/parts/agent/lib/agent_config.py",
+      "blamed_by": "staging/parts/agent/tests/agent_config_test.py",
+      "explanation": "Contract violation: temperature parameter must accept float values between 0.0 and 2.0 inclusive",
+      "dirty_reason": "Blamed by staging/parts/agent/tests/agent_config_test.py: Contract violation: temperature parameter must accept float values between 0.0 and 2.0 inclusive",
+      "timestamp": "2026-10-04T12:00:00Z"
+    }
+  ]
   ```
 
-#### 4. Canonical Integration on Sync
-When the supervisor executes `bin/cleanroom-sync` in the primary workspace:
-1. **Copy Back & Discover Cleaned Files**: Sync detects all modified role files, copies them into the canonical tree, and updates their in-band `LAST_CLEANED` / `LAST_CHANGED` / `CHANGE` metadata.
-2. **Process `FEEDBACK.md` Inbound**:
-   - `cleanroom-sync` reads and empties `FEEDBACK.md` under lock.
-   - For each target listed in `FEEDBACK.md`, `cleanroom-sync` locates the file in the primary workspace (e.g. `parts/agent/lib/agent_config.py`).
-   - It integrates the feedback directly into that file's in-band comment header, creating or appending to its `FEEDBACK:` section.
-   - The blamed file's timestamps are left untouched.
-3. **Dynamic Dirty Invalidation**: Because `FEEDBACK:` is now embedded directly in the blamed file in the primary workspace, that file is dynamically recognized as dirty (`is_dirty == True`).
-4. **Subsequent Turn**: When the role workspace responsible for that file (e.g. `cleanroom_lib`) is refreshed, the file is listed in `WORK_ORDER.md` and copied to the role workspace with the feedback visible directly in its header.
+#### 4. Canonical Integration & "One and Done" Redistribution on Sync
+When `bin/cleanroom-sync` executes in the primary workspace, it runs a decoupled **two-phase sweep**:
+
+1. **Phase 1: Inbound Harvest Across ALL Workspaces**:
+   - `cleanroom-sync` scans active role workspaces for `.cleanroom_blame_buffer.json`.
+   - For each blame entry, it calls:
+     - `src_metadata.mark_dirty(target_canonical, reason=dirty_reason)`: adds `DIRTY: <dirty_reason>` and advances `LAST_CLEANED = T_now`.
+     - `src_metadata.append_feedback(target_canonical, explanation, sender=blamed_by)`: appends to `FEEDBACK:` and advances `LAST_CLEANED = T_now`.
+   - The buffer file in the role workspace is cleared.
+2. **Dynamic Timestamp Invalidation**:
+   - Because `append_feedback` advances `LAST_CLEANED = T_now`, the file's lifecycle event timestamp ($T_{\text{event}} = \max(T_{\text{changed}}, T_{\text{cleaned}})$) advances to the current moment.
+3. **Phase 2: Outbound Cascade in the SAME Run ("One and Done")**:
+   - During the immediate Phase 2 cascade of that same sync execution, the sync engine checks all workspaces.
+   - For the culprit role workspace (e.g. `cleanroom_lib`), the canonical file now has $T_{\text{main\_event}} > T_{\text{ws\_event}}$.
+   - `cleanroom-sync` immediately pushes the blamed file with its embedded `DIRTY:` tag and `FEEDBACK:` section into the culprit's workspace!
+   - When the Lib engineer runs `bin/get_work` in their workspace, the unit is immediately reported as dirty with the exact feedback reason.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant TestWS as Role Workspace: Test (chmod 444 on lib)
-    participant FeedbackMB as Mailbox: FEEDBACK.md
-    participant MainSync as Supervisor / cleanroom-sync (Main WS)
-    participant CanonRepo as Canonical Repository (Primary WS)
+    participant Buffer as Buffer: .cleanroom_blame_buffer.json
+    participant MainSync as cleanroom-sync (Two-Phase Sweep)
+    participant CanonRepo as Canonical Repository (Main WS)
     participant LibWS as Role Workspace: Lib
 
     Note over TestWS: Test agent detects bug in lib/agent_config.py
-    TestWS->>FeedbackMB: bin/blame lib/agent_config.py "Contract violation"
-    Note over TestWS: Test agent edits test.py directly
-    MainSync->>TestWS: 1. Discover modified test.py and copy back
-    MainSync->>CanonRepo: 2. Update test.py header (LAST_CLEANED = T_now)
-    MainSync->>FeedbackMB: 3. Read and clear FEEDBACK.md
-    FeedbackMB-->>MainSync: Return feedback records
-    MainSync->>CanonRepo: 4. Integrate FEEDBACK into lib/agent_config.py header
+    TestWS->>Buffer: bin/blame lib/agent_config.py "Contract violation"
+    Note over TestWS: Test agent runs bin/submit test.py
+
+    rect rgb(240, 248, 255)
+    Note over MainSync,CanonRepo: Phase 1: Inbound Harvest (All Workspaces)
+    MainSync->>TestWS: 1. Harvest verified test.py
+    MainSync->>Buffer: 2. Read and clear .cleanroom_blame_buffer.json
+    MainSync->>CanonRepo: 3. Stamp lib/agent_config.py with DIRTY, FEEDBACK, and LAST_CLEANED = T_now
     Note over CanonRepo: lib/agent_config.py is now dynamically DIRTY
-    MainSync->>LibWS: 5. Dispatch WORK_ORDER.md & copy dirty lib/agent_config.py
-    Note over LibWS: Lib agent reads feedback in header, fixes bug in-place
+    end
+
+    rect rgb(255, 250, 240)
+    Note over MainSync,LibWS: Phase 2: Outbound Cascade (In the SAME sync sweep)
+    MainSync->>LibWS: 4. Push dirty lib/agent_config.py with FEEDBACK (T_main > T_ws)
+    end
+
+    Note over LibWS: Lib agent runs bin/get_work, reads feedback in header, and fixes in-place
 ```
 
 ### 6.5 Transparent Linter & AST Compatibility

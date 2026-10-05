@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 6ff7f10bb616
+LAST_CLEANED: 2026-10-05T05:11:30Z
+LAST_CHANGED: 2026-10-05T05:11:30Z
+CHANGE: Add delegated collaborator statement, decompose dense turn driving block, and replace code reference with literate prose
+CODE_HASH: e9ae51250ecc
 -->
 
 # openai_driver_impl implementation component
@@ -18,11 +18,23 @@ Executing robust model loops requires managing protocol-level token limits, hand
 
 **Out of scope:** The openai_driver_impl implementation component does not parse tool argument schemas, format disk transcripts, or discover build target manifests; these are handled by other components.
 
+**Delegated:** HTTP transport and endpoint communication are delegated to openai_ext; JSON argument repair is delegated to json_ext; turn logging is delegated to runner_logger; repetition detection is delegated to loop_guard; message formatting is delegated to loop_conversation; tool definition schemas and dispatch are delegated to tool_provider; runtime configuration is delegated to openai_config and agent_config.
+
 ## Types and Behavior
 
 The loop driver coordinates interaction turns using the session conversation, installed tools, the loop guard, the openai config, the agent config, and the runner logger.
 
-When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from the openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions. When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn. When a model completion response fails with an incomplete tool call error, the loop driver appends an actionable recovery notice directing smaller edits and continues the turn loop, or halts with an unexpected failure when repeated consecutive truncation failures occur.
+When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from the openai config. Tools are ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, correlating tool results with model invocations according to OpenAI tool calling conventions.
+
+When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON.
+
+When repairing a truncated invocation:
+
+- A replace file content invocation providing a target file, target content, and partial replacement content deletes any trailing incomplete line without a terminating newline, replacing it with a sentinel that raises a non implemented error carrying an incrementing session truncation identifier matching the indentation of the deleted line (or appending the sentinel on the next line matching the last line's indentation when the last line is complete), executes the tool to persist partial modifications, and returns an actionable notice directing the model to resume implementation targeting the sentinel.
+
+- Any other tool invocation terminates by appending a tool failure response with the tool's suppression key, resuming generation with a continuation turn.
+
+When a model completion response fails with an incomplete tool call error, the loop driver appends an actionable recovery notice directing smaller edits and continues the turn loop, or halts with an unexpected failure when repeated consecutive truncation failures occur.
 
 The loop driver logs log events for turn requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool call names and arguments or text response previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in the transcript when present.
 

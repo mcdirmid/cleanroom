@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T02:07:35Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 0971ceef06bb
+LAST_CLEANED: 2026-10-05T04:52:52Z
+LAST_CHANGED: 2026-10-05T04:52:52Z
+CHANGE: Add delegated collaborator statement for dag_storage and dag_config
+CODE_HASH: 5be3018230ea
 -->
 
 # dag_subgraph_impl implementation component
@@ -17,6 +17,8 @@ The dag_subgraph_impl implementation component realizes active subgraph scoping,
 Traversing multi-stage build workflows requires isolating reachable subgraphs, evaluating topological order deterministically, and tracking node visitation bounds to prevent infinite re-cleaning cycles. Hardcoding graph traversal algorithms into execution runners complicates scheduling logic and duplicates dependency validation. The dag_subgraph_impl implementation component provides an in-memory graph index over dag storage that maintains topological ordering, groups ready dirty nodes by role address up to configured batch limits, and enforces visit limits across cleaning iterations.
 
 **Out of scope:** The dag_subgraph_impl implementation component does not execute node cleaning workloads, format file aliases, or manage persistent storage; these are handled by other components.
+
+**Delegated:** Graph persistence and node state queries are delegated to dag_storage; traversal limit configuration is delegated to dag_config.
 
 ## Types and Behavior
 

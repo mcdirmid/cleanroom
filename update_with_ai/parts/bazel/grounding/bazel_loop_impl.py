@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T02:07:35Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: d23f51c9431f
-# GROUNDING_QA_AUDIT: 2026-10-05T02:07:35Z
+# LAST_CLEANED: 2026-10-05T06:13:26Z
+# LAST_CHANGED: 2026-10-05T06:13:26Z
+# CHANGE: Align inject_feedback and record_change with low-level contract
+# CODE_HASH: c363a35405e5
 # --- END CLEANROOM METADATA ---
 
 """Bazel loop implementation grounding specification module."""
@@ -22,7 +21,7 @@ class Loop(loop.Loop, InTier[SystemTier]):
 
     DISCHARGED:
     - clean_subgraph: Discharges manifest loading, cleaning loop orchestration, and telemetry streaming.
-    - mark_dirty / inject_feedback / broadcast_change: Discharges message routing across graph storage.
+    - mark_dirty / inject_feedback / broadcast_change / record_change: Discharges message routing across graph storage.
     """
 
     def clean_subgraph(self, target: dag_storage.DagNode) -> loop.BuildResult:
@@ -152,10 +151,14 @@ class Loop(loop.Loop, InTier[SystemTier]):
     ) -> None:
         """
         COVERED:
-        - Injects feedback message into target node.
+        - MUST inject caller-supplied feedback into the target node source file metadata in graph storage.
+        - MUST identify the blamed dependency node in injected feedback.
+        - MUST identify the diagnostic reason in injected feedback.
         """
         storage = self.get_singleton(dag_storage.DagStorage)
         storage.add_message(message, to=target)
+        _blamed_target: Optional[dag_storage.DagNode] = message.target
+        _reason: dag_storage.MessageContent = message.content
         raise NotImplementedError
 
     def broadcast_change(
@@ -176,12 +179,14 @@ class Loop(loop.Loop, InTier[SystemTier]):
     ) -> None:
         """
         COVERED:
-        - MUST mark the target node clean in graph storage with the change description from the change message.
+        - MUST record a caller-supplied change message against a target node in graph storage.
+        - MUST clear the last cleaned timestamp of the target node in graph storage.
+        - MUST update the change description of the target node in graph storage to dynamically invalidate downstream dependencies.
         """
         storage = self.get_singleton(dag_storage.DagStorage)
-        storage.mark_node_clean(
-            target, dag_storage.ChangeDescription(str(message.content))
-        )
+        storage.add_message(message, to=target)
+        _desc: dag_storage.ChangeDescription = dag_storage.ChangeDescription(str(message.content))
+        storage.mark_node_clean(target, _desc)
         raise NotImplementedError
 
 
