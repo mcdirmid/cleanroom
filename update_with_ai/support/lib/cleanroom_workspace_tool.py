@@ -1510,6 +1510,7 @@ def write_role_agents_md(
    `bin/submit <target_file>`
 5. If defects or verification failures are discovered, attribute blame or report failure per `{guide_rel}`:
    `bin/blame <culprit-file> "<actionable critique>"`
+   - If defects span multiple roles (e.g. both library implementation and test suite), blame each culprit file directly within the turn.
    (or run `bin/fail <target_file> "<reason>"` if verification failed)
 6. Loop over remaining ready units:
    - After submitting or blaming the current unit, repeat steps 1–5 for each remaining ready unit returned by `bin/get_work`.
