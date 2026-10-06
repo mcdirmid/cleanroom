@@ -1,0 +1,72 @@
+# update_with_ai/parts/control/BUILD.bazel
+
+load("//update_python_with_ai/support/lib:update_python_with_ai.bzl", "update_python_with_ai")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "high_specs",
+    srcs = glob(["high/*.md"], allow_empty = True),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "grounding_specs",
+    srcs = glob(["grounding/*.gt", "grounding/*.py", "grounding/*.pyi", "low/*.pyi"], allow_empty = True),
+    visibility = ["//visibility:public"],
+)
+
+update_python_with_ai(
+    name = "control_verification",
+    module_deps = ['//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage'],
+)
+
+update_python_with_ai(
+    name = "control_verification_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', ':control_verification'],
+)
+
+update_python_with_ai(
+    name = "control_work_scheduler",
+    module_deps = ['//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/dag:dag_subgraph'],
+)
+
+update_python_with_ai(
+    name = "control_work_scheduler_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_config', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/dag:dag_subgraph', ':control_work_scheduler'],
+)
+
+update_python_with_ai(
+    name = "control_submit",
+    module_deps = ['//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', ':control_verification'],
+)
+
+update_python_with_ai(
+    name = "control_submit_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', ':control_submit', ':control_verification'],
+)
+
+update_python_with_ai(
+    name = "control_attribution",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage'],
+)
+
+update_python_with_ai(
+    name = "control_attribution_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', ':control_attribution'],
+)
+
+update_python_with_ai(
+    name = "control_coordinate",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/dag:dag_subgraph', ':control_attribution', ':control_submit', ':control_verification', ':control_work_scheduler'],
+)
+
+update_python_with_ai(
+    name = "control_coordinate_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/dag:dag_subgraph', ':control_attribution', ':control_coordinate', ':control_submit', ':control_verification', ':control_work_scheduler'],
+)
+
+update_python_with_ai(
+    name = "control_asm",
+    module_deps = ['//update_with_ai/parts/agent:agent_session', ':control_attribution', ':control_attribution_impl', ':control_coordinate', ':control_coordinate_impl', ':control_submit', ':control_submit_impl', ':control_verification', ':control_verification_impl', ':control_work_scheduler', ':control_work_scheduler_impl'],
+)

@@ -29,6 +29,4 @@ The agent config provides operational policies governing whether the agent:
 
 - Performs startup reads to read declared files at session start.
 
-- Operates in mcp mode.
-
 - Expects editing tools to produce delta output.

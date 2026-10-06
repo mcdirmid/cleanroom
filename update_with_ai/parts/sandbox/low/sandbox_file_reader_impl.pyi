@@ -56,11 +56,10 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool):
 
     @operation
     def initialize(self) -> None:
-        """Installs the view file tool into the session environment when mcp mode is inactive and omits search tool.
+        """Installs the view file tool into the session environment and omits search tool.
 
         POSTCONDITIONS:
-        - WHEN mcp mode is inactive, MUST install the view file tool for the agent session.
-        - WHEN mcp mode is active, MUST install no read tools.
+        - MUST install the view file tool for the agent session.
         - MUST omit the search tool.
         """
         ...

@@ -13,6 +13,8 @@ from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import agent_file_alias
 import agent_node_config
+import control_asm
+import control_coordinate
 import sandbox_run_control
 import tool_provider
 

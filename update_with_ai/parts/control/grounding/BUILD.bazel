@@ -1,0 +1,187 @@
+# update_with_ai/parts/control/grounding/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
+
+package(default_visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "control_asm",
+    srcs = ["control_asm.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        ":control_attribution",
+        ":control_attribution_impl",
+        ":control_coordinate",
+        ":control_coordinate_impl",
+        ":control_submit",
+        ":control_submit_impl",
+        ":control_verification",
+        ":control_verification_impl",
+        ":control_work_scheduler",
+        ":control_work_scheduler_impl",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "control_attribution",
+    srcs = ["control_attribution.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "control_attribution_impl",
+    srcs = ["control_attribution_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        ":control_attribution",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "control_coordinate",
+    srcs = ["control_coordinate.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        "//update_with_ai/parts/dag/grounding:dag_subgraph",
+        ":control_attribution",
+        ":control_submit",
+        ":control_verification",
+        ":control_work_scheduler",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "control_coordinate_impl",
+    srcs = ["control_coordinate_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        "//update_with_ai/parts/dag/grounding:dag_subgraph",
+        ":control_attribution",
+        ":control_coordinate",
+        ":control_submit",
+        ":control_verification",
+        ":control_work_scheduler",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "control_submit",
+    srcs = ["control_submit.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        ":control_verification",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "control_submit_impl",
+    srcs = ["control_submit_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        ":control_submit",
+        ":control_verification",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "control_verification",
+    srcs = ["control_verification.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "control_verification_impl",
+    srcs = ["control_verification_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        ":control_verification",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "control_work_scheduler",
+    srcs = ["control_work_scheduler.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        "//update_with_ai/parts/dag/grounding:dag_subgraph",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "control_work_scheduler_impl",
+    srcs = ["control_work_scheduler_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_config",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        "//update_with_ai/parts/dag/grounding:dag_subgraph",
+        ":control_work_scheduler",
+    ],
+    imports = ["../../..", "."],
+)
+
+build_derived_test(
+    name = "targets_derived_test",
+)

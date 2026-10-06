@@ -1,204 +1,452 @@
-# Cleanroom Component Modularization Plan: Decomposing Large Components
+# Cleanroom Component Modularization: Architecting for Cleanroom Workspaces & Maximum Reuse
 
-This document specifies the architectural refactoring plan for decomposing the three largest library implementations in the Cleanroom codebase into focused, single-responsibility components with clean factored interfaces.
-
----
-
-## 1. Executive Summary & Concrete Code Audits
-
-The Cleanroom architecture enforces single-responsibility components whose behaviors are specified via literate High-Level Specifications (`high/*.md`), factored into Planning Canvases (`planning/*.md`), formalized in Low-Level typed stubs (`low/*.pyi`), proved through static Grounding (`grounding/*.py`), and implemented in Library code (`lib/*.py`).
-
-A line-by-line audit of the three largest files reveals why previous rough estimates (such as factoring out only verification checks) would be ineffective, and defines the true architectural boundaries:
-
-| Monolithic Component | Package | Lines | Core Subsystems Identified in Code Audit | Target Decomposed Components |
-| :--- | :--- | :---: | :--- | :--- |
-| [`sandbox_run_control_impl`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/sandbox/lib/sandbox_run_control_impl.py) | `sandbox` | **1,865** | • Resolution triad (`submit`/`fail`/`blame`): **677 lines**<br/>• Verification evaluation & `CheckFilesTool`: **374 lines**<br/>• Workflow tools (`advance`/`get_work`) & prompts: **394 lines**<br/>• Turn lifecycle controller & batch dependencies: **420 lines** | **4 components**<br/>• `sandbox_resolution_tools_impl`: ~680 lines<br/>• `sandbox_verification_checker_impl`: ~380 lines<br/>• `sandbox_workflow_tools_impl`: ~410 lines<br/>• `sandbox_run_controller_impl`: ~380 lines |
-| [`openai_driver_impl`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/openai/lib/openai_driver_impl.py) | `openai` | **921** | • Truncation handling, JSON repair, & client: **~400 lines**<br/>• Turn orchestration, loop guard, & tool execution: **~450 lines** | **2 components**<br/>• `openai_completion_client_impl`: ~400 lines<br/>• `openai_driver_impl`: ~450 lines |
-| [`bazel_node_config_impl`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/bazel/lib/bazel_node_config_impl.py) | `bazel` | **983** | • Guide parsing & runfiles search: **267 lines**<br/>• `AliasManager` & execroot path scrubbing: **137 lines**<br/>• Verification check command runner: **only 28 lines!**<br/>• Dependency closure & `NodeConfig` singleton: **~500 lines** | **2 components**<br/>• `bazel_resource_resolver_impl`: ~450 lines<br/>• `bazel_node_config_impl`: ~500 lines |
+This document specifies the authoritative, unified architectural refactoring plan for decomposing Cleanroom's monolithic implementations across both in-tree packages (`parts/`) and host infrastructure (`support/lib/`).
 
 ---
 
-## 2. Decomposing `sandbox_run_control_impl.py` (1,865 Lines $\to$ 4 Components)
+## 1. Architectural North Star: Workspaces Sovereign Paradigm
 
-### 2.1 Concrete Line Inventory
-An audit of `sandbox_run_control_impl.py` reveals four distinct sub-modules currently bundled together:
+### 1.1 The Cleanroom Dilemma: Two Disjoint Monoliths
+Historically, Cleanroom developed two parallel software stacks to execute the same directed acyclic graph (DAG) of blinded engineering roles:
+1. **The In-Process Headless Loop (`parts/`)**: A complex, highly coupled library designed for unattended batch execution via the OpenAI API (`parts/loop`, `parts/sandbox`, `parts/dag`, `parts/bazel`, `parts/openai`).
+2. **The Workspace & Tooling Infrastructure (`support/lib/`)**: Over 13,700 lines of ungrounded Python scripts designed to commission isolated sibling directories, generate read-only interface stubs, track in-band comment metadata, and coordinate conversational AI sessions (`cleanroom_workspace_tool.py`, `cleanroom_role_tool.py`, `src_metadata.py`, and linters).
 
-1. **Resolution Triad Subsystem (Lines 1010–1686, 677 lines)**:
-   - `_ResolveTool` base class (lines 1010–1041, 32 lines).
-   - `SubmitTool` (lines 1042–1262, 221 lines): Evaluates verification prerequisites, stamps in-band metadata (`LAST_CLEANED`, `LAST_CHANGED`, `CHANGE`), clears `FEEDBACK:`, and marks node clean.
-   - `FailTool` (lines 1263–1395, 133 lines): Records execution failure reasons, preserves dirty state, and emits failure diagnostics.
-   - `BlameTool` (lines 1396–1686, 291 lines): Validates blame dependencies, enforces single-paragraph critique formatting, and injects in-band `FEEDBACK:` records into upstream specifications.
-2. **Verification & Diagnostics Subsystem (Lines 464–691 & 785–930, 374 lines)**:
-   - `RunController` verification evaluation methods (lines 464–691, 228 lines): `verification_checks`, `update_verification`, `get_blame_targets_for_node`, `evaluate_verification`, `evaluate_verification_for_node`, and `is_verification_up_to_date_and_passing`.
-   - `CheckFilesTool` (lines 785–930, 146 lines): Tool execution, parameters schema, and compiler output cleaning (`_clean_diag_noise`).
-3. **Workflow Tools & Task Prompt Subsystem (Lines 238–437, 692–708, 931–1009, 1690–1804, 394 lines)**:
-   - Grounding resolution & prompt synthesis (lines 238–437, 200 lines): `_resolve_grounding_file`, `format_task_prompt`, `_msg_content`.
-   - Open target reminder formatting (lines 692–708, 17 lines).
-   - `AdvanceTool` (lines 931–1009, 79 lines): Progressive step disclosure tool.
-   - `GetWorkTool` (lines 1690–1804, 115 lines): Batches dirty nodes from `DagStorage` and `DagSubgraph`.
-4. **Core Run Controller Engine (Lines 44–237, 438–463, 709–784, ~420 lines)**:
-   - Node state and alias maps (`_ensure_nodes`, `get_node_for_alias`, `get_node_state`, `open_nodes`).
-   - Batch dependency checking (`get_in_batch_dependencies`, `check_in_batch_dependencies`).
-   - Node file locking (`lock_node_files`).
-   - Session turn initialization and lifecycle registration.
+Because these two stacks were developed in parallel, they independently re-implemented the same core mechanisms:
+- Both stacks independently implement **the resolution triad** (`submit`, `blame`, `fail`).
+- Both stacks independently implement **DAG topological sorting and dirty node scheduling** (`get_work`).
+- Both stacks independently inspect **in-band source metadata headers** (`LAST_CLEANED`, `LAST_CHANGED`, `FEEDBACK:`).
+- Both stacks independently parse **Bazel manifests and Starlark target dependencies**.
 
-### 2.2 Target Factored Architecture
+### 1.2 The Sovereign Paradigm: Everything Supports Workspaces
+Cleanroom's sovereign paradigm is **Cleanroom Workspaces** ([Option 3: Subagentless Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md) and [Option 4: Subagent-Driven Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md)):
+- Cleanroom achieves mathematical double-blind isolation not through complex in-process runtime mocks or fragile software hooks, but through **operating system directory isolation** and kernel-level `chmod 444` stubs.
+- Headless execution (Option 1) is not a separate architecture; it is simply a headless execution mode that operates over the same canonical parts.
+- Therefore, **we do not have two separate modularization efforts** (one for "parts" and one for "support code"). There is **only one modularization plan**, and every single component refactoring is designed to maximize code reuse in direct service of Cleanroom Workspaces.
+
+### 1.3 The In-Place Sandbox vs. Role Workspaces Dichotomy
+To understand why refactoring must proceed in a specific order, consider what `parts/sandbox` actually is:
+- **The In-Place Sandbox was an adapter to allow working without workspaces**: In Option 1, the agent operates directly within the main repository root. To prevent it from cheating or mutating unauthorized files, Cleanroom built an *in-process sandbox* (`sandbox_file_reader`, `sandbox_file_editor`, in-memory file locking) that intercepts file access in Python.
+- **The Domain Conflation Trap**: Because the in-process sandbox was Cleanroom's earliest implementation, Cleanroom's foundational *domain protocols*—the resolution triad (`submit`, `blame`, `fail`), verification evaluation, and DAG work scheduling—were conflated directly into `sandbox_run_control_impl.py` (swelling it to 2,159 lines).
+- **Role Workspaces Invert This Model**: In Role Workspaces, isolation is enforced by the operating system filesystem (sibling directories, `chmod 444` interface stubs, native tools). Workspaces do NOT need in-process file interception or in-memory lock managers.
+
+### 1.4 The Prerequisite Rule: Refactor Existing Parts First
+> [!IMPORTANT]
+> **Do Not Throw Role Workspace Code into `parts/` Before Refactoring Existing Parts**
+> If we attempt to migrate role workspace code (`cleanroom_workspace_tool.py`, `cleanroom_role_tool.py`) into `parts/` immediately, we will be grafting a physical directory architecture onto monolithic components that are still entangled with in-process sandbox mocks (`EditManager`, `tool_provider`, in-memory file locking).
+> 
+> **The Strategy**:
+> 1. We MUST refactor what we ALREADY HAVE in `parts/` first.
+> 2. Decompose `sandbox_run_control_impl.py` to extract the **pure domain protocols** (the resolution triad, verification checking, task prompting) away from the in-process sandbox adapters.
+> 3. Modernize `parts/dag` to handle all current roles dynamically.
+> 4. Once existing parts expose clean, reusable domain interfaces, introducing `parts/workspace` and `parts/role` becomes effortless, elegant, and completely free of duplication.
 
 ```mermaid
 flowchart TD
-    subgraph Sandbox_Components["Decomposed parts/sandbox Implementations"]
-        RES["sandbox_resolution_tools_impl.py<br/><b>~680 lines</b><br/>(SubmitTool, FailTool, BlameTool, _ResolveTool)"]
-        CHK["sandbox_verification_checker_impl.py<br/><b>~380 lines</b><br/>(CheckFilesTool, evaluate_verification, diag cleaner)"]
-        WF["sandbox_workflow_tools_impl.py<br/><b>~410 lines</b><br/>(AdvanceTool, GetWorkTool, prompt synthesis)"]
-        RC["sandbox_run_controller_impl.py<br/><b>~380 lines</b><br/>(Turn lifecycle, batch dependency graph, node states)"]
+    subgraph SovereignGoal ["Sovereign Architectural Goal: Cleanroom Workspaces"]
+        Opt3["Option 3: Interactive Workspaces<br/>(Antigravity / IDE sessions)"]
+        Opt4["Option 4: Autonomous Subagent Workspaces<br/>(Antigravity / DeepSeek Harness / Goose)"]
+        Opt1["Option 1: Headless Batch Loop<br/>(CI & regression runner)"]
+    end
+
+    subgraph SharedCore ["Factored, Grounded Cleanroom Parts (Maximizing Reuse)"]
+        Meta["parts/src_metadata<br/>• Single source of truth for in-band headers & hashes"]
+        Control["parts/control (~500 lines per unit)<br/>• coordinate, check_files, get_work, submit, blame, fail"]
+        Dag["parts/dag<br/>• Dynamic role phase ordering & graph storage"]
+        WS["parts/workspace<br/>• Directory sandboxing, chmod 444 stubs, role configs"]
+        Lint["parts/linter<br/>• Factored AST parsers & double-blind rule checkers"]
+    end
+
+    Control --> Opt3
+    Control --> Opt4
+    Control --> Opt1
+
+    Dag --> Control
+    Meta --> Control
+
+    WS --> Opt3
+    WS --> Opt4
+
+    Meta --> Dag
+    Meta --> Lint
+```
+
+---
+
+## 2. Concrete Code Audit: The Monoliths of Both Worlds
+
+A comprehensive audit across `update_with_ai/parts/`, `update_with_ai/support/lib/`, and `update_python_with_ai/support/lib/` identifies the monolithic files requiring decomposition and the exact duplication to eliminate:
+
+| Location | Monolithic File / Subsystem | Current Lines | Core Responsibilities Identified in Audit | Target Factored Destination | Action / Reuse Opportunity |
+| :--- | :--- | :---: | :--- | :--- | :--- |
+| `parts/sandbox` | [`sandbox_run_control_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/sandbox/lib/sandbox_run_control_impl.py) | **2,159** | • Resolution triad (`submit`/`fail`/`blame`): **677 lines**<br/>• Verification & diagnostics: **374 lines**<br/>• Workflow tools (`advance`/`get_work`): **394 lines**<br/>• Turn lifecycle & batch dependencies: **420 lines** | • `sandbox_resolution_tools_impl`<br/>• `sandbox_verification_checker_impl`<br/>• `sandbox_workflow_tools_impl`<br/>• `sandbox_run_controller_impl` | **Extract shared resolution core** so workspaces and loop share the exact same `submit`/`blame`/`fail` implementation. |
+| `support/lib` | [`cleanroom_workspace_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/support/lib/cleanroom_workspace_tool.py) | **4,104** | • Dead pre-zero-sync converge engine: **~650 lines**<br/>• Duplicated DAG dirty & topo sort: **~600 lines**<br/>• Duplicated resolution triad handlers: **~400 lines**<br/>• Duplicated Starlark AST evaluator: **~300 lines**<br/>• Workspace sandboxing & stubs: **~1,200 lines**<br/>• CLI dispatching: **~400 lines** | • **`parts/workspace`** (~1,200 lines)<br/>• Delegate DAG to **`parts/dag`**<br/>• Delegate resolution to **`parts/resolution`**<br/>• **PRUNE dead converge code** (~650 lines) | **Eliminates ~1,950 lines** of duplicate/dead code; factors pure workspace sandboxing into formal Cleanroom package. |
+| `support/lib` | [`cleanroom_role_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/support/lib/cleanroom_role_tool.py) | **884** | • Resolution CLI (`submit`, `blame`, `fail`): **~330 lines**<br/>• Work queue query (`get_work`): **~120 lines**<br/>• Role metadata & target resolution: **~400 lines** | • **`parts/role`** (~450 lines) | Delegates resolution to shared core and work query to `parts/dag`. |
+| `support/lib` | [`src_metadata.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/support/lib/src_metadata.py) | **508** (x2) | • In-band metadata headers, timestamps, change summaries, blame critique, and code hashes. | • **`parts/src_metadata`** (~500 lines) | Deduplicate identical files across `update_with_ai` and `update_python_with_ai`; formally ground in Cleanroom pipeline. |
+| `support/lib` | [`build_lint_common.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/support/lib/build_lint_common.py) | **4,095** | • Monolithic AST inspection, docstring parsing, import boundary checks, and error formatting. | • **`parts/linter`** (split into parser, rule checker, reporter) | Eliminates monolithic god-file; decouples AST extraction from rule checking. |
+| `support/lib` | Concrete Role Linters (`*_lint.py`) | **2,704** | • `lib_lint.py` (894), `test_lint.py` (528), `low_lint.py` (522), `grounding_lint.py` (504), `high_lint.py` (256). | • **`parts/linter`** (factored role validator rule sets) | Uses shared AST parser and formal Cleanroom contracts. |
+| `parts/bazel` | [`bazel_node_config_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/bazel/lib/bazel_node_config_impl.py) | **983** | • Guide & template discovery: **267 lines**<br/>• File alias & execroot path scrubbing: **137 lines**<br/>• Node config singleton & graph closure: **~500 lines** | • `bazel_resource_resolver_impl`<br/>• `bazel_node_config_impl` | Factors resource resolution away from graph state. |
+| `parts/openai` | [`openai_driver_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/openai/lib/openai_driver_impl.py) | **921** | • Truncation handling, JSON repair, & client: **~400 lines**<br/>• Turn loop, guard, tool dispatch: **~450 lines** | • `openai_completion_client_impl`<br/>• `openai_driver_impl` | Isolates API error recovery from turn orchestration. |
+
+---
+
+## 3. The Shared Subsystems: Maximizing Code Reuse
+
+By consolidating our refactoring around Cleanroom Workspaces, we identify four critical shared subsystems where reuse eliminates thousands of lines of duplication:
+
+### 3.1 Subsystem A: The Resolution Core (`submit`, `blame`, `fail`)
+Currently, three separate places implement the resolution triad:
+1. `sandbox_run_control_impl.py` (lines 1234–1960: `SubmitTool`, `BlameTool`, `FailTool`)
+2. `cleanroom_role_tool.py` (lines 488–814: `run_submit`, `run_blame`, `run_fail`)
+3. `update_with_ai.bzl` (lines 1406–1625: `_update_ai_node_submit_rule`, `_update_ai_node_blame_rule`)
+
+#### What Belongs in the Domain Core vs. What Belongs in `sandbox`
+A critical architectural realization is that **almost none of the resolution or workflow logic belongs in `sandbox`**. It was only placed there because the headless loop had to simulate an agent working in place:
+
+| Capability | Domain Protocol Core (Does NOT belong in `sandbox`; reused by Workspaces) | In-Process Sandbox Adapter (Belongs in `parts/sandbox`) |
+| :--- | :--- | :--- |
+| **`submit`** | • Precondition assertion: verification must pass.<br/>• Change documentation rule: require summary if code modified; forbid summary if unmodified; forbid summary for auditor roles.<br/>• Metadata stamping: compute `CODE_HASH`, stamp `LAST_CLEANED`, stamp `LAST_CHANGED`, clear unacted `FEEDBACK:`, stamp `<ROLE>_AUDIT:` tags.<br/>• Graph mutation: mark target node clean in the DAG. | • Unwrapping `tool_provider.ToolParameter` bindings.<br/>• Checking in-memory `EditManager.has_modifications`.<br/>• Releasing in-memory file locks.<br/>• Formatting `tool_provider.ToolResponse` and follow-up tool calls. |
+| **`blame`** | • Culprit validation: verify culprit is a declared upstream dependency.<br/>• Critique contract: validate single-paragraph, actionable critique.<br/>• In-band feedback injection: prepend `FEEDBACK: [timestamp] [role] <critique>` under comment header.<br/>• Graph mutation: mark culprit dirty in the DAG. | • Packaging into `ToolResponse` with follow-up tool call to `AdvanceTool`.<br/>• Setting session state `rc.set_node_state("FAILED")`. |
+| **`fail`** | • Failure recording: format and log execution failure diagnostics.<br/>• Graph mutation: preserve dirty state on target node. | • Terminating the in-process LLM conversational turn loop (`LoopOutcome.FAILED`). |
+| **`get_work`** | • DAG scheduling: query topological order, check upstream clean status, retrieve ready dirty nodes.<br/>• Task prompt & guide synthesis: load role guide, format instructions, list dependency paths and open feedback. | • Registering nodes in `rc._nodes` and setting `rc._open_nodes`.<br/>• Calling `sandbox.materialize_startup_templates`.<br/>• Triggering initial `AdvanceTool` follow-up call. |
+
+**The Refactoring Solution: A Dedicated `parts/control` Package**:
+Rather than inventing ad-hoc abstractions in `agent` or bloating `dag`, we factor all common workflow, verification, and resolution logic into **`update_with_ai/parts/control`**.
+`parts/sandbox` delegates its tools directly to `parts/control`, while role workspaces invoke `parts/control` directly from their CLI entrypoints.
+
+#### Modularization of `parts/control`: Enforcing ~500 Lines per Unit
+To prevent `parts/control` from accumulating technical debt, each unit is strictly bounded to **around 500 lines of Python code**:
+
+1. **`control_coordinate` (~350 lines)**:
+   - Central coordinator facade providing unified session state management and dispatch.
+   - Exposes clean Python interfaces for `get_work()`, `check_files()`, `submit()`, `blame()`, and `fail()`.
+   - Manages active target state (`open_nodes` in session, pending work tracking).
+2. **`control_verification` (~400 lines)**:
+   - Executes verification commands defined in `define_role(verify_template = "...")`.
+   - **Dual-mode target evaluation**:
+     - *Single-file mode*: Evaluates verification for a specific target file passed as an argument (`check_files("lib/foo.py")`).
+     - *All-work mode*: If called without an argument, automatically discovers and checks all work currently open / being processed in the session or workspace.
+   - Scrubs compiler diagnostic noise (`_clean_diag_noise`): strips Bazel loading lines, cache hit counts, and elapsed time statistics.
+   - Caches verification outcomes against source file hashes to prevent redundant executions.
+3. **`control_work_scheduler` (~450 lines)**:
+   - Evaluates the DAG to determine ready dirty units.
+   - **Dual-mode scheduling**:
+     - *Subgraph mode*: Walks `DagSubgraph` from a specified target root node (used in headless batch runs).
+     - *Directory scope mode*: When a subgraph is not specified but a directory is (e.g., `parts/sandbox` or `dir_scope = "update_with_ai"`), discovers all dirty units in that directory across the repository (used in role workspaces and `bin/get_work`).
+   - Dynamic role precedence: Zero hardcoded roles; rank dynamically matches the topological depth of `role_deps` in `define_role`.
+   - Synthesizes structured task prompts and directions from role guides.
+4. **`control_submit` (~400 lines)**:
+   - Precondition check: asserts that `control_verification` passes before allowing submission.
+   - Enforces change documentation contracts (requires summary if modified, forbids if unmodified, forbids for auditor roles).
+   - In-band metadata stamping (via `parts/src_metadata`): computes `CODE_HASH`, stamps `LAST_CLEANED`, stamps `LAST_CHANGED`, stamps `<ROLE>_AUDIT:` tags, and clears unacted `FEEDBACK:`.
+   - Marks target node clean in `DagStorage`.
+5. **`control_attribution` (`blame` & `fail`) (~450 lines)**:
+   - **Blame**: Validates culprit is a declared upstream dependency, enforces single-paragraph actionable critique, prepends `FEEDBACK:` in culprit comment header, and marks culprit dirty in `DagStorage`.
+   - **Fail**: Formats failure diagnostics, logs error reasons, and preserves dirty state on target node.
+
+### 3.2 Subsystem B: Zero Hardcoded Roles Across `parts/` (Dynamic `define_role` Discovery)
+A major defect in the current `parts/` implementations is **hardcoded role names**:
+- `parts/dag/lib/dag_subgraph_impl.py` hardcodes an obsolete 6-role dictionary:
+  ```python
+  role_order = {"high": 0, "low": 1, "lib": 2, "test": 3, "qa": 4, "coverage": 5}
+  ```
+  When `planning`, `grounding`, and `grounding_qa` were introduced, `dag_subgraph_impl.py` had no knowledge of them and gave them fallback tier 100!
+- `sandbox_run_control_impl.py` hardcodes:
+  ```python
+  if role in ("qa", "coverage", "grounding_qa"): ...
+  for dep_role in ("lib", "test", "grounding"): ...
+  ```
+
+**The Sovereign Rule: Zero Hardcoded Roles in `parts/`**:
+Cleanroom roles are dynamically defined in Starlark via `define_role(...)` in `BUILD.bazel`. No code in `parts/` should hardcode role strings.
+1. **Dynamic Role Phase Ordering (Tier Precedence)**:
+   - A role's scheduling rank is simply its **topological depth in the role dependency DAG** defined by `role_deps` in `define_role`.
+   - The DAG engine dynamically computes this rank (via Kahn's algorithm or memoized depth recursion) from `define_role` metadata:
+     - `high` (0 deps) $\to$ rank 0.
+     - `planning` (deps: `high`) $\to$ rank 1.
+     - `low` (deps: `planning`) $\to$ rank 2.
+     - `grounding` (deps: `low`) $\to$ rank 3.
+     - `grounding_qa` (deps: `grounding`) $\to$ rank 4.
+     - `lib` & `test` (deps: `low`, `grounding`) $\to$ rank 5.
+     - `qa` (deps: `lib`, `test`) $\to$ rank 6.
+     - `coverage` (deps: `qa`) $\to$ rank 7.
+   - Any new role declared via `define_role` in the future automatically receives its proper phase ordering with **zero code modifications** in `parts/`!
+2. **Dynamic Role Traits (Auditors & Feedback Targets)**:
+   - Instead of checking `if role in ("qa", "coverage", "grounding_qa")`, inspect `role_def.is_auditor` or `role_def.src_pattern == ""`.
+   - Instead of hardcoding feedback targets (`"lib"`, `"test"`), inspect `role_def.feedback_role_deps`.
+   - Instead of hardcoding active component types, inspect `role_def.active_component_types`.
+
+### 3.3 Subsystem C: DAG Scheduling & Ready Work Queue (`get_work`)
+Currently:
+- `parts/dag` contains Kahn's topological sort and `next_ready_batch()`, but lacked dynamic role discovery.
+- `cleanroom_workspace_tool.py` re-implemented 600 lines of custom DAG logic (`compute_role_work_queue`, `eval_unit_dirty`, `topological_sort_units`, `compute_role_phase_order`).
+
+**The Refactoring Solution**:
+Upgrade `parts/dag` with dynamic role ordering and filesystem `src_metadata` evaluation.
+- `cleanroom_workspace_tool.py` delegates `bin/cleanroom work-queue` and workspace work batching directly to `parts/dag`.
+- Headless `LoopCleaner` and Workspace Coordinator share the exact same scheduling algorithm, role precedence order, and dirty evaluation rules.
+- **Net Result**: ~600 lines of duplicate DAG code eliminated from `cleanroom_workspace_tool.py`.
+
+### 3.4 Subsystem D: In-Band Source Metadata Engine (`parts/src_metadata`)
+Currently:
+- `src_metadata.py` (508 lines) is duplicated verbatim across `update_with_ai/support/lib/` and `update_python_with_ai/support/lib/`.
+- It lives outside the Cleanroom specification pipeline as an ungrounded host script, despite defining the canonical serialization format for every file in the repository.
+
+**The Refactoring Solution**:
+Promote `src_metadata` into a formal Cleanroom package: `update_with_ai/parts/src_metadata`:
+- Authored with High-Level Specification (`high/src_metadata.md`), Planning Canvas (`planning/src_metadata.md`), Low-Level Specification (`low/src_metadata.pyi`), Grounding Proofs (`grounding/src_metadata.py`), and Library Implementation (`lib/src_metadata_impl.py`).
+- Statically proves timestamp monotonicity, regex header preservation, code hashing, and feedback parsing.
+- Used universally across `parts/dag`, `parts/sandbox`, `parts/workspace`, `parts/role`, and `parts/linter`.
+- **Net Result**: Single source of truth for metadata across the entire repo.
+
+### 3.5 Subsystem E: Pruning the Dead Converge Engine
+In `cleanroom_workspace_tool.py`:
+- `converge_role_workspace()` (lines 2840–3380, 541 lines)
+- `cleanroom_sync()` (lines 3621–3733, 113 lines)
+These functions were built for the obsolete pre-zero-sync architecture that used local JSON buffer files (`.cleanroom_blame_buffer.json`, `.cleanroom_audit_buffer.json`) and complex two-way synchronization sweeps.
+Because Cleanroom migrated to convention-driven zero-sync workspaces with direct Bazel mutations (`_submit`, `_blame`, `_fail`), this entire subsystem is completely dead code.
+
+**The Refactoring Solution**:
+Prune both functions immediately.
+- **Net Result**: Instant reduction of ~654 lines of technical debt with zero functional impact.
+
+---
+
+## 4. Decomposing the `parts/` Monoliths
+
+To enable the reuse described above, the three large in-tree implementations in `parts/` must be factored into single-responsibility components:
+
+### 4.1 Decomposing `sandbox_run_control_impl.py` (2,159 Lines $\to$ 4 Components)
+
+```mermaid
+flowchart TD
+    subgraph Decomposed_Sandbox ["parts/sandbox Factored Architecture"]
+        RES["sandbox_resolution_tools_impl.py<br/><b>~680 lines</b><br/>• SubmitTool, FailTool, BlameTool, _ResolveTool<br/>• Stamps metadata, checks hashes, validates critique"]
+        CHK["sandbox_verification_checker_impl.py<br/><b>~380 lines</b><br/>• CheckFilesTool, evaluate_verification<br/>• Compiler diagnostic cleaner (_clean_diag_noise)"]
+        WF["sandbox_workflow_tools_impl.py<br/><b>~410 lines</b><br/>• AdvanceTool, GetWorkTool<br/>• Grounding resolution & task prompt synthesis"]
+        RC["sandbox_run_controller_impl.py<br/><b>~380 lines</b><br/>• Turn lifecycle, session node states, file locking<br/>• In-batch dependency validation graph"]
     end
 
     RES --> RC
     CHK --> RC
     WF --> RC
+
+    subgraph WorkspaceReuse ["Cleanroom Workspaces Reuse"]
+        RoleCLI["parts/role (bin/submit, bin/blame, bin/fail)"]
+        BazelRules["update_with_ai.bzl (_submit, _blame targets)"]
+        WorkQueue["bin/cleanroom work-queue / bin/get_work"]
+    end
+
+    RES -.->|"Direct Reuse"| RoleCLI
+    RES -.->|"Direct Reuse"| BazelRules
+    WF -.->|"Shared Prompt Logic"| WorkQueue
 ```
 
-### 2.3 Component Responsibilities & Estimated Sizes
-- **`sandbox_resolution_tools_impl` (~680 lines)**: Houses the complete resolution triad (`SubmitTool`, `FailTool`, `BlameTool`) and common resolution helpers.
-- **`sandbox_verification_checker_impl` (~380 lines)**: Owns `CheckFilesTool`, verification check execution, diagnostic scrubbing, and passing-state verification.
-- **`sandbox_workflow_tools_impl` (~410 lines)**: Owns `GetWorkTool`, `AdvanceTool`, grounding file resolution, and task prompt generation.
-- **`sandbox_run_controller_impl` (~380 lines)**: Orchestrates turn progression, session node sets, in-batch dependency gates, and file locking.
+1. **`sandbox_resolution_tools_impl.py` (~680 lines)**:
+   - Houses the complete resolution triad (`SubmitTool`, `FailTool`, `BlameTool`) and common resolution helpers.
+   - Decoupled from `RunController` turn-state so it can be called directly by workspace tools and Bazel runner targets.
+2. **`sandbox_verification_checker_impl.py` (~380 lines)**:
+   - Owns `CheckFilesTool`, verification command runner, diagnostic output cleaner, and passing-state caching.
+3. **`sandbox_workflow_tools_impl.py` (~410 lines)**:
+   - Owns `GetWorkTool`, `AdvanceTool`, grounding file resolution, and task prompt generation.
+4. **`sandbox_run_controller_impl.py` (~380 lines)**:
+   - Orchestrates turn progression, session node sets, in-batch dependency gates, and file locking.
 
----
+### 4.2 Decomposing `bazel_node_config_impl.py` (983 Lines $\to$ 2 Components)
 
-## 3. Decomposing `openai_driver_impl.py` (921 Lines $\to$ 2 Components)
-
-### 3.1 Concrete Line Inventory
-An audit of `openai_driver_impl.py` shows that the component does **not** perform HTTP streaming; instead, it uses non-streaming `client.chat.completions.create(...)` and devotes massive code blocks to JSON repair, truncation recovery, and tool binding:
-
-1. **Truncation Handling, JSON Repair & Completion Client (~400 lines)**:
-   - `_repair_json` and `try_close` (lines 37–117, 81 lines): Algorithmic JSON repair of unclosed strings, brackets, and escapes from truncated tool call outputs.
-   - Client initialization & tool parameter schemas generation (lines 293–336, 44 lines): Serializing `tool_provider.ToolManager` into OpenAI function definitions.
-   - Request construction (lines 343–376, 34 lines): Converting `loop_conversation.Conversation` history into message payloads.
-   - Incomplete tool call detection & server-side truncation retry loop (lines 404–489, 86 lines): Handles `incomplete_tool_call` and max-token boundary errors.
-   - Length finish reason handling & sentinel replacement (lines 591–660, 70 lines): Inserts `raise NotImplementedError("TRUNCATED_...")` sentinels to allow recovery from truncated code edits.
-   - Telemetry extraction (lines 490–510, 20 lines): Extracts prompt tokens and cached tokens.
-2. **Turn Loop, Tool Execution & Safeguards (~450 lines)**:
-   - Turn bounding & iteration control (lines 337–342, 891–914, 30 lines).
-   - Tool call dispatch & argument deserialization (lines 512–589, 78 lines).
-   - Tool execution, parameter conversion, & binding (lines 661–890, 230 lines): Evaluates against `loop_guard.can_execute`, executes tools via `tool_mgr`, and appends responses.
-   - Telemetry logging & transcript formatting (lines 118–285, 168 lines): `_format_token_usage`, `_format_tool_log`, `_log_event`.
-
-### 3.2 Target Factored Architecture
+An audit demonstrates that factoring out verification checks alone would only remove 28 lines (`_CommandVerificationCheck`). The real line consumers are guide resolution and execroot path scrubbing:
 
 ```mermaid
 flowchart LR
-    subgraph OpenAI_Decomposition["Decomposed parts/openai Implementations"]
-        COMP["openai_completion_client_impl.py<br/><b>~400 lines</b><br/>(API client, tool schema builder, JSON repair,<br/>truncation detection, sentinel injection)"]
-        DRV["openai_driver_impl.py<br/><b>~450 lines</b><br/>(Turn orchestrator, loop guard, tool dispatch,<br/>history updates, transcript telemetry)"]
+    subgraph Decomposed_Bazel ["parts/bazel Factored Architecture"]
+        RES_RES["bazel_resource_resolver_impl.py<br/><b>~450 lines</b><br/>• Guide markdown parser & runfiles resolution<br/>• Template path locator & content resolution<br/>• File AliasManager & execroot path scrubbing"]
+        NODE_CFG["bazel_node_config_impl.py<br/><b>~500 lines</b><br/>• NodeConfig singleton & manifest caching<br/>• Dependency closure & ReadOnly/ReadWrite classification<br/>• Command verification runner (28 lines)"]
+    end
+
+    NODE_CFG --> RES_RES
+```
+
+1. **`bazel_resource_resolver_impl.py` (~450 lines)**:
+   - Guide discovery across `BUILD_WORKSPACE_DIRECTORY`, `RUNFILES_DIR`, `TEST_SRCDIR`, and `update_python_with_ai/guides/`.
+   - Template file resolution and markdown parsing.
+   - `AliasManager` and execroot regex path scrubbing (`_EXECROOT_PATTERN`, `_WORKSPACE_PATTERN`).
+2. **`bazel_node_config_impl.py` (~500 lines)**:
+   - Manifest loading from `DagStorage`.
+   - Transitive star dependency closure computation and read-only/read-write file partitioning.
+   - `NodeConfig` singleton lifecycle.
+
+### 4.3 Decomposing `openai_driver_impl.py` (921 Lines $\to$ 2 Components)
+
+```mermaid
+flowchart LR
+    subgraph Decomposed_OpenAI ["parts/openai Factored Architecture"]
+        COMP["openai_completion_client_impl.py<br/><b>~400 lines</b><br/>• OpenAI client initialization & completions creation<br/>• Tool schema serialization from ToolManager<br/>• Heuristic JSON repair (_repair_json, try_close)<br/>• Truncation detection & recovery sentinel injection"]
+        DRV["openai_driver_impl.py<br/><b>~450 lines</b><br/>• Conversational turn loop orchestrator<br/>• Loop guard repetition limits & safeguards<br/>• Tool execution dispatch & argument binding<br/>• Transcript formatting & token telemetry logging"]
     end
 
     DRV --> COMP
 ```
 
-### 3.3 Component Responsibilities & Estimated Sizes
-- **`openai_completion_client_impl` (~400 lines)**:
-  - Manages `OpenAI` client configuration and completions invocations.
-  - Builds OpenAI function schemas from `tool_provider.ToolManager`.
-  - Executes heuristic `_repair_json` and truncations handling.
-  - Injects `TRUNCATED` recovery sentinels into partial code edit arguments.
-- **`openai_driver_impl` (~450 lines)**:
-  - Executes the conversational turn loop (`turns < limit`).
-  - Enforces `loop_guard` repetition limits.
-  - Dispatches tool invocations to `tool_provider.ToolManager`.
-  - Appends assistant/tool messages to `loop_conversation.Conversation`.
-  - Formats run transcripts and determines final `LoopOutcome`.
+1. **`openai_completion_client_impl.py` (~400 lines)**:
+   - Encapsulates OpenAI SDK client calls, tool schema conversion, and JSON repair for truncated model outputs.
+   - Injects `raise NotImplementedError("TRUNCATED_...")` recovery sentinels.
+2. **`openai_driver_impl.py` (~450 lines)**:
+   - Executes turn loops, bounds iterations, invokes `tool_mgr`, and logs token usage.
 
 ---
 
-## 4. Decomposing `bazel_node_config_impl.py` (983 Lines $\to$ 2 Components)
+## 5. Deconstructing `support/lib/` into Cleanroom Packages
 
-### 4.1 Concrete Line Inventory & The "Verification Check" Fallacy
-A superficial inspection might suggest extracting verification checks. However, inspecting the actual code reveals:
-- **`_CommandVerificationCheck` is ONLY 28 lines** (lines 27–55)!
-- Its instantiation in `_load_per_node_info` is **only 11 lines** (lines 546–556)!
-Factoring out verification checks alone would yield a trivial ~40-line component while leaving `bazel_node_config_impl.py` at **940+ lines**.
-
-The actual line consumers in `bazel_node_config_impl.py` are:
-1. **Guide & Template Discovery Engine (Lines 64–133 & 247–443, 267 lines)**:
-   - `_parse_guide_markdown` (70 lines): Extracts sections, guidance text, and roles from guide markdown.
-   - Multi-variant guide resolution (197 lines): Searches for role guides across `BUILD_WORKSPACE_DIRECTORY`, `RUNFILES_DIR`, `TEST_SRCDIR`, package variants, and `update_python_with_ai/guides/`.
-   - Template content resolution (45 lines): Locates and loads template files across runfiles and workspace paths.
-2. **File Alias & Execroot Path Scrubbing (Lines 830–966, 137 lines)**:
-   - `AliasManager`: Maps `BoundFile` instances to package-relative aliases.
-   - Regex-based path scrubber (`_EXECROOT_PATTERN`, `_WORKSPACE_PATTERN`): Strips Bazel execroot paths from compiler and linter outputs to maintain clean, reproducible diagnostics.
-3. **Node Configuration & Dependency Graph Closure (Lines 134–246, 444–574, 575–829, ~500 lines)**:
-   - `_load_per_node_info`: Reads `DagStorage` messages and resolves package paths.
-   - Star dependencies transitive closure: Computes transitive dependencies across the graph.
-   - Dependency classification: Separates `ReadOnlyFile` vs `ReadWriteFile`, binds `blame_targets`.
-   - `NodeConfig` singleton (lines 575–829, 255 lines): Caches node manifests, filters active roles, and evaluates target bounds.
-
-### 4.2 Target Factored Architecture
+Once the shared subsystems are factored, the ungrounded code in `support/lib/` cleanly partitions into formal Cleanroom packages:
 
 ```mermaid
-flowchart LR
-    subgraph Bazel_Decomposition["Decomposed parts/bazel Implementations"]
-        RES["bazel_resource_resolver_impl.py<br/><b>~450 lines</b><br/>(Guide discovery, markdown parser, template loader,<br/>AliasManager, execroot regex scrubbing)"]
-        CFG["bazel_node_config_impl.py<br/><b>~500 lines</b><br/>(NodeConfig singleton, star dependency closure,<br/>bound file classification, verification runner)"]
+flowchart TD
+    subgraph UngroundedLegacy ["support/lib/ Monoliths (13,736 lines)"]
+        CleanWS["cleanroom_workspace_tool.py (4,104 lines)"]
+        CleanRole["cleanroom_role_tool.py (883 lines)"]
+        SrcMeta["src_metadata.py (508 lines)"]
+        Linters["build_lint_common.py & concrete linters (6,799 lines)"]
+        Cov["evaluate_coverage.py (554 lines)"]
     end
 
-    CFG --> RES
+    subgraph FormalParts ["Formal Cleanroom Packages (update_with_ai/parts/)"]
+        P_Meta["parts/src_metadata (~500 lines)"]
+        P_WS["parts/workspace (~1,200 lines)"]
+        P_Role["parts/role (~450 lines)"]
+        P_Lint["parts/linter (~2,800 lines)"]
+        P_Cov["parts/coverage (~550 lines)"]
+    end
+
+    SrcMeta ==> P_Meta
+    CleanWS ==>|"Provisioning, stubs, chmod 444"| P_WS
+    CleanRole ==>|"In-workspace CLI entrypoints"| P_Role
+    Linters ==>|"Decomposed AST parsing & rules"| P_Lint
+    Cov ==> P_Cov
 ```
 
-### 4.3 Component Responsibilities & Estimated Sizes
-- **`bazel_resource_resolver_impl` (~450 lines)**:
-  - `_parse_guide_markdown`: Parses guide markdown structure.
-  - Guide file resolver: Searches runfiles, workspace, and guide directories.
-  - Template content loader: Resolves template content from runfiles.
-  - `AliasManager`: Manages file aliases, bound paths, and scrubs execroot paths from diagnostics.
-- **`bazel_node_config_impl` (~500 lines)**:
-  - `NodeConfig` singleton: Manages per-node caches, active units, and role queries.
-  - Dependency traversal: Computes star dependency closures and blame targets.
-  - Command verification: Runs subprocess verification checks under workspace environment.
+### 5.1 `parts/workspace`: Clean Workspace Sandboxing (~1,200 Lines)
+The core responsibility of `parts/workspace` is operating-system-level double-blind sandboxing:
+- **Workspace Provisioning**: Commissioning and decommissioning sibling workspace directories (`../role_workspaces/<ws>_<role>_<dir>/`).
+- **Read-Only Interface Stubs**: Synthesizing `chmod 444` interface stubs containing `raise NotImplementedError` for prohibited roles (e.g. test workspaces physically receiving stubs instead of real implementations).
+- **Hardened Permissions**: Applying kernel-level read-only protections (`chmod 444`) to specifications, configurations, and build manifests.
+- **Harness Configuration**: Writing `.cleanroom_role.json` descriptors and `.gemini/` configuration for Antigravity, DeepSeek Harness, and Goose.
+
+### 5.2 `parts/role`: In-Workspace Tool Entrypoints (~450 Lines)
+`parts/role` provides the thin, hermetic CLI tools deployed inside each role workspace:
+- `bin/get_work`: Queries ready work queue from `parts/dag` and prints structured task directions.
+- `bin/check_files`: Executes the role's verification command with compiler diagnostic noise scrubbing.
+- `bin/submit`: Validates verification and invokes the shared resolution engine in `parts/resolution`.
+- `bin/blame`: Validates critique formatting and invokes the shared blame engine in `parts/resolution`.
+- `bin/fail`: Logs failure reasons and invokes the shared fail engine in `parts/resolution`.
+
+#### 5.2.1 The Verification Tool: `bin/check_files` as the Single Canonical Command
+Providing both `bin/check_files` and a raw command (e.g. `cd $BUILD_WORKSPACE_DIRECTORY && bazel test ...`) confuses agents with multiple ways to perform the exact same task.
+
+**Design Decision: A Single, Canonical `bin/check_files`**:
+1. **No Competing Commands**: `bin/get_work` instructs the agent to run `bin/check_files` exclusively. The agent is never presented with an alternative direct shell command.
+2. **No Unnecessary Filter Flags**: Cleanroom units are small, focused, single-responsibility components whose test suites run in under one second. Agents do not need `--test_filter` or `--test_arg` to run partial tests; verifying the entire unit specification is the exact precondition required to submit.
+3. **Automatic Target Resolution**: `bin/check_files` automatically targets the active unit registered in `.cleanroom_role.json` or pending work. It requires zero path arguments.
+4. **Diagnostic Noise Scrubbing**: It executes the role's canonical `verify_template` via the shared `_clean_diag_noise` filter, discarding Bazel cache statistics and progress lines so the agent's context window receives only actionable errors or a clean passing confirmation.
+5. **Canonical Symmetric Workflow**:
+   ```
+   1. bin/get_work                      (Fetch ready unit and review prompt)
+   2. [edit source files]               (Author specs or code adhering to guide)
+   3. bin/check_files                   (Verify unit passes tests & linters)
+   4. bin/submit <target> "<summary>"   (Conclude task, stamp clean metadata)
+      OR
+      bin/blame <culprit> "<critique>"  (Attribute upstream contract defect)
+   ```
+
+### 5.3 `parts/linter`: Modular AST Analysis (~2,800 Lines)
+Decomposes `build_lint_common.py` (4,095 lines) and concrete linters (2,704 lines) into:
+- **`linter_ast_parser`**: Pure AST extraction, comment extraction, and docstring parsing.
+- **`linter_rule_checker`**: Reusable validation rules (zero-conjunction, closed-world imports, in-tier constraints, metadata structure).
+- **Role Linters**: Co-located rule sets for `high`, `low`, `grounding`, `lib`, and `test`.
 
 ---
 
-## 5. Specification-First Execution Plan
+## 6. Execution Roadmap & Dependency Phasing
 
-Decomposition follows Cleanroom's **Mandatory Specification-First (HLS-First) Rule**:
+To ensure continuous system stability and avoid breaking working interactive sessions, refactoring is partitioned into two distinct stages:
+- **Stage I: Refactor Existing In-Tree Parts** (Decoupling domain protocols from the in-place sandbox).
+- **Stage II: Bring Role Workspaces into Factored Parts** (Plugging physical directory workspaces into clean domain interfaces).
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant HLS as High-Level Spec (high/*.md)
-    participant Plan as Planning Canvas (planning/*.md)
-    participant Low as Low-Level Stub (low/*.pyi)
-    participant Ground as Grounding Proof (grounding/*.py)
-    participant Lib as Library Code (lib/*.py)
-    participant Test as Unit Tests (tests/*_test.py)
+flowchart TD
+    subgraph Stage1 ["Stage I: Refactor Existing In-Tree Parts (Decouple Domain into parts/control)"]
+        P0["<b>Phase 0: Quick Pruning & Deduplication</b><br/>• Prune 654 lines of dead converge code from cleanroom_workspace_tool<br/>• Deduplicate src_metadata.py between repos"]
+        P1["<b>Phase 1: Establish parts/control (~500 lines per unit)</b><br/>• Author control_coordinate, control_verification, control_work_scheduler, control_submit, control_attribution<br/>• Delegate sandbox tools to parts/control (shrinking sandbox_run_control from 2,159 to ~400 lines)"]
+        P2["<b>Phase 2: Modernize parts/dag</b><br/>• Upgrade dag_subgraph_impl with dynamic role ordering<br/>• Add missing roles: planning, grounding, grounding_qa"]
+        P3["<b>Phase 3: Decompose In-Tree Monoliths</b><br/>• Decompose bazel_node_config_impl (extract bazel_resource_resolver_impl)<br/>• Decompose openai_driver_impl (extract openai_completion_client_impl)"]
+    end
 
-    Note over HLS,Test: Stage 1: Author New Factored Interfaces
-    HLS->>Plan: Specify new component semantics & intent
-    Plan->>Low: Define typed stubs with INVARIANTS/PRE/POST
-    Low->>Ground: Construct static feasibility proof
-    Ground->>Lib: Implement factored interface
-    Lib->>Test: Author contract tests
+    subgraph Stage2 ["Stage II: Bring Role Workspaces into Factored Parts"]
+        P4["<b>Phase 4: Formalize parts/workspace</b><br/>• Migrate workspace sandboxing & stubs into parts/workspace<br/>• Deploy bin/* CLI tools calling parts/control directly"]
+        P5["<b>Phase 5: Modularize Linters into parts/linter</b><br/>• Factor build_lint_common into AST parser & rules<br/>• Co-locate role validator rule sets"]
+        P6["<b>Phase 6: Multi-Harness Subagent Orchestration</b><br/>• Deploy Zero-Execution Coordinator across Antigravity, dsh, Goose"]
+    end
 
-    Note over HLS,Test: Stage 2: Refactor Implementation Modules
-    HLS->>Plan: Align upstream contracts
-    Plan->>Low: Update method signatures
-    Low->>Ground: Update proof bindings
-    Ground->>Lib: Partition monolith into target components
-    Lib->>Test: Run Bazel test suite (194 tests)
+    P0 --> P1
+    P1 --> P2
+    P2 --> P3
+    P3 --> P4
+    P4 --> P5
+    P5 --> P6
 ```
 
-### Phased Sequencing
-1. **Phase 1: `bazel_node_config_impl` $\to$ 2 components (`bazel_resource_resolver_impl` + `bazel_node_config_impl`)**:
-   - Extract `AliasManager`, guide parsing, runfiles search, and diagnostics scrubbing (~450 lines) into `bazel_resource_resolver_impl`.
-   - Leaves `bazel_node_config_impl` at a focused ~500 lines.
-2. **Phase 2: `openai_driver_impl` $\to$ 2 components (`openai_completion_client_impl` + `openai_driver_impl`)**:
-   - Extract JSON repair, completion client, tool schema builder, and truncation recovery (~400 lines) into `openai_completion_client_impl`.
-   - Leaves `openai_driver_impl` as a clean turn orchestrator (~450 lines).
-3. **Phase 3: `sandbox_run_control_impl` $\to$ 4 components**:
-   - Step 3.1: Extract resolution triad (`SubmitTool`, `FailTool`, `BlameTool`) $\to$ `sandbox_resolution_tools_impl` (~680 lines).
-   - Step 3.2: Extract `CheckFilesTool` and verification evaluation $\to$ `sandbox_verification_checker_impl` (~380 lines).
-   - Step 3.3: Extract `GetWorkTool`, `AdvanceTool`, and task prompt formatting $\to$ `sandbox_workflow_tools_impl` (~410 lines).
-   - Step 3.4: Streamline `sandbox_run_controller_impl` (~380 lines).
-4. **Phase 4: Full Verification**:
-   - Update subsystem assemblies (`sandbox_asm`, `bazel_asm`, `loop_asm`).
-   - Run `bazel test //update_with_ai/... //update_python_with_ai/...` to guarantee zero regressions.
+### Stage I: Refactor Existing In-Tree Parts
+
+#### Phase 0: Prune Dead Code & Deduplicate `src_metadata` (Immediate, Zero Risk)
+1. Delete `converge_role_workspace()` (541 lines) and `cleanroom_sync()` (113 lines) from `cleanroom_workspace_tool.py`.
+2. Move `src_metadata.py` into `update_with_ai/parts/src_metadata/`, replacing the copy in `update_python_with_ai/support/lib/src_metadata.py` with an import or symlink.
+3. Verify that all Bazel tests and `bin/cleanroom` commands continue passing.
+
+#### Phase 1: Establish `parts/control` and Delegate from `parts/sandbox`
+1. Author HLS, Planning, Low, and Grounding specifications for **`update_with_ai/parts/control`**, partitioned into 5 focused units (~500 lines each):
+   - `control_coordinate` (~350 lines): Coordinator facade and session state manager.
+   - `control_verification` (~400 lines): Dual-mode verification checker (`check_files`), diagnostic noise scrubbing, file hash caching.
+   - `control_work_scheduler` (~450 lines): Dual-mode work scheduler (`get_work` for subgraph or directory scope), task prompt synthesis.
+   - `control_submit` (~400 lines): Verification gating, change summary rules, in-band metadata stamping, DAG clean resolution.
+   - `control_attribution` (~450 lines): Single-paragraph blame validation, feedback injection, failure diagnostics.
+2. Refactor `sandbox_run_control_impl.py`:
+   - Shrinks from **2,159 lines down to ~400 lines**.
+   - `SubmitTool`, `BlameTool`, `FailTool`, `CheckFilesTool`, and `GetWorkTool` become thin adapters passing LLM parameter bindings to `parts/control`.
+   - Retains strictly in-process turn orchestration, in-memory file locking, and `AdvanceTool` guide stepping.
+
+#### Phase 2: Modernize `parts/dag`
+1. Update `parts/dag/lib/dag_subgraph_impl.py` to replace the hardcoded 6-role order with dynamic phase ordering (`compute_role_phase_order`) derived from role definitions in `BUILD.bazel`.
+2. Add support for all modern Cleanroom roles: `high`, `planning`, `low`, `grounding`, `grounding_qa`, `lib`, `test`, `qa`, and `coverage`.
+3. Verify that DAG topological sorting and batch ready-node calculation correctly handle modern role pipelines.
+
+#### Phase 3: Decompose Other In-Tree Monoliths
+1. Decompose `bazel_node_config_impl.py` into `bazel_resource_resolver_impl.py` (guide/template parsing, file aliases, execroot path scrubbing) and `bazel_node_config_impl.py` (manifest caching, dependency closure).
+2. Decompose `openai_driver_impl.py` into `openai_completion_client_impl.py` (completions client, JSON repair, truncations recovery) and `openai_driver_impl.py` (turn orchestration, loop guard, transcript logging).
+
+---
+
+### Stage II: Bring Role Workspaces into Factored Parts
+
+#### Phase 4: Formalize `parts/workspace` & `parts/role`
+1. Author HLS, Planning, Low, and Grounding specifications for `parts/workspace` and `parts/role`.
+2. Migrate workspace directory commissioning, `chmod 444` stub synthesis, permissions hardening, and `.cleanroom_role.json` generation into `parts/workspace/lib/`.
+3. Migrate in-workspace CLI tools (`bin/get_work`, `bin/submit`, `bin/blame`, `bin/fail`) into `parts/role/lib/`, directly calling the shared resolution engine from Phase 1 and DAG engine from Phase 2.
+4. Replace `cleanroom_workspace_tool.py` and `cleanroom_role_tool.py` in `support/lib` with minimal bootstrap wrappers.
+
+#### Phase 5: Modularize Linters into `parts/linter`
+1. Factor `build_lint_common.py` into `parts/linter` (`linter_ast_parser`, `linter_rule_checker`, `linter_reporter`).
+2. Co-locate concrete role linters (`high_lint`, `low_lint`, `grounding_lint`, `lib_lint`, `test_lint`) into `parts/linter`.
+
+#### Phase 6: Multi-Harness Subagent Orchestration
+1. With single-responsibility, grounded packages in place, implement the Zero-Execution Coordinator as specified in [`subagent_driven_cleanroom_workspaces_todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md).
+2. Wire up harness adapters for **Google Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose**, leveraging DeepSeek-V4 Flash economics and side-by-side benchmarking.
+
+---
+
+## 7. Architecture Ledger & Net Impact
+
+| Dimension | Before Modularization | After Modularization | Net Impact |
+| :--- | :--- | :--- | :--- |
+| **Ungrounded Code in `support/lib/`** | 13,736 lines across 15 files | **< 300 lines** (minimal entrypoint bootstrap stubs) | **98% reduction** in ungrounded code. |
+| **Monolithic God-Files (> 1,500 lines)** | • `cleanroom_workspace_tool.py`: 4,104 lines<br/>• `build_lint_common.py`: 4,095 lines<br/>• `sandbox_run_control_impl.py`: 2,159 lines | **0 files > 800 lines** | Completely eliminates all three largest monoliths in repo. |
+| **Dead / Legacy Code** | ~654 lines of obsolete `converge` and buffer file sync | **0 lines** (completely pruned in Phase 0) | Immediate removal of dead technical debt. |
+| **Code Duplication (DAG & Resolution)** | ~2,500 lines duplicated between `support/lib` and `parts/` | **0 lines** (unified `parts/resolution`, `parts/dag`, `parts/src_metadata`) | Single source of truth for resolution, scheduling, and metadata. |
+| **Cleanroom Workspaces Support** | Fragile integration relying on ungrounded scripts and duplicate logic | **100% supported by formal, mathematically grounded parts** | Workspaces become first-class citizens of Cleanroom architecture. |

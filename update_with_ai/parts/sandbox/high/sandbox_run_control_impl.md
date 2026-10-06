@@ -7,7 +7,7 @@ CODE_HASH: 9d070541868a
 
 # sandbox_run_control_impl implementation component
 
-imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config, template_format, agent_config, dag_subgraph, sandbox
+imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config, template_format, dag_subgraph, sandbox, control_coordinate, control_asm
 implements: sandbox_run_control
 
 ## Purpose
@@ -18,11 +18,11 @@ Autonomous agents reaching task completion require strict verification enforceme
 
 **Out of scope:** The sandbox_run_control_impl implementation component does not parse syntax trees or compute topological dependency schedules; these are handled by other components.
 
-**Delegated:** File storage, template materialization, and metadata mutation concerns are delegated to dag_storage.
+**Delegated:** File storage, template materialization, and metadata mutation concerns are delegated to dag_storage; session coordination, verification evaluation, work discovery, submission gating, and outcome attribution are delegated to control_coordinate.
 
 ## Types and Behavior
 
-Tools cannot be configured against non-role/agent-specific state. The run controller initializes by unconditionally installing the submit tool, fail tool, check files tool, get work tool, and blame tool for the agent session, installing the advance tool only when guide step mode is active, and obtaining verification checks and per-node blame targets from node config. Verification checks exposed by the run controller include the session verification checks from node config.
+Tools cannot be configured against non-role/agent-specific state. The run controller initializes by unconditionally installing the submit tool, fail tool, check files tool, get work tool, and blame tool for the agent session, installing the advance tool only when guide step mode is active, obtaining verification checks and per-node blame targets from node config, and delegating active target tracking, verification evaluation, submission gating, defect attribution, and work discovery to control_coordinate. Verification checks exposed by the run controller include the session verification checks from node config.
 
 Evaluation of verification checks for an active node is cached alongside the edit manager file hash of the target node read-write file. Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when the target read-write file hash has changed since the previous evaluation. When the target read-write file hash has not changed since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
 
@@ -66,9 +66,7 @@ A resolve tool:
 
 - Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
 
-- Produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when all active nodes are resolved and mcp mode is inactive.
-
-- Produces a non-terminating response with a reminder to call the get work tool when all active nodes are resolved and mcp mode is active.
+- Produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when all active nodes are resolved.
 
 The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter, and shares a constant suppression key `submit`. Executing the submit tool updates verification results if outdated.
 

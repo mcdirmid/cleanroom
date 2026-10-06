@@ -18,7 +18,7 @@ from support.lib.grounding_support import (
     value,
     only_elem,
 )
-from parts.agent.grounding import agent_config, agent_file_alias, agent_node_config
+from parts.agent.grounding import agent_file_alias, agent_node_config
 from parts.core.grounding import filesystem_ext, file_paths
 from parts.dag.grounding import dag_storage
 from parts.sandbox.grounding import (
@@ -154,16 +154,10 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, InTier[AgentSessionTier]):
     def initialize(self) -> None:
         """
         COVERED:
-        - WHEN mcp mode is inactive, MUST install the view file tool for the agent session.
-          - Condition knowledge: resolve AgentConfig and check not agent_cfg.is_mcp_mode.
+        - MUST install the view file tool for the agent session.
           - Consequent knowledge: resolve ToolManager and invoke tool_mgr.install_tool(self).
-        - WHEN mcp mode is active, MUST install no read tools.
-          - Condition knowledge: check agent_cfg.is_mcp_mode.
         - MUST omit the search tool."""
-        agent_cfg = self.get_singleton(agent_config.AgentConfig)
         tool_mgr = self.get_singleton(tool_provider.ToolManager)
-
-        _mcp_mode: bool = agent_cfg.is_mcp_mode
         tool_mgr.install_tool(self)
         raise NotImplementedError
 

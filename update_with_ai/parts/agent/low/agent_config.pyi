@@ -45,11 +45,6 @@ class AgentConfig(InTier[SystemTier], Protocol):
         ...
 
     @property
-    def is_mcp_mode(self) -> bool:
-        """Indicates whether the agent should operate in mcp mode."""
-        ...
-
-    @property
     def supersede_arg_keep(self) -> SupersedeArgKeepLimit:
         """Trailing character retention limit for string arguments on superseded tool calls."""
         ...

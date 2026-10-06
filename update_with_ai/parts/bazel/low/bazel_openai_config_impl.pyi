@@ -46,11 +46,6 @@ class AgentConfig(agent_config.AgentConfig, InTier[SystemTier]):
 
     @property
     @override
-    def is_mcp_mode(self) -> bool:
-        ...
-
-    @property
-    @override
     def supersede_arg_keep(self) -> agent_config.SupersedeArgKeepLimit:
         ...
 

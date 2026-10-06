@@ -16,23 +16,29 @@ from parts.dag.grounding import dag_config, dag_storage, dag_subgraph
 DagNode = dag_storage.DagNode
 
 
-def _role_tier(role_address: str) -> int:
-    name: str = role_address.split(":")[-1].strip().lower()
-    role_order: Dict[str, int] = {
-        "high": 0,
-        "low": 1,
-        "lib": 2,
-        "test": 3,
-        "qa": 4,
-        "coverage": 5,
-    }
-    _val: int = role_order.get(name, 100)
+def _compute_role_tiers(
+    nodes: Set[DagNode], storage: dag_storage.DagStorage
+) -> Dict[str, int]:
+    _tiers: Dict[str, int] = {}
     raise NotImplementedError
 
 
-def _node_sort_key(n: DagNode) -> tuple[int, str, str]:
+def _role_tier(role_address: str, role_tiers: Optional[Dict[str, int]] = None) -> int:
+    name: str = (
+        role_address.split(":")[-1].strip().lower()
+        if ":" in role_address
+        else role_address.strip().lower()
+    )
+    _tiers: Dict[str, int] = role_tiers if role_tiers is not None else {}
+    _val: int = _tiers.get(name, 0)
+    raise NotImplementedError
+
+
+def _node_sort_key(
+    n: DagNode, role_tiers: Optional[Dict[str, int]] = None
+) -> tuple[int, str, str]:
     _key: tuple[int, str, str] = (
-        _role_tier(str(n.role_address)),
+        _role_tier(str(n.role_address), role_tiers),
         str(n.unit_address),
         str(n.role_address),
     )
@@ -50,6 +56,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
     def __init__(self) -> None:
         self._target: Optional[DagNode] = None
         self._nodes: Set[DagNode] = set()
+        self._role_tiers: Dict[str, int] = {}
         self._order: List[DagNode] = []
         self._visits: Dict[DagNode, int] = {}
 
@@ -63,7 +70,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
           - Condition knowledge: evaluate in-degrees and neighbor mappings across target subgraph.
           - Consequent knowledge: populate self._order.
         - MUST break topological sorting ties by role tier depth first.
-          - Condition knowledge: evaluate role tier depth key via _role_tier(n.role_address).
+          - Condition knowledge: evaluate role tier depth key via _role_tier(n.role_address, self._role_tiers).
         - MUST break remaining topological sorting ties by unit address.
           - Condition knowledge: evaluate unit address key via n.unit_address."""
         storage: dag_storage.DagStorage = self.get_singleton(dag_storage.DagStorage)
@@ -72,11 +79,12 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
         _reachable_node: DagNode = sample_dep.node
 
         # Straight-line proof of tie-breaking evaluation
-        _sort_key_a: tuple[int, str, str] = _node_sort_key(target)
-        _sort_key_b: tuple[int, str, str] = _node_sort_key(_reachable_node)
+        _sort_key_a: tuple[int, str, str] = _node_sort_key(target, self._role_tiers)
+        _sort_key_b: tuple[int, str, str] = _node_sort_key(_reachable_node, self._role_tiers)
 
         self._target = target
         self._nodes = {target, _reachable_node}
+        self._role_tiers = _compute_role_tiers(self._nodes, storage)
         self._order = [target, _reachable_node]
         self._visits = {target: 0, _reachable_node: 0}
         raise NotImplementedError
@@ -105,10 +113,8 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
         - MUST bound batch size to the limit obtained from configuration.
           - Condition knowledge: access cfg.batch_size.
           - Consequent knowledge: limit batch slice to _batch_limit.
-        - MUST prioritize lib before test in role tier precedence.
-          - Condition knowledge: _role_tier("lib") < _role_tier("test").
-        - MUST prioritize test before qa in role tier precedence.
-          - Condition knowledge: _role_tier("test") < _role_tier("qa").
+        - MUST dynamically prioritize upstream roles before downstream roles based on role dependency depth in the graph.
+          - Condition knowledge: _tier_upstream < _tier_downstream derived from dynamic role tiers.
         - WHEN no dirty node in the target subgraph has all its dependencies clean, MUST return an empty sequence.
           - Consequent knowledge: return empty list []."""
         storage: dag_storage.DagStorage = self.get_singleton(dag_storage.DagStorage)
@@ -118,12 +124,11 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
         sample_node: DagNode = only_elem(self._order)
         _is_dirty: bool = storage.is_dirty(sample_node)
 
-        # Straight-line role tier precedence verification
-        _tier_lib: int = _role_tier("lib")
-        _tier_test: int = _role_tier("test")
-        _tier_qa: int = _role_tier("qa")
-        _lib_before_test: bool = _tier_lib < _tier_test
-        _test_before_qa: bool = _tier_test < _tier_qa
+        # Straight-line dynamic role tier precedence verification
+        _tiers_map: Dict[str, int] = {"upstream_role": 0, "downstream_role": 1}
+        _tier_upstream: int = _role_tier("upstream_role", _tiers_map)
+        _tier_downstream: int = _role_tier("downstream_role", _tiers_map)
+        _upstream_before_downstream: bool = _tier_upstream < _tier_downstream
 
         _empty_batch: Sequence[DagNode] = []
         _batch: Sequence[DagNode] = [sample_node]

@@ -174,6 +174,8 @@ pyright_library(
         "//update_with_ai/parts/agent/grounding:agent_file_alias",
         "//update_with_ai/parts/agent/grounding:agent_node_config",
         "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/control/grounding:control_asm",
+        "//update_with_ai/parts/control/grounding:control_coordinate",
         "//update_with_ai/parts/dag/grounding:dag_config",
         "//update_with_ai/parts/dag/grounding:dag_storage",
         "//update_with_ai/parts/dag/grounding:dag_subgraph",

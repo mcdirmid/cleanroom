@@ -7,7 +7,7 @@ CODE_HASH: 500a169c0847
 
 # sandbox_file_reader_impl implementation component
 
-imports: agent_session, filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config, template_format, sandbox_file_editor, file_paths
+imports: agent_session, filesystem_ext, tool_provider, agent_file_alias, agent_node_config, template_format, sandbox_file_editor, file_paths
 implements: sandbox_file_reader
 
 ## Purpose
@@ -22,7 +22,7 @@ Autonomous agents require structured access to workspace files, but naive whole-
 
 The read manager exposes declared read-only files and read-write files to anchor access permissions to target boundaries.
 
-The view file tool is named `view_file`, accepting a file alias path parameter to read declared workspace files. Tool availability depends on session interaction mode: in standard mode when mcp mode is inactive, the view file tool is installed for the agent session to keep agent context focused on declared files; when mcp mode is active, external protocol servers manage tools directly, so tool installation is omitted. The search tool is omitted from installation.
+The view file tool is named `view_file`, accepting a file alias path parameter to read declared workspace files. The view file tool is installed for the agent session to keep agent context focused on declared files. The search tool is omitted from installation.
 
 Tool execution:
 

@@ -487,8 +487,8 @@ class MockSandbox:
 class MockAgentConfig:
     tier = agent_session
 
-    def __init__(self, is_mcp_mode: bool = False) -> None:
-        self.is_mcp_mode = is_mcp_mode
+    def __init__(self) -> None:
+        pass
 
 
 class MockTemplateFormatter:
@@ -554,7 +554,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.edit_mgr = MockEditManager()
         self.role_cfg = MockRoleConfig(node_cfg=self.node_cfg)
         self.sb = MockSandbox()
-        self.agent_cfg = MockAgentConfig(is_mcp_mode=False)
+        self.agent_cfg = MockAgentConfig()
 
         self.registry.register_instance(
             self.tool_mgr, keys=[ToolManager], tier=agent_session
@@ -1082,7 +1082,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
             # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
             resp = submit.execute_tool(b)
 
             self.assertFalse(resp.is_failed)
@@ -1109,7 +1109,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
             # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
             # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
             resp = fail_tool.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
@@ -1182,7 +1182,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
             # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
             # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
             resp_val = blame_tool.execute_tool(b_valid)
             self.assertFalse(resp_val.is_failed)
             self.assertTrue(resp_val.is_terminated)
@@ -1198,7 +1198,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
             # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
             # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
             resp_leg = blame_tool.execute_tool(b_legacy)
             self.assertFalse(resp_leg.is_failed)
             self.assertTrue(resp_leg.is_terminated)
@@ -1282,7 +1282,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
             # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
             # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
             resp5 = submit.execute_tool(b_no_target)
             self.assertFalse(resp5.is_failed)
             self.assertTrue(resp5.is_terminated)
@@ -1363,7 +1363,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # 3. Failing when only 1 unsubmitted target remains defaults to that target
             # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
             # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
             resp2 = fail_tool.execute_tool(b_no_target)
             self.assertTrue(resp2.is_failed)
             self.assertTrue(resp2.is_terminated)
@@ -1466,7 +1466,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
             # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
             resp_ok3 = blame_tool.execute_tool(b_ok3)
             self.assertFalse(resp_ok3.is_failed)
             self.assertTrue(resp_ok3.is_terminated)
@@ -1964,7 +1964,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # 4. Now node1 is submitted; exactly one unsubmitted node remains (node2) -> defaults to node2
             # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
             # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
             resp_sub_rw2 = submit.execute_tool(b_empty)
             self.assertFalse(resp_sub_rw2.is_failed)
             self.assertTrue(resp_sub_rw2.is_terminated)
@@ -2014,7 +2014,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNone(rc.get_node_for_alias("unit2_qa.log"))
 
             # 5. Submit tool accepts unique filename
-            # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
             resp_sub = submit.execute_tool(
                 ActualParameterBindings(
                     bindings={
@@ -2029,7 +2028,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # 7. Fail tool accepts exact relative path for node2
             # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
             # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
             resp_fail = fail.execute_tool(
                 ActualParameterBindings(
                     bindings={
@@ -2040,59 +2039,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             self.assertFalse(resp_fail.is_failed)
             self.assertEqual(rc.get_node_state(node2), "FAILED")
-
-    def test_mcp_mode_non_terminating_resolutions(self) -> None:
-        """CUJ: In MCP mode, submit, fail, and blame produce non-terminating responses with a reminder to call get_work when all targets are resolved."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-        self.agent_cfg.is_mcp_mode = True
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
-            resp_sub = submit.execute_tool(
-                ActualParameterBindings(
-                    bindings={(submit.change_summary_parameter, "Added new feature")}
-                )
-            )
-            self.assertFalse(resp_sub.is_failed)
-            self.assertFalse(resp_sub.is_terminated)
-            self.assertIsNotNone(resp_sub.reminder)
-
-        # 2. Fail in MCP mode when all session targets resolved
-        self.setUp()
-        self.agent_cfg.is_mcp_mode = True
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            fail = scope.get_singleton(FailToolImpl)
-            # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
-            resp_fail = fail.execute_tool(
-                ActualParameterBindings(
-                    bindings={(fail.explanation_parameter, "Cannot solve bug")}
-                )
-            )
-            self.assertTrue(resp_fail.is_failed)
-            self.assertFalse(resp_fail.is_terminated)
-            self.assertIsNotNone(resp_fail.reminder)
-
-        # 3. Blame in MCP mode when all session targets resolved
-        self.setUp()
-        self.agent_cfg.is_mcp_mode = True
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            blame = scope.get_singleton(BlameToolImpl)
-            # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
-            resp_blame = blame.execute_tool(
-                ActualParameterBindings(
-                    bindings={
-                        (blame.blame_target_parameter, self.blame_target_file),
-                        (blame.explanation_parameter, "Broken type signature"),
-                    }
-                )
-            )
-            self.assertFalse(resp_blame.is_failed)
-            self.assertFalse(resp_blame.is_terminated)
-            self.assertIsNotNone(resp_blame.reminder)
 
     def test_get_work_tool_schema_and_open_targets_blocking(self) -> None:
         """CUJ: GetWorkTool schema defines name and max_batch_size parameter; execution fails when open session targets remain."""

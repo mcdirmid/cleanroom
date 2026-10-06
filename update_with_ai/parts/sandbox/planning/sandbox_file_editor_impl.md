@@ -20,8 +20,7 @@ Furthermore, the implementation tracks revision counters and emits structured di
 
 ### Contracts
 
-- The edit manager provides the replace file content tool when mcp mode is inactive. [provide_tool_when_mcp_inactive]
-- The edit manager installs no editing tools when mcp mode is active. [install_no_tools_when_mcp_active]
+- The edit manager provides the replace file content tool for the agent session. [provide_replace_file_content_tool]
 - The edit manager compares current workspace file content against their in-band code hash. [compare_current_against_code_hash]
 - The edit manager increments the file update revision whenever workspace files are updated. [increment_revision_on_file_update]
 - The edit manager computes the file hash by returning an MD5 hexadecimal digest of content read from the filesystem. [compute_md5_file_hash]

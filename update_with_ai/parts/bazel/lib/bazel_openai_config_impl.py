@@ -171,15 +171,6 @@ class _ConfigData:
             if "edit_delta_output" in data
             else os.environ.get("EDIT_DELTA_OUTPUT", "false").lower() in ("true", "1")
         )
-        self.is_mcp_mode = (
-            bool(data["mcp_mode"])
-            if "mcp_mode" in data
-            else (
-                os.environ.get("MCP_MODE")
-                or os.environ.get("CLEANROOM_MCP_MODE", "false")
-            ).lower()
-            in ("true", "1")
-        )
         self.node_visit_limit = (
             int(data["node_visit_limit"])
             if "node_visit_limit" in data
@@ -229,10 +220,6 @@ class AgentConfig(agent_config.AgentConfig, Singleton):
     @property
     def edit_delta_output(self) -> bool:
         return self._cfg.edit_delta_output
-
-    @property
-    def is_mcp_mode(self) -> bool:
-        return self._cfg.is_mcp_mode
 
     @property
     def supersede_arg_keep(self) -> agent_config.SupersedeArgKeepLimit:

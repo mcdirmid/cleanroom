@@ -47,8 +47,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST select dirty nodes that are contiguous in topological order.
-        - MUST prioritize lib before test in role tier precedence.
-        - MUST prioritize test before qa in role tier precedence.
+        - MUST dynamically prioritize upstream roles before downstream roles based on role dependency depth in the graph.
         - MUST start from the earliest ready dirty node in topological order.
         - MUST bound batch size to the limit obtained from configuration.
         - WHEN no dirty node in the target subgraph has all its dependencies clean, MUST return an empty sequence.

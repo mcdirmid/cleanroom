@@ -11,7 +11,6 @@
 import os
 import re
 from typing import Any, Mapping, Optional, Set, Type, Union, cast
-from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
 from . import sandbox_file_editor
@@ -169,16 +168,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
 
     def initialize(self) -> None:
         tm = get_singleton(tool_provider.ToolManager)
-        try:
-            cfg = get_singleton(agent_config.AgentConfig)
-            is_mcp = cfg.is_mcp_mode
-        except (
-            LookupError,
-            KeyError,
-        ):  # pragma: no cover (assumption: standard reader configuration)
-            is_mcp = False
-        if not is_mcp:
-            tm.install_tool(self)
+        tm.install_tool(self)
 
     @property
     def name(self) -> tool_provider.ToolName:

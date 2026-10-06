@@ -60,14 +60,6 @@ class AgentConfig(InTier[SystemTier], Protocol):
         raise NotImplementedError
 
     @property
-    def is_mcp_mode(self) -> bool:
-        """
-        DEFERRED:
-        - Indicates whether the agent should operate in mcp mode.
-        """
-        raise NotImplementedError
-
-    @property
     def supersede_arg_keep(self) -> SupersedeArgKeepLimit:
         """
         DEFERRED:

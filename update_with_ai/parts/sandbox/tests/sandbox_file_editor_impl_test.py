@@ -119,10 +119,8 @@ class MockAgentConfig:
     def __init__(
         self,
         edit_delta_output: bool = True,
-        is_mcp_mode: bool = False,
     ) -> None:
         self.edit_delta_output = edit_delta_output
-        self.is_mcp_mode = is_mcp_mode
 
 
 @dataclass(frozen=True)
@@ -299,21 +297,11 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         """CUJ: EditManager installs tools and materializes missing templates without overwriting existing files."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
-            # Requirement: The edit manager installs the replace file content tool into the tool manager when mcp mode is inactive, and installs no editing tools when mcp mode is active.
             # Requirement: [EditManager] The edit manager installs the replace file content tool.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
             # Verify the replace file content tool is named replace_file_content
             self.assertIn("replace_file_content", tool_names)
             self.assertNotIn("can_write", tool_names)
-
-            # When mcp mode is active, no editing tools are installed
-            self.agent_cfg.is_mcp_mode = True
-            self.tool_mgr.installed_tools.clear()
-            scope.get_singleton(EditManagerImpl).initialize()
-            tool_names_mcp = {t.name for t in self.tool_mgr.installed_tools}
-            # Requirement: The edit manager installs the replace file content tool into the tool manager when mcp mode is inactive, and installs no editing tools when mcp mode is active.
-            self.assertEqual(len(tool_names_mcp), 0)
-            self.assertNotIn("replace_file_content", tool_names_mcp)
 
             self.assertFalse(edit_mgr.has_modifications)
 

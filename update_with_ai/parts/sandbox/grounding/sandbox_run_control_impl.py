@@ -18,6 +18,7 @@ from support.lib.grounding_support import (
     only_elem,
 )
 from parts.agent.grounding import agent_file_alias, agent_node_config
+from parts.control.grounding import control_asm, control_coordinate
 from parts.dag.grounding import dag_config, dag_storage, dag_subgraph
 from parts.sandbox.grounding import sandbox_file_editor
 from parts.sandbox.grounding import sandbox_guide_delivery

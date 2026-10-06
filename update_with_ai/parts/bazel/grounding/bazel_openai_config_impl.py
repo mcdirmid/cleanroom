@@ -65,15 +65,6 @@ class AgentConfig(agent_config.AgentConfig, InTier[SystemTier]):
         raise NotImplementedError
 
     @property
-    def is_mcp_mode(self) -> bool:
-        """
-        COVERED:
-        - Returns mcp mode flag.
-        """
-        _flag = False
-        raise NotImplementedError
-
-    @property
     def supersede_arg_keep(self) -> agent_config.SupersedeArgKeepLimit:
         """
         COVERED:

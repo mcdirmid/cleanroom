@@ -1,10 +1,7 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 1ea31c895f19
-# COVERAGE_AUDIT: 2026-10-05T20:52:01Z
-# QA_AUDIT: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-06T11:00:00Z
+# LAST_CHANGED: 2026-10-06T11:00:00Z
+# CHANGE: compute role tiers dynamically from graph dependencies
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in dag_subgraph_impl.pyi
@@ -22,25 +19,71 @@ from support.lib.lifecycle import (
 )
 
 
-def _role_tier(role_address: str) -> int:
+def _compute_role_tiers(
+    nodes: Set[dag_storage.DagNode], storage: dag_storage.DagStorage
+) -> Dict[str, int]:
+    role_deps: Dict[str, Set[str]] = {}
+    all_roles: Set[str] = set()
+
+    for n in nodes:
+        r_name = (
+            str(n.role_address).split(":")[-1].strip().lower()
+            if ":" in str(n.role_address)
+            else str(n.role_address).strip().lower()
+        )
+        all_roles.add(r_name)
+        if r_name not in role_deps:
+            role_deps[r_name] = set()
+        for dep in storage.get_dependencies(n):
+            if dep.node in nodes:
+                dep_r = (
+                    str(dep.node.role_address).split(":")[-1].strip().lower()
+                    if ":" in str(dep.node.role_address)
+                    else str(dep.node.role_address).strip().lower()
+                )
+                all_roles.add(dep_r)
+                if dep_r != r_name:
+                    role_deps[r_name].add(dep_r)
+
+    memo: Dict[str, int] = {}
+    visiting: Set[str] = set()
+
+    def _get_depth(role: str) -> int:
+        if role in memo:
+            return memo[role]
+        if role in visiting:
+            return 0
+        visiting.add(role)
+        deps = role_deps.get(role, set())
+        if not deps:
+            depth = 0
+        else:
+            depth = 1 + max(_get_depth(d) for d in deps)
+        visiting.remove(role)
+        memo[role] = depth
+        return depth
+
+    for r in all_roles:
+        _get_depth(r)
+
+    return memo
+
+
+def _role_tier(role_address: str, role_tiers: Optional[Dict[str, int]] = None) -> int:
     name = (
         role_address.split(":")[-1].strip().lower()
         if ":" in role_address
         else role_address.strip().lower()
     )
-    role_order = {
-        "high": 0,
-        "low": 1,
-        "lib": 2,
-        "test": 3,
-        "qa": 4,
-        "coverage": 5,
-    }
-    return role_order.get(name, 100)
+    if role_tiers is not None:
+        return role_tiers.get(name, 0)
+    return 0
 
 
-def _node_sort_key(n: dag_storage.DagNode) -> tuple[int, str, str]:
-    return (_role_tier(n.role_address), n.unit_address, n.role_address)
+def _node_sort_key(
+    n: dag_storage.DagNode, role_tiers: Optional[Dict[str, int]] = None
+) -> tuple[int, str, str]:
+    return (_role_tier(n.role_address, role_tiers), n.unit_address, n.role_address)
 
 
 class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
@@ -49,6 +92,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
     def __init__(self) -> None:
         self._target: Optional[dag_storage.DagNode] = None
         self._nodes: Set[dag_storage.DagNode] = set()
+        self._role_tiers: Dict[str, int] = {}
         self._order: List[dag_storage.DagNode] = []
         self._visits: Dict[dag_storage.DagNode, int] = {}
 
@@ -66,9 +110,15 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
         return visited
 
     def _topological_sort(
-        self, nodes: Set[dag_storage.DagNode], storage: dag_storage.DagStorage
+        self,
+        nodes: Set[dag_storage.DagNode],
+        storage: dag_storage.DagStorage,
+        role_tiers: Dict[str, int],
     ) -> List[dag_storage.DagNode]:
-        sorted_nodes = sorted(nodes, key=_node_sort_key)
+        def sort_key(n: dag_storage.DagNode) -> tuple[int, str, str]:
+            return _node_sort_key(n, role_tiers)
+
+        sorted_nodes = sorted(nodes, key=sort_key)
         in_degree: Dict[dag_storage.DagNode, int] = {n: 0 for n in sorted_nodes}
         adj: Dict[dag_storage.DagNode, List[dag_storage.DagNode]] = {
             n: [] for n in sorted_nodes
@@ -76,14 +126,14 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
 
         for n in sorted_nodes:
             for dep in sorted(
-                storage.get_dependencies(n), key=lambda d: _node_sort_key(d.node)
+                storage.get_dependencies(n), key=lambda d: sort_key(d.node)
             ):
                 if dep.node in nodes:
                     adj[dep.node].append(n)
                     in_degree[n] += 1
 
         ready = sorted(
-            [n for n, deg in in_degree.items() if deg == 0], key=_node_sort_key
+            [n for n, deg in in_degree.items() if deg == 0], key=sort_key
         )
         order: List[dag_storage.DagNode] = []
 
@@ -97,7 +147,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
                     newly_ready.append(neighbor)
             for nr in newly_ready:
                 ready.append(nr)
-            ready.sort(key=_node_sort_key)
+            ready.sort(key=sort_key)
 
         return order
 
@@ -105,7 +155,8 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
         storage = get_singleton(dag_storage.DagStorage)
         self._target = target
         self._nodes = self._collect_subgraph(target, storage)
-        self._order = self._topological_sort(self._nodes, storage)
+        self._role_tiers = _compute_role_tiers(self._nodes, storage)
+        self._order = self._topological_sort(self._nodes, storage, self._role_tiers)
         self._visits = {n: 0 for n in self._nodes}
 
     def is_complete(self) -> bool:
@@ -137,9 +188,13 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
         if not ready_candidates:
             return []
 
-        best_tier = min(_role_tier(c.role_address) for c in ready_candidates)
+        best_tier = min(
+            _role_tier(c.role_address, self._role_tiers) for c in ready_candidates
+        )
         curr = next(
-            c for c in ready_candidates if _role_tier(c.role_address) == best_tier
+            c
+            for c in ready_candidates
+            if _role_tier(c.role_address, self._role_tiers) == best_tier
         )
 
         batch: List[dag_storage.DagNode] = [curr]

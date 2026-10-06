@@ -110,8 +110,8 @@ class MockBooleanConverter:
 class MockAgentConfig:
     tier = agent_session
 
-    def __init__(self, is_mcp_mode: bool = False) -> None:
-        self.is_mcp_mode = is_mcp_mode
+    def __init__(self) -> None:
+        pass
 
 
 @dataclass(frozen=True)
@@ -271,7 +271,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         }
         self.template_formatter = MockTemplateFormatter()
         self.edit_mgr = MockEditManager()
-        self.agent_cfg = MockAgentConfig(is_mcp_mode=False)
+        self.agent_cfg = MockAgentConfig()
         self.node_cfg = MockNodeConfig(
             ro_files={self.ro_file, self.ro_py_file, self.ro_pyi_file, self.ro_md_file},
             rw_files={self.rw_file},
@@ -315,7 +315,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         """CUJ: ReadManager installs tools and exposes declared files from NodeConfig."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             read_mgr = scope.get_singleton(ReadManagerImpl)
-            # Requirement: WHEN agent config mcp mode is inactive, MUST install the view file tool for the agent session.
+            # Requirement: [ReadManager] The read manager installs the view file tool.
             # Requirement: MUST omit the search tool.
             # Requirement: [ReadManager] The read manager installs the view file tool and search tool.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
@@ -324,15 +324,6 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             # Verify the search tool is omitted
             self.assertNotIn("search_files", tool_names)
             self.assertNotIn("can_read", tool_names)
-
-            # When mcp mode is active, no inspection tools are installed
-            self.agent_cfg.is_mcp_mode = True
-            self.tool_mgr.installed_tools.clear()
-            scope.get_singleton(ReadManagerImpl).initialize()
-            tool_names_mcp = {t.name for t in self.tool_mgr.installed_tools}
-            # Requirement: WHEN agent config mcp mode is active, MUST install no read tools.
-            self.assertEqual(len(tool_names_mcp), 0)
-            self.assertNotIn("view_file", tool_names_mcp)
 
             # Verify read manager exposes declared files from node config
             # Requirement: [ReadManager] The read manager exposes the session's set of read-only files.
@@ -660,33 +651,9 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             )
 
     def test_read_manager_initialization_tool_installation(self) -> None:
-        """CUJ: Verify ReadManager installs ViewFileTool when mcp mode is inactive and no inspection tools when active."""
-        reg_mcp = LifecycleRegistry()
-        __initialize__(reg_mcp)
-        reg_mcp.register_instance(
-            MockAgentConfig(is_mcp_mode=True), keys=[AgentConfig], tier=system
-        )
-        tm_mcp = MockToolManager()
-        reg_mcp.register_instance(tm_mcp, keys=[ToolManager], tier=agent_session)
-        reg_mcp.register_instance(
-            self.alias_mgr, keys=[AliasManager], tier=agent_session
-        )
-        reg_mcp.register_instance(self.node_cfg, keys=[NodeConfig], tier=agent_session)
-        reg_mcp.register_instance(self.edit_mgr, keys=[EditManager], tier=agent_session)
-        reg_mcp.register_instance(
-            self.template_formatter, keys=[TemplateFormatter], tier=agent_session
-        )
-        reg_mcp.register_instance(
-            self.bool_conv, keys=[IdentityParameterType], tier=agent_session
-        )
-
-        with enter_phase(agent_session, registry=reg_mcp) as scope:
-            # Requirement: WHEN agent config mcp mode is active, MUST install no read tools.
-            # Requirement: MUST omit the search tool.
-            self.assertEqual(len(tm_mcp.installed_tools), 0)
-
+        """CUJ: Verify ReadManager installs ViewFileTool."""
         with enter_phase(agent_session, registry=self.registry) as scope:
-            # Requirement: WHEN agent config mcp mode is inactive, MUST install the view file tool for the agent session.
+            # Requirement: MUST install the view file tool for the agent session.
             # Requirement: MUST omit the search tool.
             installed = self.tool_mgr.installed_tools
             self.assertEqual(len(installed), 1)

@@ -7,7 +7,7 @@ CODE_HASH: 9759e1465fa2
 
 # sandbox_file_reader_impl implementation component
 
-imports: agent_session, filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config, template_format, sandbox_file_editor, file_paths
+imports: agent_session, filesystem_ext, tool_provider, agent_file_alias, agent_node_config, template_format, sandbox_file_editor, file_paths
 implements: sandbox_file_reader
 
 ## Intent
@@ -21,8 +21,7 @@ By formatting lines with right-aligned line numbers, filtering metadata paragrap
 ### Contracts
 
 - The view file tool is named `view_file`. [view_file_name]
-- When mcp mode is inactive, the view file tool is installed for the agent session. [view_file_installed_non_mcp]
-- When mcp mode is active, view file tool installation is omitted. [view_file_omitted_mcp]
+- The view file tool is installed for the agent session. [view_file_installed]
 - The search tool is named `search_files`. [search_files_name]
 - The search tool is omitted from installation. [search_files_omitted]
 - The regex pattern parameter type converts a wire type string into a regex pattern. [convert_regex_pattern]
@@ -42,7 +41,7 @@ By formatting lines with right-aligned line numbers, filtering metadata paragrap
 
 ## Woven Contracts
 
-- When mcp mode is inactive, view_file is installed for the session, whereas installation is omitted when mcp mode is active. \[view_file_name, view_file_installed_non_mcp, view_file_omitted_mcp, tool_provider: [install_tools]\]
+- The view_file tool is installed for the agent session to provide structured file access. \[view_file_name, view_file_installed, tool_provider: [install_tools]\]
 - Search tool search_files is defined but omitted from installation across all session modes. [search_files_name, search_files_omitted]
 - Read file content formats lines with one-indexed right-aligned line numbers, filters metadata paragraphs, and renders markdown templates for read-only files. \[format_numbered_lines, filter_meta_paragraphs, render_markdown_templates, template_format: [format_template_text, substitute_bound_placeholders], filesystem_ext: [read_utf8_content]\]
 - Responses for read-write files carry suppression keys to supersede earlier turns, while read-only responses omit suppression keys and sanitize host paths. \[rw_response_suppression_key, ro_response_omit_suppression_key, ro_response_sanitize_paths, tool_provider: [supersede_by_key], agent_file_alias: [sanitize_mask_ws_paths, sanitize_mask_preceding_prefixes]\]

@@ -20,7 +20,7 @@ Unchecked writes to source code can introduce partial edits, exceed LLM window c
 
 ## Types and Behavior
 
-The edit manager provides the replace file content tool for the agent session when mcp mode is inactive, installs no editing tools when mcp mode is active, and provides a can write operation validating write access for a read-write file.
+The edit manager provides the replace file content tool for the agent session, and provides a can write operation validating write access for a read-write file.
 
 The edit manager exposes whether workspace file writes occurred during the session by comparing current workspace file content against their in-band code hash, tracks a file update revision that increments whenever workspace files are updated, and computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of the content. The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
 

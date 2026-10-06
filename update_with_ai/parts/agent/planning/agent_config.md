@@ -22,7 +22,6 @@ The component serves as a system-level configuration authority defining operatio
 - An agent config indicates whether the agent injects followups for tool calls.
 - An agent config indicates whether the agent can use step mode.
 - An agent config indicates whether the agent performs startup reads.
-- An agent config indicates whether the agent operates in mcp mode.
 - An agent config indicates whether the agent expects editing tools to produce delta output.
 
 ### Contracts

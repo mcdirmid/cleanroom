@@ -56,16 +56,7 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
 
     def initialize(self) -> None:
         tm = get_singleton(tool_provider.ToolManager)
-        try:
-            cfg = get_singleton(agent_config.AgentConfig)
-            is_mcp = cfg.is_mcp_mode
-        except (
-            LookupError,
-            KeyError,
-        ):  # pragma: no cover (assumption: standard non-mcp session)
-            is_mcp = False
-        if not is_mcp:
-            tm.install_tool(get_singleton(ReplaceFileContentTool))
+        tm.install_tool(get_singleton(ReplaceFileContentTool))
 
     def can_write(
         self, path: Union[agent_file_alias.RelativePath, agent_file_alias.FileAlias]
@@ -536,7 +527,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             LookupError,
             KeyError,
             AttributeError,
-        ):  # pragma: no cover (assumption: standard non-mcp session)
+        ):  # pragma: no cover (fallback if AgentConfig missing)
             delta_output = True
 
         content_msg = "Successfully replaced content."

@@ -51,7 +51,6 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
             "STEP_MODE",
             "STARTUP_READS",
             "INJECT_FOLLOWUPS",
-            "MCP_MODE",
             "RUNFILES_DIR",
             "BAZEL_RUNFILES",
             "BUILD_WORKSPACE_DIRECTORY",
@@ -86,8 +85,6 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
             self.assertTrue(agent_cfg.inject_followups)
             # Requirement: [AgentConfig] The agent config provides whether editing tools should produce delta output.
             self.assertFalse(agent_cfg.edit_delta_output)
-            # Requirement: [AgentConfig] The agent config provides whether the agent should operate in mcp mode.
-            self.assertFalse(agent_cfg.is_mcp_mode)
             # Requirement: [AgentConfig] The agent config provides the character retention limit bounding preserved string argument tails when tool responses are superseded.
             self.assertEqual(agent_cfg.supersede_arg_keep, 20)
             # Requirement: [OpenAIConfig] The openai config provides a temperature specifying the sampling temperature for model requests.
@@ -119,7 +116,6 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
         os.environ["STARTUP_READS"] = "0"
         os.environ["INJECT_FOLLOWUPS"] = "false"
         os.environ["EDIT_DELTA_OUTPUT"] = "true"
-        os.environ["MCP_MODE"] = "true"
         os.environ["SUPERSEDE_ARG_KEEP"] = "35"
         os.environ["NODE_VISIT_LIMIT"] = "42"
         os.environ["BATCH_SIZE"] = "3"
@@ -155,8 +151,6 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
             self.assertFalse(agent_cfg.inject_followups)
             # Requirement: [AgentConfig] The agent config provides whether editing tools should produce delta output.
             self.assertTrue(agent_cfg.edit_delta_output)
-            # Requirement: [AgentConfig] The agent config provides whether the agent should operate in mcp mode.
-            self.assertTrue(agent_cfg.is_mcp_mode)
             # Requirement: [AgentConfig] The agent config provides the character retention limit bounding preserved string argument tails when tool responses are superseded.
             self.assertEqual(agent_cfg.supersede_arg_keep, 35)
             # Requirement: [DagConfig] The dag config provides the node visit limit bounding node visits during graph cleaning.
@@ -182,7 +176,6 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
                 "session_start_reads": False,
                 "inject_followups": False,
                 "edit_delta_output": True,
-                "mcp_mode": True,
                 "supersede_arg_keep": 40,
                 "node_visit_limit": 450,
                 "batch_size": 4,
@@ -225,8 +218,6 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
                 self.assertFalse(agent_cfg.inject_followups)
                 # Requirement: [AgentConfig] The agent config provides whether editing tools should produce delta output.
                 self.assertTrue(agent_cfg.edit_delta_output)
-                # Requirement: [AgentConfig] The agent config provides whether the agent should operate in mcp mode.
-                self.assertTrue(agent_cfg.is_mcp_mode)
                 # Requirement: [AgentConfig] The agent config provides the character retention limit bounding preserved string argument tails when tool responses are superseded.
                 self.assertEqual(agent_cfg.supersede_arg_keep, 40)
                 # Requirement: [DagConfig] The dag config provides the node visit limit bounding node visits during graph cleaning.
