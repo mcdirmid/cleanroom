@@ -6,9 +6,12 @@
 > 
 > The codebase components implementing this architecture (`update_with_ai/parts/antigravity`, `update_with_ai/parts/mcp`, systems MCP runners, lifecycle hooks, and subagent boilerplate) have been decommissioned and removed.
 > 
+> **Superseded By**: Autonomous subagent workflows have been redesigned and superseded by [Subagent-Driven Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md), which drives Option 3's pre-confined workspaces via a zero-execution coordinator across Antigravity, DeepSeek Harness, and Goose.
+> 
 > Current active cleaning paradigms are documented in [Cleanroom Cleaning Paradigms](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleaning_paradigms.md):
 > - **Option 1 (Production Headless)**: Headless loop driving the OpenAI API (`update_with_ai/parts/loop`, `update_with_ai/parts/openai`).
 > - **Option 3 (Production Interactive Antigravity)**: Subagentless Cleanroom Workspaces with separate conversational chats in isolated sibling directories (`design-docs/subagentless_cleanroom_workspaces.md`).
+> - **Option 4 (Autonomous Multi-Harness Workspaces)**: Subagent-Driven Cleanroom Workspaces (`design-docs/subagent_driven_cleanroom_workspaces_todo.md`).
 
 ---
 
@@ -132,11 +135,12 @@ Instead of running subagents in a single folder with software guards, Cleanroom 
 4. **Zero-Sync In-Band Coordination (`bin/cleanroom`)**:
    - Changes and state are tracked via in-band comment headers (`LAST_CLEANED`, `LAST_CHANGED`, `FEEDBACK:`), with direct Bazel submissions and self-synchronizing `bin/get_work` managed via `bin/cleanroom`.
 
-### 4.3 Future Subagent Roadmap (If Subagents Return)
-If autonomous subagents are ever reconsidered in Antigravity:
-- **We will NOT resurrect Option 2's in-tree FastMCP server or shell-exec Python wrappers.**
-- **We will dispatch subagents into Option 3's pre-confined sibling workspaces.**
-- Subagents will execute within `../role_workspaces/<workspace-name>_<role>/`, where directory-level physical separation and `chmod 444` provide mathematical blindness naturally, without hooks, sentinels, or background daemons.
+### 4.3 Future Subagent Roadmap (Implemented & Superseded)
+The future subagent roadmap articulated here has now been formally specified and adopted in [Subagent-Driven Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md):
+- **We do NOT resurrect Option 2's in-tree FastMCP server or shell-exec Python wrappers.**
+- **We dispatch subagents into Option 3's pre-confined sibling workspaces.**
+- Subagents execute within `../role_workspaces/<workspace-name>_<role>_<dir>/`, where directory-level physical separation and `chmod 444` provide mathematical blindness naturally, without hooks, sentinels, or background daemons.
+- Coordination is provided by a **Zero-Execution Coordinator** that never edits code or runs tests, supported across **Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose** with low-cost **DeepSeek-V4 Flash** economics.
 
 ---
 

@@ -458,6 +458,10 @@ def run_get_work(
         print(f"\n  • [READY - {item['role'].upper()}] {item['target_file']}")
         for r in item["reasons"]:
             print(f"      - {r}")
+        if item.get("dependencies"):
+            print("      Dependencies:")
+            for dep in item["dependencies"]:
+                print(f"        - {dep}")
 
     if blocked_items:
         print(f"\nBlocked unit(s) ({len(blocked_items)} waiting on prerequisites):")
@@ -465,6 +469,10 @@ def run_get_work(
             print(f"\n  • [BLOCKED - {item['role'].upper()}] {item['target_file']}")
             for br in item.get("blocked_reasons", []):
                 print(f"      - {br}")
+            if item.get("dependencies"):
+                print("      Dependencies:")
+                for dep in item["dependencies"]:
+                    print(f"        - {dep}")
 
     if cleanroom_workspace_tool.is_auditor_role(role_name):
         print(

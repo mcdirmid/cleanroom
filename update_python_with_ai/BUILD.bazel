@@ -190,7 +190,7 @@ define_role(
     prompt_template = "Files are aligned according to the guide.",
     guide = "//update_python_with_ai/guides:qa",
     allows_step_mode = False,
-    star_role_deps = [":low", ":grounding"],
+    star_role_deps = [":low"],
     feedback_role_deps = [":lib", ":test"],
     workspace_files = PYTHON_WORKSPACE_FILES,
     tools = [],
@@ -208,7 +208,7 @@ define_role(
     guide = "//update_python_with_ai/guides:coverage",
     allows_step_mode = False,
     silent_role_deps = [":qa"],
-    star_role_deps = [":low", ":grounding"],
+    star_role_deps = [":low"],
     feedback_role_deps = [":lib", ":test"],
     workspace_files = PYTHON_WORKSPACE_FILES,
     tools = [

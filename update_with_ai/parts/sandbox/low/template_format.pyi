@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 31b65a6151b7
+# LAST_CLEANED: 2026-10-06T00:52:47Z
+# LAST_CHANGED: 2026-10-06T00:52:47Z
+# CHANGE: bind placeholders to angle bracket syntax from commonmark_ext
+# CODE_HASH: 304d2a93ae1d
 # --- END CLEANROOM METADATA ---
 
 """Template format low-level interface specification."""
@@ -33,7 +33,7 @@ class TemplateFormatter(InTier[AgentSessionTier], Protocol):
             The formatted text resulting from template evaluation.
 
         POSTCONDITIONS:
-        - MUST substitute parameter placeholders matching bound keys with their corresponding string representations.
+        - MUST substitute parameter placeholders matching bound keys with their corresponding string representations, recognizing angle-bracket placeholders (<parameter.path>) defined by commonmark_ext.
         - MUST preserve parameter placeholders whose keys are absent from the supplied parameters as unrendered placeholders.
         - WHEN a condition key in parameters is truthy or absent, MUST include enclosed conditional content.
         - WHEN a condition key in parameters is falsy, MUST omit enclosed conditional content.

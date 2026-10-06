@@ -1,13 +1,13 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: dd50c18e63bf
+LAST_CLEANED: 2026-10-06T00:52:38Z
+LAST_CHANGED: 2026-10-06T00:52:38Z
+CHANGE: import commonmark_ext and weave token contracts
+CODE_HASH: f1aa3d68dff4
 -->
 
 # template_format interface component
 
-imports: agent_session
+imports: agent_session, commonmark_ext
 
 ## Intent
 
@@ -35,6 +35,6 @@ By tolerating partial bindings and preserving unrendered placeholders, the templ
 
 ## Woven Contracts
 
-- When formatting template text, bound parameter placeholders are substituted while absent placeholders are preserved unrendered. [format_template_text_supplied, format_template_params_supplied, format_template_text, substitute_bound_placeholders, preserve_absent_placeholders]
-- Conditional blocks and line-suffix conditionals are included when condition keys are true or absent, and omitted when false. [eval_conditional_blocks, eval_suffix_conditionals, include_condition_true, include_condition_absent, omit_condition_false]
-- Loop blocks and line-suffix loops iterate over sequence collections, binding loop item variables for each repetition. [repeat_loop_blocks, repeat_suffix_loops, bind_loop_item_variables]
+- When formatting template text, bound parameter placeholders are substituted while absent placeholders are preserved unrendered. [format_template_text_supplied, format_template_params_supplied, format_template_text, substitute_bound_placeholders, preserve_absent_placeholders, commonmark_ext: [supply_markdown_text, parameter_placeholder_syntax]]
+- Conditional blocks and line-suffix conditionals are included when condition keys are true or absent, and omitted when false. [eval_conditional_blocks, eval_suffix_conditionals, include_condition_true, include_condition_absent, omit_condition_false, commonmark_ext: [html_comment_metadata]]
+- Loop blocks and line-suffix loops iterate over sequence collections, binding loop item variables for each repetition. [repeat_loop_blocks, repeat_suffix_loops, bind_loop_item_variables, commonmark_ext: [html_comment_metadata]]

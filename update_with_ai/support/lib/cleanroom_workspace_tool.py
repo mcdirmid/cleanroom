@@ -484,199 +484,31 @@ def _eval_ast_node(node: Any, env: Dict[str, Any]) -> Any:
         return None
 
 
-DEFAULT_ROLE_DEFINITIONS: Dict[str, Dict[str, Any]] = {
-    "high": {
-        "name": "high",
-        "label": "//update_python_with_ai:high",
-        "persona": "High-Level Spec Engineer",
-        "src_pattern": "{unit_dir}/high/{unit_name}.md",
-        "template": "//update_python_with_ai/templates:hls",
-        "guide": "//update_python_with_ai/guides:high_level_spec",
-        "allows_step_mode": True,
-        "role_deps": [],
-        "star_role_deps": [":high"],
-        "stub_role_deps": [],
-        "feedback_role_deps": [],
-        "tools": [
-            "update_python_with_ai/support/lib/high_lint.py",
-            "update_python_with_ai/support/lib/build_lint_common.py",
-        ],
-        "active_component_types": [
-            "implementation",
-            "assembly",
-            "interface",
-            "external",
-        ],
-        "verify_template": "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/support/lib/high_lint.py {unit_dir}/high/{unit_name}.md",
-    },
-    "planning": {
-        "name": "planning",
-        "label": "//update_python_with_ai:planning",
-        "persona": "Planning Engineer",
-        "src_pattern": "{unit_dir}/planning/{unit_name}.md",
-        "guide": "//update_python_with_ai/guides:high_to_planning",
-        "allows_step_mode": True,
-        "role_deps": [":high"],
-        "star_role_deps": [":planning"],
-        "stub_role_deps": [],
-        "feedback_role_deps": [":high"],
-        "tools": [
-            "update_with_ai/support/lib/build_lint_common.py",
-        ],
-        "active_component_types": [
-            "implementation",
-            "assembly",
-            "interface",
-            "external",
-        ],
-        "verify_template": "# Planning canvas verified against high_to_planning.md",
-    },
-    "low": {
-        "name": "low",
-        "label": "//update_python_with_ai:low",
-        "persona": "Low-Level Spec Engineer",
-        "src_pattern": "{unit_dir}/low/{unit_name}.pyi",
-        "guide": "//update_python_with_ai/guides:planning_to_low",
-        "allows_step_mode": True,
-        "role_deps": [":planning"],
-        "star_role_deps": [":low"],
-        "stub_role_deps": [],
-        "feedback_role_deps": [":planning"],
-        "tools": [
-            "pyrightconfig.json",
-            "update_python_with_ai/support/lib/low_lint.py",
-        ],
-        "active_component_types": [
-            "implementation",
-            "assembly",
-            "interface",
-            "external",
-        ],
-        "verify_template": "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/support/lib/low_lint.py {unit_dir}/low/{unit_name}.pyi",
-    },
-    "grounding": {
-        "name": "grounding",
-        "label": "//update_python_with_ai:grounding",
-        "persona": "Grounding Engineer",
-        "src_pattern": "{unit_dir}/grounding/{unit_name}.py",
-        "template": "",
-        "derive_build_template": "python3 update_python_with_ai/support/lib/check_build_derived.py --kind grounding --build-file {unit_dir}/grounding/BUILD.bazel --parent-build-file {unit_dir}/BUILD.bazel --update",
-        "guide": "//update_python_with_ai/guides:low_to_grounding",
-        "allows_step_mode": True,
-        "role_deps": [":low"],
-        "star_role_deps": [":low", ":grounding"],
-        "stub_role_deps": [],
-        "feedback_role_deps": [":low"],
-        "tools": [
-            "update_python_with_ai/support/lib/check_build_derived.py",
-            "update_python_with_ai/support/lib/build_lint_common.py",
-            "update_python_with_ai/support/lib/build_derived_test.bzl",
-            "update_python_with_ai/support/lib/grounding_lint.py",
-            "update_python_with_ai/support/lib/grounding_support.py",
-        ],
-        "active_component_types": [
-            "implementation",
-            "assembly",
-            "interface",
-            "external",
-        ],
-        "verify_template": "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/support/lib/grounding_lint.py {unit_dir}/grounding/{unit_name}.py && bazel test //{unit_dir}/grounding:{unit_name}_type_check --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
-    },
-    "grounding_qa": {
-        "name": "grounding_qa",
-        "label": "//update_python_with_ai:grounding_qa",
-        "persona": "Grounding QA Arbiter",
-        "src_pattern": "",
-        "template": "",
-        "guide": "//update_python_with_ai/guides:grounding_qa",
-        "allows_step_mode": False,
-        "role_deps": [],
-        "star_role_deps": [":low", ":grounding"],
-        "stub_role_deps": [],
-        "feedback_role_deps": [":grounding"],
-        "tools": [],
-        "active_component_types": ["implementation", "assembly", "interface"],
-        "verify_template": "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/support/lib/grounding_lint.py {unit_dir}/grounding/{unit_name}.py && bazel test //{unit_dir}/grounding:{unit_name}_type_check --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
-    },
-    "lib": {
-        "name": "lib",
-        "label": "//update_python_with_ai:lib",
-        "persona": "Lib Engineer",
-        "src_pattern": "{unit_dir}/lib/{unit_name}.py",
-        "template": "//update_python_with_ai/templates:lib",
-        "derive_build_template": "python3 update_python_with_ai/support/lib/check_build_derived.py --kind lib --build-file {unit_dir}/lib/BUILD.bazel --parent-build-file {unit_dir}/BUILD.bazel --update",
-        "guide": "//update_python_with_ai/guides:low_to_lib",
-        "allows_step_mode": True,
-        "role_deps": [":low"],
-        "star_role_deps": [":low"],
-        "stub_role_deps": [],
-        "feedback_role_deps": [],
-        "silent_role_deps": [":grounding_qa"],
-        "silent_cross_role_deps": [":lib"],
-        "tools": [
-            "update_python_with_ai/support/lib/lib_lint.py",
-            "update_python_with_ai/support/lib/build_lint_common.py",
-        ],
-        "active_component_types": ["implementation", "assembly", "interface"],
-        "verify_template": "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/support/lib/lib_lint.py {unit_dir}/lib/BUILD.bazel {unit_dir}/lib/{unit_name}.py --pyi {unit_dir}/low/{unit_name}.pyi && bazel test //{unit_dir}/lib:{unit_name}_type_check --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
-    },
-    "test": {
-        "name": "test",
-        "label": "//update_python_with_ai:test",
-        "persona": "Test Engineer",
-        "src_pattern": "{unit_dir}/tests/{unit_name}_test.py",
-        "template": "//update_python_with_ai/templates:test",
-        "derive_build_template": "python3 update_python_with_ai/support/lib/check_build_derived.py --kind test --build-file {unit_dir}/tests/BUILD.bazel --parent-build-file {unit_dir}/BUILD.bazel --update",
-        "guide": "//update_python_with_ai/guides:low_to_test",
-        "allows_step_mode": True,
-        "role_deps": [":low"],
-        "star_role_deps": [":low"],
-        "stub_role_deps": [":lib"],
-        "feedback_role_deps": [":low"],
-        "silent_role_deps": [":lib", ":grounding_qa"],
-        "silent_cross_role_deps": [":lib"],
-        "tools": [
-            "update_python_with_ai/support/lib/test_lint.py",
-            "update_python_with_ai/support/lib/build_lint_common.py",
-        ],
-        "active_component_types": ["implementation"],
-        "verify_template": "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/support/lib/test_lint.py {unit_dir}/tests/BUILD.bazel {unit_dir}/tests/{unit_name}_test.py --lib-pkg {unit_dir}/lib --pyi {unit_dir}/low/{unit_name}.pyi && bazel test //{unit_dir}/tests:{unit_name}_test_type_check --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
-    },
-    "qa": {
-        "name": "qa",
-        "label": "//update_python_with_ai:qa",
-        "persona": "QA Arbiter",
-        "src_pattern": "",
-        "template": "",
-        "guide": "//update_python_with_ai/guides:qa",
-        "allows_step_mode": False,
-        "role_deps": [],
-        "star_role_deps": [":low", ":grounding"],
-        "stub_role_deps": [],
-        "feedback_role_deps": [":lib", ":test"],
-        "tools": [],
-        "active_component_types": ["implementation"],
-        "verify_template": "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{unit_dir}/tests:{unit_name}_test --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
-    },
-    "coverage": {
-        "name": "coverage",
-        "label": "//update_python_with_ai:coverage",
-        "persona": "Coverage Arbiter",
-        "src_pattern": "",
-        "template": "",
-        "guide": "//update_python_with_ai/guides:coverage",
-        "allows_step_mode": False,
-        "role_deps": [],
-        "silent_role_deps": [":qa"],
-        "star_role_deps": [":low", ":grounding"],
-        "stub_role_deps": [],
-        "feedback_role_deps": [":lib", ":test"],
-        "tools": [
-            "update_with_ai/support/lib/evaluate_coverage.py",
-        ],
-        "active_component_types": ["implementation"],
-        "verify_template": "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{unit_dir}/tests:{unit_name}_test --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1 && python3 update_with_ai/support/lib/evaluate_coverage.py --impl {unit_dir}/lib/{unit_name}.py --test {unit_dir}/tests/{unit_name}_test.py --threshold 100.0",
-    },
+DEFAULT_ROLE_SPEC: Dict[str, Any] = {
+    "src_pattern": "",
+    "template": None,
+    "prompt_template": "",
+    "guide": None,
+    "allows_step_mode": True,
+    "node_deps": [],
+    "role_deps": [],
+    "silent_role_deps": [],
+    "stub_role_deps": [],
+    "star_role_deps": [],
+    "silent_cross_role_deps": [],
+    "feedback_role_deps": [],
+    "active_component_types": [
+        "implementation",
+        "assembly",
+        "interface",
+        "external",
+    ],
+    "verify_template": "",
+    "verification_success_message": "",
+    "persona": "",
+    "workspace_files": [],
+    "tools": [],
+    "derive_build_template": "",
 }
 
 
@@ -703,11 +535,6 @@ def load_defined_roles(repo_root: Optional[str] = None) -> Dict[str, Dict[str, A
             build_files.append((pkg_name, bf))
 
     roles: Dict[str, Dict[str, Any]] = {}
-    for r_name, r_spec in DEFAULT_ROLE_DEFINITIONS.items():
-        spec_copy = copy.deepcopy(r_spec)
-        roles[r_name] = spec_copy
-        roles[f":{r_name}"] = spec_copy
-        roles[f"//update_python_with_ai:{r_name}"] = spec_copy
 
     if not build_files:
         return roles
@@ -745,9 +572,7 @@ def load_defined_roles(repo_root: Optional[str] = None) -> Dict[str, Dict[str, A
                         if name:
                             kwargs["pkg"] = pkg_name
                             kwargs["label"] = f"//{pkg_name}:{name}"
-                            base_def = copy.deepcopy(
-                                DEFAULT_ROLE_DEFINITIONS.get(name, {})
-                            )
+                            base_def = copy.deepcopy(DEFAULT_ROLE_SPEC)
                             base_def.update(kwargs)
                             roles[name] = base_def
                             roles[f":{name}"] = base_def
@@ -785,8 +610,6 @@ def resolve_role_definition(
     short = s.split(":")[-1]
     if short in roles:
         return dict(roles[short])
-    if short in DEFAULT_ROLE_DEFINITIONS:
-        return dict(DEFAULT_ROLE_DEFINITIONS[short])
     if roles:
         known = sorted(
             [
@@ -796,19 +619,9 @@ def resolve_role_definition(
             ]
         )
         raise ValueError(f"Unknown Cleanroom role '{role_str}'. Defined roles: {known}")
-    return {
-        "name": short,
-        "label": f"//update_python_with_ai:{short}",
-        "src_pattern": f"{{unit_dir}}/{short}/{{unit_name}}.py"
-        if not is_auditor_role(short)
-        else "",
-        "guide": f"//update_python_with_ai/guides:{short}",
-        "role_deps": [],
-        "star_role_deps": [],
-        "stub_role_deps": [],
-        "feedback_role_deps": [],
-        "verify_template": "",
-    }
+    raise ValueError(
+        f"No Cleanroom roles defined in workspace. Could not resolve '{role_str}'."
+    )
 
 
 def normalize_role_arg(role: Optional[str]) -> Optional[str]:
@@ -2187,12 +2000,14 @@ def compute_role_work_queue(
     part_dirs = find_part_dirs_in_scope(main_repo_root, dir_scope)
     all_units: Dict[str, str] = {}
     module_deps: Dict[str, List[str]] = {}
+    raw_module_deps: Dict[str, List[str]] = {}
 
     for pd in part_dirs:
         bf = os.path.join(main_repo_root, pd, "BUILD.bazel")
         u_map = parse_part_units(bf) if os.path.isfile(bf) else {}
         for uname, mdeps in u_map.items():
             all_units[uname] = pd
+            raw_module_deps[uname] = list(mdeps)
             module_deps[uname] = [d.split(":")[-1] for d in mdeps]
 
     all_dirty = find_all_dirty_in_scope(main_repo_root, dir_scope=dir_scope)
@@ -2271,6 +2086,39 @@ def compute_role_work_queue(
                     blocked_reasons.append(
                         f"Prerequisite unit '{dep_u}' is dirty in role '{r_check}'"
                     )
+
+        raw_deps = raw_module_deps.get(uname, [])
+        dep_files: List[str] = []
+        for dep in raw_deps:
+            if dep.startswith("//"):
+                dep_label = dep.lstrip("/")
+                parts = dep_label.split(":")
+                dep_pkg = parts[0]
+                dep_u = parts[1] if len(parts) > 1 else os.path.basename(dep_pkg)
+            else:
+                dep_u = dep.lstrip(":")
+                dep_pkg = all_units.get(dep_u, part_dir)
+
+            if dir_scope == "staging" and dep_pkg.startswith("update_with_ai/"):
+                dep_pkg = f"staging/{dep_pkg[len('update_with_ai/'):]}"
+            elif dir_scope == "update_with_ai" and dep_pkg.startswith("staging/"):
+                dep_pkg = f"update_with_ai/{dep_pkg[len('staging/'):]}"
+
+            if clean_role == "high" and os.path.isfile(
+                os.path.join(main_repo_root, dep_pkg, "high", f"{dep_u}.md")
+            ):
+                dep_file = os.path.join(dep_pkg, "high", f"{dep_u}.md")
+            elif clean_role == "planning" and os.path.isfile(
+                os.path.join(main_repo_root, dep_pkg, "planning", f"{dep_u}.md")
+            ):
+                dep_file = os.path.join(dep_pkg, "planning", f"{dep_u}.md")
+            else:
+                dep_file = os.path.join(dep_pkg, "low", f"{dep_u}.pyi")
+
+            if dep_file not in dep_files:
+                dep_files.append(dep_file)
+
+        item["dependencies"] = dep_files
 
         if blocked_reasons:
             item["blocked_reasons"] = blocked_reasons
@@ -3726,9 +3574,17 @@ def refresh_system_files_fast(
         "update_with_ai/support/lib/cleanroom_role_tool.py",
         "update_with_ai/support/lib/src_metadata.py",
         "update_python_with_ai/support/lib/src_metadata.py",
+        "update_python_with_ai/BUILD.bazel",
     ]:
         s = os.path.join(main_repo_root, cfg)
         d = os.path.join(workspace_dir, cfg)
+        if os.path.isfile(s):
+            if not os.path.exists(d) or os.path.getmtime(s) > os.path.getmtime(d):
+                copy_file_with_perms(s, d, readonly=True)
+
+    for wf in role_def.get("workspace_files") or []:
+        s = os.path.join(main_repo_root, wf)
+        d = os.path.join(workspace_dir, wf)
         if os.path.isfile(s):
             if not os.path.exists(d) or os.path.getmtime(s) > os.path.getmtime(d):
                 copy_file_with_perms(s, d, readonly=True)
@@ -4226,8 +4082,14 @@ Commands:
             if target_dir and ws_dir != target_dir:
                 continue
             if ws_path and os.path.isdir(ws_path) and ws_role:
-                refresh_system_files_fast(ws_path, root, ws_role, dir_scope=ws_dir)
-                count += 1
+                try:
+                    role_def = resolve_role_definition(ws_role, root)
+                    refresh_system_files(ws_path, root, role_def, dir_scope=ws_dir)
+                    count += 1
+                except Exception as e:
+                    sys.stderr.write(
+                        f"Warning: Failed to refresh system files for {ws_role} in '{ws_path}': {e}\n"
+                    )
         print(f"Refreshed system files across {count} role workspace(s).")
         return 0
     elif args.subcommand == "dirty":

@@ -1,13 +1,13 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 99298f2f4160
+LAST_CLEANED: 2026-10-06T00:52:26Z
+LAST_CHANGED: 2026-10-06T00:52:26Z
+CHANGE: import commonmark_ext and declare delegated token patterns
+CODE_HASH: 10149d0058df
 -->
 
 # template_format interface component
 
-imports: agent_session
+imports: agent_session, commonmark_ext
 
 ## Purpose
 
@@ -17,6 +17,8 @@ Multi-stage agent pairing requires readable template files that survive Abstract
 
 **Out of scope:** The template_format interface component does not parse JSON manifests, read files from disk, or manage agent session lifecycles; these are handled by other components.
 
+**Delegated:** The template_format interface component delegates Markdown token conventions, comment directives, and parameter placeholder patterns to commonmark_ext.
+
 ## Types and Behavior
 
 An agent session's *template formatter* formats template documents using supplied parameter bindings.
@@ -25,7 +27,7 @@ The template formatter can *format template* text using *parameters* to produce 
 
 When formatting template text, the template formatter:
 
-- Substitutes parameter placeholders matching bound keys with their corresponding string representations.
+- Substitutes parameter placeholders matching bound keys with their corresponding string representations, recognizing parameter placeholder tokens enclosed in angle brackets.
 
 - Preserves parameter placeholders whose keys are absent from the supplied parameters as unrendered placeholders.
 

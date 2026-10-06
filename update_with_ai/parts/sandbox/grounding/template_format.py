@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 0fe857a49ae5
-# GROUNDING_QA_AUDIT: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-06T00:52:57Z
+# LAST_CHANGED: 2026-10-06T00:52:57Z
+# CHANGE: update placeholder syntax to angle brackets from commonmark_ext
+# CODE_HASH: d8b621c0e682
 # --- END CLEANROOM METADATA ---
 
 """Template format grounding specification module."""
@@ -41,6 +40,6 @@ class TemplateFormatter(InTier[AgentSessionTier], Protocol):
         - Deferred to template_format_impl.py."""
         sample_key: TemplateKey = key(parameters)
         sample_val: Any = value(parameters)
-        _rendered: str = str(text).replace(f"{{{{{sample_key}}}}}", str(sample_val))
+        _rendered: str = str(text).replace(f"<{sample_key}>", str(sample_val))
         _result: FormattedText = FormattedText(_rendered)
         raise NotImplementedError

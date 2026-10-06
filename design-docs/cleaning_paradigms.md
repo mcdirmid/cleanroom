@@ -11,28 +11,28 @@ In Cleanroom, software construction is modeled as a directed acyclic graph (DAG)
 Cleanroom has developed and evaluated three distinct cleaning paradigms:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                Cleanroom Cleaning Paradigms                                     │
-├───────────────────────────────┬─────────────────────────────────┬───────────────────────────────┤
-│ Option 1: Headless Loop       │ Option 2: Antigravity Subagents │ Option 3: Subagentless        │
-│ (Custom OpenAI API Loop)      │ (Server + Python Exec)          │ Cleanroom Workspaces          │
-├───────────────────────────────┼─────────────────────────────────┼───────────────────────────────┤
-│ • In-process Python engine    │ • In-tree Coordinator & Role    │ • Sibling isolated workspaces │
-│ • Direct OpenAI API calls     │   Worker subagents              │   (../role_workspaces/)       │
-│ • Completely headless / CI    │ • FastMCP / HTTP daemon         │ • Separate conversational     │
-│ • Custom turn & token guard   │ • Subagents execed Python CLI   │   chats per role in IDE       │
-│ • Paid API token billing      │   commands into local server    │ • 4-tier OS & policy sandbox  │
-│                               │ • Extreme token bloat & quota   │ • Maximum prompt-cache hits   │
-│                               │   exhaustion under Google Ultra │ • Zero subagent tax           │
-├───────────────────────────────┼─────────────────────────────────┼───────────────────────────────┤
-│ Status: Production (Headless) │ Status: Candidate for Turn-Down │ Status: Primary (Antigravity) │
-└───────────────────────────────┴─────────────────────────────────┴───────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                           Cleanroom Cleaning Paradigms                                            │
+├───────────────────────────────┬─────────────────────────────────┬───────────────────────────────┬─────────────────┤
+│ Option 1: Headless Loop       │ Option 2: Antigravity Subagents │ Option 3: Subagentless        │ Option 4:       │
+│ (Custom OpenAI API Loop)      │ (Server + Python Exec)          │ Cleanroom Workspaces          │ Subagent-Driven │
+├───────────────────────────────┼─────────────────────────────────┼───────────────────────────────┼─────────────────┤
+│ • In-process Python engine    │ • In-tree Coordinator & Role    │ • Sibling isolated workspaces │ • Multi-harness │
+│ • Direct OpenAI API calls     │   Worker subagents              │   (../role_workspaces/)       │   (Antigravity, │
+│ • Completely headless / CI    │ • FastMCP / HTTP daemon         │ • Separate conversational     │   dsh, Goose)   │
+│ • Custom turn & token guard   │ • Subagents execed Python CLI   │   chats per role in IDE       │ • Zero-exec     │
+│ • Paid API token billing      │   commands into local server    │ • 4-tier OS & policy sandbox  │   coordinator   │
+│                               │ • Extreme token bloat & quota   │ • Maximum prompt-cache hits   │ • DeepSeek-V4   │
+│                               │   exhaustion under Google Ultra │ • Zero subagent tax           │   Flash & Gemini│
+├───────────────────────────────┼─────────────────────────────────┼───────────────────────────────┼─────────────────┤
+│ Status: Production (Headless) │ Status: Failed & Turned Down    │ Status: Primary (Interactive) │ Status: Designed│
+└───────────────────────────────┴─────────────────────────────────┴───────────────────────────────┴─────────────────┘
 ```
 
 ### Strategic Decisions
-1. **Option 2 is being turned down**: The Antigravity subagent integration proved economically impractical under Google One Ultra / Gemini quotas. Furthermore, rather than executing native MCP tools dynamically, the implementation devolved into subagents executing shell commands that invoked Python CLI scripts against a local server daemon.
-2. **Option 3 is the primary Antigravity architecture**: Subagentless cleanroom workspaces with separate conversational chats provide strict multi-role double-blind isolation at a fraction of the token cost, leveraging standard IDE prompt caching and direct user oversight.
-3. **Future Subagents will use the Workspace Approach**: If autonomous subagents are reintroduced in the future, they will not resurrect Option 2's complex in-tree server-exec harness; instead, they will be layered directly on top of Option 3, dispatching subagents into independent, pre-confined role workspaces.
+1. **Option 2 is permanently turned down**: Decommissioned due to extreme token costs, quota exhaustion, and reliance on shell-exec HTTP client scripts (see [`antigravity_integration_failed.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)).
+2. **Option 3 is the primary interactive architecture**: Subagentless cleanroom workspaces with separate conversational chats provide strict multi-role double-blind isolation at a fraction of the token cost, leveraging standard IDE prompt caching and direct user oversight (see [`subagentless_cleanroom_workspaces.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)).
+3. **Option 4 drives Option 3 workspaces via autonomous subagents**: Specified in [Subagent-Driven Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md), Option 4 layers a zero-execution coordinator on top of Option 3's pre-confined sibling workspaces, supporting **Google Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose**, leveraging low-cost **DeepSeek-V4 Flash** and enabling side-by-side model comparison.
 
 ---
 
@@ -167,7 +167,7 @@ Interactive Chat: Lib                               Interactive Chat: Test
 
 ---
 
-## 5. Architectural Roadmap: The Workspace Foundation for Future Subagents
+## 5. Option 4: Subagent-Driven Cleanroom Workspaces (Multi-Harness Autonomous Architecture)
 
 A critical insight gained from implementing Options 2 and 3 is:
 
@@ -179,18 +179,18 @@ Trying to maintain double-blind isolation in a single working directory forced O
 - Artificial tool translation layers that ended up executing shell commands.
 - Long-lived daemon processes vulnerable to crashes and desynchronization.
 
-### The Future Architecture: Subagents on Workspaces
+### The Completed Architecture: Subagent-Driven Workspaces (Option 4)
 
-If autonomous subagents are reconsidered in the future, Cleanroom will **NOT** revive Option 2's in-tree server-exec model. Instead, future subagents will be built directly on top of **Option 3's isolated workspaces**:
+Formally specified in [Subagent-Driven Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md), Option 4 permanently solves this problem by building directly on top of **Option 3's isolated workspaces**, driven by a **Zero-Execution Coordinator** across three major execution harnesses (**Google Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose**):
 
 ```mermaid
 flowchart TD
     subgraph MainWorkspace ["Main Canonical Workspace (cleanroom/)"]
-        SuperAgent["Supervisor Agent / Coordinator"]
+        SuperAgent["Zero-Execution Coordinator\n(Antigravity / dsh / Goose)"]
         CleanroomTool["bin/cleanroom CLI"]
         Meta["In-Band Source Metadata (src_metadata.py)"]
         
-        SuperAgent -->|"1. Inspect dirty status (bin/cleanroom dirty)"| Meta
+        SuperAgent -->|"1. Inspect DAG work queue (bin/cleanroom work-queue)"| Meta
         SuperAgent -->|"2. Lifecycle management"| CleanroomTool
     end
 
@@ -204,40 +204,41 @@ flowchart TD
     CleanroomTool -->|"Prepare & Harden"| TestWS
     CleanroomTool -->|"Prepare & Harden"| QAWS
 
-    SuperAgent -->|"3. invoke_subagent(Workspace='../role_workspaces/cleanroom_lib_dir')"| LibAgent["Lib Subagent"]
-    SuperAgent -->|"4. invoke_subagent(Workspace='../role_workspaces/cleanroom_test_dir')"| TestAgent["Test Subagent"]
+    SuperAgent ==>|"3. Wake: Work ready"| LibAgent["Lib Subagent\n(DeepSeek / Gemini)"]
+    SuperAgent ==>|"4. Wake: Work ready"| TestAgent["Test Subagent\n(DeepSeek / Gemini)"]
 
     LibAgent -->|"Edit & bin/submit"| LibWS
     TestAgent -->|"Edit & bin/submit"| TestWS
 
-    LibWS -->|"5. Direct Bazel mutation"| MainWorkspace
-    TestWS -->|"5. Direct Bazel mutation"| MainWorkspace
+    LibWS ==>|"5. Direct Bazel mutation"| MainWorkspace
+    TestWS ==>|"5. Direct Bazel mutation"| MainWorkspace
 ```
 
-#### Why This Future Architecture is Superior:
+#### Why This Architecture is Superior:
 1. **Natural OS Confinement**: The subagent runs inside `../role_workspaces/<workspace-name>_<role>_<dir>/`. The operating system and directory structure enforce Cleanroom blindness natively. No hook interceptors or daemon sentinels are required.
 2. **Simplified Agent Tooling**: The subagent does not need special MCP tools or shell CLI wrappers. It uses standard native file tools (`view_file`, `replace_file_content`), inspects tasks with `bin/get_work`, and simply calls `bin/submit` when finished.
 3. **No In-Tree Contamination**: The main repository remains completely untouched until verified changes are directly submitted via Bazel targets.
-4. **Graceful Fallback**: If subagent quota is exhausted, the developer simply opens the workspace directory in Antigravity and continues the work in an interactive conversation chat without altering a single configuration.
+4. **Pluggable Low-Cost Models**: Enables headless, high-speed execution using **DeepSeek-V4 Flash** (`deepseek-flash` / V4.1-Flash) at ~\$0.18–\$0.45 per 5-node pass, slashing costs by ~98% compared to Option 2.
+5. **Cross-Harness Flexibility**: Operates identically on **Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose**.
 
 ---
 
 ## 6. Comprehensive Paradigm Comparison Matrix
 
-| Architectural Dimension | Option 1: Headless Loop | Option 2: Antigravity Subagents | Option 3: Subagentless Workspaces | Future: Subagents on Workspaces |
+| Architectural Dimension | Option 1: Headless Loop | Option 2: Antigravity Subagents (FAILED) | Option 3: Subagentless Workspaces | Option 4: Subagent-Driven Workspaces |
 | :--- | :--- | :--- | :--- | :--- |
-| **Execution Environment** | Headless CLI / CI (Bazel) | Antigravity Desktop App / IDE | Antigravity Desktop App / IDE | Antigravity Desktop App / IDE |
-| **Model Driver** | Direct OpenAI API (`openai.OpenAI`) | Antigravity Gemini via Subagents | Antigravity Gemini via Interactive Chat | Antigravity Gemini via Workspace Subagents |
-| **Confinement Mechanism** | In-process Python sandbox (`sandbox_asm`) | In-tree Hooks + Daemon Sentinel (`.mcp.active`) | 4-Tier: Directory, Policy, `chmod 444`, `AGENTS.md` | Native Directory & OS `chmod 444` in Sibling WS |
-| **Tool Interface for Agent** | OpenAI Function Tool Calling | Shell `run_command` calling Python CLI scripts | Native Antigravity tools + `bin/submit` helper | Native Antigravity tools + `bin/submit` helper |
-| **Blindness Guarantee** | In-process file aliasing | Server access gate checks | Physical omission + Read-Only Interface Stubs | Physical omission + Read-Only Interface Stubs |
-| **Token Cost Profile** | Pay-per-token (API rates) | **Extremely High** (Subagent tax, prompt repeats) | **Lowest / Most Efficient** (High KV cache hit rates) | Moderate (Isolated subagent turns without daemon tax) |
-| **Quota Sustainability** | Depends on API credit balance | **Poor** (Bursts exhaust 5h Ultra quota in minutes) | **Excellent** (Runs comfortably within standard quota) | Good (Targeted spawns without nested polling) |
-| **Verification Gate** | In-process Bazel check before submit | Python client calls server `check-files` | Local Bazel/linter check before `bin/submit` | Local Bazel/linter check before `bin/submit` |
-| **Synchronization** | Direct in-band metadata updates | Server mutates memory (Decommissioned) | Zero-sync direct Bazel mutations & `bin/get_work` pull | Zero-sync direct Bazel mutations & `bin/get_work` pull |
-| **Human Steerability** | None (Headless batch runner) | Low (Autonomous subagent tree) | **High** (Interactive conversational pair-programming) | High (Supervisor oversight in Main Workspace) |
-| **Code Locations** | `parts/loop/`, `parts/openai/` | `parts/antigravity/`, `parts/mcp/` | `bin/cleanroom`, `src_metadata.py` | Built on `bin/cleanroom` |
-| **Current Status** | **Production (Headless)** | **Candidate for Turn-Down** | **Primary (Interactive Antigravity)** | **Architectural Roadmap** |
+| **Execution Environment** | Headless CLI / CI (Bazel) | Antigravity Desktop App / IDE | Antigravity Desktop App / IDE | **Antigravity, DeepSeek Harness (`dsh`), Goose** |
+| **Model Driver** | Direct OpenAI API (`openai.OpenAI`) | Antigravity Gemini via Subagents | Antigravity Gemini via Interactive Chat | **DeepSeek-V4 Flash & Gemini Pro/Flash** |
+| **Confinement Mechanism** | In-process Python sandbox (`sandbox_asm`) | In-tree Hooks + Daemon Sentinel (`.mcp.active`) | 4-Tier: Directory, Policy, `chmod 444`, `AGENTS.md` | **Native Directory & OS `chmod 444` in Sibling WS** |
+| **Tool Interface for Agent** | OpenAI Function Tool Calling | Shell `run_command` calling Python CLI scripts | Native Antigravity tools + `bin/submit` helper | **Native host tools + `bin/submit` helper (No MCP)** |
+| **Blindness Guarantee** | In-process file aliasing | Server access gate checks | Physical omission + Read-Only Interface Stubs | **Physical omission + Read-Only Interface Stubs** |
+| **Token Cost Profile** | Pay-per-token (API rates) | **Extremely High** (Subagent tax, prompt repeats) | **Lowest / Most Efficient** (High KV cache hit rates) | **Ultra-Low on DeepSeek (\$0.18–\$0.45/run); High Cache** |
+| **Quota Sustainability** | Depends on API credit balance | **Poor** (Bursts exhaust 5h Ultra quota in minutes) | **Excellent** (Runs comfortably within standard quota) | **Excellent (Uncapped via API or persistent sessions)** |
+| **Verification Gate** | In-process Bazel check before submit | Python client calls server `check-files` | Local Bazel/linter check before `bin/submit` | **Local Bazel/linter check before `bin/submit`** |
+| **Synchronization** | Direct in-band metadata updates | Server mutates memory (Decommissioned) | Zero-sync direct Bazel mutations & `bin/get_work` pull | **Zero-sync direct Bazel mutations & `bin/get_work` pull** |
+| **Human Steerability** | None (Headless batch runner) | Low (Autonomous subagent tree) | **High** (Interactive conversational pair-programming) | **Full Autonomy with Zero-Exec Coordinator** |
+| **Code Locations** | `parts/loop/`, `parts/openai/` | `parts/antigravity/`, `parts/mcp/` | `bin/cleanroom`, `src_metadata.py` | **`bin/cleanroom`, `cleanroom_workspace_tool.py`** |
+| **Current Status** | **Production (Headless)** | **Failed & Turned Down** | **Primary (Interactive)** | **Authoritative Subagent Design** |
 
 ---
 

@@ -92,29 +92,31 @@
 
 ## 3. Cleaning Paradigms & Execution Architecture
 
-Cleanroom supports two production cleaning paradigms, each optimized for different operational environments, along with an archived post-mortem of a decommissioned subagent approach:
+Cleanroom supports distinct cleaning paradigms, each optimized for different operational environments, along with an archived post-mortem of a decommissioned subagent approach:
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                         CLEANROOM EXECUTION PARADIGMS                            │
-├──────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│  [Option 1: Custom Headless Loop]        [Option 3: Subagentless Workspaces]     │
-│  - In-process Python runner               - Independent sibling directories      │
-│  - Native OpenAI API client              - Interactive Antigravity Chat UI       │
-│  - Directed acyclic graph (DAG)          - OS chmod 444 double-blind isolation   │
-│  - Best for: CI/CD & batch cleaning      - Best for: Interactive pair programming│
-│  - Doc: custom_loop_cleanroom.md         - Doc: subagentless_cleanroom_workspaces│
-│                                                                                  │
-│                                  ▲                                               │
-│                                  │ Replaced & Superseded                         │
-│                                                                                  │
-│                     [Option 2: Antigravity Subagents] (ARCHIVED)                 │
-│                     - In-tree subagents calling HTTP/exec server                 │
-│                     - Decommissioned due to token bloat ($30-$50/run)            │
-│                     - Doc: antigravity_integration_failed.md                     │
-│                                                                                  │
-└──────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                                CLEANROOM EXECUTION PARADIGMS                             │
+├──────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                          │
+│  [Option 1: Custom Headless Loop]        [Option 3: Subagentless Workspaces]             │
+│  - In-process Python runner               - Independent sibling directories              │
+│  - Native OpenAI API client              - Interactive Antigravity Chat UI               │
+│  - Directed acyclic graph (DAG)          - OS chmod 444 double-blind isolation           │
+│  - Best for: CI/CD & batch cleaning      - Best for: Interactive pair programming        │
+│  - Doc: custom_loop_cleanroom.md         - Doc: subagentless_cleanroom_workspaces.md     │
+│                                                                                          │
+│                                  ▲                             ▲                         │
+│                                  │                             │ Extended by             │
+│                                  │                             │                         │
+│                     [Option 2: In-Tree Subagents]  [Option 4: Subagent-Driven Workspaces]│
+│                     - In-tree subagents & FastMCP  - Drives Option 3 workspaces          │
+│                     - FAILED & DECOMMISSIONED      - Antigravity, dsh, Goose             │
+│                     - Quota exhaustion ($30-$50)   - Zero-execution coordinator          │
+│                     - Doc: antigravity_failed.md   - DeepSeek-V4 Flash ($0.20/run)       │
+│                                                    - Doc: subagent_driven_workspaces.md  │
+│                                                                                          │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 1. **Option 1: Custom Loop Cleanroom** ([`custom_loop_cleanroom.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/custom_loop_cleanroom.md)):
@@ -125,20 +127,25 @@ Cleanroom supports two production cleaning paradigms, each optimized for differe
    - Sibling workspace directories (`../role_workspaces/<workspace-name>_<role>_<dir>`) running independent conversational sessions in Antigravity.
    - Enforces double-blind isolation via OS-level `chmod 444` read-only mounts and orchestrates role coordination via relative convention discovery, direct Bazel mutations (`submit`, `blame`, `fail`), and self-synchronizing `bin/get_work`.
    - Production architecture for interactive AI pair programming managed via `bin/cleanroom`.
-3. **Option 2 (Archived Post-Mortem): Antigravity Subagents & MCP Server** ([`antigravity_integration_failed.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)):
-   - Detailed analysis of why in-tree subagents communicating with an execution server failed: token cost explosion ($30–$50 per run), multi-agent instruction degradation, and socket execution brittleness.
-4. **Paradigms Comparative Guide** ([`cleaning_paradigms.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleaning_paradigms.md)):
-   - Side-by-side comparative analysis of economics, isolation, and trade-offs across all three options.
+3. **Option 4: Subagent-Driven Cleanroom Workspaces** ([`subagent_driven_cleanroom_workspaces_todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md)):
+   - Autonomous multi-agent architecture driving Option 3's pre-confined workspaces via a **Zero-Execution Coordinator**.
+   - Uniform support across **Google Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose**.
+   - Leverages **DeepSeek-V4 Flash** (`deepseek-flash`) for 98% token cost reductions and establishes a reproducible framework for side-by-side Gemini vs. DeepSeek model benchmarking.
+4. **Option 2 (Archived Post-Mortem): Antigravity Subagents & MCP Server** ([`antigravity_integration_failed.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)):
+   - Detailed analysis of why in-tree subagents communicating with an execution server failed: token cost explosion ($30–$50 per run), multi-agent instruction degradation, and socket execution brittleness. Formally superseded by Option 4.
+5. **Paradigms Comparative Guide** ([`cleaning_paradigms.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleaning_paradigms.md)):
+   - Side-by-side comparative analysis of economics, isolation, and trade-offs across all cleaning options.
 
 ---
 
 ## 4. Master Document Index
 
 ### 4.1 Execution & Cleaning Paradigms
-- **[Custom Loop Cleanroom](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/custom_loop_cleanroom.md)** (`custom_loop_cleanroom.md`): Headless in-process autonomous runner driving the OpenAI API.
+- **[Subagent-Driven Cleanroom Workspaces (TODO)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md)** (`subagent_driven_cleanroom_workspaces_todo.md`): Authoritative design for multi-harness autonomous subagent orchestration across Antigravity, DeepSeek Harness, and Goose with DeepSeek-V4 Flash economics.
 - **[Subagentless Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)** (`subagentless_cleanroom_workspaces.md`): Primary interactive architecture with convention-driven zero-sync isolated role workspaces, pathless descriptors, direct Bazel mutations, and self-synchronizing global DAG work queues.
-- **[Archived Post-Mortem: Antigravity Subagents](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)** (`antigravity_integration_failed.md`): Comprehensive post-mortem on why in-tree subagents failed.
-- **[Cleaning Paradigms Comparative Overview](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleaning_paradigms.md)** (`cleaning_paradigms.md`): Architectural comparison across all three paradigms.
+- **[Custom Loop Cleanroom](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/custom_loop_cleanroom.md)** (`custom_loop_cleanroom.md`): Headless in-process autonomous runner driving the OpenAI API.
+- **[Archived Post-Mortem: Antigravity Subagents](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)** (`antigravity_integration_failed.md`): Comprehensive post-mortem on why in-tree subagents failed (superseded by `subagent_driven_cleanroom_workspaces_todo.md`).
+- **[Cleaning Paradigms Comparative Overview](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleaning_paradigms.md)** (`cleaning_paradigms.md`): Architectural comparison across all cleaning paradigms.
 
 ### 4.2 Specification Formats
 - **[High-Level Specification Format (HLS)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/high_level_spec_format.md)** (`high_level_spec_format.md`): Literate prose specifications, italic semantic markers, single-level bullets, and lifecycle tiers.
@@ -152,7 +159,8 @@ Cleanroom supports two production cleaning paradigms, each optimized for differe
 - **[In-Band Source Metadata & State Persistence](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/in_band_source_metadata.md)** (`in_band_source_metadata.md`): Completed production architecture eliminating `.update_with_ai.textproto` in favor of comment-embedded timestamps, single-entry change summaries, unacted feedback sections, and dynamic forward dirty evaluation.
 
 ### 4.4 Refactoring & Toolchain Infrastructure
-- **[Component Modularization Plan](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/component_modularization_plan.md)** (`component_modularization_plan.md`): Architectural plan for decomposing Cleanroom's largest components (`sandbox_run_control_impl`, `openai_driver_impl`, `bazel_node_config_impl`) into focused, single-responsibility constituents.
+- **[Support Code Modularization (TODO)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/support_code_modularization_todo.md)** (`support_code_modularization_todo.md`): Architectural plan for migrating and dogfooding Cleanroom's ungrounded host infrastructure (`support/lib/`: workspace engine, role tools, `src_metadata`, and linters) into formal Cleanroom packages (`parts/workspace`, `parts/role`, `parts/src_metadata`, `parts/linter`) prior to subagent orchestration.
+- **[Component Modularization (TODO)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/component_modularization_todo.md)** (`component_modularization_todo.md`): Architectural plan for decomposing Cleanroom's largest in-tree components (`sandbox_run_control_impl`, `openai_driver_impl`, `bazel_node_config_impl`) into focused, single-responsibility constituents.
 - **[Markdown Template Format & System Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/template_format.md)** (`template_format.md`): CommonMark HTML comment template directives (`<!-- if -->`, `<!-- for -->`, `<var>`).
 - **[Toolchain & Verification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md)** (`toolchain_and_verification.md`): Deterministic linters, test coverage arbiter (`evaluate_coverage.py`), and Bazel type checking.
 - **[Auditor Roles & Verification Dirtiness Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/auditor_roles_and_dirtiness_architecture.md)** (`auditor_roles_and_dirtiness_architecture.md`): Eliminating dummy `logs/` files in favor of co-located in-band verification attestations (`<ROLE>_AUDIT:`), resolving the 0-byte paradox, and formalizing auditor dirty predicates.

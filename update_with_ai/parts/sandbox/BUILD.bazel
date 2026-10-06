@@ -73,7 +73,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "template_format",
-    module_deps = [],
+    module_deps = ['//update_with_ai/parts/core:commonmark_ext'],
 )
 
 update_python_with_ai(
