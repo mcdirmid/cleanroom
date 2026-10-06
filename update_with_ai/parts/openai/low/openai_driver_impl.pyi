@@ -1,7 +1,7 @@
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-05T20:52:01Z
-# LAST_CHANGED: 2026-10-05T05:44:03Z
-# CHANGE: Align truncation and conversation limit failure contracts with high-level literate prose
+# LAST_CHANGED: 2026-10-06T12:45:00Z
+# CHANGE: add grounding sections
 # CODE_HASH: 769d11cad2bc
 # --- END CLEANROOM METADATA ---
 
@@ -17,7 +17,13 @@ import loop_driver
 class LoopDriver(
     loop_driver.LoopDriver, InTier[AgentSessionTier]
 ):
-    """Realizes language model completion requests, tool dispatch, output continuation, and termination handling."""
+    """Realizes language model completion requests, tool dispatch, output continuation, and termination handling.
+
+    GROUNDING:
+    - Realizes iterative model execution loops by dispatching completions to OpenAI endpoints,
+      executing model-invoked tools, recovering truncated edits with indented sentinels,
+      evaluating loop guards, and streaming logs to RunnerLogger.
+    """
 
     @operation
     @override
@@ -26,6 +32,12 @@ class LoopDriver(
 
         Returns:
             The final loop outcome.
+
+        GROUNDING:
+        - Grounded via transmitting chat completion requests to OpenAI endpoints, parsing tool calls,
+          repairing truncated replace_file_content calls using indented NotImplementedError sentinels,
+          dispatching tools through tool_provider, monitoring repetitive execution via LoopGuard,
+          and returning a successful LoopOutcome upon tool termination.
 
         POSTCONDITIONS:
         - MUST transmit completion requests following OpenAI conventions with model parameters from configuration.

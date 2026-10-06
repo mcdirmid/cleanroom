@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: a96f7c185075
--->
-
 # openai_config interface component
 
 ## Intent
@@ -33,6 +26,17 @@ By consolidating model configuration into an ambient system service, the compone
 - A system's openai config provides the temperature for model requests. [provide_temperature]
 - A system's openai config provides the max tokens upper bound when token generation is constrained. [provide_max_tokens]
 
-## Woven Contracts
+### Woven Contracts
 
 - The openai config provides model endpoint coordinates, authentication secrets, request timeouts, and sampling hyperparameters for model requests. [provide_model_name, provide_base_url, provide_api_key, provide_timeout, provide_temperature, provide_max_tokens]
+
+## Grounding
+
+### Knowledge Provisions
+
+- OpenAI model endpoint coordinates, authentication secrets, request timeouts, and sampling hyperparameters. [openai_model_configuration]
+
+### Knowledge Requirements
+
+- Model configuration extraction from runtime environment or build manifests.
+  - Deferred: Provided by runtime configuration in implementation.

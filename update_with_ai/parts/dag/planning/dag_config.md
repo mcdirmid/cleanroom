@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 2f1ca7090c63
--->
-
 # dag_config interface component
 
 ## Intent
@@ -25,6 +18,17 @@ By exposing explicit visit counts and role batching bounds, the component provid
 - A system's dag config provides the node visit limit for dependency graph execution. [provide_node_visit_limit]
 - A system's dag config provides the batch size for dependency graph execution. [provide_batch_size]
 
-## Woven Contracts
+### Woven Contracts
 
 - The dag config exposes operational limits governing graph node visit caps and dirty node batch sizes during cleaning passes. [provide_node_visit_limit, provide_batch_size]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Traversal boundaries exposing node visit limits and dirty batch size constraints. [dag_configuration_limits]
+
+### Knowledge Requirements
+
+- Operational limit configuration parameters from system environment or configuration models.
+  - Deferred: Provided by system runtime configuration.

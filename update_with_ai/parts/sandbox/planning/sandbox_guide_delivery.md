@@ -36,8 +36,24 @@ By parsing markdown guides into sequential milestone sections, retaining active 
 - The guide delivery exposes whether progressive steps remain. [expose_steps_remain]
 - The guide delivery exposes its configured guide. [expose_configured_guide]
 
-## Woven Contracts
+### Woven Contracts
 
 - When advancing a step with verification passed, instructional text for the next milestone is delivered. [advance_step_passed_supplied, deliver_instructions_on_pass, expose_steps_remain]
 - When advancing a step with verification failed, the current milestone is retained while diagnostics and failure instructions are reported. [advance_step_passed_supplied, advance_step_diagnostics_supplied, retain_milestone_on_fail, report_diagnostics_on_fail, report_failure_instructions_on_fail]
 - Parsing file content constructs a guide containing a summary, step sections, and verification failure instructions. [parse_guide_content_supplied, parse_file_content_into_guide, expose_configured_guide]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Parses file content into structured milestone guides. [guide_parsing]
+- Records initial primer instructional context. [primer_recording]
+- Delivers instructional milestones upon verification advancement. [step_delivery]
+- Exposes whether progressive steps remain. [steps_remaining_status]
+
+### Knowledge Requirements
+
+- Tracking active milestone offset and initial primer in session state.
+  - Deferred: Requires state tracking in implementation.
+- Parsing markdown section headers and bulleted checklists.
+  - Deferred: Requires markdown parsing in implementation.

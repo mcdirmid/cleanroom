@@ -44,9 +44,27 @@ By tracking file modifications, revision numbers, and the most recently accessed
 - Workspace file writes occurred is true when file contents differ from their in-band code hash. [writes_occurred_true_on_diff]
 - Workspace file writes occurred is false when file contents match their in-band code hash. [writes_occurred_false_on_match]
 
-## Woven Contracts
+### Woven Contracts
 
 - Recording file reads updates the tracked last read or edited file in the session. [record_read_supplied, track_last_read_or_edited, record_file_read_op]
 - Recording file edits updates the tracked last read or edited file in the session. [record_edit_supplied, track_last_read_or_edited, record_file_edit_op]
-- The replace file content tool replaces target content within the designated line range or across multiple occurrences when allowed. \[replace_content_in_line_range, replace_multiple_when_permitted, tool_provider: [call_by_name, call_with_python_bindings]\]
+- The replace file content tool replaces target content within the designated line range or across multiple occurrences when allowed. [replace_content_in_line_range, replace_multiple_when_permitted, tool_provider: [call_by_name, call_with_python_bindings]]
 - Workspace file writes status reflects whether current workspace file contents differ from their in-band code hash. [edit_mgr_tracks_session_edits, expose_workspace_writes_occurred, writes_occurred_true_on_diff, writes_occurred_false_on_match]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Exposes whether workspace file writes occurred during the session. [writes_occurred_status]
+- Validates write access for declared read-write files. [write_access_validation]
+- Replaces file content within bounded line ranges. [content_replacement]
+- Tracks sequential file update revisions. [update_revision_tracking]
+
+### Knowledge Requirements
+
+- Access to underlying filesystem to read and write file contents.
+  - Deferred: Requires concrete filesystem operations in implementation.
+- Verification of declared read-write files against session node configuration.
+  - Deferred: Requires session configuration inspection in implementation.
+- Tracking of file read and edit history in session state.
+  - Deferred: Requires session state tracking in implementation.

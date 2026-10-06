@@ -37,9 +37,28 @@ By restricting access to declared read-only and read-write session files and val
 - The search tool searches across the session's read-only files. [search_tool_searches_ro]
 - The search tool searches across the session's read-write files. [search_tool_searches_rw]
 
-## Woven Contracts
+### Woven Contracts
 
 - When checking read access for a workspace path matching declared files, access is confirmed. [check_read_access_supplied, read_mgr_exposes_ro_files, read_mgr_exposes_rw_files, read_mgr_checks_read_access, read_access_confirms_ro, read_access_confirms_rw]
 - When checking read access for an undeclared workspace path, access fails with guidance listing readable file aliases. [check_read_access_supplied, read_mgr_exposes_ro_files, read_mgr_exposes_rw_files, read_mgr_checks_read_access, read_access_fails_with_guidance]
-- When executing the view file tool, file content is retrieved for the specified file alias path. \[view_file_reads_content, tool_provider: [call_by_name, call_with_python_bindings]\]
-- When executing the search tool, pattern matches are discovered across read-only and read-write files. \[search_tool_searches_files, search_tool_searches_ro, search_tool_searches_rw, tool_provider: [call_by_name, call_with_python_bindings]\]
+- When executing the view file tool, file content is retrieved for the specified file alias path. [view_file_reads_content, tool_provider: [call_by_name, call_with_python_bindings]]
+- When executing the search tool, pattern matches are discovered across read-only and read-write files. [search_tool_searches_files, search_tool_searches_ro, search_tool_searches_rw, tool_provider: [call_by_name, call_with_python_bindings]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Exposes declared read-only session files. [ro_files_provision]
+- Exposes declared read-write session files. [rw_files_provision]
+- Checks read access for workspace paths. [read_access_check]
+- Reads file content for specified file alias paths. [view_file_capability]
+- Searches pattern matches across declared session files. [search_files_capability]
+
+### Knowledge Requirements
+
+- Access to underlying filesystem to inspect and read file contents.
+  - Deferred: Requires concrete filesystem operations in implementation.
+- Access to session node configuration to resolve declared files.
+  - Deferred: Requires session configuration inspection in implementation.
+- Capability to record file reads in session edit manager.
+  - Deferred: Requires session state tracking in implementation.

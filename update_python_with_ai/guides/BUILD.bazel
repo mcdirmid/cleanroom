@@ -57,6 +57,20 @@ update_guide_with_ai(
 )
 
 update_guide_with_ai(
+    name = "spec_qa",
+    src = "spec_qa.md",
+    display_name = "specification qa arbiter guide",
+    deps = [],
+)
+
+update_guide_with_ai(
+    name = "low_qa",
+    src = "low_qa.md",
+    display_name = "low-level specification qa arbiter guide",
+    deps = [],
+)
+
+update_guide_with_ai(
     name = "coverage",
     src = "coverage.md",
     display_name = "coverage arbiter guide",

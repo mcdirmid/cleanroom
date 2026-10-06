@@ -27,7 +27,23 @@ Multi-stage Cleanroom pipelines require progressive execution where upstream art
 - A work scheduler formats the role prompt template with unit and component names. [format_task_prompt]
 - A work scheduler retrieves unresolved defect feedback messages from graph storage for each task. [retrieve_task_feedback]
 
-## Woven Contracts
+### Woven Contracts
 
 - When discovering work in an execution subgraph, the scheduler identifies ready dirty candidates, sorts them by dynamic role depth, limits the batch, and synthesizes task prompts. [discover_subgraph_candidates, filter_ready_dependencies, compute_role_precedence, sort_nodes_by_precedence, limit_scheduled_batch, format_task_prompt, retrieve_task_feedback]
 - When discovering work in a directory scope, the scheduler identifies matching dirty nodes, filters for clean upstream dependencies, orders them by role depth, and builds scheduled tasks. [discover_directory_candidates, filter_ready_dependencies, compute_role_precedence, sort_nodes_by_precedence, limit_scheduled_batch, format_task_prompt, retrieve_task_feedback]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Computes ready dirty nodes sorted by topological role depth into scheduled work batches. [work_schedule_provision]
+- Computes role precedence rank dynamically from declared role dependencies. [role_precedence_provision]
+
+### Knowledge Requirements
+
+- Inspection of dirty node status and upstream dependency cleanliness in graph storage.
+  - Deferred: Queried from DagStorage in implementation.
+- Topological analysis of declared role dependencies to derive role execution depth.
+  - Deferred: Derived from role configuration in implementation.
+- Resolution of prompt templates and formatting of task prompts with feedback history.
+  - Deferred: Formatted using role prompt templates in implementation.

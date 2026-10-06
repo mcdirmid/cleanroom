@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: a9e55d928ad1
--->
-
 # dag_subgraph interface component
 
 imports: dag_storage
@@ -34,9 +27,22 @@ By calculating dependency-first topological ordering, evaluating subgraph comple
 - The dag subgraph increments visit counts for each node in the recorded batch. [record_visit_increment_counts]
 - The dag subgraph enforces execution iteration limits across recorded node visits. [record_visit_enforce_iteration_limits]
 
-## Woven Contracts
+### Woven Contracts
 
-- Setting a target node establishes an active execution subgraph containing reachable dependency nodes arranged in dependency-first topological order. \[set_target_node_supplied, collect_reachable_dependencies, compute_topological_order, dag_storage: [access_dag_dependencies]\]
-- Evaluating completion status reports true if, but only if, every reachable node in the target subgraph is clean in dag storage. \[report_subgraph_complete, subgraph_complete_when_all_clean, dag_storage: [expose_node_dirty]\]
-- Requesting the next ready batch yields uncleaned dirty nodes of the same role address prioritized by role tier precedence whose dependencies are clean or present in the same ready batch, up to the maximum batch size. \[provide_next_ready_batch, ready_batch_nodes_uncleaned, ready_batch_prioritized_by_role_tier, ready_batch_dependencies_satisfied, ready_batch_grouped_by_role, ready_batch_bounded_by_size, dag_storage: [expose_node_dirty]\]
+- Setting a target node establishes an active execution subgraph containing reachable dependency nodes arranged in dependency-first topological order. [set_target_node_supplied, collect_reachable_dependencies, compute_topological_order, dag_storage: [access_dag_dependencies]]
+- Evaluating completion status reports true if, but only if, every reachable node in the target subgraph is clean in dag storage. [report_subgraph_complete, subgraph_complete_when_all_clean, dag_storage: [expose_node_dirty]]
+- Requesting the next ready batch yields uncleaned dirty nodes of the same role address prioritized by role tier precedence whose dependencies are clean or present in the same ready batch, up to the maximum batch size. [provide_next_ready_batch, ready_batch_nodes_uncleaned, ready_batch_prioritized_by_role_tier, ready_batch_dependencies_satisfied, ready_batch_grouped_by_role, ready_batch_bounded_by_size, dag_storage: [expose_node_dirty]]
 - Recording a visit for a batch increments each node's visit count and enforces execution iteration limits. [record_visit_batch_supplied, record_visit_increment_counts, record_visit_enforce_iteration_limits]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Dependency-first topological subgraph queries, ready batch scheduling, and visit tracking. [dag_subgraph_service]
+
+### Knowledge Requirements
+
+- Direct dependency graph traversal and node dirty status checks.
+  - Deferred: Queried from dag_storage in implementation.
+- Traversal boundaries for batch size and node visit limits.
+  - Deferred: Queried from dag_config in implementation.

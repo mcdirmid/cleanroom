@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 93db2f820f46
--->
-
 # agent_file_alias interface component
 
 imports: agent_session, dag_storage, file_paths, tool_provider
@@ -41,7 +34,18 @@ By acting as a converter for tool parameters, the alias manager maps wire-level 
 - The alias manager sanitizes text by masking occurrences of relative workspace paths with file alias relative paths. [sanitize_mask_ws_paths]
 - The alias manager sanitizes text by masking preceding path prefixes with file alias relative paths. [sanitize_mask_preceding_prefixes]
 
-## Woven Contracts
+### Woven Contracts
 
-- Converting a wire string produces a matching bound file if declared in session, or an unbound file otherwise without failure. \[supply_wire_alias_string, convert_alias_without_failure, convert_matching_bound_file, convert_unmatched_unbound_file, tool_provider: [convert_wire_val, convert_identity]\]
+- Converting a wire string produces a matching bound file if declared in session, or an unbound file otherwise without failure. [supply_wire_alias_string, convert_alias_without_failure, convert_matching_bound_file, convert_unmatched_unbound_file, tool_provider: [convert_wire_val, convert_identity]]
 - When sanitizing text, relative workspace paths and preceding path prefixes are masked to present file alias relative paths. [supply_text_to_sanitize, sanitize_mask_ws_paths, sanitize_mask_preceding_prefixes]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Virtual file alias mapping, conversion, and path sanitization for agent tool invocations. [alias_mapping]
+
+### Knowledge Requirements
+
+- Workspace root absolute path and session declared file boundaries.
+  - Deferred: Configured from agent session and file paths in implementation.

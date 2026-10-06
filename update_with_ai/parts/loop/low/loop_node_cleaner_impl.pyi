@@ -1,7 +1,7 @@
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-05T20:52:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
+# LAST_CHANGED: 2026-10-06T12:45:00Z
+# CHANGE: add grounding sections
 # CODE_HASH: 5dc0b7d9eba5
 # --- END CLEANROOM METADATA ---
 
@@ -16,7 +16,12 @@ import loop_node_cleaner
 
 @singleton_type("system")
 class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
-    """Realizes node clean execution, session seeding, and message dispatch."""
+    """Realizes node clean execution, session seeding, and message dispatch.
+
+    GROUNDING:
+    - Binds abstract node cleaning directives to agent session phases, driving turns
+      via LoopDriver, and translating outcomes into in-band graph storage mutations.
+    """
 
     @operation
     @override
@@ -28,6 +33,12 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
 
         Returns:
             True if processing should continue, or False if an unhandleable failure occurred.
+
+        GROUNDING:
+        - Grounded via establishing agent session phase, initializing conversation with
+          instructions to call get_work, executing turns via LoopDriver.drive, retrying once
+          on unexpected failures, resolving promptless nodes directly, and mutating DagStorage
+          node cleanliness and feedback messages according to turn termination outcomes.
 
         POSTCONDITIONS:
         - MUST clean dirty nodes within an agent session phase presenting the node role.

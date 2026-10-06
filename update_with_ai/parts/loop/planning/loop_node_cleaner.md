@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 6e7900f09958
--->
-
 # loop_node_cleaner interface component
 
 imports: dag_storage
@@ -25,6 +18,19 @@ By isolating role execution and failure reporting into a polymorphic cleaner int
 - Processing cannot continue only if an unhandleable failure occurs while cleaning the nodes. [cannot_continue_on_unhandleable_failure]
 - Processing continues when cleaning completes without unhandleable failure. [continue_when_cleaning_handled]
 
-## Woven Contracts
+### Woven Contracts
 
-- A node cleaner processes supplied dirty nodes sharing a role and returns whether workflow processing can continue. \[clean_nodes_supplied, clean_dirty_nodes, communicate_processing_continuation, cannot_continue_on_unhandleable_failure, continue_when_cleaning_handled, dag_storage: [expose_node_dirty]\]
+- A node cleaner processes supplied dirty nodes sharing a role and returns whether workflow processing can continue. [clean_nodes_supplied, clean_dirty_nodes, communicate_processing_continuation, cannot_continue_on_unhandleable_failure, continue_when_cleaning_handled, dag_storage: [expose_node_dirty]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Node cleaning execution for batches of dirty nodes sharing a role. [node_cleaner_service]
+
+### Knowledge Requirements
+
+- Execution environment orchestration for agent session phases.
+  - Deferred: Managed via agent session lifecycle and loop driver in implementation.
+- Translation of execution outcomes into graph storage mutations.
+  - Deferred: Commits clean state, change messages, or blame feedback in implementation.

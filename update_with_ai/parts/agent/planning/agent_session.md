@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 900f82167a79
--->
-
 # agent_session interface component
 
 ## Intent
@@ -26,6 +19,17 @@ The component anchors all session-scoped collaborators to a clean lifecycle tier
 
 - The agent session lifecycle tier is defined under the system lifecycle tier. [session_tier_under_system]
 
-## Woven Contracts
+### Woven Contracts
 
 - The agent session lifecycle tier is subordinate to the system lifecycle tier. [session_tier_under_system]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Canonical agent session lifecycle tier defining conversation and ephemeral resource boundaries. [agent_session_tier_provision]
+
+### Knowledge Requirements
+
+- System lifecycle tier hierarchy.
+  - Deferred: Anchored to system tier in lifecycle framework.

@@ -23,7 +23,11 @@ import tool_provider
 class CheckFilesTool(
     sandbox_run_control.CheckFilesTool, InTier[AgentSessionTier]
 ):
-    """Realizes verification check execution and diagnostic aggregation."""
+    """Realizes verification check execution and diagnostic aggregation.
+
+    GROUNDING:
+    - Evaluates session verification checks sequentially, caching results against file hashes from EditManager.
+    """
 
     @operation
     @override
@@ -42,6 +46,9 @@ class CheckFilesTool(
         - WHEN target file hashes have not changed since previous check, MUST remind agent that verification status is unchanged.
         - WHEN verification fails, MUST present sanitized diagnostic feedback alongside verification failure instructions.
         - WHEN verification passes, MUST produce response presenting passing results.
+
+        GROUNDING:
+        - Invokes RunController.update_verification() to execute outdated checks and aggregates formatted results.
         """
         ...
 
@@ -50,7 +57,11 @@ class CheckFilesTool(
 class AdvanceTool(
     sandbox_run_control.AdvanceTool, InTier[AgentSessionTier]
 ):
-    """Realizes guide milestone advancement gated by verification checks."""
+    """Realizes guide milestone advancement gated by verification checks.
+
+    GROUNDING:
+    - Coordinates milestone advancement through GuideDelivery.advance_step(), gating progression behind verification.
+    """
 
     @operation
     @override
@@ -71,6 +82,9 @@ class AdvanceTool(
         - WHEN verification passes and guide steps remain, MUST deliver next step section.
         - WHEN verification passes, no steps remain, and files were modified, MUST fail reminding agent to call submit with change summary.
         - WHEN verification passes, no steps remain, and no files were modified, MUST specify follow-up execution of submit without change summary.
+
+        GROUNDING:
+        - Checks verification status via RunController and advances guide milestone via GuideDelivery.
         """
         ...
 
@@ -79,7 +93,11 @@ class AdvanceTool(
 class SubmitTool(
     sandbox_run_control.SubmitTool, InTier[AgentSessionTier]
 ):
-    """Realizes node completion verification and clean submission."""
+    """Realizes node completion verification and clean submission.
+
+    GROUNDING:
+    - Validates verification status, change summaries, and milestones, marking nodes clean via DagStorage.
+    """
 
     @operation
     @override
@@ -104,6 +122,9 @@ class SubmitTool(
         - WHEN workspace files were not modified and change summary is provided, MUST fail reminding agent that change summaries are not permitted when submitting without workspace file modifications.
         - MUST mark the resolve target clean in storage via dag_storage with the provided change summary so that the node is no longer dirty.
         - MUST mark resolve target clean in current turn.
+
+        GROUNDING:
+        - Resolves target node from SessionCoordinator or EditManager, verifies clean conditions, and delegates to DagStorage.mark_node_clean().
         """
         ...
 
@@ -112,7 +133,11 @@ class SubmitTool(
 class FailTool(
     sandbox_run_control.FailTool, InTier[AgentSessionTier]
 ):
-    """Realizes task failure termination."""
+    """Realizes task failure termination.
+
+    GROUNDING:
+    - Marks the active target as failed in session state.
+    """
 
     @operation
     @override
@@ -129,6 +154,9 @@ class FailTool(
 
         POSTCONDITIONS:
         - MUST mark active node as failed.
+
+        GROUNDING:
+        - Resolves active node and updates status to failed in SessionCoordinator.
         """
         ...
 
@@ -137,7 +165,11 @@ class FailTool(
 class BlameTool(
     sandbox_run_control.BlameTool, InTier[AgentSessionTier]
 ):
-    """Realizes defect attribution to upstream prerequisites."""
+    """Realizes defect attribution to upstream prerequisites.
+
+    GROUNDING:
+    - Attributes failure to upstream dependency node, adding defect message to DagStorage.
+    """
 
     @operation
     @override
@@ -159,6 +191,9 @@ class BlameTool(
         - WHEN explanation contains newline characters, MUST fail reminding agent that explanation must be a single paragraph.
         - MUST record defect feedback for the blamed target via dag_storage so that the blamed node receives the feedback message.
         - MUST mark blame target as attributed.
+
+        GROUNDING:
+        - Resolves active and blame target nodes, verifies single-paragraph explanation, and adds defect message in DagStorage.
         """
         ...
 
@@ -167,7 +202,11 @@ class BlameTool(
 class GetWorkTool(
     sandbox_run_control.GetWorkTool, InTier[AgentSessionTier]
 ):
-    """Realizes batch acquisition and session task prompt delivery."""
+    """Realizes batch acquisition and session task prompt delivery.
+
+    GROUNDING:
+    - Acquires ready dirty nodes from DagStorage and DagSubgraph, materializes startup templates, and delivers session primer.
+    """
 
     @operation
     @override
@@ -187,6 +226,9 @@ class GetWorkTool(
         - WHEN no dirty nodes are ready, MUST produce an idle response.
         - WHEN ready dirty nodes are obtained and guide step mode is inactive, MUST return task primer with guide file attribution.
         - WHEN ready dirty nodes are obtained and guide step mode is active, MUST return task primer prompting advance.
+
+        GROUNDING:
+        - Queries DagStorage for ready dirty nodes, writes starter templates via DagStorage, and prepares session prompt.
         """
         ...
 
@@ -195,7 +237,11 @@ class GetWorkTool(
 class RunController(
     sandbox_run_control.RunController, InTier[AgentSessionTier]
 ):
-    """Realizes tool installation and verification check result caching."""
+    """Realizes tool installation and verification check result caching.
+
+    GROUNDING:
+    - Maintains cached verification results keyed by target node file hashes from EditManager.
+    """
 
     @property
     @override
@@ -210,5 +256,8 @@ class RunController(
         POSTCONDITIONS:
         - MUST cache verification evaluations alongside target file hashes, evaluating sequentially when outdated.
         - WHEN target file hashes have not changed since previous evaluation, MUST omit check execution and reuse cached outcome.
+
+        GROUNDING:
+        - Compares current file hashes against cached hashes and runs verification check commands if outdated.
         """
         ...

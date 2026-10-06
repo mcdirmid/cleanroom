@@ -28,7 +28,20 @@ By normalizing target strings and deriving package directories, the component en
 - The bazel target normalizes an arbitrary Bazel target identifier string into a canonical node. [normalize_identifier_to_node]
 - The bazel target extracts a node directory from a node. [extract_node_dir_from_node]
 
-## Woven Contracts
+### Woven Contracts
 
-- Normalizing target identifiers converts arbitrary string representations into canonical dag nodes. \[normalize_target_identifier_supplied, normalize_identifier_to_node, dag_storage: [access_dag_dependencies]\]
-- Extracting a node directory derives the package workspace path corresponding to a node. \[extract_node_dir_node_supplied, extract_node_dir_from_node, file_paths: [create_ws_path]\]
+- Normalizing target identifiers converts arbitrary string representations into canonical dag nodes. [normalize_target_identifier_supplied, normalize_identifier_to_node, dag_storage: [access_dag_dependencies]]
+- Extracting a node directory derives the package workspace path corresponding to a node. [extract_node_dir_node_supplied, extract_node_dir_from_node, file_paths: [create_ws_path]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Target normalization and node package directory extraction service. [bazel_target_service]
+
+### Knowledge Requirements
+
+- Parsing and normalization of arbitrary Bazel target label formats into canonical nodes.
+  - Deferred: Delegated to bazel_target_labels_ext in implementation.
+- Translation of canonical package identifiers into workspace-relative paths.
+  - Deferred: Delegated to bazel_target_labels_ext and file_paths in implementation.

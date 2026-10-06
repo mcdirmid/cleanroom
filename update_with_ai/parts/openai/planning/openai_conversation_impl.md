@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 1bcc929e9fe0
--->
-
 # openai_conversation_impl implementation component
 
 imports: agent_config, json_ext, openai_ext, tool_provider
@@ -36,10 +29,30 @@ By pruning redundant previous tool outputs, maintaining reminders, and ordering 
 - The synthetic assistant invocation correlates with the response tool call identifier. [correlate_synthetic_invocation_tool_call_id]
 - The synthetic assistant invocation orders serialized argument parameters deterministically by parameter name. [order_synthetic_invocation_arguments]
 
-## Woven Contracts
+### Woven Contracts
 
-- Messages are formatted to OpenAI system, user, assistant, and tool role conventions. \[format_messages_to_openai_conventions, loop_conversation: [provide_model_request], openai_ext: [include_ordered_messages]\]
-- Tool responses sharing a suppression key retain a rolling buffer of up to three recent responses while replacing older responses with stubs. \[retain_recent_responses_in_buffer, replace_older_responses_with_stubs, preserve_unmatched_responses_intact, retain_reminder_in_stub, inherit_reminder_when_omitted, loop_conversation: [stub_previous_responses_by_key]\]
-- Superseded assistant invocations retain parameter keys, file paths, and non-string arguments while replacing other strings with a stub marker. \[retain_parameter_keys_in_stub, preserve_file_path_parameters_in_stub, preserve_non_string_values_in_stub, stub_other_string_values_in_stub, loop_conversation: [stub_correlating_tool_args_by_key], json_ext: [parse_valid_json, serialize_sorted_keys]\]
-- Assembled model requests bundle execution notes, content, and active reminders into tool messages. \[include_notes_content_reminders_in_tool_messages, format_active_reminders_in_request, tool_provider: [call_by_name]\]
-- Unprompted starter responses are paired with synthetic antecedent assistant tool calls with sorted argument keys. \[precede_unprompted_response_with_synthetic_invocation, correlate_synthetic_invocation_tool_call_id, order_synthetic_invocation_arguments, loop_conversation: [initialize_with_initial_messages], json_ext: [serialize_sorted_keys]\]
+- Messages are formatted to OpenAI system, user, assistant, and tool role conventions. [format_messages_to_openai_conventions, loop_conversation: [provide_model_request]]
+- Tool responses sharing a suppression key retain a rolling buffer of up to three recent responses while replacing older responses with stubs. [retain_recent_responses_in_buffer, replace_older_responses_with_stubs, preserve_unmatched_responses_intact, retain_reminder_in_stub, inherit_reminder_when_omitted, loop_conversation: [stub_previous_responses_by_key]]
+- Superseded assistant invocations retain parameter keys, file paths, and non-string arguments while replacing other strings with a stub marker. [retain_parameter_keys_in_stub, preserve_file_path_parameters_in_stub, preserve_non_string_values_in_stub, stub_other_string_values_in_stub, loop_conversation: [stub_correlating_tool_args_by_key]]
+- Assembled model requests bundle execution notes, content, and active reminders into tool messages. [include_notes_content_reminders_in_tool_messages, format_active_reminders_in_request, tool_provider: [call_by_name]]
+- Unprompted starter responses are paired with synthetic antecedent assistant tool calls with sorted argument keys. [precede_unprompted_response_with_synthetic_invocation, correlate_synthetic_invocation_tool_call_id, order_synthetic_invocation_arguments, loop_conversation: [initialize_with_initial_messages]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Turn conversation history formatting, model request preparation, and tool output stubbing. [loop_conversation_service]
+
+### Inherited Deferred Requirements
+
+- Model message sequence encoding and suppression key stubbing.
+  - Grounded: [loop_conversation_service, openai_ext: [openai_wire_operations]]
+
+### Knowledge Requirements
+
+- JSON parsing and serializing with sorted keys.
+  - Grounded: [json_ext: [json_operations]]
+- Formatting tool execution messages with notes, content, and active reminders.
+  - Grounded: [loop_conversation_service]
+- Synthetic assistant invocation pairing for unprompted starter tool responses.
+  - Grounded: [loop_conversation_service, json_ext: [json_operations]]

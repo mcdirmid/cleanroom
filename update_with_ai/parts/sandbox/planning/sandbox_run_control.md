@@ -49,10 +49,31 @@ By providing dedicated tools for verification inspection, milestone advancement,
 - The get work tool delivers the session task prompt. [get_work_delivers_task_prompt]
 - The get work tool specifies a follow-up execution of the advance tool when the guide is in step mode. [get_work_specifies_advance_followup_in_step_mode]
 
-## Woven Contracts
+### Woven Contracts
 
-- The check files tool evaluates session verification checks, caching results against file hashes and reporting outcomes or failures. \[expose_verification_checks, cache_verification_results, reuse_cached_verification_outcome, check_files_updates_outdated_results, check_files_evaluates_checks, check_files_presents_outcomes, check_files_tracks_tested_hashes, check_files_fails_on_verification_failure, agent_node_config: [session_config_verification_checks]\]
+- The check files tool evaluates session verification checks, caching results against file hashes and reporting outcomes or failures. [expose_verification_checks, cache_verification_results, reuse_cached_verification_outcome, check_files_updates_outdated_results, check_files_evaluates_checks, check_files_presents_outcomes, check_files_tracks_tested_hashes, check_files_fails_on_verification_failure, agent_node_config: [session_config_verification_checks]]
 - In guide step mode, the advance tool coordinates progressive milestone advancement through guide delivery upon passing verification. [install_advance_tool_when_step_mode, advance_tool_coordinates_step_progression]
-- Concluding tasks via the submit tool validates passing verification, documents modifications, and marks resolved targets clean in the graph. \[submit_concludes_nodes_on_pass, submit_marks_target_clean, submit_enforces_change_documentation, dag_storage: [clear_node_messages]\]
-- Attributing task failure via the blame tool records diagnostic explanations blaming upstream dependency nodes. \[blame_attributes_upstream_failure, dag_storage: [add_node_messages]\]
-- The get work tool retrieves ready dirty nodes, materializes starter templates, delivers session prompts, and initiates step guidance when configured. \[get_work_retrieves_dirty_nodes, get_work_materializes_templates, get_work_delivers_task_prompt, get_work_specifies_advance_followup_in_step_mode, tool_provider: [call_by_name]\]
+- Concluding tasks via the submit tool validates passing verification, documents modifications, and marks resolved targets clean in the graph. [submit_concludes_nodes_on_pass, submit_marks_target_clean, submit_enforces_change_documentation, dag_storage: [clear_node_messages]]
+- Attributing task failure via the blame tool records diagnostic explanations blaming upstream dependency nodes. [blame_attributes_upstream_failure, dag_storage: [add_node_messages]]
+- The get work tool retrieves ready dirty nodes, materializes starter templates, delivers session prompts, and initiates step guidance when configured. [get_work_retrieves_dirty_nodes, get_work_materializes_templates, get_work_delivers_task_prompt, get_work_specifies_advance_followup_in_step_mode, tool_provider: [call_by_name]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Evaluates and aggregates session verification checks. [verification_evaluation]
+- Coordinates milestone step progression through guide delivery. [advance_step_coordination]
+- Concludes active nodes clean in graph storage. [clean_submission]
+- Records defect attribution to upstream dependencies. [defect_blame]
+- Acquires active dirty nodes and initializes session tasks. [work_acquisition]
+
+### Knowledge Requirements
+
+- Access to dag storage to query nodes and record messages.
+  - Deferred: Requires graph storage in implementation.
+- Access to session edit manager to inspect modification state and hashes.
+  - Deferred: Requires edit manager in implementation.
+- Capability to execute external verification commands.
+  - Deferred: Requires command execution in implementation.
+- Access to guide delivery to manage milestone transitions.
+  - Deferred: Requires guide delivery in implementation.

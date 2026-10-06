@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 41ff7effe9e8
--->
-
 # agent_node_config interface component
 
 imports: agent_session, agent_file_alias, dag_storage
@@ -46,9 +39,22 @@ By centralizing role execution versions and providing structured representations
 - The session config provides session blame targets mapping read-write files to blame target read-only files. [session_config_blame_targets]
 - The session config provides session messages mapping read-write files to incoming messages. [session_config_messages]
 
-## Woven Contracts
+### Woven Contracts
 
 - Configuring the role of the session in the role config sets the session role. [role_config_set_role]
 - Setting the nodes being cleaned in the role config updates the active node sequence and increments the execution version. [role_config_set_nodes, set_nodes_increments_version]
 - The session config exposes declared read-only and read-write bound files anchoring file permissions to active nodes. [session_config_read_only_files, session_config_read_write_files]
 - When verification criteria fail, the verification check communicates diagnostic feedback describing the failure. [verification_check_passed, verification_check_feedback]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Session-scoped node configuration, file permissions, guides, templates, and verification checks. [node_configuration_service]
+
+### Knowledge Requirements
+
+- Session role configuration and active cleaned nodes.
+  - Deferred: Provided by session orchestrator in implementation.
+- Read-only and read-write bound file declarations for active session nodes.
+  - Deferred: Derived from graph storage targets in implementation.

@@ -1,7 +1,7 @@
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-05T20:52:01Z
-# LAST_CHANGED: 2026-10-05T05:42:51Z
-# CHANGE: Make log opening declarative and specify unbuffered flush mechanics
+# LAST_CHANGED: 2026-10-06T12:45:00Z
+# CHANGE: add grounding sections
 # CODE_HASH: e705ed6a816c
 # --- END CLEANROOM METADATA ---
 
@@ -13,7 +13,12 @@ import runner_logger
 
 @singleton_type("system")
 class RunnerLogger(runner_logger.RunnerLogger):
-    """Realizes live terminal logging and unbuffered transcript file output."""
+    """Realizes live terminal logging and unbuffered transcript file output.
+
+    GROUNDING:
+    - Implements execution logging by formatting timestamped summaries to stdout
+      and streaming unbuffered JSON-serialized event records to a transcript log file.
+    """
 
     @operation
     @override
@@ -22,6 +27,10 @@ class RunnerLogger(runner_logger.RunnerLogger):
 
         Args:
             event: The execution event record to consume.
+
+        GROUNDING:
+        - Formats timestamp and event name to sys.stdout and appends raw transcript
+          text followed by immediate flush to ensure durability.
 
         POSTCONDITIONS:
         - MUST format single-line summaries with timestamps on standard output lines.
@@ -35,6 +44,9 @@ class RunnerLogger(runner_logger.RunnerLogger):
 
 def __orphan__() -> None:
     """Orphan contracts for runner logger implementation.
+
+    GROUNDING:
+    - Resolves log file path from environment and truncates file at startup.
 
     POSTCONDITIONS:
     - MUST truncate the transcript log file at opening.

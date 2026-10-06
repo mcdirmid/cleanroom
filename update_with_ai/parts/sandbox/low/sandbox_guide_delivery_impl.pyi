@@ -21,16 +21,31 @@ import tool_provider
 class GuideDelivery(
     sandbox_guide_delivery.GuideDelivery, InTier[AgentSessionTier]
 ):
-    """Realizes markdown guide parsing and milestone-gated step progression."""
+    """Realizes markdown guide parsing and milestone-gated step progression.
+
+    GROUNDING:
+    - Tracks the parsed NodeGuide, active step offset, and optional InitialPrimer
+      in private attributes within the agent session tier.
+    """
 
     @property
     @override
     def guide(self) -> Optional[agent_node_config.NodeGuide]:
+        """Exposes the configured node guide.
+
+        GROUNDING:
+        - Exposes the internal parsed NodeGuide or None if unconfigured.
+        """
         ...
 
     @property
     @override
     def has_steps_remaining(self) -> bool:
+        """Exposes whether steps remain to be completed.
+
+        GROUNDING:
+        - Checks whether the active step offset is less than the total count of step sections.
+        """
         ...
 
     @operation
@@ -48,12 +63,20 @@ class GuideDelivery(
         - MUST extract the guide summary from content preceding the first heading and under headings titled "Summary".
         - MUST capture verification failure instructions when a section heading begins with "Verification failure".
         - MUST create sequential step sections for level-two headings excluding sections titled "Summary", "Lint checks", or "Verification failure".
+
+        GROUNDING:
+        - Parses markdown text by splitting on section headings, extracting summary, failure instructions, and step sections.
         """
         ...
 
     @operation
     @override
     def record_initial_primer(self, primer: sandbox_guide_delivery.InitialPrimer) -> None:
+        """Records the initial primer instructional context.
+
+        GROUNDING:
+        - Stores the supplied InitialPrimer in private session state.
+        """
         ...
 
     @operation
@@ -73,5 +96,8 @@ class GuideDelivery(
         POSTCONDITIONS:
         - WHEN verification passes, MUST deliver instructional text.
         - WHEN verification fails, MUST retain current milestone and report failure diagnostics alongside verification failure instructions.
+
+        GROUNDING:
+        - Advances step offset if verification passed and steps remain; otherwise preserves offset and formats failure response with failure instructions and diagnostics.
         """
         ...

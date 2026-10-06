@@ -13,7 +13,14 @@ class SubmissionCoordinator(
     control_submit.SubmissionCoordinator,
     InTier[AgentSessionTier],
 ):
-    """Implementation of submission coordinator."""
+    """Implementation of submission coordinator.
+
+    GROUNDING:
+    - Realizes submission gating by verifying check outcomes from VerificationEvaluator,
+      validating in-batch dependency cleanliness, enforcing change summary constraints
+      against file modifications and auditor role configurations, and mutating node
+      cleanliness in DagStorage.
+    """
 
     @operation
     @override
@@ -24,4 +31,11 @@ class SubmissionCoordinator(
         has_modifications: bool = False,
         in_batch_dependencies: Optional[Sequence[dag_storage.DagNode]] = None,
     ) -> control_submit.SubmissionOutcome:
+        """Evaluates submission criteria and commits clean status to storage.
+
+        GROUNDING:
+        - Grounded via VerificationEvaluator to ensure checks pass, NodeConfig and RoleConfig
+          to inspect auditor roles, modification tracking to validate change summary necessity,
+          and DagStorage to update status to clean and append change messages.
+        """
         ...

@@ -9,8 +9,8 @@
 
 ## Mandatory Specification-First (HLS-First) Rule
 
-- **ALWAYS start with HLS changes when changing code in a parts directory**: Never make stealth changes to library code (`lib/*.py`), unit tests (`tests/*_test.py`), or grounding specs (`grounding/*.pyi`) without first authoring and aligning the corresponding High-Level Specification (`high/*.md`).
-- **Automatic Downstream Alignment**: Whenever changes are made to HLS files (`high/*.md`), immediately and automatically cascade alignment across the entire downstream pipeline: `HLS` (`high/*.md`) $\\to$ `Planning` (`planning/*.md`) $\\to$ `Low` (`low/*.pyi`) $\\to$ `Grounding` (`grounding/*.py`) $\\to$ `Grounding QA` (`logs/*_grounding_qa.log`) $\\to$ `Library` (`lib/*.py`) $\\to$ `Unit Tests` (`tests/*_test.py`). Do not stop after editing HLS files or wait for separate prompts to complete downstream alignment.
+- **ALWAYS start with HLS changes when changing code in a parts directory**: Never make stealth changes to library code (`lib/*.py`) or unit tests (`tests/*_test.py`) without first authoring and aligning the corresponding High-Level Specification (`high/*.md`).
+- **Automatic Downstream Alignment**: Whenever changes are made to HLS files (`high/*.md`), immediately and automatically cascade alignment across the entire downstream pipeline: `HLS` (`high/*.md`) $\to$ `Planning` (`planning/*.md`) $\to$ `Spec QA` $\to$ `Low` (`low/*.pyi`) $\to$ `Low QA` $\to$ `Library` (`lib/*.py`) $\to$ `Unit Tests` (`tests/*_test.py`). Do not stop after editing HLS files or wait for separate prompts to complete downstream alignment.
 
 ## Semantic Analysis Over Syntactic Checking (Anti-Mechanistic Rule)
 
@@ -27,9 +27,9 @@ Always read and maintain in context the relevant guide from `update_python_with_
 
 - **High-Level Specs (HLS)**: `update_python_with_ai/guides/high_level_spec.md`
 - **HLS to Planning Alignment**: `update_python_with_ai/guides/high_to_planning.md`
+- **Spec QA Arbiter**: `update_python_with_ai/guides/spec_qa.md`
 - **Planning to Low Alignment**: `update_python_with_ai/guides/planning_to_low.md`
-- **Low to Grounding Alignment**: `update_python_with_ai/guides/low_to_grounding.md`
-- **Grounding QA Arbiter**: `update_python_with_ai/guides/grounding_qa.md`
+- **Low QA Arbiter**: `update_python_with_ai/guides/low_qa.md`
 - **Low-Level Specification to Library Code Alignment**: `update_python_with_ai/guides/low_to_lib.md`
 - **Low-Level Specification to Unit Tests Alignment**: `update_python_with_ai/guides/low_to_test.md`
 - **QA Verification**: `update_python_with_ai/guides/qa.md`

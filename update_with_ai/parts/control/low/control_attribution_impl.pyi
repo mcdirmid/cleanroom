@@ -13,7 +13,14 @@ class AttributionCoordinator(
     control_attribution.AttributionCoordinator,
     InTier[AgentSessionTier],
 ):
-    """Implementation of attribution coordinator."""
+    """Implementation of attribution coordinator.
+
+    GROUNDING:
+    - Coordinates upstream defect blame and failure reporting by validating that blame
+      targets are declared upstream dependencies, enforcing single-paragraph feedback rules,
+      updating culprit cleanliness and feedback records in DagStorage, and transitioning
+      affected session nodes to attributed or failed states.
+    """
 
     @operation
     @override
@@ -25,6 +32,14 @@ class AttributionCoordinator(
         in_batch_dependencies: Optional[Sequence[dag_storage.DagNode]] = None,
         in_batch_dependents: Optional[Sequence[dag_storage.DagNode]] = None,
     ) -> control_attribution.AttributionOutcome:
+        """Attributes defect to an upstream dependency and requests reprocessing.
+
+        GROUNDING:
+        - Grounded via DagStorage to verify upstream dependency edges, string newline
+          checking for single-paragraph compliance, DagStorage feedback appending
+          and dirty status marking on the culprit, and cascading failure to in-batch
+          dependent nodes.
+        """
         ...
 
     @operation
@@ -35,4 +50,11 @@ class AttributionCoordinator(
         explanation: str,
         in_batch_dependents: Optional[Sequence[dag_storage.DagNode]] = None,
     ) -> control_attribution.AttributionOutcome:
+        """Records a task failure and fails downstream in-batch dependent nodes.
+
+        GROUNDING:
+        - Grounded via DagStorage diagnostic logging and dirty status preservation
+          on the failed target, alongside cascading failure marking across downstream
+          in-batch dependent nodes.
+        """
         ...

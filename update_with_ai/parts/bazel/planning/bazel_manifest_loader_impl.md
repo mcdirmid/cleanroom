@@ -41,9 +41,35 @@ By locating manifest files across workspace directories or runfiles trees, norma
 - The bazel manifest loader registers declared silent dependencies as non-propagating dependencies in agent storage. [register_silent_dependencies_in_storage]
 - The bazel manifest loader synthesizes fallback node definitions for referenced targets lacking manifests. [synthesize_fallback_definitions_for_missing_targets]
 
-## Woven Contracts
+### Woven Contracts
 
-- Package path resolution anchors relative package directories to the workspace root retrieved from the file path manager and canonical paths to candidate runfiles roots. \[anchor_workspace_package_paths, anchor_runfiles_package_paths, file_paths: [resolve_workspace_path]\]
-- Target manifests are discovered across candidate paths in workspace directories or runfiles trees and loaded via bazel manifest ext. \[retrieve_from_workspace_directories, retrieve_from_runfiles_trees, anchor_workspace_package_paths, anchor_runfiles_package_paths, load_target_manifest_via_ext, bazel_manifest_ext: [parse_monolithic_target_fields], bazel_manifest_loader: [retrieve_manifest_for_node], file_paths: [resolve_workspace_path]\]
-- Unit and role manifests decode metadata schemas and synthesize target records by evaluating source patterns and prompt templates. \[load_unit_manifest_via_ext, load_role_manifest_via_ext, evaluate_role_source_patterns, evaluate_task_prompt_templates, evaluate_verification_check_templates, crossproduct_unit_role_dependencies, incorporate_role_node_dependencies, synthesize_promptless_passthrough_definitions, bazel_manifest_ext: [parse_unit_label, parse_role_label, parse_node_deps], bazel_manifest_loader: [retrieve_manifest_for_node, synthesize_passthrough_definitions]\]
-- Manifest loading populates agent storage with node definitions, declared source paths and silent source paths normalized without duplicate package segments, and graph dependency edges while synthesizing definitions for missing targets. \[populate_node_definitions_in_storage, record_source_file_paths_in_storage, record_silent_source_file_paths_in_storage, register_direct_dependencies_in_storage, register_feedback_dependencies_in_storage, register_silent_dependencies_in_storage, synthesize_fallback_definitions_for_missing_targets, agent_storage: [maintain_workspace_targets, provide_node_definitions], dag_storage: [access_dag_dependencies], bazel_manifest_loader: [resolve_manifests_into_nodes, resolve_manifests_into_definitions, resolve_manifests_into_prompts, populate_agent_storage, resolve_direct_dependencies_graph_edges, resolve_silent_dependencies_non_propagating, synthesize_missing_dependency_definitions]\]
+- Package path resolution anchors relative package directories to the workspace root retrieved from the file path manager and canonical paths to candidate runfiles roots. [anchor_workspace_package_paths, anchor_runfiles_package_paths, file_paths: [resolve_workspace_path]]
+- Target manifests are discovered across candidate paths in workspace directories or runfiles trees and loaded via bazel manifest ext. [retrieve_from_workspace_directories, retrieve_from_runfiles_trees, anchor_workspace_package_paths, anchor_runfiles_package_paths, load_target_manifest_via_ext, bazel_manifest_loader: [retrieve_manifest_for_node], file_paths: [resolve_workspace_path]]
+- Unit and role manifests decode metadata schemas and synthesize target records by evaluating source patterns and prompt templates. [load_unit_manifest_via_ext, load_role_manifest_via_ext, evaluate_role_source_patterns, evaluate_task_prompt_templates, evaluate_verification_check_templates, crossproduct_unit_role_dependencies, incorporate_role_node_dependencies, synthesize_promptless_passthrough_definitions, bazel_manifest_loader: [retrieve_manifest_for_node, synthesize_passthrough_definitions]]
+- Manifest loading populates agent storage with node definitions, declared source paths and silent source paths normalized without duplicate package segments, and graph dependency edges while synthesizing definitions for missing targets. [populate_node_definitions_in_storage, record_source_file_paths_in_storage, record_silent_source_file_paths_in_storage, register_direct_dependencies_in_storage, register_feedback_dependencies_in_storage, register_silent_dependencies_in_storage, synthesize_fallback_definitions_for_missing_targets, agent_storage: [maintain_workspace_targets, provide_node_definitions], dag_storage: [access_dag_dependencies], bazel_manifest_loader: [resolve_manifests_into_nodes, resolve_manifests_into_definitions, resolve_manifests_into_prompts, populate_agent_storage, resolve_direct_dependencies_graph_edges, resolve_silent_dependencies_non_propagating, synthesize_missing_dependency_definitions]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Target manifest discovery, schema parsing, template evaluation, and graph population. [bazel_manifest_loader_service]
+
+### Inherited Deferred Requirements
+
+- Manifest file discovery across workspace directories and candidate runfiles trees.
+  - Grounded: [file_paths: [path_resolution_service]]
+- Parsing build system unit, role, and target manifest JSON schemas.
+  - Grounded: [bazel_manifest_ext: [unit_manifest_parsing, role_manifest_parsing, target_manifest_parsing]]
+- Evaluation of role path patterns and prompt templates against unit attributes.
+  - Grounded: [bazel_manifest_ext: [unit_manifest_parsing, role_manifest_parsing]]
+- Populating target definitions, source file paths, and dependency edges in agent and dag storage.
+  - Grounded: [agent_storage: [agent_storage_service], dag_storage: [dag_storage_service]]
+
+### Knowledge Requirements
+
+- Candidate manifest search path construction across workspace and runfiles.
+  - Grounded: [file_paths: [path_resolution_service]]
+- Decoding unit and role JSON schemas into typed manifest records.
+  - Grounded: [bazel_manifest_ext: [unit_manifest_parsing, role_manifest_parsing]]
+- Registering synthesized targets and dependency edges into storage.
+  - Grounded: [agent_storage: [agent_storage_service], dag_storage: [dag_storage_service]]

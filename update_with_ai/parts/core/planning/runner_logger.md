@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 36acb2850a34
--->
-
 # runner_logger interface component
 
 ## Intent
@@ -28,6 +21,19 @@ By centralizing event consumption within a system-level logging service, the com
 - The runner logger writes single-line summaries to standard output. [write_stdout_summary]
 - The runner logger writes verbose transcript representations to a transcript log file. [write_transcript_log]
 
-## Woven Contracts
+### Woven Contracts
 
 - When consuming a runner log event, the runner logger writes a single-line summary to standard output and the verbose transcript representation to the transcript log file. [supply_runner_log_event, consume_log_events, write_stdout_summary, write_transcript_log]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Execution event logging with live stdout summaries and transcript file recording. [runner_logging_service]
+
+### Knowledge Requirements
+
+- Formatting and terminal emission of event summaries.
+  - Deferred: Formatted with timestamps and written to stdout in implementation.
+- Persistent file recording of verbose event transcripts with immediate flush.
+  - Deferred: Appended to unbuffered file in implementation.

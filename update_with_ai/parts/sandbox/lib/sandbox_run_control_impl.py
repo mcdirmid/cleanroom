@@ -171,7 +171,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
     def reset_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
         self._cache.clear()
         self._coord.reset_nodes(nodes)
-        if not nodes: _install_tools()
+        _install_tools()
 
     def evaluate_verification(self, target: Optional[dag_storage.DagNode] = None) -> Tuple[bool, str]:
         cfg = get_singleton(agent_node_config.NodeConfig)

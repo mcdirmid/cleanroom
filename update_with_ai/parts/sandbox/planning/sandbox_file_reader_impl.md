@@ -39,13 +39,37 @@ By formatting lines with right-aligned line numbers, filtering metadata paragrap
 - Searching read-only files provides matched line numbers. [search_ro_returns_line_numbers]
 - Searching read-write files states that matches were found without displaying line contents. [search_rw_withholds_contents]
 
-## Woven Contracts
+### Woven Contracts
 
-- The view_file tool is installed for the agent session to provide structured file access. \[view_file_name, view_file_installed, tool_provider: [install_tools]\]
+- The view_file tool is installed for the agent session to provide structured file access. [view_file_name, view_file_installed, tool_provider: [install_tools]]
 - Search tool search_files is defined but omitted from installation across all session modes. [search_files_name, search_files_omitted]
-- Read file content formats lines with one-indexed right-aligned line numbers, filters metadata paragraphs, and renders markdown templates for read-only files. \[format_numbered_lines, filter_meta_paragraphs, render_markdown_templates, template_format: [format_template_text, substitute_bound_placeholders], filesystem_ext: [read_utf8_content]\]
-- Responses for read-write files carry suppression keys to supersede earlier turns, while read-only responses omit suppression keys and sanitize host paths. \[rw_response_suppression_key, ro_response_omit_suppression_key, ro_response_sanitize_paths, tool_provider: [supersede_by_key], agent_file_alias: [sanitize_mask_ws_paths, sanitize_mask_preceding_prefixes]\]
-- When reading a missing read-write file, empty content is returned, whereas a missing read-only file fails with recovery guidance. \[read_missing_rw_empty, missing_ro_file_fails, filesystem_ext: [inspect_path_exists], tool_provider: [call_improper_fails, failed_call_feedback]\]
-- Upon successful file reading, the file is recorded as the session's last read or written file. \[record_read_file, sandbox_file_editor: [track_last_read_or_edited, record_file_read_op]\]
-- When converting an invalid regex search pattern, conversion fails with diagnostic feedback. \[convert_regex_pattern, invalid_regex_pattern_fails, tool_provider: [convert_failure_error]\]
-- When searching declared files, read-only matches return sanitized lines while read-write matches withhold line contents to enforce edit safety. \[search_ro_returns_contents, search_ro_returns_line_numbers, search_rw_withholds_contents, filesystem_ext: [traverse_regex_scan, collect_regex_line_numbers, collect_regex_line_contents], agent_file_alias: [sanitize_mask_ws_paths]\]
+- Read file content formats lines with one-indexed right-aligned line numbers, filters metadata paragraphs, and renders markdown templates for read-only files. [format_numbered_lines, filter_meta_paragraphs, render_markdown_templates, template_format: [format_template_text, substitute_bound_placeholders]]
+- Responses for read-write files carry suppression keys to supersede earlier turns, while read-only responses omit suppression keys and sanitize host paths. [rw_response_suppression_key, ro_response_omit_suppression_key, ro_response_sanitize_paths, tool_provider: [supersede_by_key], agent_file_alias: [sanitize_mask_ws_paths, sanitize_mask_preceding_prefixes]]
+- When reading a missing read-write file, empty content is returned, whereas a missing read-only file fails with recovery guidance. [read_missing_rw_empty, missing_ro_file_fails, tool_provider: [call_improper_fails, failed_call_feedback]]
+- Upon successful file reading, the file is recorded as the session's last read or written file. [record_read_file, sandbox_file_editor: [track_last_read_or_edited, record_file_read_op]]
+- When converting an invalid regex search pattern, conversion fails with diagnostic feedback. [convert_regex_pattern, invalid_regex_pattern_fails, tool_provider: [convert_failure_error]]
+- When searching declared files, read-only matches return sanitized lines while read-write matches withhold line contents to enforce edit safety. [search_ro_returns_contents, search_ro_returns_line_numbers, search_rw_withholds_contents, agent_file_alias: [sanitize_mask_ws_paths]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Exposes declared read-only session files. [ro_files_provision]
+- Exposes declared read-write session files. [rw_files_provision]
+- Checks read access for workspace paths. [read_access_check]
+- Reads file content for specified file alias paths. [view_file_capability]
+- Searches pattern matches across declared session files. [search_files_capability]
+
+### Inherited Deferred Requirements
+
+- Access to underlying filesystem to inspect and read file contents.
+  - Grounded: [filesystem_ext: [filesystem_operations]]
+- Access to session node configuration to resolve declared files.
+  - Grounded: [agent_node_config: [node_configuration_service]]
+- Capability to record file reads in session edit manager.
+  - Grounded: [sandbox_file_editor: [update_revision_tracking]]
+
+### Knowledge Requirements
+
+- Formatting line numbered output with metadata filtering and template rendering.
+  - Grounded: [template_format: [template_formatting], agent_file_alias: [alias_mapping]]

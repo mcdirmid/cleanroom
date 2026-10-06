@@ -25,7 +25,23 @@ In iterative agent coding workflows, build and test executions produce verbose o
 - A verification evaluator memoizes verification results keyed by target file hashes. [cache_result_by_hash]
 - A verification evaluator reuses memoized results when target file hashes are unchanged. [reuse_cached_result]
 
-## Woven Contracts
+### Woven Contracts
 
 - When evaluating checks for a target whose files have not changed since prior evaluation, the verification evaluator returns the memoized verification result with the cached flag set. [cache_result_by_hash, reuse_cached_result]
 - When check execution produces diagnostic output, the verification evaluator sanitizes the output by removing build progress lines, load banners, and elapsed timing statistics before reporting the outcome. [filter_progress_noise, filter_banner_noise, filter_timing_noise]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Evaluates target verification checks with terminal noise filtering. [verification_evaluation]
+- Memoizes check results by file hash to avoid redundant subprocess execution. [verification_caching]
+
+### Knowledge Requirements
+
+- Resolution of configured verification check commands for target nodes.
+  - Deferred: Resolved from agent_node_config in implementation.
+- Computation of cryptographic hashes of target read-write files.
+  - Deferred: Computed via SHA-256 in implementation.
+- Subprocess execution of verification commands.
+  - Deferred: Delegated to subprocess execution in implementation.

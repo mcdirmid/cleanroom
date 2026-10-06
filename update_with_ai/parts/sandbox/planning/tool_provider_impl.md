@@ -25,9 +25,28 @@ To facilitate robust interaction across dynamic agent environments, the implemen
 - When an unknown parameter name is supplied, failure feedback reminds the agent that only declared parameters of the tool can be provided. [unknown_param_reminder]
 - When a required parameter argument is omitted, failure feedback reminds the agent that required parameters of the tool must be supplied. [omitted_required_reminder]
 
-## Woven Contracts
+### Woven Contracts
 
-- When executing a tool with argument mappings, the tool is executed by name with wire parameter bindings. \[delegate_exec_with_args, tool_provider: [call_wire_bindings, call_by_name]\]
-- When parameter bindings contain a name that does not match known parameters of the tool, execution fails with feedback citing the unknown parameter and reminding the agent that only declared parameters of the tool can be provided. \[unknown_param_fails, unknown_param_reminder, tool_provider: [provide_tool_params, call_by_name, resolve_symbols, call_improper_fails, failed_call_feedback]\]
-- When a call omits a required parameter configuring a missing note evaluated against present parameters, execution fails with feedback citing the missing parameter, the evaluated missing note, and reminding the agent that required parameters of the tool must be supplied. \[omitted_required_reminder, tool_provider: [check_requirements, call_improper_fails, failed_call_feedback]\]
-- When a call omits a required parameter lacking a configured missing note, execution fails with feedback citing the missing parameter and reminding the agent that required parameters of the tool must be supplied. \[omitted_required_reminder, tool_provider: [check_requirements, call_improper_fails, failed_call_feedback]\]
+- When executing a tool with argument mappings, the tool is executed by name with wire parameter bindings. [delegate_exec_with_args, tool_provider: [call_wire_bindings, call_by_name]]
+- When parameter bindings contain a name that does not match known parameters of the tool, execution fails with feedback citing the unknown parameter and reminding the agent that only declared parameters of the tool can be provided. [unknown_param_fails, unknown_param_reminder, tool_provider: [provide_tool_params, call_by_name, resolve_symbols, call_improper_fails, failed_call_feedback]]
+- When a call omits a required parameter configuring a missing note evaluated against present parameters, execution fails with feedback citing the missing parameter, the evaluated missing note, and reminding the agent that required parameters of the tool must be supplied. [omitted_required_reminder, tool_provider: [check_requirements, call_improper_fails, failed_call_feedback]]
+- When a call omits a required parameter lacking a configured missing note, execution fails with feedback citing the missing parameter and reminding the agent that required parameters of the tool must be supplied. [omitted_required_reminder, tool_provider: [check_requirements, call_improper_fails, failed_call_feedback]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Private dictionary mapping tool names to installed tools. [private_tool_storage]
+- Mutation capability to insert tools into private dictionary. [private_tool_mutation]
+
+### Inherited Deferred Requirements
+
+- Access to backing collection storing installed tools.
+  - Grounded: [private_tool_storage]
+- Capability to register and mutate installed tools in storage.
+  - Grounded: [private_tool_mutation]
+
+### Knowledge Requirements
+
+- Execution of tools by name with parameter binding conversion and diagnostic error handling.
+  - Grounded: [private_tool_storage, tool_provider: [wire_value_conversion, tool_execution_capability, tool_response_generation]]

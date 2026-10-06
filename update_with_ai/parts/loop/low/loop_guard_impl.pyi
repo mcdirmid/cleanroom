@@ -1,7 +1,7 @@
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-05T20:52:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
+# LAST_CHANGED: 2026-10-06T12:45:00Z
+# CHANGE: add grounding sections
 # CODE_HASH: 48aec8080a13
 # --- END CLEANROOM METADATA ---
 
@@ -17,7 +17,12 @@ import tool_provider
 
 @singleton_type("agent_session")
 class LoopGuard(loop_guard.LoopGuard, InTier[AgentSessionTier]):
-    """Realizes threshold-based repetition tracking for tools and line-bounded file edits."""
+    """Realizes threshold-based repetition tracking for tools and line-bounded file edits.
+
+    GROUNDING:
+    - Maintains in-memory call signatures and file edit ranges, emitting LoopReminder
+      at warning thresholds and LoopFailure at fatal thresholds.
+    """
 
     @operation
     @override
@@ -35,6 +40,10 @@ class LoopGuard(loop_guard.LoopGuard, InTier[AgentSessionTier]):
         Returns:
             Optional loop reminder or loop failure.
 
+        GROUNDING:
+        - Grounded via tracking consecutive identical tool calls and file edit coordinate spans,
+          producing LoopReminder at two repetitions and LoopFailure at fatal limits.
+
         POSTCONDITIONS:
         - WHEN consecutive identical tool executions reach two repetitions, MUST produce a loop reminder.
         - WHEN consecutive identical tool executions reach the fatal threshold, MUST produce a loop failure.
@@ -47,6 +56,9 @@ class LoopGuard(loop_guard.LoopGuard, InTier[AgentSessionTier]):
     @override
     def reset(self) -> None:
         """Resets repetition tracking counters upon forward progress.
+
+        GROUNDING:
+        - Grounded via clearing internal consecutive repetition counters when forward progress occurs.
 
         POSTCONDITIONS:
         - MUST reset repetition counters in the loop guard.

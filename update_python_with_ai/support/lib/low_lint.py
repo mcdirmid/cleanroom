@@ -41,6 +41,7 @@ ALLOWED_DOCSTRING_SECTIONS = {
     "INVARIANTS:",
     "PRECONDITIONS:",
     "POSTCONDITIONS:",
+    "GROUNDING:",
     "Raises:",
     "Yields:",
 }
@@ -54,7 +55,6 @@ PROHIBITED_DOCSTRING_SECTIONS = {
     "GROUNDING_REQUIREMENTS:",
     "GROUNDING_ASSUMPTIONS:",
     "GROUNDING_IMPLEMENTS:",
-    "GROUNDING_ARGUMENT:",
 }
 
 CLASS_DECORATORS = {
@@ -107,8 +107,18 @@ def _check_comments(content: str, fname: str) -> list[str]:
     return errors
 
 
+def _is_enum_class(node: ast.ClassDef) -> bool:
+    """Checks whether a class inherits from Enum."""
+    for base in node.bases:
+        if isinstance(base, ast.Name) and base.id == "Enum":
+            return True
+        if isinstance(base, ast.Attribute) and base.attr == "Enum":
+            return True
+    return False
+
+
 def _check_docstring_contracts(
-    doc: str, fname: str, node_name: str, node_lineno: int
+    doc: str, fname: str, node_name: str, node_lineno: int, is_impl: bool = False
 ) -> tuple[list[str], set[str], set[str]]:
     """Validates docstring section structure, bullet format, and period terminations.
 
@@ -120,16 +130,34 @@ def _check_docstring_contracts(
 
     lines = doc.splitlines()
     cur_section: str | None = None
+    cur_bullet: str | None = None
+    cur_bullet_lineno: int = 0
+
+    def finish_bullet():
+        nonlocal cur_bullet, cur_bullet_lineno
+        if cur_bullet is not None:
+            if cur_section in ("INVARIANTS:", "PRECONDITIONS:", "POSTCONDITIONS:", "GROUNDING:"):
+                if not cur_bullet.endswith("."):
+                    errors.append(
+                        f"{fname}:{cur_bullet_lineno}: error: sentence under '{cur_section}' must end with a period: '{cur_bullet}'"
+                    )
+            if cur_section == "INVARIANTS:":
+                invariants.add(cur_bullet)
+            elif cur_section == "PRECONDITIONS:":
+                preconditions.add(cur_bullet)
+            cur_bullet = None
 
     for offset, raw_line in enumerate(lines):
         line = raw_line.strip()
         line_num = node_lineno + offset
 
         if not line:
+            finish_bullet()
             continue
 
         # Detect potential section headers
         if line in PROHIBITED_DOCSTRING_SECTIONS:
+            finish_bullet()
             errors.append(
                 f"{fname}:{line_num}: error: prohibited docstring section '{line}' in '{node_name}'"
             )
@@ -142,8 +170,15 @@ def _check_docstring_contracts(
             "Raises:",
             "Yields:",
         ):
+            finish_bullet()
             if line in ALLOWED_DOCSTRING_SECTIONS:
-                cur_section = line
+                if line == "GROUNDING:" and not is_impl:
+                    errors.append(
+                        f"{fname}:{line_num}: error: 'GROUNDING:' section only permitted in implementation specifications (*_impl.pyi) in '{node_name}'"
+                    )
+                    cur_section = None
+                else:
+                    cur_section = line
             else:
                 errors.append(
                     f"{fname}:{line_num}: error: unknown docstring section '{line}' in '{node_name}'"
@@ -156,22 +191,21 @@ def _check_docstring_contracts(
             "PRECONDITIONS:",
             "POSTCONDITIONS:",
             "CONSTITUENTS:",
+            "GROUNDING:",
         ):
-            if not line.startswith("- "):
+            if line.startswith("- "):
+                finish_bullet()
+                cur_bullet = line[2:].strip()
+                cur_bullet_lineno = line_num
+            elif cur_bullet is not None and (raw_line.startswith("  ") or raw_line.startswith("\t") or raw_line.startswith("    ")):
+                cur_bullet += " " + line
+            else:
+                finish_bullet()
                 errors.append(
                     f"{fname}:{line_num}: error: entry under '{cur_section}' must start with '- ': '{line}'"
                 )
-            elif cur_section in ("INVARIANTS:", "PRECONDITIONS:", "POSTCONDITIONS:"):
-                clause = line[2:].strip()
-                if not line.endswith("."):
-                    errors.append(
-                        f"{fname}:{line_num}: error: sentence under '{cur_section}' must end with a period: '{line}'"
-                    )
-                if cur_section == "INVARIANTS:":
-                    invariants.add(clause)
-                elif cur_section == "PRECONDITIONS:":
-                    preconditions.add(clause)
 
+    finish_bullet()
     return errors, invariants, preconditions
 
 
@@ -300,7 +334,7 @@ def lint_low_file(file_path: Path) -> list[str]:
     # Validate module docstring if present
     module_doc = ast.get_docstring(tree)
     if module_doc:
-        d_errs, _, _ = _check_docstring_contracts(module_doc, fname, "module", 1)
+        d_errs, _, _ = _check_docstring_contracts(module_doc, fname, "module", 1, is_impl=is_impl)
         errors.extend(d_errs)
 
     for stmt in tree.body:
@@ -324,7 +358,7 @@ def lint_low_file(file_path: Path) -> list[str]:
                 )
             else:
                 d_errs, _, _ = _check_docstring_contracts(
-                    doc, fname, "__orphan__", stmt.lineno
+                    doc, fname, "__orphan__", stmt.lineno, is_impl=is_impl
                 )
                 errors.extend(d_errs)
             continue
@@ -336,6 +370,7 @@ def lint_low_file(file_path: Path) -> list[str]:
 
         # Class validation
         cls_node = stmt
+        is_enum = _is_enum_class(cls_node)
         decs: list[str] = []
         for d in cls_node.decorator_list:
             if isinstance(d, ast.Name):
@@ -344,7 +379,7 @@ def lint_low_file(file_path: Path) -> list[str]:
                 decs.append(d.func.id)
 
         recognized_decs = [d for d in decs if d in CLASS_DECORATORS]
-        if not recognized_decs:
+        if not recognized_decs and not is_enum:
             errors.append(
                 f"{fname}:{cls_node.lineno}: error: class '{cls_node.name}' missing Cleanroom structural decorator (@singleton_type, @poly_type, @data_type, @variant, or @dataclass)"
             )
@@ -356,12 +391,15 @@ def lint_low_file(file_path: Path) -> list[str]:
         cls_invariants: set[str] = set()
         if cls_doc:
             d_errs, cls_invariants, _ = _check_docstring_contracts(
-                cls_doc, fname, cls_node.name, cls_node.lineno
+                cls_doc, fname, cls_node.name, cls_node.lineno, is_impl=is_impl
             )
             errors.extend(d_errs)
 
         # Validate members
         for member in cls_node.body:
+            if is_enum:
+                if isinstance(member, (ast.Assign, ast.AnnAssign, ast.Expr)):
+                    continue
             if (
                 isinstance(member, ast.Expr)
                 and isinstance(member.value, ast.Constant)
@@ -457,7 +495,7 @@ def lint_low_file(file_path: Path) -> list[str]:
             m_doc = ast.get_docstring(func)
             if m_doc:
                 d_errs, _, m_preconditions = _check_docstring_contracts(
-                    m_doc, fname, f"{cls_node.name}.{func.name}", func.lineno
+                    m_doc, fname, f"{cls_node.name}.{func.name}", func.lineno, is_impl=is_impl
                 )
                 errors.extend(d_errs)
 

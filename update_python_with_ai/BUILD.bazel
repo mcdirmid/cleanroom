@@ -63,6 +63,27 @@ define_role(
 )
 
 define_role(
+    name = "spec_qa",
+    persona = "Specification QA Arbiter",
+    src_pattern = "",
+    prompt_template = "Files are aligned according to the guide.",
+    guide = "//update_python_with_ai/guides:spec_qa",
+    allows_step_mode = False,
+    star_role_deps = [":high", ":planning"],
+    feedback_role_deps = [":planning"],
+    workspace_files = PYTHON_WORKSPACE_FILES,
+    tools = [
+        "update_python_with_ai/support/lib/high_lint.py",
+        "update_python_with_ai/support/lib/spec_lint.py",
+        "update_python_with_ai/support/lib/build_lint_common.py",
+    ],
+    active_component_types = ["implementation", "assembly", "interface", "external"],
+    verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/support/lib/high_lint.py {unit_dir}/high/{unit_name}.md && python3 update_python_with_ai/support/lib/spec_lint.py {unit_dir}/planning/{unit_name}.md",
+    verification_success_message = "Specification and planning verified for {unit_name}.",
+    visibility = ["//visibility:public"],
+)
+
+define_role(
     name = "low",
     persona = "Low-Level Spec Engineer",
     src_pattern = "{unit_dir}/low/{unit_name}.pyi",
@@ -75,13 +96,34 @@ define_role(
     ],
     role_deps = [":planning"],
     star_role_deps = [":low"],
+    silent_role_deps = [":spec_qa"],
     tools = [
-        "pyrightconfig.json",
-        "update_python_with_ai/support/lib/low_lint.py",
+        "update_with_ai/support/lib/build_lint_common.py",
     ],
     feedback_role_deps = [":planning"],
     active_component_types = ["implementation", "assembly", "interface", "external"],
+    verify_template = "# Low-level specification verified against planning_to_low.md",
+    visibility = ["//visibility:public"],
+)
+
+define_role(
+    name = "low_qa",
+    persona = "Low-Level QA Arbiter",
+    src_pattern = "",
+    prompt_template = "Files are aligned according to the guide.",
+    guide = "//update_python_with_ai/guides:low_qa",
+    allows_step_mode = False,
+    star_role_deps = [":planning", ":low"],
+    feedback_role_deps = [":low"],
+    workspace_files = PYTHON_WORKSPACE_FILES,
+    tools = [
+        "pyrightconfig.json",
+        "update_python_with_ai/support/lib/low_lint.py",
+        "update_python_with_ai/support/lib/build_lint_common.py",
+    ],
+    active_component_types = ["implementation", "assembly", "interface", "external"],
     verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/support/lib/low_lint.py {unit_dir}/low/{unit_name}.pyi",
+    verification_success_message = "Low-level specification verified for {unit_name}.",
     visibility = ["//visibility:public"],
 )
 
@@ -144,7 +186,7 @@ define_role(
     allows_step_mode = True,
     role_deps = [":low"],
     star_role_deps = [":low"],
-    silent_role_deps = [":grounding_qa"],
+    silent_role_deps = [":low_qa", ":grounding_qa"],
     silent_cross_role_deps = [":lib"],
     workspace_files = PYTHON_WORKSPACE_FILES,
     tools = [
@@ -168,7 +210,7 @@ define_role(
     allows_step_mode = True,
     role_deps = [":low"],
     star_role_deps = [":low"],
-    silent_role_deps = [":lib", ":grounding_qa"],
+    silent_role_deps = [":lib", ":low_qa", ":grounding_qa"],
     stub_role_deps = [":lib"],
     silent_cross_role_deps = [":lib"],
     feedback_role_deps = [":low"],

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-05T05:34:22Z
-CHANGE: Align truncation and conversation limit failure contracts with high-level literate prose
-CODE_HASH: 153730e4711d
--->
-
 # openai_driver_impl implementation component
 
 imports: agent_config, json_ext, loop_conversation, loop_guard, openai_config, openai_ext, runner_logger, tool_provider
@@ -12,7 +5,7 @@ implements: loop_driver
 
 ## Intent
 
-Executing robust model loops requires managing protocol-level token limits, handling tool failures gracefully, and binding runtime parameters to API completion endpoints. The openai_driver_impl implementation component constructs completion requests using configuration parameters from openai config and agent config, dispatches model-invoked tool executions through the tool manager, injects recovery guidance on failures, and resumes truncated completions.
+Executes robust model loops requires managing protocol-level token limits, handling tool failures gracefully, and binding runtime parameters to API completion endpoints. The openai_driver_impl implementation component constructs completion requests using configuration parameters from openai config and agent config, dispatches model-invoked tool executions through the tool manager, injects recovery guidance on failures, and resumes truncated completions.
 
 By repairing incomplete code edits using indented sentinel exceptions, supporting follow-up tool chains with prior-thought reasoning, and streaming audit summaries to runner loggers, the driver maintains resilient autonomous problem-solving loops.
 
@@ -50,12 +43,34 @@ By repairing incomplete code edits using indented sentinel exceptions, supportin
 - When a model response produces no tool executions, the loop driver appends a prompt reminding that progress requires invoking tools. [prompt_tool_invocation_when_none_called]
 - When interaction turns reach the conversation limit from agent config, the loop driver halts execution with an unexpected failure indicating that the conversation limit was reached. [halt_when_turn_limit_reached]
 
-## Woven Contracts
+### Woven Contracts
 
-- Driving turns constructs OpenAI completion payloads with sorted tools and parameters, transmitting over HTTPS and correlating call results. \[transmit_openai_completion_request, bind_model_parameters, order_tools_by_name, order_tool_parameters_by_sequence, correlate_tool_results_with_invocations, openai_ext: [define_chat_completion_payload, establish_https_transport], openai_config: [provide_model_name, provide_timeout]\]
-- Truncated generations are recovered by repairing partial replace file content payloads with indented sentinels raising non implemented errors or terminated with failure responses before continuation. \[recover_truncated_tool_invocations, repair_replace_file_content_with_sentinel, append_sentinel_on_next_line, execute_repaired_tool_to_persist_mods, return_notice_targeting_sentinel, terminate_other_truncated_tool, resume_generation_with_continuation, json_ext: [repair_input_supplied, repair_strip_whitespace, repair_locate_opening_brace, repair_balance_string_quotes, repair_strip_trailing_commas, repair_close_nested_containers]\]
+- Driving turns constructs OpenAI completion payloads with sorted tools and parameters, transmitting over HTTPS and correlating call results. [transmit_openai_completion_request, bind_model_parameters, order_tools_by_name, order_tool_parameters_by_sequence, correlate_tool_results_with_invocations, openai_config: [provide_model_name, provide_timeout]]
+- Truncated generations are recovered by repairing partial replace file content payloads with indented sentinels raising non implemented errors or terminated with failure responses before continuation. [recover_truncated_tool_invocations, repair_replace_file_content_with_sentinel, append_sentinel_on_next_line, execute_repaired_tool_to_persist_mods, return_notice_targeting_sentinel, terminate_other_truncated_tool, resume_generation_with_continuation]
 - Incomplete tool call errors prompt actionable recovery guidance for smaller edits across continuation turns or halt upon repeated failures. [append_recovery_notice_on_incomplete_tool_call, continue_turn_on_incomplete_tool_call, halt_on_repeated_truncation_failures]
-- Execution events, token consumption metrics, and compact summaries stream to the runner logger. \[log_turn_events_to_runner_logger, format_compact_log_summaries, include_corrective_reminders_in_transcript, runner_logger: [consume_log_events]\]
-- Repetition tracking halts on fatal loop failures or injects reminders, while productive modifications reset guard counters. \[halt_on_loop_guard_failure, append_loop_guard_reminder, clear_guard_tracking_on_progress, loop_guard: [evaluate_consecutive_tools, clear_repetition_on_progress]\]
-- Follow-up tool specifications execute chained tool calls with synthetic prior thought reasoning. \[execute_designated_followup_tool, append_synthetic_assistant_with_reasoning, append_followup_response_immediately, tool_provider: [call_by_name]\]
-- Tool outcomes govern loop continuation, halting on terminal failures, prompting on missing tool calls, and aborting upon turn limit exhaustion. \[continue_on_non_terminating_failure, halt_on_terminating_failure, conclude_on_successful_termination, prompt_tool_invocation_when_none_called, halt_when_turn_limit_reached, loop_driver: [conclude_atomically_on_termination, produce_loop_outcome_on_termination], agent_config: [expose_execution_parameters]\]
+- Execution events, token consumption metrics, and compact summaries stream to the runner logger. [log_turn_events_to_runner_logger, format_compact_log_summaries, include_corrective_reminders_in_transcript, runner_logger: [consume_log_events]]
+- Repetition tracking halts on fatal loop failures or injects reminders, while productive modifications reset guard counters. [halt_on_loop_guard_failure, append_loop_guard_reminder, clear_guard_tracking_on_progress, loop_guard: [evaluate_consecutive_tools, clear_repetition_on_progress]]
+- Follow-up tool specifications execute chained tool calls with synthetic prior thought reasoning. [execute_designated_followup_tool, append_synthetic_assistant_with_reasoning, append_followup_response_immediately, tool_provider: [call_by_name]]
+- Tool outcomes govern loop continuation, halting on terminal failures, prompting on missing tool calls, and aborting upon turn limit exhaustion. [continue_on_non_terminating_failure, halt_on_terminating_failure, conclude_on_successful_termination, prompt_tool_invocation_when_none_called, halt_when_turn_limit_reached, loop_driver: [conclude_atomically_on_termination, produce_loop_outcome_on_termination], agent_config: [expose_execution_parameters]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Turn loop driving, model dispatch, tool execution, and termination evaluation. [loop_driver_service]
+
+### Inherited Deferred Requirements
+
+- Model API completion calls and tool dispatch execution.
+  - Grounded: [openai_ext: [openai_wire_operations], openai_config: [openai_model_configuration], tool_provider: [tool_execution_capability, installed_tools_collection], loop_conversation: [loop_conversation_service]]
+- Loop guard monitoring and runner logger event reporting.
+  - Grounded: [loop_guard: [loop_guard_service], runner_logger: [runner_logging_service]]
+
+### Knowledge Requirements
+
+- Recovery and continuation mechanics for truncated model responses and incomplete tool calls.
+  - Grounded: [json_ext: [json_operations], tool_provider: [tool_execution_capability]]
+- Chained follow-up tool execution with synthetic prior-thought reasoning.
+  - Grounded: [tool_provider: [tool_execution_capability], loop_conversation: [loop_conversation_service]]
+- Turn count termination enforcement based on agent conversation limit.
+  - Grounded: [agent_config: [agent_configuration_parameters]]

@@ -73,7 +73,7 @@ To preserve agent context window capacity across multi-turn interactions, respon
 - A tool call fails when tool-specific execution conditions fail. [exec_condition_fails]
 - A failed tool call communicates diagnostic feedback in the tool response. [failed_call_feedback]
 
-## Woven Contracts
+### Woven Contracts
 
 - When installing a tool, name collision handling is out of scope. [install_tools]
 - When a response specifies a suppression key, prior conversation turns with the same key are hidden. [call_produces_response, supersede_by_key]
@@ -87,3 +87,21 @@ To preserve agent context window capacity across multi-turn interactions, respon
 - When a constituent conversion fails in a composite type, conversion fails propagating that constituent's failure. [convert_list, convert_mapping_keys, convert_mapping_vals, convert_failure_error, composite_failure_propagate]
 - When all parameter symbols resolve, required parameters are present, defaults are applied, and wire conversions succeed, the tool is called with action parameter bindings and returns its tool response. [call_wire_bindings, convert_wire_val, call_produces_response, resolve_symbols, convert_arguments, apply_defaults, check_requirements, call_with_python_bindings]
 - When tool-specific execution conditions fail, failure status is indicated in the tool response with diagnostic feedback. [call_produces_response, exec_condition_fails, failed_call_feedback]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Exposes installed tools available for agent execution. [installed_tools_collection]
+- Converts wire type values to python type values. [wire_value_conversion]
+- Executes tools with python parameter bindings. [tool_execution_capability]
+- Produces structured tool responses. [tool_response_generation]
+
+### Knowledge Requirements
+
+- Access to backing collection storing installed tools.
+  - Deferred: Requires concrete backing collection in implementation.
+- Capability to register and mutate installed tools in storage.
+  - Deferred: Requires concrete state mutation in implementation.
+- Execution of tools by name with parameter binding conversion and diagnostic error handling.
+  - Grounded: [installed_tools_collection, wire_value_conversion, tool_execution_capability, tool_response_generation]

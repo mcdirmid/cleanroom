@@ -79,13 +79,39 @@ By providing atomic failure handling for out-of-order execution, preventing subm
 - When ready dirty nodes are obtained and guide step mode is inactive, the get work tool returns the task primer with guide file attribution. [get_work_returns_primer_with_guide_file]
 - When ready dirty nodes are obtained and guide step mode is active, the get work tool returns the task primer prompting advance. [get_work_returns_primer_with_advance_prompt]
 
-## Woven Contracts
+### Woven Contracts
 
 - Session outcome tools are installed during controller initialization, restricting the advance tool strictly to guide step mode. [install_submit_tool, install_fail_tool, install_check_files_tool, install_get_work_tool, install_blame_tool, install_advance_tool_conditional, expose_session_verification_checks]
-- Verification results are evaluated sequentially and cached against target file hashes, reusing cached evaluations when files remain unchanged. \[cache_verification_with_file_hash, evaluate_verification_checks_sequentially, verification_outdated_initially, verification_outdated_on_hash_change, omit_checks_when_hashes_match, sandbox_run_control: [cache_verification_results, reuse_cached_verification_outcome]\]
-- The check files tool executes verification across modified workspace files, presenting sanitized failure diagnostics or passing results. \[present_sanitized_feedback_on_check_failure, present_passing_results_on_check_success, remind_verification_unchanged, share_check_files_suppression_key, sandbox_run_control: [check_files_evaluates_checks, check_files_presents_outcomes, check_files_fails_on_verification_failure]\]
-- The advance tool gates step progression behind passing verification, guiding the agent to run verification checks or submit completed work. \[advance_repeats_primer_on_first_step_failure, advance_reminds_call_check_files, advance_specifies_check_files_followup, advance_delivers_next_step_on_pass, advance_fails_reminding_submit_when_modified, advance_specifies_submit_followup_when_unmodified, share_advance_suppression_key, sandbox_guide_delivery: [advance_step_passed_supplied, advance_step_diagnostics_supplied]\]
+- Verification results are evaluated sequentially and cached against target file hashes, reusing cached evaluations when files remain unchanged. [cache_verification_with_file_hash, evaluate_verification_checks_sequentially, verification_outdated_initially, verification_outdated_on_hash_change, omit_checks_when_hashes_match, sandbox_run_control: [cache_verification_results, reuse_cached_verification_outcome]]
+- The check files tool executes verification across modified workspace files, presenting sanitized failure diagnostics or passing results. [present_sanitized_feedback_on_check_failure, present_passing_results_on_check_success, remind_verification_unchanged, share_check_files_suppression_key, sandbox_run_control: [check_files_evaluates_checks, check_files_presents_outcomes, check_files_fails_on_verification_failure]]
+- The advance tool gates step progression behind passing verification, guiding the agent to run verification checks or submit completed work. [advance_repeats_primer_on_first_step_failure, advance_reminds_call_check_files, advance_specifies_check_files_followup, advance_delivers_next_step_on_pass, advance_fails_reminding_submit_when_modified, advance_specifies_submit_followup_when_unmodified, share_advance_suppression_key, sandbox_guide_delivery: [advance_step_passed_supplied, advance_step_diagnostics_supplied]]
 - Resolve tools match and default target arguments and validate in-batch dependency ordering. [resolve_tool_accepts_target_alias, resolve_tool_matches_target, resolve_target_defaults_single_node, resolve_target_defaults_last_path, resolve_tool_fails_when_unresolvable, resolve_tool_fails_when_target_not_open, resolve_tool_fails_when_dependency_not_clean, resolve_tool_fails_dependent_nodes, resolve_tool_lists_remaining_nodes, resolve_tool_terminates_when_all_resolved]
-- The submit tool verifies that guide milestones are finished and tests pass before marking the node clean in storage and in turn with documented changes. \[submit_fails_when_guide_steps_remain, submit_specifies_advance_followup, submit_fails_when_verification_failing, submit_specifies_check_files_followup, submit_fails_when_initial_change_unmodified, submit_fails_when_feedback_unmodified, submit_fails_when_summary_provided_for_auditor, submit_fails_when_change_summary_omitted, submit_fails_when_summary_provided_without_modifications, submit_marks_node_clean_in_storage, submit_marks_node_clean, share_submit_suppression_key, sandbox_run_control: [submit_concludes_nodes_on_pass, submit_marks_target_clean, submit_enforces_change_documentation], dag_storage: [mark_node_clean_in_storage, mark_clean_with_change_description, mark_auditor_node_clean_stamps_dependencies]\]
-- The blame tool attributes defects to upstream dependencies using single-paragraph explanations, recording defect feedback in storage and identifying the active node from the blame target. \[blame_identifies_active_node_from_target, blame_defaults_single_target, blame_fails_when_target_unconfigured, blame_fails_when_explanation_has_newlines, blame_records_defect_feedback_in_storage, blame_marks_target_attributed, sandbox_run_control: [blame_attributes_upstream_failure], dag_storage: [record_feedback_messages]\]
-- The get work tool orchestrates batch acquisition from graph storage, template materialization via dag storage, and session initialization. \[get_work_fails_when_open_nodes_remain, get_work_obtains_dirty_nodes, get_work_produces_idle_response, get_work_materializes_templates_via_storage, get_work_returns_primer_with_guide_file, get_work_returns_primer_with_advance_prompt, dag_storage: [materialize_node_template]\]
+- The submit tool verifies that guide milestones are finished and tests pass before marking the node clean in storage and in turn with documented changes. [submit_fails_when_guide_steps_remain, submit_specifies_advance_followup, submit_fails_when_verification_failing, submit_specifies_check_files_followup, submit_fails_when_initial_change_unmodified, submit_fails_when_feedback_unmodified, submit_fails_when_summary_provided_for_auditor, submit_fails_when_change_summary_omitted, submit_fails_when_summary_provided_without_modifications, submit_marks_node_clean_in_storage, submit_marks_node_clean, share_submit_suppression_key, sandbox_run_control: [submit_concludes_nodes_on_pass, submit_marks_target_clean, submit_enforces_change_documentation], dag_storage: [mark_node_clean_in_storage, mark_clean_with_change_description, mark_auditor_node_clean_stamps_dependencies]]
+- The blame tool attributes defects to upstream dependencies using single-paragraph explanations, recording defect feedback in storage and identifying the active node from the blame target. [blame_identifies_active_node_from_target, blame_defaults_single_target, blame_fails_when_target_unconfigured, blame_fails_when_explanation_has_newlines, blame_records_defect_feedback_in_storage, blame_marks_target_attributed, sandbox_run_control: [blame_attributes_upstream_failure], dag_storage: [record_feedback_messages]]
+- The get work tool orchestrates batch acquisition from graph storage, template materialization via dag storage, and session initialization. [get_work_fails_when_open_nodes_remain, get_work_obtains_dirty_nodes, get_work_produces_idle_response, get_work_materializes_templates_via_storage, get_work_returns_primer_with_guide_file, get_work_returns_primer_with_advance_prompt, dag_storage: [materialize_node_template]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Evaluates and aggregates session verification checks. [verification_evaluation]
+- Coordinates milestone step progression through guide delivery. [advance_step_coordination]
+- Concludes active nodes clean in graph storage. [clean_submission]
+- Records defect attribution to upstream dependencies. [defect_blame]
+- Acquires active dirty nodes and initializes session tasks. [work_acquisition]
+
+### Inherited Deferred Requirements
+
+- Access to dag storage to query nodes and record messages.
+  - Grounded: [dag_storage: [dag_storage_service]]
+- Access to session edit manager to inspect modification state and hashes.
+  - Grounded: [sandbox_file_editor: [writes_occurred_status]]
+- Capability to execute external verification commands.
+  - Grounded: [agent_node_config: [node_configuration_service]]
+- Access to guide delivery to manage milestone transitions.
+  - Grounded: [sandbox_guide_delivery: [step_delivery]]
+
+### Knowledge Requirements
+
+- Resolution of active targets from command line arguments or session state.
+  - Grounded: [control_coordinate: [session_target_registry, default_target_resolution]]

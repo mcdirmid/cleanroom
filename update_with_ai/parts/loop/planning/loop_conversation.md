@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: a111041257ee
--->
-
 # loop_conversation interface component
 
 imports: tool_provider
@@ -40,9 +33,20 @@ By tracking message roles, correlating tool calls, and stubbing obsolete tool pa
 - The conversation stubs correlating tool arguments identified by a suppression key. [stub_correlating_tool_args_by_key]
 - The conversation provides a model request for transmission to a language model. [provide_model_request]
 
-## Woven Contracts
+### Woven Contracts
 
 - Initializing conversation populates starting message history with task instructions. [initialize_with_initial_messages, initial_messages_include_task_instructions]
-- Appending updates conversation history with model messages and tool responses. \[append_messages_supplied, append_messages_to_conversation, append_tool_responses_to_conversation, tool_provider: [call_by_name]\]
+- Appending updates conversation history with model messages and tool responses. [append_messages_supplied, append_messages_to_conversation, append_tool_responses_to_conversation, tool_provider: [call_by_name]]
 - When subsequent tools matching a suppression key execute, previous tool outputs and correlating arguments are replaced with stubs in place. [stub_previous_responses_by_key, stub_correlating_tool_args_by_key]
 - Formatted conversation history is exported as a model request for provider transmission. [provide_model_request]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Turn conversation history formatting, model request preparation, and tool output stubbing. [loop_conversation_service]
+
+### Knowledge Requirements
+
+- Model message sequence encoding and suppression key stubbing.
+  - Deferred: Implemented by conversation manager in provider implementation.

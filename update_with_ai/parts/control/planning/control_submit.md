@@ -25,7 +25,23 @@ Allowing untested code to enter the repository creates regressions. The submissi
 - A submission coordinator marks the target node status as clean in graph storage upon acceptance. [mark_node_clean]
 - A submission coordinator records the change summary as a change message on the target node. [record_change_message]
 
-## Woven Contracts
+### Woven Contracts
 
 - When submitting a target node with passing verification, clean in-batch dependencies, and valid change summary, the coordinator marks the target clean and records the change message. [assert_verification_passed, assert_in_batch_dependencies_clean, mark_node_clean, record_change_message]
 - When submitting an auditor node, the coordinator rejects any submission containing a change summary. [forbid_summary_for_auditors]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Submission gating enforcing verification success, in-batch cleanliness, and change summary rules. [submission_gating]
+- Transition of submitted nodes to clean state with change message recording in graph storage. [clean_state_transition]
+
+### Knowledge Requirements
+
+- Evaluation of verification check results for candidate targets.
+  - Deferred: Delegated to VerificationEvaluator in implementation.
+- Inspection of auditor role declarations in role configuration.
+  - Deferred: Queried from role configuration in implementation.
+- Mutation of target node status to clean and persistence of change messages in graph storage.
+  - Deferred: Delegated to DagStorage in implementation.

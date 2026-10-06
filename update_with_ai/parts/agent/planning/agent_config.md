@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 66ac5e80b78f
--->
-
 # agent_config interface component
 
 ## Intent
@@ -28,6 +21,17 @@ The component serves as a system-level configuration authority defining operatio
 
 - A system's agent config exposes execution parameters for agent sessions. [expose_execution_parameters]
 
-## Woven Contracts
+### Woven Contracts
 
 - The agent config provides system-level execution parameters governing conversation turn limits, follow-up injection, step mode delivery, startup reads, delta editing outputs, and supersede character preservation. [expose_execution_parameters]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Operational policy parameters bounding conversation depth and tool behaviors. [agent_configuration_parameters]
+
+### Knowledge Requirements
+
+- System-wide agent configuration parameters from environment or model configuration.
+  - Deferred: Provided by system runtime configuration.

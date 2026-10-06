@@ -14,12 +14,20 @@ import tool_provider
 
 @singleton_type("agent_session")
 class ToolManager(tool_provider.ToolManager):
-    """Implements tool manager as an in-memory session registry maintaining tools installed during an agent session."""
+    """Implements tool manager as an in-memory session registry maintaining tools installed during an agent session.
+
+    GROUNDING:
+    - Maintains installed tools in an internal dictionary mapping ToolName to Tool instances within the agent session tier.
+    """
 
     @property
     @override
     def installed_tools(self) -> Mapping[tool_provider.ToolName, tool_provider.Tool]:
-        """Exposes installed tools to inform the agent of what tools it can execute."""
+        """Exposes installed tools to inform the agent of what tools it can execute.
+
+        GROUNDING:
+        - Exposes the internal dictionary mapping ToolName to Tool instances.
+        """
         ...
 
     @operation
@@ -29,6 +37,9 @@ class ToolManager(tool_provider.ToolManager):
 
         Args:
             tool: Tool instance to install.
+
+        GROUNDING:
+        - Inserts the tool into the internal installed tools dictionary keyed by tool.name.
         """
         ...
 
@@ -54,5 +65,8 @@ class ToolManager(tool_provider.ToolManager):
         - WHEN an argument is omitted for a parameter that is not required and has a default value, MUST bind the default value as the actual parameter value.
         - WHEN parameter conversion raises ParameterConversionError, MUST fail tool execution with content formatted as "Error: Invalid argument for parameter '{param_name}': {error_message}" and reminder "Parameters must match their declared wire types.".
         - WHEN parameter mappings are successfully resolved, MUST execute the matching tool with the resolved actual parameter bindings and return the tool's response.
+
+        GROUNDING:
+        - Resolves the tool by name from the internal installed tools dictionary, validates parameters against tool.parameters, converts wire arguments via parameter type conversion, applies defaults, and dispatches execution to tool.execute.
         """
         ...

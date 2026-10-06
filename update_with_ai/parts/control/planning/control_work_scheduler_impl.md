@@ -22,7 +22,28 @@ Computing role depth dynamically replaces fragile static dictionaries. The imple
 - The work scheduler formats prompt variables for unit directory, unit name, and component type. [substitute_prompt_variables]
 - The work scheduler appends feedback messages into a formatted feedback review section. [append_feedback_section]
 
-## Woven Contracts
+### Woven Contracts
 
 - When sorting candidate tasks, the scheduler builds the role dependency graph, calculates role depth, and orders nodes by ascending depth. [query_role_definitions, build_role_dag, calculate_role_depth, control_work_scheduler: [sort_nodes_by_precedence]]
 - When scheduling by directory, the scheduler scans directory nodes, verifies dirty status, checks that non-silent dependencies are clean, and formats task prompts. [scan_directory_nodes, query_node_status, check_upstream_cleanliness, substitute_prompt_variables, append_feedback_section, control_work_scheduler: [limit_scheduled_batch]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Computes ready dirty nodes sorted by topological role depth into scheduled work batches. [work_schedule_provision]
+- Computes role precedence rank dynamically from declared role dependencies. [role_precedence_provision]
+
+### Inherited Deferred Requirements
+
+- Inspection of dirty node status and upstream dependency cleanliness in graph storage.
+  - Grounded: [dag_storage: [dag_storage_service]]
+- Topological analysis of declared role dependencies to derive role execution depth.
+  - Grounded: [agent_config: [agent_configuration_parameters], agent_node_config: [node_configuration_service], role_precedence_provision]
+- Resolution of prompt templates and formatting of task prompts with feedback history.
+  - Grounded: [agent_node_config: [node_configuration_service], dag_storage: [dag_storage_service]]
+
+### Knowledge Requirements
+
+- Filtering and scanning candidate nodes within subgraphs or directory path patterns.
+  - Grounded: [dag_subgraph: [dag_subgraph_service], dag_storage: [dag_storage_service]]

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: b78649676667
--->
-
 # loop_cleaner_impl implementation component
 
 imports: dag_storage, dag_subgraph, loop_node_cleaner
@@ -26,8 +19,26 @@ By delegating active subgraph scoping, ready batch selection, and node visit enf
 - Cleaning halts immediately if the node cleaner communicates that processing cannot continue. [halt_immediately_when_cleaner_signals_halt]
 - Cleaning concludes when the dag subgraph is complete. [conclude_when_subgraph_complete]
 
-## Woven Contracts
+### Woven Contracts
 
-- Scoping the target node on the dag subgraph computes dependency-first topological order and delivers ready batches for execution. \[set_target_on_subgraph, process_ready_batches, dag_subgraph: [set_target_node_supplied, compute_topological_order, provide_next_ready_batch]\]
-- Ready batches are passed to the node cleaner, recording visit limits and halting immediately upon unhandled execution failure. \[record_node_visits_for_cleaned_batch, halt_immediately_when_cleaner_signals_halt, loop_cleaner: [halt_when_node_cleaner_cannot_continue], loop_node_cleaner: [clean_dirty_nodes, communicate_processing_continuation], dag_subgraph: [record_visit_batch_supplied, record_visit_increment_counts, record_visit_enforce_iteration_limits]\]
-- Cleaning concludes when the dag subgraph confirms all reachable dependency nodes are clean. \[conclude_when_subgraph_complete, loop_cleaner: [conclude_when_all_nodes_clean], dag_subgraph: [report_subgraph_complete, subgraph_complete_when_all_clean]\]
+- Scoping the target node on the dag subgraph computes dependency-first topological order and delivers ready batches for execution. [set_target_on_subgraph, process_ready_batches, dag_subgraph: [set_target_node_supplied, compute_topological_order, provide_next_ready_batch]]
+- Ready batches are passed to the node cleaner, recording visit limits and halting immediately upon unhandled execution failure. [record_node_visits_for_cleaned_batch, halt_immediately_when_cleaner_signals_halt, loop_cleaner: [halt_when_node_cleaner_cannot_continue], loop_node_cleaner: [clean_dirty_nodes, communicate_processing_continuation], dag_subgraph: [record_visit_batch_supplied, record_visit_increment_counts, record_visit_enforce_iteration_limits]]
+- Cleaning concludes when the dag subgraph confirms all reachable dependency nodes are clean. [conclude_when_subgraph_complete, loop_cleaner: [conclude_when_all_nodes_clean], dag_subgraph: [report_subgraph_complete, subgraph_complete_when_all_clean]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Topological dependency-first cleaning traversal across target subgraphs. [loop_cleaner_service]
+
+### Inherited Deferred Requirements
+
+- Subgraph topological traversal and batch dirty node discovery.
+  - Grounded: [dag_subgraph: [dag_subgraph_service]]
+- Delegation of ready batch workloads to NodeCleaner.
+  - Grounded: [loop_node_cleaner: [node_cleaner_service]]
+
+### Knowledge Requirements
+
+- Completion check across target subgraph.
+  - Grounded: [dag_subgraph: [dag_subgraph_service]]

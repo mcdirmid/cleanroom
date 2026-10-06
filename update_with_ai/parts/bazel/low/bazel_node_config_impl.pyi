@@ -21,7 +21,11 @@ import file_paths
 class NodeConfig(
     agent_node_config.NodeConfig, InTier[AgentSessionTier]
 ):
-    """Realizes session configuration by resolving Bazel target manifests."""
+    """Realizes session configuration by resolving Bazel target manifests.
+
+    GROUNDING:
+    - Realizes agent_node_config by querying bazel_manifest_loader for active node manifests, extracting declared file permissions, guides, templates, and verification checks.
+    """
 
     @property
     @override
@@ -30,6 +34,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - MUST aggregate read-only files across active nodes, excluding session read-write files.
+
+        GROUNDING:
+        - Aggregates read-only dependencies from per_node_info_by_node, filtering out any session read-write bound files.
         """
         ...
 
@@ -40,6 +47,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - MUST aggregate read-write files and templates across active nodes.
+
+        GROUNDING:
+        - Aggregates read-write source files and templates across active nodes from per_node_info_by_node.
         """
         ...
 
@@ -50,6 +60,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - WHEN a session has a single node and the target node allows step mode, MUST permit step mode eligibility.
+
+        GROUNDING:
+        - Checks step mode eligibility on the single active node manifest via per_node_info_by_node.
         """
         ...
 
@@ -60,6 +73,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - WHEN permitted by agent config with an eligible session lacking feedback, MUST activate step mode.
+
+        GROUNDING:
+        - Evaluates agent_config step mode permissions against single-node session eligibility and absence of feedback.
         """
         ...
 
@@ -71,6 +87,9 @@ class NodeConfig(
         POSTCONDITIONS:
         - WHEN guide step mode is active, MUST provide the session guide file.
         - MUST expose the unbound guide file from guide target labels.
+
+        GROUNDING:
+        - Retrieves the unbound guide file from the active node's guide target label when step mode is active.
         """
         ...
 
@@ -81,6 +100,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - MUST aggregate read-write files and templates across active nodes.
+
+        GROUNDING:
+        - Combines template mappings across active nodes from per_node_info_by_node.
         """
         ...
 
@@ -91,6 +113,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - MUST combine template parameters across active nodes.
+
+        GROUNDING:
+        - Merges declared template parameter dictionaries across active nodes.
         """
         ...
 
@@ -106,6 +131,9 @@ class NodeConfig(
         - WHEN a section heading begins with "Verification failure", MUST capture verification failure instructions.
         - MUST create sequential step sections for subsequent level-two headings.
         - MUST exclude sections titled "Summary", "Lint checks", or "Verification failure" from step sections.
+
+        GROUNDING:
+        - Parses markdown sections of the resolved guide file into NodeGuide summaries, step sections, and failure instructions.
         """
         ...
 
@@ -118,6 +146,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - MUST map each active node to its declared blame targets.
+
+        GROUNDING:
+        - Maps each active DagNode to its feedback dependency bound files extracted from per_node_info_by_node.
         """
         ...
 
@@ -128,6 +159,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - MUST aggregate verification checks across active nodes.
+
+        GROUNDING:
+        - Flattens verification check sequences across active nodes from verification_checks_by_node.
         """
         ...
 
@@ -140,6 +174,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - MUST map each active node to its verification checks.
+
+        GROUNDING:
+        - Maps each active DagNode to its declared verification check commands from per_node_info_by_node.
         """
         ...
 
@@ -150,6 +187,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - MUST map each active node to the relative path of its declared source file alias.
+
+        GROUNDING:
+        - Maps each active DagNode to the relative workspace path of its declared primary source file.
         """
         ...
 
@@ -160,6 +200,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - WHEN exactly one node is active, MUST provide the verification success message from the active node.
+
+        GROUNDING:
+        - Retrieves the configured verification success message when exactly one node is active in the session.
         """
         ...
 
@@ -170,6 +213,9 @@ class NodeConfig(
 
         POSTCONDITIONS:
         - MUST combine feedback messages from graph storage across active nodes.
+
+        GROUNDING:
+        - Gathers pending feedback messages from dag_storage across active session nodes.
         """
         ...
 
@@ -197,6 +243,9 @@ class NodeConfig(
         - MUST resolve declared verification success messages.
         - MUST resolve feedback messages from graph storage.
         - MUST map each active node to its per node info.
+
+        GROUNDING:
+        - Loads per-node manifest metadata via bazel_manifest_loader and feedback from dag_storage into PerNodeInfo records.
         """
         ...
 
@@ -205,21 +254,40 @@ class NodeConfig(
 class AliasManager(
     agent_file_alias.AliasManager, InTier[AgentSessionTier]
 ):
-    """Realizes minimal file alias resolution and safe path masking."""
+    """Realizes minimal file alias resolution and safe path masking.
+
+    GROUNDING:
+    - Realizes agent_file_alias by constructing relative file aliases anchored to the workspace root and masking host path occurrences.
+    """
 
     @property
     @override
     def workspace_root(self) -> file_paths.WorkspaceRoot:
+        """Configured absolute workspace root path.
+
+        GROUNDING:
+        - Returns the configured absolute workspace root path from file_paths.
+        """
         ...
 
     @property
     @override
     def actual_type(self) -> Type[agent_file_alias.FileAlias]:
+        """Exposes FileAlias as the concrete parameter target type.
+
+        GROUNDING:
+        - Exposes FileAlias as the concrete parameter target type.
+        """
         ...
 
     @property
     @override
     def wire_type(self) -> Type[str]:
+        """Exposes str as the wire-level serialization type.
+
+        GROUNDING:
+        - Exposes str as the wire-level serialization type.
+        """
         ...
 
     @operation
@@ -237,6 +305,9 @@ class AliasManager(
         - MUST generate file aliases with relative paths for accessible workspace files.
         - MUST match relative paths to file aliases when converting wire type strings.
         - MUST produce unbound files when relative paths are unmapped.
+
+        GROUNDING:
+        - Resolves wire string paths against declared session bound files or falls back to an UnboundFile.
         """
         ...
 
@@ -255,5 +326,8 @@ class AliasManager(
         - MUST replace matching host paths with relative workspace paths when sanitizing output text.
         - MUST mask occurrences of workspace root path prefixes when sanitizing output text.
         - MUST mask occurrences of execution root path prefixes when sanitizing output text.
+
+        GROUNDING:
+        - Scans output text for host workspace and execution root path prefixes, replacing them with relative workspace paths.
         """
         ...

@@ -15,7 +15,11 @@ import dag_storage
 
 @singleton_type("system")
 class BazelTarget(bazel_target.BazelTarget, InTier[SystemTier]):
-    """Realizes Bazel label canonicalization and package directory resolution."""
+    """Realizes Bazel label canonicalization and package directory resolution.
+
+    GROUNDING:
+    - Realizes bazel_target interface contracts by delegating label normalization and package directory resolution to bazel_target_labels_ext.
+    """
 
     @operation
     @override
@@ -30,6 +34,9 @@ class BazelTarget(bazel_target.BazelTarget, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST strip repository qualifiers and expand omitted target names into canonical nodes.
+
+        GROUNDING:
+        - Invokes bazel_target_labels_ext.normalize_label to strip repository prefixes and expand omitted target names into canonical DagNode coordinates.
         """
         ...
 
@@ -46,5 +53,8 @@ class BazelTarget(bazel_target.BazelTarget, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST derive node directories by extracting package directory paths relative to a workspace root.
+
+        GROUNDING:
+        - Invokes bazel_target_labels_ext.resolve_package_dir to convert the DagNode package coordinate into a relative workspace path anchored via file_paths.
         """
         ...

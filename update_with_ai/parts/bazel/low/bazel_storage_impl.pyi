@@ -16,13 +16,22 @@ import dag_storage
 
 @singleton_type("system")
 class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
-    """Realizes in-memory graph indexing and in-band source file metadata persistence for Bazel targets."""
+    """Realizes in-memory graph indexing and in-band source file metadata persistence for Bazel targets.
+
+    GROUNDING:
+    - Realizes agent_storage and dag_storage by indexing target definitions and dependencies in memory while persisting dirty status and feedback in in-band source headers via src_metadata_ext.
+    """
 
     @operation
     @override
     def get_node_definition(
         self, node: dag_storage.DagNode
     ) -> agent_storage.NodeDefinition:
+        """Retrieves in-memory node definition for a node.
+
+        GROUNDING:
+        - Returns the NodeDefinition cached in memory for the given DagNode.
+        """
         ...
 
     @operation
@@ -30,6 +39,11 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
     def store_node_definition(
         self, node: dag_storage.DagNode, definition: agent_storage.NodeDefinition
     ) -> None:
+        """Stores in-memory node definition for a node.
+
+        GROUNDING:
+        - Records the NodeDefinition in the in-memory dictionary mapped by DagNode.
+        """
         ...
 
     @operation
@@ -42,6 +56,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST associate the declared source file relative path with the node in storage.
+
+        GROUNDING:
+        - Maps the DagNode to its workspace-relative primary source file path in memory.
         """
         ...
 
@@ -57,6 +74,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST associate the set of forward dependencies with the node in storage.
+
+        GROUNDING:
+        - Records the forward DagDependency set for the node in the in-memory dependency index.
         """
         ...
 
@@ -75,6 +95,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST return the set of upstream forward dependencies for the node.
+
+        GROUNDING:
+        - Retrieves the recorded set of forward DagDependency edges from the in-memory dependency index.
         """
         ...
 
@@ -90,6 +113,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST associate the silent source file paths with the node in storage.
+
+        GROUNDING:
+        - Records the tuple of silent source file relative paths for the node in memory.
         """
         ...
 
@@ -115,6 +141,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         - WHEN an auditor node has any verified feedback target file metadata missing, unparseable, or missing the auditor role audit timestamp, MUST return true.
         - WHEN an auditor node has any verified feedback target file with last changed timestamp newer than its audit timestamp, MUST return true.
         - WHEN an auditor node has any non-silent contract dependency with last changed timestamp newer than a verified feedback target file audit timestamp, MUST return true.
+
+        GROUNDING:
+        - Evaluates dirty state by inspecting source file existence via file_paths, parsing in-band headers with src_metadata_ext, and comparing dependency change timestamps.
         """
         ...
 
@@ -133,6 +162,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         POSTCONDITIONS:
         - WHEN node is an auditor role without registered feedback dependencies, MUST raise KeyError.
         - MUST return the set of verified feedback target nodes for the auditor node.
+
+        GROUNDING:
+        - Retrieves the verified feedback target nodes mapped to the auditor node in memory.
         """
         ...
 
@@ -148,6 +180,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST associate the feedback dependencies with the auditor node in storage.
+
+        GROUNDING:
+        - Associates verified feedback target nodes with the auditor node in memory.
         """
         ...
 
@@ -164,6 +199,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - WHEN message is a feedback message, MUST append an unacted feedback entry to the target source file metadata.
+
+        GROUNDING:
+        - Caches the diagnostic DagMessage in memory and appends unacted feedback to the blamed node source header via src_metadata_ext.
         """
         ...
 
@@ -177,6 +215,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST remove all messages recorded for the node.
+
+        GROUNDING:
+        - Removes diagnostic messages cached in memory for the specified DagNode.
         """
         ...
 
@@ -199,6 +240,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         - WHEN change_description is omitted and node has a source artifact, MUST update the last cleaned timestamp and clear unacted feedback and dirty tag.
         - WHEN node is an auditor role, MUST stamp audit metadata on all feedback dependencies without updating last changed timestamp.
         - MUST update metadata such that the node is no longer dirty.
+
+        GROUNDING:
+        - Updates in-band timestamps, removes feedback and dirty tags via src_metadata_ext, and stamps audit metadata on feedback dependencies.
         """
         ...
 
@@ -213,6 +257,9 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         POSTCONDITIONS:
         - WHEN node declared source file does not exist, MUST write configured template content to the source path.
         - WHEN node declared source file already exists, MUST preserve existing file content without overwriting.
+
+        GROUNDING:
+        - Writes configured template content to the source path via file_paths if the source file does not exist on disk.
         """
         ...
 
@@ -226,5 +273,8 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         POSTCONDITIONS:
         - MUST delete the last cleaned timestamp from the source file metadata header.
         - WHEN node is an auditor role, MUST remove the role audit timestamp from each verified feedback target file metadata.
+
+        GROUNDING:
+        - Clears the last cleaned timestamp in the source metadata header via src_metadata_ext, marking the node dirty.
         """
         ...

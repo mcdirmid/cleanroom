@@ -18,16 +18,31 @@ import tool_provider
 
 @singleton_type("agent_session")
 class ReadManager(sandbox_file_reader.ReadManager):
-    """Regulates file reading across session files."""
+    """Regulates file reading across session files.
+
+    GROUNDING:
+    - Queries declared read-only and read-write session files from NodeConfig
+      and validates workspace paths within the agent session tier.
+    """
 
     @property
     @override
     def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
+        """Exposes session read-only files.
+
+        GROUNDING:
+        - Exposes declared read-only files resolved from NodeConfig.
+        """
         ...
 
     @property
     @override
     def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
+        """Exposes session read-write files.
+
+        GROUNDING:
+        - Exposes declared read-write files resolved from NodeConfig.
+        """
         ...
 
     @operation
@@ -46,13 +61,21 @@ class ReadManager(sandbox_file_reader.ReadManager):
         POSTCONDITIONS:
         - WHEN path does not match any declared file workspace path, MUST produce a ToolResponse with failed set to True, content starting with "Error: Unknown file '{path}'. Available files: ", and reminder "Only declared files can be inspected.".
         - WHEN path matches a declared file workspace path, MUST produce a successful ToolResponse indicating access is permitted with content "Access permitted for '{path}'.".
+
+        GROUNDING:
+        - Checks whether target path matches any declared ReadOnlyFile or ReadWriteFile from NodeConfig.
         """
         ...
 
 
 @singleton_type("agent_session")
 class ViewFileTool(sandbox_file_reader.ViewFileTool):
-    """Executes file read across declared session files."""
+    """Executes file read across declared session files.
+
+    GROUNDING:
+    - Reads file content from filesystem, applies line numbering, filters metadata,
+      substitutes template parameters, and records reads in EditManager.
+    """
 
     @operation
     def initialize(self) -> None:
@@ -61,6 +84,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool):
         POSTCONDITIONS:
         - MUST install the view file tool for the agent session.
         - MUST omit the search tool.
+
+        GROUNDING:
+        - Registers view_file into ToolManager and omits search_files.
         """
         ...
 
@@ -108,6 +134,11 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool):
         - WHEN reading a read-write file, MUST set suppression key matching the file relative path.
         - WHEN reading a read-only file, MUST omit suppression key and sanitize host paths.
         - WHEN reading a file succeeds, MUST record the read file to establish the session's last read or written file.
+
+        GROUNDING:
+        - Reads file from filesystem, formats right-aligned line numbering, strips META paragraphs,
+          evaluates template parameters, sanitizes paths, sets suppression keys for read-write files,
+          and records read in EditManager.
         """
         ...
 
@@ -117,7 +148,11 @@ class RegexPatternParameterType(
     tool_provider.ParameterType[agent_file_alias.RegexPattern, str],
     InTier[AgentSessionTier],
 ):
-    """Converts wire type string into regex pattern."""
+    """Converts wire type string into regex pattern.
+
+    GROUNDING:
+    - Compiles wire string into RegexPattern, catching re.error and raising ParameterConversionError.
+    """
 
     @property
     @override
@@ -143,13 +178,20 @@ class RegexPatternParameterType(
         POSTCONDITIONS:
         - WHEN wire_value is not a valid regular expression pattern, MUST raise tool_provider.ParameterConversionError with message formatted as "Invalid regex pattern '{wire_value}': {error}".
         - WHEN wire_value is a valid regular expression pattern, MUST return the constructed RegexPattern.
+
+        GROUNDING:
+        - Uses re.compile to parse pattern, returning RegexPattern or raising ParameterConversionError on syntax error.
         """
         ...
 
 
 @singleton_type("agent_session")
 class SearchTool(sandbox_file_reader.SearchTool):
-    """Searches regex patterns across workspace files."""
+    """Searches regex patterns across workspace files.
+
+    GROUNDING:
+    - Iterates over declared read-only and read-write files, scanning for regex matches and withholding read-write line contents.
+    """
 
     @property
     @override
@@ -189,5 +231,8 @@ class SearchTool(sandbox_file_reader.SearchTool):
         - WHEN regex pattern is invalid, MUST return a ToolResponse with failed set to True and content starting with "Error: Invalid regex pattern ".
         - WHEN matches are found for read-only files, MUST return matched line contents and line numbers sanitized to mask host paths.
         - WHEN matches are found for read-write files, MUST state that matches were found with "{relative_path}: matches found (details hidden to prevent unanchored edits)".
+
+        GROUNDING:
+        - Reads declared session files from NodeConfig, applies regex search, sanitizes paths for read-only matches, and withholds read-write line details.
         """
         ...

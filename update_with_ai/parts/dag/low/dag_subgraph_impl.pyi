@@ -1,7 +1,7 @@
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-05T20:52:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
+# LAST_CHANGED: 2026-10-06T12:45:00Z
+# CHANGE: add grounding sections
 # CODE_HASH: 0f01cb9894fd
 # --- END CLEANROOM METADATA ---
 
@@ -16,7 +16,13 @@ import dag_subgraph
 
 @singleton_type("system")
 class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
-    """Coordinates topological subgraph queries and visit bounds across graph storage."""
+    """Coordinates topological subgraph queries and visit bounds across graph storage.
+
+    GROUNDING:
+    - Queries active execution subgraphs rooted at a target node, sorting nodes into
+      dependency-first topological order, scheduling batches of uncleaned dirty nodes
+      by role precedence, and bounding visitation limits via DagConfig and DagStorage.
+    """
 
     @operation
     @override
@@ -25,6 +31,10 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
 
         Args:
             target: The target node rooting the active execution subgraph.
+
+        GROUNDING:
+        - Grounded via DagStorage.dependencies graph walk collecting reachable nodes,
+          topological sorting breaking ties by role tier depth and unit address.
 
         POSTCONDITIONS:
         - MUST break topological sorting ties by role tier depth first.
@@ -35,6 +45,11 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
     @operation
     @override
     def is_complete(self) -> bool:
+        """Reports whether all nodes in the target subgraph are clean.
+
+        GROUNDING:
+        - Grounded via DagStorage.is_dirty checks across all reachable subgraph nodes.
+        """
         ...
 
     @operation
@@ -44,6 +59,10 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
 
         Returns:
             The sequence of dirty nodes ready to be cleaned.
+
+        GROUNDING:
+        - Grounded via selecting earliest contiguous ready dirty nodes of identical role
+          prioritized by dynamic role tier precedence up to DagConfig.batch_size.
 
         POSTCONDITIONS:
         - MUST select dirty nodes that are contiguous in topological order.
@@ -61,6 +80,10 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier]):
 
         Args:
             batch: The batch of nodes whose visit count is recorded.
+
+        GROUNDING:
+        - Grounded via incrementing in-memory visit counters and comparing against
+          DagConfig.node_visit_limit, raising an unexpected failure on overflow.
 
         POSTCONDITIONS:
         - MUST advance the visit count for each node in the batch.

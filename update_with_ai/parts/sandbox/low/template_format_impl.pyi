@@ -18,7 +18,12 @@ import template_format
 class TemplateFormatter(
     template_format.TemplateFormatter, InTier[AgentSessionTier]
 ):
-    """Realizes Markdown document formatting using CommonMark comment directives."""
+    """Realizes Markdown document formatting using CommonMark comment directives.
+
+    GROUNDING:
+    - Formats markdown templates by parsing comment directives via CommonMark and regex scanners,
+      resolving dot-separated parameter paths in bindings within the agent session tier.
+    """
 
     @operation
     @override
@@ -39,5 +44,9 @@ class TemplateFormatter(
         - MUST evaluate line-suffix and block conditional comments, retaining or omitting content based on truthiness.
         - MUST strip template comment markers from produced content.
         - MUST evaluate loop directive comments repeating block content for each element in matched collections.
+
+        GROUNDING:
+        - Parses text for conditional markers and loop blocks, resolves nested parameters,
+          expands repetitions, strips directive comments, and normalizes blank lines.
         """
         ...

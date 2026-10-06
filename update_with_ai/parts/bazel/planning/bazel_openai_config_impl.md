@@ -31,7 +31,27 @@ By reading target configuration from environment variables or command-line argum
 - Execution parameters fall back to standard defaults when environment variables are unset. [fallback_params_to_defaults]
 - Authentication credentials fall back to standard defaults when environment variables are unset. [fallback_credentials_to_defaults]
 
-## Woven Contracts
+### Woven Contracts
 
 - Target configuration resolution selects modules specified via environment variables or command-line arguments, defaulting to standard targets. [resolve_target_from_model_config_env, resolve_target_from_agent_config_env, resolve_target_from_config_arg, default_target_to_standard]
-- Execution parameters and credentials load from resolved target modules, falling back to ambient environment variables or defaults when absent. \[load_execution_params_from_target, load_auth_credentials_from_target, fallback_params_to_env_when_absent, fallback_credentials_to_env_when_absent, fallback_params_to_defaults, fallback_credentials_to_defaults, model_config_ext: [decode_config_json, parse_model_config_fields, extract_env_credentials], agent_config: [expose_execution_parameters], dag_config: [provide_node_visit_limit, provide_batch_size]\]
+- Execution parameters and credentials load from resolved target modules, falling back to ambient environment variables or defaults when absent. [load_execution_params_from_target, load_auth_credentials_from_target, fallback_params_to_env_when_absent, fallback_credentials_to_env_when_absent, fallback_params_to_defaults, fallback_credentials_to_defaults, agent_config: [expose_execution_parameters], dag_config: [provide_node_visit_limit, provide_batch_size]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Model execution parameters and authentication secrets extracted from target modules and environment. [bazel_model_configuration]
+
+### Inherited Deferred Requirements
+
+- System-wide agent configuration parameters from environment or model configuration.
+  - Grounded: [model_config_ext: [model_config_operations]]
+- Operational limit configuration parameters from system environment or configuration models.
+  - Grounded: [model_config_ext: [model_config_operations]]
+- Model configuration extraction from runtime environment or build manifests.
+  - Grounded: [model_config_ext: [model_config_operations]]
+
+### Knowledge Requirements
+
+- Parsing model config JSON and extracting ambient environment variables.
+  - Grounded: [model_config_ext: [model_config_operations]]

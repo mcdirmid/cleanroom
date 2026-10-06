@@ -16,7 +16,11 @@ import loop
 
 @singleton_type("system")
 class Loop(loop.Loop, InTier[SystemTier]):
-    """Realizes workspace target loading, topological cleaning, and runner telemetry streaming."""
+    """Realizes workspace target loading, topological cleaning, and runner telemetry streaming.
+
+    GROUNDING:
+    - Realizes loop interface contracts by loading targets into dag_storage via bazel_manifest_loader, orchestrating cleaning with loop_cleaner, and reporting telemetry to runner_logger.
+    """
 
     @operation
     @override
@@ -40,6 +44,9 @@ class Loop(loop.Loop, InTier[SystemTier]):
         - MUST stream telemetry capturing execution events to transcript files.
         - MUST stream telemetry capturing pass duration to standard output and transcript files.
         - MUST stream telemetry capturing build outcome to standard output and transcript files.
+
+        GROUNDING:
+        - Loads target graph via bazel_manifest_loader, invokes loop_cleaner to execute topological cleaning passes, checks post-cleaning dirtiness, and streams telemetry to runner_logger.
         """
         ...
 
@@ -56,6 +63,9 @@ class Loop(loop.Loop, InTier[SystemTier]):
         - MUST stamp node metadata headers with the current timestamp as the last cleaned timestamp.
         - MUST initialize missing last changed timestamps and default change descriptions.
         - MUST clear unacted feedback across the target subgraph.
+
+        GROUNDING:
+        - Traverses subgraph via dag_storage, materializing templates for missing files and stamping clean metadata timestamps.
         """
         ...
 
@@ -72,6 +82,9 @@ class Loop(loop.Loop, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST delete the last cleaned timestamp from the target node source file metadata header.
+
+        GROUNDING:
+        - Delegates last cleaned timestamp removal to dag_storage.delete_last_cleaned.
         """
         ...
 
@@ -90,6 +103,9 @@ class Loop(loop.Loop, InTier[SystemTier]):
         - MUST inject caller-supplied feedback into the target node source file metadata in graph storage.
         - MUST identify the blamed dependency node in injected feedback.
         - MUST identify the diagnostic reason in injected feedback.
+
+        GROUNDING:
+        - Records feedback message on target node in dag_storage, updating in-band source headers with blamed dependency and diagnostic reasoning.
         """
         ...
 
@@ -98,6 +114,11 @@ class Loop(loop.Loop, InTier[SystemTier]):
     def broadcast_change(
         self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None:
+        """Broadcasts a change message across forward dependencies.
+
+        GROUNDING:
+        - Records change messages across forward dependencies in dag_storage.
+        """
         ...
 
     @operation
@@ -115,5 +136,8 @@ class Loop(loop.Loop, InTier[SystemTier]):
         - MUST record a caller-supplied change message against a target node in graph storage.
         - MUST clear the last cleaned timestamp of the target node in graph storage.
         - MUST update the change description of the target node in graph storage to dynamically invalidate downstream dependencies.
+
+        GROUNDING:
+        - Records change description on target node in dag_storage, clearing last cleaned timestamp and invalidating downstream dependents.
         """
         ...

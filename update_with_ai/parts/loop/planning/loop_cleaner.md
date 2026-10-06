@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-05T05:33:23Z
-CHANGE: Add caller acyclic subgraph assumption contract
-CODE_HASH: 1562b541dcda
--->
-
 # loop_cleaner interface component
 
 imports: dag_storage, loop_node_cleaner
@@ -27,6 +20,19 @@ By guaranteeing dependency-first evaluation order and halting promptly on unreco
 - Cleaning dirty nodes halts if the node cleaner communicates that processing cannot continue. [halt_when_node_cleaner_cannot_continue]
 - Cleaning concludes when all nodes in the subgraph rooted at the target node are clean. [conclude_when_all_nodes_clean]
 
-## Woven Contracts
+### Woven Contracts
 
-- The loop cleaner traverses dirty nodes in topological dependency order using the supplied node cleaner, halting if cleaning fails or concluding when all subgraph nodes are clean. \[caller_guarantees_target_roots_acyclic_subgraph, clean_target_supplied, clean_node_cleaner_supplied, clean_nodes_topological_order, ensure_dependencies_clean_first, halt_when_node_cleaner_cannot_continue, conclude_when_all_nodes_clean, loop_node_cleaner: [clean_dirty_nodes, communicate_processing_continuation], dag_storage: [access_dag_dependencies, expose_node_dirty]\]
+- The loop cleaner traverses dirty nodes in topological dependency order using the supplied node cleaner, halting if cleaning fails or concluding when all subgraph nodes are clean. [caller_guarantees_target_roots_acyclic_subgraph, clean_target_supplied, clean_node_cleaner_supplied, clean_nodes_topological_order, ensure_dependencies_clean_first, halt_when_node_cleaner_cannot_continue, conclude_when_all_nodes_clean, loop_node_cleaner: [clean_dirty_nodes, communicate_processing_continuation], dag_storage: [access_dag_dependencies, expose_node_dirty]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Topological dependency-first cleaning traversal across target subgraphs. [loop_cleaner_service]
+
+### Knowledge Requirements
+
+- Subgraph topological traversal and batch dirty node discovery.
+  - Deferred: Delegated to DagSubgraph in implementation.
+- Delegation of ready batch workloads to NodeCleaner.
+  - Deferred: Delegated to NodeCleaner in implementation.

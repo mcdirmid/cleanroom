@@ -33,8 +33,23 @@ By tolerating partial bindings and preserving unrendered placeholders, the templ
 - The template formatter repeats line-suffix loops across items when the collection key resolves to a sequence. [repeat_suffix_loops]
 - The template formatter binds loop item variables during repetition. [bind_loop_item_variables]
 
-## Woven Contracts
+### Woven Contracts
 
-- When formatting template text, bound parameter placeholders are substituted while absent placeholders are preserved unrendered. [format_template_text_supplied, format_template_params_supplied, format_template_text, substitute_bound_placeholders, preserve_absent_placeholders, commonmark_ext: [supply_markdown_text, parameter_placeholder_syntax]]
-- Conditional blocks and line-suffix conditionals are included when condition keys are true or absent, and omitted when false. [eval_conditional_blocks, eval_suffix_conditionals, include_condition_true, include_condition_absent, omit_condition_false, commonmark_ext: [html_comment_metadata]]
-- Loop blocks and line-suffix loops iterate over sequence collections, binding loop item variables for each repetition. [repeat_loop_blocks, repeat_suffix_loops, bind_loop_item_variables, commonmark_ext: [html_comment_metadata]]
+- When formatting template text, bound parameter placeholders are substituted while absent placeholders are preserved unrendered. [format_template_text_supplied, format_template_params_supplied, format_template_text, substitute_bound_placeholders, preserve_absent_placeholders]
+- Conditional blocks and line-suffix conditionals are included when condition keys are true or absent, and omitted when false. [eval_conditional_blocks, eval_suffix_conditionals, include_condition_true, include_condition_absent, omit_condition_false]
+- Loop blocks and line-suffix loops iterate over sequence collections, binding loop item variables for each repetition. [repeat_loop_blocks, repeat_suffix_loops, bind_loop_item_variables]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Formats template text with parameter substitutions and conditional evaluations. [template_formatting]
+- Evaluates conditional blocks and line-suffix conditions based on parameters. [conditional_evaluation]
+- Repeats loop blocks and line-suffix loops across sequence elements. [loop_repetition]
+
+### Knowledge Requirements
+
+- Parsing markdown text and HTML comment directives.
+  - Deferred: Requires CommonMark comment directive parsing in implementation.
+- Resolving dot-separated parameter bindings in hierarchical dictionaries.
+  - Deferred: Requires nested parameter resolution in implementation.

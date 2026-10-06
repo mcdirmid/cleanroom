@@ -22,8 +22,29 @@ Compilers and build tools output varied terminal sequences and progress indicato
 - The verification evaluator cleans stdout and stderr lines matching build noise prefixes. [clean_diagnostic_lines]
 - The verification evaluator writes the final result and hash entry to the cache. [update_hash_cache]
 
-## Woven Contracts
+### Woven Contracts
 
 - When current file hashes match the cached hash, the evaluator skips command execution and returns the cached outcome with is_cached true. [detect_hash_match, control_verification: [reuse_cached_result]]
 - When a check command fails, the evaluator stops subsequent checks, cleans error text of noise prefixes, marks the result as failing, and updates the cache. [execute_check_command, record_check_failure, clean_diagnostic_lines, update_hash_cache]
 - When all check commands succeed, the evaluator cleans standard output of noise prefixes, marks the result as passing, and updates the cache. [execute_check_command, record_check_success, clean_diagnostic_lines, update_hash_cache]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Evaluates target verification checks with terminal noise filtering. [verification_evaluation]
+- Memoizes check results by file hash to avoid redundant subprocess execution. [verification_caching]
+
+### Inherited Deferred Requirements
+
+- Resolution of configured verification check commands for target nodes.
+  - Grounded: [agent_node_config: [node_configuration_service]]
+- Computation of cryptographic hashes of target read-write files.
+  - Grounded: [agent_file_alias: [alias_mapping], verification_caching]
+- Subprocess execution of verification commands.
+  - Grounded: [verification_evaluation]
+
+### Knowledge Requirements
+
+- Regex-based diagnostic noise scrubbing of progress bars, build banners, and timing stats.
+  - Grounded: [verification_evaluation]

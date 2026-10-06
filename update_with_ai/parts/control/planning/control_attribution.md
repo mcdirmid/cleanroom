@@ -28,7 +28,23 @@ Defect attribution allows agents encountering irrecoverable upstream flaws to se
 - An attribution coordinator records a failure diagnostic on the target node in graph storage. [record_failure_diagnostic]
 - An attribution coordinator preserves dirty status on a failed target node in graph storage. [preserve_target_dirty]
 
-## Woven Contracts
+### Woven Contracts
 
 - When blaming a valid upstream dependency with a single-paragraph critique, the coordinator records feedback, marks the culprit dirty, attributes the source, and fails in-batch dependents. [assert_blame_target_is_upstream, assert_blame_target_receives_feedback, assert_single_paragraph_critique, assert_source_dependencies_clean, record_blame_feedback, mark_culprit_dirty, mark_source_attributed, propagate_in_batch_failure]
 - When recording a task failure, the coordinator logs the failure diagnostic, preserves the target's dirty state, and fails dependent in-batch nodes. [record_failure_diagnostic, preserve_target_dirty, propagate_in_batch_failure]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Defect blame gating validating upstream targets, feedback configuration, and single-paragraph critique formatting. [attribution_gating]
+- Failure recording and cascading invalidation across in-batch dependent nodes. [failure_propagation]
+
+### Knowledge Requirements
+
+- Verification of upstream dependency relationships and feedback reception enablement.
+  - Deferred: Verified against graph storage and node configuration in implementation.
+- Enforcement of single-paragraph critique structure with zero newline characters.
+  - Deferred: Validated via string inspection in implementation.
+- Persistence of feedback messages and node status mutations in graph storage.
+  - Deferred: Delegated to DagStorage in implementation.

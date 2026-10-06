@@ -1,12 +1,6 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-05T05:32:43Z
-CHANGE: Make log opening declarative and specify unbuffered flush mechanics
-CODE_HASH: 5dbcc1cf08aa
--->
-
 # runner_logger_impl implementation component
 
+imports: filesystem_ext
 implements: runner_logger
 
 ## Intent
@@ -28,8 +22,26 @@ By clearing prior run logs at startup and resolving output destinations from env
 - Transcript log entries flush immediately after each write. [flush_immediately_after_write]
 - Immediate flushing guarantees unbuffered persistence across unexpected crashes. [guarantee_unbuffered_persistence]
 
-## Woven Contracts
+### Woven Contracts
 
 - At opening, the runner logger resolves the transcript log file destination and truncates the transcript file. [truncate_transcript_at_opening, default_log_destination, resolve_env_log_destination]
-- When consuming runner log events, formatted single-line summaries are written to standard output for live terminal visibility. \[format_stdout_summaries_with_timestamps, format_stdout_event_names, runner_logger: [supply_runner_log_event, consume_log_events, write_stdout_summary]\]
-- When consuming runner log events, verbose records are appended to disk with immediate flushing guaranteeing unbuffered persistence. \[append_verbose_records, flush_immediately_after_write, guarantee_unbuffered_persistence, runner_logger: [supply_runner_log_event, consume_log_events, write_transcript_log]\]
+- When consuming runner log events, formatted single-line summaries are written to standard output for live terminal visibility. [format_stdout_summaries_with_timestamps, format_stdout_event_names, runner_logger: [supply_runner_log_event, consume_log_events, write_stdout_summary]]
+- When consuming runner log events, verbose records are appended to disk with immediate flushing guaranteeing unbuffered persistence. [append_verbose_records, flush_immediately_after_write, guarantee_unbuffered_persistence, runner_logger: [supply_runner_log_event, consume_log_events, write_transcript_log]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Execution event logging with live stdout summaries and transcript file recording. [runner_logging_service]
+
+### Inherited Deferred Requirements
+
+- Formatting and terminal emission of event summaries.
+  - Grounded: [runner_logging_service]
+- Persistent file recording of verbose event transcripts with immediate flush.
+  - Grounded: [filesystem_ext: [filesystem_operations]]
+
+### Knowledge Requirements
+
+- Log destination resolution from environment variables and startup file truncation.
+  - Grounded: [filesystem_ext: [filesystem_operations]]

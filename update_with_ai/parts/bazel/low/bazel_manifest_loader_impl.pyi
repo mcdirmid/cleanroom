@@ -18,7 +18,11 @@ import dag_storage
 class BazelManifestLoader(
     bazel_manifest_loader.BazelManifestLoader, InTier[SystemTier]
 ):
-    """Realizes JSON manifest loading, node resolution, and graph construction."""
+    """Realizes JSON manifest loading, node resolution, and graph construction.
+
+    GROUNDING:
+    - Realizes bazel_manifest_loader interface contracts by discovering build manifests across filesystem search paths, decoding schemas via bazel_manifest_ext, and populating agent_storage and dag_storage.
+    """
 
     @operation
     @override
@@ -47,6 +51,9 @@ class BazelManifestLoader(
         - MUST cross-product unit dependencies with role dependencies to produce target dependencies.
         - MUST incorporate fixed role node dependencies as declared direct dependencies across unit and role dimensions.
         - MUST synthesize promptless pass-through node definitions when a unit component type is not active for a role.
+
+        GROUNDING:
+        - Discovers unit and role manifests across workspace directories and runfiles trees using file_paths, decodes them via bazel_manifest_ext, evaluates path patterns and prompt templates, and synthesizes TargetManifest records.
         """
         ...
 
@@ -66,5 +73,8 @@ class BazelManifestLoader(
         - MUST register declared feedback dependencies in agent storage.
         - MUST register declared silent dependencies as non-propagating dependencies in agent storage.
         - MUST synthesize fallback node definitions for referenced targets lacking manifests.
+
+        GROUNDING:
+        - Discovers and parses TargetManifest records via retrieve_manifest, populating node definitions and prompt metadata into agent_storage and registering dependency relationships into dag_storage.
         """
         ...

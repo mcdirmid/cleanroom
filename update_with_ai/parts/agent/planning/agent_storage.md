@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-05T05:27:47Z
-CHANGE: Update node definition typing to reflect execution configuration, role attributes, and task prompts
-CODE_HASH: dd32f582e505
--->
-
 # agent_storage interface component
 
 imports: dag_storage
@@ -32,7 +25,18 @@ By extending dag storage with manifest-backed node definitions and prompt metada
 - The agent storage provides node definitions for declared nodes. [provide_node_definitions]
 - The agent storage evaluates node dirty status and derives pending messages from in-band source file metadata. [evaluate_dirty_from_source_metadata]
 
-## Woven Contracts
+### Woven Contracts
 
 - When querying a declared node, the agent storage provides its task prompt and node definition. [query_node_def_supplied, query_task_prompt_supplied, provide_task_prompts, provide_node_definitions]
-- When a propagating dependency changes, dependent nodes dynamically evaluate as dirty based on dependency change timestamps. \[evaluate_dirty_from_source_metadata, dag_storage: [expose_node_dirty, dirty_when_dependency_newer]\]
+- When a propagating dependency changes, dependent nodes dynamically evaluate as dirty based on dependency change timestamps. [evaluate_dirty_from_source_metadata, dag_storage: [expose_node_dirty, dirty_when_dependency_newer]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Manifest-backed graph storage with task prompts and node definitions. [agent_storage_service]
+
+### Knowledge Requirements
+
+- Target manifest discovery and in-band source file metadata parsing.
+  - Deferred: Provided by storage implementation using manifest readers and src_metadata_ext.

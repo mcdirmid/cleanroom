@@ -22,9 +22,30 @@ The implementation evaluates verification results from the verification evaluato
 - The submission coordinator invokes graph storage to update node status to clean. [update_storage_clean]
 - The submission coordinator invokes graph storage to append the change message. [append_storage_change]
 
-## Woven Contracts
+### Woven Contracts
 
 - When verification fails or has not run, the coordinator rejects the submission with a verification error. [query_target_verification, format_verification_error]
 - When an in-batch dependency is not clean, the coordinator rejects the submission with a dependency error. [format_dependency_error, control_submit: [assert_in_batch_dependencies_clean]]
 - When change summary rules fail based on file modifications or auditor role status, the coordinator rejects the submission with a summary error. [check_auditor_role, inspect_file_modifications, format_summary_error, control_submit: [require_summary_when_modified, forbid_summary_when_unmodified, forbid_summary_for_auditors]]
 - When all checks succeed, the coordinator updates node status to clean and appends the change message in graph storage. [update_storage_clean, append_storage_change, control_submit: [mark_node_clean, record_change_message]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Submission gating enforcing verification success, in-batch cleanliness, and change summary rules. [submission_gating]
+- Transition of submitted nodes to clean state with change message recording in graph storage. [clean_state_transition]
+
+### Inherited Deferred Requirements
+
+- Evaluation of verification check results for candidate targets.
+  - Grounded: [control_verification: [verification_evaluation]]
+- Inspection of auditor role declarations in role configuration.
+  - Grounded: [agent_node_config: [node_configuration_service]]
+- Mutation of target node status to clean and persistence of change messages in graph storage.
+  - Grounded: [dag_storage: [dag_storage_service], clean_state_transition]
+
+### Knowledge Requirements
+
+- Inspection of session file modification state to validate change summary requirements.
+  - Grounded: [caller input, submission_gating]

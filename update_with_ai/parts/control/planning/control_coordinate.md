@@ -27,8 +27,31 @@ Autonomous tools require a consistent state coordinator so that nodes being work
 - A session coordinator dispatches failure recording through the attribution coordinator. [dispatch_fail]
 - A session coordinator queries remaining open targets in the session. [query_open_targets]
 
-## Woven Contracts
+### Woven Contracts
 
 - When check files is invoked without a target argument, the coordinator queries all open targets and evaluates verification across each open target. [query_open_targets, dispatch_check_files]
 - When submit succeeds for a target, the coordinator updates that target's state to clean and reports remaining open targets. [dispatch_submit, track_target_states, query_open_targets]
 - When blame or fail occurs for a target, the coordinator updates target states and marks in-batch dependent nodes as failed. [dispatch_blame, dispatch_fail, track_target_states, query_open_targets]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Session target state tracking and active node registry. [session_target_registry]
+- Default target resolution for ambiguous or omitted tool invocations. [default_target_resolution]
+- Central dispatching facade for control operations across verification, work scheduling, submission, and attribution. [control_dispatch_facade]
+
+### Knowledge Requirements
+
+- Registration and tracking of active session targets across target states.
+  - Deferred: Delegated to in-memory node state dictionary in implementation.
+- Resolution of default targets based on open counts or file modification timestamps.
+  - Deferred: Delegated to default target resolution algorithm in implementation.
+- Work discovery dispatching to work scheduler.
+  - Deferred: Delegated to WorkScheduler from control_work_scheduler in implementation.
+- Verification evaluation dispatching across single or all open targets.
+  - Deferred: Delegated to VerificationEvaluator from control_verification in implementation.
+- Target submission dispatching through submission coordinator.
+  - Deferred: Delegated to SubmissionCoordinator from control_submit in implementation.
+- Defect attribution and failure dispatching through attribution coordinator.
+  - Deferred: Delegated to AttributionCoordinator from control_attribution in implementation.

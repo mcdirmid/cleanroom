@@ -36,6 +36,7 @@ exports_files([
     "build_derived_test.bzl",
     "build_lint_common.py",
     "high_lint.py",
+    "spec_lint.py",
     "low_lint.py",
     "grounding_lint.py",
     "lib_lint.py",
@@ -85,6 +86,13 @@ pyright_library(
 pyright_library(
     name = "high_lint",
     srcs = ["high_lint.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "spec_lint",
+    srcs = ["spec_lint.py"],
     pyright_deps = [],
     visibility = ["//visibility:public"],
 )

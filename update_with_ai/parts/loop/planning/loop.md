@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 35be00d70d66
--->
-
 # loop interface component
 
 imports: dag_storage
@@ -39,10 +32,23 @@ By managing end-to-end cleaning runs, injecting change and feedback messages, an
 - A caller supplies a change message when recording a change message. [record_change_message_supplied]
 - The loop records a caller-supplied change message on a target node in graph storage, updating in-band source metadata and dynamically invalidating downstream dependencies. [record_node_change_message]
 
-## Woven Contracts
+### Woven Contracts
 
-- Executing a cleaning pass traverses the subgraph rooted at a target node and yields a build result. \[clean_pass_target_supplied, execute_cleaning_pass, produce_build_result, dag_storage: [access_dag_dependencies]\]
-- Marking an acyclic subgraph clean primes target and dependency source files with clean timestamps, materializing missing templates and clearing unacted feedback. \[mark_clean_target_supplied, mark_subgraph_clean, dag_storage: [access_dag_dependencies, clear_node_messages]\]
-- Marking a target node dirty removes its last cleaned timestamp from in-band source metadata. \[mark_dirty_target_supplied, mark_node_dirty, dag_storage: [mark_node_dirty]\]
-- Injecting feedback messages records diagnostic updates in target node messages. \[inject_feedback_target_supplied, inject_feedback_message_supplied, inject_feedback_message, dag_storage: [add_node_messages]\]
-- Recording change messages updates a modified node in graph storage with a change description, clearing unacted feedback and dynamically invalidating downstream dependencies. \[record_change_node_supplied, record_change_message_supplied, record_node_change_message, dag_storage: [mark_clean_with_change_description]\]
+- Executing a cleaning pass traverses the subgraph rooted at a target node and yields a build result. [clean_pass_target_supplied, execute_cleaning_pass, produce_build_result, dag_storage: [access_dag_dependencies]]
+- Marking an acyclic subgraph clean primes target and dependency source files with clean timestamps, materializing missing templates and clearing unacted feedback. [mark_clean_target_supplied, mark_subgraph_clean, dag_storage: [access_dag_dependencies, clear_node_messages]]
+- Marking a target node dirty removes its last cleaned timestamp from in-band source metadata. [mark_dirty_target_supplied, mark_node_dirty, dag_storage: [mark_node_dirty]]
+- Injecting feedback messages records diagnostic updates in target node messages. [inject_feedback_target_supplied, inject_feedback_message_supplied, inject_feedback_message, dag_storage: [add_node_messages]]
+- Recording change messages updates a modified node in graph storage with a change description, clearing unacted feedback and dynamically invalidating downstream dependencies. [record_change_node_supplied, record_change_message_supplied, record_node_change_message, dag_storage: [mark_clean_with_change_description]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Orchestrated end-to-end cleaning runs, feedback injection, and change recording. [loop_orchestration_service]
+
+### Knowledge Requirements
+
+- Subgraph cleaning pass execution in dependency order.
+  - Deferred: Delegated to loop cleaner in implementation.
+- In-band source metadata mutation for clean and dirty states.
+  - Deferred: Delegated to dag storage in implementation.

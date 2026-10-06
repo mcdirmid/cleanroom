@@ -2447,6 +2447,21 @@ class SandboxRunControlImplTest(unittest.TestCase):
             installed_names = {t.name for t in self.tool_mgr.installed_tools}
             self.assertIn("advance", installed_names)
 
+    def test_reset_nodes_with_nodes_installs_active_tools_in_step_mode(
+        self,
+    ) -> None:
+        """CUJ: Calling reset_nodes with non-empty batch installs advance tool when guide step mode is active."""
+        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc: Any = scope.get_singleton(RunControllerImpl)
+            self.tool_mgr.installed_tools.clear()
+
+            # Requirement: The run controller installs the advance tool only when guide step mode is active.
+            rc.reset_nodes([node1])
+            installed_names = {t.name for t in self.tool_mgr.installed_tools}
+            self.assertIn("advance", installed_names)
+            self.assertIn("submit", installed_names)
+
     def test_resolve_default_target_selection(self) -> None:
         """CUJ: Resolving default target selects matching active node or defaults when unambiguous."""
         node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")

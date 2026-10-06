@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 6b8a8c3a1a40
--->
-
 # loop_guard_impl implementation component
 
 imports: tool_provider
@@ -30,7 +23,25 @@ By enforcing an explicit reminder threshold of two repetitions and fatal thresho
 - When consecutive edits target the same file and line range, the loop guard produces a loop failure at the fatal threshold. [fail_edit_repetition_at_fatal]
 - Any tool execution demonstrating forward progress resets repetition counters in the loop guard. [reset_counters_on_forward_progress]
 
-## Woven Contracts
+### Woven Contracts
 
-- Repeating identical tool calls or line-bounded edits triggers advisory reminders at two repetitions and fatal failure when reaching the fatal limit. \[track_identical_tool_executions, track_consecutive_file_range_edits, remind_tool_repetition_at_two, advise_no_new_info_until_files_updated, warn_repetition_triggers_fatal, fail_tool_repetition_at_fatal, remind_edit_repetition_at_two, fail_edit_repetition_at_fatal, loop_guard: [produce_loop_reminder_at_warning, produce_loop_failure_at_fatal]\]
-- Tool executions demonstrating progress clear repetition counters to allow legitimate iterative development. \[reset_counters_on_forward_progress, loop_guard: [clear_repetition_on_progress]\]
+- Repeating identical tool calls or line-bounded edits triggers advisory reminders at two repetitions and fatal failure when reaching the fatal limit. [track_identical_tool_executions, track_consecutive_file_range_edits, remind_tool_repetition_at_two, advise_no_new_info_until_files_updated, warn_repetition_triggers_fatal, fail_tool_repetition_at_fatal, remind_edit_repetition_at_two, fail_edit_repetition_at_fatal, loop_guard: [produce_loop_reminder_at_warning, produce_loop_failure_at_fatal]]
+- Tool executions demonstrating progress clear repetition counters to allow legitimate iterative development. [reset_counters_on_forward_progress, loop_guard: [clear_repetition_on_progress]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Repetition tracking and loop prevention across consecutive tool executions and file edits. [loop_guard_service]
+
+### Inherited Deferred Requirements
+
+- Consecutive tool signature and file edit span tracking.
+  - Grounded: [loop_guard_service, tool_provider: [tool_execution_capability]]
+- Threshold evaluation for warning reminders and fatal aborts.
+  - Grounded: [loop_guard_service]
+
+### Knowledge Requirements
+
+- Repetition counter reset on forward progress.
+  - Grounded: [loop_guard_service]

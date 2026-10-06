@@ -1,7 +1,7 @@
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-05T20:52:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
+# LAST_CHANGED: 2026-10-06T12:45:00Z
+# CHANGE: add grounding sections
 # CODE_HASH: ce44bc7de95e
 # --- END CLEANROOM METADATA ---
 
@@ -16,7 +16,12 @@ import loop_node_cleaner
 
 @singleton_type("system")
 class LoopCleaner(loop_cleaner.LoopCleaner, InTier[SystemTier]):
-    """Realizes dependency-first topological cleaning and visit recording using dag subgraph."""
+    """Realizes dependency-first topological cleaning and visit recording using dag subgraph.
+
+    GROUNDING:
+    - Traverses active execution subgraphs by setting target nodes on DagSubgraph,
+      processing topological ready batches through NodeCleaner, and enforcing visit bounds.
+    """
 
     @operation
     @override
@@ -31,6 +36,11 @@ class LoopCleaner(loop_cleaner.LoopCleaner, InTier[SystemTier]):
 
         Returns:
             True if all nodes in the target subgraph are clean, or False if processing halted.
+
+        GROUNDING:
+        - Grounded via DagSubgraph to compute topological ordering and deliver ready batches,
+          delegating batch workloads to NodeCleaner.clean, recording visits, and halting
+          on cleaner failure or concluding upon subgraph completion.
 
         POSTCONDITIONS:
         - MUST set target node on dag subgraph to determine dependency-first topological order.

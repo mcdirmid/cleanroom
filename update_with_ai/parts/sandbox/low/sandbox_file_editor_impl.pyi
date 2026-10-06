@@ -18,11 +18,22 @@ import tool_provider
 
 @singleton_type("agent_session")
 class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
-    """Realizes workspace file modification tracking."""
+    """Realizes workspace file modification tracking.
+
+    GROUNDING:
+    - Tracks session file modifications, last accessed file, and sequential update revisions
+      using internal state attributes within the agent session tier, resolving write access
+      against session read-write files.
+    """
 
     @property
     @override
     def has_modifications(self) -> bool:
+        """Exposes whether workspace file modifications occurred during the session.
+
+        GROUNDING:
+        - Grounded by querying whether any file modifications were recorded in session state.
+        """
         ...
 
     @property
@@ -32,22 +43,41 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
 
         POSTCONDITIONS:
         - MUST increment the file update revision whenever workspace files are updated.
+
+        GROUNDING:
+        - Exposes the internal monotonically increasing revision counter.
         """
         ...
 
     @property
     @override
     def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
+        """Exposes the last read or edited file.
+
+        GROUNDING:
+        - Exposes the internal pointer tracking the most recently accessed FileAlias.
+        """
         ...
 
     @operation
     @override
     def record_file_read(self, file: agent_file_alias.FileAlias) -> None:
+        """Records that a file was read during the session.
+
+        GROUNDING:
+        - Updates the internal last_read_or_edited_file tracking pointer with the supplied file.
+        """
         ...
 
     @operation
     @override
     def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None:
+        """Records that a file was edited during the session.
+
+        GROUNDING:
+        - Updates the internal last_read_or_edited_file tracking pointer, marks writes as occurred,
+          and increments the file update revision.
+        """
         ...
 
     @operation
@@ -63,6 +93,9 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
 
         POSTCONDITIONS:
         - MUST return an MD5 hexadecimal digest of content read from the filesystem.
+
+        GROUNDING:
+        - Reads file content from filesystem using file.resolve_path() and computes MD5 hexadecimal digest.
         """
         ...
 
@@ -82,6 +115,9 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
         POSTCONDITIONS:
         - WHEN the target file is not a declared read-write file, MUST fail reminding the agent that only declared read-write files can be written.
         - WHEN a declared read-write file is supplied, MUST record the file edit and confirm write access.
+
+        GROUNDING:
+        - Resolves target path against declared read-write files from NodeConfig and records file edit in EditManager.
         """
         ...
 
@@ -90,7 +126,12 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
 class ReplaceFileContentTool(
     sandbox_file_editor.ReplaceFileContentTool, InTier[AgentSessionTier]
 ):
-    """Realizes targeted text replacement within bounded line ranges."""
+    """Realizes targeted text replacement within bounded line ranges.
+
+    GROUNDING:
+    - Coordinates text replacements on ReadWriteFiles by delegating file resolution, matching,
+      and modification tracking to EditManager and writing updated lines to filesystem.
+    """
 
     @operation
     @override
@@ -118,5 +159,8 @@ class ReplaceFileContentTool(
         - WHEN the edit produces no change to file content, MUST fail reminding the agent that no-op edits will fail.
         - WHEN the replacement succeeds, MUST write updated content creating missing parent directories and record workspace file writes.
         - WHEN the replacement succeeds, MUST remind the agent to call check files to verify syntax and types.
+
+        GROUNDING:
+        - Validates target ReadWriteFile, matches target content using exact matching or whitespace fallback, writes updated content to filesystem, records edit via EditManager, and advances revision.
         """
         ...

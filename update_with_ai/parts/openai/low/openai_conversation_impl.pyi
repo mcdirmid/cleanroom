@@ -1,7 +1,7 @@
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-05T20:52:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
+# LAST_CHANGED: 2026-10-06T12:45:00Z
+# CHANGE: add grounding sections
 # CODE_HASH: bf386802660e
 # --- END CLEANROOM METADATA ---
 
@@ -19,7 +19,12 @@ import tool_provider
 class Conversation(
     loop_conversation.Conversation, InTier[AgentSessionTier]
 ):
-    """Realizes OpenAI provider role schema formatting, stubbing, and synthetic call injection."""
+    """Realizes OpenAI provider role schema formatting, stubbing, and synthetic call injection.
+
+    GROUNDING:
+    - Implements conversation management conforming to OpenAI role schemas, managing
+      unprompted response synthetic pairing, suppression key stubbing, and active reminder formatting.
+    """
 
     @operation
     @override
@@ -31,6 +36,9 @@ class Conversation(
         Args:
             initial_messages: Starting conversation messages.
 
+        GROUNDING:
+        - Grounded via pairing initial unprompted tool responses with synthetic antecedent assistant tool calls.
+
         POSTCONDITIONS:
         - MUST precede unprompted tool responses with synthetic assistant tool invocations.
         """
@@ -41,6 +49,11 @@ class Conversation(
     def append_message(
         self, message: loop_conversation.ConversationMessage
     ) -> None:
+        """Appends a conversation message to history.
+
+        GROUNDING:
+        - Grounded via appending conversation messages directly to in-memory history.
+        """
         ...
 
     @operation
@@ -60,6 +73,10 @@ class Conversation(
             tool_name: Name of the executed tool.
             tool_arguments: Serialized arguments passed to the tool.
 
+        GROUNDING:
+        - Grounded via buffer tracking per suppression key, stubbing superseded tool responses
+          and correlating assistant arguments while preserving file paths and non-string values.
+
         POSTCONDITIONS:
         - MUST retain a buffer of up to three most recent responses sharing suppression keys.
         - MUST replace preceding responses beyond the buffer limit with stubs.
@@ -76,6 +93,10 @@ class Conversation(
 
         Returns:
             The formatted model request.
+
+        GROUNDING:
+        - Grounded via assembling in-memory messages into an OpenAI-conforming ModelRequest,
+          formatting active reminders and execution notes into visible message content.
 
         POSTCONDITIONS:
         - MUST format messages conforming to OpenAI role schemas.

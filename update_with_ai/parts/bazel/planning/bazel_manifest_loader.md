@@ -46,8 +46,25 @@ By synthesizing unit and role manifests into target records, translating declare
 - The bazel manifest loader synthesizes promptless pass-through node definitions when a unit component type is not active for a role. [synthesize_passthrough_definitions]
 - Synthesized pass-through node definitions act as graph dependencies without propagating changes. [passthrough_definitions_non_propagating]
 
-## Woven Contracts
+### Woven Contracts
 
-- Manifest loading retrieves build manifests and populates agent storage with nodes, definitions, and prompts. \[retrieve_manifest_node_supplied, retrieve_manifest_for_node, resolve_manifests_into_nodes, resolve_manifests_into_definitions, resolve_manifests_into_prompts, populate_agent_storage, agent_storage: [maintain_workspace_targets, provide_node_definitions]\]
-- Direct and silent dependencies populate dependency graph edges in agent storage, recording silent dependencies as non-propagating edges. \[resolve_direct_dependencies_graph_edges, resolve_silent_dependencies_non_propagating, dag_storage: [access_dag_dependencies]\]
-- Missing dependency manifests and inactive role stages synthesize pass-through graph definitions that participate in ordering without propagating modifications. \[synthesize_missing_dependency_definitions, synthesize_passthrough_definitions, passthrough_definitions_non_propagating, dag_storage: [dependencies_form_dag]\]
+- Manifest loading retrieves build manifests and populates agent storage with nodes, definitions, and prompts. [retrieve_manifest_node_supplied, retrieve_manifest_for_node, resolve_manifests_into_nodes, resolve_manifests_into_definitions, resolve_manifests_into_prompts, populate_agent_storage, agent_storage: [maintain_workspace_targets, provide_node_definitions]]
+- Direct and silent dependencies populate dependency graph edges in agent storage, recording silent dependencies as non-propagating edges. [resolve_direct_dependencies_graph_edges, resolve_silent_dependencies_non_propagating, dag_storage: [access_dag_dependencies]]
+- Missing dependency manifests and inactive role stages synthesize pass-through graph definitions that participate in ordering without propagating modifications. [synthesize_missing_dependency_definitions, synthesize_passthrough_definitions, passthrough_definitions_non_propagating, dag_storage: [dependencies_form_dag]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Manifest loading, target record synthesis, and graph storage population. [manifest_loading_service]
+
+### Knowledge Requirements
+
+- Manifest file discovery across workspace directories and candidate runfiles trees.
+  - Deferred: Delegated to bazel_manifest_loader_impl across candidate search paths.
+- Parsing build system unit, role, and target manifest JSON schemas.
+  - Deferred: Delegated to bazel_manifest_ext in implementation.
+- Evaluation of role path patterns and prompt templates against unit attributes.
+  - Deferred: Evaluated in bazel_manifest_loader_impl during target record synthesis.
+- Populating target definitions, source file paths, and dependency edges in agent and dag storage.
+  - Deferred: Delegated to agent_storage and dag_storage in implementation.

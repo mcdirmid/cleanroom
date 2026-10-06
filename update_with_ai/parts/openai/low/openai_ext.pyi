@@ -33,7 +33,7 @@ The `openai_ext` external component specifies the HTTP REST wire protocol for Op
 
 ## Build Dependencies
 
-- `urllib.request` or `httpx`
+- requirement("openai")
 
 ## Usage Snippets
 

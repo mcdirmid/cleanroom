@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 552c58f25cc6
--->
-
 # loop_guard interface component
 
 imports: tool_provider
@@ -31,7 +24,20 @@ By distinguishing repetitive oscillations from productive tool invocations, the 
 - The loop guard produces a loop failure communicating session termination when consecutive repetitions reach a fatal threshold. [produce_loop_failure_at_fatal]
 - The loop guard clears repetition tracking when a tool execution demonstrates forward progress. [clear_repetition_on_progress]
 
-## Woven Contracts
+### Woven Contracts
 
 - Repetition monitoring evaluates consecutive identical tool executions and file edits, issuing reminders at warning limits and aborting at fatal limits. [evaluate_consecutive_tools, evaluate_consecutive_edits, produce_loop_reminder_at_warning, produce_loop_failure_at_fatal]
-- Tool invocations that produce state changes or forward progress reset internal repetition tracking. \[clear_repetition_on_progress, tool_provider: [call_by_name]\]
+- Tool invocations that produce state changes or forward progress reset internal repetition tracking. [clear_repetition_on_progress, tool_provider: [call_by_name]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Repetition tracking and loop prevention across consecutive tool executions and file edits. [loop_guard_service]
+
+### Knowledge Requirements
+
+- Consecutive tool signature and file edit span tracking.
+  - Deferred: Tracked via in-memory execution state in implementation.
+- Threshold evaluation for warning reminders and fatal aborts.
+  - Deferred: Enforced via configured warning and fatal limits in implementation.

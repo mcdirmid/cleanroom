@@ -22,8 +22,29 @@ The implementation matches blame strings against upstream file aliases, validate
 - The attribution coordinator updates culprit node status to dirty in graph storage. [update_culprit_status_dirty]
 - The attribution coordinator updates dependent node states to failed in the active session. [update_dependent_nodes_failed]
 
-## Woven Contracts
+### Woven Contracts
 
 - When a blame target does not match an upstream dependency, the coordinator rejects attribution with an error listing valid targets. [resolve_culprit_node, validate_culprit_upstream, format_invalid_target_error]
 - When an explanation contains newlines, the coordinator rejects attribution with a single-paragraph requirement error. [check_explanation_newlines, format_newline_error]
 - When blame validation succeeds, the coordinator stores the feedback message, updates the culprit to dirty, and marks dependents as failed. [store_feedback_message, update_culprit_status_dirty, update_dependent_nodes_failed, control_attribution: [mark_source_attributed]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Defect blame gating validating upstream targets, feedback configuration, and single-paragraph critique formatting. [attribution_gating]
+- Failure recording and cascading invalidation across in-batch dependent nodes. [failure_propagation]
+
+### Inherited Deferred Requirements
+
+- Verification of upstream dependency relationships and feedback reception enablement.
+  - Grounded: [dag_storage: [dag_storage_service], agent_node_config: [node_configuration_service]]
+- Enforcement of single-paragraph critique structure with zero newline characters.
+  - Grounded: [attribution_gating]
+- Persistence of feedback messages and node status mutations in graph storage.
+  - Grounded: [dag_storage: [dag_storage_service]]
+
+### Knowledge Requirements
+
+- Cascading status transitions to failed state across active session in-batch dependents.
+  - Grounded: [failure_propagation]
