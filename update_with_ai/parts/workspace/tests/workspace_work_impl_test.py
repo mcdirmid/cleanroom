@@ -121,6 +121,31 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             pending = self.work_mgr.get_pending_work(ws_dir)
             self.assertEqual(list(pending), ["scope/lib/foo.py"])
 
+    def test_resolve_contract_files(self) -> None:
+        with tempfile.TemporaryDirectory() as ws_dir:
+            part_dir = os.path.join(ws_dir, "staging/parts/testpkg")
+            os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+            os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+
+            low_spec = os.path.join(part_dir, "low/widget_impl.pyi")
+            low_iface = os.path.join(part_dir, "low/widget.pyi")
+            lib_iface = os.path.join(part_dir, "lib/widget.py")
+            lib_impl = os.path.join(part_dir, "lib/widget_impl.py")
+
+            for fpath in (low_spec, low_iface, lib_iface, lib_impl):
+                with open(fpath, "w", encoding="utf-8") as f:
+                    f.write("# test\n")
+
+            contracts = self.work_mgr.resolve_contract_files(
+                "staging/parts/testpkg/lib/widget_impl.py",
+                ws_dir,
+                role_name="lib",
+            )
+            self.assertIn("staging/parts/testpkg/low/widget_impl.pyi", contracts)
+            self.assertIn("staging/parts/testpkg/low/widget.pyi", contracts)
+            self.assertNotIn("staging/parts/testpkg/lib/widget.py", contracts)
+            self.assertNotIn("staging/parts/testpkg/lib/widget_impl.py", contracts)
+
 
 if __name__ == "__main__":
     unittest.main()

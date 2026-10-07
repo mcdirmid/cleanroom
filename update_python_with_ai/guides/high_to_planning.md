@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-07T05:04:27Z
 LAST_CHANGED: 2026-10-06T12:35:00Z
 CHANGE: update planning structure with Grounding section, knowledge provisions, and sub-bullet resolution
 CODE_HASH: dc3fad46fca6

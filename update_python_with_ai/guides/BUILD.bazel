@@ -22,20 +22,6 @@ update_guide_with_ai(
 )
 
 update_guide_with_ai(
-    name = "low_to_grounding",
-    src = "low_to_grounding.md",
-    display_name = "low-level to grounding specification guide",
-    deps = [],
-)
-
-update_guide_with_ai(
-    name = "grounding_qa",
-    src = "grounding_qa.md",
-    display_name = "grounding qa arbiter guide",
-    deps = [],
-)
-
-update_guide_with_ai(
     name = "low_to_lib",
     src = "low_to_lib.md",
     display_name = "low-level to library code guide",

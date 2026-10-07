@@ -26,6 +26,7 @@ class WorkQueueItem:
         dependency_files: Sequence of dependency file paths.
         is_ready: True if all non-silent dependencies are clean.
         blocked_reasons: Sequence of reasons why the target is blocked.
+        contract_files: Sequence of companion contract and spec file paths.
     """
 
     target_file: str
@@ -34,6 +35,7 @@ class WorkQueueItem:
     dependency_files: Sequence[str]
     is_ready: bool
     blocked_reasons: Sequence[str] = ()
+    contract_files: Sequence[str] = ()
 
 
 @data_type
@@ -76,6 +78,57 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
         ...
 
     @operation
+    def set_pending_work(self, workspace_dir: str, targets: Sequence[str]) -> None:
+        """Records pending target paths into local buffer file.
+
+        POSTCONDITIONS:
+        - When targets sequence is empty, MUST clear pending work buffer.
+        - When targets sequence is non-empty, MUST serialize targets to .cleanroom_pending_work.json.
+        """
+        ...
+
+    @operation
+    def remove_pending_target(self, workspace_dir: str, submitted_target: str) -> None:
+        """Removes a submitted target from local pending work buffer.
+
+        POSTCONDITIONS:
+        - MUST remove matching target from .cleanroom_pending_work.json.
+        """
+        ...
+
+    @operation
+    def is_pending_target_dirty(
+        self,
+        target_path: str,
+        workspace_dir: str,
+        main_root: Optional[str] = None,
+        role_name: Optional[str] = None,
+    ) -> bool:
+        """Checks whether a pending target file is still dirty.
+
+        POSTCONDITIONS:
+        - MUST check in-band metadata dirty status across local workspace and main repository.
+        - MUST return true if target is missing, marked dirty, or has unacted feedback.
+        """
+        ...
+
+    @operation
+    def compute_role_work_queue(
+        self,
+        role_name: str,
+        dir_scope: str,
+        repo_root: str,
+    ) -> tuple[Sequence[WorkQueueItem], Sequence[WorkQueueItem]]:
+        """Computes ready and blocked dirty units directly from build manifests and metadata.
+
+        POSTCONDITIONS:
+        - MUST scan part directories in scope for dirty units.
+        - MUST check intra-unit upstream roles, auditor feedback deps, and inter-unit module deps.
+        - MUST return tuple of (ready_items, blocked_items) sorted topologically.
+        """
+        ...
+
+    @operation
     def evaluate_work(
         self,
         dir_scope: str,
@@ -90,5 +143,20 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
         - MUST schedule work for directory scope using dynamic role precedence.
         - MUST partition tasks into ready and blocked items.
         - MUST return WorkQueueSummary detailing ready and blocked items.
+        """
+        ...
+
+    @operation
+    def resolve_contract_files(
+        self,
+        target_path: str,
+        workspace_dir: str,
+        role_name: Optional[str] = None,
+    ) -> Sequence[str]:
+        """Resolves companion specification contracts and interface definitions for target.
+
+        POSTCONDITIONS:
+        - MUST discover low-level spec contracts, interface protocols, and definitions for target.
+        - MUST return existing readable contract paths relative to workspace root.
         """
         ...

@@ -48,7 +48,20 @@ class WorkspaceRegistry(
         """Resolves role configuration matching standard roles or build rules.
 
         GROUNDING:
-        - Maps normalized role identifiers to built-in file patterns, guides, and audit tags.
+        - Parses define_role declarations from build file using AST evaluation, extracting all
+          attributes and deriving patterns and audit tags, raising KeyError if unknown.
+        """
+        ...
+
+    @operation
+    @override
+    def list_roles(
+        self, repo_root: Optional[str] = None
+    ) -> Sequence[workspace_registry.RoleDefinition]:
+        """Loads and resolves all role definitions declared in repository build files.
+
+        GROUNDING:
+        - Parses all define_role declarations from repository build file into RoleDefinition objects.
         """
         ...
 

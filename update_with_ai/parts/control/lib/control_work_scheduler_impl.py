@@ -76,20 +76,12 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
         for r_name, r_cfg in getattr(cfg, "role_definitions", {}).items():
             role_deps[r_name] = getattr(r_cfg, "role_deps", ())
         if not role_deps:
-            role_deps = {
-                "high": (),
-                "planning": ("high",),
-                "low": ("planning",),
-                "grounding": ("low",),
-                "grounding_qa": ("grounding", "low"),
-                "lib": ("low", "grounding"),
-                "test": ("lib", "low"),
-                "qa": ("test", "lib", "low"),
-                "coverage": ("test", "lib", "low"),
-            }
+            raise KeyError(f"No role definitions available to compute precedence rank for {role_address}")
         ranks = self.compute_role_precedence(role_deps)
         clean = role_address.split(":")[-1].strip().lower()
-        return ranks.get(clean, 99)
+        if clean not in ranks:
+            raise KeyError(f"Role '{clean}' not found in computed role precedence ranks: {list(ranks.keys())}")
+        return ranks[clean]
 
     def schedule_work(
         self,

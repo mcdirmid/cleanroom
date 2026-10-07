@@ -23,11 +23,19 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
 - The workspace work manager calls schedule_work with dir_scope to obtain ready and blocked tasks. [invoke_scheduler_with_dir_scope]
 - The workspace work manager writes ready target file paths to .cleanroom_pending_work.json as JSON. [write_ready_targets_buffer]
 - The workspace work manager generates formatted text summaries detailing ready items, blocked items, and next actions. [render_work_queue_text_summary]
+- The workspace work manager writes designated target paths into the pending work buffer file. [write_assigned_pending_targets]
+- The workspace work manager filters out a submitted target path from the pending work buffer file. [filter_out_resolved_pending_target]
+- The workspace work manager discovers companion specification contracts and interface files for target units on disk using role definitions from workspace_registry. [discover_unit_contract_files]
+- The workspace work manager filters cross-unit dependencies using silent_cross_role_deps and expands star_role_deps from workspace_registry. [filter_and_expand_dependencies]
+- The workspace work manager raises ValueError or KeyError on unrecognized roles or file paths. [fail_loud_on_unrecognized_roles]
+- The workspace work manager checks local and main repository metadata to test if a pending target is dirty. [test_pending_target_dirty_state]
+- The workspace work manager inspects parts in scope to compute ready and blocked role units with topological ordering. [compute_and_sort_role_work_queue]
 
 ### Woven Contracts
 
-- When checking work status, the work manager checks the pending buffer, invokes the work scheduler with dir_scope, writes ready targets to disk, and renders the text summary. [read_and_check_pending_buffer, invoke_scheduler_with_dir_scope, write_ready_targets_buffer, render_work_queue_text_summary, workspace_work: [check_pending_work_status, discover_directory_scope_work, record_ready_targets_buffer, format_work_queue_diagnostics], control_work_scheduler: [work_scheduling_service]]
+- When checking work status, the work manager checks the pending buffer, invokes the work scheduler with dir_scope, resolves companion contracts, filters cross-unit dependencies, writes ready targets to disk, and renders the text summary. [read_and_check_pending_buffer, invoke_scheduler_with_dir_scope, discover_unit_contract_files, filter_and_expand_dependencies, fail_loud_on_unrecognized_roles, write_ready_targets_buffer, render_work_queue_text_summary, workspace_work: [check_pending_work_status, discover_directory_scope_work, resolve_unit_contract_files, filter_role_dependencies, enforce_strict_role_resolution, record_ready_targets_buffer, format_work_queue_diagnostics], workspace_registry: [resolve_role_definition, list_roles], control_work_scheduler: [work_scheduling_service]]
 - When all targets are clean, the manager deletes the pending work buffer and renders a clean summary. [delete_pending_work_buffer, render_work_queue_text_summary, workspace_work: [clear_pending_work_buffer]]
+- When managing target assignments, the work manager writes assigned targets to disk, removes submitted targets, and checks dirtiness against repository metadata. [write_assigned_pending_targets, filter_out_resolved_pending_target, test_pending_target_dirty_state, workspace_work: [set_pending_work_targets, remove_pending_target_path, is_pending_target_dirty_disk], src_metadata: [extract_metadata_disk]]
 
 ## Grounding
 
@@ -35,6 +43,7 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
 
 - Pending target buffer reading, writing, and deletion mechanics. [pending_work_buffer_mechanics]
 - Queue formatting and diagnostic text generation logic. [queue_diagnostic_rendering_logic]
+- Role work queue computation and topological dependency sorting algorithms. [role_work_queue_algorithm]
 
 ### Inherited Deferred Requirements
 

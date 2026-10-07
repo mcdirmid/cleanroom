@@ -31,24 +31,18 @@ if test_srcdir:
 
 try:
     from update_python_with_ai.support.lib.build_lint_common import (
-        DerivedGroundingInfo,
         DerivedLibInfo,
         DerivedTestInfo,
-        check_grounding_targets,
         check_lib_targets,
         check_test_targets,
-        compute_expected_grounding_deps,
         compute_expected_lib_deps,
         compute_expected_test_deps,
-        compute_grounding_derived_info,
         compute_lib_derived_info,
         compute_test_derived_info,
-        ensure_or_update_grounding_build,
         ensure_or_update_lib_build,
         ensure_or_update_test_build,
         find_ext_spec_paths,
         find_workspace_root,
-        generate_grounding_build_content,
         generate_lib_build_content,
         generate_test_build_content,
         package_of,
@@ -58,24 +52,18 @@ try:
 except ImportError:
     try:
         from update_with_ai.support.lib.build_lint_common import (
-            DerivedGroundingInfo,
             DerivedLibInfo,
             DerivedTestInfo,
-            check_grounding_targets,
             check_lib_targets,
             check_test_targets,
-            compute_expected_grounding_deps,
             compute_expected_lib_deps,
             compute_expected_test_deps,
-            compute_grounding_derived_info,
             compute_lib_derived_info,
             compute_test_derived_info,
-            ensure_or_update_grounding_build,
             ensure_or_update_lib_build,
             ensure_or_update_test_build,
             find_ext_spec_paths,
             find_workspace_root,
-            generate_grounding_build_content,
             generate_lib_build_content,
             generate_test_build_content,
             package_of,
@@ -87,24 +75,18 @@ except ImportError:
         if repo_root not in sys.path:
             sys.path.insert(0, repo_root)
         from update_python_with_ai.support.lib.build_lint_common import (
-            DerivedGroundingInfo,
             DerivedLibInfo,
             DerivedTestInfo,
-            check_grounding_targets,
             check_lib_targets,
             check_test_targets,
-            compute_expected_grounding_deps,
             compute_expected_lib_deps,
             compute_expected_test_deps,
-            compute_grounding_derived_info,
             compute_lib_derived_info,
             compute_test_derived_info,
-            ensure_or_update_grounding_build,
             ensure_or_update_lib_build,
             ensure_or_update_test_build,
             find_ext_spec_paths,
             find_workspace_root,
-            generate_grounding_build_content,
             generate_lib_build_content,
             generate_test_build_content,
             package_of,
@@ -119,9 +101,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--kind",
-        choices=["lib", "test", "grounding"],
+        choices=["lib", "test"],
         required=True,
-        help="Whether verifying lib/BUILD.bazel, tests/BUILD.bazel, or grounding/BUILD.bazel",
+        help="Whether verifying lib/BUILD.bazel or tests/BUILD.bazel",
     )
     parser.add_argument(
         "--build-file",
@@ -164,12 +146,8 @@ def main() -> int:
             updated = ensure_or_update_lib_build(
                 build_file, parent_build_file, workspace_root=workspace_root
             )
-        elif args.kind == "test":
-            updated = ensure_or_update_test_build(
-                build_file, parent_build_file, workspace_root=workspace_root
-            )
         else:
-            updated = ensure_or_update_grounding_build(
+            updated = ensure_or_update_test_build(
                 build_file, parent_build_file, workspace_root=workspace_root
             )
         if updated:
@@ -184,12 +162,8 @@ def main() -> int:
         errors = check_lib_targets(
             build_file, parent_build_file, workspace_root=workspace_root
         )
-    elif args.kind == "test":
-        errors = check_test_targets(
-            build_file, parent_build_file, workspace_root=workspace_root
-        )
     else:
-        errors = check_grounding_targets(
+        errors = check_test_targets(
             build_file, parent_build_file, workspace_root=workspace_root
         )
 

@@ -7,10 +7,10 @@ Cleanroom software engineering eliminates hallucinations, ambiguity, and impleme
 > **The Anti-Drift Principle**: Structural validation, requirements inheritance, symbol linking, and coverage auditing must be executed by **100% deterministic, zero-token Python tooling** running in milliseconds. LLMs are reserved for generative synthesis; deterministic tools enforce the guardrails.
 
 This document describes the complete toolchain architecture implemented in Cleanroom:
-1. **The Specification Toolchain (`grounding_tool.py`)**: AST-based linting, symbol resolution, closed-world linking, and zero-token in-place requirements synchronization for Python interface stubs (`.pyi`).
-2. **The Coverage Evaluation Tool (`evaluate_coverage.py`)**: Single-target test isolation, AST-based executable statement normalization, and assumption violation detection.
-3. **The Specification & Code Linters (`update_with_ai/support/lib/`)**: Static prose, italic semantic marker, library implementation, and test alignment linters.
-4. **Verification Boundary & The Supervising LLM Protocol (TODO)**: Resolving untestable natural language agent diagnostics.
+1. **The Specification Linters (`update_python_with_ai/support/lib/`)**: AST-based prose validation (`high_lint.py`), planning canvas structure validation (`spec_lint.py`), and pure interface stub verification (`low_lint.py`).
+2. **The Code & Test Linters (`update_python_with_ai/support/lib/`)**: Concrete implementation compliance (`lib_lint.py`), requirement comment citation validation (`test_lint.py`), and derived build synchronization (`check_build_derived.py`).
+3. **The Coverage Evaluation Engine (`update_with_ai/parts/tools/`)**: Modular single-target test tracing, AST statement extraction, and contiguous span deficit reporting (`tool_coverage.py`, `tool_coverage_impl.py`), executed via `bin/check_files` in the `coverage` role workspace.
+4. **Planned Linter Modernization (TODO)**: Migrating procedural linters from `support/lib/` into canonical `parts/` components with full 4-stage specifications.
 
 ```
 +---------------------------------------------------------------------------------------+
@@ -19,15 +19,13 @@ This document describes the complete toolchain architecture implemented in Clean
 |                                                                                       |
 |  [High-Level Spec: high/*.md]                                                         |
 |           |                                                                           |
-|           v (hls_lint.py)                                                             |
+|           v (high_lint.py)                                                            |
 |  [Planning Canvas: planning/*.md]                                                     |
 |           |                                                                           |
-|           v                                                                           |
+|           v (spec_lint.py: Gate 1 SPEC_QA)                                            |
 |  [Low-Level Stubs: low/*.pyi]                                                         |
 |           |                                                                           |
-|           v (grounding_tool.py: Lint -> Link -> Compile)                              |
-|  [Groundtalk Specifications: grounding/*.gt]                                          |
-|           |                                                                           |
+|           v (low_lint.py: Gate 2 LOW_QA)                                              |
 |           +---------------------------------------+                                   |
 |           |                                       |                                   |
 |           v (lib_lint.py)                         v (test_lint.py)                    |
@@ -35,8 +33,8 @@ This document describes the complete toolchain architecture implemented in Clean
 |           |                                       |                                   |
 |           +-------------------+-------------------+                                   |
 |                               |                                                       |
-|                               v (evaluate_coverage.py)                                |
-|              [Single-Target 100% Statement Coverage]                                  |
+|                               v (tool_coverage via bin/check_files)                   |
+|              [Single-Target 100% Statement Coverage: Gate 3]                          |
 |                               |                                                       |
 |                               v (bazel test //... && pyright)                         |
 |                 [Verified Cleanroom Subsystem]                                        |
@@ -199,30 +197,42 @@ The coverage tool enforces this:
 
 ### 3.4 CLI Invocation & Target Resolution
 
-The tool accepts flexible target arguments, including Bazel target labels, file names, or module prefixes:
+In role workspaces, coverage evaluation is executed directly by the `coverage` arbiter via `bin/check_files`, or explicitly via `cleanroom_role_tool.py`:
 
 ```bash
-# Evaluate by Bazel target label:
-bazel run //update_with_ai/support/lib:evaluate_coverage -- //update_with_ai/tests:dag_cleaner_impl_test
+# In coverage role workspace: verify pending target
+bin/check_files
 
-# Evaluate by test suite name:
-bazel run //update_with_ai/support/lib:evaluate_coverage -- sandbox_file_editor_impl_test
+# In coverage role workspace: verify specific unit
+bin/check_files staging/parts/sandbox/lib/sandbox_file_reader_impl.py
 
-# Evaluate by implementation module prefix:
-bazel run //update_with_ai/support/lib:evaluate_coverage -- sandbox_run_control
+# Direct tool runner invocation:
+python3 update_with_ai/support/lib/cleanroom_role_tool.py coverage \
+    --impl staging/parts/sandbox/lib/sandbox_file_reader_impl.py \
+    --test staging/parts/sandbox/tests/sandbox_file_reader_impl_test.py \
+    --threshold 100.0
 ```
 
 **Terminal Output Example**:
 ```text
-Evaluating single test coverage: sandbox_file_editor_impl_test.py -> sandbox_file_editor_impl.py
-=====================================================================================
-Test Suite:      update_with_ai/tests/sandbox_file_editor_impl_test.py
-Implementation:  update_with_ai/lib/sandbox_file_editor_impl.py
--------------------------------------------------------------------------------------
-Total Statements: 219   | Covered: 219   | Missed: 0     | Coverage: 100.0%
--------------------------------------------------------------------------------------
-✓ 100.0% coverage - all statements executed by test suite.
-=====================================================================================
+=== Checking sandbox_file_reader_impl (role: coverage, part: staging/parts/sandbox) ===
+//staging/parts/sandbox/tests:sandbox_file_reader_impl_test PASSED in 0.3s
+================================================================================
+COVERAGE DEFICIT DETECTED: 97.5% (Threshold: 100.0%)
+================================================================================
+Test Suite:      sandbox_file_reader_impl_test.py
+Implementation:  sandbox_file_reader_impl.py
+Statements:      363 executable, 354 covered, 9 missed
+Total Spans:     5 non-continuous spans
+--------------------------------------------------------------------------------
+Uncovered statement spans in sandbox_file_reader_impl.py:
+
+  Span 1 (lines 124-126):
+     124:         except (
+     125:             LookupError,
+     126:             KeyError,
+...
+================================================================================
 ```
 
 ### 3.5 Full Verification Benchmark Across All 20 Modules
@@ -253,38 +263,43 @@ Total Statements: 219   | Covered: 219   | Missed: 0     | Coverage: 100.0%
 
 ---
 
-## 4. The Specification & Code Linters: `update_with_ai/support/lib/`
+## 4. The Specification & Code Linters: `update_python_with_ai/support/lib/`
 
-Cleanroom provides specialized linters in `update_with_ai/support/lib/` (sharing parsing logic via `build_lint_common.py`) that validate specification authoring and code alignment:
+Cleanroom provides specialized deterministic AST linters in `update_python_with_ai/support/lib/` (sharing parsing logic via `build_lint_common.py`) that validate specification authoring and code alignment:
 
-### 4.1 `hls_lint.py`: High-Level Specification Linter
+### 4.1 `high_lint.py`: High-Level Specification Linter
 - Validates Markdown structure under `## Purpose` and `## Types and Behavior`.
 - Enforces literate prose requirements: flat single-level bullets, blank lines between paragraphs, and no nested bullet trees.
 - Validates italic semantic markers (`*term*`), verifying that terms are italicized upon initial introduction for a concept and plain text on subsequent reference.
-- Validates assembly specifications (`*_asm.md`), checking front-matter ordering and enforcing that non-assembly specifications never import `*_impl` or `*_asm` components.
+- Enforces component dependency rules: front-matter `imports:` and component isolation.
 
-### 4.2 `lib_lint.py`: Library Implementation Linter
-- Validates concrete implementation modules in `update_with_ai/lib/`.
-- Verifies singleton registration parity, lifecycle registry integration, and imports against grounding declarations.
-- Automatically maintains `update_with_ai/lib/BUILD.bazel`, extracting third-party external requirements (such as `requirement("openai")`) from dependent `.pyi` specifications and inserting required `@pip` load statements.
+### 4.2 `spec_lint.py`: Planning Canvas Linter
+- Enforces the requirements of `update_python_with_ai/guides/spec_qa.md`.
+- Verifies `## Intent` prose separation from `## Factored Contracts`.
+- Enforces the Zero-Conjunction Rule on atomic contract statements (`[slug]`).
+- Validates epistemic grounding completeness under `## Grounding`, verifying that all `### Knowledge Requirements` are grounded against imported capability provisions.
 
-### 4.3 `test_lint.py`: Unit Test Alignment Linter
+### 4.3 `low_lint.py`: Low-Level Specification Linter
+- Enforces pure Python interface stub rules (`.pyi`): ellipsis bodies (`...`), structural decorators (`@singleton_type`, `@poly_type`, `@data_type`, `@variant`, `@operation`, `@override`).
+- Validates Design-by-Contract docstring headers (`INVARIANTS:`, `PRECONDITIONS:`, `POSTCONDITIONS:`).
+- Validates Natural Language Grounding Arguments (`GROUNDING:`) in `*_impl.pyi` files.
+
+### 4.4 `lib_lint.py`: Library Implementation Linter
+- Validates concrete implementation modules in `{unit_dir}/lib/`.
+- Verifies singleton registration parity, lifecycle registry integration, and imports against low-level stub declarations.
+- Automatically maintains `{unit_dir}/lib/BUILD.bazel`, extracting external dependencies and inserting required build rules.
+
+### 4.5 `test_lint.py`: Unit Test Alignment Linter
 - Enforces the requirements of `update_python_with_ai/guides/low_to_test.md`.
-- Verifies that test assertions carry `# Requirement: <exact text>` comments matching canonical grounding statements.
+- Verifies that test assertions carry `# Requirement: <exact text>` comments matching canonical contract statements.
 - Verifies that every test file concludes with `# Untested requirements: None` or an explicit bulleted list of untestable requirements.
-### 4.4 Groundtalk Assembly Verifier: Transitive Provenance & Deadlock Prevention
-- Validates Groundtalk assembly specifications (`*_asm.gt`).
-- Tracks requirement-to-requirement provenance edges (`[target_req] <- dep_req1, dep_req2 .`) established by constituent proofs.
-- Collects transitive provenance from any interface directly or indirectly imported into each constituent implementation, making assemblies self-contained for outer system composition.
-- Verifies requirement provenance DAGs for complete closure and detects circular dependency cycles (deadlocks) across constituent implementations.
 
-### 4.5 Groundtalk State & Interface Verification Rules
-- **State in Interfaces Permitted**: Interfaces (`*.gt`) and implementations (`*_impl.gt`) may declare virtual state under `STATE:`.
-- **`[INVALID_STATE_WRITE]`**: Enforces that only declared state fields can be written with `+`. Any atom prefixed with `+` whose predicate name is not a declared state field in the enclosing file is flagged as an invalid state write.
-- **`[STATE_META_RULE]`**: Enforces that any virtual state declared in a Groundtalk file must be **both written (with `+`) and read within that same file**. Write-only state and read-only state are flagged as errors.
-- **`[DUPLICATE_PROVISION_REQUIREMENT]`**: Enforces that no rule in `PROVISIONS:` and requirement in `REQUIREMENTS:` both provision and require the same thing (e.g. `A <- B` and `A <-? B`). The types of properties and return types of operations must not be provisioned; they must be proven instead.
-- **`[INTERFACE_PROOF_MANDATE]`**: Enforces mock integrity for unit tests. If an implementation specification (`*_impl.gt`) contains a proof for an inherited requirement whose proof steps cite only interface-level rules, interface state, and imported collaborators (requiring zero implementation-specific state or local rules), the verifier flags this as an error. The proof must be moved to the base interface (`*.gt`).
-- **Mandatory Update Consequents**: Verifies that operations updating domain state declare their postcondition using the `+` write prefix on the affected state field in the requirement rule consequent (e.g. `+node_visits(node)`).
+### 4.6 Planned Linter Migration into Parts Components (TODO)
+Currently, all linters reside as monolithic procedural scripts in `update_python_with_ai/support/lib/`. The next critical architectural milestone is refactoring them into modular Cleanroom parts under `update_with_ai/parts/` (e.g. `parts/lint/` or expanding `parts/tools/`):
+- Author High-Level Specifications (`high/*.md`) for AST parsing, contract extraction, and rule validation.
+- Author Planning Canvases (`planning/*.md`) proving epistemic grounding of linter AST traversal capabilities.
+- Formalize Low-Level Specifications (`low/*.pyi`) with typed DbC interfaces.
+- Separate implementation (`lib/*.py`) and contract-driven unit tests (`tests/*_test.py`), eliminating procedural scripts from `support/lib/`.
 
 ---
 

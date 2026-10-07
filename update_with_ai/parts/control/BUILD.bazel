@@ -38,22 +38,22 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "control_submit",
-    module_deps = ['//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', ':control_verification'],
+    module_deps = ['//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', ':control_verification', ':src_metadata'],
 )
 
 update_python_with_ai(
     name = "control_submit_impl",
-    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', ':control_submit', ':control_verification'],
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', ':control_submit', ':control_verification', ':src_metadata'],
 )
 
 update_python_with_ai(
     name = "control_attribution",
-    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage'],
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', ':src_metadata'],
 )
 
 update_python_with_ai(
     name = "control_attribution_impl",
-    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', ':control_attribution'],
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/dag:dag_storage', ':control_attribution', ':src_metadata'],
 )
 
 update_python_with_ai(

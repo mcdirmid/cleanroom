@@ -75,11 +75,12 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertTrue(os.path.isdir(ws_dir))
             bin_dir = os.path.join(ws_dir, "bin")
             self.assertTrue(os.path.isdir(bin_dir))
-            for tool in ("get_work", "submit", "blame", "fail", "coverage"):
+            for tool in ("get_work", "check_files", "submit", "blame", "fail"):
                 tool_p = os.path.join(bin_dir, tool)
                 self.assertTrue(os.path.isfile(tool_p))
                 mode = stat.S_IMODE(os.stat(tool_p).st_mode)
                 self.assertEqual(mode & 0o755, 0o755)
+            self.assertFalse(os.path.isfile(os.path.join(bin_dir, "coverage")))
 
             role_cfg = os.path.join(ws_dir, ".cleanroom_role.json")
             self.assertTrue(os.path.isfile(role_cfg))

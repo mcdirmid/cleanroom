@@ -7,14 +7,14 @@ CODE_HASH: 0837040b5997
 
 # workspace_registry_impl implementation component
 
-imports: agent_session
+imports: agent_session, bazel_manifest_ext
 implements: workspace_registry
 
 ## Purpose
 
 The workspace_registry_impl implementation component realizes role configuration resolution, path sanitization, and persistent workspace registration in `.cleanroom_workspaces.json`.
 
-Reliable multi-role orchestration depends on atomic registry file updates and deterministic workspace naming conventions across platforms. Incomplete role resolution or corrupted registry records lead to orphaned role trees, stale lock files, and race conditions during simultaneous provisioning. The workspace_registry_impl implementation component resolves standard role templates (including high, planning, low, lib, test, qa, and coverage roles), normalizes role identifiers, computes directory hashes, and performs atomic JSON registry serialization with file locking.
+Reliable multi-role orchestration depends on atomic registry file updates and deterministic workspace naming conventions across platforms. Incomplete role resolution or corrupted registry records lead to orphaned role trees, stale lock files, and race conditions during simultaneous provisioning. The workspace_registry_impl implementation component resolves role definitions dynamically from build files using AST evaluation, normalizes role identifiers, computes directory hashes, and performs atomic JSON registry serialization with file locking.
 
 **Out of scope:** The workspace_registry_impl implementation component does not provision directory contents, synchronize git state, or evaluate task dirty status; these are handled by other components.
 
@@ -22,21 +22,7 @@ Reliable multi-role orchestration depends on atomic registry file updates and de
 
 The workspace registry discovers the canonical repository root by ascending the directory tree until locating git metadata directories or canonical Bazel workspace indicators (ignoring projected role workspace directories containing `.cleanroom_role.json`), inspecting role metadata descriptors or matching sibling workspace conventions when called from within an isolated role workspace, and falling back to ambient process working directories when indicators are absent.
 
-The workspace registry resolves role definitions by matching requested role names against standard Cleanroom roles or inspecting role rule targets. When matching standard roles, the registry provisions:
-
-- The high role, granting write access to high-level markdown specifications and reading design guidelines.
-
-- The planning role, granting write access to planning documents and reading upstream high-level specifications.
-
-- The low role, granting write access to low-level Python stubs and reading planning documents and grounding stubs.
-
-- The lib role, granting write access to library Python source files and reading low-level stubs and grounding specifications.
-
-- The test role, granting write access to unit test source files and reading low-level stubs and library implementations.
-
-- The qa role, performing logless verification audits over library implementations, unit tests, and contracts with the QA_AUDIT tag.
-
-- The coverage role, verifying branch and statement execution thresholds with the COVERAGE_AUDIT tag.
+The workspace registry resolves role definitions by parsing define_role declarations from the repository's build file using AST evaluation, extracting all declared role attributes, deriving writable file patterns from source patterns, deriving read-only file patterns from role dependencies and star role dependencies, and computing audit tags for auditor roles without primary source artifacts. If a requested role is unknown or undeclared, role resolution fails fast and raises an explicit error without synthetic fallbacks.
 
 The workspace registry computes role workspace directory paths by combining the repository root parent directory with the role name and directory scope, sanitizing directory delimiters into underscores to produce collision-free sibling workspaces.
 

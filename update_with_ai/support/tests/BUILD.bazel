@@ -99,16 +99,6 @@ py_test(
 )
 
 py_test(
-    name = "grounding_support_test",
-    srcs = ["grounding_support_test.py"],
-    imports = ["../.."],
-    main = "grounding_support_test.py",
-    deps = [
-        "//update_with_ai/support/lib:grounding_support",
-    ],
-)
-
-py_test(
     name = "src_metadata_test",
     srcs = ["src_metadata_test.py"],
     imports = ["../.."],

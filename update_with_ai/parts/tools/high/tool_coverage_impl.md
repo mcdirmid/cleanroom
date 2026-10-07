@@ -28,7 +28,7 @@ The coverage evaluator:
 
 - Extracts candidate non-executable lines by parsing source text into abstract syntax trees, identifying docstring constants, class and function signature continuations, and line indices marked with pragma no cover comments along with their statement bodies.
 
-- Executes single-target test suites under Python trace instrumentation, clearing cached target modules from memory, injecting local package paths into module search paths, capturing test suite runner failures, and collecting executed line hits on the implementation file.
+- Executes single-target test suites under Python trace instrumentation, clearing cached target and test modules from memory across package namespaces, injecting local package paths into module search paths, capturing test suite runner failures, and collecting executed line hits on the implementation file.
 
 - Formats uncovered line sequences into compact comma-separated range strings and paired contiguous span tuples.
 

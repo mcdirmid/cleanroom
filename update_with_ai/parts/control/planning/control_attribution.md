@@ -7,7 +7,7 @@ CODE_HASH: 9a69b69a870c
 
 # control_attribution interface component
 
-imports: agent_session, dag_storage, agent_file_alias, agent_node_config
+imports: agent_session, dag_storage, agent_file_alias, agent_node_config, src_metadata
 
 ## Intent
 
@@ -34,11 +34,15 @@ Defect attribution allows agents encountering irrecoverable upstream flaws to se
 - An attribution coordinator marks downstream in-batch dependent nodes as failed. [propagate_in_batch_failure]
 - An attribution coordinator records a failure diagnostic on the target node in graph storage. [record_failure_diagnostic]
 - An attribution coordinator preserves dirty status on a failed target node in graph storage. [preserve_target_dirty]
+- An attribution coordinator resolves culprit files, validates critique explanations, and executes blame mutations on disk. [execute_file_blame_mutation]
+- An attribution coordinator resolves target files, appends failure feedback, and marks dirty status on disk. [execute_file_failure_mutation]
 
 ### Woven Contracts
 
 - When blaming a valid upstream dependency with a single-paragraph critique, the coordinator records feedback, marks the culprit dirty, attributes the source, and fails in-batch dependents. [assert_blame_target_is_upstream, assert_blame_target_receives_feedback, assert_single_paragraph_critique, assert_source_dependencies_clean, record_blame_feedback, mark_culprit_dirty, mark_source_attributed, propagate_in_batch_failure]
 - When recording a task failure, the coordinator logs the failure diagnostic, preserves the target's dirty state, and fails dependent in-batch nodes. [record_failure_diagnostic, preserve_target_dirty, propagate_in_batch_failure]
+- When blaming a culprit file, the coordinator validates critique formatting, executes build blame targets or mutates in-band metadata, and synchronizes files. [assert_single_paragraph_critique, execute_file_blame_mutation, src_metadata: [source_metadata_service]]
+- When failing a file target, the coordinator appends failure diagnostics, marks dirty status, and synchronizes files. [execute_file_failure_mutation, src_metadata: [source_metadata_service]]
 
 ## Grounding
 
@@ -46,6 +50,7 @@ Defect attribution allows agents encountering irrecoverable upstream flaws to se
 
 - Defect blame gating validating upstream targets, feedback configuration, and single-paragraph critique formatting. [attribution_gating]
 - Failure recording and cascading invalidation across in-batch dependent nodes. [failure_propagation]
+- File-level blame attribution and failure mutation services. [file_attribution_service]
 
 ### Knowledge Requirements
 
@@ -55,3 +60,5 @@ Defect attribution allows agents encountering irrecoverable upstream flaws to se
   - Deferred: Validated via string inspection in implementation.
 - Persistence of feedback messages and node status mutations in graph storage.
   - Deferred: Delegated to DagStorage in implementation.
+- In-band source metadata extraction and feedback formatting.
+  - Grounded: [src_metadata: [source_metadata_service]]

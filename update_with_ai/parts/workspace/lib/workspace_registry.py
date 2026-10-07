@@ -20,6 +20,19 @@ class RoleDefinition:
     writable_file_patterns: Sequence[str]
     readonly_file_patterns: Sequence[str]
     feedback_role_deps: Sequence[str]
+    src_pattern: str = ""
+    role_deps: Sequence[str] = ()
+    star_role_deps: Sequence[str] = ()
+    silent_role_deps: Sequence[str] = ()
+    stub_role_deps: Sequence[str] = ()
+    silent_cross_role_deps: Sequence[str] = ()
+    active_component_types: Sequence[str] = ()
+    verify_template: str = ""
+    verification_success_message: str = ""
+    persona: str = ""
+    workspace_files: Sequence[str] = ()
+    tools: Sequence[str] = ()
+    derive_build_template: str = ""
     role_address: Optional[str] = None
     audit_tag: Optional[str] = None
     task_prompt: Optional[str] = None
@@ -42,6 +55,10 @@ class WorkspaceRegistry(Protocol):
     def resolve_role_definition(
         self, role_name_or_address: str, repo_root: Optional[str] = None
     ) -> RoleDefinition: ...
+
+    def list_roles(
+        self, repo_root: Optional[str] = None
+    ) -> Sequence[RoleDefinition]: ...
 
     def compute_workspace_dir(
         self,

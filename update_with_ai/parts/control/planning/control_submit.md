@@ -7,7 +7,7 @@ CODE_HASH: 1f9ea8e57798
 
 # control_submit interface component
 
-imports: agent_session, dag_storage, agent_node_config, control_verification
+imports: agent_session, dag_storage, agent_node_config, control_verification, src_metadata
 
 ## Intent
 
@@ -31,11 +31,16 @@ Allowing untested code to enter the repository creates regressions. The submissi
 - A submission coordinator forbids a change summary when resolving an auditor role. [forbid_summary_for_auditors]
 - A submission coordinator marks the target node status as clean in graph storage upon acceptance. [mark_node_clean]
 - A submission coordinator records the change summary as a change message on the target node. [record_change_message]
+- A submission coordinator rejects submission of test files in auditor roles. [reject_test_submission_for_auditors]
+- A submission coordinator rejects submission of read-only targets or targets outside directory scope. [reject_invalid_producer_file_submission]
+- A submission coordinator validates file modification hash against change summary presence. [validate_file_change_summary]
+- A submission coordinator executes build submission targets or updates in-band source metadata directly. [execute_file_submission_mutation]
 
 ### Woven Contracts
 
 - When submitting a target node with passing verification, clean in-batch dependencies, and valid change summary, the coordinator marks the target clean and records the change message. [assert_verification_passed, assert_in_batch_dependencies_clean, mark_node_clean, record_change_message]
 - When submitting an auditor node, the coordinator rejects any submission containing a change summary. [forbid_summary_for_auditors]
+- When submitting a file target, the coordinator validates role permissions, enforces change summary consistency, executes submission mutations, and stamps in-band metadata. [reject_test_submission_for_auditors, reject_invalid_producer_file_submission, validate_file_change_summary, execute_file_submission_mutation, src_metadata: [source_metadata_service]]
 
 ## Grounding
 
@@ -43,6 +48,7 @@ Allowing untested code to enter the repository creates regressions. The submissi
 
 - Submission gating enforcing verification success, in-batch cleanliness, and change summary rules. [submission_gating]
 - Transition of submitted nodes to clean state with change message recording in graph storage. [clean_state_transition]
+- File-level submission gating and in-band metadata stamping services. [file_submission_gating_service]
 
 ### Knowledge Requirements
 
@@ -52,3 +58,5 @@ Allowing untested code to enter the repository creates regressions. The submissi
   - Deferred: Queried from role configuration in implementation.
 - Mutation of target node status to clean and persistence of change messages in graph storage.
   - Deferred: Delegated to DagStorage in implementation.
+- Extraction and mutation of in-band source metadata.
+  - Grounded: [src_metadata: [source_metadata_service]]

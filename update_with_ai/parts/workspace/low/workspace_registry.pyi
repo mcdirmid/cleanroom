@@ -25,6 +25,19 @@ class RoleDefinition:
         writable_file_patterns: Sequence of glob patterns for writable targets.
         readonly_file_patterns: Sequence of glob patterns for immutable contracts.
         feedback_role_deps: Sequence of role names receiving feedback.
+        src_pattern: Primary source file path pattern with placeholders.
+        role_deps: Sequence of intra-unit role dependencies.
+        star_role_deps: Sequence of cross-unit star role dependencies.
+        silent_role_deps: Sequence of intra-unit silent role dependencies.
+        stub_role_deps: Sequence of intra-unit stub role dependencies.
+        silent_cross_role_deps: Sequence of cross-unit silent role dependencies.
+        active_component_types: Sequence of component classifications active for role.
+        verify_template: Shell command template for verification.
+        verification_success_message: Success message upon verification passing.
+        persona: Human-readable role persona.
+        workspace_files: Sequence of repository files copied into workspace.
+        tools: Sequence of tool files copied into workspace.
+        derive_build_template: Pre-sync command template for child build files.
         role_address: Optional full role target address.
         audit_tag: Optional metadata audit tag.
         task_prompt: Optional prompt template string.
@@ -35,6 +48,19 @@ class RoleDefinition:
     writable_file_patterns: Sequence[str]
     readonly_file_patterns: Sequence[str]
     feedback_role_deps: Sequence[str]
+    src_pattern: str = ""
+    role_deps: Sequence[str] = ()
+    star_role_deps: Sequence[str] = ()
+    silent_role_deps: Sequence[str] = ()
+    stub_role_deps: Sequence[str] = ()
+    silent_cross_role_deps: Sequence[str] = ()
+    active_component_types: Sequence[str] = ()
+    verify_template: str = ""
+    verification_success_message: str = ""
+    persona: str = ""
+    workspace_files: Sequence[str] = ()
+    tools: Sequence[str] = ()
+    derive_build_template: str = ""
     role_address: Optional[str] = None
     audit_tag: Optional[str] = None
     task_prompt: Optional[str] = None
@@ -83,8 +109,21 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
         """Resolves role definition from role name or target address.
 
         POSTCONDITIONS:
-        - MUST match standard Cleanroom roles or parse rule definition.
+        - MUST parse define_role declarations from BUILD.bazel.
+        - MUST raise KeyError when role is not declared in build file.
         - MUST return RoleDefinition with configured file patterns and guide.
+        """
+        ...
+
+    @operation
+    def list_roles(
+        self, repo_root: Optional[str] = None
+    ) -> Sequence[RoleDefinition]:
+        """Loads and resolves all role definitions declared in repository.
+
+        POSTCONDITIONS:
+        - MUST parse role definition declarations from BUILD.bazel.
+        - MUST return RoleDefinition objects for all declared roles.
         """
         ...
 

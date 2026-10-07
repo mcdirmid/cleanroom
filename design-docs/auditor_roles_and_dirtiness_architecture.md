@@ -61,26 +61,29 @@ $$\texttt{<ROLE\_NAME\_IN\_CAPS>\_AUDIT: <UTC timestamp>}$$
 
 ### 2.1 Concrete Tag Conventions
 
-| Auditor Role | Verified Feedback Target Files | Audit Metadata Tag | Example Header Line |
-| :--- | :--- | :--- | :--- |
-| **`grounding_qa`** | `grounding/<unit>.py` | `GROUNDING_QA_AUDIT` | `GROUNDING_QA_AUDIT: 2026-10-03T20:15:00Z` |
-| **`qa`** | `lib/<unit>.py`, `tests/<unit>_test.py` | `QA_AUDIT` | `QA_AUDIT: 2026-10-03T20:18:00Z` |
-| **`coverage`** | `lib/<unit>.py`, `tests/<unit>_test.py` | `COVERAGE_AUDIT` | `COVERAGE_AUDIT: 2026-10-03T20:20:00Z` |
+| Auditor Role | Verified Target Files | Pipeline Gate | Audit Metadata Tag | Example Header Line |
+| :--- | :--- | :--- | :--- | :--- |
+| **`spec_qa`** | `planning/<unit>.md` | Gate 1 | `SPEC_QA_AUDIT` | `SPEC_QA_AUDIT: 2026-10-06T20:15:00Z` |
+| **`low_qa`** | `low/<unit>.pyi` | Gate 2 | `LOW_QA_AUDIT` | `LOW_QA_AUDIT: 2026-10-06T20:16:00Z` |
+| **`qa`** | `lib/<unit>.py`, `tests/<unit>_test.py` | Gate 3 | `QA_AUDIT` | `QA_AUDIT: 2026-10-06T20:18:00Z` |
+| **`coverage`** | `lib/<unit>.py`, `tests/<unit>_test.py` | Gate 3 | `COVERAGE_AUDIT` | `COVERAGE_AUDIT: 2026-10-06T20:20:00Z` |
 
 ```
 THE CLEAN ZERO-LOG IN-BAND AUDIT ARCHITECTURE
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │  parts/agent/                                                                          │
-│  ├── grounding/agent_config.py     ◄── GROUNDING_QA_AUDIT: 2026-10-03T20:15:00Z        │
-│  ├── lib/agent_config.py           ◄── QA_AUDIT: 2026-10-03T20:18:00Z                  │
-│  │                                 ◄── COVERAGE_AUDIT: 2026-10-03T20:20:00Z            │
-│  └── tests/agent_config_test.py    ◄── QA_AUDIT: 2026-10-03T20:18:00Z                  │
-│                                    ◄── COVERAGE_AUDIT: 2026-10-03T20:20:00Z            │
+│  ├── planning/agent_config.md      ◄── SPEC_QA_AUDIT: 2026-10-06T20:15:00Z             │
+│  ├── low/agent_config.pyi          ◄── LOW_QA_AUDIT: 2026-10-06T20:16:00Z              │
+│  ├── lib/agent_config.py           ◄── QA_AUDIT: 2026-10-06T20:18:00Z                  │
+│  │                                 ◄── COVERAGE_AUDIT: 2026-10-06T20:20:00Z            │
+│  └── tests/agent_config_test.py    ◄── QA_AUDIT: 2026-10-06T20:18:00Z                  │
+│                                    ◄── COVERAGE_AUDIT: 2026-10-06T20:20:00Z            │
 └────────────────────────────────────────────────────────────────────────────────────────┘
-  • Zero dummy log files on disk; package `logs/` directories are permanently eliminated.
+  • Zero dummy log files on disk; package logs/ directories are permanently eliminated.
   • Audit tags are flat key-values, trivial to parse with simple line regex.
   • Stamped on all verified feedback files (both lib and test for qa/coverage).
   • Audit timestamps are updated ONLY when the audit phase PASSES.
+  • In role workspaces, arbiters execute checks via bin/check_files and submit via bin/submit.
 ```
 
 ### 2.2 Why Flat Single Tags Beat Nested Lists

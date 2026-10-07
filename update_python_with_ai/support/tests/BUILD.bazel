@@ -44,15 +44,6 @@ sh_test(
 )
 
 sh_test(
-    name = "grounding_lint_test",
-    srcs = ["grounding_lint_test.sh"],
-    data = [
-        "//update_python_with_ai/support/lib:grounding_lint.py",
-    ],
-    tags = ["lint"],
-)
-
-sh_test(
     name = "lib_lint_test",
     srcs = ["lib_lint_test.sh"],
     data = [

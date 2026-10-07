@@ -599,6 +599,18 @@ class CleanroomRoleToolTest(unittest.TestCase):
         ret = cleanroom_role_tool.main(["refresh-sys", "--repo-root", self.fake_repo])
         self.assertEqual(ret, 0)
         self.assertTrue(os.path.isdir(os.path.join(lib_ws, "bin")))
+        self.assertTrue(os.path.isfile(os.path.join(lib_ws, "bin/check_files")))
+
+    def test_check_files_command(self) -> None:
+        """Verifies cleanroom_role_tool check_files command."""
+        lib_ws = commission_workspace(
+            "lib", dir_scope="staging", repo_root=self.fake_repo
+        )
+        os.chdir(lib_ws)
+        ret = cleanroom_role_tool.main(["check_files"])
+        self.assertEqual(ret, 0)
+        ret_err = cleanroom_role_tool.main(["check_files", "nonexistent"])
+        self.assertEqual(ret_err, 1)
 
 
 if __name__ == "__main__":

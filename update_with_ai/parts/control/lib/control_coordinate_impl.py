@@ -38,27 +38,21 @@ def _extract_unit_info(node: dag_storage.DagNode) -> Tuple[str, str]:
         pkg, target_part = "", addr
 
     role = str(node.role_address).split(":")[-1].strip() if node.role_address else ""
-    KNOWN_ROLES = (
-        "grounding_qa",
-        "coverage",
-        "qa",
-        "grounding",
-        "planning",
-        "high",
-        "low",
-        "test",
-        "lib",
-    )
+    cfg = get_singleton(agent_node_config.NodeConfig)
+    role_defs = getattr(cfg, "role_definitions", {})
+    known_roles = tuple(role_defs.keys())
+
     unit_name = target_part
     if role and unit_name.endswith(f"_{role}"):
         unit_name = unit_name[: -len(f"_{role}")]
-    elif any(unit_name.endswith(f"_{r}") for r in KNOWN_ROLES):
-        for r in KNOWN_ROLES:
+    elif any(unit_name.endswith(f"_{r}") for r in known_roles):
+        for r in known_roles:
             if unit_name.endswith(f"_{r}"):
                 unit_name = unit_name[: -len(f"_{r}")]
                 break
-    if role in ("qa", "coverage", "grounding_qa"):
-        for dep_role in ("lib", "test", "grounding"):
+    if role and role in role_defs:
+        r_def = role_defs[role]
+        for dep_role in [d.split(":")[-1] for d in getattr(r_def, "feedback_role_deps", ())]:
             if unit_name.endswith(f"_{dep_role}"):
                 unit_name = unit_name[: -len(f"_{dep_role}")]
                 break

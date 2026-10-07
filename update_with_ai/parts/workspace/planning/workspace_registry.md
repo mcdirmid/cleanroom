@@ -17,14 +17,15 @@ Managing multiple directory-scoped and role-specific workspaces requires consist
 
 ### Typing
 
-- A role definition record encapsulates a role name, an optional role address, a guide path, a sequence of writable file patterns, a sequence of read-only file patterns, a sequence of feedback role dependencies, an optional audit tag, and an optional task prompt.
+- A role definition record encapsulates a role name, an optional role address, a guide path, a source pattern, a sequence of writable file patterns, a sequence of read-only file patterns, a sequence of role dependencies, a sequence of star role dependencies, a sequence of silent role dependencies, a sequence of stub role dependencies, a sequence of silent cross-role dependencies, a sequence of feedback role dependencies, a sequence of active component types, a verification template, a verification success message, a persona, a sequence of workspace files, a sequence of tools, an optional audit tag, and an optional task prompt.
 - A workspace descriptor record encapsulates a workspace directory, a main repository root, a directory scope, a role definition, and an optional last sync timestamp.
 - A workspace registry operates within the agent session lifecycle tier.
 
 ### Contracts
 
 - The workspace registry discovers the canonical repository root by ascending directory trees. [discover_repo_root]
-- The workspace registry resolves role definitions matching standard Cleanroom role names. [resolve_standard_role_definition]
+- The workspace registry resolves role definitions dynamically from repository build files. [resolve_role_definition]
+- The workspace registry lists all declared role definitions from repository build files. [list_all_role_definitions]
 - The workspace registry computes sanitized workspace directory paths for role and directory scope. [compute_workspace_directory_path]
 - The workspace registry records workspace descriptors into the persistent workspaces registry file. [record_workspace_descriptor]
 - The workspace registry unregisters workspace descriptors from the persistent workspaces registry file. [unregister_workspace_descriptor]
@@ -33,6 +34,7 @@ Managing multiple directory-scoped and role-specific workspaces requires consist
 ### Woven Contracts
 
 - When resolving a role workspace location, the registry discovers the canonical repository root and computes a collision-free workspace path matching the role name and directory scope. [discover_repo_root, compute_workspace_directory_path]
+- When resolving or listing role configurations, the registry loads role definitions dynamically from repository build files. [resolve_role_definition, list_all_role_definitions]
 - When registering a newly commissioned workspace, the registry appends the workspace descriptor to the persistent registry file. [record_workspace_descriptor, load_active_workspace_descriptors]
 - When decommissioning an active workspace, the registry removes the matching workspace descriptor from the persistent registry file. [unregister_workspace_descriptor, load_active_workspace_descriptors]
 

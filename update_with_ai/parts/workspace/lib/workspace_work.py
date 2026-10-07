@@ -32,6 +32,7 @@ class WorkQueueItem:
     dependency_files: Sequence[str]
     is_ready: bool
     blocked_reasons: Sequence[str] = ()
+    contract_files: Sequence[str] = ()
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,25 @@ class WorkspaceWorkManager(Protocol):
 
     def clear_pending_work(self, workspace_dir: str) -> None: ...
 
+    def set_pending_work(self, workspace_dir: str, targets: Sequence[str]) -> None: ...
+
+    def remove_pending_target(self, workspace_dir: str, submitted_target: str) -> None: ...
+
+    def is_pending_target_dirty(
+        self,
+        target_path: str,
+        workspace_dir: str,
+        main_root: Optional[str] = None,
+        role_name: Optional[str] = None,
+    ) -> bool: ...
+
+    def compute_role_work_queue(
+        self,
+        role_name: str,
+        dir_scope: str,
+        repo_root: str,
+    ) -> tuple[Sequence[WorkQueueItem], Sequence[WorkQueueItem]]: ...
+
     def evaluate_work(
         self,
         dir_scope: str,
@@ -63,3 +83,10 @@ class WorkspaceWorkManager(Protocol):
         workspace_dir: Optional[str] = None,
         force: bool = False,
     ) -> WorkQueueSummary: ...
+
+    def resolve_contract_files(
+        self,
+        target_path: str,
+        workspace_dir: str,
+        role_name: Optional[str] = None,
+    ) -> Sequence[str]: ...

@@ -54,11 +54,21 @@ class MockDagStorage:
         self.messages[to].append(message)
 
 
+class MockRoleDef:
+    def __init__(self, is_auditor=False, audit_tag=None, src_pattern=""):
+        self.is_auditor = is_auditor
+        self.audit_tag = audit_tag
+        self.src_pattern = src_pattern
+
+
 class MockNodeConfig:
     tier = agent_session.agent_session
 
     def __init__(self):
-        self.role_definitions = {}
+        self.role_definitions = {
+            "lib": MockRoleDef(is_auditor=False, src_pattern="{unit_dir}/lib/{unit_name}.py"),
+            "qa": MockRoleDef(is_auditor=True, audit_tag="QA_AUDIT", src_pattern=""),
+        }
 
 
 class ControlSubmitImplTest(unittest.TestCase):

@@ -73,6 +73,7 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":control_verification",
+        ":src_metadata",
     ],
     visibility = ["//visibility:public"],
 )
@@ -89,6 +90,7 @@ pyright_library(
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":control_submit",
         ":control_verification",
+        ":src_metadata",
     ],
     visibility = ["//visibility:public"],
 )
@@ -103,6 +105,7 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/dag/lib:dag_storage",
+        ":src_metadata",
     ],
     visibility = ["//visibility:public"],
 )
@@ -118,6 +121,7 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":control_attribution",
+        ":src_metadata",
     ],
     visibility = ["//visibility:public"],
 )
@@ -137,6 +141,7 @@ pyright_library(
         ":control_submit",
         ":control_verification",
         ":control_work_scheduler",
+        ":src_metadata",
     ],
     visibility = ["//visibility:public"],
 )
@@ -157,6 +162,7 @@ pyright_library(
         ":control_submit",
         ":control_verification",
         ":control_work_scheduler",
+        ":src_metadata",
     ],
     visibility = ["//visibility:public"],
 )

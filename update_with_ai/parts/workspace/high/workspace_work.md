@@ -21,7 +21,7 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 
 ## Types and Behavior
 
-A *work queue item* record encapsulates a pending task: a *target file*, a *role name*, a sequence of *dirtiness reasons*, a sequence of *dependency files*, an optional *blocked reason*, and an *is ready flag*.
+A *work queue item* record encapsulates a pending task: a *target file*, a *role name*, a sequence of *dirtiness reasons*, a sequence of *dependency files*, a sequence of companion *contract files*, an optional *blocked reason*, and an *is ready flag*.
 
 A *work queue summary* record encapsulates the overall state of a directory scope: a sequence of *ready items*, a sequence of *blocked items*, and an *is clean flag*.
 
@@ -31,8 +31,16 @@ The workspace work manager:
 
 - Evaluates dirty targets and topological readiness across a specified directory scope, discovering ready and blocked work items according to dynamic role precedence without requiring a subgraph.
 
+- Resolves companion upstream specification contracts and interface definitions for target units from role definitions in workspace_registry to guide agent implementation and verification.
+
+- Filters cross-unit dependencies based on star_role_deps and silent_cross_role_deps in workspace_registry, suppressing peer implementation files matching silent cross-role dependencies and expanding star-role specification contracts.
+
+- Enforces strict role resolution without synthetic fallbacks, failing loudly when unknown roles or unrecognized file patterns are encountered.
+
 - Rejects new work discovery requests when uncompleted dirty work remains pending from a previous query in the role workspace, unless forced.
 
-- Records ready targets into a local pending work buffer upon successful discovery, and clears the pending work buffer when all targets in scope evaluate clean.
+- Manages pending target tracking by recording assigned targets into a local pending work buffer, removing submitted targets, and checking target dirtiness.
+
+- Clears the pending work buffer when all targets in scope evaluate clean.
 
 - Formulates structured work queue summaries detailing ready targets, dirty reasons, prerequisite blockers, and actionable next steps for the active role.

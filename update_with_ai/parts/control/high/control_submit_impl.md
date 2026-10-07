@@ -7,7 +7,7 @@ CODE_HASH: 143650e6b0c9
 
 # control_submit_impl implementation component
 
-imports: agent_session, dag_storage, agent_node_config, control_verification, agent_file_alias
+imports: agent_session, dag_storage, agent_node_config, control_verification, agent_file_alias, src_metadata
 implements: control_submit
 
 ## Purpose
@@ -18,7 +18,7 @@ Enforcing submission integrity prevents corrupting the dependency graph with bro
 
 **Out of scope:** The control_submit_impl implementation component does not execute compilers or run regression test suites; these are handled by other components.
 
-**Delegated:** Verification status checks are delegated to control_verification. Graph storage mutations are delegated to dag_storage.
+**Delegated:** Verification status checks are delegated to control_verification; in-band source metadata extraction and header updates are delegated to src_metadata; graph storage mutations are delegated to dag_storage.
 
 ## Types and Behavior
 
@@ -37,3 +37,11 @@ When submitting a target:
 - When workspace files were not modified and the target is not an auditor role, the submission coordinator forbids non-empty change summaries, rejecting submissions that attempt to document changes when no modifications occurred.
 
 - When all preconditions and change summary rules are satisfied, the submission coordinator marks the target node status as clean in graph storage, records the change message, and returns an accepted submission outcome.
+
+When submitting a file target:
+
+- The submission coordinator resolves the target file path and unit name against the local workspace and canonical repository roots.
+
+- When submitting in an auditor role, the submission coordinator rejects test files, resolves audited implementation and companion test files, executes build submission targets or stamps in-band audit tags directly in the canonical repository, and synchronizes updated files back to the role workspace.
+
+- When submitting in a producer role, the submission coordinator verifies write permissions and active directory scope patterns, validates that a change summary was provided if and only if code was modified, executes build submission targets or updates in-band change metadata directly in the canonical repository, and synchronizes updated files back to the role workspace.

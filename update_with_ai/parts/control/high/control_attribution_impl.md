@@ -7,7 +7,7 @@ CODE_HASH: 3e34e4273c25
 
 # control_attribution_impl implementation component
 
-imports: agent_session, dag_storage, agent_file_alias, agent_node_config
+imports: agent_session, dag_storage, agent_file_alias, agent_node_config, src_metadata
 implements: control_attribution
 
 ## Purpose
@@ -18,7 +18,7 @@ Accurate defect attribution requires verifying that blame is directed exclusivel
 
 **Out of scope:** The control_attribution_impl implementation component does not edit file comments or reorder git history; these are handled by other components.
 
-**Delegated:** Feedback message storage and node status mutations are delegated to dag_storage.
+**Delegated:** Feedback message storage and node status mutations are delegated to dag_storage; in-band source metadata extraction and feedback formatting are delegated to src_metadata.
 
 ## Types and Behavior
 
@@ -41,3 +41,15 @@ When recording task failure:
 - The attribution coordinator records the failure explanation on the target node in graph storage.
 
 - The attribution coordinator preserves the dirty status on the target node, marks the node as failed in the active session, and marks in-batch dependent nodes as failed.
+
+When attributing blame to a culprit file:
+
+- The attribution coordinator resolves the culprit file path against canonical repository and workspace roots.
+
+- The attribution coordinator validates that the critique explanation contains no newline characters, rejecting explanations that contain multiple lines or breaks.
+
+- The attribution coordinator invokes the build blame target when supported or appends in-band feedback and marks dirty status directly in the canonical repository, and synchronizes updated files back to the local role workspace.
+
+When recording task failure for a file target:
+
+- The attribution coordinator resolves the target file path, appends verification failure diagnostics, marks dirty status directly in the canonical repository, and synchronizes updated files back to the local role workspace.

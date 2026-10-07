@@ -55,11 +55,17 @@ def _package_runner_zipapps(bin_dir: str) -> None:
     os.makedirs(bin_dir, exist_ok=True)
     tools = {
         "get_work": "get_work",
+        "check_files": "check_files",
         "submit": "submit",
         "blame": "blame",
         "fail": "fail",
-        "coverage": "coverage",
     }
+    cov_path = os.path.join(bin_dir, "coverage")
+    if os.path.isfile(cov_path):
+        try:
+            os.remove(cov_path)
+        except OSError:
+            pass
     for tool_name, cmd in tools.items():
         tool_path = os.path.join(bin_dir, tool_name)
         runner_code = f'''import json
@@ -129,14 +135,15 @@ def _write_role_agents_md(
     if is_auditor:
         workflow = f"""1. Run `bin/get_work` to synchronize with main and inspect pending dirty units.
 2. Follow companion guide `{guide}` to verify target compliance.
-3. Submit verification stamp: `bin/submit <target_file>`
-4. Blame defects if discovered: `bin/blame <culprit_file> "<explanation>"`
+3. Run verification checks: `bin/check_files [target_file]`
+4. Submit verification stamp: `bin/submit <target_file>`
+5. Blame defects if discovered: `bin/blame <culprit_file> "<explanation>"`
 """
     else:
         workflow = f"""1. Run `bin/get_work` to inspect and pull pending work.
 2. Follow companion guide `{guide}` to author or update targets in scope.
-3. Run verification suite to validate changes.
-4. Submit completed targets: `bin/submit <target_file>`
+3. Run verification checks: `bin/check_files [target_file]`
+4. Submit completed targets: `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>` if unmodified)
 5. If upstream contracts are defective: `bin/blame <culprit_contract> "<explanation>"`
 """
 
@@ -153,7 +160,7 @@ def _write_role_agents_md(
 3. **Main Repository Inviolability**: The main workspace is strictly read-only and off-limits to direct agent actions. All interaction with main occurs exclusively through the prescribed `bin/` tools.
 
 ## Fail-Stop & Reporting Protocol (Do NOT Self-Heal)
-If any cleanroom binary (`bin/get_work`, `bin/coverage`, `bin/blame`, `bin/submit`) fails due to:
+If any cleanroom binary (`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/submit`) fails due to:
 - A Python exception or traceback (e.g., `ModuleNotFoundError`, `ImportError`, `AttributeError`)
 - A Bazel analysis or execution failure
 - A missing support file, template error, or dependency issue
@@ -284,6 +291,18 @@ class WorkspaceSynchronizer(
         _package_runner_zipapps(bin_dir)
         _write_role_agents_md(workspace_dir, role_def, dir_scope)
         refreshed_count += 6
+
+        role_tool_src = os.path.join(
+            main_root, "update_with_ai/support/lib/cleanroom_role_tool.py"
+        )
+        if os.path.isfile(role_tool_src):
+            role_tool_dst = os.path.join(
+                workspace_dir, "update_with_ai/support/lib/cleanroom_role_tool.py"
+            )
+            copy_file_with_perms(
+                role_tool_src, role_tool_dst, readonly=False, executable=True
+            )
+            refreshed_count += 1
 
         meta_path = os.path.join(workspace_dir, ROLE_CONFIG_FILE)
         if os.path.isfile(meta_path):

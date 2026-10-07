@@ -51,4 +51,23 @@ class SubmissionCoordinator(InTier[AgentSessionTier], Protocol):
         - When files unmodified and change summary supplied, MUST reject submission.
         - When accepted, MUST mark target node clean in graph storage and record change message.
         """
+    @operation
+    def submit_target_file(
+        self,
+        target: str,
+        summary: Optional[str] = None,
+        repo_root: Optional[str] = None,
+        workspace_root: Optional[str] = None,
+        role_name: Optional[str] = None,
+    ) -> SubmissionOutcome:
+        """Submits a file target after validating gating rules and updating metadata.
+
+        POSTCONDITIONS:
+        - When auditor role attempts to submit a verification or test file, MUST reject submission.
+        - When producer role attempts to submit a read-only target, MUST reject submission.
+        - When target is modified and change summary is omitted, MUST reject submission.
+        - When target is unmodified and change summary is supplied, MUST reject submission.
+        - When accepted, MUST update in-band metadata or execute build submission target in main repository.
+        - MUST return SubmissionOutcome indicating acceptance status and message.
+        """
         ...

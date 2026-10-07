@@ -17,20 +17,11 @@ update_with_ai(
     visibility = ["//visibility:public"],
 )
 
-update_with_ai(
-    name = "grounding_support_spec",
-    src = "grounding_support.pyi",
-    prompt = "Cleanroom grounding support specification stubs.",
-    visibility = ["//visibility:public"],
-)
-
 exports_files([
     "framework.py",
     "framework.pyi",
     "lifecycle.py",
     "lifecycle.pyi",
-    "grounding_support.py",
-    "grounding_support.pyi",
     "update_python_with_ai.bzl",
     "check_build_derived.py",
     "build_derived_test.bzl",
@@ -38,18 +29,9 @@ exports_files([
     "high_lint.py",
     "spec_lint.py",
     "low_lint.py",
-    "grounding_lint.py",
     "lib_lint.py",
     "test_lint.py",
 ], visibility = ["//visibility:public"])
-
-pyright_library(
-    name = "grounding_support",
-    srcs = ["grounding_support.py"],
-    pyright_deps = ["//update_with_ai/support/lib:grounding_support"],
-    imports = ["../..", "."],
-    visibility = ["//visibility:public"],
-)
 
 pyright_library(
     name = "framework",
@@ -97,13 +79,6 @@ pyright_library(
 pyright_library(
     name = "low_lint",
     srcs = ["low_lint.py"],
-    pyright_deps = [],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "grounding_lint",
-    srcs = ["grounding_lint.py"],
     pyright_deps = [],
     visibility = ["//visibility:public"],
 )

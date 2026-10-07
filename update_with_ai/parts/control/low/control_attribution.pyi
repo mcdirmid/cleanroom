@@ -71,3 +71,39 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
         - MUST mark in-batch dependent nodes as failed.
         """
         ...
+
+    @operation
+    def blame_culprit_file(
+        self,
+        culprit_file: str,
+        critique: str,
+        repo_root: Optional[str] = None,
+        workspace_root: Optional[str] = None,
+        caller_role: Optional[str] = None,
+    ) -> AttributionOutcome:
+        """Attributes defect blame to an upstream culprit file.
+
+        POSTCONDITIONS:
+        - When critique contains newline characters, MUST reject blame.
+        - When culprit file cannot be resolved, MUST reject blame.
+        - When accepted, MUST record in-band feedback and dirty status via build target or direct metadata mutation.
+        - MUST return AttributionOutcome indicating acceptance status and message.
+        """
+        ...
+
+    @operation
+    def fail_target_file(
+        self,
+        target_file: str,
+        reason: Optional[str] = None,
+        repo_root: Optional[str] = None,
+        workspace_root: Optional[str] = None,
+    ) -> AttributionOutcome:
+        """Records task failure for a target file.
+
+        POSTCONDITIONS:
+        - When target file cannot be resolved, MUST reject failure recording.
+        - When accepted, MUST mark target file dirty and record failure diagnostics in canonical repository.
+        - MUST return AttributionOutcome indicating acceptance status and message.
+        """
+        ...

@@ -44,3 +44,20 @@ class AttributionCoordinator(Protocol):
         explanation: str,
         in_batch_dependents: Optional[Sequence[dag_storage.DagNode]] = None,
     ) -> AttributionOutcome: ...
+
+    def blame_culprit_file(
+        self,
+        culprit_file: str,
+        critique: str,
+        repo_root: Optional[str] = None,
+        workspace_root: Optional[str] = None,
+        caller_role: Optional[str] = None,
+    ) -> AttributionOutcome: ...
+
+    def fail_target_file(
+        self,
+        target_file: str,
+        reason: Optional[str] = None,
+        repo_root: Optional[str] = None,
+        workspace_root: Optional[str] = None,
+    ) -> AttributionOutcome: ...

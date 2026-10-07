@@ -36,7 +36,7 @@ When commissioning a workspace, the provisioner:
 
 - Copies upstream contract dependencies and guides into the workspace with read-only permissions (`chmod 444`), ensuring agents cannot alter upstream specifications in-place.
 
-- Deploys executable zipapp runner wrappers into the workspace `bin/` directory, packaging executable runners for `get_work`, `submit`, `blame`, `fail`, and `coverage` with execution permissions (`chmod 755`).
+- Deploys executable zipapp runner wrappers into the workspace `bin/` directory, packaging executable runners for `get_work`, `check_files`, `submit`, `blame`, `fail`, and `coverage` with execution permissions (`chmod 755`).
 
 - Writes the `.cleanroom_role.json` configuration file recording role address, role name, directory scope, and canonical main repository root.
 

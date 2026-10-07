@@ -17,7 +17,7 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 
 ### Typing
 
-- A work queue item record encapsulates a target file, a role name, a sequence of dirtiness reasons, a sequence of dependency files, an optional blocked reason, and an is ready flag.
+- A work queue item record encapsulates a target file, a role name, a sequence of dirtiness reasons, a sequence of dependency files, a sequence of companion contract files, an optional blocked reason, and an is ready flag.
 - A work queue summary record encapsulates a sequence of ready items, a sequence of blocked items, and an is clean flag.
 - A workspace work manager operates within the agent session lifecycle tier.
 
@@ -26,13 +26,21 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 - The workspace work manager inspects .cleanroom_pending_work.json to check whether pending targets remain dirty. [check_pending_work_status]
 - The workspace work manager clears .cleanroom_pending_work.json when no pending targets remain dirty. [clear_pending_work_buffer]
 - The workspace work manager invokes directory-scoped work discovery to compute ready and blocked units. [discover_directory_scope_work]
+- The workspace work manager resolves companion upstream specification contract files and interface definitions for target units dynamically from workspace_registry. [resolve_unit_contract_files]
+- The workspace work manager filters cross-unit dependencies based on star_role_deps and silent_cross_role_deps from workspace_registry. [filter_role_dependencies]
+- The workspace work manager enforces fail-loud role resolution without synthetic fallbacks. [enforce_strict_role_resolution]
 - The workspace work manager records ready targets into .cleanroom_pending_work.json upon discovery. [record_ready_targets_buffer]
 - The workspace work manager formats actionable diagnostic next steps for ready and blocked queue items. [format_work_queue_diagnostics]
+- The workspace work manager records assigned target paths into the pending work buffer file. [set_pending_work_targets]
+- The workspace work manager removes a resolved target path from the pending work buffer file. [remove_pending_target_path]
+- The workspace work manager evaluates whether a pending target remains dirty on disk. [is_pending_target_dirty_disk]
+- The workspace work manager computes role work queues by discovering dirty units and sorting ready units topologically. [compute_role_work_queue_targets]
 
 ### Woven Contracts
 
-- When discovering work in a role workspace, the manager checks pending work status, discovers directory scope work if unblocked, records ready targets, and formats diagnostic outputs. [check_pending_work_status, discover_directory_scope_work, record_ready_targets_buffer, format_work_queue_diagnostics, control_work_scheduler: [discover_directory_candidates, filter_ready_dependencies], src_metadata: [extract_metadata_disk]]
+- When discovering work in a role workspace, the manager checks pending work status, discovers directory scope work if unblocked, resolves companion contracts, filters cross-unit dependencies according to star and silent role rules, records ready targets, and formats diagnostic outputs. [check_pending_work_status, discover_directory_scope_work, resolve_unit_contract_files, filter_role_dependencies, enforce_strict_role_resolution, record_ready_targets_buffer, format_work_queue_diagnostics, workspace_registry: [resolve_role_definition, list_roles], control_work_scheduler: [discover_directory_candidates, filter_ready_dependencies], src_metadata: [extract_metadata_disk]]
 - When all targets in scope evaluate clean, the manager clears the pending work buffer and indicates clean status. [clear_pending_work_buffer, discover_directory_scope_work]
+- When a target is resolved, the work manager removes the target from the pending buffer and checks whether any pending work remains dirty. [remove_pending_target_path, is_pending_target_dirty_disk, src_metadata: [extract_metadata_disk]]
 
 ## Grounding
 
@@ -40,6 +48,7 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 
 - Directory-scoped work queue discovery and diagnostic presentation services. [workspace_work_discovery_service]
 - Pending work buffer state management and target tracking capabilities. [workspace_pending_work_tracking]
+- Role work queue computation and topological unit sorting capabilities. [role_work_queue_computation_service]
 
 ### Knowledge Requirements
 

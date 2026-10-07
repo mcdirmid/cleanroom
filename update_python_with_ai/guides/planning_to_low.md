@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-07T05:04:27Z
 LAST_CHANGED: 2026-10-06T12:35:00Z
 CHANGE: add GROUNDING: section to implementation stubs and update collaborator mentioning rules
 CODE_HASH: 47ac02f98743

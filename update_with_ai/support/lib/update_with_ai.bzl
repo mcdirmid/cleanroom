@@ -649,8 +649,6 @@ def _update_ai_node_clean_impl(ctx):
     _dep_manifests = []
     for _dep in ctx.attr.deps:
         _dep_manifests.extend(_dep[DefaultInfo].files.to_list())
-    for _role in getattr(ctx.attr, "_canonical_roles", []):
-        _dep_manifests.extend(_role[DefaultInfo].files.to_list())
 
     # Include the generated config files for the bundled configs (the
     # //model_configs:all_configs bundle) plus the explicit `config`
@@ -671,9 +669,6 @@ def _update_ai_node_clean_impl(ctx):
     _manifest_depsets = [
         ctx.attr.node[OutputGroupInfo].manifests,
     ] + [dep[OutputGroupInfo].manifests for dep in ctx.attr.deps]
-    for _role in getattr(ctx.attr, "_canonical_roles", []):
-        if OutputGroupInfo in _role:
-            _manifest_depsets.append(_role[OutputGroupInfo].manifests)
     if ctx.attr.guide:
         _manifest_depsets.append(ctx.attr.guide[OutputGroupInfo].manifests)
 
@@ -720,19 +715,6 @@ _update_ai_node_clean_rule = rule(
                   "configuration for this *_clean binary (overrides " +
                   "--define=MODEL_CONFIG; may still be overridden by --config " +
                   "or MODEL_CONFIG_TARGET / AGENT_CONFIG_TARGET at run time).",
-        ),
-        "_canonical_roles": attr.label_list(
-            default = [
-                Label("//update_python_with_ai:high"),
-                Label("//update_python_with_ai:planning"),
-                Label("//update_python_with_ai:grounding"),
-                Label("//update_python_with_ai:low"),
-                Label("//update_python_with_ai:lib"),
-                Label("//update_python_with_ai:test"),
-                Label("//update_python_with_ai:qa"),
-                Label("//update_python_with_ai:coverage"),
-            ],
-            aspects = [_collect_manifests],
         ),
         "_model_configs": attr.label(
             default = Label("//model_configs:all_configs"),
@@ -1186,15 +1168,10 @@ def _update_ai_node_mark_clean_impl(ctx):
     _dep_manifests = []
     for _dep in ctx.attr.deps:
         _dep_manifests.extend(_dep[DefaultInfo].files.to_list())
-    for _role in getattr(ctx.attr, "_canonical_roles", []):
-        _dep_manifests.extend(_role[DefaultInfo].files.to_list())
 
     _manifest_depsets = [
         ctx.attr.node[OutputGroupInfo].manifests,
     ] + [dep[OutputGroupInfo].manifests for dep in ctx.attr.deps]
-    for _role in getattr(ctx.attr, "_canonical_roles", []):
-        if OutputGroupInfo in _role:
-            _manifest_depsets.append(_role[OutputGroupInfo].manifests)
     if ctx.attr.guide:
         _manifest_depsets.append(ctx.attr.guide[OutputGroupInfo].manifests)
 
@@ -1234,19 +1211,6 @@ _update_ai_node_mark_clean_rule = rule(
             aspects = [_collect_manifests],
             doc = "Optional guide node target whose manifest must reach runfiles " +
                   "for graph resolution (the guide is declared separately from deps).",
-        ),
-        "_canonical_roles": attr.label_list(
-            default = [
-                Label("//update_python_with_ai:high"),
-                Label("//update_python_with_ai:planning"),
-                Label("//update_python_with_ai:grounding"),
-                Label("//update_python_with_ai:low"),
-                Label("//update_python_with_ai:lib"),
-                Label("//update_python_with_ai:test"),
-                Label("//update_python_with_ai:qa"),
-                Label("//update_python_with_ai:coverage"),
-            ],
-            aspects = [_collect_manifests],
         ),
         "_dag_runner": attr.label(
             default = Label("//update_with_ai/parts/systems/lib:bazel_openai_loop_asm"),
@@ -1519,7 +1483,7 @@ def _update_ai_node_submit_impl(ctx):
         "    storage = get_singleton(DagStorage)",
         "",
         "    role_name = origin_node.role_address.split(':')[-1] if origin_node.role_address else ''",
-        "    is_auditor = role_name in ('qa', 'coverage', 'grounding_qa')",
+        "    is_auditor = role_name in ('spec_qa', 'low_qa', 'qa', 'coverage')",
         "",
         "    if is_auditor:",
         "        # Auditor submission stamps <ROLE>_AUDIT on feedback dependencies",
@@ -1953,14 +1917,9 @@ def _update_ai_node_prompt_impl(ctx):
     _manifest_depsets = []
     if OutputGroupInfo in ctx.attr.node:
         _manifest_depsets.append(ctx.attr.node[OutputGroupInfo].manifests)
-    _role_files = []
-    for _role in getattr(ctx.attr, "_canonical_roles", []):
-        _role_files.extend(_role[DefaultInfo].files.to_list())
-        if OutputGroupInfo in _role:
-            _manifest_depsets.append(_role[OutputGroupInfo].manifests)
 
     _runfiles = ctx.runfiles(
-        files = [_wrapper_py, _manifest] + _role_files,
+        files = [_wrapper_py, _manifest],
         transitive_files = depset(
             transitive = _manifest_depsets + [
                 ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
@@ -1987,19 +1946,6 @@ _update_ai_node_prompt_rule = rule(
         "_dag_runner": attr.label(
             default = Label("//update_with_ai/parts/systems/lib:bazel_openai_loop_asm"),
             providers = [PyInfo],
-        ),
-        "_canonical_roles": attr.label_list(
-            default = [
-                Label("//update_python_with_ai:high"),
-                Label("//update_python_with_ai:planning"),
-                Label("//update_python_with_ai:grounding"),
-                Label("//update_python_with_ai:low"),
-                Label("//update_python_with_ai:lib"),
-                Label("//update_python_with_ai:test"),
-                Label("//update_python_with_ai:qa"),
-                Label("//update_python_with_ai:coverage"),
-            ],
-            aspects = [_collect_manifests],
         ),
     },
 )
@@ -2582,7 +2528,8 @@ def _update_ai_batch_mark_clean_impl(ctx):
         "}",
         "",
         "AUDITOR_TAGS = {",
-        '    "grounding_qa": "GROUNDING_QA_AUDIT",',
+        '    "spec_qa": "SPEC_QA_AUDIT",',
+        '    "low_qa": "LOW_QA_AUDIT",',
         '    "qa": "QA_AUDIT",',
         '    "coverage": "COVERAGE_AUDIT",',
         "}",
@@ -2599,8 +2546,10 @@ def _update_ai_batch_mark_clean_impl(ctx):
         '    is_ext = unit_name.endswith("_ext")',
         "    if is_ext:",
         "        return []",
-        '    if role == "grounding_qa":',
-        '        return [os.path.join(workspace_root, pkg, "grounding", f"{unit_name}.py")]',
+        '    if role == "spec_qa":',
+        '        return [os.path.join(workspace_root, pkg, "planning", f"{unit_name}.md")]',
+        '    elif role == "low_qa":',
+        '        return [os.path.join(workspace_root, pkg, "low", f"{unit_name}.pyi")]',
         '    elif role in ("qa", "coverage"):',
         "        return [",
         '            os.path.join(workspace_root, pkg, "lib", f"{unit_name}.py"),',
@@ -2622,8 +2571,6 @@ def _update_ai_batch_mark_clean_impl(ctx):
         '        return os.path.join(workspace_root, pkg, "planning", f"{unit_name}.md")',
         '    elif role == "low":',
         '        return os.path.join(workspace_root, pkg, "low", f"{unit_name}.pyi")',
-        '    elif role == "grounding":',
-        '        return os.path.join(workspace_root, pkg, "grounding", f"{unit_name}.py")',
         '    elif role == "lib" and not is_ext:',
         '        return os.path.join(workspace_root, pkg, "lib", f"{unit_name}.py")',
         '    elif role == "test" and not is_ext:',
@@ -2675,7 +2622,7 @@ def _update_ai_batch_mark_clean_impl(ctx):
         "        pass",
         "",
         "    if not nodes:",
-        '        roles = ["high", "planning", "low", "grounding", "lib", "test", "qa", "coverage"]',
+        '        roles = ["high", "planning", "spec_qa", "low", "low_qa", "lib", "test", "qa", "coverage"]',
         "        target_dir = os.path.join(workspace_root, scope) if scope else workspace_root",
         "        if os.path.isdir(target_dir):",
         "            for r, dirs, files in os.walk(target_dir):",

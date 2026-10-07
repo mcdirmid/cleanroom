@@ -34,3 +34,12 @@ class SubmissionCoordinator(Protocol):
         has_modifications: bool = False,
         in_batch_dependencies: Optional[Sequence[dag_storage.DagNode]] = None,
     ) -> SubmissionOutcome: ...
+
+    def submit_target_file(
+        self,
+        target: str,
+        summary: Optional[str] = None,
+        repo_root: Optional[str] = None,
+        workspace_root: Optional[str] = None,
+        role_name: Optional[str] = None,
+    ) -> SubmissionOutcome: ...

@@ -218,9 +218,9 @@ For producer roles (`high`, `planning`, `low`, `grounding`, `lib`, `test`):
 4. **Header Stamping**: Advances `LAST_CLEANED` and `LAST_CHANGED` to UTC now, records `CHANGE:`, updates `CODE_HASH:`, and clears resolved `FEEDBACK:` and `DIRTY:` markers.
 
 ### 4.2 Auditor Submissions (`bin/submit <target_file>`)
-For auditor roles (`grounding_qa`, `qa`, `coverage`):
-1. Delegates directly to `bazel run //pkg:unit_qa_submit` (or role-specific submit target).
-2. Stamps `<ROLE>_AUDIT: <timestamp>` into the target file header in canonical main without altering `LAST_CHANGED` or code contents.
+For auditor roles (`spec_qa`, `low_qa`, `qa`, `coverage`):
+1. Verifies verification pass criteria via `bin/check_files` (which executes role linters, tests, or statement coverage).
+2. Delegates to submission coordinator to stamp `<ROLE>_AUDIT: <timestamp>` into the target file header in canonical main without altering `LAST_CHANGED` or code contents.
 
 ### 4.3 Direct Upstream Blame (`bin/blame <culprit-file> "<critique>"`)
 When a defect in an upstream contract or dependency is discovered:
@@ -263,7 +263,7 @@ flowchart TD
 ### 5.2 Dependency-Aware Queue Rules
 - **Cross-Role Dependency Blocking**: A unit is blocked if any of its upstream role dependencies (`role_deps`, `star_role_deps`, `feedback_role_deps`) are dirty.
 - **Intra-Role Dependency Allowing**: A unit is eligible for work if its only dirty dependencies belong to the **same** role.
-- **Auditor Feedback Blocking**: An auditor role (`qa`, `coverage`, `grounding_qa`) is blocked if any of its feedback targets are dirty or have unacted `FEEDBACK:`.
+- **Auditor Feedback Blocking**: An auditor role (`spec_qa`, `low_qa`, `qa`, `coverage`) is blocked if any of its feedback targets are dirty or have unacted `FEEDBACK:`.
 - **Topological Sorting**: Multiple ready units within the same role are returned in topological dependency order ($dependency \to dependent$).
 
 ### 5.3 Multi-Unit Processing Loop
@@ -473,10 +473,11 @@ In Cleanroom, the implementer writes code against the **formal specification**, 
 ## 10. Production Artifacts & Verified Status
 
 All zero-sync Cleanroom workspace components are implemented, hermetically verified, and actively operational:
-1. `update_with_ai/support/lib/cleanroom_workspace_tool.py`: Core workspace lifecycle engine (`commission`, `decommission`, `refresh`, `refresh-sys`, `dirty`, `clean`, `work-queue`, stub synthesis, DAG queue computation).
-2. `update_with_ai/support/lib/cleanroom_role_tool.py`: Role workspace internal binaries (`get_work`, `submit`, `blame`, `fail`).
-3. `update_with_ai/support/lib/update_with_ai.bzl`: Bazel macro rules for `_submit`, `_blame`, and `_fail` direct-to-main mutations.
-4. `update_with_ai/support/lib/src_metadata.py`: In-band comment metadata parser, serializer, and dirty checker.
+1. `update_with_ai/parts/workspace/`: Core workspace lifecycle engine (`workspace_tool.py`, `workspace_tool_impl.py`, `workspace_sync_impl.py`, `workspace_provision_impl.py`, `workspace_registry_impl.py`, `workspace_work_impl.py`).
+2. `update_with_ai/parts/control/`: Canonical in-band metadata management (`src_metadata.py`), submission validation (`control_submit_impl.py`), and defect blame attribution (`control_attribution_impl.py`).
+3. `update_with_ai/parts/tools/`: Deterministic statement test coverage evaluation (`tool_coverage.py`, `tool_coverage_impl.py`).
+4. `update_with_ai/support/lib/cleanroom_role_tool.py`: Ultra-slim entrypoint shim ($\le 50$ lines, exactly 45 lines) executing role workspace binaries (`get_work`, `check_files`, `submit`, `blame`, `fail`) within the `agent_session` tier.
 5. `bin/cleanroom`: Primary lifecycle CLI in the canonical main workspace.
-6. `update_with_ai/support/tests/cleanroom_workspace_tool_test.py`: Comprehensive test suite verifying commissioning, stub generation, convention discovery, and queue computation (`bazel test //update_with_ai/support/tests:cleanroom_workspace_tool_test`).
-7. `update_with_ai/support/tests/cleanroom_role_tool_test.py`: Unit test suite verifying role tool behavior, Bazel mutation delegation, and queue consumption (`bazel test //update_with_ai/support/tests:cleanroom_role_tool_test`).
+6. `update_with_ai/parts/workspace/tests/`: Comprehensive test suites verifying provisioning, synchronizing, registry parsing, work queue computation, and tool execution (`bazel test //update_with_ai/parts/workspace/tests:all`).
+7. `update_with_ai/parts/tools/tests/`: Unit test suite verifying AST statement filtering, trace instrumentation, span grouping, and coverage evaluation (`bazel test //update_with_ai/parts/tools/tests:all`).
+8. `update_with_ai/parts/control/tests/`: Unit test suite verifying in-band metadata parsing, dirty evaluation, submission gating, and blame attribution (`bazel test //update_with_ai/parts/control/tests:all`).

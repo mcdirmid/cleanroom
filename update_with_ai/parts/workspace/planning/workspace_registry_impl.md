@@ -7,19 +7,19 @@ CODE_HASH: b5fd06abb413
 
 # workspace_registry_impl implementation component
 
-imports: agent_session
+imports: agent_session, bazel_manifest_ext
 implements: workspace_registry
 
 ## Intent
 
-Reliable multi-role orchestration depends on atomic registry file updates and deterministic workspace naming conventions across platforms. Incomplete role resolution or corrupted registry records lead to orphaned role trees, stale lock files, and race conditions during simultaneous provisioning. The workspace_registry_impl implementation component resolves standard role templates (including high, planning, low, lib, test, qa, and coverage roles), normalizes role identifiers, computes directory hashes, and performs atomic JSON registry serialization with file locking.
+Reliable multi-role orchestration depends on atomic registry file updates and deterministic workspace naming conventions across platforms. Incomplete role resolution or corrupted registry records lead to orphaned role trees, stale lock files, and race conditions during simultaneous provisioning. The workspace_registry_impl implementation component resolves role definitions dynamically from build files using AST evaluation, normalizes role identifiers, computes directory hashes, and performs atomic JSON registry serialization with file locking.
 
 ## Factored Contracts
 
 ### Contracts
 
 - The workspace registry searches ancestor directories for MODULE.bazel or .git markers (distinguishing canonical repositories from projected role workspaces) to locate the canonical repository root. [search_ancestor_markers]
-- The workspace registry maps standard Cleanroom role names to built-in file patterns and audit tags. [map_standard_role_patterns]
+- The workspace registry parses define_role declarations from repository build files into role definitions with fail-fast exception signaling. [parse_build_file_role_definitions]
 - The workspace registry normalizes role address strings into canonical role names. [normalize_role_identifier]
 - The workspace registry replaces directory separator characters with underscores to construct workspace folder names. [sanitize_directory_folder_name]
 - The workspace registry writes JSON descriptors atomically to .cleanroom_workspaces.json using temporary sibling files. [write_json_registry_atomically]
@@ -28,7 +28,7 @@ Reliable multi-role orchestration depends on atomic registry file updates and de
 ### Woven Contracts
 
 - When discovering repository roots, the registry searches ancestor markers and falls back to ambient working directories if markers are absent. [search_ancestor_markers, workspace_registry: [discover_repo_root]]
-- When resolving role definitions, the registry normalizes identifiers and maps standard role patterns. [normalize_role_identifier, map_standard_role_patterns, workspace_registry: [resolve_standard_role_definition]]
+- When resolving or listing role definitions, the registry normalizes identifiers and parses define_role declarations from repository build files. [normalize_role_identifier, parse_build_file_role_definitions, workspace_registry: [resolve_role_definition, list_all_role_definitions]]
 - When computing workspace paths, the registry combines sanitized directory names with parent projects roots. [sanitize_directory_folder_name, workspace_registry: [compute_workspace_directory_path]]
 - When recording or unregistering workspaces, the registry reads existing descriptors, updates the collection, and writes the JSON file atomically. [read_json_registry_descriptors, write_json_registry_atomically, workspace_registry: [record_workspace_descriptor, unregister_workspace_descriptor]]
 
@@ -44,7 +44,7 @@ Reliable multi-role orchestration depends on atomic registry file updates and de
 - Discovery of repository roots and workspace paths on the filesystem.
   - Grounded: [path_sanitization_mechanics]
 - Serialization and deserialization of the persistent workspace registry file.
-  - Grounded: [registry_serialization_logic]
+  - Grounded: [registry_serialization_logic, bazel_manifest_ext: [role_manifest_parsing]]
 
 ### Knowledge Requirements
 

@@ -128,54 +128,6 @@ define_role(
 )
 
 define_role(
-    name = "grounding",
-    persona = "Grounding Engineer",
-    src_pattern = "{unit_dir}/grounding/{unit_name}.py",
-    derive_build_template = "python3 update_python_with_ai/support/lib/check_build_derived.py --kind grounding --build-file {unit_dir}/grounding/BUILD.bazel --parent-build-file {unit_dir}/BUILD.bazel --update",
-    prompt_template = "Files are aligned according to the guide.",
-    guide = "//update_python_with_ai/guides:low_to_grounding",
-    allows_step_mode = True,
-    node_deps = [
-        "//update_python_with_ai/support/lib:framework_spec",
-        "//update_python_with_ai/support/lib:lifecycle_spec",
-        "//update_python_with_ai/support/lib:grounding_support_spec",
-    ],
-    role_deps = [":low"],
-    star_role_deps = [":low", ":grounding"],
-    workspace_files = PYTHON_WORKSPACE_FILES,
-    tools = [
-        "update_python_with_ai/support/lib/check_build_derived.py",
-        "update_python_with_ai/support/lib/build_lint_common.py",
-        "update_python_with_ai/support/lib/build_derived_test.bzl",
-        "update_python_with_ai/support/lib/grounding_lint.py",
-        "update_python_with_ai/support/lib/grounding_support.py",
-    ],
-    feedback_role_deps = [":low"],
-    active_component_types = ["implementation", "assembly", "interface", "external"],
-    verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/support/lib/grounding_lint.py {unit_dir}/grounding/{unit_name}.py && bazel test //{unit_dir}/grounding:{unit_name}_type_check --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
-    verification_success_message = "Grounding specification passed static lint and pyright type checking for {unit_name}.",
-    visibility = ["//visibility:public"],
-)
-
-define_role(
-    name = "grounding_qa",
-    persona = "Grounding QA Arbiter",
-    src_pattern = "",
-    prompt_template = "Files are aligned according to the guide.",
-    guide = "//update_python_with_ai/guides:grounding_qa",
-    allows_step_mode = False,
-    star_role_deps = [":low", ":grounding"],
-    feedback_role_deps = [":grounding"],
-    workspace_files = PYTHON_WORKSPACE_FILES,
-    tools = [],
-    active_component_types = ["implementation", "assembly", "interface"],
-    verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/support/lib/grounding_lint.py {unit_dir}/grounding/{unit_name}.py && bazel test //{unit_dir}/grounding:{unit_name}_type_check --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
-    verification_success_message = "Grounding specification verified for {unit_name}.",
-    visibility = ["//visibility:public"],
-)
-
-
-define_role(
     name = "lib",
     persona = "Lib Engineer",
     src_pattern = "{unit_dir}/lib/{unit_name}.py",
@@ -186,7 +138,7 @@ define_role(
     allows_step_mode = True,
     role_deps = [":low"],
     star_role_deps = [":low"],
-    silent_role_deps = [":low_qa", ":grounding_qa"],
+    silent_role_deps = [":low_qa"],
     silent_cross_role_deps = [":lib"],
     workspace_files = PYTHON_WORKSPACE_FILES,
     tools = [
@@ -210,7 +162,7 @@ define_role(
     allows_step_mode = True,
     role_deps = [":low"],
     star_role_deps = [":low"],
-    silent_role_deps = [":lib", ":low_qa", ":grounding_qa"],
+    silent_role_deps = [":lib", ":low_qa"],
     stub_role_deps = [":lib"],
     silent_cross_role_deps = [":lib"],
     feedback_role_deps = [":low"],
@@ -237,7 +189,7 @@ define_role(
     workspace_files = PYTHON_WORKSPACE_FILES,
     tools = [],
     active_component_types = ["implementation"],
-    verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{unit_dir}/tests:{unit_name}_test --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
+    verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{unit_dir}/tests:{unit_name}_test --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress --nocache_test_results 2>&1",
     verification_success_message = "Test {unit_name}_test.py passed.",
     visibility = ["//visibility:public"],
 )
@@ -257,7 +209,7 @@ define_role(
         "update_with_ai/support/lib/cleanroom_role_tool.py",
     ],
     active_component_types = ["implementation"],
-    verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{unit_dir}/tests:{unit_name}_test --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1 && python3 update_with_ai/support/lib/cleanroom_role_tool.py coverage --impl {unit_dir}/lib/{unit_name}.py --test {unit_dir}/tests/{unit_name}_test.py --threshold 100.0",
+    verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{unit_dir}/tests:{unit_name}_test --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress --nocache_test_results 2>&1 && python3 update_with_ai/support/lib/cleanroom_role_tool.py coverage --impl {unit_dir}/lib/{unit_name}.py --test {unit_dir}/tests/{unit_name}_test.py --threshold 100.0",
     verification_success_message = "All lines of {unit_name}.py are covered by {unit_name}_test.py.",
     visibility = ["//visibility:public"],
 )

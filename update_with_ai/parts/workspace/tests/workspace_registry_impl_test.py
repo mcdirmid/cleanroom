@@ -40,11 +40,23 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
         self.assertEqual(role_def.role_name, "lib")
         self.assertIn("lib/*.py", role_def.writable_file_patterns)
         self.assertIn("low/*.pyi", role_def.readonly_file_patterns)
+        self.assertEqual(list(role_def.silent_cross_role_deps), [":lib"])
+        self.assertEqual(list(role_def.star_role_deps), [":low"])
 
         qa_def = self.ws_registry.resolve_role_definition(":qa")
         self.assertEqual(qa_def.role_name, "qa")
         self.assertEqual(qa_def.writable_file_patterns, [])
         self.assertEqual(qa_def.audit_tag, "QA_AUDIT")
+
+    def test_unknown_role_raises_key_error(self) -> None:
+        with self.assertRaises(KeyError):
+            self.ws_registry.resolve_role_definition("nonexistent_role_xyz")
+
+    def test_list_roles(self) -> None:
+        roles = self.ws_registry.list_roles()
+        role_names = [r.role_name for r in roles]
+        for expected in ("high", "planning", "spec_qa", "low", "low_qa", "lib", "test", "qa", "coverage"):
+            self.assertIn(expected, role_names)
 
     def test_compute_workspace_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:

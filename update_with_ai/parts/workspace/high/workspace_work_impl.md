@@ -24,6 +24,14 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
 
 The workspace work manager discovers work items within a designated directory scope.
 
+When managing pending target state:
+
+- The work manager records assigned target paths to `.cleanroom_pending_work.json`.
+
+- The work manager removes a resolved target path from `.cleanroom_pending_work.json` when submitted or blamed.
+
+- The work manager evaluates whether a pending target remains dirty by checking in-band source metadata across local and canonical repositories.
+
 When evaluating work in a role workspace:
 
 - The work manager checks whether a pending work buffer file exists at `.cleanroom_pending_work.json`. If pending targets exist, the manager re-evaluates each target's dirty status using in-band metadata. If any target remains dirty and force is false, work discovery aborts, returning an error directing the agent to complete or blame the pending target.
@@ -36,4 +44,10 @@ When evaluating work in a role workspace:
 
 - If ready items exist and a role workspace is active, the manager records the ready target file paths into the pending work buffer.
 
-- The work manager compiles the results into a work queue summary detailing ready tasks, dirty reasons, dependency paths, blocked causes, and role-specific instructions.
+- The work manager resolves companion upstream specification contract files and interface definitions for candidate targets using dynamic role definitions from workspace_registry, avoiding peer implementation file leakage.
+
+- The work manager resolves cross-unit dependencies by filtering out silent cross-role dependencies and expanding star-role specification contracts dynamically defined in workspace_registry.
+
+- The work manager enforces fail-loud resolution for unknown roles or unmatched paths, raising explicit exceptions without synthetic fallbacks.
+
+- The work manager compiles the results into a work queue summary detailing ready tasks, dirty reasons, dependency paths, companion contract files, blocked causes, and role-specific instructions.

@@ -260,7 +260,14 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
         test_mod_name = f"tests.{tpath.stem}"
 
         for m in list(sys.modules.keys()):
-            if m.startswith(lib_mod_name) or m.startswith(test_mod_name):
+            if (
+                m == module_base
+                or m.endswith(f".{module_base}")
+                or m == tpath.stem
+                or m.endswith(f".{tpath.stem}")
+                or m.startswith(lib_mod_name)
+                or m.startswith(test_mod_name)
+            ):
                 del sys.modules[m]
 
         if "lib" not in sys.modules or not getattr(sys.modules["lib"], "__path__", None):

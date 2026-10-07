@@ -42,11 +42,22 @@ class MockDagStorage:
         return self.messages.get(node, set())
 
 
+class MockRoleDef:
+    def __init__(self, role_deps=()):
+        self.role_deps = role_deps
+
+
 class MockNodeConfig:
     tier = agent_session.agent_session
 
     def __init__(self):
-        self.role_definitions = {}
+        self.role_definitions = {
+            "high": MockRoleDef([]),
+            "planning": MockRoleDef(["high"]),
+            "low": MockRoleDef(["planning"]),
+            "lib": MockRoleDef(["low"]),
+            "test": MockRoleDef(["lib"]),
+        }
 
 
 class ControlWorkSchedulerImplTest(unittest.TestCase):
