@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+CODE_HASH: 3e34e4273c25
+-->
+
 # control_attribution_impl implementation component
 
 imports: agent_session, dag_storage, agent_file_alias, agent_node_config

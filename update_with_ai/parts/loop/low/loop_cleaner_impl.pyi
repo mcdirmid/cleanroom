@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-06T12:45:00Z
 # CHANGE: add grounding sections
-# CODE_HASH: ce44bc7de95e
+# CODE_HASH: 487cc8aca5f3
 # --- END CLEANROOM METADATA ---
 
 """Loop cleaner implementation low-level specification."""

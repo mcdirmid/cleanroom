@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-05T05:30:20Z
 CHANGE: Eliminate regex and cache mechanics, decompose step mode, and align parameter catalog
-CODE_HASH: 5ac8e0d56618
+CODE_HASH: 937081e60f86
 -->
 
 # bazel_node_config_impl implementation component

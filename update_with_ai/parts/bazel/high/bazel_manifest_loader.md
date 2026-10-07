@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-05T05:18:30Z
 CHANGE: Streamline manifest resolution to eliminate redundant dependency statements
 CODE_HASH: 225982be0fea

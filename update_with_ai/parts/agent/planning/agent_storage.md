@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+CODE_HASH: 0170083672a7
+-->
+
 # agent_storage interface component
 
 imports: dag_storage

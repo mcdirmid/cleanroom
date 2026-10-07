@@ -67,6 +67,22 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
-    name = "control_asm",
-    module_deps = ['//update_with_ai/parts/agent:agent_session', ':control_attribution', ':control_attribution_impl', ':control_coordinate', ':control_coordinate_impl', ':control_submit', ':control_submit_impl', ':control_verification', ':control_verification_impl', ':control_work_scheduler', ':control_work_scheduler_impl'],
+    name = "src_metadata_ext",
+    module_deps = [],
 )
+
+update_python_with_ai(
+    name = "src_metadata",
+    module_deps = ['//update_with_ai/parts/agent:agent_session', ':src_metadata_ext'],
+)
+
+update_python_with_ai(
+    name = "src_metadata_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_session', ':src_metadata', ':src_metadata_ext'],
+)
+
+update_python_with_ai(
+    name = "control_asm",
+    module_deps = ['//update_with_ai/parts/agent:agent_session', ':control_attribution', ':control_attribution_impl', ':control_coordinate', ':control_coordinate_impl', ':control_submit', ':control_submit_impl', ':control_verification', ':control_verification_impl', ':control_work_scheduler', ':control_work_scheduler_impl', ':src_metadata', ':src_metadata_impl'],
+)
+

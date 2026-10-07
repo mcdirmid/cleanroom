@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-05T17:30:16Z
 # CHANGE: Align is_dirty postcondition with dirty tag
-# CODE_HASH: 44674c858f07
+# CODE_HASH: 3c9b384227c8
 # --- END CLEANROOM METADATA ---
 
 """Bazel storage implementation low-level specification."""
@@ -19,7 +19,7 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
     """Realizes in-memory graph indexing and in-band source file metadata persistence for Bazel targets.
 
     GROUNDING:
-    - Realizes agent_storage and dag_storage by indexing target definitions and dependencies in memory while persisting dirty status and feedback in in-band source headers via src_metadata_ext.
+    - Realizes agent_storage and dag_storage by indexing target definitions and dependencies in memory while persisting dirty status and feedback in in-band source headers via src_metadata.
     """
 
     @operation
@@ -143,7 +143,7 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         - WHEN an auditor node has any non-silent contract dependency with last changed timestamp newer than a verified feedback target file audit timestamp, MUST return true.
 
         GROUNDING:
-        - Evaluates dirty state by inspecting source file existence via file_paths, parsing in-band headers with src_metadata_ext, and comparing dependency change timestamps.
+        - Evaluates dirty state by inspecting source file existence via file_paths, parsing in-band headers with src_metadata, and comparing dependency change timestamps.
         """
         ...
 
@@ -201,7 +201,7 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         - WHEN message is a feedback message, MUST append an unacted feedback entry to the target source file metadata.
 
         GROUNDING:
-        - Caches the diagnostic DagMessage in memory and appends unacted feedback to the blamed node source header via src_metadata_ext.
+        - Caches the diagnostic DagMessage in memory and appends unacted feedback to the blamed node source header via src_metadata.
         """
         ...
 
@@ -242,7 +242,7 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         - MUST update metadata such that the node is no longer dirty.
 
         GROUNDING:
-        - Updates in-band timestamps, removes feedback and dirty tags via src_metadata_ext, and stamps audit metadata on feedback dependencies.
+        - Updates in-band timestamps, removes feedback and dirty tags via src_metadata, and stamps audit metadata on feedback dependencies.
         """
         ...
 
@@ -275,6 +275,6 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
         - WHEN node is an auditor role, MUST remove the role audit timestamp from each verified feedback target file metadata.
 
         GROUNDING:
-        - Clears the last cleaned timestamp in the source metadata header via src_metadata_ext, marking the node dirty.
+        - Clears the last cleaned timestamp in the source metadata header via src_metadata, marking the node dirty.
         """
         ...

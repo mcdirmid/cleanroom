@@ -8,9 +8,7 @@ package(default_visibility = ["//visibility:public"])
 pyright_library(
     name = "bazel_asm",
     srcs = ["bazel_asm.py"],
-    deps = [
-        "//update_python_with_ai/support/lib:src_metadata",
-    ],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
@@ -18,6 +16,7 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/control/lib:src_metadata",
         "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/core/lib:file_paths_impl",
         "//update_with_ai/parts/dag/lib:dag_storage",
@@ -120,13 +119,12 @@ pyright_library(
 pyright_library(
     name = "bazel_storage_impl",
     srcs = ["bazel_storage_impl.py"],
-    deps = [
-        "//update_python_with_ai/support/lib:src_metadata",
-    ],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/control/lib:src_metadata",
         "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":bazel_target",

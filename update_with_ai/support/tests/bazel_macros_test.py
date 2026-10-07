@@ -8,13 +8,7 @@ import sys
 import unittest
 from pathlib import Path
 
-try:
-    import src_metadata
-except ImportError:
-    try:
-        from update_with_ai.support.lib import src_metadata
-    except ImportError:
-        from update_python_with_ai.support.lib import src_metadata
+from update_with_ai.parts.control.lib import src_metadata
 
 
 class TestBazelMacros(unittest.TestCase):

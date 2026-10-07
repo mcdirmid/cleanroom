@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+CODE_HASH: 79428158f324
+-->
+
 # loop_driver interface component
 
 imports: agent_config, loop_conversation, loop_guard, runner_logger, tool_provider

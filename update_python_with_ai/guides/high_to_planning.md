@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-06T12:35:00Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-06T12:35:00Z
 CHANGE: update planning structure with Grounding section, knowledge provisions, and sub-bullet resolution
-CODE_HASH: f8a192b8d01e
+CODE_HASH: dc3fad46fca6
 -->
 
 # Guide: High-Level to Planning Specification Alignment

@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CHANGED: 2026-10-07T00:11:26Z
+# CHANGE: new file
+# CODE_HASH: e5bafa80b3b6
+# --- END CLEANROOM METADATA ---
+
 """Low-level interface specification for control_attribution."""
 
 from dataclasses import dataclass

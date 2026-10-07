@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-04T23:01:55Z
 # CHANGE: new file
-# CODE_HASH: 3e8d93024228
+# CODE_HASH: 5d8e73ad4078
 # --- END CLEANROOM METADATA ---
 
 """Sandbox guide delivery implementation low-level specification."""

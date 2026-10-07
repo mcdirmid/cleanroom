@@ -86,3 +86,15 @@ pyright_test(
     ],
 )
 
+pyright_test(
+    name = "src_metadata_impl_test",
+    srcs = ["src_metadata_impl_test.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/control/lib:src_metadata",
+        "//update_with_ai/parts/control/lib:src_metadata_impl",
+    ],
+)
+
+

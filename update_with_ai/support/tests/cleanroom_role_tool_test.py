@@ -20,19 +20,41 @@ for _p in [
     if _p not in sys.path and os.path.isdir(_p):
         sys.path.insert(0, _p)
 
-import src_metadata
+from update_with_ai.parts.control.lib import src_metadata
+from update_with_ai.parts.workspace.lib import workspace_provision_impl
 from update_with_ai.support.lib import cleanroom_role_tool
-from update_with_ai.support.lib import cleanroom_workspace_tool
+
+
+def commission_workspace(role_name: str, dir_scope: str = "staging", repo_root: str | None = None) -> str:
+    prov = workspace_provision_impl.WorkspaceProvisioner()
+    desc = prov.commission(role_name, dir_scope, repo_root=repo_root)
+    return desc.workspace_dir
+
+
+write_file_with_perms = cleanroom_role_tool.write_file_with_perms
+compute_role_work_queue = cleanroom_role_tool.compute_role_work_queue
 
 
 class CleanroomRoleToolTest(unittest.TestCase):
     def setUp(self) -> None:
+        from update_with_ai.parts.workspace.lib import workspace_asm
+        from support.lib.lifecycle import enter_phase
+        from update_with_ai.parts.agent.lib import agent_session
+
+        from update_with_ai.parts.control.lib import control_asm
+        workspace_asm.__initialize__()
+        control_asm.__initialize__()
+        self.phase_cm = enter_phase(agent_session.agent_session)
+        self.phase_cm.__enter__()
+
         self.test_dir = tempfile.mkdtemp()
         self.fake_repo = os.path.join(self.test_dir, "fake_repo")
         os.makedirs(self.fake_repo, exist_ok=True)
         self.orig_cwd = os.getcwd()
 
     def tearDown(self) -> None:
+        if hasattr(self, "phase_cm"):
+            self.phase_cm.__exit__(None, None, None)
         os.chdir(self.orig_cwd)
         for root, dirs, files in os.walk(self.test_dir):
             for d in dirs:
@@ -64,7 +86,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             last_changed="2026-10-04T12:00:00Z",
         )
 
-        lib_ws = cleanroom_workspace_tool.commission_workspace(
+        lib_ws = commission_workspace(
             "lib", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(lib_ws)
@@ -90,7 +112,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
             f.write('update_python_with_ai(name = "config")\n')
 
-        lib_ws = cleanroom_workspace_tool.commission_workspace(
+        lib_ws = commission_workspace(
             "lib", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(lib_ws)
@@ -147,17 +169,17 @@ class CleanroomRoleToolTest(unittest.TestCase):
             f.write('update_python_with_ai(name = "config")\n')
 
         main_lib = os.path.join(self.fake_repo, "staging/parts/agent/lib/config.py")
-        cleanroom_workspace_tool.write_file_with_perms(
+        write_file_with_perms(
             main_lib, "# verified in main\n", readonly=False
         )
 
-        qa_ws = cleanroom_workspace_tool.commission_workspace(
+        qa_ws = commission_workspace(
             "qa", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(qa_ws)
 
         target = os.path.join(qa_ws, "staging/parts/agent/lib/config.py")
-        cleanroom_workspace_tool.write_file_with_perms(
+        write_file_with_perms(
             target, "# verified\n", readonly=True
         )
 
@@ -188,7 +210,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             last_changed="2026-10-04T12:00:00Z",
         )
 
-        lib_ws = cleanroom_workspace_tool.commission_workspace(
+        lib_ws = commission_workspace(
             "lib", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(lib_ws)
@@ -254,7 +276,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             last_changed="2026-10-04T12:00:00Z",
         )
 
-        lib_ws = cleanroom_workspace_tool.commission_workspace(
+        lib_ws = commission_workspace(
             "lib", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(lib_ws)
@@ -278,13 +300,13 @@ class CleanroomRoleToolTest(unittest.TestCase):
         with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
             f.write('update_python_with_ai(name = "config")\n')
 
-        qa_ws = cleanroom_workspace_tool.commission_workspace(
+        qa_ws = commission_workspace(
             "qa", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(qa_ws)
 
         test_file = os.path.join(qa_ws, "staging/parts/agent/tests/config_test.py")
-        cleanroom_workspace_tool.write_file_with_perms(
+        write_file_with_perms(
             test_file, "# test code\n", readonly=True
         )
 
@@ -303,14 +325,14 @@ class CleanroomRoleToolTest(unittest.TestCase):
         main_test = os.path.join(
             self.fake_repo, "staging/parts/agent/tests/config_test.py"
         )
-        cleanroom_workspace_tool.write_file_with_perms(
+        write_file_with_perms(
             main_lib, "# lib\n", readonly=False
         )
-        cleanroom_workspace_tool.write_file_with_perms(
+        write_file_with_perms(
             main_test, "# test\n", readonly=False
         )
 
-        qa_ws = cleanroom_workspace_tool.commission_workspace(
+        qa_ws = commission_workspace(
             "qa", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(qa_ws)
@@ -339,17 +361,17 @@ class CleanroomRoleToolTest(unittest.TestCase):
             f.write('update_python_with_ai(name = "config")\n')
 
         main_lib = os.path.join(self.fake_repo, "staging/parts/agent/lib/config.py")
-        cleanroom_workspace_tool.write_file_with_perms(
+        write_file_with_perms(
             main_lib, "# lib in main\n", readonly=False
         )
 
-        qa_ws = cleanroom_workspace_tool.commission_workspace(
+        qa_ws = commission_workspace(
             "qa", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(qa_ws)
 
         lib_target = os.path.join(qa_ws, "staging/parts/agent/lib/config.py")
-        cleanroom_workspace_tool.write_file_with_perms(
+        write_file_with_perms(
             lib_target, "# lib\n", readonly=True
         )
 
@@ -371,14 +393,14 @@ class CleanroomRoleToolTest(unittest.TestCase):
         with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
             f.write('update_python_with_ai(name = "config")\n')
 
-        lib_ws = cleanroom_workspace_tool.commission_workspace(
+        lib_ws = commission_workspace(
             "lib", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(lib_ws)
 
         # Read-only upstream file
         ro_file = os.path.join(lib_ws, "staging/parts/agent/low/config.pyi")
-        cleanroom_workspace_tool.write_file_with_perms(
+        write_file_with_perms(
             ro_file, "# contract\n", readonly=True
         )
 
@@ -393,17 +415,17 @@ class CleanroomRoleToolTest(unittest.TestCase):
             f.write('update_python_with_ai(name = "config")\n')
 
         main_lib = os.path.join(self.fake_repo, "staging/parts/agent/lib/config.py")
-        cleanroom_workspace_tool.write_file_with_perms(
+        write_file_with_perms(
             main_lib, "# lib\n", readonly=False
         )
 
-        qa_ws = cleanroom_workspace_tool.commission_workspace(
+        qa_ws = commission_workspace(
             "qa", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(qa_ws)
 
         lib_target = os.path.join(qa_ws, "staging/parts/agent/lib/config.py")
-        cleanroom_workspace_tool.write_file_with_perms(
+        write_file_with_perms(
             lib_target, "# lib\n", readonly=True
         )
 
@@ -440,7 +462,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         with open(low_derived, "w", encoding="utf-8") as f:
             f.write("# low spec\n")
 
-        lib_ws = cleanroom_workspace_tool.commission_workspace(
+        lib_ws = commission_workspace(
             "lib", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(lib_ws)
@@ -448,7 +470,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         # Evaluates queue for lib:
         # base: upstream low is clean -> ready!
         # derived: upstream low is dirty -> blocked!
-        ready, blocked = cleanroom_workspace_tool.compute_role_work_queue(
+        ready, blocked = compute_role_work_queue(
             "lib", "staging", self.fake_repo
         )
         ready_names = [item["unit_name"] for item in ready]
@@ -466,7 +488,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             last_cleaned="2026-10-04T12:00:00Z",
             last_changed="2026-10-04T12:00:00Z",
         )
-        ready2, blocked2 = cleanroom_workspace_tool.compute_role_work_queue(
+        ready2, blocked2 = compute_role_work_queue(
             "lib", "staging", self.fake_repo
         )
         ready_names2 = [item["unit_name"] for item in ready2]
@@ -490,7 +512,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             last_changed="2026-10-04T12:00:00Z",
         )
 
-        lib_ws = cleanroom_workspace_tool.commission_workspace(
+        lib_ws = commission_workspace(
             "lib", dir_scope="staging", repo_root=self.fake_repo
         )
         os.chdir(lib_ws)
@@ -541,6 +563,44 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.assertEqual(ret_blame, 0)
         self.assertEqual(cleanroom_role_tool.get_pending_work(lib_ws), [])
 
+    def test_coverage_command(self) -> None:
+        """Verifies cleanroom_role_tool coverage command."""
+        impl_path = os.path.join(self.test_dir, "sample_impl.py")
+        test_path = os.path.join(self.test_dir, "sample_impl_test.py")
+
+        with open(impl_path, "w", encoding="utf-8") as f:
+            f.write("def foo():\n    return 42\ndef bar():\n    return 0\n")
+
+        with open(test_path, "w", encoding="utf-8") as f:
+            f.write(
+                "import unittest\nfrom sample_impl import foo\n"
+                "class STest(unittest.TestCase):\n"
+                "    def test_f(self):\n"
+                "        self.assertEqual(foo(), 42)\n"
+            )
+
+        # Baseline: threshold 0.0 passes
+        ret_pass = cleanroom_role_tool.main(
+            ["coverage", "--impl", impl_path, "--test", test_path, "-t", "0.0"]
+        )
+        self.assertEqual(ret_pass, 0)
+
+        # Threshold 100.0 fails due to uncovered bar()
+        ret_fail = cleanroom_role_tool.main(
+            ["coverage", "--impl", impl_path, "--test", test_path, "-t", "100.0"]
+        )
+        self.assertEqual(ret_fail, 1)
+
+    def test_refresh_sys_command(self) -> None:
+        """Verifies cleanroom_role_tool refresh-sys command refreshes system files."""
+        lib_ws = commission_workspace(
+            "lib", dir_scope="staging", repo_root=self.fake_repo
+        )
+        ret = cleanroom_role_tool.main(["refresh-sys", "--repo-root", self.fake_repo])
+        self.assertEqual(ret, 0)
+        self.assertTrue(os.path.isdir(os.path.join(lib_ws, "bin")))
+
 
 if __name__ == "__main__":
     unittest.main()
+

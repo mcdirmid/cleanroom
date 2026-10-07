@@ -1,13 +1,13 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-05T04:57:18Z
 CHANGE: Standardize on canonical check files tool over singular check file tool
-CODE_HASH: 31a40e95cf5a
+CODE_HASH: d110da470b5d
 -->
 
 # sandbox_file_editor_impl implementation component
 
-imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config
+imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config, src_metadata
 implements: sandbox_file_editor
 
 ## Purpose
@@ -17,6 +17,8 @@ The sandbox_file_editor_impl implementation component realizes targeted in-place
 Unchecked writes to source code can introduce partial edits, exceed LLM window constraints, or write to invalid file coordinates. The sandbox_file_editor_impl implementation component provides guarded in-memory and disk operations that validate string uniqueness and check line boundary conditions.
 
 **Out of scope:** The sandbox_file_editor_impl implementation component does not enforce git version control, execute code formatters, or resolve task dependencies; these are handled by other components.
+
+**Delegated:** In-band source code hash checking and metadata parsing are delegated to src_metadata.
 
 ## Types and Behavior
 

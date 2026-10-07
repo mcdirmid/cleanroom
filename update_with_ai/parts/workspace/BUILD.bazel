@@ -1,0 +1,106 @@
+# update_with_ai/parts/workspace/BUILD.bazel
+
+load("//update_python_with_ai/support/lib:update_python_with_ai.bzl", "update_python_with_ai")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "high_specs",
+    srcs = glob(["high/*.md"], allow_empty = True),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "grounding_specs",
+    srcs = glob(["grounding/*.gt", "grounding/*.py", "grounding/*.pyi", "low/*.pyi"], allow_empty = True),
+    visibility = ["//visibility:public"],
+)
+
+update_python_with_ai(
+    name = "workspace_registry",
+    module_deps = [
+        "//update_with_ai/parts/agent:agent_session",
+    ],
+)
+
+update_python_with_ai(
+    name = "workspace_registry_impl",
+    module_deps = [
+        "//update_with_ai/parts/agent:agent_session",
+        ":workspace_registry",
+    ],
+)
+
+update_python_with_ai(
+    name = "workspace_provision",
+    module_deps = [
+        "//update_with_ai/parts/agent:agent_session",
+        ":workspace_registry",
+    ],
+)
+
+update_python_with_ai(
+    name = "workspace_provision_impl",
+    module_deps = [
+        "//update_with_ai/parts/agent:agent_session",
+        ":workspace_provision",
+        ":workspace_registry",
+    ],
+)
+
+update_python_with_ai(
+    name = "workspace_sync",
+    module_deps = [
+        "//update_with_ai/parts/agent:agent_session",
+        "//update_with_ai/parts/control:src_metadata",
+        ":workspace_registry",
+    ],
+)
+
+update_python_with_ai(
+    name = "workspace_sync_impl",
+    module_deps = [
+        "//update_with_ai/parts/agent:agent_session",
+        "//update_with_ai/parts/control:src_metadata",
+        ":workspace_registry",
+        ":workspace_sync",
+    ],
+)
+
+update_python_with_ai(
+    name = "workspace_work",
+    module_deps = [
+        "//update_with_ai/parts/agent:agent_session",
+        "//update_with_ai/parts/control:control_work_scheduler",
+        "//update_with_ai/parts/control:src_metadata",
+        ":workspace_registry",
+    ],
+)
+
+update_python_with_ai(
+    name = "workspace_work_impl",
+    module_deps = [
+        "//update_with_ai/parts/agent:agent_session",
+        "//update_with_ai/parts/control:control_work_scheduler",
+        "//update_with_ai/parts/control:src_metadata",
+        ":workspace_registry",
+        ":workspace_work",
+    ],
+)
+
+update_python_with_ai(
+    name = "workspace_asm",
+    module_deps = [
+        "//update_with_ai/parts/agent:agent_session",
+        "//update_with_ai/parts/control:control_work_scheduler",
+        "//update_with_ai/parts/control:src_metadata",
+        ":workspace_provision",
+        ":workspace_provision_impl",
+        ":workspace_registry",
+        ":workspace_registry_impl",
+        ":workspace_sync",
+        ":workspace_sync_impl",
+        ":workspace_work",
+        ":workspace_work_impl",
+    ],
+)

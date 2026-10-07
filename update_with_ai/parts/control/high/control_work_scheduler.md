@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+CODE_HASH: 1ab4b48f3086
+-->
+
 # control_work_scheduler interface component
 
 imports: agent_session, dag_storage, dag_subgraph, agent_node_config

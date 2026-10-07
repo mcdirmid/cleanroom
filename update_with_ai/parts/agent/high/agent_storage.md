@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-05T04:50:34Z
 CHANGE: Broaden node definition to encapsulate build target attributes, role boundaries, and prompts
 CODE_HASH: bc3420fa6c49

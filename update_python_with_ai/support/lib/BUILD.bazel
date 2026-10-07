@@ -41,7 +41,6 @@ exports_files([
     "grounding_lint.py",
     "lib_lint.py",
     "test_lint.py",
-    "src_metadata.py",
 ], visibility = ["//visibility:public"])
 
 pyright_library(
@@ -68,11 +67,9 @@ pyright_library(
     visibility = ["//visibility:public"],
 )
 
-pyright_library(
+alias(
     name = "src_metadata",
-    srcs = ["src_metadata.py"],
-    pyright_deps = [],
-    imports = ["../.."],
+    actual = "//update_with_ai/parts/control/lib:src_metadata",
     visibility = ["//visibility:public"],
 )
 

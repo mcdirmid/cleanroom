@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+CODE_HASH: 168c259d47c1
+-->
+
 # agent_file_alias interface component
 
 imports: agent_session, dag_storage, file_paths, tool_provider

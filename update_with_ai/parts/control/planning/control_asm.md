@@ -1,10 +1,17 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+CODE_HASH: 75270be71a06
+-->
+
 # control_asm assembly component
 
-imports: control_coordinate_impl, control_verification_impl, control_work_scheduler_impl, control_submit_impl, control_attribution_impl
+imports: control_coordinate_impl, control_verification_impl, control_work_scheduler_impl, control_submit_impl, control_attribution_impl, src_metadata_impl
 
 ## Intent
 
-Assembles session coordination, verification evaluation, work scheduling, submission gating, and defect attribution constituents into the unified control package.
+Assembles session coordination, verification evaluation, work scheduling, submission gating, defect attribution, and source metadata constituents into the unified control package.
 
 ## Factored Contracts
 

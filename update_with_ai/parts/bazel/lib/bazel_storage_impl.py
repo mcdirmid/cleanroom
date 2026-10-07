@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-05T17:28:49Z
 # CHANGE: Add dirty tag checks to get_messages and is_dirty
-# CODE_HASH: 313622a0527c
-# COVERAGE_AUDIT: 2026-10-05T20:52:01Z
-# QA_AUDIT: 2026-10-05T20:52:01Z
+# CODE_HASH: 53bffead0de9
+# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
+# QA_AUDIT: 2026-10-07T00:13:59Z
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in bazel_storage_impl.pyi
@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 from update_with_ai.parts.agent.lib import agent_storage
 from update_with_ai.parts.core.lib import file_paths
 from update_with_ai.parts.dag.lib import dag_storage
-from support.lib import src_metadata
+from update_with_ai.parts.control.lib import src_metadata
 from . import bazel_target
 from support.lib.lifecycle import (
     LifecycleRegistry,

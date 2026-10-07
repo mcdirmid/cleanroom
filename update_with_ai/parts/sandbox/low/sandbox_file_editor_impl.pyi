@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-05T05:44:34Z
 # CHANGE: Standardize on check files tool in editing contracts
-# CODE_HASH: 25605a157588
+# CODE_HASH: fd143525af9d
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file editor implementation low-level specification."""
@@ -32,7 +32,7 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
         """Exposes whether workspace file modifications occurred during the session.
 
         GROUNDING:
-        - Grounded by querying whether any file modifications were recorded in session state.
+        - Grounded by checking workspace file contents against in-band code hashes via src_metadata.
         """
         ...
 

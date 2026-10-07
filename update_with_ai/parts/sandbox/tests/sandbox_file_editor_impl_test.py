@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-05T06:01:53Z
 # CHANGE: Standardize on check files tool in editing contracts
-# CODE_HASH: 327e15bbd765
-# COVERAGE_AUDIT: 2026-10-05T20:52:01Z
-# QA_AUDIT: 2026-10-05T20:52:01Z
+# CODE_HASH: e0685f7fbff3
+# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
+# QA_AUDIT: 2026-10-07T00:13:59Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_file_editor_impl aligned with grounding specifications."""
@@ -31,7 +31,7 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
     UnboundFile,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from support.lib import src_metadata
+from update_with_ai.parts.control.lib import src_metadata, src_metadata_impl
 from update_with_ai.parts.agent.lib.agent_node_config import NodeGuide, NodeConfig
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor import (
@@ -252,6 +252,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
+        src_metadata_impl.__initialize__(self.registry)
 
         self.tool_mgr = MockToolManager()
         self.str_conv = MockStringConverter()

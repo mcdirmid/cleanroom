@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-05T05:39:52Z
 # CHANGE: Add silent source file path contract to load_manifest
-# CODE_HASH: 5e3c3d5195d6
+# CODE_HASH: 2648c2d5a137
 # --- END CLEANROOM METADATA ---
 
 """Bazel manifest loader implementation low-level specification."""

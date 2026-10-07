@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-06T00:52:47Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-06T00:52:47Z
 # CHANGE: bind placeholders to angle bracket syntax from commonmark_ext
 # CODE_HASH: 304d2a93ae1d

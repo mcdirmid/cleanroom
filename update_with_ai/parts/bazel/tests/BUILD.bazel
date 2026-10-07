@@ -78,6 +78,8 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_storage",
         "//update_with_ai/parts/bazel/lib:bazel_storage_impl",
         "//update_with_ai/parts/bazel/lib:bazel_target",
+        "//update_with_ai/parts/control/lib:src_metadata",
+        "//update_with_ai/parts/control/lib:src_metadata_impl",
         "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
     ],

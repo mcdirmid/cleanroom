@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-06T12:45:00Z
 # CHANGE: add grounding sections
-# CODE_HASH: bf386802660e
+# CODE_HASH: 8f91e54afdbb
 # --- END CLEANROOM METADATA ---
 
 """OpenAI conversation implementation low-level specification."""

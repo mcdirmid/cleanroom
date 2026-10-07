@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-06T12:45:00Z
 # CHANGE: add grounding sections
-# CODE_HASH: 0f01cb9894fd
+# CODE_HASH: c3337f9edbc0
 # --- END CLEANROOM METADATA ---
 
 """Dag subgraph implementation specification."""

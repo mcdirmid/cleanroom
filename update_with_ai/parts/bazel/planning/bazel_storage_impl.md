@@ -1,13 +1,13 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-05T17:29:55Z
 CHANGE: Add dirty tag dirty evaluation contracts
-CODE_HASH: 961ed44b5bef
+CODE_HASH: 6fee2a0fa8c5
 -->
 
 # bazel_storage_impl implementation component
 
-imports: bazel_target, file_paths, src_metadata_ext
+imports: bazel_target, file_paths, src_metadata
 implements: agent_storage, dag_storage
 
 ## Intent
@@ -83,15 +83,15 @@ By storing clean status, change summaries, and feedback directly within source f
 ### Inherited Deferred Requirements
 
 - Target manifest discovery and in-band source file metadata parsing.
-  - Grounded: [src_metadata_ext: [src_metadata_operations], bazel_target: [bazel_target_service]]
+  - Grounded: [src_metadata: [source_metadata_service], bazel_target: [bazel_target_service]]
 - Source artifact inspection and in-band header parsing on the underlying filesystem.
-  - Grounded: [src_metadata_ext: [src_metadata_operations], file_paths: [path_resolution_service]]
+  - Grounded: [src_metadata: [source_metadata_service], file_paths: [path_resolution_service]]
 - Stamping clean metadata, clearing messages, and template materialization on disk.
-  - Grounded: [src_metadata_ext: [src_metadata_operations], file_paths: [path_resolution_service]]
+  - Grounded: [src_metadata: [source_metadata_service], file_paths: [path_resolution_service]]
 
 ### Knowledge Requirements
 
 - Resolving source paths and extracting in-band metadata.
-  - Grounded: [src_metadata_ext: [src_metadata_operations], file_paths: [path_resolution_service]]
+  - Grounded: [src_metadata: [source_metadata_service], file_paths: [path_resolution_service]]
 - Updating in-band metadata timestamps, feedback, and change descriptions.
-  - Grounded: [src_metadata_ext: [src_metadata_operations]]
+  - Grounded: [src_metadata: [source_metadata_service]]

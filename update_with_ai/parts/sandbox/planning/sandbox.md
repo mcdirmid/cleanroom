@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-06T12:35:00Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-06T12:35:00Z
 CHANGE: update to planning grounding format
-CODE_HASH: a0358f79c7f5
+CODE_HASH: 88eda6434a81
 -->
 
 # sandbox interface component

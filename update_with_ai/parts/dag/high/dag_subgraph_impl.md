@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-05T04:52:52Z
 CHANGE: Add delegated collaborator statement for dag_storage and dag_config
-CODE_HASH: 5be3018230ea
+CODE_HASH: 63a9228db8f7
 -->
 
 # dag_subgraph_impl implementation component

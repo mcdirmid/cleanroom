@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-05T17:29:02Z
 # CHANGE: Add test for dirty tag dirty state
-# CODE_HASH: a2c0cc68661e
-# COVERAGE_AUDIT: 2026-10-05T20:52:01Z
-# QA_AUDIT: 2026-10-05T20:52:01Z
+# CODE_HASH: de954536f1b4
+# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
+# QA_AUDIT: 2026-10-07T00:13:59Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for bazel_storage_impl aligned with grounding specifications."""
@@ -46,10 +46,7 @@ from update_with_ai.parts.dag.lib.dag_storage import (
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
-try:
-    from support.lib import src_metadata
-except ImportError:
-    from update_with_ai.support.lib import src_metadata
+from update_with_ai.parts.control.lib import src_metadata, src_metadata_impl
 
 
 def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
@@ -111,6 +108,7 @@ class BazelStorageImplTest(unittest.TestCase):
             self.node_id_utils, keys=[BazelTarget], tier="system"
         )
         __initialize__(self.registry)
+        src_metadata_impl.__initialize__(self.registry)
 
     def tearDown(self) -> None:
         if self.orig_env is not None:

@@ -52,7 +52,7 @@ pyright_test(
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/loop/lib:loop",
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_python_with_ai/support/lib:src_metadata",
+        "//update_with_ai/parts/control/lib:src_metadata",
     ],
 )
 
@@ -89,19 +89,6 @@ sh_test(
 )
 
 py_test(
-    name = "cleanroom_workspace_tool_test",
-    srcs = ["cleanroom_workspace_tool_test.py"],
-    data = [
-        "//update_python_with_ai/support/lib:check_build_derived.py",
-    ],
-    imports = ["../.."],
-    main = "cleanroom_workspace_tool_test.py",
-    deps = [
-        "//update_with_ai/support/lib:cleanroom_workspace_tool_lib",
-    ],
-)
-
-py_test(
     name = "cleanroom_role_tool_test",
     srcs = ["cleanroom_role_tool_test.py"],
     imports = ["../.."],
@@ -127,6 +114,7 @@ py_test(
     imports = ["../.."],
     main = "src_metadata_test.py",
     deps = [
-        "//update_with_ai/support/lib:src_metadata",
+        "//update_with_ai/parts/control/lib:src_metadata",
+        "//update_with_ai/parts/control/lib:src_metadata_impl",
     ],
 )

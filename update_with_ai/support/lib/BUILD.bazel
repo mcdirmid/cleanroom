@@ -77,41 +77,31 @@ alias(
     visibility = ["//visibility:public"],
 )
 
-py_binary(
-    name = "evaluate_coverage",
-    srcs = ["evaluate_coverage.py"],
-    main = "evaluate_coverage.py",
-    visibility = ["//visibility:public"],
-    deps = [":lifecycle"],
-)
-
-py_library(
-    name = "cleanroom_workspace_tool_lib",
-    srcs = ["cleanroom_workspace_tool.py"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":build_lint_common",
-        ":lib_lint",
-        ":src_metadata",
-        ":test_lint",
-    ],
-)
-
-py_binary(
-    name = "cleanroom_workspace_tool",
-    srcs = ["cleanroom_workspace_tool.py"],
-    main = "cleanroom_workspace_tool.py",
-    visibility = ["//visibility:public"],
-    deps = [":cleanroom_workspace_tool_lib"],
-)
-
 py_library(
     name = "cleanroom_role_tool_lib",
     srcs = ["cleanroom_role_tool.py"],
     visibility = ["//visibility:public"],
     deps = [
-        ":cleanroom_workspace_tool_lib",
-        ":src_metadata",
+        ":build_lint_common",
+        ":lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/workspace/lib:workspace_asm",
+        "//update_with_ai/parts/workspace/lib:workspace_provision_impl",
+        "//update_with_ai/parts/workspace/lib:workspace_registry_impl",
+        "//update_with_ai/parts/workspace/lib:workspace_sync_impl",
+        "//update_with_ai/parts/workspace/lib:workspace_work_impl",
+        "//update_with_ai/parts/control/lib:control_asm",
+        "//update_with_ai/parts/control/lib:control_attribution",
+        "//update_with_ai/parts/control/lib:control_attribution_impl",
+        "//update_with_ai/parts/control/lib:control_submit",
+        "//update_with_ai/parts/control/lib:control_submit_impl",
+        "//update_with_ai/parts/control/lib:control_work_scheduler",
+        "//update_with_ai/parts/control/lib:control_work_scheduler_impl",
+        "//update_with_ai/parts/control/lib:src_metadata",
+        "//update_with_ai/parts/control/lib:src_metadata_impl",
+        "//update_with_ai/parts/tools/lib:tool_coverage",
+        "//update_with_ai/parts/tools/lib:tool_coverage_impl",
+        "//update_with_ai/parts/tools/lib:tools_asm",
     ],
 )
 

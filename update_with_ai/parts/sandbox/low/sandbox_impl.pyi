@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-06T12:35:00Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-06T12:35:00Z
 # CHANGE: add grounding sections
-# CODE_HASH: 30e55d74c5f1
+# CODE_HASH: 57b757257994
 # --- END CLEANROOM METADATA ---
 
 """Sandbox implementation low-level specification."""

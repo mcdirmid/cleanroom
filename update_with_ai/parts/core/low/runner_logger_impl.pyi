@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-06T12:45:00Z
 # CHANGE: add grounding sections
-# CODE_HASH: e705ed6a816c
+# CODE_HASH: b1c41a1736e0
 # --- END CLEANROOM METADATA ---
 
 """Runner logger implementation low-level specification."""

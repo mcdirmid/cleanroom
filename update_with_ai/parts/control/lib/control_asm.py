@@ -1,7 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-06T11:15:00Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-06T11:15:00Z
 # CHANGE: implement singleton registration in control_asm
+# CODE_HASH: 722a22fbc736
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ from . import (
     control_verification_impl,
     control_work_scheduler,
     control_work_scheduler_impl,
+    src_metadata,
+    src_metadata_impl,
 )
 
 CONSTITUENTS = (
@@ -27,6 +30,7 @@ CONSTITUENTS = (
     control_work_scheduler_impl,
     control_submit_impl,
     control_attribution_impl,
+    src_metadata_impl,
 )
 
 
@@ -56,5 +60,10 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         control_attribution_impl.AttributionCoordinator,
         keys=[control_attribution.AttributionCoordinator, control_attribution_impl.AttributionCoordinator],
+        tier=agent_session.agent_session,
+    )
+    reg.register_singleton(
+        src_metadata_impl.SourceMetadataCoordinator,
+        keys=[src_metadata.SourceMetadataCoordinator, src_metadata_impl.SourceMetadataCoordinator],
         tier=agent_session.agent_session,
     )

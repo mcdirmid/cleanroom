@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CHANGED: 2026-10-07T00:11:26Z
+# CHANGE: new file
+# CODE_HASH: e3fa32f70719
+# --- END CLEANROOM METADATA ---
+
 """Low-level implementation specification for control_coordinate_impl."""
 
 from typing import Optional, Sequence

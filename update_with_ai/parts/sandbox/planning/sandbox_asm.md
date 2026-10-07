@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-06T12:35:00Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-06T12:35:00Z
 CHANGE: update to planning grounding format
-CODE_HASH: e3b0c44298fc
+CODE_HASH: 002f10b8584c
 -->
 
 # sandbox_asm assembly component

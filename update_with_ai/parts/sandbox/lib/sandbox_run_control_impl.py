@@ -1,7 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-06T12:00:00Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-06T12:55:00Z
 # CHANGE: compact wire conversions and tool calling to ~400 lines
+# CODE_HASH: 32fa4158de3e
+# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
+# QA_AUDIT: 2026-10-07T00:13:59Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations

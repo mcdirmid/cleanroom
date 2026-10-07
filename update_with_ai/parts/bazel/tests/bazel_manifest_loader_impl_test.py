@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-05T16:05:47Z
 # CHANGE: Fix node address in redundant package prefix deduplication test
 # CODE_HASH: 28df621b1e32
-# COVERAGE_AUDIT: 2026-10-05T20:52:01Z
-# QA_AUDIT: 2026-10-05T20:52:01Z
+# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
+# QA_AUDIT: 2026-10-07T00:13:59Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for bazel_manifest_loader_impl aligned with grounding specifications."""

@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-05T05:40:38Z
 # CHANGE: Eliminate regex and cache mechanics, decompose step mode, and align parameter catalog
-# CODE_HASH: fd3e6dbc3536
+# CODE_HASH: 48e5cc6eef08
 # --- END CLEANROOM METADATA ---
 
 """Bazel node config implementation low-level specification."""

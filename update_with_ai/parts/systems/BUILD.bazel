@@ -29,3 +29,15 @@ update_python_with_ai(
     ],
 )
 
+update_python_with_ai(
+    name = "cleanroom_asm",
+    module_deps = [
+        ':bazel_openai_loop_asm',
+        '//update_with_ai/parts/control:control_asm',
+        '//update_with_ai/parts/core:file_paths_impl',
+        '//update_with_ai/parts/tools:tools_asm',
+        '//update_with_ai/parts/workspace:workspace_asm',
+    ],
+)
+
+

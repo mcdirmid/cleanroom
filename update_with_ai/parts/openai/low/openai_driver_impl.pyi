@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-06T12:45:00Z
 # CHANGE: add grounding sections
-# CODE_HASH: 769d11cad2bc
+# CODE_HASH: 0917cf702a1f
 # --- END CLEANROOM METADATA ---
 
 """OpenAI driver implementation low-level specification."""

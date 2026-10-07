@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-06T00:52:38Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-06T00:52:38Z
 CHANGE: import commonmark_ext and weave token contracts
-CODE_HASH: f1aa3d68dff4
+CODE_HASH: 3fb60791ce2d
 -->
 
 # template_format interface component

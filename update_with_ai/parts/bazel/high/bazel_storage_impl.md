@@ -1,13 +1,13 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-05T17:29:31Z
 CHANGE: Incorporate dirty tag dirty evaluation
-CODE_HASH: e8e7d62b088e
+CODE_HASH: 2553a5d684d9
 -->
 
 # bazel_storage_impl implementation component
 
-imports: bazel_target, file_paths, src_metadata_ext
+imports: bazel_target, file_paths, src_metadata
 implements: agent_storage, dag_storage
 
 ## Purpose
@@ -18,7 +18,7 @@ Coordinating multi-node builds requires fast in-memory access to target metadata
 
 **Out of scope:** The bazel_storage_impl implementation component does not deserialize JSON manifests, drive agent loops, or execute verification commands; these are handled by other components.
 
-**Delegated:** Target label normalization is delegated to bazel_target; workspace path resolution and validation are delegated to file_paths; in-band comment header parsing and serialization are delegated to src_metadata_ext.
+**Delegated:** Target label normalization is delegated to bazel_target; workspace path resolution and validation are delegated to file_paths; in-band source metadata extraction, hashing, and mutation are delegated to src_metadata.
 
 ## Types and Behavior
 

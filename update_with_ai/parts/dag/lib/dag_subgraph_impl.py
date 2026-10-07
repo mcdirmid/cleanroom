@@ -1,7 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-06T11:00:00Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-06T11:00:00Z
 # CHANGE: compute role tiers dynamically from graph dependencies
+# CODE_HASH: 1a3468b7016e
+# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
+# QA_AUDIT: 2026-10-07T00:13:59Z
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in dag_subgraph_impl.pyi
@@ -25,7 +28,7 @@ def _compute_role_tiers(
     role_deps: Dict[str, Set[str]] = {}
     all_roles: Set[str] = set()
 
-    for n in nodes:
+    for n in sorted(nodes, key=lambda x: (x.unit_address, x.role_address)):
         r_name = (
             str(n.role_address).split(":")[-1].strip().lower()
             if ":" in str(n.role_address)
@@ -34,7 +37,10 @@ def _compute_role_tiers(
         all_roles.add(r_name)
         if r_name not in role_deps:
             role_deps[r_name] = set()
-        for dep in storage.get_dependencies(n):
+        for dep in sorted(
+            storage.get_dependencies(n),
+            key=lambda d: (d.node.unit_address, d.node.role_address),
+        ):
             if dep.node in nodes:
                 dep_r = (
                     str(dep.node.role_address).split(":")[-1].strip().lower()
@@ -58,12 +64,12 @@ def _compute_role_tiers(
         if not deps:
             depth = 0
         else:
-            depth = 1 + max(_get_depth(d) for d in deps)
+            depth = 1 + max(_get_depth(d) for d in sorted(deps))
         visiting.remove(role)
         memo[role] = depth
         return depth
 
-    for r in all_roles:
+    for r in sorted(all_roles):
         _get_depth(r)
 
     return memo
@@ -132,8 +138,11 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
                     adj[dep.node].append(n)
                     in_degree[n] += 1
 
+        generation: Dict[dag_storage.DagNode, int] = {n: 0 for n in sorted_nodes}
+
         ready = sorted(
-            [n for n, deg in in_degree.items() if deg == 0], key=sort_key
+            [n for n, deg in in_degree.items() if deg == 0],
+            key=lambda n: (generation[n], sort_key(n)),
         )
         order: List[dag_storage.DagNode] = []
 
@@ -142,12 +151,15 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
             order.append(curr)
             newly_ready = []
             for neighbor in adj[curr]:
+                generation[neighbor] = max(
+                    generation[neighbor], generation[curr] + 1
+                )
                 in_degree[neighbor] -= 1
                 if in_degree[neighbor] == 0:
                     newly_ready.append(neighbor)
             for nr in newly_ready:
                 ready.append(nr)
-            ready.sort(key=sort_key)
+            ready.sort(key=lambda n: (generation[n], sort_key(n)))
 
         return order
 

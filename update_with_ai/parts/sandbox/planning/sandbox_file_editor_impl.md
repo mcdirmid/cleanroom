@@ -1,13 +1,13 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-05T05:35:00Z
 CHANGE: Standardize on check files tool in editing contracts
-CODE_HASH: 4fc1975697ce
+CODE_HASH: d0bd39637bc3
 -->
 
 # sandbox_file_editor_impl implementation component
 
-imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config
+imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config, src_metadata
 implements: sandbox_file_editor
 
 ## Intent
@@ -92,3 +92,5 @@ Furthermore, the implementation tracks revision counters and emits structured di
 
 - Computation of cryptographic hashes from file content.
   - Grounded: [filesystem_ext: [filesystem_operations]]
+- In-band code hash evaluation.
+  - Grounded: [src_metadata: [source_metadata_service]]

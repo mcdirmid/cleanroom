@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+CODE_HASH: 58ed0df6ed15
+-->
+
 # openai_conversation_impl implementation component
 
 imports: agent_config, json_ext, openai_ext, tool_provider

@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T20:52:01Z
+LAST_CLEANED: 2026-10-07T00:13:59Z
 LAST_CHANGED: 2026-10-04T23:01:55Z
 CHANGE: new file
-CODE_HASH: 2dee9d59cf23
+CODE_HASH: d8ec2627d72b
 -->
 
 # sandbox_guide_delivery_impl implementation component

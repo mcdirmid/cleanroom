@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-04T23:01:55Z
 # CHANGE: new file
-# CODE_HASH: 5f274388d1af
+# CODE_HASH: 19a566d1bac6
 # --- END CLEANROOM METADATA ---
 
 """Bazel target implementation low-level specification."""

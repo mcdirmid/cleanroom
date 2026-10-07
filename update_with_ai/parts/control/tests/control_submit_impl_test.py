@@ -1,3 +1,12 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CHANGED: 2026-10-07T00:11:26Z
+# CHANGE: new file
+# CODE_HASH: 7567deb21f68
+# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
+# QA_AUDIT: 2026-10-07T00:13:59Z
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for control_submit_impl."""
 
 import unittest

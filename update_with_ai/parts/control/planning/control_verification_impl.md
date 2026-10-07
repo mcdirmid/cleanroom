@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+CODE_HASH: 1e90a2591fbc
+-->
+
 # control_verification_impl implementation component
 
 imports: agent_session, agent_node_config, dag_storage, agent_file_alias

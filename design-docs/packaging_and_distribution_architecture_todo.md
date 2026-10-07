@@ -623,7 +623,187 @@ Because these commands run directly in Python, they execute in **10–30 millise
 
 ---
 
-## 10. Migration Phases & Implementation Plan
+## 10. User Scenarios & Onboarding Workflows
+
+How does a developer actually install, explore, and use Cleanroom in practice? Below are four concrete walkthroughs demonstrating user journeys from zero-install playgrounds to full production integration.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                               USER ONBOARDING JOURNEYS                                 │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  [Scenario 1: 5-Minute Playground]         [Scenario 2: Existing Project Integration]  │
+│  • uvx cleanroom init --example calc       • uv tool install cleanroom                 │
+│  • Zero-install, disposable sandbox        • Interactive pair programming in IDE       │
+│  • Step through 4 stages interactively     • Double-blind lib & test generation        │
+│                                                                                        │
+│  [Scenario 3: Autonomous CI Loop]          [Scenario 4: Enterprise Monorepo Bridge]    │
+│  • uvx --with "cleanroom[loop]" clean      • cleanroom export-bazel                    │
+│  • Headless batch cleaning on PRs          • Preserves Bazel remote cache & cluster CI │
+│  • Enforces 100% statement coverage        • Zero Starlark authoring required          │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Scenario 1: The 5-Minute Zero-Install Playground (`uvx`)
+*Persona: A curious developer who wants to test Cleanroom's specification-to-code pipeline without modifying their environment.*
+
+1. **Bootstrap an example sandbox**:
+   ```bash
+   mkdir cleanroom-demo && cd cleanroom-demo
+   uvx cleanroom init --example counter
+   ```
+   This generates a minimal Cleanroom workspace:
+   ```
+   cleanroom-demo/
+   ├── pyproject.toml               # Configured with [tool.cleanroom] methodology = "python"
+   └── parts/
+       └── counter/
+           └── high/
+               └── counter.md       # Pre-authored literate high-level specification
+   ```
+
+2. **Inspect the DAG work queue**:
+   ```bash
+   uvx cleanroom work-queue
+   ```
+   *Output:*
+   ```text
+   [READY]   planning:counter  (High-level spec is ready; planning canvas needed)
+   [BLOCKED] spec_qa:counter   (Awaiting planning)
+   [BLOCKED] low:counter       (Awaiting spec_qa)
+   [BLOCKED] lib:counter       (Awaiting low)
+   [BLOCKED] tests:counter     (Awaiting low)
+   [BLOCKED] qa:counter        (Awaiting lib & tests)
+   ```
+
+3. **Step through the stages**:
+   The user (or their AI assistant) can run verification gates on each generated artifact:
+   ```bash
+   # Verify planning contracts
+   uvx cleanroom verify planning parts/counter
+
+   # Submit planning canvas to advance the pipeline
+   uvx cleanroom submit parts/counter/planning/counter.md --notes "Authored atomic contracts"
+   ```
+   The user watches the pipeline transition deterministically through `planning` $\to$ `spec_qa` $\to$ `low` $\to$ `lib` & `tests` $\to$ `qa` (100% statement coverage).
+
+---
+
+### Scenario 2: Adding Cleanroom to an Existing Python Project
+*Persona: An engineer adding Cleanroom to an existing repository (e.g. a FastAPI service or CLI tool) for day-to-day AI pair programming.*
+
+1. **Install Cleanroom CLI**:
+   ```bash
+   # Option A: Install globally as an isolated tool (recommended)
+   uv tool install cleanroom
+
+   # Option B: Add to project development dependencies
+   uv add --dev cleanroom
+   ```
+
+2. **Initialize in Project Root**:
+   ```bash
+   cd my-existing-project
+   cleanroom init
+   ```
+   This appends a lightweight configuration to `pyproject.toml`:
+   ```toml
+   [tool.cleanroom]
+   methodology = "python"
+   parts_dir = "parts"
+   ```
+
+3. **Author a New Feature via High-Level Specification**:
+   The developer authors `parts/auth/high/jwt_service.md` following Cleanroom's literate prose conventions and italic markers (`*token*`, `*claims*`, `*secret*`).
+
+4. **Commission an Isolated Role Workspace (Option 3 Subagentless)**:
+   To prevent context contamination and cheating:
+   ```bash
+   cleanroom commission planning parts/auth
+   ```
+   This provisions `../role_workspaces/myproject_planning_auth/` with read-only upstream contracts (`chmod 444`) and the relevant guidelines (`guides/high_to_planning.md`).
+
+5. **AI Pair Programming Turn Loop**:
+   Inside the role workspace (in Antigravity, Cursor, or VS Code):
+   - The agent runs `bin/get_work` to fetch current tasks and guidelines.
+   - The agent writes `parts/auth/planning/jwt_service.md`.
+   - The agent validates contracts:
+     ```bash
+     bin/cleanroom verify planning
+     ```
+   - When verified, the agent submits:
+     ```bash
+     bin/cleanroom submit parts/auth/planning/jwt_service.md --notes "Factored JWT validation contracts"
+     ```
+   - Downstream arbiters (`spec_qa`, `low_qa`, `qa`, `coverage`) verify each gate deterministically in milliseconds.
+
+---
+
+### Scenario 3: Headless Autonomous Loop in CI/CD (`cleanroom[loop]`)
+*Persona: A team enforcing Cleanroom verification on GitHub Actions pull requests.*
+
+1. **Configure CI Workflow (`.github/workflows/cleanroom.yml`)**:
+   ```yaml
+   name: Cleanroom Verification
+   on: [pull_request]
+
+   jobs:
+     verify:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v4
+         - uses: astral-sh/setup-uv@v3
+
+         - name: Check Cleanroom Dirtiness & Test Coverage
+           run: |
+             uvx cleanroom work-queue --assert-clean
+             uv run pytest
+   ```
+
+2. **Unattended Batch Cleaning (Optional)**:
+   If a team wants CI or a nightly cron to automatically clean modified specifications using LLMs:
+   ```bash
+   # Installs the optional [loop] extra with OpenAI / provider drivers:
+   uvx --with "cleanroom[loop]" cleanroom clean parts/auth --model gpt-4o
+   ```
+   Cleanroom runs its in-process runner (`loop_cleaner.py`), cleans nodes in topological dependency order, verifies test coverage, and commits clean in-band metadata attestations (`LAST_CLEANED`).
+
+---
+
+### Scenario 4: Enterprise Monorepo with Bazel Bridge
+*Persona: An engineer in a large multi-language monorepo where all CI must execute through Bazel.*
+
+1. **Develop Naturally with Cleanroom**:
+   The engineer works in `parts/service/` using native Cleanroom CLI tools (`cleanroom work-queue`, `cleanroom submit`).
+
+2. **Export Bazel Targets**:
+   Instead of writing complex Starlark by hand:
+   ```bash
+   cleanroom export-bazel parts/service
+   ```
+   Cleanroom inspects `parts/service/` and automatically generates or updates `parts/service/BUILD.bazel`:
+   ```python
+   # Generated by cleanroom export-bazel - DO NOT EDIT MANUALLY
+   load("@rules_cleanroom//:defs.bzl", "cleanroom_part")
+
+   cleanroom_part(
+       name = "service",
+       units = ["jwt_service", "session_store"],
+       methodology = "python",
+   )
+   ```
+
+3. **Run in Monorepo CI**:
+   The team's distributed CI runs:
+   ```bash
+   bazel test //parts/service/...
+   ```
+   Bazel utilizes remote execution and build caching across the organization, while developers author code using Cleanroom's pure Python CLI.
+
+---
+
+## 11. Migration Phases & Implementation Plan
 ```mermaid
 sequenceDiagram
     autonumber
@@ -663,10 +843,12 @@ sequenceDiagram
 - Refactor [`cleanroom_workspace_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/support/lib/cleanroom_workspace_tool.py) to remove the hard dependency on `MODULE.bazel` and `BUILD.bazel`.
 - Add convention-based discovery for parts directories containing `high/`, `planning/`, `low/`, `lib/`, `tests/`.
 - Replace `bazel run //...:submit` commands in role workspace launcher scripts with direct Python invocations.
+- **[COMPLETED] Deleted `support/lib/src_metadata.py`**: `src_metadata` has been canonicalized into [`src_metadata.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/lib/src_metadata.py). Residual imports across `parts/`, tests, and `cleanroom_role_tool.py` have been migrated to `update_with_ai.parts.control.lib.src_metadata`. `update_with_ai/support/lib/src_metadata.py` and `update_python_with_ai/support/lib/src_metadata.py` (along with `cleanroom_workspace_tool.py` and `evaluate_coverage.py`) have been permanently deleted.
 
 ### Phase 3: Verification Engine Parity
-- Ensure all determinism arbiters (`hls_lint.py`, `grounding_tool.py`, `lib_lint.py`, `test_lint.py`, `evaluate_coverage.py`) run natively via `uv run`.
+- Ensure all determinism arbiters (`hls_lint.py`, `grounding_tool.py`, `lib_lint.py`, `test_lint.py`, `tool_coverage.py`) run natively via `uv run`.
 - Confirm Pyright and coverage verification succeed with zero Bazel dependency.
+- **[COMPLETED] Moved Coverage to `parts/tools`**: Coverage measurement has been migrated from monolithic scripts to modularized [`tool_coverage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage.py) and [`tool_coverage_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage_impl.py) under `parts/tools/`, with role workspace runner integration available via `bin/cleanroom_role_tool coverage`. Obsolete `evaluate_coverage.py` has been deleted.
 
 ### Phase 4: Packaging, CI/CD, & Open Source Distribution
 - Configure GitHub Actions to run CI on PRs using `astral-sh/setup-uv@v3`.

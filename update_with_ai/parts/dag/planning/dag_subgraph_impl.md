@@ -1,3 +1,10 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+CODE_HASH: 6b94b6228517
+-->
+
 # dag_subgraph_impl implementation component
 
 imports: dag_config, dag_storage

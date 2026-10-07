@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T20:52:01Z
+# LAST_CLEANED: 2026-10-07T00:13:59Z
 # LAST_CHANGED: 2026-10-04T23:01:55Z
 # CHANGE: new file
-# CODE_HASH: 39d19ccff5fc
-# COVERAGE_AUDIT: 2026-10-05T20:52:01Z
-# QA_AUDIT: 2026-10-05T20:52:01Z
+# CODE_HASH: 6bef95c8c61c
+# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
+# QA_AUDIT: 2026-10-07T00:13:59Z
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in sandbox_file_editor_impl.pyi
@@ -23,7 +23,7 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
-from support.lib import src_metadata
+from update_with_ai.parts.control.lib import src_metadata
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 
 

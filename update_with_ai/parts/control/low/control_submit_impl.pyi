@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CHANGED: 2026-10-07T00:11:26Z
+# CHANGE: new file
+# CODE_HASH: ba7e3b3204c1
+# --- END CLEANROOM METADATA ---
+
 """Low-level implementation specification for control_submit_impl."""
 
 from typing import Optional, Sequence
