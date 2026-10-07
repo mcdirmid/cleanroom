@@ -24,7 +24,7 @@ Command-line subagents in Cleanroom workspaces require a robust entrypoint that 
 
 - The realization constructs argument parsers for commission, decommission, refresh-sys, get_work, check_files, submit, blame, fail, and coverage. [construct_cli_parser]
 - In get_work, the runner pulls inbound changes from canonical main, rejects execution if pending targets remain dirty, queries the work manager, records pending targets, and formats console reports. [realize_get_work]
-- In check_files, the runner synchronizes latest changes from main for auditor roles, identifies the active role and target files, executes corresponding role linters and Bazel type check rules, formats clean diagnostic outputs, and returns verification exit status. [realize_check_files]
+- In check_files, the runner identifies the active role and target files, executes corresponding role linters and Bazel type check rules, formats clean diagnostic outputs, and returns verification exit status. [realize_check_files]
 - In submit, the runner delegates target submission to the submission coordinator and clears pending work upon acceptance. [realize_submit]
 - In blame, the runner delegates critique attribution to the attribution coordinator and clears pending work upon acceptance. [realize_blame]
 - In fail, the runner delegates failure diagnostics to the attribution coordinator and clears pending work upon acceptance. [realize_fail]
@@ -49,14 +49,14 @@ Command-line subagents in Cleanroom workspaces require a robust entrypoint that 
 - Active workspace registry and repository root discovery.
   - Grounded: [workspace_registry: [workspace_registry_service]]
 - Workspace provisioning and decommissioning capabilities.
-  - Grounded: [workspace_provision: [workspace_provision_service]]
+  - Grounded: [workspace_provision: [workspace_provisioning_service]]
 - Inbound pulling and system file refresh capabilities.
-  - Grounded: [workspace_sync: [workspace_sync_service]]
+  - Grounded: [workspace_sync: [workspace_pull_service]]
 - Work queue evaluation and pending target tracking capabilities.
   - Grounded: [workspace_work: [workspace_work_discovery_service, workspace_pending_work_tracking]]
 - Target submission validation and in-band metadata stamping.
-  - Grounded: [control_submit: [submission_service]]
+  - Grounded: [control_submit: [file_submission_gating_service]]
 - Blame attribution and failure recording capabilities.
-  - Grounded: [control_attribution: [attribution_service]]
+  - Grounded: [control_attribution: [file_attribution_service]]
 - Statement test coverage evaluation and diagnostic reporting.
   - Grounded: [tool_coverage: [coverage_evaluation_service]]

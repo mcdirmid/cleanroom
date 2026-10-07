@@ -30,7 +30,7 @@ The realization:
 
 - In get_work execution, pulls inbound changes from the canonical main workspace, verifies whether prior dirty targets remain pending in the role workspace, evaluates ready and blocked items from the work manager, records pending targets, and formats actionable next steps.
 
-- In check_files execution, synchronizes latest changes from canonical main for auditor roles, resolves active role and target files, executes corresponding static linting, type-checking, or test rules, formats clean diagnostic outcomes, and returns verification exit status.
+- In check_files execution, resolves active role and target files, executes corresponding static linting, type-checking, or test rules, formats clean diagnostic outcomes, and returns verification exit status.
 
 - In submit execution, delegates file validation and metadata stamping to the submission coordinator, reflecting stamped files to the role workspace and clearing the target from pending work on success.
 

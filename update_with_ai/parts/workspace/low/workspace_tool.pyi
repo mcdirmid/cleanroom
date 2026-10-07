@@ -118,8 +118,3 @@ class WorkspaceToolRunner(InTier[AgentSessionTier], Protocol):
     ) -> int:
         """Refreshes system files, bin tools, configs, and guides across role workspaces."""
         ...
-
-
-def get_workspace_tool_runner() -> WorkspaceToolRunner:
-    """Returns singleton WorkspaceToolRunner instance."""
-    ...

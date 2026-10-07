@@ -417,21 +417,6 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
             meta.get("dir_scope") or meta.get("parts_dir", "staging")
         ) if meta else "staging"
 
-        if (
-            is_auditor_role(role_name, repo_root=main_root)
-            and main_root
-            and os.path.isdir(main_root)
-            and main_root != ws_root
-        ):
-            try:
-                sync = workspace_sync_impl.WorkspaceSynchronizer()
-                sync.pull(ws_root, main_root, role_name, dir_scope=d_scope, silent=True)
-                sync.refresh_system_files(
-                    ws_root, main_root, role_name, dir_scope=d_scope, silent=True
-                )
-            except Exception as e:
-                sys.stderr.write(f"Warning: automatic sync from main failed: {e}\n")
-
         targets_to_check: List[str] = []
         if target:
             targets_to_check.append(target)
