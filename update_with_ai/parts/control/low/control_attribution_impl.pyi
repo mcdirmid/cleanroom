@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
-# CODE_HASH: 0dd06aa23e9f
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# CODE_HASH: 3640a1e339cc
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_attribution_impl."""

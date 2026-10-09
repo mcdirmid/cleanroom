@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T05:31:13Z
 CHANGE: Remove code-level constructor constraint from typing
 CODE_HASH: c358fa2d2887
+SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
 -->
 
 # bazel_target interface component

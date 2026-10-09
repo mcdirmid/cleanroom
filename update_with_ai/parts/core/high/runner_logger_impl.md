@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T04:45:49Z
 CHANGE: Make log opening declarative and specify concrete unbuffered flush mechanics
 CODE_HASH: 79be16ba3400

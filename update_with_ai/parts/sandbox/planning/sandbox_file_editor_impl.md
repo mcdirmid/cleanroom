@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
-LAST_CHANGED: 2026-10-05T05:35:00Z
-CHANGE: Standardize on check files tool in editing contracts
-CODE_HASH: d0bd39637bc3
-SPEC_QA_AUDIT: 2026-10-07T23:58:18Z
+LAST_CLEANED: 2026-10-09T21:40:39Z
+LAST_CHANGED: 2026-10-09T21:35:59Z
+CHANGE: Contract replace file content tool installation for agent session
+CODE_HASH: d6b242201016
+SPEC_QA_AUDIT: 2026-10-09T21:40:39Z
 -->
 
 # sandbox_file_editor_impl implementation component
@@ -21,7 +21,7 @@ Furthermore, the implementation tracks revision counters and emits structured di
 
 ### Contracts
 
-- The edit manager provides the replace file content tool for the agent session. [provide_replace_file_content_tool]
+- The replace file content tool is installed for the agent session. [install_replace_file_content_tool]
 - The edit manager compares current workspace file content against their in-band code hash. [compare_current_against_code_hash]
 - The edit manager increments the file update revision whenever workspace files are updated. [increment_revision_on_file_update]
 - The edit manager computes the file hash by returning an MD5 hexadecimal digest of content read from the filesystem. [compute_md5_file_hash]
@@ -63,6 +63,7 @@ Furthermore, the implementation tracks revision counters and emits structured di
 
 ### Woven Contracts
 
+- The replace file content tool is installed for the agent session to enable targeted text replacement in declared read-write files. [install_replace_file_content_tool, sandbox_file_editor: [install_replace_file_content_tool]]
 - Validating write access confirms access and records file edits for declared read-write files, but rejects undeclared targets. [can_write_fails_when_not_read_write, can_write_records_file_edit, can_write_produces_success_response, remind_only_read_write_writable, sandbox_file_editor: [can_write_validates_access]]
 - Missing path arguments default to the last read or edited read-write file with an advisory warning, failing if no valid file history exists. [implicitly_bind_last_read_or_edited_file, warn_when_path_implicitly_bound, fail_when_path_omitted_and_no_last_file, fail_when_path_omitted_and_last_not_read_write, sandbox_file_editor: [track_last_read_or_edited]]
 - Line search windows are validated against file bounds, rejecting non-positive or inverted bounds before matching proceeds. [fail_when_start_line_less_than_one, fail_when_start_line_exceeds_line_count_plus_one, fail_when_end_line_less_than_one, fail_when_end_line_exceeds_line_count, fail_when_start_exceeds_end]

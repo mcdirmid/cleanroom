@@ -1,18 +1,14 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 721022d94d57
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T02:18:04Z
+# CHANGE: Align with agent_session.pyi specification
+# CODE_HASH: 1e6f3e698d6b
 # --- END CLEANROOM METADATA ---
+
+from __future__ import annotations
+from support.lib.lifecycle import LifecycleTier, system
 
 # Requirements specified in agent_session.pyi
 
-from support.lib.lifecycle import ChildTierOf, LifecycleTier, SystemTier, system
-
-
-class AgentSessionTier(ChildTierOf[SystemTier]):
-    def __init__(self, name: str = "agent_session") -> None:
-        super().__init__(name=name, parent=system)
-
-
-agent_session: AgentSessionTier = AgentSessionTier()
+agent_session: LifecycleTier = system.create_child('agent_session')
+AgentSessionTier = LifecycleTier

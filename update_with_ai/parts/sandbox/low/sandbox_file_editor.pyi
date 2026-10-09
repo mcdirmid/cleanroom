@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 998b60a3fe78
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:38:02Z
+# LAST_CHANGED: 2026-10-09T21:38:02Z
+# CHANGE: Specify that the replace file content tool is installed for the agent session
+# CODE_HASH: 2c0d33a5a911
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file editor low-level interface specification."""
@@ -144,6 +143,15 @@ class EditManager(InTier[AgentSessionTier], Protocol):
 @singleton_type("agent_session")
 class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
     """Editing tool that replaces target content in a read-write file."""
+
+    @operation
+    def initialize(self) -> None:
+        """Installs the replace file content tool into the session environment.
+
+        POSTCONDITIONS:
+        - MUST install the replace file content tool for the agent session.
+        """
+        ...
 
     @property
     def path_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:

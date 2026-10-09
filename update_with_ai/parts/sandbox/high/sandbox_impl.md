@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T05:21:23Z
 CHANGE: Align purpose with sandbox to justify agent_node_config import and add delegation boundary
-CODE_HASH: 4793d2f9ef5a
+CODE_HASH: 8390f46f8ceb
 -->
 
 # sandbox_impl implementation component

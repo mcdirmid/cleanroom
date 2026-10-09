@@ -3,14 +3,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cleanroom"
-version = "0.2.0"
-description = "Literate, specification-driven software engineering framework for autonomous AI pair-programming"
+name = "update_with_ai"
+version = "0.1.0"
+description = "Cleanroom update_with_ai package"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
-authors = [
-    { name = "Cleanroom Authors" }
-]
 dependencies = [
     "pydantic>=2.5.0",
     "pyright>=1.1.350",
@@ -21,39 +17,28 @@ dependencies = [
     "openai>=1.0.0",
 ]
 
-[project.scripts]
-cleanroom = "update_with_ai.support.lib.cleanroom_role_tool:main"
-cleanroom-loop = "update_with_ai.support.lib.cleanroom_uv_runner:main"
-
-[tool.uv.workspace]
-members = [
-    "update_with_ai",
-    "staging",
-]
-
 [tool.hatch.build.targets.wheel]
-packages = ["update_with_ai", "update_python_with_ai"]
+packages = ["parts", "support"]
 
 [tool.pytest.ini_options]
 testpaths = [
-    "update_with_ai/parts",
-    "update_with_ai/support/tests",
-    "update_python_with_ai/support/tests",
+    "parts",
+    "support/tests",
+    "tests",
 ]
 norecursedirs = [
     ".git",
     ".venv",
     "bazel-*",
-    "staging",
     "node_modules",
 ]
 pythonpath = [
     ".",
-    "update_with_ai",
-    "update_python_with_ai",
+    "..",
+    "parts",
+    "support/lib",
 ]
 python_files = ["*_test.py", "test_*.py"]
-addopts = ["--ignore=update_with_ai/parts/sandbox/tests/sandbox_run_control_impl_test.py"]
 
 [tool.pyright]
 exclude = [

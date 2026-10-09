@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-08T15:45:00Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-08T15:45:00Z
 CHANGE: clarify check_files template regeneration for regenerable roles
-CODE_HASH: 8b9c1d2e3f4a
+CODE_HASH: 0d7dcc1ed470
 -->
 
 # workspace_tool_impl implementation component

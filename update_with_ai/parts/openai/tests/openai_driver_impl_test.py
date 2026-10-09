@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
 # LAST_CHANGED: 2026-10-05T17:02:27Z
 # CHANGE: Use completion error payload for incomplete tool call recovery test
 # CODE_HASH: c3a2c3e58ec8
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for openai_driver_impl aligned with grounding specifications."""

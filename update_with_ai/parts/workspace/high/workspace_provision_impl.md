@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-08T18:30:00Z
-CHANGE: document stub role dependencies synthesis in commissioning behavior
-CODE_HASH: ef79d567f7bd
+LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CHANGED: 2026-10-09T02:39:58Z
+CHANGE: add contamination tripwire to AGENTS.md synthesis specification
+CODE_HASH: 03216cce2696
 -->
 
 # workspace_provision_impl implementation component
@@ -40,6 +40,6 @@ When commissioning a workspace, the provisioner:
 
 - Writes the `.cleanroom_role.json` configuration file recording role address, role name, directory scope, and canonical main repository root.
 
-- Synthesizes `AGENTS.md` containing behavioral constraints, role instructions, strict boundary rules (workspace boundary, forbidding git operations, main repo read-only), an explicit fail-stop and reporting protocol (prohibiting self-healing on infrastructure tracebacks, errors, or missing dependencies while distinguishing ordinary verification test failures destined for blame attribution), and tool usage sequences tailored to the commissioned role.
+- Synthesizes `AGENTS.md` containing behavioral constraints, role instructions, strict boundary rules (workspace boundary, forbidding git operations, main repo read-only), a zero-tolerance contamination tripwire mandating immediate abort upon reading out-of-bounds files, an explicit fail-stop and reporting protocol (prohibiting self-healing on infrastructure tracebacks, errors, or missing dependencies while distinguishing ordinary verification test failures destined for blame attribution), and tool usage sequences tailored to the commissioned role.
 
 - Registers the new workspace descriptor in the workspace registry.

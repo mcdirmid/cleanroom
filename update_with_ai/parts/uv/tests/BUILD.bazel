@@ -45,13 +45,11 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/agent/lib:agent_storage",
         "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
         "//update_with_ai/parts/uv/lib:uv_manifest_loader",
         "//update_with_ai/parts/uv/lib:uv_node_config_impl",
-        "//update_with_ai/parts/uv/lib:uv_target",
     ],
 )
 

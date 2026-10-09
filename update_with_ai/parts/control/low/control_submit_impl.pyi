@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: ba7e3b3204c1
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T22:20:00Z
+# CHANGE: Record change summary during clean status transition without appending dirty change message
+# CODE_HASH: f234ad5f1097
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_submit_impl."""
@@ -48,6 +48,6 @@ class SubmissionCoordinator(
         GROUNDING:
         - Grounded via VerificationEvaluator to ensure checks pass, NodeConfig and RoleConfig
           to inspect auditor roles, modification tracking to validate change summary necessity,
-          and DagStorage to update status to clean and append change messages.
+          and DagStorage to update status to clean with the change description.
         """
         ...

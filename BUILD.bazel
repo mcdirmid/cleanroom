@@ -1,2 +1,2 @@
-exports_files(["pyrightconfig.json"])
+exports_files([])
 

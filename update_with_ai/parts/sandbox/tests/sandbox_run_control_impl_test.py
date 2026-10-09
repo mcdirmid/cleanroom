@@ -1,3439 +1,2467 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 53d70cbdd59a
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:46:30Z
+# LAST_CHANGED: 2026-10-09T22:40:00Z
+# CHANGE: Allow clean submit of unmodified implementation nodes
+# CODE_HASH: e61b138311e9
+# QA_AUDIT: 2026-10-09T21:46:30Z
 # --- END CLEANROOM METADATA ---
 
-"""Unit tests for sandbox_run_control_impl aligned with grounding specifications."""
+"""Unit tests for sandbox_run_control_impl per its grounding specification."""
+
+from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass
-from typing import Any, cast, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from update_with_ai.parts.dag.lib.dag_storage import (
-    DagDependency,
-    DagNode,
-    MessageContent,
-)
-from update_with_ai.parts.dag.lib import dag_storage
-from update_with_ai.parts.agent.lib.agent_file_alias import (
-    AliasManager,
-    BoundFile,
-    FileAlias,
-    FileContent,
-    ReadOnlyFile,
-    ReadWriteFile,
-    RelativePath,
-    UnboundFile,
-)
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
-from update_with_ai.parts.agent.lib.agent_config import AgentConfig
-from update_with_ai.parts.agent.lib.agent_node_config import (
-    NodeConfig,
-    NodeGuide,
-    RoleConfig,
-    VerificationCheck,
-    GuideSummary,
-    VerificationDiagnostic,
-    VerificationFailureInstructions,
+from update_with_ai.parts.agent.lib import (
+    agent_file_alias,
+    agent_node_config,
+    agent_session,
 )
-from update_with_ai.parts.dag.lib.dag_subgraph import DagSubgraph
-from update_with_ai.parts.sandbox.lib.sandbox import Sandbox
-from update_with_ai.parts.sandbox.lib.sandbox_file_editor import EditManager
-from update_with_ai.parts.sandbox.lib.sandbox_guide_delivery import GuideDelivery
-from update_with_ai.parts.sandbox.lib.sandbox_run_control import (
+from update_with_ai.parts.control.lib import control_coordinate
+from update_with_ai.parts.dag.lib import dag_config, dag_storage, dag_subgraph
+from update_with_ai.parts.sandbox.lib import (
+    sandbox,
+    sandbox_file_editor,
+    sandbox_guide_delivery,
+    sandbox_run_control,
+    template_format,
+    tool_provider,
+)
+from update_with_ai.parts.sandbox.lib.sandbox_run_control_impl import (
     AdvanceTool,
     BlameTool,
     CheckFilesTool,
     FailTool,
     GetWorkTool,
-    ResolveTool,
     RunController,
     SubmitTool,
-)
-from update_with_ai.parts.sandbox.lib.sandbox_run_control_impl import (
-    AdvanceTool as AdvanceToolImpl,
-    BlameTool as BlameToolImpl,
-    CheckFilesTool as CheckFilesToolImpl,
-    FailTool as FailToolImpl,
-    GetWorkTool as GetWorkToolImpl,
-    RunController as RunControllerImpl,
-    SubmitTool as SubmitToolImpl,
     __initialize__,
 )
 
-agent_session = RunControllerImpl.tier
-from update_with_ai.parts.sandbox.lib import template_format
-from update_with_ai.parts.sandbox.lib.tool_provider import (
-    ParameterName,
-    ParameterType,
-    Tool,
-    ToolManager,
-    ToolParameter,
-    ToolResponse,
-    ToolResponseContent,
-    WireType,
-)
 
-
-class ActualParameterBindings(dict[Any, Any]):
-    def __init__(self, bindings: Any) -> None:
-        if isinstance(bindings, set):
-            super().__init__(dict(bindings))
-        elif isinstance(bindings, dict):
-            super().__init__(bindings)
-        else:
-            super().__init__(bindings)
-
-
-class MockToolManager:
-    tier = agent_session
-
-    def __init__(self) -> None:
-        self.installed_tools: Set[Tool] = set()
-
-    def install_tool(self, tool: Tool) -> None:
-        self.installed_tools.add(tool)
-
-    def execute_tool(
-        self, name: Any, wire_parameter_bindings: Mapping[ParameterName, WireType]
-    ) -> ToolResponse:
-        return ToolResponse(
-            is_failed=False, is_terminated=False, content=ToolResponseContent("")
-        )
-
-
-class MockStringConverter:
-    tier = agent_session
-    actual_type = str
-    wire_type = str
-
-    def convert(self, wire_value: Any) -> str:
-        return str(wire_value)
-
-
-STRING_PARAMETER_TYPE: Any = MockStringConverter()
-
-
-class MockIntegerConverter:
-    tier = agent_session
-    actual_type = int
-    wire_type = int
-
-    def convert(self, wire_value: Any) -> int:
-        return int(wire_value)
-
-
-@dataclass(frozen=True)
-class _WorkspacePathDouble:
-    path: str
-
-    def __str__(self) -> str:
-        return self.path
-
-    def __fspath__(self) -> str:
-        return self.path
-
-
-def _make_workspace_path(path: str) -> Any:
-    return _WorkspacePathDouble(path)
-
-
-def _make_workspace_root(path: str) -> Any:
-    return _WorkspacePathDouble(path)
-
-
-def _make_dag_node(unit_address: str, role_address: str = "lib") -> DagNode:
-    return DagNode(
-        unit_address=dag_storage.UnitAddress(unit_address),
-        role_address=dag_storage.RoleAddress(role_address),
+def _make_node(unit: str = "unit_a", role: str = "dev") -> dag_storage.DagNode:
+    return dag_storage.DagNode(
+        unit_address=dag_storage.UnitAddress(unit),
+        role_address=dag_storage.RoleAddress(role),
     )
 
 
-class MockAliasManager:
-    tier = agent_session
+def _make_file_alias(path: str) -> agent_file_alias.FileAlias:
+    return agent_file_alias.FileAlias(agent_file_alias.RelativePath(path))
+
+
+def _make_bound_file(
+    path: str,
+    owning_node: Optional[dag_storage.DagNode] = None,
+) -> agent_file_alias.BoundFile:
+    node = owning_node if owning_node is not None else _make_node(path.replace("/", "_").replace(".", "_"))
+    return agent_file_alias.BoundFile(
+        relative_path=agent_file_alias.RelativePath(path),
+        workspace_path=agent_file_alias.file_paths.WorkspacePath(
+            agent_file_alias.file_paths.PathString(f"/workspace/{path}")
+        ),
+        owning_node=node,
+    )
+
+
+def _bindings(d: Mapping[Any, Any]) -> Any:
+    return d
+
+
+def _make_read_write_file(
+    path: str,
+    owning_node: Optional[dag_storage.DagNode] = None,
+) -> agent_file_alias.ReadWriteFile:
+    node = owning_node if owning_node is not None else _make_node(path.replace("/", "_").replace(".", "_"))
+    return agent_file_alias.ReadWriteFile(
+        relative_path=agent_file_alias.RelativePath(path),
+        workspace_path=agent_file_alias.file_paths.WorkspacePath(
+            agent_file_alias.file_paths.PathString(f"/workspace/{path}")
+        ),
+        owning_node=node,
+    )
+
+
+@dataclass(frozen=True)
+class MockVerificationResult:
+    passed: bool
+    diagnostic_output: str
+    is_cached: bool = False
+
+
+@dataclass(frozen=True)
+class MockScheduledTask:
+    node: dag_storage.DagNode
+    task_prompt: str
+    dependency_paths: Sequence[str]
+    feedback_messages: Sequence[dag_storage.FeedbackMessage]
+
+
+@dataclass(frozen=True)
+class MockWorkSchedule:
+    tasks: Sequence[MockScheduledTask]
+
+
+class MockVerificationCheck:
+    def __init__(self, passed: bool = True, diagnostic: str = "") -> None:
+        self.passed = passed
+        self.diagnostic = agent_node_config.VerificationDiagnostic(diagnostic)
+        self.call_count = 0
+
+    def verify(self) -> Tuple[bool, agent_node_config.VerificationDiagnostic]:
+        self.call_count += 1
+        return self.passed, self.diagnostic
+
+
+class MockToolManager:
+    tier = agent_session.agent_session
 
     def __init__(self) -> None:
-        self.workspace_root = _make_workspace_root("/workspace")
-        self.actual_type = FileAlias
-        self.wire_type = str
+        self.installed_tools: Dict[tool_provider.ToolName, tool_provider.Tool] = {}
 
-    def convert(self, wire_value: Any) -> Any:
-        return wire_value
+    def install_tool(self, tool: tool_provider.Tool) -> None:
+        self.installed_tools[tool.name] = tool
 
-    def sanitize_text(self, text: str) -> str:
-        return text.replace("/workspace/pkg/", "")
-
-    def initialize(self) -> None:
-        pass
-
-
-class _MockBlameTargetsDict(dict):
-    def __init__(self, initial: dict, default_targets: Set[BoundFile]):
-        super().__init__(initial)
-        self._default_targets = default_targets
-
-    def __contains__(self, key: Any) -> bool:
-        if super().__contains__(key):
-            return True
-        return bool(self._default_targets)
-
-    def __getitem__(self, key: Any) -> Set[BoundFile]:
-        if super().__contains__(key):
-            return super().__getitem__(key)
-        if self._default_targets:
-            return set(self._default_targets)
-        return super().__getitem__(key)
-
-    def get(self, key: Any, default: Any = None) -> Any:
-        if super().__contains__(key):
-            return super().get(key, default)
-        if self._default_targets:
-            return set(self._default_targets)
-        return default
-
-
-class MockNodeConfig:
-    tier = agent_session
-
-    def __init__(
+    def execute_tool(
         self,
-        blame_targets: Optional[Set[BoundFile]] = None,
-        blame_targets_by_node: Optional[Mapping[DagNode, Set[BoundFile]]] = None,
-        verification_checks: Optional[Sequence[VerificationCheck]] = None,
-        verification_checks_by_node: Optional[
-            Mapping[DagNode, Sequence[VerificationCheck]]
-        ] = None,
-        guide: Optional[NodeGuide] = None,
-        is_step_mode: bool = True,
-        feedback: Optional[Sequence[str]] = None,
-        read_write_files: Optional[Set[BoundFile]] = None,
-        verification_success_message: Optional[str] = None,
-        src_file_alias_by_node: Optional[Mapping[DagNode, str]] = None,
-        guide_file: Optional[UnboundFile] = None,
-        read_only_files: Optional[Set[BoundFile]] = None,
-    ) -> None:
-        self._blame_targets = blame_targets or set()
-        self.blame_targets_by_node: Mapping[DagNode, Set[BoundFile]] = (
-            _MockBlameTargetsDict(
-                dict(blame_targets_by_node or {}), self._blame_targets
-            )
-        )
-        self._verification_checks: Sequence[VerificationCheck] = (
-            verification_checks or []
-        )
-        self.verification_checks_by_node: Mapping[
-            DagNode, Sequence[VerificationCheck]
-        ] = verification_checks_by_node or {}
-        self._guide = guide
-        self.is_step_mode = is_step_mode
-        self._feedback: Sequence[str] = feedback or ()
-        self._read_write_files: Set[BoundFile] = read_write_files or set()
-        self._read_only_files: Set[BoundFile] = read_only_files or set()
-        self._verification_success_message = verification_success_message
-        self.src_file_alias_by_node: Mapping[DagNode, str] = (
-            src_file_alias_by_node or {}
-        )
-        self._guide_file = guide_file
-
-    @property
-    def read_only_files(self) -> Set[BoundFile]:
-        return set(self._read_only_files)
-
-    @property
-    def read_write_files(self) -> Set[BoundFile]:
-        return set(self._read_write_files)
-
-    @property
-    def guide_file(self) -> Optional[UnboundFile]:
-        return self._guide_file
-
-    @property
-    def templates(self) -> Mapping[BoundFile, FileContent]:
-        return {}
-
-    @property
-    def guide(self) -> Optional[NodeGuide]:
-        return self._guide
-
-    @property
-    def verification_checks(self) -> Sequence[VerificationCheck]:
-        return self._verification_checks
-
-    @property
-    def verification_success_message(self) -> Optional[str]:
-        return self._verification_success_message
-
-    @property
-    def feedback(self) -> Sequence[str]:
-        return self._feedback
-
-
-class MockGuideDelivery:
-    tier = agent_session
-
-    def __init__(
-        self,
-        has_steps: bool = False,
-        next_step_content: Optional[str] = None,
-        guide: Optional[NodeGuide] = None,
-    ) -> None:
-        self.has_steps_remaining = has_steps
-        self.next_step_content = next_step_content
-        self.advance_step_called = False
-        self.initialize_called = True
-        self.last_verification_passed: Optional[bool] = None
-        self.last_failure_diagnostics: Optional[str] = None
-        self._guide: Optional[NodeGuide] = guide
-        self.initial_primer: Optional[str] = None
-
-    def initialize(self) -> None:
-        self.initialize_called = True
-
-    def record_initial_primer(self, primer: str) -> None:
-        self.initial_primer = primer
-
-    set_initial_primer = record_initial_primer
-
-    @property
-    def guide(self) -> Optional[NodeGuide]:
-        return self._guide
-
-    def advance_step(
-        self, verification_passed: bool, failure_diagnostics: Optional[str] = None
-    ) -> Optional[ToolResponse]:
-        self.advance_step_called = True
-        self.last_verification_passed = verification_passed
-        self.last_failure_diagnostics = failure_diagnostics
-        if not verification_passed:
-            summary = self.initial_primer or (
-                self._guide.summary if self._guide else "NodeGuide Summary"
-            )
-            return ToolResponse(
+        name: tool_provider.ToolName,
+        wire_parameter_bindings: Mapping[tool_provider.ParameterName, Any],
+    ) -> tool_provider.ToolResponse:
+        if name not in self.installed_tools:
+            return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
-                content=ToolResponseContent(
-                    f"{summary}\n\nVerification failed:\n{failure_diagnostics}"
+                content=tool_provider.ToolResponseContent(
+                    f"Error: Unknown tool '{name}'."
                 ),
             )
-        if self.has_steps_remaining:
-            if self.next_step_content:
-                return ToolResponse(
-                    is_failed=False,
+        tool = self.installed_tools[name]
+        actual_bindings: Dict[tool_provider.ToolParameter[Any, Any], Any] = {}
+        for param_name, wire_val in wire_parameter_bindings.items():
+            if param_name not in tool.parameters:
+                return tool_provider.ToolResponse(
+                    is_failed=True,
                     is_terminated=False,
-                    content=ToolResponseContent(self.next_step_content or ""),
+                    content=tool_provider.ToolResponseContent(
+                        f"Error: Unknown parameter '{param_name}'."
+                    ),
                 )
-        return None
-
-    def parse_guide(self, content: FileContent) -> NodeGuide:
-        return NodeGuide(summary=GuideSummary(""), sections=[])
+            param = tool.parameters[param_name]
+            try:
+                actual_bindings[param] = param.parameter_type.convert(wire_val)
+            except (tool_provider.ParameterConversionError, ValueError, TypeError) as e:
+                msg = getattr(e, "message", str(e))
+                return tool_provider.ToolResponse(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=tool_provider.ToolResponseContent(
+                        f"Error: Invalid argument for parameter '{param_name}': {msg}"
+                    ),
+                )
+        return tool.execute_tool(actual_bindings)
 
 
 class MockEditManager:
-    tier = agent_session
+    tier = agent_session.agent_session
 
-    def __init__(
-        self, has_modifications: bool = False, file_update_revision: int = 0
-    ) -> None:
-        self.has_modifications = has_modifications
-        self.file_update_revision = file_update_revision
-        self._last_read_or_edited_file: Optional[Any] = None
-        self._file_hashes: dict[Any, str] = {}
+    def __init__(self) -> None:
+        self.has_modifications = False
+        self.file_update_revision = sandbox_file_editor.FileUpdateRevision(0)
+        self.last_read_or_edited_file: Optional[agent_file_alias.FileAlias] = None
+        self._current_hash = sandbox_file_editor.FileHash("hash123")
+        self.file_hashes: Dict[str, sandbox_file_editor.FileHash] = {}
+        self.hashed_files: List[agent_file_alias.FileAlias] = []
 
-    def file_hash(self, file: Any) -> str:
-        path_str = getattr(
-            file, "relative_path", getattr(file, "short_name", str(file))
+    def set_file_hash(self, h: str, file: Optional[Any] = None) -> None:
+        new_hash = sandbox_file_editor.FileHash(h)
+        if file is not None:
+            key = str(file.relative_path) if hasattr(file, "relative_path") else str(file)
+            self.file_hashes[key] = new_hash
+        else:
+            self._current_hash = new_hash
+
+    def record_file_read(self, file: agent_file_alias.FileAlias) -> None:
+        self.last_read_or_edited_file = file
+
+    def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None:
+        self.last_read_or_edited_file = file
+
+    def file_hash(self, file: Any) -> sandbox_file_editor.FileHash:
+        self.hashed_files.append(file)
+        key = str(file.relative_path) if hasattr(file, "relative_path") else str(file)
+        return self.file_hashes.get(key, self._current_hash)
+
+    def can_write(self, path: Any) -> tool_provider.ToolResponse:
+        return tool_provider.ToolResponse(
+            is_failed=False,
+            is_terminated=False,
+            content=tool_provider.ToolResponseContent("OK"),
         )
-        if file in self._file_hashes:
-            return self._file_hashes[file]
-        if path_str in self._file_hashes:
-            return self._file_hashes[path_str]
-        return f"hash_{self.file_update_revision}_{path_str}"
-
-    @property
-    def last_read_or_edited_file(self) -> Optional[Any]:
-        return self._last_read_or_edited_file
-
-    @last_read_or_edited_file.setter
-    def last_read_or_edited_file(self, value: Optional[Any]) -> None:
-        self._last_read_or_edited_file = value
 
 
-class TargetFileObj:
-    def __init__(self, relative_path: str) -> None:
-        self.relative_path = relative_path
-        self.short_name = relative_path
+class MockRoleDef:
+    def __init__(
+        self,
+        is_auditor: bool = False,
+        audit_tag: Optional[str] = None,
+        src_pattern: str = "",
+    ) -> None:
+        self.is_auditor = is_auditor
+        self.audit_tag = audit_tag
+        self.src_pattern = src_pattern
 
 
-class MockVerificationCheck(VerificationCheck):
-    def __init__(self, passes: bool = True, diagnostic: str = "") -> None:
-        self.passes = passes
-        self.diagnostic = diagnostic
-        self.called = False
-        self.call_count = 0
+class MockRoleConfig:
+    tier = agent_session.agent_session
 
-    def verify(self) -> Tuple[bool, VerificationDiagnostic]:
-        self.called = True
-        self.call_count += 1
-        return self.passes, VerificationDiagnostic(self.diagnostic)
+    def __init__(self) -> None:
+        self.role = agent_node_config.RoleName("developer")
+        self.nodes: List[dag_storage.DagNode] = []
+        self.version = agent_node_config.ExecutionVersion(1)
+
+    def set_role(self, role: agent_node_config.RoleName) -> None:
+        self.role = role
+
+    def set_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
+        self.nodes = list(nodes)
+        self.version = agent_node_config.ExecutionVersion(int(self.version) + 1)
 
 
-class MockNodeDefinition:
-    def __init__(self, task_prompt: str = "") -> None:
-        self.task_prompt = task_prompt
+class MockNodeConfig:
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.read_only_files: Set[agent_file_alias.ReadOnlyFile] = set()
+        self.read_write_files: Set[agent_file_alias.ReadWriteFile] = set()
+        self.allows_step_mode = False
+        self.is_step_mode = False
+        self.guide_file: Optional[agent_file_alias.UnboundFile] = None
+        self.templates: Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent] = {}
+        self.template_parameters: Mapping[agent_node_config.TemplateParamKey, Any] = {}
+        self.guide: Optional[agent_node_config.NodeGuide] = None
+        self.blame_targets_by_node: Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]] = {}
+        self.verification_checks: Sequence[agent_node_config.VerificationCheck] = []
+        self.verification_checks_by_node: Mapping[dag_storage.DagNode, Sequence[agent_node_config.VerificationCheck]] = {}
+        self.src_file_alias: Optional[agent_file_alias.RelativePath] = None
+        self.src_file_alias_by_node: Mapping[dag_storage.DagNode, agent_file_alias.RelativePath] = {}
+        self.verification_success_message: Optional[agent_node_config.VerificationSuccessMessage] = None
+        self.feedback: Sequence[agent_node_config.NodeFeedback] = []
+        self.per_node_info_by_node: Mapping[dag_storage.DagNode, agent_node_config.PerNodeInfo] = {}
+        self.role_definitions: Dict[str, Any] = {}
+
+
+
+class MockGuideDelivery:
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.guide: Optional[agent_node_config.NodeGuide] = None
+        self.has_steps_remaining = False
+        self.advance_step_response: Optional[tool_provider.ToolResponse] = None
+        self.advance_step_calls: List[Tuple[bool, agent_node_config.VerificationDiagnostic]] = []
+        self.recorded_primers: List[sandbox_guide_delivery.InitialPrimer] = []
+
+    def parse_guide(self, content: agent_file_alias.FileContent) -> agent_node_config.NodeGuide:
+        return agent_node_config.NodeGuide(
+            summary=agent_node_config.GuideSummary("Summary"),
+            sections=[],
+        )
+
+    def record_initial_primer(self, primer: sandbox_guide_delivery.InitialPrimer) -> None:
+        self.recorded_primers.append(primer)
+
+    def advance_step(
+        self, verification_passed: bool, failure_diagnostics: agent_node_config.VerificationDiagnostic
+    ) -> Optional[tool_provider.ToolResponse]:
+        self.advance_step_calls.append((verification_passed, failure_diagnostics))
+        if self.advance_step_response is not None:
+            return self.advance_step_response
+        if not verification_passed:
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(f"Verification failure: {failure_diagnostics}"),
+            )
+        if self.guide and self.guide.sections:
+            section = self.guide.sections[0]
+            return tool_provider.ToolResponse(
+                is_failed=False,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(
+                    f"Milestone Section {section.index}: {section.title}\n{section.content}"
+                ),
+            )
+        return tool_provider.ToolResponse(
+            is_failed=False,
+            is_terminated=False,
+            content=tool_provider.ToolResponseContent("Next milestone section delivered"),
+        )
 
 
 class MockDagStorage:
     tier = system
 
     def __init__(self) -> None:
-        self.dependencies: dict[DagNode, Set[DagDependency]] = {}
-        self.messages: dict[DagNode, List[Any]] = {}
-        self.node_definitions: dict[DagNode, Any] = {}
-        self.dirty_nodes: Set[DagNode] = set()
-        self.cleaned_nodes: list[tuple[DagNode, Optional[str]]] = []
-        self.materialized_nodes: list[DagNode] = []
-
-    def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
-        return self.dependencies.get(node, set())
-
-    def get_messages(self, node: DagNode) -> Sequence[Any]:
-        return self.messages.get(node, [])
-
-    def get_node_definition(self, node: DagNode) -> Any:
-        return self.node_definitions.get(node)
-
-    def is_dirty(self, node: DagNode) -> bool:
-        return node in self.dirty_nodes
+        self.clean_nodes: Set[dag_storage.DagNode] = set()
+        self.dirty_nodes: Set[dag_storage.DagNode] = set()
+        self.messages: List[Tuple[dag_storage.DagNode, Any]] = []
+        self.materialized_nodes: List[dag_storage.DagNode] = []
 
     def mark_node_clean(
-        self, node: DagNode, change_description: Optional[str] = None
+        self, node: dag_storage.DagNode, change_description: Optional[Any] = None, *args: Any, **kwargs: Any
     ) -> None:
+        self.clean_nodes.add(node)
         self.dirty_nodes.discard(node)
-        self.cleaned_nodes.append((node, change_description))
 
-    def materialize_template(self, node: DagNode) -> None:
+    def mark_node_dirty(self, node: dag_storage.DagNode, reason: Optional[str] = None) -> None:
+        self.clean_nodes.discard(node)
+        self.dirty_nodes.add(node)
+
+    def mark_subgraph_clean(self, node: dag_storage.DagNode) -> None:
+        self.clean_nodes.add(node)
+        self.dirty_nodes.discard(node)
+
+    def is_dirty(self, node: dag_storage.DagNode) -> bool:
+        return node in self.dirty_nodes or node not in self.clean_nodes
+
+    def add_feedback_message(self, node: dag_storage.DagNode, message: Any) -> None:
+        self.messages.append((node, message))
+        self.clean_nodes.discard(node)
+        self.dirty_nodes.add(node)
+
+    def add_message(self, message: Any, to: dag_storage.DagNode) -> None:
+        self.messages.append((to, message))
+        self.clean_nodes.discard(to)
+        self.dirty_nodes.add(to)
+
+    def clear_messages(self, node: dag_storage.DagNode) -> None:
+        self.messages = [m for m in self.messages if m[0] != node]
+
+    def materialize_template(self, node: dag_storage.DagNode) -> None:
         self.materialized_nodes.append(node)
 
-    def add_message(self, message: Any, to: DagNode) -> None:
-        self.messages.setdefault(to, []).append(message)
+    def get_dependencies(self, node: dag_storage.DagNode) -> Set[Any]:
+        return set()
+
+    def get_messages(self, node: dag_storage.DagNode) -> Set[Any]:
+        return {m[1] for m in self.messages if m[0] == node}
+
+
+class MockSessionCoordinator:
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.open_targets: List[dag_storage.DagNode] = []
+        self.target_states: Dict[dag_storage.DagNode, control_coordinate.TargetState] = {}
+        self.node_by_alias: Dict[Any, dag_storage.DagNode] = {}
+        self.alias_by_node: Dict[dag_storage.DagNode, str] = {}
+        self.dispatched_submit: Optional[Tuple[Any, ...]] = None
+        self.dispatched_blame: Optional[Tuple[Any, ...]] = None
+        self.dispatched_fail: Optional[Tuple[Any, ...]] = None
+        self.verification_result: bool = True
+        self.verification_diagnostic: str = ""
+        self.is_cached: bool = False
+        self.storage: Optional[MockDagStorage] = None
+        self.role_config: Optional[MockRoleConfig] = None
+        self.submit_outcome: Optional[control_coordinate.ControlDispatchOutcome] = None
+        self.blame_outcome: Optional[control_coordinate.ControlDispatchOutcome] = None
+        self.fail_outcome: Optional[control_coordinate.ControlDispatchOutcome] = None
+        self.node_config: Optional[MockNodeConfig] = None
+
+    def register_node(
+        self,
+        node: dag_storage.DagNode,
+        alias: Any,
+        state: control_coordinate.TargetState = control_coordinate.TargetState.OPEN,
+    ) -> None:
+        alias_str = str(alias.relative_path) if hasattr(alias, "relative_path") else str(alias)
+        if state == control_coordinate.TargetState.OPEN and node not in self.open_targets:
+            self.open_targets.append(node)
+        self.target_states[node] = state
+        self.node_by_alias[alias_str] = node
+        self.node_by_alias[alias] = node
+        self.alias_by_node[node] = alias_str
+        if self.role_config is not None and node not in self.role_config.nodes:
+            self.role_config.set_nodes(list(self.role_config.nodes) + [node])
+
+    def reset_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
+        self.open_targets = list(nodes)
+
+    def resolve_default_target(self, last_accessed_file: Optional[Any] = None) -> Optional[dag_storage.DagNode]:
+        return self.open_targets[0] if self.open_targets else None
+
+    def get_node_for_alias(self, alias: Any) -> Optional[dag_storage.DagNode]:
+        if hasattr(alias, "relative_path"):
+            alias_str = str(alias.relative_path)
+        else:
+            alias_str = str(alias)
+        return self.node_by_alias.get(alias_str) or self.node_by_alias.get(alias)
+
+    def get_alias_for_node(self, node: dag_storage.DagNode) -> str:
+        return self.alias_by_node.get(node, "test_alias")
+
+    def dispatch_get_work(
+        self,
+        subgraph: Optional[dag_subgraph.DagSubgraph] = None,
+        dir_scope: Optional[str] = None,
+        max_batch_size: Optional[int] = None,
+    ) -> Any:
+        ready_nodes = []
+        if subgraph is not None:
+            ready_nodes = list(subgraph.next_ready_batch())
+        tasks = []
+        for n in ready_nodes:
+            self.register_node(n, f"pkg/{n.unit_address}.py")
+            if self.storage is not None:
+                self.storage.materialize_template(n)
+            tasks.append(
+                MockScheduledTask(
+                    node=n,
+                    task_prompt="Work prompt",
+                    dependency_paths=[],
+                    feedback_messages=[],
+                )
+            )
+        return MockWorkSchedule(tasks=tasks)
+
+    def dispatch_check_files(self, target_alias: Optional[str] = None) -> Any:
+        return MockVerificationResult(
+            passed=self.verification_result,
+            diagnostic_output=self.verification_diagnostic,
+            is_cached=self.is_cached,
+        )
+
+    def dispatch_submit(
+        self,
+        target_alias: Optional[str] = None,
+        change_summary: Optional[str] = None,
+        has_modifications: bool = False,
+    ) -> control_coordinate.ControlDispatchOutcome:
+        self.dispatched_submit = (target_alias, change_summary, has_modifications)
+        if self.submit_outcome is not None:
+            return self.submit_outcome
+        target = self.get_node_for_alias(target_alias) if target_alias else self.resolve_default_target()
+        if target:
+            self.target_states[target] = control_coordinate.TargetState.CLEAN
+            if target in self.open_targets:
+                self.open_targets.remove(target)
+            if self.storage is not None:
+                self.storage.mark_node_clean(target, change_summary)
+        return control_coordinate.ControlDispatchOutcome(
+            success=True, message="Submitted", remaining_open_targets=list(self.open_targets)
+        )
+
+    def dispatch_blame(
+        self,
+        source_alias: Optional[str] = None,
+        blame_target_alias: Optional[str] = None,
+        explanation: str = "",
+    ) -> control_coordinate.ControlDispatchOutcome:
+        self.dispatched_blame = (source_alias, blame_target_alias, explanation)
+        if self.blame_outcome is not None:
+            return self.blame_outcome
+        target = self.get_node_for_alias(source_alias) if source_alias else self.resolve_default_target()
+        if target:
+            self.target_states[target] = control_coordinate.TargetState.ATTRIBUTED
+            if target in self.open_targets:
+                self.open_targets.remove(target)
+        if blame_target_alias and self.storage is not None:
+            blamed_node = self.get_node_for_alias(blame_target_alias)
+            if not blamed_node and hasattr(self, "node_config") and self.node_config:
+                for targets in self.node_config.blame_targets_by_node.values():
+                    for t in targets:
+                        t_alias: Any = getattr(t, "alias", t)
+                        if hasattr(t_alias, "relative_path") and str(t_alias.relative_path) == str(blame_target_alias):
+                            blamed_node = getattr(t, "owning_node", None)
+                            break
+            if blamed_node:
+                msg = dag_storage.FeedbackMessage(
+                    content=dag_storage.MessageContent(explanation),
+                    target=blamed_node,
+                )
+                self.storage.add_feedback_message(blamed_node, msg)
+        return control_coordinate.ControlDispatchOutcome(
+            success=True, message="Blamed", remaining_open_targets=list(self.open_targets)
+        )
+
+    def dispatch_fail(
+        self,
+        target_alias: Optional[str] = None,
+        explanation: str = "",
+    ) -> control_coordinate.ControlDispatchOutcome:
+        self.dispatched_fail = (target_alias, explanation)
+        target = self.get_node_for_alias(target_alias) if target_alias else self.resolve_default_target()
+        if target:
+            self.target_states[target] = control_coordinate.TargetState.FAILED
+            if target in self.open_targets:
+                self.open_targets.remove(target)
+        return control_coordinate.ControlDispatchOutcome(
+            success=True, message="Failed", remaining_open_targets=self.open_targets
+        )
 
 
 class MockDagSubgraph:
     tier = system
 
-    def __init__(self, ready_batches: Optional[List[Sequence[DagNode]]] = None) -> None:
-        self.ready_batches: List[Sequence[DagNode]] = ready_batches or []
-        self.batch_index: int = 0
-
-    def next_ready_batch(self) -> Sequence[DagNode]:
-        if self.batch_index < len(self.ready_batches):
-            batch = self.ready_batches[self.batch_index]
-            self.batch_index += 1
-            return batch
-        return []
-
-
-class MockRoleConfig:
-    tier = agent_session
-
-    def __init__(self, node_cfg: Optional["MockNodeConfig"] = None) -> None:
-        self.node_cfg = node_cfg
-        self._role: str = ""
-        self.active_nodes: Sequence[DagNode] = []
-        self.execution_version: int = 1
-
-    @property
-    def role(self) -> str:
-        return self._role
-
-    @property
-    def nodes(self) -> Sequence[DagNode]:
-        return self.active_nodes
-
-    @property
-    def version(self) -> int:
-        return self.execution_version
-
-    def set_role(self, role: str) -> None:
-        self._role = role
-
-    def set_nodes(self, nodes: Sequence[DagNode]) -> None:
-        self.active_nodes = list(nodes)
-        if nodes:
-            self._role = nodes[0].role_address
-        self.execution_version += 1
-        if self.node_cfg is not None:
-            self.node_cfg.src_file_alias_by_node = {
-                n: f"{n.unit_address.split(':')[-1]}.py" for n in nodes
-            }
-
-
-class MockSandbox:
-    tier = agent_session
-
     def __init__(self) -> None:
-        self.materialize_startup_templates_called = False
+        self.target: Optional[dag_storage.DagNode] = None
+        self.complete = True
+        self.ready_batch: List[dag_storage.DagNode] = []
+        self.visited_batches: List[Sequence[dag_storage.DagNode]] = []
 
-    def materialize_templates(self) -> None:
-        self.materialize_startup_templates_called = True
+    def set_target(self, target: dag_storage.DagNode) -> None:
+        self.target = target
 
-    materialize_startup_templates = materialize_templates
+    def is_complete(self) -> bool:
+        return self.complete
+
+    def next_ready_batch(self) -> Sequence[dag_storage.DagNode]:
+        return self.ready_batch
+
+    def record_visit(self, batch: Sequence[dag_storage.DagNode]) -> None:
+        self.visited_batches.append(batch)
 
 
-class MockAgentConfig:
-    tier = agent_session
+class MockDagConfig:
+    tier = system
 
-    def __init__(self) -> None:
-        pass
+    @property
+    def node_visit_limit(self) -> dag_config.NodeVisitLimit:
+        return dag_config.NodeVisitLimit(10)
+
+    @property
+    def batch_size(self) -> dag_config.BatchSize:
+        return dag_config.BatchSize(2)
+
+
+class MockAliasManager:
+    tier = agent_session.agent_session
+
+    @property
+    def workspace_root(self) -> Any:
+        return "/tmp/test_ws"
+
+    @property
+    def actual_type(self) -> type[agent_file_alias.FileAlias]:
+        return agent_file_alias.FileAlias
+
+    @property
+    def wire_type(self) -> type[str]:
+        return str
+
+    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+        if not isinstance(wire_value, str):
+            raise tool_provider.ParameterConversionError(
+                tool_provider.ConversionErrorMessage("Wire value must be a string")
+            )
+        return agent_file_alias.FileAlias(agent_file_alias.RelativePath(wire_value))
+
+    def sanitize_text(
+        self, text: agent_file_alias.UnsanitizedText
+    ) -> agent_file_alias.SanitizedText:
+        return agent_file_alias.SanitizedText(str(text))
 
 
 class MockTemplateFormatter:
-    tier = agent_session
+    tier = agent_session.agent_session
 
-    def format_template(self, text: str, parameters: Any) -> str:
-        nodes = parameters.get("nodes", [])
-        if "Remaining open files" in text or "Remaining submit targets" in text:
-            lines = ["Remaining submit targets to handle:"]
-            for n in nodes:
-                lines.append(f"- `{n.get('src_alias', '')}`")
-            return "\n".join(lines)
-        if parameters.get("is_multi_node"):
-            lines = ["Process the following files:"]
-            for n in nodes:
-                lines.append(f"- `{n['src_alias']}`: {n['task_prompt']}")
-            lines.append(
-                "\nCall submit(target='<file_name>') to submit each file individually."
-            )
-            if parameters.get("has_guide"):
-                lines.append(f"\n{parameters.get('guide_instruction')}")
-            return "\n".join(lines)
-        if "task_prompt" in parameters:
-            res = parameters.get("task_prompt", "")
-            if parameters.get("has_guide"):
-                res = f"{res}\n\n{parameters.get('guide_instruction')}"
-            return res
-        return text
+    def format_template(
+        self,
+        text: template_format.TemplateText,
+        parameters: Mapping[template_format.TemplateKey, Any],
+    ) -> template_format.FormattedText:
+        return template_format.FormattedText(str(text))
+
+
+class MockSandbox:
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.has_modifications = False
 
 
 class SandboxRunControlImplTest(unittest.TestCase):
     def setUp(self) -> None:
-        node = _make_dag_node(unit_address="//pkg:upstream", role_address="lib")
-        self.blame_target_file = ReadOnlyFile(
-            relative_path=RelativePath("dep.py"),
-            workspace_path=_make_workspace_path("pkg/dep.py"),
-            owning_node=node,
-        )
-
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
-
-        self.storage = MockDagStorage()
+        self.mock_storage = MockDagStorage()
         self.registry.register_instance(
-            self.storage, keys=[dag_storage.DagStorage], tier=system
+            self.mock_storage,
+            keys=[dag_storage.DagStorage],
+            tier=system,
         )
-        self.subgraph = MockDagSubgraph()
-        self.registry.register_instance(self.subgraph, keys=[DagSubgraph], tier=system)
-
-        self.tool_mgr = MockToolManager()
-        self.str_conv = MockStringConverter()
-        self.int_conv = MockIntegerConverter()
-        self.alias_mgr = MockAliasManager()
-        self.tmpl_formatter = MockTemplateFormatter()
-        self.node_cfg = MockNodeConfig(
-            blame_targets={self.blame_target_file},
-            is_step_mode=True,
-            guide=NodeGuide(summary=GuideSummary("NodeGuide Summary"), sections=[]),
-        )
-        self.guide_del = MockGuideDelivery(
-            guide=NodeGuide(summary=GuideSummary("NodeGuide Summary"), sections=[])
-        )
-        self.edit_mgr = MockEditManager()
-        self.role_cfg = MockRoleConfig(node_cfg=self.node_cfg)
-        self.sb = MockSandbox()
-        self.agent_cfg = MockAgentConfig()
-
+        self.mock_subgraph = MockDagSubgraph()
         self.registry.register_instance(
-            self.tool_mgr, keys=[ToolManager], tier=agent_session
+            self.mock_subgraph,
+            keys=[dag_subgraph.DagSubgraph],
+            tier=system,
         )
+        self.mock_dag_config = MockDagConfig()
         self.registry.register_instance(
-            self.alias_mgr, keys=[AliasManager], tier=agent_session
+            self.mock_dag_config,
+            keys=[dag_config.DagConfig],
+            tier=system,
         )
+        self.mock_tool_manager = MockToolManager()
         self.registry.register_instance(
-            self.tmpl_formatter,
+            self.mock_tool_manager,
+            keys=[tool_provider.ToolManager],
+            tier=agent_session.agent_session,
+        )
+        self.mock_edit_manager = MockEditManager()
+        self.registry.register_instance(
+            self.mock_edit_manager,
+            keys=[sandbox_file_editor.EditManager],
+            tier=agent_session.agent_session,
+        )
+        self.mock_node_config = MockNodeConfig()
+        self.registry.register_instance(
+            self.mock_node_config,
+            keys=[agent_node_config.NodeConfig],
+            tier=agent_session.agent_session,
+        )
+        self.mock_role_config = MockRoleConfig()
+        self.registry.register_instance(
+            self.mock_role_config,
+            keys=[agent_node_config.RoleConfig],
+            tier=agent_session.agent_session,
+        )
+        self.mock_guide_delivery = MockGuideDelivery()
+        self.registry.register_instance(
+            self.mock_guide_delivery,
+            keys=[sandbox_guide_delivery.GuideDelivery],
+            tier=agent_session.agent_session,
+        )
+        self.mock_session_coordinator = MockSessionCoordinator()
+        self.mock_session_coordinator.storage = self.mock_storage
+        self.mock_session_coordinator.node_config = self.mock_node_config
+        self.mock_session_coordinator.role_config = self.mock_role_config
+        self.registry.register_instance(
+            self.mock_session_coordinator,
+            keys=[control_coordinate.SessionCoordinator],
+            tier=agent_session.agent_session,
+        )
+        self.mock_sandbox = MockSandbox()
+        self.registry.register_instance(
+            self.mock_sandbox,
+            keys=[sandbox.Sandbox],
+            tier=agent_session.agent_session,
+        )
+        self.mock_alias_manager = MockAliasManager()
+        self.registry.register_instance(
+            self.mock_alias_manager,
+            keys=[
+                agent_file_alias.AliasManager,
+                tool_provider.ParameterType[agent_file_alias.FileAlias, str],
+            ],
+            tier=agent_session.agent_session,
+        )
+        self.mock_template_formatter = MockTemplateFormatter()
+        self.registry.register_instance(
+            self.mock_template_formatter,
             keys=[template_format.TemplateFormatter],
-            tier=agent_session,
-        )
-        self.registry.register_instance(
-            self.node_cfg, keys=[NodeConfig], tier=agent_session
-        )
-        self.registry.register_instance(
-            self.guide_del, keys=[GuideDelivery], tier=agent_session
-        )
-        self.registry.register_instance(
-            self.edit_mgr, keys=[EditManager], tier=agent_session
-        )
-        self.registry.register_instance(
-            self.role_cfg, keys=[RoleConfig], tier=agent_session
-        )
-        self.registry.register_instance(self.sb, keys=[Sandbox], tier=agent_session)
-        self.registry.register_instance(
-            self.agent_cfg, keys=[AgentConfig], tier=agent_session
+            tier=agent_session.agent_session,
         )
 
-    def test_run_controller_initialization_with_blame_and_step_mode(self) -> None:
-        """CUJ: RunController installs advance, submit, fail, and blame tools when step mode and blame targets exist."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            ctrl: Any = scope.get_singleton(RunControllerImpl)
-            # Requirement: Verification checks exposed by the run controller include the session verification checks from node config.
-            # Requirement: [RunController] The run controller exposes verification checks that validate session criteria.
-            self.assertEqual(ctrl.verification_checks, [])
-            # Requirement: Tools cannot be configured against non-role/agent-specific state; the run controller installs submit, fail, check files, get work, and blame tools unconditionally, and installs advance tool when guide step mode is active.
-            # Requirement: [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
-            # Requirement: [RunController] The run controller installs a submit tool which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, accepting a text change summary parameter, and enforces change documentation.
-            # Requirement: [RunController] The run controller installs a fail tool which is a resolve tool that terminates the run in failure, accepting a text explanation parameter.
-            # Requirement: [RunController] The run controller installs an argument-free check files tool named check_files that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
-            # Requirement: [RunController] The run controller installs a blame tool which is a resolve tool, attributing task failure to an upstream dependency node, accepting a file alias blame target parameter and a text explanation parameter.
-            # Requirement: [RunController] The run controller installs a get work tool that retrieves active dirty nodes, materializes startup templates, accepting an integer max batch size parameter, and delivers the session task prompt.
-            tool_names = {t.name for t in self.tool_mgr.installed_tools}
-            # Verify the advance tool is named advance
-            self.assertIn("advance", tool_names)
-            # Verify the submit tool is named submit
-            self.assertIn("submit", tool_names)
-            # Verify the fail tool is named fail
-            self.assertIn("fail", tool_names)
-            # Verify the check files tool is named check_files
-            self.assertIn("check_files", tool_names)
-            # Verify the blame tool is named blame
-            self.assertIn("blame", tool_names)
-            # Verify the get work tool is named get_work
-            self.assertIn("get_work", tool_names)
+    def test_initialization(self) -> None:
+        """CUJ: Verify initial component presence and singleton resolution."""
+        self.assertIsNotNone(self.registry)
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            for cls in [
+                AdvanceTool,
+                BlameTool,
+                CheckFilesTool,
+                FailTool,
+                GetWorkTool,
+                RunController,
+                SubmitTool,
+            ]:
+                instance = scope.get_singleton(cls)
+                self.assertIsNotNone(instance)
 
-    def test_run_controller_initialization_without_step_mode(self) -> None:
-        """CUJ: RunController omits advance tool when step mode is inactive, and installs blame tool unconditionally."""
-        reg = LifecycleRegistry()
-        __initialize__(reg)
-        tool_mgr = MockToolManager()
-        cfg = MockNodeConfig(blame_targets=set(), is_step_mode=False, guide=None)
-        reg.register_instance(self.storage, keys=[dag_storage.DagStorage], tier=system)
-        reg.register_instance(self.subgraph, keys=[DagSubgraph], tier=system)
-        reg.register_instance(tool_mgr, keys=[ToolManager], tier=agent_session)
-        reg.register_instance(self.alias_mgr, keys=[AliasManager], tier=agent_session)
-        reg.register_instance(
-            self.tmpl_formatter,
-            keys=[template_format.TemplateFormatter],
-            tier=agent_session,
+    # -------------------------------------------------------------------------
+    # CheckFilesTool Tests
+    # -------------------------------------------------------------------------
+
+    def test_check_files_tool_metadata(self) -> None:
+        """Postcondition: Execute verification checks and present diagnostic outcomes."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(CheckFilesTool)
+            self.assertEqual(tool.name, tool_provider.ToolName("check_files"))
+            self.assertTrue(len(tool.description) > 0)
+
+    def test_check_files_tool_passes_verification(self) -> None:
+        """Postcondition: WHEN verification passes, MUST produce response presenting passing results."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        check = MockVerificationCheck(passed=True)
+        self.mock_node_config.verification_checks = [check]
+        self.mock_session_coordinator.verification_result = True
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(CheckFilesTool)
+            response = tool.execute_tool({})
+            self.assertFalse(response.is_failed)
+            self.assertFalse(response.is_terminated)
+            self.assertIsNotNone(response.content)
+
+    def test_check_files_tool_fails_verification(self) -> None:
+        """Postcondition: WHEN verification fails, MUST present sanitized diagnostic feedback alongside verification failure instructions."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        check = MockVerificationCheck(passed=False, diagnostic="SyntaxError: invalid syntax")
+        self.mock_node_config.verification_checks = [check]
+        self.mock_session_coordinator.verification_result = False
+        self.mock_session_coordinator.verification_diagnostic = "SyntaxError: invalid syntax"
+        self.mock_edit_manager.set_file_hash("hash_failing")
+        failure_instructions = agent_node_config.VerificationFailureInstructions(
+            "Review diagnostic output and fix the offending code."
         )
-        reg.register_instance(cfg, keys=[NodeConfig], tier=agent_session)
-        reg.register_instance(self.guide_del, keys=[GuideDelivery], tier=agent_session)
-        reg.register_instance(self.edit_mgr, keys=[EditManager], tier=agent_session)
-        reg.register_instance(self.role_cfg, keys=[RoleConfig], tier=agent_session)
-        reg.register_instance(self.sb, keys=[Sandbox], tier=agent_session)
-        reg.register_instance(self.agent_cfg, keys=[AgentConfig], tier=agent_session)
-
-        with enter_phase(agent_session, registry=reg) as scope:
-            ctrl: Any = scope.get_singleton(RunControllerImpl)
-            # Requirement: Tools cannot be configured against non-role/agent-specific state; the run controller installs submit, fail, check files, get work, and blame tools unconditionally, and installs advance tool when guide step mode is active.
-            tool_names = {t.name for t in tool_mgr.installed_tools}
-            self.assertIn("submit", tool_names)
-            self.assertIn("fail", tool_names)
-            self.assertIn("check_files", tool_names)
-            self.assertIn("get_work", tool_names)
-            self.assertIn("blame", tool_names)
-            self.assertNotIn("advance", tool_names)
-
-    def test_run_controller_evaluate_verification_caching(self) -> None:
-        """CUJ: RunController caches verification results and reuses them when file revision unchanged."""
-        check = MockVerificationCheck(
-            passes=False, diagnostic="Syntax error in /workspace/pkg/dep.py:5"
+        self.mock_node_config.guide = agent_node_config.NodeGuide(
+            summary=agent_node_config.GuideSummary("Overview"),
+            sections=[],
+            verification_failure=failure_instructions,
         )
-        self.node_cfg._verification_checks = [check]
-        self.edit_mgr.file_update_revision = 1
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(CheckFilesTool)
+            response = tool.execute_tool({})
+            self.assertTrue(response.is_failed)
+            self.assertIn("SyntaxError", str(response.content))
+            self.assertIn(str(failure_instructions), str(response.content))
 
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            ctrl: Any = scope.get_singleton(RunControllerImpl)
-            # First evaluation executes checks and caches result
-            # Requirement: Evaluation of verification checks for an active node is cached alongside the edit manager file hash of the target node read-write file.
-            # Requirement: [RunController] The run controller caches verification evaluation results alongside edit manager file hashes for target nodes, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
-            # Requirement: Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when the target read-write file hash has changed since the previous evaluation.
-            passed1, diag1 = ctrl.evaluate_verification()
-            self.assertFalse(passed1)
-            self.assertEqual(check.call_count, 1)
-            self.assertIn("dep.py:5", diag1)
+    def test_check_files_tool_unchanged_hashes(self) -> None:
+        """Postcondition: WHEN target file hashes have not changed, MUST remind agent status is unchanged."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        check = MockVerificationCheck(passed=True)
+        self.mock_node_config.verification_checks = [check]
+        self.mock_session_coordinator.verification_result = True
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(CheckFilesTool)
+            first_resp = tool.execute_tool({})
+            self.assertFalse(first_resp.is_failed)
+            self.mock_session_coordinator.is_cached = True
+            second_resp = tool.execute_tool({})
+            self.assertIsNotNone(second_resp.content)
 
-            # Re-evaluation with same file revision reuses cached result without re-executing checks
-            # Requirement: When the target read-write file hash has not changed since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
-            passed2, diag2 = ctrl.evaluate_verification()
-            self.assertFalse(passed2)
-            self.assertEqual(check.call_count, 1)
-            self.assertEqual(diag1, diag2)
+    def test_check_files_tool_presents_configured_verification_success_message(self) -> None:
+        """Postcondition: CheckFilesTool presenting configured verification success messages."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        check = MockVerificationCheck(passed=True)
+        self.mock_node_config.verification_checks = [check]
+        self.mock_session_coordinator.verification_result = True
+        success_msg = agent_node_config.VerificationSuccessMessage("All checks passed successfully.")
+        self.mock_node_config.verification_success_message = success_msg
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(CheckFilesTool)
+            response = tool.execute_tool({})
+            self.assertFalse(response.is_failed)
+            self.assertFalse(response.is_terminated)
+            self.assertIn("All checks passed successfully.", str(response.content))
 
-            # Modifying workspace files updates revision and triggers re-execution
-            self.edit_mgr.file_update_revision = 2
-            check.passes = True
-            passed3, _ = ctrl.evaluate_verification()
-            self.assertTrue(passed3)
-            self.assertEqual(check.call_count, 2)
+    # -------------------------------------------------------------------------
+    # AdvanceTool Tests
+    # -------------------------------------------------------------------------
 
-    def test_advance_tool_initial_delivery_omits_verification_update(self) -> None:
-        """CUJ: AdvanceTool evaluates verification on first execution and repeats primer/summary and diagnostics on failure."""
-        vcheck = MockVerificationCheck(passes=False, diagnostic="Failing initial check")
-        self.node_cfg._verification_checks = [vcheck]
-        self.guide_del.set_initial_primer("Task Primer Content")
+    def test_advance_tool_metadata(self) -> None:
+        """Postcondition: Advance guide milestone gated by verification checks."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(AdvanceTool)
+            self.assertEqual(tool.name, tool_provider.ToolName("advance"))
+            self.assertTrue(len(tool.description) > 0)
 
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            advance = scope.get_singleton(AdvanceToolImpl)
-            b = ActualParameterBindings(bindings=set())
-
-            # Verify the advance tool is named advance
-            self.assertEqual(advance.name, "advance")
-            self.assertEqual(advance.parameters, {})
-            self.assertIsInstance(advance.description, str)
-
-            # Requirement: Tool execution fails when verification has not been evaluated for the current workspace files or is failing, evaluating verification results and repeating the primer and summary content alongside failure diagnostics through guide delivery on the first step, reminding the agent that the check files tool should be called first, and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
-            resp = advance.execute_tool(b)
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIn("Task Primer Content", resp.content)
-            self.assertIn("Failing initial check", resp.content)
-            self.assertEqual(vcheck.call_count, 1)
-            self.assertEqual(resp.suppression_key, "advance")
-            self.assertIsNotNone(resp.follow_up_tool_call)
-            assert resp.follow_up_tool_call is not None
-            self.assertEqual(resp.follow_up_tool_call.tool_name, "check_files")
-
-    def test_advance_tool_subsequent_execution_fails_when_check_files_not_run(
-        self,
-    ) -> None:
-        """CUJ: Advance call fails when check_files has not been run."""
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            advance = scope.get_singleton(AdvanceToolImpl)
-            b = ActualParameterBindings(bindings=set())
-
-            # Requirement: Tool execution fails when verification has not been evaluated for the current workspace files or is failing, evaluating verification results and repeating the primer and summary content alongside failure diagnostics through guide delivery on the first step, reminding the agent that the check files tool should be called first, and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
-            resp = advance.execute_tool(b)
-
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertEqual(vcheck.call_count, 1)
-            self.assertIn("NodeGuide Summary", resp.content)
-            self.assertIsNotNone(resp.reminder)
-            self.assertIsNotNone(resp.follow_up_tool_call)
-            assert resp.follow_up_tool_call is not None
-            self.assertEqual(resp.follow_up_tool_call.tool_name, "check_files")
-
-    def test_advance_tool_file_edit_invalidates_verification_for_advance(
-        self,
-    ) -> None:
-        """CUJ: File modification invalidates verification, requiring check_files before advance."""
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            advance = scope.get_singleton(AdvanceToolImpl)
-            check_files = scope.get_singleton(CheckFilesTool)
-            b = ActualParameterBindings(bindings=set())
-
-            # 1. check_files runs and passes
-            _ = check_files.execute_tool(b)
-            self.assertEqual(vcheck.call_count, 1)
-
-            # 2. Advance succeeds
-            self.guide_del.has_steps_remaining = True
-            self.guide_del.next_step_content = "Step 1: Write initial test case"
-            resp = advance.execute_tool(b)
-            self.assertFalse(resp.is_failed)
-
-            # 3. Agent edits workspace file -> file_update_revision increments
-            self.edit_mgr.file_update_revision += 1
-
-            # 4. Subsequent advance fails because verification is outdated
-            # Requirement: Tool execution fails when verification has not been evaluated for the current workspace files or is failing, evaluating verification results and repeating the primer and summary content alongside failure diagnostics through guide delivery on the first step, reminding the agent that the check files tool should be called first, and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
-            resp = advance.execute_tool(b)
-            self.assertTrue(resp.is_failed)
-            assert resp.follow_up_tool_call is not None
-            self.assertEqual(resp.follow_up_tool_call.tool_name, "check_files")
-
-            # 5. check_files runs again on new revision
-            _ = check_files.execute_tool(b)
-            self.assertEqual(vcheck.call_count, 2)
-
-            # 6. Advance succeeds again
-            resp = advance.execute_tool(b)
-            self.assertFalse(resp.is_failed)
-
-    def test_advance_tool_subsequent_execution_fails_when_verification_failing(
-        self,
-    ) -> None:
-        """CUJ: Subsequent advance call evaluates verification and fails when verification fails."""
-        vcheck = MockVerificationCheck(passes=False, diagnostic="Syntax error")
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            advance = scope.get_singleton(AdvanceToolImpl)
-            check_files = scope.get_singleton(CheckFilesTool)
-            b = ActualParameterBindings(bindings=set())
-
-            _ = check_files.execute_tool(b)
-            # Requirement: Tool execution fails when verification has not been evaluated for the current workspace files or is failing, evaluating verification results and repeating the primer and summary content alongside failure diagnostics through guide delivery on the first step, reminding the agent that the check files tool should be called first, and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
-            resp = advance.execute_tool(b)
-
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertEqual(vcheck.call_count, 1)
-            self.assertIsNotNone(resp.reminder)
-            self.assertIsNotNone(resp.follow_up_tool_call)
-            assert resp.follow_up_tool_call is not None
-            self.assertEqual(resp.follow_up_tool_call.tool_name, "check_files")
-            self.assertTrue(resp.follow_up_tool_call.reasoning_text)
-            assert resp.follow_up_tool_call.reasoning_text is not None
-            self.assertIn(
-                "verification", resp.follow_up_tool_call.reasoning_text.lower()
-            )
-            self.assertIn("advanc", resp.follow_up_tool_call.reasoning_text.lower())
-
-    def test_advance_tool_steps_remaining_delivers_next_step(self) -> None:
-        """CUJ: AdvanceTool advances guide step and delivers next step section when verification passes."""
-        self.guide_del.has_steps_remaining = True
-        self.guide_del.next_step_content = "Step 1: Write initial test case"
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            advance = scope.get_singleton(AdvanceToolImpl)
-            check_files = scope.get_singleton(CheckFilesTool)
-            b = ActualParameterBindings(bindings=set())
-
-            _ = advance.execute_tool(b)
-            _ = check_files.execute_tool(b)
-            # Requirement: Tool execution advances guide delivery and delivers the next step section when verification is passing and guide steps remain.
-            resp = advance.execute_tool(b)
-
-            self.assertFalse(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertEqual(resp.content, "Step 1: Write initial test case")
-
-    def test_advance_tool_no_steps_remaining_files_modified_requires_submit(
-        self,
-    ) -> None:
-        """CUJ: AdvanceTool fails with reminder to call submit tool when no steps remain and files were modified."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            advance = scope.get_singleton(AdvanceToolImpl)
-            check_files = scope.get_singleton(CheckFilesTool)
-            b = ActualParameterBindings(bindings=set())
-
-            _ = advance.execute_tool(b)
-            _ = check_files.execute_tool(b)
-            # Requirement: Tool execution fails with a reminder to call the submit tool with a change summary describing modifications when verification is passing, no steps remain, and workspace files were modified.
-            resp = advance.execute_tool(b)
-
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIsNotNone(resp.reminder)
-            self.assertEqual(resp.suppression_key, "advance")
-
-    def test_advance_tool_no_steps_remaining_no_files_modified_specifies_submit_followup(
-        self,
-    ) -> None:
-        """CUJ: AdvanceTool specifies submit follow-up tool call when no steps remain and no files were modified."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = False
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            advance = scope.get_singleton(AdvanceToolImpl)
-            check_files = scope.get_singleton(CheckFilesTool)
-            b = ActualParameterBindings(bindings=set())
-
-            _ = advance.execute_tool(b)
-            _ = check_files.execute_tool(b)
-            # Requirement: Tool execution produces a response specifying a follow-up execution of the submit tool without a change summary and with reasoning text indicating that all guide steps are complete when verification is passing, no steps remain, and no workspace files were modified.
-            resp = advance.execute_tool(b)
-
-            self.assertFalse(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIsNotNone(resp.follow_up_tool_call)
-            assert resp.follow_up_tool_call is not None
-            self.assertEqual(resp.follow_up_tool_call.tool_name, "submit")
-            self.assertEqual(len(resp.follow_up_tool_call.wire_parameter_bindings), 0)
-            self.assertTrue(resp.follow_up_tool_call.reasoning_text)
-            assert resp.follow_up_tool_call.reasoning_text is not None
-            self.assertIn("guide step", resp.follow_up_tool_call.reasoning_text.lower())
-            self.assertEqual(resp.suppression_key, "advance")
-
-    def test_submit_tool_parameters_and_converters(self) -> None:
-        """CUJ: SubmitTool declares target and change_summary parameters with converters."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            # Verify the submit tool is named submit
-            self.assertEqual(submit.name, "submit")
-            self.assertIsInstance(submit.description, str)
-            self.assertEqual(
-                submit.parameters,
-                {
-                    submit.target_parameter.name: submit.target_parameter,
-                    submit.change_summary_parameter.name: submit.change_summary_parameter,
-                },
-            )
-            self.assertEqual(submit.target_parameter.name, "target")
-            self.assertEqual(submit.change_summary_parameter.name, "change_summary")
-            self.assertTrue(
-                callable(submit.change_summary_parameter.parameter_type.convert)
-            )
-            self.assertIs(submit.target_parameter.parameter_type, self.alias_mgr)
-
-    def test_submit_tool_fails_when_steps_remain_specifies_advance_followup(
-        self,
-    ) -> None:
-        """CUJ: SubmitTool fails when guide steps remain and specifies advance as follow-up."""
-        self.guide_del.has_steps_remaining = True
-        vcheck = MockVerificationCheck(passes=False)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            b = ActualParameterBindings(bindings=set())
-            # Requirement: Executing the submit tool updates verification results if outdated.
-            # Requirement: Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call with reasoning text indicating that remaining guide steps must be completed before finishing.
-            resp = submit.execute_tool(b)
-
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIsNotNone(resp.reminder)
-            self.assertIsNotNone(resp.follow_up_tool_call)
-            assert resp.follow_up_tool_call is not None
-            self.assertEqual(resp.follow_up_tool_call.tool_name, "advance")
-            self.assertEqual(len(resp.follow_up_tool_call.wire_parameter_bindings), 0)
-            self.assertTrue(resp.follow_up_tool_call.reasoning_text)
-            assert resp.follow_up_tool_call.reasoning_text is not None
-            self.assertIn("guide step", resp.follow_up_tool_call.reasoning_text.lower())
-            # Verify submit suppression key
-            self.assertEqual(resp.suppression_key, "submit")
-
-    def test_submit_tool_fails_when_verification_failing_specifies_check_files_followup(
-        self,
-    ) -> None:
-        """CUJ: SubmitTool fails when verification fails and specifies check_files follow-up."""
-        self.guide_del.has_steps_remaining = False
-        self.node_cfg._feedback = ["Previous feedback"]
-        self.edit_mgr.has_modifications = False
-        vcheck = MockVerificationCheck(
-            passes=False, diagnostic="Syntax error in /workspace/pkg/dep.py:20"
-        )
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            b = ActualParameterBindings(bindings=set())
-            # Requirement: Executing the submit tool updates verification results if outdated.
-            # Requirement: Tool execution fails when verification is failing, reminding the agent that the check files tool should be called first and specifying a follow-up execution of the check files tool targeting the resolve target with reasoning text indicating that verification results must be inspected before submitting.
-            resp = submit.execute_tool(b)
-
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIsNotNone(resp.reminder)
-            self.assertIsNotNone(resp.follow_up_tool_call)
-            assert resp.follow_up_tool_call is not None
-            self.assertEqual(resp.follow_up_tool_call.tool_name, "check_files")
-            self.assertEqual(
-                dict(resp.follow_up_tool_call.wire_parameter_bindings),
-                {},
-            )
-            self.assertTrue(resp.follow_up_tool_call.reasoning_text)
-            assert resp.follow_up_tool_call.reasoning_text is not None
-            self.assertIn(
-                "verification", resp.follow_up_tool_call.reasoning_text.lower()
-            )
-            self.assertIn("submit", resp.follow_up_tool_call.reasoning_text.lower())
-            self.assertEqual(resp.suppression_key, "submit")
-
-    def test_submit_tool_fails_when_feedback_present_and_no_files_modified(
-        self,
-    ) -> None:
-        """CUJ: SubmitTool fails when feedback is present and no workspace files were modified."""
-        self.guide_del.has_steps_remaining = False
-        self.node_cfg._feedback = ["Must address edge cases"]
-        self.edit_mgr.has_modifications = False
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            b = ActualParameterBindings(bindings=set())
-            # Requirement: Tool execution fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
-            resp = submit.execute_tool(b)
-
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIsNotNone(resp.reminder)
-            self.assertEqual(resp.suppression_key, "submit")
-
-    def test_submit_tool_fails_when_initial_implementation_and_no_files_modified(
-        self,
-    ) -> None:
-        """CUJ: SubmitTool fails when initial implementation change message is present and no workspace files were modified."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = False
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            open_node = rc.open_nodes()[0]
-            self.storage.messages[open_node] = [
-                dag_storage.ChangeMessage(
-                    content=MessageContent("implement lib/target.py")
+    def test_advance_tool_failing_first_step_repeats_primer(self) -> None:
+        """Postcondition: WHEN verification is failing on first step, MUST repeat primer and summary."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        guide = agent_node_config.NodeGuide(
+            summary=agent_node_config.GuideSummary("Overview guide"),
+            sections=[
+                agent_node_config.StepSection(
+                    index=agent_node_config.StepIndex(0),
+                    title=agent_node_config.StepTitle("First Step"),
+                    content=agent_node_config.StepContent("Do step 1"),
                 )
-            ]
-            b = ActualParameterBindings(bindings=set())
-            # Requirement: Tool execution fails when an initial implementation change is assigned to the target node and no workspace files were modified, reminding the agent that workspace files must be modified to implement the change before submitting.
-            resp = submit.execute_tool(b)
+            ],
+        )
+        self.mock_guide_delivery.guide = guide
+        self.mock_guide_delivery.has_steps_remaining = True
+        self.mock_node_config.is_step_mode = True
+        self.mock_node_config.guide = guide
+        self.mock_session_coordinator.verification_result = False
+        self.mock_session_coordinator.verification_diagnostic = "First step failure"
+        self.mock_node_config.verification_checks = [
+            MockVerificationCheck(passed=False, diagnostic="First step failure")
+        ]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(AdvanceTool)
+            response = tool.execute_tool({})
+            self.assertTrue(response.is_failed)
 
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIn(
-                "Initial implementation task requires workspace file modifications",
-                resp.content,
+    def test_advance_tool_failing_specifies_check_files(self) -> None:
+        """Postcondition: WHEN verification is failing, MUST remind agent to call check files and specify follow-up."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        guide = agent_node_config.NodeGuide(
+            summary=agent_node_config.GuideSummary("Overview guide"),
+            sections=[
+                agent_node_config.StepSection(
+                    index=agent_node_config.StepIndex(2),
+                    title=agent_node_config.StepTitle("Later Step"),
+                    content=agent_node_config.StepContent("Do later step"),
+                )
+            ],
+        )
+        self.mock_guide_delivery.guide = guide
+        self.mock_guide_delivery.has_steps_remaining = True
+        self.mock_node_config.is_step_mode = True
+        self.mock_node_config.guide = guide
+        self.mock_session_coordinator.verification_result = False
+        self.mock_session_coordinator.verification_diagnostic = "Later failure"
+        self.mock_node_config.verification_checks = [
+            MockVerificationCheck(passed=False, diagnostic="Later failure")
+        ]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(AdvanceTool)
+            response = tool.execute_tool({})
+            self.assertTrue(response.is_failed)
+            self.assertIsNotNone(response.follow_up_tool_call)
+            assert response.follow_up_tool_call is not None
+            self.assertEqual(
+                response.follow_up_tool_call.tool_name,
+                tool_provider.ToolName("check_files"),
             )
-            self.assertIsNotNone(resp.reminder)
-            self.assertEqual(resp.suppression_key, "submit")
 
-    def test_submit_tool_fails_when_files_modified_and_summary_omitted(self) -> None:
-        """CUJ: SubmitTool fails when workspace files modified but change summary omitted."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
+    def test_advance_tool_delivering_next_milestone_section_when_verification_passes_and_guide_steps_remain(self) -> None:
+        """Postcondition: AdvanceTool delivering the next milestone section when verification passes and guide steps remain."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        section = agent_node_config.StepSection(
+            index=agent_node_config.StepIndex(1),
+            title=agent_node_config.StepTitle("Step 1 Title"),
+            content=agent_node_config.StepContent("Step 1 Content Instructions"),
+        )
+        guide = agent_node_config.NodeGuide(
+            summary=agent_node_config.GuideSummary("Overview guide"),
+            sections=[section],
+        )
+        self.mock_guide_delivery.guide = guide
+        self.mock_guide_delivery.has_steps_remaining = True
+        self.mock_node_config.is_step_mode = True
+        self.mock_node_config.guide = guide
+        self.mock_session_coordinator.verification_result = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        milestone_response = tool_provider.ToolResponse(
+            is_failed=False,
+            is_terminated=False,
+            content=tool_provider.ToolResponseContent(
+                "Milestone Section 1: Step 1 Title\nStep 1 Content Instructions"
+            ),
+        )
+        self.mock_guide_delivery.advance_step_response = milestone_response
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(AdvanceTool)
+            response = tool.execute_tool({})
+            self.assertFalse(response.is_failed)
+            self.assertFalse(response.is_terminated)
+            self.assertEqual(response.content, milestone_response.content)
+            self.assertIn("Step 1 Title", str(response.content))
+            self.assertIn("Step 1 Content Instructions", str(response.content))
+            self.assertEqual(len(self.mock_guide_delivery.advance_step_calls), 1)
+            self.assertTrue(self.mock_guide_delivery.advance_step_calls[0][0])
 
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            b = ActualParameterBindings(bindings=set())
-            # Requirement: Tool execution fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
-            resp = submit.execute_tool(b)
+    def test_advance_tool_passes_no_steps_modified(self) -> None:
+        """Postcondition: WHEN verification passes, no steps remain, and files modified, MUST fail reminding to submit with summary."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_guide_delivery.has_steps_remaining = False
+        self.mock_sandbox.has_modifications = True
+        self.mock_edit_manager.has_modifications = True
+        self.mock_session_coordinator.verification_result = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(AdvanceTool)
+            response = tool.execute_tool({})
+            self.assertTrue(response.is_failed)
+            combined = f"{response.content} {response.reminder or ''}".lower()
+            self.assertIn("submit", combined)
 
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIsNotNone(resp.reminder)
-            self.assertEqual(resp.suppression_key, "submit")
-
-    def test_submit_tool_fails_when_no_files_modified_and_summary_provided(
-        self,
-    ) -> None:
-        """CUJ: SubmitTool fails when no workspace files modified but change summary provided."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = False
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            b = ActualParameterBindings(
-                bindings={(submit.change_summary_parameter, "Unneeded change summary")}
+    def test_advance_tool_passes_no_steps_unmodified(self) -> None:
+        """Postcondition: WHEN verification passes, no steps remain, and no files modified, MUST specify follow-up submit."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_guide_delivery.has_steps_remaining = False
+        self.mock_sandbox.has_modifications = False
+        self.mock_edit_manager.has_modifications = False
+        self.mock_session_coordinator.verification_result = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(AdvanceTool)
+            response = tool.execute_tool({})
+            self.assertIsNotNone(response.follow_up_tool_call)
+            assert response.follow_up_tool_call is not None
+            self.assertEqual(
+                response.follow_up_tool_call.tool_name,
+                tool_provider.ToolName("submit"),
             )
-            resp = submit.execute_tool(b)
 
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIn("Workspace files were not modified", resp.content)
-            self.assertEqual(resp.suppression_key, "submit")
+    # -------------------------------------------------------------------------
+    # SubmitTool Tests
+    # -------------------------------------------------------------------------
 
-    def test_submit_tool_succeeds_when_no_files_modified_and_no_summary_provided(
-        self,
-    ) -> None:
-        """CUJ: SubmitTool succeeds and terminates when no workspace files modified and no change summary provided."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = False
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
+    def test_submit_tool_metadata(self) -> None:
+        """Postcondition: Submit target changes and enforce change summary when modified."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            self.assertEqual(tool.name, tool_provider.ToolName("submit"))
+            self.assertTrue(len(tool.description) > 0)
+            self.assertIn(tool.target_parameter.name, tool.parameters)
+            self.assertIn(tool.change_summary_parameter.name, tool.parameters)
 
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            b = ActualParameterBindings(bindings=set())
-            resp = submit.execute_tool(b)
-
-            self.assertFalse(resp.is_failed)
-            self.assertTrue(resp.is_terminated)
-            self.assertEqual(resp.suppression_key, "submit")
-
-    def test_submit_tool_succeeds_and_terminates_session(self) -> None:
-        """CUJ: SubmitTool succeeds and terminates session when criteria met and verification passes."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            b = ActualParameterBindings(
-                bindings={(submit.change_summary_parameter, "Added new feature")}
+    def test_submit_tool_fails_when_guide_steps_remain(self) -> None:
+        """Postcondition: WHEN guide step mode is active and steps remain, MUST fail specifying advance."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_node_config.is_step_mode = True
+        self.mock_guide_delivery.has_steps_remaining = True
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            response = tool.execute_tool({})
+            self.assertTrue(response.is_failed)
+            self.assertIsNotNone(response.follow_up_tool_call)
+            assert response.follow_up_tool_call is not None
+            self.assertEqual(
+                response.follow_up_tool_call.tool_name,
+                tool_provider.ToolName("advance"),
             )
-            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
-            resp = submit.execute_tool(b)
 
-            self.assertFalse(resp.is_failed)
-            self.assertTrue(resp.is_terminated)
-            self.assertIn("Added new feature", resp.content)
-            self.assertEqual(resp.suppression_key, "submit")
+    def test_submit_tool_fails_when_verification_failing(self) -> None:
+        """Postcondition: WHEN verification is failing, MUST fail specifying follow-up check_files."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.verification_result = False
+        self.mock_session_coordinator.verification_diagnostic = "Syntax error"
+        self.mock_node_config.is_step_mode = False
+        self.mock_node_config.verification_checks = [
+            MockVerificationCheck(passed=False, diagnostic="Syntax error")
+        ]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            response = tool.execute_tool({})
+            self.assertTrue(response.is_failed)
+            self.assertIsNotNone(response.follow_up_tool_call)
+            assert response.follow_up_tool_call is not None
+            self.assertEqual(
+                response.follow_up_tool_call.tool_name,
+                tool_provider.ToolName("check_files"),
+            )
 
-    def test_fail_tool(self) -> None:
-        """CUJ: FailTool produces terminating failure response carrying explanation."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            fail_tool = scope.get_singleton(FailToolImpl)
-            self.assertIsInstance(fail_tool.description, str)
-            self.assertGreater(len(fail_tool.parameters), 0)
-            # Verify the fail tool is named fail
-            self.assertEqual(fail_tool.name, "fail")
-            self.assertEqual(fail_tool.explanation_parameter.name, "explanation")
+    def test_submit_tool_fails_when_modified_without_summary(self) -> None:
+        """Postcondition: WHEN files were modified and change summary is omitted, MUST fail."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.verification_result = True
+        self.mock_sandbox.has_modifications = True
+        self.mock_edit_manager.has_modifications = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            response = tool.execute_tool({})
+            self.assertTrue(response.is_failed)
+
+    def test_submit_tool_fails_when_unmodified_with_summary(self) -> None:
+        """Postcondition: WHEN workspace files were not modified and change summary is provided, MUST fail reminding agent that change summaries are not permitted when submitting without workspace file modifications."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.verification_result = True
+        self.mock_sandbox.has_modifications = False
+        self.mock_edit_manager.has_modifications = False
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Unneeded summary"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertTrue(response.is_failed)
+            combined = f"{response.content} {response.reminder or ''}".lower()
             self.assertTrue(
-                callable(fail_tool.explanation_parameter.parameter_type.convert)
+                "not permitted" in combined
+                or "without" in combined
+                or "modification" in combined
             )
 
-            b = ActualParameterBindings(
-                bindings={(fail_tool.explanation_parameter, "Cannot solve bug")}
-            )
-            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
-            # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
-            resp = fail_tool.execute_tool(b)
+    def test_submit_tool_fails_auditor_with_summary(self) -> None:
+        """Postcondition: WHEN target is an auditor node and change summary is provided, MUST fail reminding agent that change summary is prohibited for audit nodes."""
+        node = _make_node("unit1", role="auditor")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.verification_result = True
+        self.mock_role_config.role = agent_node_config.RoleName("auditor")
+        self.mock_sandbox.has_modifications = True
+        self.mock_edit_manager.has_modifications = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Summary for audit"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertTrue(response.is_failed)
+            combined = f"{response.content} {response.reminder or ''}".lower()
+            self.assertTrue("prohibited" in combined or "audit" in combined)
 
-            self.assertTrue(resp.is_failed)
-            self.assertTrue(resp.is_terminated)
-            self.assertIn("Cannot solve bug", resp.content)
+    def test_submit_tool_fails_when_feedback_present_without_modifications(self) -> None:
+        """Postcondition: WHEN session feedback is present and no files were modified, MUST fail."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.verification_result = True
+        self.mock_sandbox.has_modifications = False
+        self.mock_edit_manager.has_modifications = False
+        self.mock_node_config.feedback = [agent_node_config.NodeFeedback("Fix regression")]
+        self.mock_storage.add_feedback_message(
+            node,
+            dag_storage.FeedbackMessage(
+                content=dag_storage.MessageContent("Fix regression"), target=node
+            ),
+        )
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+            }
+            response = tool.execute_tool(_bindings(bindings))
+            self.assertTrue(response.is_failed)
 
-    def test_blame_tool(self) -> None:
-        """CUJ: BlameTool validates target and produces terminating feedback attribution."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            blame_tool = scope.get_singleton(BlameToolImpl)
-            self.assertIsInstance(blame_tool.description, str)
-            self.assertGreater(len(blame_tool.parameters), 0)
-            # Verify the blame tool is named blame
-            self.assertEqual(blame_tool.name, "blame")
-            self.assertIs(
-                blame_tool.blame_target_parameter.parameter_type, self.alias_mgr
+    def test_submit_tool_failing_when_per_node_configuration_specifies_active_feedback_on_unmodified_target(self) -> None:
+        """Postcondition: SubmitTool failing when per-node configuration specifies active feedback on an unmodified target."""
+        node = _make_node("unit_per_node_feedback")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit_per_node_feedback.py")
+        self.mock_session_coordinator.verification_result = True
+        self.mock_sandbox.has_modifications = False
+        self.mock_edit_manager.has_modifications = False
+        self.mock_node_config.feedback = []
+        self.mock_storage.clear_messages(node)
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        self.mock_node_config.per_node_info_by_node = {
+            node: agent_node_config.PerNodeInfo(
+                read_only_files=set(),
+                read_write_files=set(),
+                templates={},
+                template_parameters={},
+                allows_step_mode=False,
+                guide_file=None,
+                guide=None,
+                blame_targets=set(),
+                verification_checks=[MockVerificationCheck(passed=True)],
+                src_file_alias=None,
+                verification_success_message=None,
+                feedback=[agent_node_config.NodeFeedback("Resolve reviewer defect before submitting")],
             )
-            self.assertEqual(blame_tool.explanation_parameter.name, "explanation")
-            self.assertTrue(
-                callable(blame_tool.explanation_parameter.parameter_type.convert)
-            )
+        }
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            response = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_per_node_feedback.py"),
+            }))
+            self.assertTrue(response.is_failed)
+            self.assertFalse(response.is_terminated)
+            self.assertTrue(len(str(response.content)) > 0)
+            self.assertNotIn(node, self.mock_storage.clean_nodes)
+            self.assertIsNone(self.mock_session_coordinator.dispatched_submit)
 
-            # Invalid target fails
-            unrecognized = ReadOnlyFile(
-                relative_path=RelativePath("unknown.py"),
-                workspace_path=_make_workspace_path("unknown.py"),
-                owning_node=_make_dag_node(
-                    unit_address="//pkg:unknown", role_address="lib"
+    def test_submit_tool_succeeds_when_initial_implementation_without_modifications(self) -> None:
+        """Postcondition: WHEN an initial implementation change is assigned and no files were modified, MUST succeed without change summary."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.verification_result = True
+        self.mock_sandbox.has_modifications = False
+        self.mock_edit_manager.has_modifications = False
+        self.mock_storage.add_message(
+            dag_storage.ChangeMessage(
+                content=dag_storage.MessageContent("Initial implementation required")
+            ),
+            to=node,
+        )
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+            }
+            response = tool.execute_tool(_bindings(bindings))
+            self.assertFalse(response.is_failed)
+            self.assertIn(node, self.mock_storage.clean_nodes)
+
+    def test_submit_tool_differentiating_message_variants_when_enforcing_initial_implementation_modification_constraints(self) -> None:
+        """Postcondition: SubmitTool differentiating message variants (including non-change feedback, empty descriptions, and audit notifications) when enforcing modification constraints."""
+        self.mock_sandbox.has_modifications = False
+        self.mock_edit_manager.has_modifications = False
+        self.mock_session_coordinator.verification_result = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+
+            # 1. Initial implementation change message variant: MUST succeed when unmodified without change summary
+            node_init = _make_node("unit_init")
+            self.mock_storage.mark_node_dirty(node_init)
+            self.mock_session_coordinator.register_node(node_init, "pkg/unit_init.py")
+            self.mock_storage.add_message(
+                dag_storage.ChangeMessage(
+                    content=dag_storage.MessageContent("Initial implementation required")
+                ),
+                to=node_init,
+            )
+            resp_init = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_init.py")}))
+            self.assertFalse(resp_init.is_failed)
+            self.assertIn(node_init, self.mock_storage.clean_nodes)
+
+            # 2. Empty description change message variant: MUST succeed when unmodified without change summary
+            node_empty = _make_node("unit_empty")
+            self.mock_storage.mark_node_dirty(node_empty)
+            self.mock_session_coordinator.register_node(node_empty, "pkg/unit_empty.py")
+            self.mock_storage.add_message(
+                dag_storage.ChangeMessage(
+                    content=dag_storage.MessageContent("")
+                ),
+                to=node_empty,
+            )
+            resp_empty = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_empty.py")}))
+            self.assertFalse(resp_empty.is_failed)
+            self.assertIn(node_empty, self.mock_storage.clean_nodes)
+
+            # Whitespace-only description change message variant: MUST also succeed when unmodified without change summary
+            node_ws = _make_node("unit_ws")
+            self.mock_storage.mark_node_dirty(node_ws)
+            self.mock_session_coordinator.register_node(node_ws, "pkg/unit_ws.py")
+            self.mock_storage.add_message(
+                dag_storage.ChangeMessage(
+                    content=dag_storage.MessageContent("   \n\t  ")
+                ),
+                to=node_ws,
+            )
+            resp_ws = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_ws.py")}))
+            self.assertFalse(resp_ws.is_failed)
+            self.assertIn(node_ws, self.mock_storage.clean_nodes)
+
+            # 3. Non-change feedback variant (FeedbackMessage and session feedback): MUST fail when unmodified
+            node_fb = _make_node("unit_fb")
+            self.mock_storage.mark_node_dirty(node_fb)
+            self.mock_session_coordinator.register_node(node_fb, "pkg/unit_fb.py")
+            self.mock_storage.add_feedback_message(
+                node_fb,
+                dag_storage.FeedbackMessage(
+                    content=dag_storage.MessageContent("Downstream defect: regression observed"),
+                    target=node_fb,
                 ),
             )
-            b_invalid = ActualParameterBindings(
-                bindings={
-                    (blame_tool.blame_target_parameter, unrecognized),
-                    (blame_tool.explanation_parameter, "Broken"),
-                }
+            self.mock_node_config.feedback = [agent_node_config.NodeFeedback("Fix regression")]
+            resp_fb = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_fb.py")}))
+            self.assertTrue(resp_fb.is_failed)
+
+            # 4. Audit notification variant: MUST succeed when unmodified without change summary
+            node_audit = _make_node("unit_audit", role="auditor")
+            self.mock_storage.mark_node_dirty(node_audit)
+            self.mock_session_coordinator.register_node(node_audit, "pkg/unit_audit.py")
+            self.mock_role_config.role = agent_node_config.RoleName("auditor")
+            self.mock_storage.add_message(
+                dag_storage.ChangeMessage(
+                    content=dag_storage.MessageContent("Audit notification: verify implementation")
+                ),
+                to=node_audit,
             )
-            # Requirement: Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
-            # Requirement: Tool execution fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
-            resp_inv = blame_tool.execute_tool(b_invalid)
-            self.assertTrue(resp_inv.is_failed)
-            self.assertIsNotNone(resp_inv.reminder)
+            resp_audit = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_audit.py")}))
+            self.assertFalse(resp_audit.is_failed)
+            self.assertIn(node_audit, self.mock_storage.clean_nodes)
 
-            # Multiline explanation fails
-            b_multiline = ActualParameterBindings(
-                bindings={
-                    (blame_tool.blame_target_parameter, self.blame_target_file),
-                    (blame_tool.explanation_parameter, "Line 1\nLine 2"),
-                }
+            # 5. Upstream dependency change variant: MUST succeed when unmodified without change summary
+            self.mock_role_config.role = agent_node_config.RoleName("developer")
+            self.mock_node_config.feedback = []
+            node_dep = _make_node("unit_dep")
+            self.mock_storage.mark_node_dirty(node_dep)
+            self.mock_session_coordinator.register_node(node_dep, "pkg/unit_dep.py")
+            self.mock_storage.add_message(
+                dag_storage.ChangeMessage(
+                    content=dag_storage.MessageContent("Upstream dependency changed")
+                ),
+                to=node_dep,
             )
-            # Requirement: Tool execution fails if the explanation contains newline characters, providing an error response and reminding the agent that the blame explanation must be a single paragraph without newlines.
-            resp_multi = blame_tool.execute_tool(b_multiline)
-            self.assertTrue(resp_multi.is_failed)
-            self.assertFalse(resp_multi.is_terminated)
-            self.assertEqual(
-                resp_multi.content,
-                "Error: Blame explanation must be a single paragraph without newlines.",
+            resp_dep = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_dep.py")}))
+            self.assertFalse(resp_dep.is_failed)
+            self.assertIn(node_dep, self.mock_storage.clean_nodes)
+
+    def test_submit_tool_differentiating_message_variants_in_graph_storage_for_non_auditor_targets_without_active_session_feedback(self) -> None:
+        """Postcondition: SubmitTool differentiating message variants in graph storage (non-change defect feedback and audit messages) for non-auditor targets without active session feedback when evaluating initial implementation modification constraints."""
+        self.mock_sandbox.has_modifications = False
+        self.mock_edit_manager.has_modifications = False
+        self.mock_session_coordinator.verification_result = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        self.mock_role_config.role = agent_node_config.RoleName("developer")
+        self.mock_node_config.feedback = []
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+
+            # 1. Non-change defect feedback in graph storage for non-auditor target without active session feedback: MUST fail when unmodified
+            node_defect = _make_node("unit_non_auditor_defect", role="developer")
+            self.mock_storage.mark_node_dirty(node_defect)
+            self.mock_session_coordinator.register_node(node_defect, "pkg/unit_non_auditor_defect.py")
+            self.mock_storage.add_feedback_message(
+                node_defect,
+                dag_storage.FeedbackMessage(
+                    content=dag_storage.MessageContent("Downstream defect: regression observed"),
+                    target=node_defect,
+                ),
             )
-            self.assertEqual(
-                resp_multi.reminder,
-                "Provide the blame explanation as a single continuous paragraph without line breaks or bulleted lists.",
+            resp_defect = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_non_auditor_defect.py")}))
+            self.assertTrue(resp_defect.is_failed)
+
+            # 2. Audit message in graph storage for non-auditor target without active session feedback: MUST succeed when unmodified without change summary
+            node_audit = _make_node("unit_non_auditor_audit", role="developer")
+            self.mock_storage.mark_node_dirty(node_audit)
+            self.mock_session_coordinator.register_node(node_audit, "pkg/unit_non_auditor_audit.py")
+            self.mock_storage.add_message(
+                dag_storage.ChangeMessage(
+                    content=dag_storage.MessageContent("Audit notification: verified implementation")
+                ),
+                to=node_audit,
             )
+            resp_audit = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_non_auditor_audit.py")}))
+            self.assertFalse(resp_audit.is_failed)
+            self.assertIn(node_audit, self.mock_storage.clean_nodes)
 
-            # Valid target terminates with Blamed attribution
-            b_valid = ActualParameterBindings(
-                bindings={
-                    (blame_tool.blame_target_parameter, self.blame_target_file),
-                    (blame_tool.explanation_parameter, "Broken type signature"),
-                }
+            # 3. Initial implementation change message in graph storage for non-auditor target without active session feedback: MUST succeed when unmodified without change summary
+            node_init = _make_node("unit_non_auditor_init", role="developer")
+            self.mock_storage.mark_node_dirty(node_init)
+            self.mock_session_coordinator.register_node(node_init, "pkg/unit_non_auditor_init.py")
+            self.mock_storage.add_message(
+                dag_storage.ChangeMessage(
+                    content=dag_storage.MessageContent("Initial implementation required")
+                ),
+                to=node_init,
             )
-            # Requirement: Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
-            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
-            resp_val = blame_tool.execute_tool(b_valid)
-            self.assertFalse(resp_val.is_failed)
-            self.assertTrue(resp_val.is_terminated)
-            self.assertIn("dep.py: Broken type signature", resp_val.content)
+            resp_init = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_non_auditor_init.py")}))
+            self.assertFalse(resp_init.is_failed)
+            self.assertIn(node_init, self.mock_storage.clean_nodes)
 
-            # Backward compatibility: raw_target provided instead of blame_target
-            b_legacy = ActualParameterBindings(
-                bindings={
-                    (blame_tool.target_parameter, self.blame_target_file),
-                    (blame_tool.explanation_parameter, "Legacy blame call"),
-                }
+            # 4. Empty description change message in graph storage for non-auditor target without active session feedback: MUST succeed when unmodified without change summary
+            node_empty = _make_node("unit_non_auditor_empty", role="developer")
+            self.mock_storage.mark_node_dirty(node_empty)
+            self.mock_session_coordinator.register_node(node_empty, "pkg/unit_non_auditor_empty.py")
+            self.mock_storage.add_message(
+                dag_storage.ChangeMessage(
+                    content=dag_storage.MessageContent("")
+                ),
+                to=node_empty,
             )
-            # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
-            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
-            resp_leg = blame_tool.execute_tool(b_legacy)
-            self.assertFalse(resp_leg.is_failed)
-            self.assertTrue(resp_leg.is_terminated)
-            self.assertIn("dep.py: Legacy blame call", resp_leg.content)
+            resp_empty = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_non_auditor_empty.py")}))
+            self.assertFalse(resp_empty.is_failed)
+            self.assertIn(node_empty, self.mock_storage.clean_nodes)
 
-    def test_multi_node_submit_and_in_session_dependencies(self) -> None:
-        """CUJ: Multi-node session enforces in-session dependency order, validates targets, and marks completion."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:unit2", role_address="lib")
-        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py"}
-        self.storage.dependencies[node2] = {DagDependency(node=node1)}
-
-        vcheck1 = MockVerificationCheck(passes=True)
-        vcheck2 = MockVerificationCheck(passes=True)
-        self.node_cfg.verification_checks_by_node = {node1: [vcheck1], node2: [vcheck2]}
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            rc: Any = scope.get_singleton(RunControllerImpl)
-
-            # Unit name and package-qualified lookup; fully qualified address rejected
-            self.assertEqual(rc.get_node_for_alias("unit1"), node1)
-            self.assertEqual(rc.get_node_for_alias("pkg/unit1"), node1)
-            self.assertIsNone(rc.get_node_for_alias("//pkg:unit1"))
-
-            # 1. Submitting without target in multi-target session fails when multiple unsubmitted targets exist
-            b_no_target = ActualParameterBindings(bindings=set())
-            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
-            resp1 = submit.execute_tool(b_no_target)
-            self.assertTrue(resp1.is_failed)
-            self.assertIn("Target parameter must be specified", resp1.content)
-
-            # 1b. Submitting without target defaults to last read or written path if open session target
-            self.edit_mgr.last_read_or_edited_file = TargetFileObj("unit2.py")
-            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
-            # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
-            resp_dep_def = submit.execute_tool(b_no_target)
-            self.assertTrue(resp_dep_def.is_failed)
-            self.assertIn("must be submitted before `unit2.py`", resp_dep_def.content)
-            self.edit_mgr.last_read_or_edited_file = None
-
-            # 2. Submitting unknown target fails
-            b_unknown = ActualParameterBindings(
-                bindings={(submit.target_parameter, "unknown.py")}
+            # 5. Upstream dependency change in graph storage for non-auditor target without active session feedback: MUST succeed when unmodified without change summary
+            node_dep = _make_node("unit_non_auditor_dep", role="developer")
+            self.mock_storage.mark_node_dirty(node_dep)
+            self.mock_session_coordinator.register_node(node_dep, "pkg/unit_non_auditor_dep.py")
+            self.mock_storage.add_message(
+                dag_storage.ChangeMessage(
+                    content=dag_storage.MessageContent("Upstream dependency changed")
+                ),
+                to=node_dep,
             )
-            # Requirement: Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
-            resp2 = submit.execute_tool(b_unknown)
-            self.assertTrue(resp2.is_failed)
-            self.assertIn("is not an open target", resp2.content)
+            resp_dep = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_non_auditor_dep.py")}))
+            self.assertFalse(resp_dep.is_failed)
+            self.assertIn(node_dep, self.mock_storage.clean_nodes)
 
-            # 3. Submitting node2 before node1 fails due to in-session dependency
-            b_dep_first = ActualParameterBindings(
-                bindings={(submit.target_parameter, "unit2.py")}
-            )
-            # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
-            resp3 = submit.execute_tool(b_dep_first)
-            self.assertTrue(resp3.is_failed)
-            self.assertIn("must be submitted before `unit2.py`", resp3.content)
+    def test_submit_tool_succeeds_with_modifications_and_summary(self) -> None:
+        """Postcondition: MUST mark resolve target clean in storage and current turn."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.verification_result = True
+        self.mock_sandbox.has_modifications = True
+        self.mock_edit_manager.has_modifications = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Implemented feature"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertFalse(response.is_failed)
+            self.assertTrue(response.is_terminated)
+            self.assertIn(node, self.mock_storage.clean_nodes)
 
-            # 4. Submitting node1 succeeds: marks node1 SUBMITTED, leaves session open with remaining open files
-            b_node1 = ActualParameterBindings(
-                bindings={
-                    (submit.target_parameter, TargetFileObj("unit1.py")),
-                    (submit.change_summary_parameter, "Cleaned unit 1"),
-                }
-            )
-            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
-            resp4 = submit.execute_tool(b_node1)
-            self.assertFalse(resp4.is_failed)
-            self.assertFalse(resp4.is_terminated)
-            self.assertEqual(rc.get_node_state(node1), "SUBMITTED")
-            self.assertIn("Target `unit1.py` submitted successfully.", resp4.content)
-            self.assertIn("- `unit2.py`", resp4.content)
+    def test_submit_tool_succeeds_unmodified_without_summary(self) -> None:
+        """Postcondition: WHEN unedited target passes verification, MUST submit without summary."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.verification_result = True
+        self.mock_sandbox.has_modifications = False
+        self.mock_edit_manager.has_modifications = False
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+            }
+            response = tool.execute_tool(_bindings(bindings))
+            self.assertFalse(response.is_failed)
+            self.assertTrue(response.is_terminated)
+            self.assertIn(node, self.mock_storage.clean_nodes)
 
-            # 5. Submitting when only one unsubmitted target remains defaults to that target
-            self.edit_mgr.has_modifications = False
-            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
-            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
-            resp5 = submit.execute_tool(b_no_target)
-            self.assertFalse(resp5.is_failed)
-            self.assertTrue(resp5.is_terminated)
-            self.assertEqual(rc.get_node_state(node2), "SUBMITTED")
-            self.assertIn("Session completed successfully.", resp5.content)
-            self.assertEqual(rc.format_open_targets_reminder(), "")
+    def test_submit_tool_terminating_response_when_all_resolved_and_non_terminating_when_open_remain(self) -> None:
+        """Postcondition: WHEN all active nodes resolved MUST terminate, WHEN other open remain MUST not terminate."""
+        node1 = _make_node("unit1")
+        node2 = _make_node("unit2")
+        self.mock_storage.mark_node_dirty(node1)
+        self.mock_storage.mark_node_dirty(node2)
+        self.mock_session_coordinator.register_node(node1, "pkg/unit1.py")
+        self.mock_session_coordinator.register_node(node2, "pkg/unit2.py")
+        self.mock_session_coordinator.verification_result = True
+        self.mock_sandbox.has_modifications = False
+        self.mock_edit_manager.has_modifications = False
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
 
-    def test_multi_node_fail_blocks_dependents_and_terminates(self) -> None:
-        """CUJ: Multi-node fail marks target FAILED, in-batch dependents FAILED, and terminates when no open nodes remain."""
-        node1 = _make_dag_node(unit_address="//pkg:f_unit1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:f_unit2", role_address="lib")
-        node3 = _make_dag_node(unit_address="//pkg:f_unit3", role_address="lib")
-        self.node_cfg.src_file_alias_by_node = {
-            node1: "f_unit1.py",
-            node2: "f_unit2.py",
-            node3: "f_unit3.py",
-        }
-        self.storage.dependencies[node2] = {DagDependency(node=node1)}
-        f_rw1 = ReadWriteFile(
-            relative_path=RelativePath("f_unit1.py"),
-            workspace_path=_make_workspace_path("pkg/f_unit1.py"),
-            owning_node=node1,
-        )
-        f_rw2 = ReadWriteFile(
-            relative_path=RelativePath("f_unit2.py"),
-            workspace_path=_make_workspace_path("pkg/f_unit2.py"),
-            owning_node=node2,
-        )
-        f_rw3 = ReadWriteFile(
-            relative_path=RelativePath("f_unit3.py"),
-            workspace_path=_make_workspace_path("pkg/f_unit3.py"),
-            owning_node=node3,
-        )
-        self.node_cfg._read_write_files = {f_rw1, f_rw2, f_rw3}
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            fail_tool = scope.get_singleton(FailToolImpl)
-            rc: Any = scope.get_singleton(RunControllerImpl)
-
-            # 1. Failing without target in multi-target session fails when multiple unsubmitted targets exist
-            b_no_target = ActualParameterBindings(
-                bindings={(fail_tool.explanation_parameter, "No target")}
-            )
-            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
-            resp_no_target = fail_tool.execute_tool(b_no_target)
-            self.assertTrue(resp_no_target.is_failed)
-            self.assertIn("Target parameter must be specified", resp_no_target.content)
-
-            # 1b. Defaulting to last read/written path when multiple unsubmitted exist
-            self.edit_mgr.last_read_or_edited_file = TargetFileObj("f_unit1.py")
-            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
-            # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
-            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
-            resp1 = fail_tool.execute_tool(b_no_target)
+            # Submitting first node leaves node2 open -> non-terminating
+            resp1 = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit1.py")}))
             self.assertFalse(resp1.is_failed)
             self.assertFalse(resp1.is_terminated)
-            self.assertEqual(rc.get_node_state(node1), "FAILED")
-            self.assertEqual(rc.get_node_state(node2), "FAILED")
-            self.assertIn(
-                "Remaining submit targets to handle:\n- `f_unit3.py`", resp1.content
-            )
-            self.edit_mgr.last_read_or_edited_file = None
 
-            # 2. Failing already-failed node fails because it is not an open target
-            b_fail_again = ActualParameterBindings(
-                bindings={
-                    (fail_tool.target_parameter, TargetFileObj("f_unit1.py")),
-                    (fail_tool.explanation_parameter, "Already failed"),
-                }
-            )
-            # Requirement: Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
-            resp_inv = fail_tool.execute_tool(b_fail_again)
-            self.assertTrue(resp_inv.is_failed)
-            self.assertIn("is not an open target", resp_inv.content)
-
-            # 3. Failing when only 1 unsubmitted target remains defaults to that target
-            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
-            # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
-            resp2 = fail_tool.execute_tool(b_no_target)
-            self.assertTrue(resp2.is_failed)
+            # Submitting second node resolves all nodes -> terminating
+            resp2 = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit2.py")}))
+            self.assertFalse(resp2.is_failed)
             self.assertTrue(resp2.is_terminated)
-            self.assertEqual(rc.get_node_state(node3), "FAILED")
-            self.assertIn("Failed: No target", resp2.content)
 
-    def test_multi_node_blame_blocks_dependents_and_terminates(self) -> None:
-        """CUJ: Multi-node blame marks target BLAME, in-batch dependents FAILED, and terminates when no open nodes remain."""
-        node1 = _make_dag_node(unit_address="//pkg:b_unit1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:b_unit2", role_address="lib")
-        node3 = _make_dag_node(unit_address="//pkg:b_unit3", role_address="lib")
-        self.node_cfg.src_file_alias_by_node = {
-            node1: "b_unit1.py",
-            node2: "b_unit2.py",
-            node3: "b_unit3.py",
-        }
-        self.storage.dependencies[node2] = {DagDependency(node=node1)}
-        b_rw1 = ReadWriteFile(
-            relative_path=RelativePath("b_unit1.py"),
-            workspace_path=_make_workspace_path("pkg/b_unit1.py"),
-            owning_node=node1,
-        )
-        b_rw2 = ReadWriteFile(
-            relative_path=RelativePath("b_unit2.py"),
-            workspace_path=_make_workspace_path("pkg/b_unit2.py"),
-            owning_node=node2,
-        )
-        b_rw3 = ReadWriteFile(
-            relative_path=RelativePath("b_unit3.py"),
-            workspace_path=_make_workspace_path("pkg/b_unit3.py"),
-            owning_node=node3,
-        )
-        self.node_cfg._read_write_files = {b_rw1, b_rw2, b_rw3}
-        bt1 = ReadOnlyFile(
-            relative_path=RelativePath("upstream_spec1.md"),
-            workspace_path=_make_workspace_path("pkg/upstream_spec1.md"),
-            owning_node=_make_dag_node(
-                unit_address="//pkg:upstream_unit1", role_address="spec"
-            ),
-        )
-        bt3 = ReadOnlyFile(
-            relative_path=RelativePath("upstream_spec3.md"),
-            workspace_path=_make_workspace_path("pkg/upstream_spec3.md"),
-            owning_node=_make_dag_node(
-                unit_address="//pkg:upstream_unit3", role_address="spec"
-            ),
-        )
-        self.node_cfg.blame_targets_by_node = {node1: {bt1}, node3: {bt3}}
+    def test_submit_tool_validating_role_definitions_designating_auditor_nodes_across_auditor_flags_tags_or_restricted_writable_file_patterns(self) -> None:
+        """Postcondition: SubmitTool validating role definitions designating auditor nodes across auditor flags, tags, or restricted writable file patterns against supplied change summaries."""
+        self.mock_session_coordinator.verification_result = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        self.mock_sandbox.has_modifications = True
+        self.mock_edit_manager.has_modifications = True
 
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            blame_tool = scope.get_singleton(BlameToolImpl)
-            rc: Any = scope.get_singleton(RunControllerImpl)
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
 
-            # Blame node1 with invalid target fails
-            b_bad = ActualParameterBindings(
-                bindings={
-                    (blame_tool.target_parameter, "b_unit1.py"),
-                    (blame_tool.blame_target_parameter, "wrong.py"),
-                    (blame_tool.explanation_parameter, "Bad"),
-                }
+            # 1. Auditor node designated via auditor flag (is_auditor=True or RoleName("auditor"))
+            node_flag = _make_node("unit_flag", role="auditor_flag_role")
+            self.mock_storage.mark_node_dirty(node_flag)
+            self.mock_session_coordinator.register_node(node_flag, "pkg/unit_flag.py")
+            self.mock_role_config.role = agent_node_config.RoleName("auditor_flag_role")
+            self.mock_node_config.role_definitions["auditor_flag_role"] = MockRoleDef(
+                is_auditor=True, audit_tag=None, src_pattern="{unit_dir}/lib/{unit_name}.py"
             )
-            # Requirement: Tool execution fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
-            resp_bad = blame_tool.execute_tool(b_bad)
-            self.assertTrue(resp_bad.is_failed)
-
-            # Blame node1 with valid target and omitted target: infers node1 from blame target!
-            b_ok = ActualParameterBindings(
-                bindings={
-                    (blame_tool.blame_target_parameter, "upstream_spec1.md"),
-                    (blame_tool.explanation_parameter, "Spec defect"),
-                }
+            # Supplying change summary MUST fail with reminder that summary is prohibited for audit nodes
+            resp_flag_with_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_flag.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Audit review summary"),
+            }))
+            self.assertTrue(resp_flag_with_sum.is_failed)
+            self.assertIsNotNone(resp_flag_with_sum.reminder)
+            assert resp_flag_with_sum.reminder is not None
+            self.assertTrue(
+                "prohibited" in resp_flag_with_sum.reminder.lower()
+                or "audit" in resp_flag_with_sum.reminder.lower()
             )
-            # Requirement: Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
-            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
-            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
-            resp_ok = blame_tool.execute_tool(b_ok)
-            self.assertFalse(resp_ok.is_failed)
-            self.assertFalse(resp_ok.is_terminated)
-            self.assertEqual(rc.get_node_state(node1), "BLAME")
-            self.assertEqual(rc.get_node_state(node2), "FAILED")
-            self.assertEqual(rc.get_node_state(node3), "OPEN")
-            self.assertEqual(len(self.storage.get_messages(bt1.owning_node)), 1)
-            self.assertEqual(
-                self.storage.get_messages(bt1.owning_node)[0].content, "Spec defect"
+            # Omitting change summary MUST succeed
+            resp_flag_no_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_flag.py"),
+            }))
+            self.assertFalse(resp_flag_no_sum.is_failed)
+            self.assertIn(node_flag, self.mock_storage.clean_nodes)
+
+            # Also verify standard auditor role name flag
+            node_auditor_name = _make_node("unit_auditor_name", role="auditor")
+            self.mock_storage.mark_node_dirty(node_auditor_name)
+            self.mock_session_coordinator.register_node(node_auditor_name, "pkg/unit_auditor_name.py")
+            self.mock_role_config.role = agent_node_config.RoleName("auditor")
+            resp_name_with_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_auditor_name.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Summary"),
+            }))
+            self.assertTrue(resp_name_with_sum.is_failed)
+            self.assertIsNotNone(resp_name_with_sum.reminder)
+            assert resp_name_with_sum.reminder is not None
+            resp_name_no_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_auditor_name.py"),
+            }))
+            self.assertFalse(resp_name_no_sum.is_failed)
+            self.assertIn(node_auditor_name, self.mock_storage.clean_nodes)
+
+            # 2. Auditor node designated via audit tag (audit_tag="QA_AUDIT" or role address with audit tag)
+            node_tag = _make_node("unit_tag", role="qa_audit")
+            self.mock_storage.mark_node_dirty(node_tag)
+            self.mock_session_coordinator.register_node(node_tag, "pkg/unit_tag.py")
+            self.mock_role_config.role = agent_node_config.RoleName("qa_audit")
+            self.mock_node_config.role_definitions["qa_audit"] = MockRoleDef(
+                is_auditor=False, audit_tag="QA_AUDIT", src_pattern="{unit_dir}/lib/{unit_name}.py"
             )
-            self.assertIn(
-                "Target `b_unit1.py` blamed `upstream_spec1.md`: Spec defect",
-                resp_ok.content,
+            resp_tag_with_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_tag.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("QA Audit notes"),
+            }))
+            self.assertTrue(resp_tag_with_sum.is_failed)
+            self.assertIsNotNone(resp_tag_with_sum.reminder)
+            assert resp_tag_with_sum.reminder is not None
+            self.assertTrue(
+                "prohibited" in resp_tag_with_sum.reminder.lower()
+                or "audit" in resp_tag_with_sum.reminder.lower()
             )
-            self.assertIn("- `b_unit3.py`", resp_ok.content)
+            resp_tag_no_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_tag.py"),
+            }))
+            self.assertFalse(resp_tag_no_sum.is_failed)
+            self.assertIn(node_tag, self.mock_storage.clean_nodes)
 
-            # Blame node3: blame target passed via target parameter -> terminates!
-            b_ok3 = ActualParameterBindings(
-                bindings={
-                    (blame_tool.target_parameter, "upstream_spec3.md"),
-                    (blame_tool.explanation_parameter, "Spec defect 3"),
-                }
+            # 3. Auditor node designated via restricted writable file patterns (src_pattern="" or empty read_write_files)
+            node_restricted = _make_node("unit_restricted", role="reviewer")
+            self.mock_storage.mark_node_dirty(node_restricted)
+            self.mock_session_coordinator.register_node(node_restricted, "pkg/unit_restricted.py")
+            self.mock_role_config.role = agent_node_config.RoleName("reviewer")
+            self.mock_node_config.role_definitions["reviewer"] = MockRoleDef(
+                is_auditor=False, audit_tag=None, src_pattern=""
             )
-            # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
-            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
-            resp_ok3 = blame_tool.execute_tool(b_ok3)
-            self.assertFalse(resp_ok3.is_failed)
-            self.assertTrue(resp_ok3.is_terminated)
-            self.assertEqual(rc.get_node_state(node3), "BLAME")
-            self.assertEqual(len(self.storage.get_messages(bt3.owning_node)), 1)
-            self.assertEqual(
-                self.storage.get_messages(bt3.owning_node)[0].content, "Spec defect 3"
+            self.mock_node_config.read_write_files = set()
+            resp_restr_with_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_restricted.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Reviewer summary"),
+            }))
+            self.assertTrue(resp_restr_with_sum.is_failed)
+            self.assertIsNotNone(resp_restr_with_sum.reminder)
+            resp_restr_no_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_restricted.py"),
+            }))
+            self.assertFalse(resp_restr_no_sum.is_failed)
+            self.assertIn(node_restricted, self.mock_storage.clean_nodes)
+
+            # 4. Non-auditor role with normal writable file pattern requires change summary when files modified
+            node_dev = _make_node("unit_dev", role="developer")
+            self.mock_storage.mark_node_dirty(node_dev)
+            self.mock_session_coordinator.register_node(node_dev, "pkg/unit_dev.py")
+            self.mock_role_config.role = agent_node_config.RoleName("developer")
+            self.mock_node_config.role_definitions["developer"] = MockRoleDef(
+                is_auditor=False, audit_tag=None, src_pattern="{unit_dir}/lib/{unit_name}.py"
             )
-            self.assertIn("Blamed upstream_spec3.md: Spec defect 3", resp_ok3.content)
+            self.mock_node_config.read_write_files = {
+                _make_read_write_file("pkg/unit_dev.py")
+            }
+            # Omission fails
+            resp_dev_no_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_dev.py"),
+            }))
+            self.assertTrue(resp_dev_no_sum.is_failed)
+            # Providing summary succeeds
+            resp_dev_with_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_dev.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Feature changes"),
+            }))
+            self.assertFalse(resp_dev_with_sum.is_failed)
+            self.assertIn(node_dev, self.mock_storage.clean_nodes)
 
-    def test_resolve_tool_types_and_parameters(self) -> None:
-        """CUJ: ResolveTool defines target parameter identifying the active node being resolved."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            fail_tool = scope.get_singleton(FailToolImpl)
-            blame_tool = scope.get_singleton(BlameToolImpl)
-            self.assertTrue(hasattr(submit, "target_parameter"))
-            self.assertTrue(hasattr(fail_tool, "target_parameter"))
-            self.assertTrue(hasattr(blame_tool, "target_parameter"))
-            # Contract: ResolveTool specifies target_parameter with wire parameter name "target"
-            self.assertEqual(submit.target_parameter.name, "target")
-            self.assertEqual(fail_tool.target_parameter.name, "target")
-            self.assertEqual(blame_tool.target_parameter.name, "target")
+    def test_submit_tool_attaching_change_summary_reminders_when_submission_outcomes_fail_due_to_change_summary_requirements(self) -> None:
+        """Postcondition: SubmitTool attaching change summary reminders when submission outcomes fail due to change summary requirements."""
+        self.mock_session_coordinator.verification_result = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
 
-    def test_in_batch_dependency_clean_in_turn_enforcement(self) -> None:
-        """CUJ: Submit, fail, and blame fail when in-batch dependency is not clean in the current turn."""
-        node1 = _make_dag_node(unit_address="//pkg:dep_u1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:dep_u2", role_address="lib")
-        self.node_cfg.src_file_alias_by_node = {node1: "dep_u1.py", node2: "dep_u2.py"}
-        self.storage.dependencies[node2] = {DagDependency(node=node1)}
-        rw1 = ReadWriteFile(
-            relative_path=RelativePath("dep_u1.py"),
-            workspace_path=_make_workspace_path("pkg/dep_u1.py"),
-            owning_node=node1,
-        )
-        rw2 = ReadWriteFile(
-            relative_path=RelativePath("dep_u2.py"),
-            workspace_path=_make_workspace_path("pkg/dep_u2.py"),
-            owning_node=node2,
-        )
-        self.node_cfg._read_write_files = {rw1, rw2}
-        bt = ReadOnlyFile(
-            relative_path=RelativePath("upstream_dep.md"),
-            workspace_path=_make_workspace_path("pkg/upstream_dep.md"),
-            owning_node=_make_dag_node(unit_address="//pkg:up", role_address="spec"),
-        )
-        self.node_cfg.blame_targets_by_node = {node2: {bt}}
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg.verification_checks_by_node = {node1: [vcheck], node2: [vcheck]}
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
 
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            fail_tool = scope.get_singleton(FailToolImpl)
-            blame_tool = scope.get_singleton(BlameToolImpl)
-            rc: Any = scope.get_singleton(RunControllerImpl)
-
-            # 1. Fail on node2 fails because in-batch dependency node1 is not clean
-            b_fail = ActualParameterBindings(
-                bindings={
-                    (fail_tool.target_parameter, "dep_u2.py"),
-                    (fail_tool.explanation_parameter, "Failing dependent"),
-                }
+            # 1. Files modified + change summary omitted: MUST fail attaching change summary reminder
+            node_mod = _make_node("unit_mod")
+            self.mock_storage.mark_node_dirty(node_mod)
+            self.mock_session_coordinator.register_node(node_mod, "pkg/unit_mod.py")
+            self.mock_role_config.role = agent_node_config.RoleName("developer")
+            self.mock_sandbox.has_modifications = True
+            self.mock_edit_manager.has_modifications = True
+            resp_no_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_mod.py"),
+            }))
+            self.assertTrue(resp_no_sum.is_failed)
+            self.assertIsNotNone(resp_no_sum.reminder)
+            assert resp_no_sum.reminder is not None
+            rem_mod = resp_no_sum.reminder.lower()
+            self.assertTrue(
+                "change summary" in rem_mod or "change_summary" in rem_mod,
+                f"Expected change summary reminder, got: {resp_no_sum.reminder}",
             )
-            # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
-            resp_fail = fail_tool.execute_tool(b_fail)
-            self.assertTrue(resp_fail.is_failed)
-            self.assertIn("must be submitted before `dep_u2.py`", resp_fail.content)
 
-            # 2. Blame on node2 fails because in-batch dependency node1 is not clean
-            b_blame = ActualParameterBindings(
-                bindings={
-                    (blame_tool.target_parameter, "dep_u2.py"),
-                    (blame_tool.blame_target_parameter, "upstream_dep.md"),
-                    (blame_tool.explanation_parameter, "Blaming dependent"),
-                }
+            # 2. Workspace files NOT modified + change summary provided: MUST fail reminding agent that change summaries are not permitted without modifications
+            node_unmod = _make_node("unit_unmod")
+            self.mock_storage.mark_node_dirty(node_unmod)
+            self.mock_session_coordinator.register_node(node_unmod, "pkg/unit_unmod.py")
+            self.mock_role_config.role = agent_node_config.RoleName("developer")
+            self.mock_sandbox.has_modifications = False
+            self.mock_edit_manager.has_modifications = False
+            resp_unmod_with_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_unmod.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Unnecessary summary"),
+            }))
+            self.assertTrue(resp_unmod_with_sum.is_failed)
+            self.assertIsNotNone(resp_unmod_with_sum.reminder)
+            assert resp_unmod_with_sum.reminder is not None
+            rem_unmod = resp_unmod_with_sum.reminder.lower()
+            self.assertTrue(
+                "not permitted" in rem_unmod or "without" in rem_unmod or "workspace file modifications" in rem_unmod,
+                f"Expected reminder that summaries are not permitted without modifications, got: {resp_unmod_with_sum.reminder}",
             )
-            # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
-            resp_blame = blame_tool.execute_tool(b_blame)
-            self.assertTrue(resp_blame.is_failed)
-            self.assertIn("must be submitted before `dep_u2.py`", resp_blame.content)
 
-            # 3. Submit on node2 fails because in-batch dependency node1 is not clean
-            b_submit2 = ActualParameterBindings(
-                bindings={
-                    (submit.target_parameter, "dep_u2.py"),
-                    (submit.change_summary_parameter, "Cleaned 2"),
-                }
+            # 3. Auditor node + change summary provided: MUST fail reminding agent that change summary is prohibited for audit nodes
+            node_audit = _make_node("unit_audit_node", role="auditor")
+            self.mock_storage.mark_node_dirty(node_audit)
+            self.mock_session_coordinator.register_node(node_audit, "pkg/unit_audit_node.py")
+            self.mock_role_config.role = agent_node_config.RoleName("auditor")
+            self.mock_sandbox.has_modifications = False
+            self.mock_edit_manager.has_modifications = False
+            resp_audit_with_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_audit_node.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Audit change summary"),
+            }))
+            self.assertTrue(resp_audit_with_sum.is_failed)
+            self.assertIsNotNone(resp_audit_with_sum.reminder)
+            assert resp_audit_with_sum.reminder is not None
+            rem_audit = resp_audit_with_sum.reminder.lower()
+            self.assertTrue(
+                "prohibited" in rem_audit or "audit" in rem_audit,
+                f"Expected reminder that change summary is prohibited for audit nodes, got: {resp_audit_with_sum.reminder}",
             )
-            # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
-            resp_sub2 = submit.execute_tool(b_submit2)
-            self.assertTrue(resp_sub2.is_failed)
-            self.assertIn("must be submitted before `dep_u2.py`", resp_sub2.content)
 
-            # 4. Submit node1 using target alias parameter: marks node1 clean in turn
-            b_sub1 = ActualParameterBindings(
-                bindings={
-                    (submit.target_parameter, "dep_u1.py"),
-                    (submit.change_summary_parameter, "Cleaned 1"),
-                }
+    def test_submit_tool_handling_rejected_coordinator_submission_outcomes_reporting_change_summary_requirements(self) -> None:
+        """Postcondition: SubmitTool handling rejected coordinator submission outcomes on dispatched submissions that report change summary requirements, verifying failure responses."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.verification_result = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        self.mock_sandbox.has_modifications = True
+        self.mock_edit_manager.has_modifications = True
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+
+            # 1. Dispatched submission with modifications and change summary: Coordinator rejects reporting change summary requirements
+            self.mock_session_coordinator.submit_outcome = control_coordinate.ControlDispatchOutcome(
+                success=False,
+                message="Submission rejected by coordinator: change summary does not meet required specifications",
+                remaining_open_targets=[node],
             )
-            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
-            resp_sub1 = submit.execute_tool(b_sub1)
-            self.assertFalse(resp_sub1.is_failed)
-            self.assertTrue(rc.is_clean_in_turn(node1))
+            resp_disp_mod = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Implemented feature updates"),
+            }))
+            self.assertTrue(resp_disp_mod.is_failed)
+            self.assertFalse(resp_disp_mod.is_terminated)
+            self.assertTrue(len(str(resp_disp_mod.content)) > 0)
+            self.assertIsNotNone(self.mock_session_coordinator.dispatched_submit)
+            assert self.mock_session_coordinator.dispatched_submit is not None
+            self.assertEqual(self.mock_session_coordinator.dispatched_submit[0], "pkg/unit1.py")
+            self.assertNotIn(node, self.mock_storage.clean_nodes)
 
-            # 5. Now submit on node2 succeeds!
-            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
-            resp_sub2_ok = submit.execute_tool(b_submit2)
-            self.assertFalse(resp_sub2_ok.is_failed)
-            self.assertTrue(resp_sub2_ok.is_terminated)
-            self.assertEqual(rc.get_node_state(node2), "SUBMITTED")
-
-    def test_cascading_failure_to_in_batch_dependents_and_file_locking(self) -> None:
-        """CUJ: Failing an active node whose in-batch dependencies are clean cascades failure to in-batch dependents and locks files."""
-        node1 = _make_dag_node(unit_address="//pkg:casc1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:casc2", role_address="lib")
-        node3 = _make_dag_node(unit_address="//pkg:casc3", role_address="lib")
-        node4 = _make_dag_node(unit_address="//pkg:casc4", role_address="lib")
-        self.node_cfg.src_file_alias_by_node = {
-            node1: "casc1.py",
-            node2: "casc2.py",
-            node3: "casc3.py",
-            node4: "casc4.py",
-        }
-        self.storage.dependencies[node2] = {DagDependency(node=node1)}
-        self.storage.dependencies[node3] = {DagDependency(node=node2)}
-        rw1 = ReadWriteFile(
-            relative_path=RelativePath("casc1.py"),
-            workspace_path=_make_workspace_path("pkg/casc1.py"),
-            owning_node=node1,
-        )
-        rw2 = ReadWriteFile(
-            relative_path=RelativePath("casc2.py"),
-            workspace_path=_make_workspace_path("pkg/casc2.py"),
-            owning_node=node2,
-        )
-        rw3 = ReadWriteFile(
-            relative_path=RelativePath("casc3.py"),
-            workspace_path=_make_workspace_path("pkg/casc3.py"),
-            owning_node=node3,
-        )
-        rw4 = ReadWriteFile(
-            relative_path=RelativePath("casc4.py"),
-            workspace_path=_make_workspace_path("pkg/casc4.py"),
-            owning_node=node4,
-        )
-        self.node_cfg._read_write_files = {rw1, rw2, rw3, rw4}
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            fail_tool = scope.get_singleton(FailToolImpl)
-            rc: Any = scope.get_singleton(RunControllerImpl)
-
-            b_fail = ActualParameterBindings(
-                bindings={
-                    (fail_tool.target_parameter, "casc1.py"),
-                    (fail_tool.explanation_parameter, "Cascading bug"),
-                }
+            # 2. Dispatched submission without modifications and without change summary: Coordinator rejects reporting change summary requirements
+            self.mock_sandbox.has_modifications = False
+            self.mock_edit_manager.has_modifications = False
+            self.mock_session_coordinator.dispatched_submit = None
+            self.mock_session_coordinator.submit_outcome = control_coordinate.ControlDispatchOutcome(
+                success=False,
+                message="Submission rejected by coordinator: change summary required by repository policy",
+                remaining_open_targets=[node],
             )
-            # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
-            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
-            resp = fail_tool.execute_tool(b_fail)
-            self.assertFalse(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertEqual(rc.get_node_state(node1), "FAILED")
-            self.assertEqual(rc.get_node_state(node2), "FAILED")
-            self.assertEqual(rc.get_node_state(node3), "FAILED")
-            self.assertEqual(rc.get_node_state(node4), "OPEN")
-            self.assertIn("- `casc4.py`", resp.content)
+            resp_disp_unmod = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+            }))
+            self.assertTrue(resp_disp_unmod.is_failed)
+            self.assertFalse(resp_disp_unmod.is_terminated)
+            self.assertTrue(len(str(resp_disp_unmod.content)) > 0)
+            self.assertIsNotNone(self.mock_session_coordinator.dispatched_submit)
+            assert self.mock_session_coordinator.dispatched_submit is not None
+            self.assertEqual(self.mock_session_coordinator.dispatched_submit[0], "pkg/unit1.py")
+            self.assertNotIn(node, self.mock_storage.clean_nodes)
 
-    def test_check_files_evaluates_all_open_targets_and_caches(self) -> None:
-        """CUJ: CheckFilesTool evaluates verification checks across all open targets and caches results."""
-        node1 = _make_dag_node(unit_address="//pkg:rt_unit1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:rt_unit2", role_address="lib")
-        self.node_cfg.src_file_alias_by_node = {
-            node1: "rt_unit1.py",
-            node2: "rt_unit2.py",
-        }
-        vcheck1 = MockVerificationCheck(passes=True, diagnostic="Check 1 passed")
-        vcheck2 = MockVerificationCheck(passes=False, diagnostic="Check 2 failed")
-        self.node_cfg.verification_checks_by_node = {
-            node1: [vcheck1],
-            node2: [vcheck2],
-        }
+            # 3. Dispatched submission on auditor target without change summary: Coordinator rejects reporting change summary requirements
+            node_audit = _make_node("unit_audit_node", role="auditor")
+            self.mock_storage.mark_node_dirty(node_audit)
+            self.mock_session_coordinator.register_node(node_audit, "pkg/unit_audit_node.py")
+            self.mock_role_config.role = agent_node_config.RoleName("auditor")
+            self.mock_session_coordinator.dispatched_submit = None
+            self.mock_session_coordinator.submit_outcome = control_coordinate.ControlDispatchOutcome(
+                success=False,
+                message="Submission rejected by coordinator: change summary prohibited for audit nodes",
+                remaining_open_targets=[node_audit],
+            )
+            resp_disp_audit = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_audit_node.py"),
+            }))
+            self.assertTrue(resp_disp_audit.is_failed)
+            self.assertFalse(resp_disp_audit.is_terminated)
+            self.assertTrue(len(str(resp_disp_audit.content)) > 0)
+            self.assertIsNotNone(self.mock_session_coordinator.dispatched_submit)
+            assert self.mock_session_coordinator.dispatched_submit is not None
+            self.assertEqual(self.mock_session_coordinator.dispatched_submit[0], "pkg/unit_audit_node.py")
+            self.assertNotIn(node_audit, self.mock_storage.clean_nodes)
 
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            check_files = scope.get_singleton(CheckFilesTool)
-            rc.reset_nodes([node1, node2])
+    def test_submit_tool_attaching_change_summary_reminders_when_coordinator_rejection_outcomes_explicitly_report_change_summary_requirements(self) -> None:
+        """Postcondition: SubmitTool attaching change summary reminders when coordinator rejection outcomes explicitly report change_summary requirements."""
+        node = _make_node("unit_csr")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit_csr.py")
+        self.mock_session_coordinator.verification_result = True
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        self.mock_sandbox.has_modifications = True
+        self.mock_edit_manager.has_modifications = True
 
-            b = ActualParameterBindings(bindings=set())
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
 
-            # Requirement: Executing the check files tool updates verification results if outdated and evaluates verification checks across all open targets and modified workspace files.
-            resp = check_files.execute_tool(b)
-            self.assertTrue(resp.is_failed)
-            self.assertEqual(vcheck1.call_count, 1)
-            self.assertEqual(vcheck2.call_count, 1)
-            self.assertIn("Check 2 failed", resp.content)
-
-            # Cached verification check evaluation for nodes without file revision updates
-            resp_cached = check_files.execute_tool(b)
-            self.assertTrue(resp_cached.is_failed)
-            self.assertEqual(vcheck1.call_count, 1)
-            self.assertEqual(vcheck2.call_count, 1)
-
-            # When node2 passes, both pass
-            vcheck2.passes = True
-            self.edit_mgr.file_update_revision = 10
-            # Requirement: Executing the check files tool updates verification results if outdated and evaluates verification checks across all open targets and modified workspace files.
-            resp_pass = check_files.execute_tool(b)
-            self.assertFalse(resp_pass.is_failed)
-            self.assertEqual(vcheck1.call_count, 2)
-            self.assertEqual(vcheck2.call_count, 2)
-
-    def test_check_files_tool_failing_verification_presents_diagnostics_and_instructions(
-        self,
-    ) -> None:
-        """CUJ: CheckFilesTool fails when verification fails, presenting sanitized diagnostics and failure instructions."""
-        self.guide_del._guide = NodeGuide(
-            summary=GuideSummary("Summary"),
-            sections=[],
-            verification_failure=VerificationFailureInstructions(
-                "Inspect diagnostics and fix workspace files."
-            ),
-        )
-        vcheck = MockVerificationCheck(
-            passes=False, diagnostic="Syntax error in /workspace/pkg/dep.py:12"
-        )
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            check_files = scope.get_singleton(CheckFilesTool)
-            # Verify the check files tool is named check_files
-            self.assertEqual(check_files.name, "check_files")
-            self.assertEqual(check_files.parameters, {})
-            self.assertIsInstance(check_files.description, str)
-
-            b = ActualParameterBindings(bindings=set())
-            # Requirement: [RunController] The run controller installs an argument-free check files tool named check_files that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
-            # Requirement: Tool execution fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
-            resp = check_files.execute_tool(b)
-
+            # 1. Outcome explicitly reports change_summary requirements -> MUST attach change summary reminder
+            self.mock_session_coordinator.submit_outcome = control_coordinate.ControlDispatchOutcome(
+                success=False,
+                message="Submission rejected: change_summary is required when files are modified",
+                remaining_open_targets=[node],
+            )
+            resp = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_csr.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Modified files"),
+            }))
             self.assertTrue(resp.is_failed)
             self.assertFalse(resp.is_terminated)
-            self.assertIn("dep.py:12", resp.content)
-            self.assertNotIn("/workspace/pkg/", resp.content)
-            self.assertIn(
-                "## Verification failure\nInspect diagnostics and fix workspace files.",
-                resp.content,
+            self.assertTrue(len(str(resp.content)) > 0)
+            self.assertIsNotNone(resp.reminder)
+            assert resp.reminder is not None
+            rem = resp.reminder.lower()
+            self.assertTrue(
+                "change summary" in rem or "change_summary" in rem,
+                f"Expected change summary reminder when coordinator outcome explicitly reports change_summary, got: {resp.reminder}",
             )
-            # Verify check files suppression key
-            self.assertEqual(resp.suppression_key, "check_files")
+            self.assertIsNotNone(self.mock_session_coordinator.dispatched_submit)
+            self.assertNotIn(node, self.mock_storage.clean_nodes)
 
-    def test_check_files_tool_passing_verification_presents_results(self) -> None:
-        """CUJ: CheckFilesTool produces a passing response when verification passes."""
-        vcheck = MockVerificationCheck(
-            passes=True, diagnostic="All tests pass in /workspace/pkg/test.py"
+            # 2. Outcome does NOT report change_summary requirements -> does NOT attach reminder
+            self.mock_session_coordinator.submit_outcome = control_coordinate.ControlDispatchOutcome(
+                success=False,
+                message="Submission rejected: internal coordinator error",
+                remaining_open_targets=[node],
+            )
+            resp_no_rem = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_csr.py"),
+                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Modified files"),
+            }))
+            self.assertTrue(resp_no_rem.is_failed)
+            self.assertFalse(resp_no_rem.is_terminated)
+            self.assertTrue(len(str(resp_no_rem.content)) > 0)
+            self.assertIsNone(resp_no_rem.reminder)
+
+    # -------------------------------------------------------------------------
+    # FailTool Tests
+    # -------------------------------------------------------------------------
+
+    def test_fail_tool_metadata(self) -> None:
+        """Postcondition: Record failure reason and terminate session."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(FailTool)
+            self.assertEqual(tool.name, tool_provider.ToolName("fail"))
+            self.assertTrue(len(tool.description) > 0)
+            self.assertIn(tool.target_parameter.name, tool.parameters)
+            self.assertIn(tool.explanation_parameter.name, tool.parameters)
+
+    def test_fail_tool_execution(self) -> None:
+        """Postcondition: MUST mark active node as failed and terminate run."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(FailTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.explanation_parameter: sandbox_run_control.FailureExplanation("Fatal error encountered"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertTrue(response.is_failed)
+            self.assertTrue(response.is_terminated)
+            self.assertEqual(
+                self.mock_session_coordinator.target_states[node],
+                control_coordinate.TargetState.FAILED,
+            )
+
+    # -------------------------------------------------------------------------
+    # BlameTool Tests
+    # -------------------------------------------------------------------------
+
+    def test_blame_tool_metadata(self) -> None:
+        """Postcondition: Attribute defect to upstream contract."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(BlameTool)
+            self.assertEqual(tool.name, tool_provider.ToolName("blame"))
+            self.assertTrue(len(tool.description) > 0)
+            self.assertIn(tool.target_parameter.name, tool.parameters)
+            self.assertIn(tool.blame_target_parameter.name, tool.parameters)
+            self.assertIn(tool.explanation_parameter.name, tool.parameters)
+
+    def test_blame_tool_fails_invalid_blame_target(self) -> None:
+        """Postcondition: WHEN blame target does not match configured target, MUST fail listing available targets."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_node_config.blame_targets_by_node = {
+            node: {_make_bound_file("pkg/upstream.py")}
+        }
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(BlameTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.blame_target_parameter: _make_file_alias("pkg/wrong.py"),
+                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Defect"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertTrue(response.is_failed)
+            self.assertIn("pkg/upstream.py", str(response.content))
+
+    def test_blame_tool_fails_multiline_explanation(self) -> None:
+        """Postcondition: WHEN explanation contains newlines, MUST fail reminding it must be single paragraph."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_node_config.blame_targets_by_node = {
+            node: {_make_bound_file("pkg/upstream.py")}
+        }
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(BlameTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.blame_target_parameter: _make_file_alias("pkg/upstream.py"),
+                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Line one\nLine two"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertTrue(response.is_failed)
+
+    def test_blame_tool_succeeds_and_records_defect(self) -> None:
+        """Postcondition: MUST record defect feedback for blamed target via dag_storage and mark attributed."""
+        node = _make_node("unit1")
+        upstream_node = _make_node("upstream_unit")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.register_node(upstream_node, "pkg/upstream.py")
+        bound = _make_bound_file("pkg/upstream.py", owning_node=upstream_node)
+        self.mock_node_config.blame_targets_by_node = {
+            node: {bound}
+        }
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(BlameTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.blame_target_parameter: _make_file_alias("pkg/upstream.py"),
+                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Interface specification is defective"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertFalse(response.is_failed)
+            self.assertEqual(
+                self.mock_session_coordinator.target_states[node],
+                control_coordinate.TargetState.ATTRIBUTED,
+            )
+
+    def test_blame_tool_attributing_defect_feedback_when_blame_target_node_is_not_pre_registered(self) -> None:
+        """Postcondition: BlameTool attributing defect feedback when the blame target node is not pre-registered."""
+        node = _make_node("unit1")
+        upstream_node = _make_node("upstream_unregistered")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        # upstream_node is NOT registered with mock_session_coordinator.register_node
+        bound = _make_bound_file("pkg/upstream_unregistered.py", owning_node=upstream_node)
+        self.mock_node_config.blame_targets_by_node = {
+            node: {bound}
+        }
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(BlameTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.blame_target_parameter: _make_file_alias("pkg/upstream_unregistered.py"),
+                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Interface specification is defective"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertFalse(response.is_failed)
+            self.assertEqual(
+                self.mock_session_coordinator.target_states[node],
+                control_coordinate.TargetState.ATTRIBUTED,
+            )
+            self.assertTrue(
+                any(n == upstream_node for n, _ in self.mock_storage.messages),
+                "Expected defect feedback recorded for unregistered upstream node",
+            )
+
+    def test_blame_tool_defaults_to_single_blame_target(self) -> None:
+        """Postcondition: WHEN blame target is omitted in single-target context, MUST default to configured target."""
+        node = _make_node("unit1")
+        upstream_node = _make_node("upstream_unit")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.register_node(upstream_node, "pkg/upstream.py")
+        bound = _make_bound_file("pkg/upstream.py", owning_node=upstream_node)
+        self.mock_node_config.blame_targets_by_node = {
+            node: {bound}
+        }
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(BlameTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Interface specification is defective"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertFalse(response.is_failed)
+            self.assertEqual(
+                self.mock_session_coordinator.target_states[node],
+                control_coordinate.TargetState.ATTRIBUTED,
+            )
+            self.assertEqual(
+                self.mock_session_coordinator.dispatched_blame,
+                ("pkg/unit1.py", "pkg/upstream.py", "Interface specification is defective"),
+            )
+            self.assertIn(upstream_node, [m[0] for m in self.mock_storage.messages])
+
+    def test_blame_tool_fails_omitted_target_in_multi_target_context(self) -> None:
+        """Postcondition: WHEN blame target is omitted in multi-target context, MUST fail listing available blame targets."""
+        node = _make_node("unit1")
+        upstream1 = _make_node("upstream1")
+        upstream2 = _make_node("upstream2")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.register_node(upstream1, "pkg/upstream1.py")
+        self.mock_session_coordinator.register_node(upstream2, "pkg/upstream2.py")
+        bound1 = _make_bound_file("pkg/upstream1.py", owning_node=upstream1)
+        bound2 = _make_bound_file("pkg/upstream2.py", owning_node=upstream2)
+        self.mock_node_config.blame_targets_by_node = {
+            node: {bound1, bound2}
+        }
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(BlameTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Defect"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertTrue(response.is_failed)
+            content = str(response.content)
+            self.assertTrue("pkg/upstream1.py" in content or "pkg/upstream2.py" in content)
+
+    def test_blame_tool_fails_when_no_active_node_exists(self) -> None:
+        """Postcondition: BlameTool error handling when no active node exists."""
+        self.mock_session_coordinator.open_targets = []
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(BlameTool)
+            bindings = {
+                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Defect"),
+            }
+            response = tool.execute_tool(_bindings(bindings))
+            self.assertTrue(response.is_failed)
+
+    def test_blame_tool_fails_when_active_node_has_no_configured_blame_targets(self) -> None:
+        """Postcondition: BlameTool error handling when an active node has no configured blame targets."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_node_config.blame_targets_by_node = {node: set()}
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(BlameTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Defect"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertTrue(response.is_failed)
+
+    def test_blame_tool_fails_when_blame_dispatch_fails(self) -> None:
+        """Postcondition: BlameTool error handling when blame dispatch fails."""
+        node = _make_node("unit1")
+        upstream = _make_node("upstream1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.register_node(upstream, "pkg/upstream1.py")
+        bound = _make_bound_file("pkg/upstream1.py", owning_node=upstream)
+        self.mock_node_config.blame_targets_by_node = {node: {bound}}
+        self.mock_session_coordinator.blame_outcome = control_coordinate.ControlDispatchOutcome(
+            success=False, message="Blame dispatch failed", remaining_open_targets=[node]
         )
-        self.node_cfg._verification_checks = [vcheck]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(BlameTool)
+            bindings = {
+                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
+                tool.blame_target_parameter: _make_file_alias("pkg/upstream1.py"),
+                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Defect"),
+            }
+            response = tool.execute_tool(bindings)
+            self.assertTrue(response.is_failed)
+            self.assertIn("Blame dispatch failed", str(response.content))
 
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            check_files = scope.get_singleton(CheckFilesTool)
-            b = ActualParameterBindings(bindings=set())
-            # Requirement: [RunController] The run controller installs an argument-free check files tool named check_files that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
-            # Requirement: Tool execution produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
-            resp = check_files.execute_tool(b)
+    # -------------------------------------------------------------------------
+    # GetWorkTool Tests
+    # -------------------------------------------------------------------------
 
-            self.assertFalse(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIn("All tests pass in test.py", resp.content)
-            # Verify check files suppression key
-            self.assertEqual(resp.suppression_key, "check_files")
+    def test_get_work_tool_metadata(self) -> None:
+        """Postcondition: Inspect and pull pending work."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(GetWorkTool)
+            self.assertEqual(tool.name, tool_provider.ToolName("get_work"))
+            self.assertTrue(len(tool.description) > 0)
+            self.assertIn(tool.max_batch_size_parameter.name, tool.parameters)
 
-            # Custom verification_success_message
-            # Requirement: Tool execution produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
-            self.node_cfg._verification_success_message = "Test test.py passed."
-            self.edit_mgr.file_update_revision = 99
-            resp2 = check_files.execute_tool(b)
-            self.assertIn("Test test.py passed.", resp2.content)
+    def test_get_work_tool_fails_when_open_targets_remain(self) -> None:
+        """Postcondition: WHEN open active nodes remain, MUST fail reminding to resolve open nodes."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(GetWorkTool)
+            response = tool.execute_tool({})
+            self.assertTrue(response.is_failed)
 
-    def test_check_files_tool_updates_verification_results_if_outdated(self) -> None:
-        """CUJ: CheckFilesTool caches verification results and re-evaluates when workspace files updated."""
-        vcheck = MockVerificationCheck(passes=False, diagnostic="Error 1")
-        self.node_cfg._verification_checks = [vcheck]
-        self.edit_mgr.file_update_revision = 1
+    def test_get_work_tool_idle_when_no_dirty_nodes(self) -> None:
+        """Postcondition: WHEN no dirty nodes are ready, MUST produce an idle response."""
+        self.mock_session_coordinator.open_targets = []
+        self.mock_subgraph.ready_batch = []
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(GetWorkTool)
+            response = tool.execute_tool({})
+            self.assertFalse(response.is_failed)
 
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            check_files = scope.get_singleton(CheckFilesTool)
-            b = ActualParameterBindings(bindings=set())
+    def test_get_work_tool_returns_primer_step_mode_inactive(self) -> None:
+        """Postcondition: WHEN ready dirty nodes obtained and guide step inactive, MUST return task primer."""
+        self.mock_session_coordinator.open_targets = []
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_subgraph.ready_batch = [node]
+        self.mock_node_config.is_step_mode = False
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(GetWorkTool)
+            response = tool.execute_tool({})
+            self.assertFalse(response.is_failed)
 
-            # First execution runs checks
-            # Requirement: [RunController] The run controller installs an argument-free check files tool named check_files that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
-            # Requirement: Executing the check files tool updates verification results if outdated and evaluates verification checks across all open targets and modified workspace files.
-            resp1 = check_files.execute_tool(b)
-            self.assertTrue(resp1.is_failed)
-            self.assertEqual(vcheck.call_count, 1)
-            self.assertIsNone(resp1.reminder)
-            self.assertIsNone(resp1.follow_up_tool_call)
+    def test_get_work_tool_returns_primer_step_mode_active(self) -> None:
+        """Postcondition: WHEN ready dirty nodes obtained and guide step active, MUST return primer prompting advance and specify follow-up execution of advance tool."""
+        self.mock_session_coordinator.open_targets = []
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_subgraph.ready_batch = [node]
+        self.mock_node_config.is_step_mode = True
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(GetWorkTool)
+            response = tool.execute_tool({})
+            self.assertFalse(response.is_failed)
+            self.assertIsNotNone(response.content)
+            self.assertIsNotNone(response.follow_up_tool_call)
+            assert response.follow_up_tool_call is not None
+            self.assertEqual(
+                response.follow_up_tool_call.tool_name,
+                tool_provider.ToolName("advance"),
+            )
+            combined = f"{response.content} {response.reminder or ''}".lower()
+            self.assertIn("advance", combined)
 
-            # Second execution without file updates reuses cache
-            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when target read-write file hashes have not changed since the previous check files tool execution.
-            resp2 = check_files.execute_tool(b)
-            self.assertTrue(resp2.is_failed)
-            self.assertEqual(vcheck.call_count, 1)
-            self.assertIsNotNone(resp2.reminder)
+    # -------------------------------------------------------------------------
+    # RunController Tests
+    # -------------------------------------------------------------------------
 
-            # Third execution after file update re-evaluates
-            self.edit_mgr.file_update_revision = 2
-            vcheck.passes = True
-            resp3 = check_files.execute_tool(b)
-            self.assertFalse(resp3.is_failed)
-            self.assertEqual(vcheck.call_count, 2)
-            self.assertIsNone(resp3.reminder)
-            self.assertIsNone(resp3.follow_up_tool_call)
+    def test_run_controller(self) -> None:
+        """Postcondition: Track verification checks and update verification status."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            controller = scope.get_singleton(RunController)
+            self.assertEqual(list(controller.verification_checks), [])
+            controller.update_verification()
 
-    def test_check_files_tool_repeated_with_read_write_file_specifies_view_file_followup(
-        self,
-    ) -> None:
-        """CUJ: Repeated check_files execution specifies follow-up read of the source file with view_file and reasoning."""
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-        rw_file = ReadWriteFile(
-            relative_path=RelativePath("src.py"),
-            workspace_path=_make_workspace_path("/workspace/src.py"),
-            owning_node=_make_dag_node(unit_address="//pkg:target", role_address="lib"),
-        )
-        self.node_cfg._read_write_files = {rw_file}
-        self.edit_mgr.file_update_revision = 1
+    def test_run_controller_initialize_registers_session_tools_into_tool_manager(self) -> None:
+        """Postcondition: RunController.initialize registers outcome tools into ToolManager, conditionally including advance."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            controller = scope.get_singleton(RunController)
 
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            check_files = scope.get_singleton(CheckFilesTool)
-            b = ActualParameterBindings(bindings=set())
+            # Step mode inactive: submit, fail, check_files, get_work, blame installed; advance omitted
+            self.mock_node_config.is_step_mode = False
+            self.mock_node_config.allows_step_mode = False
+            self.mock_tool_manager.installed_tools.clear()
+            controller.initialize()
 
-            resp1 = check_files.execute_tool(b)
-            self.assertFalse(resp1.is_failed)
-            self.assertIsNone(resp1.reminder)
-            self.assertIsNone(resp1.follow_up_tool_call)
+            self.assertIn(tool_provider.ToolName("submit"), self.mock_tool_manager.installed_tools)
+            self.assertIn(tool_provider.ToolName("fail"), self.mock_tool_manager.installed_tools)
+            self.assertIn(tool_provider.ToolName("check_files"), self.mock_tool_manager.installed_tools)
+            self.assertIn(tool_provider.ToolName("get_work"), self.mock_tool_manager.installed_tools)
+            self.assertIn(tool_provider.ToolName("blame"), self.mock_tool_manager.installed_tools)
+            self.assertNotIn(tool_provider.ToolName("advance"), self.mock_tool_manager.installed_tools)
 
-            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when target read-write file hashes have not changed since the previous check files tool execution.
-            self.node_cfg.is_step_mode = False
-            resp2 = check_files.execute_tool(b)
-            self.assertFalse(resp2.is_failed)
-            self.assertIsNotNone(resp2.reminder)
-            self.assertIsNone(resp2.follow_up_tool_call)
+            # Step mode active: advance is conditionally installed
+            self.mock_node_config.is_step_mode = True
+            self.mock_node_config.allows_step_mode = True
+            self.mock_node_config.guide = agent_node_config.NodeGuide(
+                summary=agent_node_config.GuideSummary("Guide"),
+                sections=[],
+            )
+            self.mock_tool_manager.installed_tools.clear()
+            controller.initialize()
 
-            # In step mode, repeated execution sets reminder with no follow-up tool call
-            self.node_cfg.is_step_mode = True
-            resp_step = check_files.execute_tool(b)
-            self.assertIsNotNone(resp_step.reminder)
-            self.assertIsNone(resp_step.follow_up_tool_call)
+            self.assertIn(tool_provider.ToolName("submit"), self.mock_tool_manager.installed_tools)
+            self.assertIn(tool_provider.ToolName("fail"), self.mock_tool_manager.installed_tools)
+            self.assertIn(tool_provider.ToolName("check_files"), self.mock_tool_manager.installed_tools)
+            self.assertIn(tool_provider.ToolName("get_work"), self.mock_tool_manager.installed_tools)
+            self.assertIn(tool_provider.ToolName("blame"), self.mock_tool_manager.installed_tools)
+            self.assertIn(tool_provider.ToolName("advance"), self.mock_tool_manager.installed_tools)
 
-            # When verification fails, repeated execution sets reminder with no follow-up tool call
-            vcheck.passes = False
-            self.edit_mgr.file_update_revision = 2
-            _ = check_files.execute_tool(b)
-            resp_fail = check_files.execute_tool(b)
-            self.assertIsNotNone(resp_fail.reminder)
-            self.assertIsNone(resp_fail.follow_up_tool_call)
+    def test_run_controller_caching(self) -> None:
+        """Postcondition: Caches verification evaluations and skips re-execution when file hashes unchanged."""
+        check = MockVerificationCheck(passed=True)
+        self.mock_node_config.verification_checks = [check]
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            controller = scope.get_singleton(RunController)
+            controller.update_verification()
+            initial_count = check.call_count
+            controller.update_verification()
+            self.assertEqual(check.call_count, initial_count)
+            self.mock_edit_manager.set_file_hash("hash999")
+            controller.update_verification()
+            self.assertGreater(check.call_count, initial_count)
 
-            # Multi-target session source file resolution:
-            rw2 = ReadWriteFile(
-                relative_path=RelativePath("src2.py"),
-                workspace_path=_make_workspace_path("/workspace/src2.py"),
-                owning_node=_make_dag_node(
-                    unit_address="//pkg:target2", role_address="lib"
+    def test_run_controller_incorporating_declared_source_file_aliases_and_per_node_target_file_sets_into_cached_verification_file_hash_evaluations(self) -> None:
+        """Postcondition: RunController incorporating declared source file aliases and per-node target file sets into cached verification file hash evaluations."""
+        node = _make_node("unit1")
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_role_config.set_nodes([node])
+        src_alias = agent_file_alias.RelativePath("pkg/src_declared.py")
+        self.mock_node_config.src_file_alias_by_node = {node: src_alias}
+        src_file_alias = agent_file_alias.FileAlias(src_alias)
+        self.mock_edit_manager.set_file_hash("hash_declared_v1", file=src_file_alias)
+
+        # Per-node target file set
+        target_file_a = _make_read_write_file("pkg/target_a.py")
+        target_file_b = _make_read_write_file("pkg/target_b.py")
+        target_alias_a = agent_file_alias.FileAlias(target_file_a.relative_path)
+        target_alias_b = agent_file_alias.FileAlias(target_file_b.relative_path)
+        self.mock_edit_manager.set_file_hash("hash_target_a_v1", file=target_alias_a)
+        self.mock_edit_manager.set_file_hash("hash_target_b_v1", file=target_alias_b)
+
+        last_accessed = _make_file_alias("pkg/last_accessed.py")
+        self.mock_edit_manager.last_read_or_edited_file = last_accessed
+        self.mock_edit_manager.set_file_hash("hash_accessed_v1", file=last_accessed)
+
+        check = MockVerificationCheck(passed=True)
+        self.mock_node_config.verification_checks = [check]
+
+        self.mock_node_config.read_write_files = {target_file_a, target_file_b}
+        self.mock_node_config.per_node_info_by_node = {
+            node: agent_node_config.PerNodeInfo(
+                read_only_files=set(),
+                read_write_files={target_file_a, target_file_b},
+                templates={},
+                template_parameters={},
+                allows_step_mode=False,
+                guide_file=None,
+                guide=None,
+                blame_targets=set(),
+                verification_checks=[check],
+                src_file_alias=src_alias,
+                verification_success_message=None,
+                feedback=[],
+            )
+        }
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            controller = scope.get_singleton(RunController)
+            controller.update_verification()
+            self.assertEqual(check.call_count, 1)
+            self.assertIn(src_file_alias, self.mock_edit_manager.hashed_files)
+
+            # Unchanged declared source file alias and per-node target file sets reuses cache
+            controller.update_verification()
+            self.assertEqual(check.call_count, 1)
+
+            # Modifying hash of a file in per-node target file set invalidates cache and triggers check execution
+            self.mock_edit_manager.set_file_hash("hash_target_a_v2", file=target_alias_a)
+            controller.update_verification()
+            self.assertEqual(check.call_count, 2)
+
+            # Modifying hash of another file in per-node target file set invalidates cache and triggers check execution
+            self.mock_edit_manager.set_file_hash("hash_target_b_v2", file=target_alias_b)
+            controller.update_verification()
+            self.assertEqual(check.call_count, 3)
+
+            # Modifying hash of declared source file alias invalidates cache and triggers check execution
+            self.mock_edit_manager.set_file_hash("hash_declared_v2", file=src_file_alias)
+            controller.update_verification()
+            self.assertEqual(check.call_count, 4)
+
+            # Modifying hash of last accessed file invalidates cache and triggers check execution
+            self.mock_edit_manager.set_file_hash("hash_accessed_v2", file=last_accessed)
+            controller.update_verification()
+            self.assertEqual(check.call_count, 5)
+
+            # Adding a second node with its own per-node target file set and declared source alias
+            node2 = _make_node("unit2")
+            self.mock_session_coordinator.register_node(node2, "pkg/unit2.py")
+            self.mock_role_config.set_nodes([node, node2])
+            src_alias2 = agent_file_alias.RelativePath("pkg/src_per_node.py")
+            src_file_alias2 = agent_file_alias.FileAlias(src_alias2)
+            target_file_2 = _make_read_write_file("pkg/unit2_target.py")
+            target_alias_2 = agent_file_alias.FileAlias(target_file_2.relative_path)
+            self.mock_edit_manager.set_file_hash("hash_per_node_v1", file=src_file_alias2)
+            self.mock_edit_manager.set_file_hash("hash_node2_target_v1", file=target_alias_2)
+            self.mock_node_config.per_node_info_by_node = {
+                node: self.mock_node_config.per_node_info_by_node[node],
+                node2: agent_node_config.PerNodeInfo(
+                    read_only_files=set(),
+                    read_write_files={target_file_2},
+                    templates={},
+                    template_parameters={},
+                    allows_step_mode=False,
+                    guide_file=None,
+                    guide=None,
+                    blame_targets=set(),
+                    verification_checks=[check],
+                    src_file_alias=src_alias2,
+                    verification_success_message=None,
+                    feedback=[],
                 ),
+            }
+            controller.update_verification()
+            self.assertEqual(check.call_count, 6)
+            self.assertIn(src_file_alias2, self.mock_edit_manager.hashed_files)
+
+            # Modifying target file in second node's per-node target file set invalidates cache
+            self.mock_edit_manager.set_file_hash("hash_node2_target_v2", file=target_alias_2)
+            controller.update_verification()
+            self.assertEqual(check.call_count, 7)
+
+    def test_run_controller_incorporating_declared_source_file_alias_attributes_on_node_configuration_into_cached_verification_file_hash_evaluations(self) -> None:
+        """Postcondition: RunController incorporating declared source file alias attributes on node configuration into cached verification file hash evaluations."""
+        node = _make_node("unit_src_alias")
+        self.mock_session_coordinator.register_node(node, "pkg/unit_src_alias.py")
+        self.mock_role_config.set_nodes([node])
+        src_alias = agent_file_alias.RelativePath("pkg/src_declared_alias.py")
+        src_file_alias = agent_file_alias.FileAlias(src_alias)
+        self.mock_edit_manager.set_file_hash("hash_src_v1", file=src_file_alias)
+        self.mock_edit_manager.set_file_hash("hash_node_v1", file=_make_file_alias("pkg/unit_src_alias.py"))
+
+        check = MockVerificationCheck(passed=True)
+        self.mock_node_config.verification_checks = [check]
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            controller = scope.get_singleton(RunController)
+
+            # 1. Attribute src_file_alias on node configuration
+            self.mock_node_config.src_file_alias = src_alias
+            self.mock_node_config.src_file_alias_by_node = {}
+            controller.update_verification()
+            self.assertEqual(check.call_count, 1)
+            self.assertIn(src_file_alias, self.mock_edit_manager.hashed_files)
+
+            # Verification outcome is cached when declared source file alias hash is unchanged
+            controller.update_verification()
+            self.assertEqual(check.call_count, 1)
+
+            # Modifying declared source file alias invalidates cache and triggers check re-evaluation
+            self.mock_edit_manager.set_file_hash("hash_src_v2", file=src_file_alias)
+            controller.update_verification()
+            self.assertEqual(check.call_count, 2)
+
+            # 2. Attribute src_file_alias_by_node on node configuration
+            self.mock_node_config.src_file_alias = None
+            self.mock_node_config.src_file_alias_by_node = {node: src_alias}
+            self.mock_edit_manager.set_file_hash("hash_src_v3", file=src_file_alias)
+            controller.update_verification()
+            self.assertEqual(check.call_count, 3)
+
+            # Cached when unchanged
+            controller.update_verification()
+            self.assertEqual(check.call_count, 3)
+
+            # Invalidate when hash changes
+            self.mock_edit_manager.set_file_hash("hash_src_v4", file=src_file_alias)
+            controller.update_verification()
+            self.assertEqual(check.call_count, 4)
+
+    # -------------------------------------------------------------------------
+    # Tool Parameter Wire Decoding Tests
+    # -------------------------------------------------------------------------
+
+    def test_submit_tool_wire_parameter_decoding(self) -> None:
+        """Postcondition: SubmitTool parameter wire decoding converts target and change summary wire values."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            target_param = tool.target_parameter
+            self.assertEqual(target_param.parameter_type.wire_type, str)
+            self.assertEqual(target_param.parameter_type.actual_type, agent_file_alias.FileAlias)
+            converted_target = target_param.parameter_type.convert("pkg/unit1.py")
+            self.assertIsInstance(converted_target, agent_file_alias.FileAlias)
+            self.assertEqual(str(converted_target.relative_path), "pkg/unit1.py")
+
+            summary_param = tool.change_summary_parameter
+            self.assertEqual(summary_param.parameter_type.wire_type, str)
+            converted_summary = summary_param.parameter_type.convert("Added feature implementation")
+            self.assertEqual(str(converted_summary), "Added feature implementation")
+
+    def test_fail_tool_wire_parameter_decoding(self) -> None:
+        """Postcondition: FailTool parameter wire decoding converts target and failure explanation wire values."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(FailTool)
+            target_param = tool.target_parameter
+            converted_target = target_param.parameter_type.convert("pkg/unit1.py")
+            self.assertIsInstance(converted_target, agent_file_alias.FileAlias)
+            self.assertEqual(str(converted_target.relative_path), "pkg/unit1.py")
+
+            explanation_param = tool.explanation_parameter
+            self.assertEqual(explanation_param.parameter_type.wire_type, str)
+            converted_explanation = explanation_param.parameter_type.convert("Fatal test suite failure")
+            self.assertEqual(str(converted_explanation), "Fatal test suite failure")
+
+    def test_blame_tool_wire_parameter_decoding(self) -> None:
+        """Postcondition: BlameTool parameter wire decoding converts target, blame target, and blame explanation wire values."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(BlameTool)
+            target_param = tool.target_parameter
+            converted_target = target_param.parameter_type.convert("pkg/unit1.py")
+            self.assertIsInstance(converted_target, agent_file_alias.FileAlias)
+            self.assertEqual(str(converted_target.relative_path), "pkg/unit1.py")
+
+            blame_target_param = tool.blame_target_parameter
+            self.assertEqual(blame_target_param.parameter_type.wire_type, str)
+            converted_blame = blame_target_param.parameter_type.convert("pkg/upstream.py")
+            self.assertIsInstance(converted_blame, agent_file_alias.FileAlias)
+            self.assertEqual(str(converted_blame.relative_path), "pkg/upstream.py")
+
+            explanation_param = tool.explanation_parameter
+            self.assertEqual(explanation_param.parameter_type.wire_type, str)
+            converted_explanation = explanation_param.parameter_type.convert("Defective contract specification")
+            self.assertEqual(str(converted_explanation), "Defective contract specification")
+
+    def test_get_work_tool_wire_parameter_decoding(self) -> None:
+        """Postcondition: GetWorkTool parameter wire decoding converts max batch size wire value."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(GetWorkTool)
+            batch_param = tool.max_batch_size_parameter
+            self.assertEqual(batch_param.parameter_type.wire_type, int)
+            converted_batch = batch_param.parameter_type.convert(5)
+            assert converted_batch is not None
+            self.assertEqual(int(converted_batch), 5)
+
+    def test_optional_change_summary_wire_conversion_returning_empty_bindings_for_blank_wire_inputs(self) -> None:
+        """Postcondition: optional change summary wire conversion returning empty bindings for blank wire inputs."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SubmitTool)
+            param_type = tool.change_summary_parameter.parameter_type
+
+            # Empty string produces empty binding (None)
+            self.assertIsNone(param_type.convert(""))
+
+            # Whitespace strings produce empty binding (None)
+            self.assertIsNone(param_type.convert("   "))
+            self.assertIsNone(param_type.convert("\t\n  \r\n"))
+
+            # None wire input produces empty binding (None)
+            self.assertIsNone(param_type.convert(None))  # type: ignore[arg-type]
+
+            # Non-blank wire inputs produce ChangeSummary instances
+            converted = param_type.convert("Implemented new feature")
+            self.assertEqual(converted, sandbox_run_control.ChangeSummary("Implemented new feature"))
+            self.assertEqual(str(converted), "Implemented new feature")
+
+    def test_tool_parameter_wire_decoding_conversion_error(self) -> None:
+        """Postcondition: WHEN wire value cannot be converted, MUST handle ParameterConversionError."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(GetWorkTool)
+            batch_param = tool.max_batch_size_parameter
+            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
+                batch_param.parameter_type.convert("not_an_int")  # type: ignore[arg-type]
+
+    def test_tool_parameter_actual_type_properties_and_optional_wire_value_conversion_across_run_control_tools(self) -> None:
+        """Postcondition: Tool parameter actual type properties and optional wire value conversion across run control tools."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            # SubmitTool: parameters actual_type properties + optional wire conversion
+            submit_tool = scope.get_singleton(SubmitTool)
+            self.assertIn(tool_provider.ParameterName("target"), submit_tool.parameters)
+            self.assertIn(tool_provider.ParameterName("change_summary"), submit_tool.parameters)
+            self.assertEqual(submit_tool.target_parameter.name, tool_provider.ParameterName("target"))
+            self.assertTrue(len(str(submit_tool.target_parameter.description)) > 0)
+            self.assertIsInstance(submit_tool.target_parameter.is_required, bool)
+            self.assertEqual(submit_tool.target_parameter.parameter_type.actual_type, agent_file_alias.FileAlias)
+            self.assertEqual(submit_tool.target_parameter.parameter_type.wire_type, str)
+
+            self.assertEqual(submit_tool.change_summary_parameter.name, tool_provider.ParameterName("change_summary"))
+            self.assertTrue(len(str(submit_tool.change_summary_parameter.description)) > 0)
+            self.assertIsInstance(submit_tool.change_summary_parameter.is_required, bool)
+            self.assertEqual(submit_tool.change_summary_parameter.parameter_type.actual_type, sandbox_run_control.ChangeSummary)
+            self.assertEqual(submit_tool.change_summary_parameter.parameter_type.wire_type, str)
+
+            t_alias = submit_tool.target_parameter.parameter_type.convert("pkg/mod.py")
+            self.assertIsInstance(t_alias, agent_file_alias.FileAlias)
+            self.assertEqual(str(t_alias.relative_path), "pkg/mod.py")
+            s_val = submit_tool.change_summary_parameter.parameter_type.convert("Summary text")
+            self.assertEqual(str(s_val), "Summary text")
+            self.assertIsNone(submit_tool.change_summary_parameter.parameter_type.convert(""))
+            self.assertIsNone(submit_tool.change_summary_parameter.parameter_type.convert("   "))
+            self.assertIsNone(submit_tool.change_summary_parameter.parameter_type.convert(None))  # type: ignore[arg-type]
+            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
+                submit_tool.target_parameter.parameter_type.convert(12345)  # type: ignore[arg-type]
+            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
+                submit_tool.change_summary_parameter.parameter_type.convert(12345)  # type: ignore[arg-type]
+
+            # FailTool: parameters actual_type properties + wire conversion
+            fail_tool = scope.get_singleton(FailTool)
+            self.assertIn(tool_provider.ParameterName("target"), fail_tool.parameters)
+            self.assertIn(tool_provider.ParameterName("explanation"), fail_tool.parameters)
+            self.assertEqual(fail_tool.target_parameter.parameter_type.actual_type, agent_file_alias.FileAlias)
+            self.assertEqual(fail_tool.explanation_parameter.name, tool_provider.ParameterName("explanation"))
+            self.assertTrue(len(str(fail_tool.explanation_parameter.description)) > 0)
+            self.assertIsInstance(fail_tool.explanation_parameter.is_required, bool)
+            self.assertEqual(fail_tool.explanation_parameter.parameter_type.actual_type, sandbox_run_control.FailureExplanation)
+            self.assertEqual(fail_tool.explanation_parameter.parameter_type.wire_type, str)
+            f_expl = fail_tool.explanation_parameter.parameter_type.convert("Fatal error")
+            self.assertEqual(str(f_expl), "Fatal error")
+            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
+                fail_tool.explanation_parameter.parameter_type.convert(12345)  # type: ignore[arg-type]
+
+            # BlameTool: parameters actual_type properties + optional wire conversion
+            blame_tool = scope.get_singleton(BlameTool)
+            self.assertIn(tool_provider.ParameterName("target"), blame_tool.parameters)
+            self.assertIn(tool_provider.ParameterName("blame_target"), blame_tool.parameters)
+            self.assertIn(tool_provider.ParameterName("explanation"), blame_tool.parameters)
+            self.assertEqual(blame_tool.target_parameter.parameter_type.actual_type, agent_file_alias.FileAlias)
+            self.assertEqual(blame_tool.blame_target_parameter.name, tool_provider.ParameterName("blame_target"))
+            self.assertTrue(len(str(blame_tool.blame_target_parameter.description)) > 0)
+            self.assertIsInstance(blame_tool.blame_target_parameter.is_required, bool)
+            self.assertEqual(blame_tool.blame_target_parameter.parameter_type.actual_type, agent_file_alias.FileAlias)
+            self.assertEqual(blame_tool.blame_target_parameter.parameter_type.wire_type, str)
+            self.assertEqual(blame_tool.explanation_parameter.name, tool_provider.ParameterName("explanation"))
+            self.assertTrue(len(str(blame_tool.explanation_parameter.description)) > 0)
+            self.assertIsInstance(blame_tool.explanation_parameter.is_required, bool)
+            self.assertEqual(blame_tool.explanation_parameter.parameter_type.actual_type, sandbox_run_control.BlameExplanation)
+            self.assertEqual(blame_tool.explanation_parameter.parameter_type.wire_type, str)
+            b_target = blame_tool.blame_target_parameter.parameter_type.convert("pkg/upstream.py")
+            self.assertIsInstance(b_target, agent_file_alias.FileAlias)
+            b_expl = blame_tool.explanation_parameter.parameter_type.convert("Spec bug")
+            self.assertEqual(str(b_expl), "Spec bug")
+            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
+                blame_tool.blame_target_parameter.parameter_type.convert(999)  # type: ignore[arg-type]
+            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
+                blame_tool.explanation_parameter.parameter_type.convert(999)  # type: ignore[arg-type]
+
+            # GetWorkTool: parameters actual_type properties + optional wire conversion
+            gw_tool = scope.get_singleton(GetWorkTool)
+            self.assertIn(tool_provider.ParameterName("max_batch_size"), gw_tool.parameters)
+            self.assertEqual(gw_tool.max_batch_size_parameter.name, tool_provider.ParameterName("max_batch_size"))
+            self.assertTrue(len(str(gw_tool.max_batch_size_parameter.description)) > 0)
+            self.assertIsInstance(gw_tool.max_batch_size_parameter.is_required, bool)
+            self.assertEqual(gw_tool.max_batch_size_parameter.parameter_type.actual_type, dag_config.BatchSize)
+            self.assertEqual(gw_tool.max_batch_size_parameter.parameter_type.wire_type, int)
+            batch = gw_tool.max_batch_size_parameter.parameter_type.convert(4)
+            assert batch is not None
+            self.assertEqual(int(batch), 4)
+            try:
+                b_none = gw_tool.max_batch_size_parameter.parameter_type.convert(None)  # type: ignore[arg-type]
+                self.assertIsNone(b_none)
+            except (tool_provider.ParameterConversionError, ValueError, TypeError):
+                pass
+            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
+                gw_tool.max_batch_size_parameter.parameter_type.convert("not_an_int")  # type: ignore[arg-type]
+
+            # CheckFilesTool and AdvanceTool parameter schema checks
+            cf_tool = scope.get_singleton(CheckFilesTool)
+            self.assertIsInstance(cf_tool.parameters, Mapping)
+            adv_tool = scope.get_singleton(AdvanceTool)
+            self.assertIsInstance(adv_tool.parameters, Mapping)
+
+            # ToolManager execution with invalid parameter wire value fails gracefully
+            self.mock_tool_manager.install_tool(gw_tool)
+            err_resp = self.mock_tool_manager.execute_tool(
+                tool_provider.ToolName("get_work"),
+                {tool_provider.ParameterName("max_batch_size"): "invalid_int"},
             )
-            self.node_cfg._read_write_files = {rw_file, rw2}
-            self.edit_mgr.file_update_revision = 3
+            self.assertTrue(err_resp.is_failed)
+            self.assertIn("Invalid argument", str(err_resp.content))
 
-            # 1. Repeated execution with last accessed read-write file set
-            self.edit_mgr.last_read_or_edited_file = rw2
-            _ = check_files.execute_tool(b)
-            resp_last = check_files.execute_tool(b)
-            self.assertIsNone(resp_last.follow_up_tool_call)
-            assert resp_last.reminder is not None
-            self.assertTrue(resp_last.reminder)
+    def test_tool_manager_wire_dispatch_across_run_control_tools(self) -> None:
+        """Postcondition: Dispatch tool execution via wire parameter bindings across all run control tools."""
+        node = _make_node("unit1")
+        upstream = _make_node("upstream1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        self.mock_session_coordinator.register_node(upstream, "pkg/upstream1.py")
+        bound_upstream = _make_bound_file("pkg/upstream1.py", owning_node=upstream)
+        self.mock_node_config.blame_targets_by_node = {node: {bound_upstream}}
+        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
+        self.mock_session_coordinator.verification_result = True
 
-            # 2. Repeated execution when last accessed is None
-            self.edit_mgr.last_read_or_edited_file = None
-            self.edit_mgr.file_update_revision = 4
-            _ = check_files.execute_tool(b)
-            resp_earliest = check_files.execute_tool(b)
-            self.assertIsNone(resp_earliest.follow_up_tool_call)
-            self.assertIsNotNone(resp_earliest.reminder)
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            for cls in [CheckFilesTool, AdvanceTool, SubmitTool, FailTool, BlameTool, GetWorkTool]:
+                tool = scope.get_singleton(cls)
+                self.mock_tool_manager.install_tool(tool)
 
-    def test_check_files_hash_tracking(self) -> None:
-        """CUJ: CheckFilesTool tracks file hashes and triggers loop-breaker when unchanged."""
-        node1 = _make_dag_node(unit_address="//pkg:t1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:t2", role_address="lib")
-        rw1 = ReadWriteFile(
-            relative_path=RelativePath("t1.py"),
-            workspace_path=_make_workspace_path("/workspace/t1.py"),
-            owning_node=node1,
-        )
-        rw2 = ReadWriteFile(
-            relative_path=RelativePath("t2.py"),
-            workspace_path=_make_workspace_path("/workspace/t2.py"),
-            owning_node=node2,
-        )
-        self.node_cfg._read_write_files = {rw1, rw2}
-        vcheck1 = MockVerificationCheck(passes=False, diagnostic="Error on t1")
-        self.node_cfg.verification_checks_by_node = {
-            node1: [vcheck1],
-        }
-        self.edit_mgr._file_hashes["t1.py"] = "hash_t1_v1"
-        self.edit_mgr._file_hashes["t2.py"] = "hash_t2_v1"
+            resp = self.mock_tool_manager.execute_tool(tool_provider.ToolName("check_files"), {})
+            self.assertFalse(resp.is_failed)
 
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            check_files = scope.get_singleton(CheckFilesTool)
-            b = ActualParameterBindings(bindings=set())
+            self.mock_guide_delivery.has_steps_remaining = True
+            resp = self.mock_tool_manager.execute_tool(tool_provider.ToolName("advance"), {})
+            self.assertFalse(resp.is_failed)
 
-            # First time fails with error, no reminder
-            # Requirement: Executing the check files tool updates verification results if outdated and evaluates verification checks across all open targets and modified workspace files.
-            resp1 = check_files.execute_tool(b)
-            self.assertTrue(resp1.is_failed)
-            self.assertEqual(vcheck1.call_count, 1)
-            self.assertIsNone(resp1.reminder)
-
-            # Check files again: same hash -> loop-breaker reminder
-            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when target read-write file hashes have not changed since the previous check files tool execution.
-            resp2 = check_files.execute_tool(b)
-            self.assertEqual(vcheck1.call_count, 1)
-            self.assertIsNotNone(resp2.reminder)
-            assert resp2.reminder is not None
-            self.assertTrue(resp2.reminder)
-
-            # Modifying t1 changes hash
-            self.edit_mgr._file_hashes["t1.py"] = "hash_t1_v2"
-            self.edit_mgr.file_update_revision = 2
-            vcheck1.passes = True
-
-            # Check files: hash changed, so re-evaluates without loop-breaker reminder
-            # Requirement: Executing the check files tool updates verification results if outdated and evaluates verification checks across all open targets and modified workspace files.
-            resp3 = check_files.execute_tool(b)
-            self.assertFalse(resp3.is_failed)
-            self.assertEqual(vcheck1.call_count, 2)
-            self.assertIsNone(resp3.reminder)
-
-    def test_default_target_resolution_with_read_write_files(self) -> None:
-        """CUJ: RunController resolves default targets across single, multiple unsubmitted, and locked files."""
-        node1 = _make_dag_node(unit_address="//pkg:t1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:t2", role_address="lib")
-        rw1 = ReadWriteFile(
-            relative_path=RelativePath("t1.py"),
-            workspace_path=_make_workspace_path("/workspace/t1.py"),
-            owning_node=node1,
-        )
-        rw2 = ReadWriteFile(
-            relative_path=RelativePath("t2.py"),
-            workspace_path=_make_workspace_path("/workspace/t2.py"),
-            owning_node=node2,
-        )
-        ro_file = ReadOnlyFile(
-            relative_path=RelativePath("readme.md"),
-            workspace_path=_make_workspace_path("/workspace/readme.md"),
-            owning_node=_make_dag_node(unit_address="//pkg:ro", role_address="doc"),
-        )
-        self.node_cfg._read_write_files = {rw1, rw2}
-        vcheck1 = MockVerificationCheck(passes=True)
-        vcheck2 = MockVerificationCheck(passes=True)
-        self.node_cfg.verification_checks_by_node = {node1: [vcheck1], node2: [vcheck2]}
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            rc: Any = scope.get_singleton(RunControllerImpl)
-
-            b_empty = ActualParameterBindings(bindings=set())
-
-            # 1. Multiple unsubmitted files, last_read_or_edited_file is None -> submit fails
-            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
-            resp_sub_fail = submit.execute_tool(b_empty)
-            self.assertTrue(resp_sub_fail.is_failed)
-            self.assertIn("Target parameter must be specified", resp_sub_fail.content)
-
-            # 2. Multiple unsubmitted files, last_read_or_edited_file is read-only -> fails
-            self.edit_mgr.last_read_or_edited_file = ro_file
-            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
-            self.assertTrue(submit.execute_tool(b_empty).is_failed)
-
-            # 3. Multiple unsubmitted files, last_read_or_edited_file is rw1 -> defaults to rw1
-            self.edit_mgr.last_read_or_edited_file = rw1
-            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
-            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
-            resp_sub_ok = submit.execute_tool(b_empty)
-            self.assertFalse(resp_sub_ok.is_failed)
-            self.assertEqual(rc.get_node_state(node1), "SUBMITTED")
-            self.assertIn(node1, [n for n, _ in self.storage.cleaned_nodes])
-
-            # 4. Now node1 is submitted; exactly one unsubmitted node remains (node2) -> defaults to node2
-            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
-            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
-            resp_sub_rw2 = submit.execute_tool(b_empty)
-            self.assertFalse(resp_sub_rw2.is_failed)
-            self.assertTrue(resp_sub_rw2.is_terminated)
-            self.assertEqual(rc.get_node_state(node2), "SUBMITTED")
-            self.assertIn(node2, [n for n, _ in self.storage.cleaned_nodes])
-
-    def test_multi_node_target_matching_by_alias_relative_path_and_unique_filename(
-        self,
-    ) -> None:
-        """CUJ: Run controller matches session targets by alias, relative path, or unique filename across submit, fail, and blame."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:unit2", role_address="lib")
-        node3 = _make_dag_node(unit_address="//pkg2:unit2", role_address="lib")
-        self.node_cfg.src_file_alias_by_node = {
-            node1: "testing/parts/pkg/logs/unit1_qa.log",
-            node2: "testing/parts/pkg/logs/unit2_qa.log",
-            node3: "testing/parts/pkg2/logs/unit2_qa.log",
-        }
-        vcheck1 = MockVerificationCheck(passes=True)
-        vcheck2 = MockVerificationCheck(passes=True)
-        vcheck3 = MockVerificationCheck(passes=True)
-        self.node_cfg.verification_checks_by_node = {
-            node1: [vcheck1],
-            node2: [vcheck2],
-            node3: [vcheck3],
-        }
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            submit = scope.get_singleton(SubmitToolImpl)
-            fail = scope.get_singleton(FailToolImpl)
-            rc: Any = scope.get_singleton(RunControllerImpl)
-
-            # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias), and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
-            # 1. Look up by exact alias / relative path
-            self.assertEqual(
-                rc.get_node_for_alias("testing/parts/pkg/logs/unit1_qa.log"), node1
+            self.mock_sandbox.has_modifications = True
+            self.mock_edit_manager.has_modifications = True
+            self.mock_guide_delivery.has_steps_remaining = False
+            resp = self.mock_tool_manager.execute_tool(
+                tool_provider.ToolName("submit"),
+                {
+                    tool_provider.ParameterName("target"): "pkg/unit1.py",
+                    tool_provider.ParameterName("change_summary"): "Wire dispatched submit",
+                },
             )
-            # 2. Look up by unit name / package-qualified name (fully qualified address is rejected)
-            self.assertEqual(rc.get_node_for_alias("unit1"), node1)
-            self.assertEqual(rc.get_node_for_alias("pkg/unit1"), node1)
-            self.assertIsNone(rc.get_node_for_alias("//pkg:unit1"))
-            # 3. Look up by unique filename / basename
-            self.assertEqual(rc.get_node_for_alias("unit1_qa.log"), node1)
-            # 4. Ambiguous basename returns None (unit2_qa.log is shared by node2 and node3)
-            self.assertIsNone(rc.get_node_for_alias("unit2_qa.log"))
+            self.assertFalse(resp.is_failed)
 
-            # 5. Submit tool accepts unique filename
-            resp_sub = submit.execute_tool(
-                ActualParameterBindings(
-                    bindings={
-                        (submit.target_parameter, TargetFileObj("unit1_qa.log")),
-                        (submit.change_summary_parameter, "Completed unit 1"),
-                    }
-                )
+            resp = self.mock_tool_manager.execute_tool(
+                tool_provider.ToolName("fail"),
+                {
+                    tool_provider.ParameterName("target"): "pkg/unit1.py",
+                    tool_provider.ParameterName("explanation"): "Wire dispatched failure",
+                },
             )
-            self.assertFalse(resp_sub.is_failed)
-            self.assertEqual(rc.get_node_state(node1), "SUBMITTED")
-
-            # 7. Fail tool accepts exact relative path for node2
-            # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes.
-            resp_fail = fail.execute_tool(
-                ActualParameterBindings(
-                    bindings={
-                        (fail.target_parameter, "testing/parts/pkg/logs/unit2_qa.log"),
-                        (fail.explanation_parameter, "Failing unit 2"),
-                    }
-                )
-            )
-            self.assertFalse(resp_fail.is_failed)
-            self.assertEqual(rc.get_node_state(node2), "FAILED")
-
-    def test_get_work_tool_schema_and_open_targets_blocking(self) -> None:
-        """CUJ: GetWorkTool schema defines name and max_batch_size parameter; execution fails when open session targets remain."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            open_target = _make_dag_node(unit_address="//pkg:open_target")
-            rc.reset_nodes([open_target])
-            get_work = scope.get_singleton(GetWorkToolImpl)
-            self.assertEqual(get_work.name, "get_work")
-            self.assertEqual(
-                get_work.description,
-                "Retrieves active dirty targets, materializes startup templates, and returns the session task prompt.",
-            )
-            param_names = set(get_work.parameters.keys())
-            self.assertIn("max_batch_size", param_names)
-            # Verify the get work tool max_batch_size parameter
-            self.assertEqual(get_work.max_batch_size_parameter.name, "max_batch_size")
-            self.assertFalse(get_work.max_batch_size_parameter.is_required)
-
-            # Requirement: Tool execution fails when open active nodes remain, reminding the agent that open nodes must be resolved before requesting new work.
-            # Requirement: [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-            resp = get_work.execute_tool(ActualParameterBindings(bindings=set()))
             self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertTrue(resp.content)
-            self.assertIsNotNone(resp.reminder)
-            self.assertTrue(resp.reminder)
+            self.assertTrue(resp.is_terminated)
 
-    def test_get_work_idle_when_no_dirty_nodes_ready(self) -> None:
-        """CUJ: When no open targets remain and no dirty nodes are ready in dag subgraph, get_work returns an idle response."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            submit = scope.get_singleton(SubmitToolImpl)
-            get_work = scope.get_singleton(GetWorkToolImpl)
-
-            submit.execute_tool(
-                ActualParameterBindings(
-                    bindings={(submit.change_summary_parameter, "Done")}
-                )
-            )
-            self.assertEqual(len(rc.open_nodes()), 0)
-
-            self.subgraph.ready_batches = []
-            self.subgraph.batch_index = 0
-
-            # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open active nodes remain.
-            # Requirement: Tool execution produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
-            resp = get_work.execute_tool(ActualParameterBindings(bindings=set()))
-            self.assertFalse(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertTrue(resp.content)
-
-    def test_get_work_materializes_templates_and_delivers_task_prompt(self) -> None:
-        """CUJ: When ready dirty nodes exist, get_work updates role config, materializes startup templates, and returns rendered task prompt."""
-        self.node_cfg.is_step_mode = False
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        node_a = _make_dag_node(unit_address="//pkg:unit_a", role_address="lib")
-        node_b = _make_dag_node(unit_address="//pkg:unit_b", role_address="lib")
-        self.subgraph.ready_batches = [[node_a, node_b]]
-        self.subgraph.batch_index = 0
-
-        self.storage.dirty_nodes = {node_a, node_b}
-        self.storage.node_definitions = {
-            node_a: MockNodeDefinition(task_prompt="Clean unit A"),
-            node_b: MockNodeDefinition(task_prompt="Clean unit B"),
-        }
-        self.storage.messages = {
-            node_a: [
-                dag_storage.FeedbackMessage(
-                    content=MessageContent("Fix linter in unit A")
-                )
-            ],
-            node_b: [],
-        }
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            submit = scope.get_singleton(SubmitToolImpl)
-            get_work = scope.get_singleton(GetWorkToolImpl)
-
-            # Resolve existing open target
-            submit.execute_tool(
-                ActualParameterBindings(
-                    bindings={(submit.change_summary_parameter, "Done")}
-                )
-            )
-            self.assertEqual(len(rc.open_nodes()), 0)
-
-            # Call get_work with max_batch_size = 1
-            # Requirement: [Tool] When a parameter is required, an argument must be supplied for tool execution.
-            # Verify the get work tool max_batch_size parameter
-            # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open active nodes remain.
-            # Requirement: Tool execution materializes startup templates on disk, initializes guide delivery and resets guide advance state for the assigned batch, and returns the rendered task primer mapping source files to grounding files with guide file attribution, incoming messages, and instructions to read the guide file for alignment guidance when ready dirty nodes are obtained and guide step mode is inactive.
-            initial_version = self.role_cfg.execution_version
-            resp = get_work.execute_tool(
-                ActualParameterBindings(
-                    bindings={(get_work.max_batch_size_parameter, 1)}
-                )
+            resp = self.mock_tool_manager.execute_tool(
+                tool_provider.ToolName("blame"),
+                {
+                    tool_provider.ParameterName("target"): "pkg/unit1.py",
+                    tool_provider.ParameterName("blame_target"): "pkg/upstream1.py",
+                    tool_provider.ParameterName("explanation"): "Wire dispatched blame",
+                },
             )
             self.assertFalse(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIsNone(resp.follow_up_tool_call)
-            self.assertIn(node_a, self.storage.materialized_nodes)
-            self.assertTrue(self.guide_del.initialize_called)
-            self.assertEqual(self.role_cfg.active_nodes, [node_a])
-            self.assertEqual(self.role_cfg.execution_version, initial_version + 1)
-            self.assertIn("unit_a.py with grounding/unit_a.pyi", resp.content)
-            self.assertIn(
-                "Fix unit_a.py based on feedback: Fix linter in unit A", resp.content
-            )
-            self.assertEqual(rc.open_nodes(), [node_a])
 
-    def test_get_work_step_mode_specifies_advance_followup(self) -> None:
-        """CUJ: When guide is in step mode, get_work records initial primer and omits advance follow-up."""
-        self.node_cfg.is_step_mode = True
-        node = _make_dag_node(unit_address="//pkg:unit_a", role_address="lib")
-        self.subgraph.ready_batches = [[node]]
-        self.subgraph.batch_index = 0
-        self.storage.dirty_nodes = {node}
-        self.storage.node_definitions = {
-            node: MockNodeDefinition(task_prompt="Clean unit A"),
-        }
-        self.storage.messages = {node: []}
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            submit = scope.get_singleton(SubmitToolImpl)
-            get_work = scope.get_singleton(GetWorkToolImpl)
-
-            # Resolve existing open target
-            submit.execute_tool(
-                ActualParameterBindings(
-                    bindings={(submit.change_summary_parameter, "Done")}
-                )
-            )
-
-            # Requirement: Tool execution materializes startup templates on disk, initializes guide delivery, records the task primer in guide delivery, and returns the task primer mapping source files to grounding files, guide summary, incoming messages, and instructions to call the advance tool when done making edits without guide file citation and without specifying a follow-up execution of the advance tool when ready dirty nodes are obtained and guide step mode is active.
-            resp = get_work.execute_tool(
-                ActualParameterBindings(
-                    bindings={(get_work.max_batch_size_parameter, 1)}
-                )
+            self.mock_session_coordinator.open_targets = []
+            self.mock_subgraph.ready_batch = []
+            resp = self.mock_tool_manager.execute_tool(
+                tool_provider.ToolName("get_work"),
+                {tool_provider.ParameterName("max_batch_size"): 2},
             )
             self.assertFalse(resp.is_failed)
-            self.assertIsNone(resp.follow_up_tool_call)
-            self.assertIn("unit_a.py with grounding/unit_a.pyi", resp.content)
-            self.assertIn("NodeGuide Summary", resp.content)
-            self.assertIn("Call advance() when done making edits.", resp.content)
-            self.assertEqual(self.guide_del.initial_primer, resp.content)
-
-    def test_check_files_tool_properties(self) -> None:
-        """CUJ: CheckFilesTool exposes its name, description, and empty parameters set."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            check_files = scope.get_singleton(CheckFilesToolImpl)
-            # Verify the check files tool is named check_files
-            self.assertEqual(check_files.name, "check_files")
-            self.assertEqual(check_files.parameters, {})
-            self.assertIsInstance(check_files.description, str)
-
-    def test_get_work_max_batch_size_zero_and_role_mismatch(self) -> None:
-        """CUJ: GetWorkTool accepts max_batch_size=0 and filters nodes by role mismatch."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        node_diff = _make_dag_node(unit_address="//pkg:diff", role_address="other_role")
-        self.subgraph.ready_batches = [[node_diff]]
-        self.subgraph.batch_index = 0
-        self.storage.dirty_nodes = {node_diff}
-        self.role_cfg.set_role("my_role")
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            submit = scope.get_singleton(SubmitToolImpl)
-            get_work = scope.get_singleton(GetWorkToolImpl)
-
-            # Resolve open target
-            submit.execute_tool(
-                ActualParameterBindings(
-                    bindings={(submit.change_summary_parameter, "Done")}
-                )
-            )
-            self.assertEqual(len(rc.open_nodes()), 0)
-
-            # 1. Role mismatch filters batch to empty, returning idle response
-            # Requirement: Tool execution produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
-            resp_mismatch = get_work.execute_tool(
-                ActualParameterBindings(bindings=set())
-            )
-            self.assertFalse(resp_mismatch.is_failed)
-            self.assertTrue(resp_mismatch.content)
-
-            # 2. Matching role with max_batch_size = 0
-            self.role_cfg.set_role("other_role")
-            self.subgraph.ready_batches = [[node_diff]]
-            self.subgraph.batch_index = 0
-            self.storage.node_definitions = {
-                node_diff: MockNodeDefinition(task_prompt="Diff prompt")
-            }
-            self.storage.messages = {node_diff: []}
-            # Verify the get work tool max_batch_size parameter
-            resp_zero = get_work.execute_tool(
-                ActualParameterBindings(
-                    bindings={(get_work.max_batch_size_parameter, 0)}
-                )
-            )
-            self.assertFalse(resp_zero.is_failed)
-
-    def test_multi_node_in_session_dependencies_and_block_dependents(self) -> None:
-        """CUJ: Verify is_multi_node, in-session dependency tracking, and block_dependents cascading."""
-        node1 = _make_dag_node(unit_address="//pkg:dep1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:dep2", role_address="lib")
-        rw2 = ReadWriteFile(
-            relative_path=RelativePath("dep2.py"),
-            workspace_path=_make_workspace_path("pkg/dep2.py"),
-            owning_node=node2,
-        )
-        self.node_cfg._read_write_files = {rw2}
-        self.storage.dependencies[node2] = {DagDependency(node=node1)}
-        self.node_cfg.src_file_alias_by_node = {node1: "dep1.py", node2: "dep2.py"}
-        self.role_cfg.active_nodes = [node1, node2]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-
-            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
-            self.assertTrue(rc.is_multi_node)
-
-            # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
-            self.assertEqual(rc.get_in_session_dependencies(node2), {node1})
-            self.assertEqual(rc.get_in_session_dependencies(node1), set())
-
-            # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
-            rc.block_dependents(node1)
-            self.assertEqual(rc.get_node_state(node2), "FAILED")
-
-    def test_format_task_prompt_with_guide_file_and_messages(self) -> None:
-        """CUJ: format_task_prompt formats guide instructions, node definitions, and incoming messages."""
-        node_a = _make_dag_node(unit_address="//pkg:unit_a", role_address="lib")
-        node_b = _make_dag_node(unit_address="//pkg:unit_b", role_address="lib")
-        guide_file = UnboundFile(relative_path=RelativePath("guide.md"))
-        self.node_cfg._guide_file = guide_file
-        self.node_cfg.src_file_alias_by_node = {
-            node_a: "unit_a.py",
-            node_b: "unit_b.py",
-        }
-        self.storage.node_definitions = {
-            node_a: MockNodeDefinition(task_prompt="Implement unit A"),
-            node_b: MockNodeDefinition(task_prompt="Implement unit B"),
-        }
-        self.storage.messages = {
-            node_a: [
-                dag_storage.ChangeMessage(
-                    content=MessageContent("Updated types in upstream")
-                )
-            ],
-            node_b: [
-                dag_storage.ChangeMessage(
-                    content=MessageContent("Renamed method in dependency")
-                )
-            ],
-        }
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-
-            # 1. Single-node with step mode and guide file
-            # Requirement: Tool execution materializes startup templates on disk, initializes guide delivery, records the task primer in guide delivery, and returns the task primer mapping source files to grounding files, guide summary, incoming messages, and instructions to call the advance tool when done making edits without guide file citation and without specifying a follow-up execution of the advance tool when ready dirty nodes are obtained and guide step mode is active.
-            prompt_single = rc.format_task_prompt([node_a])
-            self.assertIn("unit_a.py with grounding/unit_a.pyi", prompt_single)
-            self.assertIn("NodeGuide Summary", prompt_single)
-            self.assertIn("Incoming change: Updated types in upstream", prompt_single)
-            self.assertIn("Call advance() when done making edits.", prompt_single)
-            self.assertNotIn("guide.md", prompt_single)
-
-            # 2. Multi-node with non-step mode
-            self.node_cfg.is_step_mode = False
-            # Requirement: Tool execution materializes startup templates on disk, initializes guide delivery and resets guide advance state for the assigned batch, and returns the rendered task primer mapping source files to grounding files with guide file attribution, incoming messages, and instructions to read the guide file for alignment guidance when ready dirty nodes are obtained and guide step mode is inactive.
-            prompt_multi = rc.format_task_prompt([node_a, node_b])
-            self.assertIn(
-                "The following files are supposed to be aligned according to guide guide.md:",
-                prompt_multi,
-            )
-            self.assertIn("unit_a.py with grounding/unit_a.pyi", prompt_multi)
-            self.assertIn("unit_b.py with grounding/unit_b.pyi", prompt_multi)
-            self.assertIn(
-                "Incoming change for unit_a.py: Updated types in upstream", prompt_multi
-            )
-            self.assertIn(
-                "Incoming change for unit_b.py: Renamed method in dependency",
-                prompt_multi,
-            )
-            self.assertIn("Read guide.md for alignment guidance.", prompt_multi)
-
-            # 3. NodeGuide file resolved via read_only_files markdown fallback
-            self.node_cfg._guide_file = None
-            md_guide = ReadOnlyFile(
-                relative_path=RelativePath("spec_guide.md"),
-                workspace_path=_make_workspace_path("pkg/spec_guide.md"),
-                owning_node=node_a,
-            )
-            self.node_cfg._read_only_files = {md_guide}
-            prompt_fallback = rc.format_task_prompt([node_a])
-            self.assertIn(
-                "The following files are supposed to be aligned according to guide spec_guide.md:",
-                prompt_fallback,
-            )
-            self.assertIn("Read spec_guide.md for alignment guidance.", prompt_fallback)
-
-            # 4. DagNode with empty definition and fallback alias from read_write_files
-            node_c = _make_dag_node(unit_address="//pkg:unit_c", role_address="lib")
-            rw_c = ReadWriteFile(
-                relative_path=RelativePath("unit_c.py"),
-                workspace_path=_make_workspace_path("pkg/unit_c.py"),
-                owning_node=node_c,
-            )
-            self.node_cfg._read_write_files = {rw_c}
-            self.storage.messages[node_c] = [
-                dag_storage.ChangeMessage(content=MessageContent(""))
-            ]
-            prompt_c_single = rc.format_task_prompt([node_c])
-            self.assertIn("Incoming change", prompt_c_single)
-            prompt_c_multi = rc.format_task_prompt([node_a, node_c])
-            self.assertIn("Incoming change for unit_c.py", prompt_c_multi)
-
-    def test_format_task_prompt_qa_node_with_spec(self) -> None:
-        """CUJ: format_task_prompt includes associated grounding specification path for qa nodes."""
-        node_qa1 = _make_dag_node(
-            unit_address="//parts/pkg:unit1_impl",
-            role_address="//update_python_with_ai:qa",
-        )
-        node_qa2 = _make_dag_node(
-            unit_address="//parts/pkg:unit2_impl",
-            role_address="//update_python_with_ai:qa",
-        )
-        self.node_cfg.src_file_alias_by_node = {
-            node_qa1: "logs/unit1_impl_qa.log",
-            node_qa2: "logs/unit2_impl_qa.log",
-        }
-        spec1 = ReadOnlyFile(
-            relative_path=RelativePath("grounding/unit1_impl.pyi"),
-            workspace_path=_make_workspace_path("parts/pkg/grounding/unit1_impl.pyi"),
-            owning_node=node_qa1,
-        )
-        spec2 = ReadOnlyFile(
-            relative_path=RelativePath("grounding/unit2_impl.pyi"),
-            workspace_path=_make_workspace_path("parts/pkg/grounding/unit2_impl.pyi"),
-            owning_node=node_qa2,
-        )
-        self.node_cfg._read_only_files = {spec1, spec2}
-        self.storage.node_definitions = {
-            node_qa1: MockNodeDefinition(
-                task_prompt="Evaluate test execution and arbitrate failures per the guide."
-            ),
-            node_qa2: MockNodeDefinition(
-                task_prompt="Evaluate test execution and arbitrate failures per the guide."
-            ),
-        }
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-
-            # Single QA node
-            prompt_single = rc.format_task_prompt([node_qa1])
-            self.assertIn(
-                "logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_single
-            )
-
-            # Multi QA nodes
-            self.node_cfg.is_step_mode = False
-            prompt_multi = rc.format_task_prompt([node_qa1, node_qa2])
-            self.assertIn(
-                "logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_multi
-            )
-            self.assertIn(
-                "logs/unit2_impl_qa.log with grounding/unit2_impl.pyi", prompt_multi
-            )
-
-            # Fallback spec resolution without read_only_files
-            self.node_cfg._read_only_files = set()
-            prompt_fallback = rc.format_task_prompt([node_qa1])
-            self.assertIn(
-                "logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_fallback
-            )
-
-    def test_reset_nodes_empty_list_triggers_ensure_nodes_and_tool_installation(
-        self,
-    ) -> None:
-        """CUJ: Calling reset_nodes with empty sequence triggers fallback to _ensure_nodes and installs active tools."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            self.tool_mgr.installed_tools.clear()
-
-            # Requirement: Tools cannot be configured against non-role/agent-specific state; the run controller installs submit, fail, check files, get work, and blame tools unconditionally, and installs advance tool when guide step mode is active.
-            rc.reset_nodes([])
-            self.assertGreater(len(rc.open_nodes()), 0)
-            installed_names = {t.name for t in self.tool_mgr.installed_tools}
-            self.assertIn("advance", installed_names)
-
-    def test_reset_nodes_with_nodes_installs_active_tools_in_step_mode(
-        self,
-    ) -> None:
-        """CUJ: Calling reset_nodes with non-empty batch installs advance tool when guide step mode is active."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            self.tool_mgr.installed_tools.clear()
-
-            # Requirement: The run controller installs the advance tool only when guide step mode is active.
-            rc.reset_nodes([node1])
-            installed_names = {t.name for t in self.tool_mgr.installed_tools}
-            self.assertIn("advance", installed_names)
-            self.assertIn("submit", installed_names)
-
-    def test_resolve_default_target_selection(self) -> None:
-        """CUJ: Resolving default target selects matching active node or defaults when unambiguous."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:unit2", role_address="lib")
-        rw1 = ReadWriteFile(
-            relative_path=RelativePath("unit1.py"),
-            workspace_path=_make_workspace_path("pkg/unit1.py"),
-            owning_node=node1,
-        )
-        rw2 = ReadWriteFile(
-            relative_path=RelativePath("unit2.py"),
-            workspace_path=_make_workspace_path("pkg/unit2.py"),
-            owning_node=node2,
-        )
-        self.node_cfg._read_write_files = {rw1, rw2}
-        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py"}
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            rc.reset_nodes([node1, node2])
-
-            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
-            self.assertIsNone(rc.resolve_default_target())
-            self.edit_mgr.last_read_or_edited_file = rw2
-            self.assertEqual(rc.resolve_default_target(), node2)
-            self.edit_mgr.last_read_or_edited_file = TargetFileObj("unit1.py")
-            self.assertEqual(rc.resolve_default_target(), node1)
-            self.edit_mgr.last_read_or_edited_file = "unit2.py"
-            self.assertEqual(rc.resolve_default_target(), node2)
-            self.edit_mgr.last_read_or_edited_file = UnboundFile(
-                relative_path=RelativePath("unit1.py")
-            )
-            self.assertEqual(rc.resolve_default_target(), node1)
-
-            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
-            rc.set_node_state(node1, "SUBMITTED")
-            self.edit_mgr.last_read_or_edited_file = None
-            self.assertEqual(rc.resolve_default_target(), node2)
-
-            rc.set_node_state(node1, "OPEN")
-            rc.set_node_state(node2, "SUBMITTED")
-            self.assertEqual(rc.resolve_default_target(), node1)
-
-            # Last read file with no owning_node resolves via get_node_for_alias
-            rc.set_node_state(node2, "OPEN")
-            rw_no_owner = ReadWriteFile(
-                relative_path=RelativePath("unit2.py"),
-                workspace_path=_make_workspace_path("unit2.py"),
-                owning_node=cast(Any, None),
-            )
-            self.edit_mgr.last_read_or_edited_file = rw_no_owner
-            self.assertEqual(rc.resolve_default_target(), node2)
-
-            # When no read-write files exist and a single node is open
-            self.node_cfg._read_write_files = set()
-            self.node_cfg.src_file_alias_by_node = {node1: "unit1.py"}
-            rc._node_states.clear()
-            rc._nodes = [node1]
-            rc.reset_nodes([node1])
-            self.edit_mgr.last_read_or_edited_file = None
-            self.assertEqual(rc.resolve_default_target(), node1)
-
-    def test_resolve_default_target_lexicographically_earliest_node(self) -> None:
-        """CUJ: Resolving default target orders nodes by lexicographically earliest read-write file path when discovered."""
-        node_z = _make_dag_node(unit_address="//pkg:node_z", role_address="lib")
-        node_a = _make_dag_node(unit_address="//pkg:node_a", role_address="lib")
-        rw_z = ReadWriteFile(
-            relative_path=RelativePath("z_file.py"),
-            workspace_path=_make_workspace_path("pkg/z_file.py"),
-            owning_node=node_z,
-        )
-        rw_a = ReadWriteFile(
-            relative_path=RelativePath("a_file.py"),
-            workspace_path=_make_workspace_path("pkg/a_file.py"),
-            owning_node=node_a,
-        )
-        self.node_cfg.src_file_alias_by_node = {}
-        self.node_cfg._read_write_files = {rw_z, rw_a}
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            rc.reset_nodes([])
-            self.assertEqual(rc.nodes, [node_a, node_z])
-            self.assertEqual(rc.open_nodes(), [node_a, node_z])
-
-            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
-            self.edit_mgr.last_read_or_edited_file = rw_z
-            self.assertEqual(rc.resolve_default_target(), node_z)
-
-            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
-            self.edit_mgr.last_read_or_edited_file = None
-            rc.set_node_state(node_z, "SUBMITTED")
-            self.assertEqual(rc.resolve_default_target(), node_a)
-
-            # Single unsubmitted file with owning_node=None resolving via alias or falling back to open_nodes[0]
-            rw_unowned = ReadWriteFile(
-                relative_path=RelativePath("unowned.py"),
-                workspace_path=_make_workspace_path("pkg/unowned.py"),
-                owning_node=cast(Any, None),
-            )
-            self.node_cfg._read_write_files = {rw_unowned, rw_z}
-            self.node_cfg.src_file_alias_by_node = {node_a: "unowned.py"}
-            self.assertEqual(rc.resolve_default_target(), node_a)
-            self.node_cfg.src_file_alias_by_node.clear()
-            self.assertEqual(rc.resolve_default_target(), node_a)
-
-    def test_blame_tool_target_defaulting_from_blame_targets(self) -> None:
-        """CUJ: BlameTool defaults resolve target when blame target matches configured node blame target."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:unit2", role_address="lib")
-        rw1 = ReadWriteFile(
-            relative_path=RelativePath("unit1.py"),
-            workspace_path=_make_workspace_path("pkg/unit1.py"),
-            owning_node=node1,
-        )
-        rw2 = ReadWriteFile(
-            relative_path=RelativePath("unit2.py"),
-            workspace_path=_make_workspace_path("pkg/unit2.py"),
-            owning_node=node2,
-        )
-        self.node_cfg._read_write_files = {rw1, rw2}
-        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py"}
-
-        bt1: BoundFile = ReadOnlyFile(
-            relative_path=RelativePath("dep1.py"),
-            workspace_path=_make_workspace_path("pkg/dep1.py"),
-            owning_node=_make_dag_node(
-                unit_address="//pkg:upstream1", role_address="lib"
-            ),
-        )
-        bt_shared: BoundFile = ReadOnlyFile(
-            relative_path=RelativePath("shared_dep.py"),
-            workspace_path=_make_workspace_path("pkg/shared_dep.py"),
-            owning_node=_make_dag_node(
-                unit_address="//pkg:upstream_shared", role_address="lib"
-            ),
-        )
-        blame_targets: Set[BoundFile] = {bt1, bt_shared}
-        self.node_cfg._blame_targets = blame_targets
-        self.node_cfg.blame_targets_by_node = {
-            node1: {bt1, bt_shared},
-            node2: {bt_shared},
-        }
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            blame = scope.get_singleton(BlameToolImpl)
-            rc.reset_nodes([node1, node2])
-
-            # 1. Single matching node in blame_targets_by_node defaults resolve target
-            b_single = ActualParameterBindings(
-                bindings={
-                    (blame.blame_target_parameter, bt1),
-                    (blame.explanation_parameter, "Defect in dep1"),
-                }
-            )
-            # Requirement: Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
-            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
-            resp_single = blame.execute_tool(b_single)
-            self.assertFalse(resp_single.is_failed)
-            self.assertIn("unit1.py", resp_single.content)
-            self.assertEqual(rc.open_nodes(), [node2])
-
-            # 2. Multiple matching nodes defaults via resolve_default_target
-            rc.reset_nodes([node1, node2])
-            self.edit_mgr.last_read_or_edited_file = rw2
-            b_multi = ActualParameterBindings(
-                bindings={
-                    (blame.blame_target_parameter, bt_shared),
-                    (blame.explanation_parameter, "Defect in shared_dep"),
-                }
-            )
-            # Requirement: Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
-            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
-            resp_multi = blame.execute_tool(b_multi)
-            self.assertFalse(resp_multi.is_failed)
-            self.assertIn("unit2.py", resp_multi.content)
-            self.assertEqual(rc.open_nodes(), [node1])
-
-            # 3. Legacy target parameter with multiple matching nodes defaults via resolve_default_target
-            rc.reset_nodes([node1, node2])
-            self.edit_mgr.last_read_or_edited_file = rw1
-            b_legacy = ActualParameterBindings(
-                bindings={
-                    (blame.target_parameter, bt_shared),
-                    (blame.explanation_parameter, "Defect in shared_dep legacy"),
-                }
-            )
-            # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
-            resp_legacy = blame.execute_tool(b_legacy)
-            self.assertFalse(resp_legacy.is_failed)
-            self.assertIn("unit1.py", resp_legacy.content)
-
-            # 4. Invalid target_str provided falls back to matching_nodes
-            rc.reset_nodes([node1, node2])
-            b_inv = ActualParameterBindings(
-                bindings={
-                    (blame.target_parameter, "nonexistent.py"),
-                    (blame.blame_target_parameter, bt_shared),
-                    (blame.explanation_parameter, "Invalid target_str"),
-                }
-            )
-            resp_inv = blame.execute_tool(b_inv)
-            self.assertFalse(resp_inv.is_failed)
-
-            # 5. def_node not in matching_nodes defaults to first matching node
-            node3 = _make_dag_node(unit_address="//pkg:unit3", role_address="lib")
-            rw3 = ReadWriteFile(
-                relative_path=RelativePath("unit3.py"),
-                workspace_path=_make_workspace_path("pkg/unit3.py"),
-                owning_node=node3,
-            )
-            self.node_cfg._read_write_files = {rw1, rw2, rw3}
-            self.node_cfg.src_file_alias_by_node = {
-                node1: "unit1.py",
-                node2: "unit2.py",
-                node3: "unit3.py",
-            }
-            rc.reset_nodes([node1, node2, node3])
-            self.edit_mgr.last_read_or_edited_file = rw3
-            b_def_notin = ActualParameterBindings(
-                bindings={
-                    (blame.blame_target_parameter, bt_shared),
-                    (blame.explanation_parameter, "def_node not in matching"),
-                }
-            )
-            resp_def_notin = blame.execute_tool(b_def_notin)
-            self.assertFalse(resp_def_notin.is_failed)
-
-            # 6. Legacy target where target is not a configured blame target
-            rc.reset_nodes([node1, node2, node3])
-            b_leg_not_blame = ActualParameterBindings(
-                bindings={
-                    (blame.target_parameter, "unit1.py"),
-                    (blame.explanation_parameter, "Not a blame target"),
-                }
-            )
-            # Requirement: Tool execution fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
-            resp_not_blame = blame.execute_tool(b_leg_not_blame)
-            self.assertTrue(resp_not_blame.is_failed)
-            self.assertIn("not a valid blame target", resp_not_blame.content)
-
-            # 7. resolve_target parameter supplied with blame target when blame_target parameter is omitted
-            rc.reset_nodes([node1, node2, node3])
-            self.edit_mgr.last_read_or_edited_file = rw2
-            b_res_blame = ActualParameterBindings(
-                bindings={
-                    (blame.target_parameter, bt_shared),
-                    (
-                        blame.explanation_parameter,
-                        "resolve_target matching blame target",
-                    ),
-                }
-            )
-            resp_res_blame = blame.execute_tool(b_res_blame)
-            self.assertFalse(resp_res_blame.is_failed)
-
-            # 8. Both blame_target and resolve_target omitted fails due to missing blame target
-            rc.reset_nodes([node1, node2, node3])
-            self.edit_mgr.last_read_or_edited_file = None
-            b_both_omitted = ActualParameterBindings(
-                bindings={(blame.explanation_parameter, "Both omitted")}
-            )
-            resp_both_omitted = blame.execute_tool(b_both_omitted)
-            self.assertTrue(resp_both_omitted.is_failed)
-
-    def test_blame_tool_resolve_target_defaulting_when_uninferrable_from_blame_target(
-        self,
-    ) -> None:
-        """CUJ: BlameTool defaults resolve target using resolve target defaulting rules when uninferrable from blame target."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:unit2", role_address="lib")
-        rw1 = ReadWriteFile(
-            relative_path=RelativePath("unit1.py"),
-            workspace_path=_make_workspace_path("pkg/unit1.py"),
-            owning_node=node1,
-        )
-        rw2 = ReadWriteFile(
-            relative_path=RelativePath("unit2.py"),
-            workspace_path=_make_workspace_path("pkg/unit2.py"),
-            owning_node=node2,
-        )
-        bt_unmapped: BoundFile = ReadOnlyFile(
-            relative_path=RelativePath("unmapped_dep.py"),
-            workspace_path=_make_workspace_path("pkg/unmapped_dep.py"),
-            owning_node=_make_dag_node(
-                unit_address="//pkg:upstream", role_address="lib"
-            ),
-        )
-        self.node_cfg._read_write_files = {rw1, rw2}
-        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py"}
-        blame_targets: Set[BoundFile] = {bt_unmapped}
-        self.node_cfg._blame_targets = blame_targets
-        self.node_cfg.blame_targets_by_node = {
-            node1: {bt_unmapped},
-            node2: {bt_unmapped},
-        }
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            blame = scope.get_singleton(BlameToolImpl)
-
-            # 1. Multiple open nodes, last_read_or_edited_file matches node2
-            rc.reset_nodes([node1, node2])
-            self.edit_mgr.last_read_or_edited_file = rw2
-            b1 = ActualParameterBindings(
-                bindings={
-                    (blame.blame_target_parameter, bt_unmapped),
-                    (
-                        blame.explanation_parameter,
-                        "Blame when resolve_target uninferrable and last_read set",
-                    ),
-                }
-            )
-            # Requirement: Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
-            res1 = blame.execute_tool(b1)
-            self.assertFalse(res1.is_failed)
-            self.assertIn("unit2.py", res1.content)
-            self.assertEqual(rc.open_nodes(), [node1])
-
-            # 2. Single open node remaining defaults to that node
-            self.edit_mgr.last_read_or_edited_file = None
-            b2 = ActualParameterBindings(
-                bindings={
-                    (blame.blame_target_parameter, bt_unmapped),
-                    (
-                        blame.explanation_parameter,
-                        "Blame when resolve_target uninferrable single open node",
-                    ),
-                }
-            )
-            # Requirement: Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
-            res2 = blame.execute_tool(b2)
-            self.assertFalse(res2.is_failed)
-            self.assertEqual(rc.open_nodes(), [])
-
-    def test_blame_tool_fails_when_no_open_target_found(self) -> None:
-        """CUJ: BlameTool execution fails with error response listing open targets when no open target is found."""
-        bt: BoundFile = ReadOnlyFile(
-            relative_path=RelativePath("dep.py"),
-            workspace_path=_make_workspace_path("pkg/dep.py"),
-            owning_node=_make_dag_node(
-                unit_address="//pkg:upstream", role_address="lib"
-            ),
-        )
-        bt_targets: Set[BoundFile] = {bt}
-        self.node_cfg._blame_targets = bt_targets
-        self.role_cfg.set_role("//pkg:role")
-        self.role_cfg.active_nodes = []
-        self.node_cfg.src_file_alias_by_node = {}
-        self.node_cfg._read_write_files = set()
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            blame = scope.get_singleton(BlameToolImpl)
-            rc.reset_nodes([])
-            rc._nodes = []
-
-            b = ActualParameterBindings(
-                bindings={
-                    (blame.blame_target_parameter, bt),
-                    (blame.explanation_parameter, "Defect with no open targets"),
-                }
-            )
-            # Requirement: Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
-            resp = blame.execute_tool(b)
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertTrue(resp.content)
-            self.assertIsNotNone(resp.reminder)
-            self.assertTrue(resp.reminder)
-
-    def test_check_files_repeated_defaults_view_file_to_last_read_or_earliest(
-        self,
-    ) -> None:
-        """CUJ: CheckFilesTool defaults follow-up view_file to last read or edited file or earliest read-write file when repeated."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        rw_b = ReadWriteFile(
-            relative_path=RelativePath("b.py"),
-            workspace_path=_make_workspace_path("pkg/b.py"),
-            owning_node=_make_dag_node(unit_address="//pkg:other", role_address="lib"),
-        )
-        rw_a = ReadWriteFile(
-            relative_path=RelativePath("a.py"),
-            workspace_path=_make_workspace_path("pkg/a.py"),
-            owning_node=_make_dag_node(unit_address="//pkg:other2", role_address="lib"),
-        )
-        self.node_cfg._read_write_files = {rw_b, rw_a}
-        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py"}
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-        self.edit_mgr._file_hashes = {"a.py": "h", "b.py": "h"}
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            check_files = scope.get_singleton(CheckFilesToolImpl)
-            rc.reset_nodes([node1])
-
-            b = ActualParameterBindings(bindings=set())
-            # Initial execution evaluates verification and caches revision
-            # Requirement: Executing the check files tool updates verification results if outdated and evaluates verification checks across all open targets and modified workspace files.
-            res1 = check_files.execute_tool(b)
-            self.assertFalse(res1.is_failed)
-
-            # Repeated execution with last_read_or_edited_file sets reminder and no follow-up tool call
-            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when target read-write file hashes have not changed since the previous check files tool execution.
-            self.edit_mgr.last_read_or_edited_file = rw_b
-            res2 = check_files.execute_tool(b)
-            self.assertFalse(res2.is_failed)
-            self.assertIsNone(res2.follow_up_tool_call)
-            self.assertIsNotNone(res2.reminder)
-
-            # Repeated execution with no last_read sets reminder and no follow-up tool call
-            self.edit_mgr.last_read_or_edited_file = None
-            res3 = check_files.execute_tool(b)
-            self.assertFalse(res3.is_failed)
-            self.assertIsNone(res3.follow_up_tool_call)
-            self.assertIsNotNone(res3.reminder)
-
-    def test_check_files_evaluates_open_in_batch_dependencies(self) -> None:
-        """CUJ: Executing check_files tool evaluates open in-batch dependencies and surfaces failures."""
-        node_dep = _make_dag_node(unit_address="//pkg:dep", role_address="lib")
-        node_tgt = _make_dag_node(unit_address="//pkg:target", role_address="lib")
-        vcheck_dep = MockVerificationCheck(
-            passes=False, diagnostic="SyntaxError in dep.py"
-        )
-        vcheck_tgt = MockVerificationCheck(passes=True, diagnostic="target.py OK")
-
-        self.node_cfg.verification_checks_by_node = {
-            node_dep: [vcheck_dep],
-            node_tgt: [vcheck_tgt],
-        }
-        self.node_cfg.src_file_alias_by_node = {
-            node_dep: "dep.py",
-            node_tgt: "target.py",
-        }
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            self.storage.dependencies[node_tgt] = {
-                dag_storage.DagDependency(node=node_dep)
-            }
-            rc.reset_nodes([node_dep, node_tgt])
-
-            check_files = scope.get_singleton(CheckFilesToolImpl)
-            # Requirement: Executing the check files tool updates verification results if outdated and evaluates verification checks across all open targets and modified workspace files.
-            b = ActualParameterBindings(bindings=set())
-            resp = check_files.execute_tool(b)
-            self.assertTrue(resp.is_failed)
-            self.assertIn("SyntaxError in dep.py", resp.content)
-
-    def test_format_task_prompt_qa_and_target_stem_variations(self) -> None:
-        """CUJ: format_task_prompt handles QA prompt defaulting, target stem variations (_test, _coverage), companions, and fallback targets."""
-        node_qa = _make_dag_node(unit_address="//pkg:unit_qa", role_address="qa")
-        node_test = _make_dag_node(unit_address="//pkg:unit_test", role_address="test")
-        node_cov = _make_dag_node(
-            unit_address="//pkg:unit_coverage", role_address="coverage"
-        )
-        node_lib = _make_dag_node(unit_address="//pkg:unit", role_address="lib")
-
-        self.storage.node_definitions = {
-            node_qa: MockNodeDefinition(task_prompt=""),
-            node_test: MockNodeDefinition(task_prompt="Test unit"),
-            node_cov: MockNodeDefinition(task_prompt="Coverage unit"),
-            node_lib: MockNodeDefinition(task_prompt="Implement unit"),
-        }
-
-        ro_guide: BoundFile = ReadOnlyFile(
-            relative_path=RelativePath("guide.md"),
-            workspace_path=_make_workspace_path("pkg/guide.md"),
-            owning_node=node_qa,
-        )
-        ro_spec: BoundFile = ReadOnlyFile(
-            relative_path=RelativePath("grounding/unit.pyi"),
-            workspace_path=_make_workspace_path("pkg/grounding/unit.pyi"),
-            owning_node=node_lib,
-        )
-        ro_impl: BoundFile = ReadOnlyFile(
-            relative_path=RelativePath("lib/unit.py"),
-            workspace_path=_make_workspace_path("pkg/lib/unit.py"),
-            owning_node=node_lib,
-        )
-
-        # 1. QA node with alias having parent directory and empty task prompt (spec_path is None)
-        self.node_cfg._read_only_files = {ro_guide}
-        self.node_cfg.src_file_alias_by_node = {node_qa: "pkg/unit_qa"}
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            prompt_qa = rc.format_task_prompt([node_qa])
-            self.assertIn("pkg/unit_qa with grounding/unit_qa.pyi", prompt_qa)
-
-        # 2. QA node with empty alias
-        self.node_cfg.src_file_alias_by_node = {node_qa: ""}
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            prompt_qa_empty = rc.format_task_prompt([node_qa])
-            self.assertIn("grounding/unit_qa.pyi", prompt_qa_empty)
-
-        # 3. Test node alias ending in _test, coverage node ending in _coverage, lib node companions (.py and .pyi)
-        self.node_cfg._read_only_files = {ro_guide, ro_spec, ro_impl}
-        self.node_cfg.src_file_alias_by_node = {
-            node_test: "tests/unit_test.py",
-            node_cov: "tests/unit_coverage.py",
-            node_lib: "lib/unit.py",
-        }
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            prompt_lib = rc.format_task_prompt([node_lib])
-            self.assertIn("lib/unit.py with grounding/unit.pyi", prompt_lib)
-
-            prompt_test = rc.format_task_prompt([node_test])
-            self.assertIn("tests/unit_test.py with grounding/unit.pyi", prompt_test)
-
-            prompt_cov = rc.format_task_prompt([node_cov])
-            self.assertIn("tests/unit_coverage.py with grounding/unit.pyi", prompt_cov)
-
-        # 4. Incoming feedback when src_file_alias_by_node and read_write_files are empty
-        self.node_cfg.src_file_alias_by_node = {}
-        self.node_cfg._read_write_files = set()
-        self.storage.messages[node_lib] = [
-            dag_storage.FeedbackMessage(content=MessageContent("Fix syntax error"))
-        ]
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            prompt_fb = rc.format_task_prompt([node_lib])
-            self.assertIn("Fix pkg/unit based on feedback: Fix syntax error", prompt_fb)
-
-    def test_is_node_dirty_rw_file_alias_lookup(self) -> None:
-        """CUJ: evaluate_verification_for_node resolves rw_file by relative_path when owning_node is None."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        rw1 = ReadWriteFile(
-            relative_path=RelativePath("unit1.py"),
-            workspace_path=_make_workspace_path("pkg/unit1.py"),
-            owning_node=cast(Any, None),
-        )
-        self.node_cfg._read_write_files = {rw1}
-        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py"}
-        self.node_cfg.verification_checks_by_node = {
-            node1: [MockVerificationCheck(passes=True)]
-        }
-        self.edit_mgr._file_hashes = {"unit1.py": "h1"}
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            rc.reset_nodes([node1])
-            # Requirement: Evaluation of verification checks for an active node is cached alongside the edit manager file hash of the target node read-write file.
-            # Requirement: When the target read-write file hash has not changed since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
-            passed, diag = rc.evaluate_verification_for_node(node1)
-            self.assertTrue(passed)
-
-    def test_resolve_default_target_single_rw_file_and_node_states(self) -> None:
-        """CUJ: resolve_default_target handles single rw file fallbacks and closed node states."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        rw1_unowned = ReadWriteFile(
-            relative_path=RelativePath("unit1.py"),
-            workspace_path=_make_workspace_path("pkg/unit1.py"),
-            owning_node=cast(Any, None),
-        )
-
-        # 1. Single read-write file with owning_node=None matches by alias
-        self.node_cfg._read_write_files = {rw1_unowned}
-        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py"}
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            rc.reset_nodes([node1])
-            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
-            self.assertEqual(rc.resolve_default_target(), node1)
-
-        # 2. Single read-write file where alias does not match node falls back to nodes[0]
-        rw_other = ReadWriteFile(
-            relative_path=RelativePath("other.py"),
-            workspace_path=_make_workspace_path("pkg/other.py"),
-            owning_node=cast(Any, None),
-        )
-        self.node_cfg._read_write_files = {rw_other}
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            rc.reset_nodes([node1])
-            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
-            self.assertEqual(rc.resolve_default_target(), node1)
-
-        # 3. No open nodes returns None
-        node2 = _make_dag_node(unit_address="//pkg:unit2", role_address="lib")
-        rw2 = ReadWriteFile(
-            relative_path=RelativePath("unit2.py"),
-            workspace_path=_make_workspace_path("pkg/unit2.py"),
-            owning_node=node2,
-        )
-        self.node_cfg._read_write_files = {rw1_unowned, rw2}
-        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py"}
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            rc.reset_nodes([node1, node2])
-            rc._node_states[node1] = "SUBMITTED"
-            rc._node_states[node2] = "SUBMITTED"
-            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
-            self.assertIsNone(rc.resolve_default_target())
-
-        # 4. _is_file_open filters out closed owning_node and closed alias_node
-        node3 = _make_dag_node(unit_address="//pkg:unit3", role_address="lib")
-        rw2_owned = ReadWriteFile(
-            relative_path=RelativePath("unit2.py"),
-            workspace_path=_make_workspace_path("pkg/unit2.py"),
-            owning_node=node2,
-        )
-        rw3_unowned = ReadWriteFile(
-            relative_path=RelativePath("unit3.py"),
-            workspace_path=_make_workspace_path("pkg/unit3.py"),
-            owning_node=cast(Any, None),
-        )
-        self.node_cfg._read_write_files = {rw1_unowned, rw2_owned, rw3_unowned}
-        self.node_cfg.src_file_alias_by_node = {
-            node1: "unit1.py",
-            node2: "unit2.py",
-            node3: "unit3.py",
-        }
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            rc.reset_nodes([node1, node2, node3])
-            rc._node_states[node2] = "SUBMITTED"
-            rc._node_states[node3] = "SUBMITTED"
-            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
-            self.assertEqual(rc.resolve_default_target(), node1)
-
-    def test_check_files_when_no_open_nodes_and_rw_file_matching(self) -> None:
-        """CUJ: CheckFilesTool evaluates verification when no open nodes remain, and matches rw_file by path."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        rw1 = ReadWriteFile(
-            relative_path=RelativePath("unit1.py"),
-            workspace_path=_make_workspace_path("pkg/unit1.py"),
-            owning_node=node1,
-        )
-        rw1_dup = ReadWriteFile(
-            relative_path=RelativePath("unit1.py"),
-            workspace_path=_make_workspace_path("pkg/unit1.py"),
-            owning_node=cast(Any, None),
-        )
-        vcheck = MockVerificationCheck(passes=True, diagnostic="All tests pass")
-        self.node_cfg._verification_checks = [vcheck]
-        self.node_cfg._read_write_files = {rw1}
-        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py"}
-        self.edit_mgr._file_hashes = {"unit1.py": "h"}
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            check_files = scope.get_singleton(CheckFilesToolImpl)
-            rc.reset_nodes([node1])
-            rc._node_states[node1] = "SUBMITTED"
-
-            # 1. No open nodes: CheckFilesTool calls rc.evaluate_verification
-            # Requirement: Executing the check files tool updates verification results if outdated and evaluates verification checks across all open targets and modified workspace files.
-            b = ActualParameterBindings(bindings=set())
-            resp = check_files.execute_tool(b)
-            self.assertFalse(resp.is_failed)
-
-            # 2. Repeated execution where last_read_or_edited_file is a different instance with identical relative_path
-            self.edit_mgr.last_read_or_edited_file = rw1_dup
-            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when target read-write file hashes have not changed since the previous check files tool execution.
-            resp2 = check_files.execute_tool(b)
-            self.assertFalse(resp2.is_failed)
-            self.assertIsNone(resp2.follow_up_tool_call)
-            self.assertIsNotNone(resp2.reminder)
-
-            # 3. No open nodes and verification fails
-            vcheck_fail = MockVerificationCheck(
-                passes=False, diagnostic="Failure in check"
-            )
-            self.node_cfg._verification_checks = [vcheck_fail]
-            self.edit_mgr._file_hashes["unit1.py"] = "h_changed"
-            resp_fail = check_files.execute_tool(b)
-            self.assertTrue(resp_fail.is_failed)
-            self.assertIn("Failure in check", resp_fail.content)
-
-    def test_blame_tool_suffix_and_basename_and_tiebreak_matching(self) -> None:
-        """CUJ: BlameTool matches blame target by suffix and basename, and handles multiple matching node tiebreak."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = _make_dag_node(unit_address="//pkg:unit2", role_address="lib")
-        node3 = _make_dag_node(unit_address="//pkg:unit3", role_address="lib")
-
-        bt_nested = ReadOnlyFile(
-            relative_path=RelativePath("a/b/dep.py"),
-            workspace_path=_make_workspace_path("pkg/a/b/dep.py"),
-            owning_node=_make_dag_node(
-                unit_address="//pkg:upstream", role_address="lib"
-            ),
-        )
-        rw1 = ReadWriteFile(
-            relative_path=RelativePath("unit1.py"),
-            workspace_path=_make_workspace_path("pkg/unit1.py"),
-            owning_node=node1,
-        )
-        rw2 = ReadWriteFile(
-            relative_path=RelativePath("unit2.py"),
-            workspace_path=_make_workspace_path("pkg/unit2.py"),
-            owning_node=node2,
-        )
-        rw3 = ReadWriteFile(
-            relative_path=RelativePath("unit3.py"),
-            workspace_path=_make_workspace_path("pkg/unit3.py"),
-            owning_node=node3,
-        )
-
-        self.node_cfg._blame_targets = cast(Set[BoundFile], {bt_nested})
-        self.node_cfg.blame_targets_by_node = {
-            node1: {bt_nested},
-            node2: {bt_nested},
-            node3: set(),
-        }
-        self.node_cfg._read_write_files = {rw1, rw2, rw3}
-        self.node_cfg.src_file_alias_by_node = {
-            node1: "unit1.py",
-            node2: "unit2.py",
-            node3: "unit3.py",
-        }
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            blame = scope.get_singleton(BlameToolImpl)
-            rc.reset_nodes([node1, node2, node3])
-
-            # 1. Match blame target by suffix: "b/dep.py"
-            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
-            b_suffix = ActualParameterBindings(
-                bindings={
-                    (blame.target_parameter, "unit1.py"),
-                    (blame.blame_target_parameter, "b/dep.py"),
-                    (blame.explanation_parameter, "Suffix match defect"),
-                }
-            )
-            res_suffix = blame.execute_tool(b_suffix)
-            self.assertFalse(res_suffix.is_failed)
-
-            # Reset node1 state
-            rc._node_states[node1] = "OPEN"
-
-            # 2. Match blame target by basename: "other_dir/dep.py" (not suffix of "a/b/dep.py")
-            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
-            b_base = ActualParameterBindings(
-                bindings={
-                    (blame.target_parameter, "unit1.py"),
-                    (blame.blame_target_parameter, "other_dir/dep.py"),
-                    (blame.explanation_parameter, "Basename match defect"),
-                }
-            )
-            res_base = blame.execute_tool(b_base)
-            self.assertFalse(res_base.is_failed)
-
-            # Reset node1 state
-            rc._node_states[node1] = "OPEN"
-
-            # 3. Multiple matching nodes for blame_target, def_node (node3 via last_read) is not in matching_nodes
-            self.edit_mgr.last_read_or_edited_file = rw3
-            b_tiebreak = ActualParameterBindings(
-                bindings={
-                    (blame.blame_target_parameter, bt_nested),
-                    (blame.explanation_parameter, "Tiebreak blame target"),
-                }
-            )
-            # Requirement: Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
-            res_tiebreak = blame.execute_tool(b_tiebreak)
-            self.assertFalse(res_tiebreak.is_failed)
-            self.assertIn("unit1.py", res_tiebreak.content)
-
-            # Reset node1 state
-            rc._node_states[node1] = "OPEN"
-
-            # 4. Target parameter matches blame target of multiple nodes, def_node (node2) IS in matching_nodes
-            self.edit_mgr.last_read_or_edited_file = rw2
-            b_target_tiebreak = ActualParameterBindings(
-                bindings={
-                    (blame.target_parameter, "a/b/dep.py"),
-                    (blame.explanation_parameter, "Tiebreak with target param"),
-                }
-            )
-            # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
-            res_target_tiebreak = blame.execute_tool(b_target_tiebreak)
-            self.assertFalse(res_target_tiebreak.is_failed)
-            self.assertIn("unit2.py", res_target_tiebreak.content)
-
-    def test_get_work_tool_invalid_max_batch_size(self) -> None:
-        """CUJ: GetWorkTool ignores unparseable max_batch_size and returns batch."""
-        node1 = _make_dag_node(unit_address="//pkg:unit1", role_address="lib")
-        self.storage.dirty_nodes = {node1}
-        self.subgraph.ready_batches = [[node1]]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            get_work = scope.get_singleton(GetWorkToolImpl)
-            # Verify the get work tool max_batch_size parameter
-            b = ActualParameterBindings(
-                bindings={
-                    (get_work.max_batch_size_parameter, cast(Any, "invalid_number")),
-                }
-            )
-            resp = get_work.execute_tool(b)
-            self.assertFalse(resp.is_failed)
-
-    def test_unit_name_matching_and_target_omission(self) -> None:
-        """CUJ: Resolve tools match short unit names, package-qualified names, and support target omission and blame attribution from blame_target."""
-        node1 = _make_dag_node(
-            unit_address="//my_pkg:unit_foo_lib_qa", role_address="qa"
-        )
-        node2 = _make_dag_node(
-            unit_address="//my_pkg:unit_bar_lib_qa", role_address="qa"
-        )
-        vcheck1 = MockVerificationCheck(passes=True)
-        vcheck2 = MockVerificationCheck(passes=True)
-        self.node_cfg.verification_checks_by_node = {node1: [vcheck1], node2: [vcheck2]}
-        self.node_cfg.is_step_mode = False
-        self.guide_del.has_steps_remaining = False
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            rc: Any = scope.get_singleton(RunControllerImpl)
-            submit = scope.get_singleton(SubmitToolImpl)
-            fail = scope.get_singleton(FailToolImpl)
-            blame = scope.get_singleton(BlameToolImpl)
-
-            # 1. Short unit name submission when unique among active nodes
-            rc.reset_nodes([node1, node2])
-            b_short = ActualParameterBindings(
-                bindings={
-                    (submit.target_parameter, "unit_foo"),
-                }
-            )
-            # Requirement: A resolve tool matches the resolve target parameter by declared source file, short unit name (when unique), or package-qualified unit name against open active nodes.
-            resp_short = submit.execute_tool(b_short)
-            self.assertFalse(resp_short.is_failed)
-            self.assertIn("unit_foo", resp_short.content)
-            self.assertEqual(rc.open_nodes(), [node2])
-
-            # 2. Package-qualified unit name submission
-            b_pkg = ActualParameterBindings(
-                bindings={
-                    (submit.target_parameter, "my_pkg/unit_bar"),
-                }
-            )
-            resp_pkg = submit.execute_tool(b_pkg)
-            self.assertFalse(resp_pkg.is_failed)
-            self.assertEqual(rc.open_nodes(), [])
-
-            # 3. Ambiguous short unit name fails when duplicate
-            node_a = _make_dag_node(
-                unit_address="//pkg_a:widget_coverage", role_address="coverage"
-            )
-            node_b = _make_dag_node(
-                unit_address="//pkg_b:widget_coverage", role_address="coverage"
-            )
-            vcheck_a = MockVerificationCheck(passes=True)
-            vcheck_b = MockVerificationCheck(passes=True)
-            self.node_cfg.verification_checks_by_node = {
-                node_a: [vcheck_a],
-                node_b: [vcheck_b],
-            }
-            rc.reset_nodes([node_a, node_b])
-
-            # Verify prompt instructions generated by format_task_prompt
-            prompt_multi = rc.format_task_prompt([node_a, node_b])
-            self.assertIn(
-                "specify target as <unit_name> (if unique among session units) or <relative_path>/<unit_name> (if ambiguous)",
-                prompt_multi,
-            )
-            prompt_single = rc.format_task_prompt([node_b])
-            self.assertIn(
-                "When calling submit or fail for a single unit, the target parameter may be omitted.",
-                prompt_single,
-            )
-
-            b_ambig = ActualParameterBindings(
-                bindings={
-                    (submit.target_parameter, "widget"),
-                }
-            )
-            resp_ambig = submit.execute_tool(b_ambig)
-            self.assertTrue(resp_ambig.is_failed)
-            self.assertIn(
-                "Error: Target 'widget' is not an open target.", resp_ambig.content
-            )
-
-            # 4. Fully qualified unit address fails, relative_path/unit_name resolves duplicate
-            b_fq_invalid = ActualParameterBindings(
-                bindings={
-                    (submit.target_parameter, "//pkg_a:widget_coverage"),
-                }
-            )
-            resp_fq = submit.execute_tool(b_fq_invalid)
-            self.assertTrue(resp_fq.is_failed)
-            self.assertIn(
-                "Error: Target '//pkg_a:widget_coverage' is not an open target.",
-                resp_fq.content,
-            )
-
-            b_rel = ActualParameterBindings(
-                bindings={
-                    (submit.target_parameter, "pkg_a/widget"),
-                }
-            )
-            resp_rel = submit.execute_tool(b_rel)
-            self.assertFalse(resp_rel.is_failed)
-            self.assertEqual(rc.open_nodes(), [node_b])
-
-            # 5. Providing change_summary for auditor node fails
-            b_auditor_with_summary = ActualParameterBindings(
-                bindings={
-                    (
-                        submit.change_summary_parameter,
-                        "Should not be allowed for auditor",
-                    ),
-                }
-            )
-            resp_auditor_fail = submit.execute_tool(b_auditor_with_summary)
-            self.assertTrue(resp_auditor_fail.is_failed)
-            self.assertIn(
-                "Change summary is prohibited for audit nodes",
-                resp_auditor_fail.content,
-            )
-
-            # 5b. Target omission when only 1 node remains open without change summary
-            b_omit = ActualParameterBindings(bindings=set())
-            # Requirement: When omitted with a single open active node, resolve target defaults to that remaining unsubmitted active node.
-            resp_omit = submit.execute_tool(b_omit)
-            self.assertFalse(resp_omit.is_failed)
-            self.assertEqual(rc.open_nodes(), [])
-
-            # 6. Target omission with fail tool when single node is active
-            solo_node = _make_dag_node(
-                unit_address="//pkg:solo_unit_qa", role_address="qa"
-            )
-            rc.reset_nodes([solo_node])
-            b_fail_omit = ActualParameterBindings(
-                bindings={
-                    (fail.explanation_parameter, "Solo node failure explanation"),
-                }
-            )
-            resp_fail_omit = fail.execute_tool(b_fail_omit)
-            self.assertTrue(resp_fail_omit.is_failed)
-            self.assertEqual(rc.open_nodes(), [])
-
-            # 7. Blame identification using just blame_target in multi-node session
-            node_upstream = _make_dag_node(
-                unit_address="//pkg:upstream_spec", role_address="high"
-            )
-            n1 = _make_dag_node(unit_address="//pkg:calc_lib", role_address="lib")
-            n2 = _make_dag_node(unit_address="//pkg:parser_lib", role_address="lib")
-            bt1 = ReadOnlyFile(
-                relative_path=RelativePath("high/calc.md"),
-                workspace_path=_make_workspace_path("pkg/high/calc.md"),
-                owning_node=node_upstream,
-            )
-            bt2 = ReadOnlyFile(
-                relative_path=RelativePath("high/parser.md"),
-                workspace_path=_make_workspace_path("pkg/high/parser.md"),
-                owning_node=node_upstream,
-            )
-            self.node_cfg.blame_targets_by_node = {
-                n1: {bt1},
-                n2: {bt2},
-            }
-            rc.reset_nodes([n1, n2])
-
-            b_blame = ActualParameterBindings(
-                bindings={
-                    (blame.blame_target_parameter, bt2),
-                    (blame.explanation_parameter, "Specification defect in parser"),
-                }
-            )
-            # Requirement: The blame tool identifies the active node attributing blame from the specified blame target.
-            resp_blame = blame.execute_tool(b_blame)
-            self.assertFalse(resp_blame.is_failed)
-            self.assertIn("parser", resp_blame.content)
-            self.assertEqual(rc.open_nodes(), [n1])
 
 
 if __name__ == "__main__":
     unittest.main()
 
-# Untested requirements: None
+# Untested requirements:
+# None

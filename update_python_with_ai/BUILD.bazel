@@ -18,7 +18,6 @@ PYTHON_WORKSPACE_FILES = [
     "bin/pyright_library.bzl",
     "requirements.txt",
     "requirements_lock.txt",
-    "pyrightconfig.json",
     "update_python_with_ai/BUILD.bazel",
     "update_python_with_ai/support",
     "update_with_ai/support/lib",
@@ -117,7 +116,6 @@ define_role(
     feedback_role_deps = [":low"],
     workspace_files = PYTHON_WORKSPACE_FILES,
     tools = [
-        "pyrightconfig.json",
         "update_python_with_ai/support/lib/low_lint.py",
         "update_python_with_ai/support/lib/build_lint_common.py",
     ],

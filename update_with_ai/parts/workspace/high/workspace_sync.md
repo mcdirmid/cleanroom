@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-08T18:30:00Z
 CHANGE: document stub role dependencies synchronization in pull and refresh contracts
-CODE_HASH: 3da7a23421ad
+CODE_HASH: 6086606e94ff
 -->
 
 # workspace_sync interface component

@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T02:18:07Z
+# CHANGE: Align with sandbox_asm.pyi specification
+# CODE_HASH: b7687c1a36f9
+# --- END CLEANROOM METADATA ---
+
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry

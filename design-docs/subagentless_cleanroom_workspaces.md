@@ -116,6 +116,7 @@ flowchart TD
   3. Absolute prohibition against executing `git` commands (`git status`, `git diff`, etc.).
   4. Mandatory execution of `bin/get_work` before taking any other action.
   5. Mandatory processing and sequential submission of all ready units within the turn.
+  6. Zero-tolerance contamination tripwire mandating immediate abort upon reading any out-of-bounds files.
 
 ---
 

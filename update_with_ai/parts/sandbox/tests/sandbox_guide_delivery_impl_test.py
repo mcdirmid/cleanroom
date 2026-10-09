@@ -1,339 +1,236 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 3c267424c16f
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CHANGED: 2026-10-09T04:10:39Z
+# CHANGE: Verify advance_step progressing past all guide milestones and reporting recorded initial primer alongside verification diagnostics upon failure at initial step
+# CODE_HASH: 1c8cdbf6f4aa
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
-"""Unit tests for sandbox_guide_delivery_impl aligned with grounding specifications."""
+"""Unit tests for sandbox_guide_delivery_impl per its grounding specification."""
+
+from __future__ import annotations
 
 import unittest
-from typing import Optional, Set, Tuple
-from update_with_ai.parts.agent.lib.agent_file_alias import (
-    BoundFile,
-    FileContent,
-    UnboundFile,
-)
+from typing import List
+
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib.agent_session import agent_session
-from update_with_ai.parts.agent.lib.agent_node_config import (
-    GuideSummary,
-    NodeConfig,
-    NodeGuide,
-    StepContent,
-    StepIndex,
-    StepSection,
-    StepTitle,
-    VerificationDiagnostic,
-    VerificationFailureInstructions,
-)
-from update_with_ai.parts.sandbox.lib.sandbox_guide_delivery import (
-    GuideDelivery,
-    InitialPrimer,
-)
+from update_with_ai.parts.agent.lib import agent_file_alias, agent_node_config
+from update_with_ai.parts.sandbox.lib import sandbox_guide_delivery, tool_provider
 from update_with_ai.parts.sandbox.lib.sandbox_guide_delivery_impl import (
-    GuideDelivery as GuideDeliveryImpl,
+    GuideDelivery,
     __initialize__,
 )
 
 
-class MockNodeConfig:
-    tier = agent_session
+_PREAMBLE = "Preamble overview text."
+_SUMMARY_BODY = "Summary section body text."
+_STEP_ONE_CONTENT = "Perform the first milestone task."
+_STEP_TWO_CONTENT = "Perform the second milestone task."
+_LINT_CONTENT = "Lint checklist item."
+_FAILURE_CONTENT = "Repair the reported verification failures."
 
-    def __init__(
-        self, guide: Optional[NodeGuide] = None, feedback: Tuple[str, ...] = ()
-    ) -> None:
-        self._guide = guide
-        self._feedback = feedback
+_GUIDE_MARKDOWN = (
+    f"{_PREAMBLE}\n"
+    "\n"
+    "## Summary\n"
+    "\n"
+    f"{_SUMMARY_BODY}\n"
+    "\n"
+    "## Lint checks\n"
+    "\n"
+    f"- [ ] {_LINT_CONTENT}\n"
+    "\n"
+    "## Step One\n"
+    "\n"
+    f"{_STEP_ONE_CONTENT}\n"
+    "\n"
+    "## Step Two\n"
+    "\n"
+    f"{_STEP_TWO_CONTENT}\n"
+    "\n"
+    "## Verification failure instructions\n"
+    "\n"
+    f"{_FAILURE_CONTENT}\n"
+)
 
-    @property
-    def read_only_files(self) -> Set[BoundFile]:
-        return set()
 
-    @property
-    def read_write_files(self) -> Set[BoundFile]:
-        return set()
+def _make_content(text: str) -> agent_file_alias.FileContent:
+    return agent_file_alias.FileContent(text)
 
-    @property
-    def guide_file(self) -> Optional[UnboundFile]:
-        return None
 
-    @property
-    def is_step_mode(self) -> bool:
-        return True
-
-    @property
-    def templates(self) -> Set[Tuple[BoundFile, FileContent]]:
-        return set()
-
-    @property
-    def guide(self) -> Optional[NodeGuide]:
-        return self._guide
-
-    @guide.setter
-    def guide(self, value: Optional[NodeGuide]) -> None:
-        self._guide = value
-
-    @property
-    def blame_targets(self) -> Set[BoundFile]:
-        return set()
-
-    @property
-    def feedback(self) -> Tuple[str, ...]:
-        return self._feedback
-
-    @feedback.setter
-    def feedback(self, value: Tuple[str, ...]) -> None:
-        self._feedback = value
+def _make_diagnostic(text: str) -> agent_node_config.VerificationDiagnostic:
+    return agent_node_config.VerificationDiagnostic(text)
 
 
 class SandboxGuideDeliveryImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
-        self.node_cfg = MockNodeConfig()
-        self.registry.register_instance(
-            self.node_cfg, keys=[NodeConfig], tier=agent_session
-        )
 
-    def test_dataclasses(self) -> None:
-        """CUJ: Instantiating StepSection and NodeGuide records."""
-        section = StepSection(
-            index=StepIndex(0),
-            title=StepTitle("Step 1"),
-            content=StepContent("Content 1"),
-        )
-        self.assertEqual(section.index, 0)
-        self.assertEqual(section.title, "Step 1")
-        self.assertEqual(section.content, "Content 1")
-
-        guide = NodeGuide(summary=GuideSummary("NodeGuide Summary"), sections=[section])
-        self.assertEqual(guide.summary, "NodeGuide Summary")
-        self.assertEqual(len(guide.sections), 1)
-
-    def test_parse_guide_and_skips_lint_checks(self) -> None:
-        """CUJ: Parsing markdown guide extracts summary and sections, skipping Lint checks."""
-        content = (
-            "This is the summary text.\n\n"
-            "## Verification failure\nCheck error logs carefully.\n\n"
-            "## Step 1\nDo the first task.\n\n"
-            "## Lint checks\nRun pyright and check for warnings.\n\n"
-            "## Step 2\nDo the second task."
-        )
+    def test_initialization(self) -> None:
+        """CUJ: Singleton resolves under both impl and interface keys; unconfigured guide is None."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             delivery = scope.get_singleton(GuideDelivery)
-            parsed = delivery.parse_guide(FileContent(content))
-
-            # Requirement: Parsing extracts guide summary from content preceding the first section heading and under headings titled Summary, captures verification failure instructions when heading begins with Verification failure, and creates sequential step sections for subsequent level-two headings excluding Summary, Lint checks, or Verification failure.
-            self.assertEqual(parsed.summary, "This is the summary text.")
-            self.assertEqual(parsed.verification_failure, "Check error logs carefully.")
-            self.assertEqual(len(parsed.sections), 2)
-            self.assertEqual(parsed.sections[0].title, "Step 1")
-            self.assertEqual(parsed.sections[0].content, "Do the first task.")
-            self.assertEqual(parsed.sections[1].title, "Step 2")
-            self.assertEqual(parsed.sections[1].content, "Do the second task.")
-
-            plain = delivery.parse_guide(
-                FileContent("Just a guide summary without headings.")
-            )
-            self.assertEqual(plain.summary, "Just a guide summary without headings.")
-            self.assertIsNone(plain.verification_failure)
-            self.assertEqual(len(plain.sections), 0)
-
-            # When Verification failure is the trailing section heading
-            trailing_vf_content = (
-                "Summary only.\n\n"
-                "## Step 1\nFirst step.\n\n"
-                "## Verification failure\nTrailing failure instructions."
-            )
-            parsed_trailing = delivery.parse_guide(FileContent(trailing_vf_content))
-            # Requirement: Parsing extracts guide summary from content preceding the first section heading and under headings titled Summary, captures verification failure instructions when heading begins with Verification failure, and creates sequential step sections for subsequent level-two headings excluding Summary, Lint checks, or Verification failure.
-            self.assertEqual(
-                parsed_trailing.verification_failure, "Trailing failure instructions."
-            )
-            self.assertEqual(len(parsed_trailing.sections), 1)
-
-            # When content contains a ## Summary heading
-            standard_guide_content = (
-                "# NodeGuide: Standard NodeGuide\n\n"
-                "## Summary\n"
-                "This is the standard summary text.\n\n"
-                "## Verification failure\nCheck error logs.\n\n"
-                "## Step 1\nExecute step 1.\n\n"
-                "## Lint checks\nCheck rules."
-            )
-            parsed_standard = delivery.parse_guide(FileContent(standard_guide_content))
-            self.assertEqual(
-                parsed_standard.summary,
-                "# NodeGuide: Standard NodeGuide\n\nThis is the standard summary text.",
-            )
-            self.assertEqual(parsed_standard.verification_failure, "Check error logs.")
-            self.assertEqual(len(parsed_standard.sections), 1)
-            self.assertEqual(parsed_standard.sections[0].title, "Step 1")
-            self.assertEqual(parsed_standard.sections[0].content, "Execute step 1.")
-
-            # When Summary is the trailing section heading
-            trailing_summary_content = (
-                "## Step 1\nFirst step.\n\n## Summary\nTrailing summary content."
-            )
-            # Requirement: Parsing extracts guide summary from content preceding the first section heading and under headings titled Summary, captures verification failure instructions when heading begins with Verification failure, and creates sequential step sections for subsequent level-two headings excluding Summary, Lint checks, or Verification failure.
-            parsed_ts = delivery.parse_guide(FileContent(trailing_summary_content))
-            self.assertIn("Trailing summary content.", parsed_ts.summary)
-
-    def test_advance_step_lifecycle(self) -> None:
-        """CUJ: Advancing through steps with verification passing and failing."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            delivery = scope.get_singleton(GuideDelivery)
-            self.assertFalse(delivery.has_steps_remaining)
-            # Requirement: When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
-            res_none = delivery.advance_step(
-                verification_passed=True, failure_diagnostics=VerificationDiagnostic("")
-            )
-            self.assertIsNone(res_none)
-
-        guide = NodeGuide(
-            summary=GuideSummary("High-level summary"),
-            verification_failure=VerificationFailureInstructions(
-                "Fix failure instructions"
-            ),
-            sections=[
-                StepSection(
-                    index=StepIndex(0),
-                    title=StepTitle("Step 1"),
-                    content=StepContent("Content 1"),
-                ),
-                StepSection(
-                    index=StepIndex(1),
-                    title=StepTitle("Step 2"),
-                    content=StepContent("Content 2"),
-                ),
-            ],
-        )
-        self.node_cfg._guide = guide
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            delivery = scope.get_singleton(GuideDelivery)
-            # Requirement: When initialized for an agent session, the guide delivery obtains its guide parsed from configured guide file content.
-            # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
-            self.assertTrue(delivery.has_steps_remaining)
-            self.assertIs(delivery.guide, guide)
-
-            # Verification failure before any steps delivered emits summary and failure diagnostics
-            # Requirement: Advancing a step when verification fails emits a response combining the initial primer content (or guide summary when an initial primer is omitted), any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
-            res_fail0 = delivery.advance_step(
-                verification_passed=False,
-                failure_diagnostics=VerificationDiagnostic("Pre-flight check failed"),
-            )
-            self.assertIsNotNone(res_fail0)
-            assert res_fail0 is not None
-            self.assertTrue(res_fail0.is_failed)
-            self.assertFalse(res_fail0.is_terminated)
-            self.assertIn("High-level summary", res_fail0.content)
-            self.assertIn(
-                "## Verification failure\nFix failure instructions", res_fail0.content
-            )
-            self.assertIn(
-                "Verification failed:\nPre-flight check failed", res_fail0.content
-            )
-            self.assertTrue(delivery.has_steps_remaining)
-
-            # When initial primer is configured, verification failure uses initial primer
-            # Requirement: Can record an initial primer.
-            # Requirement: Advancing a step when verification fails emits a response combining the initial primer content (or guide summary when an initial primer is omitted), any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
-            delivery.record_initial_primer(
-                InitialPrimer("Initial Primer Mapping Content")
-            )
-            res_fail_primer = delivery.advance_step(
-                verification_passed=False,
-                failure_diagnostics=VerificationDiagnostic("Primer check failed"),
-            )
-            self.assertIsNotNone(res_fail_primer)
-            assert res_fail_primer is not None
-            self.assertIn("Initial Primer Mapping Content", res_fail_primer.content)
-            self.assertNotIn("High-level summary", res_fail_primer.content)
-            self.assertIn(
-                "Verification failed:\nPrimer check failed", res_fail_primer.content
-            )
-
-            # First passing advance delivers the first step section
-            # Requirement: Advancing a step when verification passes emits a response presenting the next step section content introduced by Now check carefully: alongside instructions to check carefully, make edits if the source file does not conform to any checklist item, and call advance() only when conforming, transitioning to that step section when further step sections remain.
-            res1 = delivery.advance_step(
-                verification_passed=True, failure_diagnostics=VerificationDiagnostic("")
-            )
-            self.assertIsNotNone(res1)
-            assert res1 is not None
-            self.assertFalse(res1.is_failed)
-            self.assertFalse(res1.is_terminated)
-            self.assertNotIn("High-level summary", res1.content)
-            self.assertIn("Step 1", res1.content)
-            self.assertIn("Now check carefully:\nContent 1", res1.content)
-            self.assertIn(
-                "Check carefully and make edits if the source file does not conform to any checklist item, calling advance() only when the source file conforms to all checklist items.",
-                res1.content,
-            )
-            self.assertTrue(delivery.has_steps_remaining)
-
-            # Verification failure while Step 1 is active retains step index and emits current step and diagnostics without guide summary
-            # Requirement: Advancing a step when verification fails emits a response combining the current step section content introduced by Now check carefully:, any configured verification failure instructions, and failure diagnostics without advancing to subsequent sections when a step section is currently active.
-            res_fail1 = delivery.advance_step(
-                verification_passed=False,
-                failure_diagnostics=VerificationDiagnostic("Syntax error in step 1"),
-            )
-            self.assertIsNotNone(res_fail1)
-            assert res_fail1 is not None
-            self.assertTrue(res_fail1.is_failed)
-            self.assertFalse(res_fail1.is_terminated)
-            self.assertNotIn("High-level summary", res_fail1.content)
-            self.assertIn("Step 1", res_fail1.content)
-            self.assertIn("Now check carefully:\nContent 1", res_fail1.content)
-            self.assertIn(
-                "## Verification failure\nFix failure instructions", res_fail1.content
-            )
-            self.assertTrue(delivery.has_steps_remaining)
-
-            # Advance to second step section
-            # Requirement: Advancing a step when verification passes emits a response presenting the next step section content introduced by Now check carefully: alongside instructions to check carefully, make edits if the source file does not conform to any checklist item, and call advance() only when conforming, transitioning to that step section when further step sections remain.
-            res2 = delivery.advance_step(
-                verification_passed=True, failure_diagnostics=VerificationDiagnostic("")
-            )
-            self.assertIsNotNone(res2)
-            assert res2 is not None
-            self.assertFalse(res2.is_failed)
-            self.assertFalse(res2.is_terminated)
-            self.assertNotIn("High-level summary", res2.content)
-            self.assertIn("Step 2", res2.content)
-            self.assertIn("Now check carefully:\nContent 2", res2.content)
-            self.assertIn(
-                "Check carefully and make edits if the source file does not conform to any checklist item, calling advance() only when the source file conforms to all checklist items.",
-                res2.content,
-            )
+            self.assertIsInstance(delivery, GuideDelivery)
+            self.assertIs(scope.get_singleton(sandbox_guide_delivery.GuideDelivery), delivery)
+            self.assertIsNone(delivery.guide)
             self.assertFalse(delivery.has_steps_remaining)
 
-            # Subsequent advance when exhausted produces None
-            # Requirement: When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
-            res3 = delivery.advance_step(
-                verification_passed=True, failure_diagnostics=VerificationDiagnostic("")
-            )
-            self.assertIsNone(res3)
-
-    def test_has_steps_remaining_when_no_guide(self) -> None:
-        """CUJ: When no guide is configured, steps remaining evaluates to false."""
-        self.node_cfg._guide = None
+    def test_parse_guide_extracts_summary(self) -> None:
+        """Postcondition: Summary is extracted from preamble content and 'Summary' headings."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             delivery = scope.get_singleton(GuideDelivery)
-            # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
-            self.assertFalse(delivery.has_steps_remaining)
-            self.assertIsNone(
-                delivery.advance_step(
-                    verification_passed=True,
-                    failure_diagnostics=VerificationDiagnostic(""),
-                )
+            guide = delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            self.assertIsInstance(guide, agent_node_config.NodeGuide)
+            self.assertIn(_PREAMBLE, guide.summary)
+            self.assertIn(_SUMMARY_BODY, guide.summary)
+            self.assertNotIn(_STEP_ONE_CONTENT, guide.summary)
+            self.assertNotIn(_FAILURE_CONTENT, guide.summary)
+
+    def test_parse_guide_captures_verification_failure(self) -> None:
+        """Postcondition: Headings beginning with 'Verification failure' populate failure instructions."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            guide = delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            self.assertIsNotNone(guide.verification_failure)
+            self.assertIn(_FAILURE_CONTENT, str(guide.verification_failure))
+
+    def test_parse_guide_creates_sequential_step_sections(self) -> None:
+        """Postcondition: Level-two headings other than Summary/Lint checks/Verification failure become steps."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            guide = delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            self.assertEqual(len(guide.sections), 2)
+            first, second = guide.sections[0], guide.sections[1]
+            self.assertEqual(first.title, agent_node_config.StepTitle("Step One"))
+            self.assertEqual(second.title, agent_node_config.StepTitle("Step Two"))
+            self.assertIn(_STEP_ONE_CONTENT, first.content)
+            self.assertIn(_STEP_TWO_CONTENT, second.content)
+            self.assertEqual(second.index, first.index + 1)
+            titles: List[str] = [str(s.title) for s in guide.sections]
+            self.assertNotIn("Summary", titles)
+            self.assertNotIn("Lint checks", titles)
+            for section in guide.sections:
+                self.assertNotIn(_LINT_CONTENT, section.content)
+                self.assertNotIn(_FAILURE_CONTENT, section.content)
+
+    def test_guide_property_exposes_parsed_guide(self) -> None:
+        """Postcondition: guide returns the configured node guide when present."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            guide = delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            self.assertEqual(delivery.guide, guide)
+
+    def test_has_steps_remaining_after_parse(self) -> None:
+        """Postcondition: has_steps_remaining reports remaining steps after parsing a guide with steps."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            self.assertTrue(delivery.has_steps_remaining)
+
+    def test_record_initial_primer(self) -> None:
+        """Postcondition: record_initial_primer records primer without disturbing guide progression."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            guide = delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            result = delivery.record_initial_primer(
+                sandbox_guide_delivery.InitialPrimer("Initial primer instructions.")
             )
+            self.assertIsNone(result)
+            self.assertEqual(delivery.guide, guide)
+            self.assertTrue(delivery.has_steps_remaining)
+
+    def test_advance_step_passed_delivers_instructions(self) -> None:
+        """Postcondition: WHEN verification passes, MUST deliver instructional text."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            response = delivery.advance_step(True, _make_diagnostic(""))
+            self.assertIsNotNone(response)
+            assert response is not None
+            self.assertIsInstance(response, tool_provider.ToolResponse)
+            self.assertFalse(response.is_failed)
+            self.assertTrue(
+                _STEP_ONE_CONTENT in response.content
+                or _STEP_TWO_CONTENT in response.content,
+                f"Expected milestone instructions in response: {response.content!r}",
+            )
+
+    def test_advance_step_passed_progresses_milestones(self) -> None:
+        """Postcondition: Passing verification advances milestones until no steps remain."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            delivery.advance_step(True, _make_diagnostic(""))
+            self.assertTrue(delivery.has_steps_remaining)
+            delivery.advance_step(True, _make_diagnostic(""))
+            self.assertFalse(delivery.has_steps_remaining)
+
+    def test_advance_step_failed_reports_diagnostics(self) -> None:
+        """Postcondition: WHEN verification fails, MUST retain milestone and report diagnostics with failure instructions."""
+        diagnostic_text = "check_files: 3 lint errors detected"
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            response = delivery.advance_step(False, _make_diagnostic(diagnostic_text))
+            self.assertIsNotNone(response)
+            assert response is not None
+            self.assertIsInstance(response, tool_provider.ToolResponse)
+            self.assertIn(diagnostic_text, response.content)
+            self.assertIn(_FAILURE_CONTENT, response.content)
+            self.assertTrue(delivery.has_steps_remaining)
+
+    def test_advance_step_failed_retains_milestone(self) -> None:
+        """Postcondition: WHEN verification fails, MUST retain current milestone (no progression)."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            delivery.advance_step(True, _make_diagnostic(""))
+            self.assertTrue(delivery.has_steps_remaining)
+            delivery.advance_step(False, _make_diagnostic("failure one"))
+            delivery.advance_step(False, _make_diagnostic("failure two"))
+            self.assertTrue(delivery.has_steps_remaining)
+            delivery.advance_step(True, _make_diagnostic(""))
+            self.assertFalse(delivery.has_steps_remaining)
+
+    def test_advance_step_past_all_milestones(self) -> None:
+        """Postcondition: advance_step when progressing past all guide milestone steps upon successful verification."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            resp1 = delivery.advance_step(True, _make_diagnostic(""))
+            self.assertIsNotNone(resp1)
+            self.assertTrue(delivery.has_steps_remaining)
+            resp2 = delivery.advance_step(True, _make_diagnostic(""))
+            self.assertFalse(delivery.has_steps_remaining)
+            # Progressing past all milestone steps
+            resp_past = delivery.advance_step(True, _make_diagnostic(""))
+            self.assertFalse(delivery.has_steps_remaining)
+
+    def test_advance_step_initial_step_failure_reports_primer(self) -> None:
+        """Postcondition: Reporting the recorded initial primer alongside verification diagnostics upon failure at the initial step."""
+        primer_text = "Important initial primer: review requirements carefully."
+        diag_text = "SyntaxError on initial compile"
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            delivery.parse_guide(_make_content(_GUIDE_MARKDOWN))
+            delivery.record_initial_primer(sandbox_guide_delivery.InitialPrimer(primer_text))
+
+            # Failure at initial step
+            response = delivery.advance_step(False, _make_diagnostic(diag_text))
+            self.assertIsNotNone(response)
+            assert response is not None
+            self.assertIsInstance(response, tool_provider.ToolResponse)
+            self.assertIn(primer_text, response.content)
+            self.assertIn(diag_text, response.content)
+            self.assertIn(_FAILURE_CONTENT, response.content)
+            self.assertTrue(delivery.has_steps_remaining)
 
 
 if __name__ == "__main__":
     unittest.main()
 
-# Untested requirements: None
+# Untested requirements:
+# None

@@ -1,10 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 79adcea3bf23
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:46:18Z
+# LAST_CHANGED: 2026-10-09T22:20:00Z
+# CHANGE: Present dirty node role on role config without pre-priming nodes during session setup
+# CODE_HASH: fc48dae57bed
+# QA_AUDIT: 2026-10-09T21:46:18Z
 # --- END CLEANROOM METADATA ---
 
 import os
@@ -14,7 +13,6 @@ from . import loop_conversation
 from . import loop_driver
 from . import loop_node_cleaner
 from update_with_ai.parts.agent.lib import agent_node_config
-from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib import agent_storage
 from update_with_ai.parts.core.lib import runner_logger
 from update_with_ai.parts.dag.lib import dag_storage
@@ -31,8 +29,8 @@ from support.lib.lifecycle import (
 )
 
 
-class _RoleConfig(agent_node_config.RoleConfig, Singleton):
-    tier = agent_session
+class _RoleConfig(agent_node_config.RoleConfig):
+    tier = "agent_session"
 
     def __init__(self) -> None:
         self._role: agent_node_config.RoleName = agent_node_config.RoleName("")
@@ -255,7 +253,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                 )
 
         def _execute_session() -> Set[dag_storage.DagMessage]:
-            with enter_phase(agent_session, setup=setup_session) as session:
+            with enter_phase("agent_session", setup=setup_session) as session:
                 hist = session.get_singleton(loop_conversation.Conversation)
                 hist.initialize(
                     [
@@ -395,5 +393,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         _RoleConfig,
         keys=[_RoleConfig, agent_node_config.RoleConfig],
-        tier=agent_session,
+        tier="agent_session",
     )

@@ -1,247 +1,177 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-06T11:00:00Z
-# CHANGE: compute role tiers dynamically from graph dependencies
-# CODE_HASH: 1a3468b7016e
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T04:49:11Z
+# CHANGE: Eliminate unreachable unready dependency break branch in next_ready_batch
+# CODE_HASH: 8c02c7d79873
+# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
-# Requirements specified in dag_subgraph_impl.pyi
-from collections import deque
-from typing import Dict, List, Optional, Sequence, Set
-from . import dag_config
-from . import dag_storage
-from . import dag_subgraph
+from __future__ import annotations
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 from support.lib.lifecycle import (
+    InTier,
     LifecycleRegistry,
     Singleton,
+    SystemTier,
     get_default_registry,
     get_singleton,
     system,
 )
+from .dag_storage import DagNode, DagStorage
+from . import dag_config
+from . import dag_subgraph
 
+# Requirements specified in dag_subgraph_impl.pyi
 
-def _compute_role_tiers(
-    nodes: Set[dag_storage.DagNode], storage: dag_storage.DagStorage
-) -> Dict[str, int]:
-    role_deps: Dict[str, Set[str]] = {}
-    all_roles: Set[str] = set()
-
-    for n in sorted(nodes, key=lambda x: (x.unit_address, x.role_address)):
-        r_name = (
-            str(n.role_address).split(":")[-1].strip().lower()
-            if ":" in str(n.role_address)
-            else str(n.role_address).strip().lower()
-        )
-        all_roles.add(r_name)
-        if r_name not in role_deps:
-            role_deps[r_name] = set()
-        for dep in sorted(
-            storage.get_dependencies(n),
-            key=lambda d: (d.node.unit_address, d.node.role_address),
-        ):
-            if dep.node in nodes:
-                dep_r = (
-                    str(dep.node.role_address).split(":")[-1].strip().lower()
-                    if ":" in str(dep.node.role_address)
-                    else str(dep.node.role_address).strip().lower()
-                )
-                all_roles.add(dep_r)
-                if dep_r != r_name:
-                    role_deps[r_name].add(dep_r)
-
-    memo: Dict[str, int] = {}
-    visiting: Set[str] = set()
-
-    def _get_depth(role: str) -> int:
-        if role in memo:
-            return memo[role]
-        if role in visiting:
-            return 0
-        visiting.add(role)
-        deps = role_deps.get(role, set())
-        if not deps:
-            depth = 0
-        else:
-            depth = 1 + max(_get_depth(d) for d in sorted(deps))
-        visiting.remove(role)
-        memo[role] = depth
-        return depth
-
-    for r in sorted(all_roles):
-        _get_depth(r)
-
-    return memo
-
-
-def _role_tier(role_address: str, role_tiers: Optional[Dict[str, int]] = None) -> int:
-    name = (
-        role_address.split(":")[-1].strip().lower()
-        if ":" in role_address
-        else role_address.strip().lower()
-    )
-    if role_tiers is not None:
-        return role_tiers.get(name, 0)
-    return 0
-
-
-def _node_sort_key(
-    n: dag_storage.DagNode, role_tiers: Optional[Dict[str, int]] = None
-) -> tuple[int, str, str]:
-    return (_role_tier(n.role_address, role_tiers), n.unit_address, n.role_address)
-
-
-class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
+class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
     tier = system
 
     def __init__(self) -> None:
-        self._target: Optional[dag_storage.DagNode] = None
-        self._nodes: Set[dag_storage.DagNode] = set()
-        self._role_tiers: Dict[str, int] = {}
-        self._order: List[dag_storage.DagNode] = []
-        self._visits: Dict[dag_storage.DagNode, int] = {}
+        self._target: Optional[DagNode] = None
+        self._topological_order: List[DagNode] = []
+        self._visit_counts: Dict[DagNode, int] = {}
 
-    def _collect_subgraph(
-        self, root: dag_storage.DagNode, storage: dag_storage.DagStorage
-    ) -> Set[dag_storage.DagNode]:
-        visited: Set[dag_storage.DagNode] = set()
-        queue: deque[dag_storage.DagNode] = deque([root])
+    def set_target(self, target: DagNode) -> None:
+        self._target = target
+        storage = get_singleton(DagStorage)
+
+        reachable: Set[DagNode] = set()
+        queue: List[DagNode] = [target]
+        reachable.add(target)
         while queue:
-            curr = queue.popleft()
-            if curr not in visited:
-                visited.add(curr)
-                for dep in storage.get_dependencies(curr):
+            curr = queue.pop(0)
+            for dep in storage.get_dependencies(curr):
+                if dep.node not in reachable:
+                    reachable.add(dep.node)
                     queue.append(dep.node)
-        return visited
 
-    def _topological_sort(
-        self,
-        nodes: Set[dag_storage.DagNode],
-        storage: dag_storage.DagStorage,
-        role_tiers: Dict[str, int],
-    ) -> List[dag_storage.DagNode]:
-        def sort_key(n: dag_storage.DagNode) -> tuple[int, str, str]:
-            return _node_sort_key(n, role_tiers)
+        def _clean_role(r: str) -> str:
+            return r.split(":")[-1].strip().lower()
 
-        sorted_nodes = sorted(nodes, key=sort_key)
-        in_degree: Dict[dag_storage.DagNode, int] = {n: 0 for n in sorted_nodes}
-        adj: Dict[dag_storage.DagNode, List[dag_storage.DagNode]] = {
-            n: [] for n in sorted_nodes
+        role_deps: Dict[str, Set[str]] = {}
+        for n in reachable:
+            r_n = _clean_role(str(n.role_address))
+            if r_n not in role_deps:
+                role_deps[r_n] = set()
+            for dep in storage.get_dependencies(n):
+                r_dep = _clean_role(str(dep.node.role_address))
+                if r_dep != r_n:
+                    role_deps[r_n].add(r_dep)
+
+        default_ranks = {
+            "high": 1,
+            "planning": 2,
+            "spec_qa": 3,
+            "low": 4,
+            "low_qa": 5,
+            "lib": 6,
+            "tests": 7,
+            "test": 7,
+            "qa": 8,
+            "coverage": 9,
         }
 
-        for n in sorted_nodes:
-            for dep in sorted(
-                storage.get_dependencies(n), key=lambda d: sort_key(d.node)
-            ):
-                if dep.node in nodes:
-                    adj[dep.node].append(n)
-                    in_degree[n] += 1
+        role_memo: Dict[str, int] = {}
+        visiting: Set[str] = set()
 
-        generation: Dict[dag_storage.DagNode, int] = {n: 0 for n in sorted_nodes}
+        def _get_role_depth(role: str) -> int:
+            if role in role_memo:
+                return role_memo[role]
+            if role in visiting:
+                return 0  # Cycle detected, break cycle gracefully
+            visiting.add(role)
+            deps = role_deps.get(role, set())
+            if not deps:
+                depth = 0
+            else:
+                depth = 1 + max(_get_role_depth(d) for d in deps)
+            visiting.remove(role)
+            role_memo[role] = depth
+            return depth
 
-        ready = sorted(
-            [n for n, deg in in_degree.items() if deg == 0],
-            key=lambda n: (generation[n], sort_key(n)),
-        )
-        order: List[dag_storage.DagNode] = []
+        for r in role_deps:
+            _get_role_depth(r)
+
+        def _role_rank(node: DagNode) -> Tuple[int, int]:
+            r = _clean_role(str(node.role_address))
+            return (role_memo.get(r, 0), default_ranks.get(r, 999))
+
+        in_deps: Dict[DagNode, Set[DagNode]] = {}
+        dependents: Dict[DagNode, Set[DagNode]] = {n: set() for n in reachable}
+
+        for n in reachable:
+            deps_in_subgraph = {
+                dep.node for dep in storage.get_dependencies(n)
+                if dep.node in reachable
+            }
+            in_deps[n] = deps_in_subgraph
+            for dep_node in deps_in_subgraph:
+                dependents[dep_node].add(n)
+
+        ready = [n for n in reachable if not in_deps[n]]
+        topological_order: List[DagNode] = []
 
         while ready:
-            curr = ready.pop(0)
-            order.append(curr)
-            newly_ready = []
-            for neighbor in adj[curr]:
-                generation[neighbor] = max(
-                    generation[neighbor], generation[curr] + 1
-                )
-                in_degree[neighbor] -= 1
-                if in_degree[neighbor] == 0:
-                    newly_ready.append(neighbor)
-            for nr in newly_ready:
-                ready.append(nr)
-            ready.sort(key=lambda n: (generation[n], sort_key(n)))
+            ready.sort(key=lambda n: (_role_rank(n), str(n.unit_address), str(n.role_address)))
+            chosen = ready.pop(0)
+            topological_order.append(chosen)
 
-        return order
+            for dependent in list(dependents[chosen]):
+                in_deps[dependent].remove(chosen)
+                if not in_deps[dependent]:
+                    ready.append(dependent)
 
-    def set_target(self, target: dag_storage.DagNode) -> None:
-        storage = get_singleton(dag_storage.DagStorage)
-        self._target = target
-        self._nodes = self._collect_subgraph(target, storage)
-        self._role_tiers = _compute_role_tiers(self._nodes, storage)
-        self._order = self._topological_sort(self._nodes, storage, self._role_tiers)
-        self._visits = {n: 0 for n in self._nodes}
+        self._topological_order = topological_order
 
     def is_complete(self) -> bool:
-        if (
-            self._target is None or not self._nodes
-        ):  # pragma: no cover (assumption: target set before completion check)
-            return False
-        storage = get_singleton(dag_storage.DagStorage)
-        return not any(storage.is_dirty(n) for n in self._nodes)
+        storage = get_singleton(DagStorage)
+        return not any(storage.is_dirty(node) for node in self._topological_order)
 
-    def next_ready_batch(self) -> Sequence[dag_storage.DagNode]:
-        storage = get_singleton(dag_storage.DagStorage)
+    def next_ready_batch(self) -> Sequence[DagNode]:
+        storage = get_singleton(DagStorage)
         cfg = get_singleton(dag_config.DagConfig)
-        batch_size = max(1, cfg.batch_size)
+        batch_limit = max(1, int(cfg.batch_size))
 
-        ready_candidates: List[dag_storage.DagNode] = []
-        for curr in self._order:
-            if not storage.is_dirty(curr):
-                continue
+        start_idx: Optional[int] = None
+        for i, node in enumerate(self._topological_order):
+            if storage.is_dirty(node):
+                deps = [
+                    dep.node for dep in storage.get_dependencies(node)
+                    if dep.node in self._topological_order
+                ]
+                if all(not storage.is_dirty(d) for d in deps):
+                    start_idx = i
+                    break
 
-            deps_clean = all(
-                not storage.is_dirty(d.node)
-                for d in storage.get_dependencies(curr)
-                if d.node in self._nodes
-            )
-            if deps_clean:
-                ready_candidates.append(curr)
-
-        if not ready_candidates:
+        if start_idx is None:
             return []
 
-        best_tier = min(
-            _role_tier(c.role_address, self._role_tiers) for c in ready_candidates
-        )
-        curr = next(
-            c
-            for c in ready_candidates
-            if _role_tier(c.role_address, self._role_tiers) == best_tier
-        )
+        first_node = self._topological_order[start_idx]
+        first_role = first_node.role_address
+        batch: List[DagNode] = []
 
-        batch: List[dag_storage.DagNode] = [curr]
-        batch_set: Set[dag_storage.DagNode] = {curr}
-
-        dirty_order = [n for n in self._order if storage.is_dirty(n)]
-        curr_idx = dirty_order.index(curr)
-        if batch_size > 1:
-            for cand in dirty_order[curr_idx + 1 :]:
-                if len(batch) >= batch_size:
-                    break
-                if cand.role_address != curr.role_address:
-                    break
-                cand_deps_clean = all(
-                    d.node in batch_set or not storage.is_dirty(d.node)
-                    for d in storage.get_dependencies(cand)
-                    if d.node in self._nodes
-                )
-                if not cand_deps_clean:
-                    break
-                batch.append(cand)
-                batch_set.add(cand)
+        for idx in range(start_idx, len(self._topological_order)):
+            curr = self._topological_order[idx]
+            if not storage.is_dirty(curr):
+                break
+            if curr.role_address != first_role:
+                break
+            batch.append(curr)
+            if len(batch) >= batch_limit:
+                break
 
         return batch
 
-    def record_visit(self, batch: Sequence[dag_storage.DagNode]) -> None:
+    def record_visit(self, batch: Sequence[DagNode]) -> None:
         cfg = get_singleton(dag_config.DagConfig)
-        limit = cfg.node_visit_limit
-
+        limit = int(cfg.node_visit_limit)
         for node in batch:
-            count = self._visits.get(node, 0) + 1
-            self._visits[node] = count
+            count = self._visit_counts.get(node, 0) + 1
+            self._visit_counts[node] = count
             if count > limit:
                 raise RuntimeError(
-                    f"Node ({node.unit_address}, {node.role_address}) exceeded node visit limit of {limit}"
+                    f"Node visit limit exceeded ({limit}) for node '{node.unit_address}:{node.role_address}'"
                 )
 
 
@@ -249,6 +179,8 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         DagSubgraph,
-        keys=[DagSubgraph, dag_subgraph.DagSubgraph],
+        keys=[DagSubgraph, dag_subgraph.DagSubgraph, InTier[SystemTier]],
         tier=system,
     )
+
+_initialize_ = __initialize__

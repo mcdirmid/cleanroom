@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T04:57:08Z
 CHANGE: Standardize on canonical mapping parameter type over dictionary parameter type
 CODE_HASH: 2b6d8d81fbe3

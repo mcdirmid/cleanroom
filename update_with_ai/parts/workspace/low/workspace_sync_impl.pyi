@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-08T03:34:00Z
-# CHANGE: update pull grounding for writable target updates and deleted files
-# CODE_HASH: 46a2d7bcb3b8
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T02:39:58Z
+# CHANGE: recopy AGENTS.md with contamination tripwire in system refresh grounding
+# CODE_HASH: 877d814a19cb
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_sync_impl."""
@@ -62,8 +62,8 @@ class WorkspaceSynchronizer(
         """Refreshes non-parts system files into role workspace.
 
         GROUNDING:
-        - Recopies build rules, tools, linters, and guides into workspace,
-          and enforces read-only test stubs for stub_role_deps.
+        - Recopies build rules, tools, linters, guides, and AGENTS.md with contamination
+          tripwires into workspace, and enforces read-only test stubs for stub_role_deps.
         """
         ...
 

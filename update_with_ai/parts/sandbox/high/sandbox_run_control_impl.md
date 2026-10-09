@@ -1,13 +1,13 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
-LAST_CHANGED: 2026-10-05T04:57:36Z
-CHANGE: Standardize on canonical check files tool over singular check file tool in Purpose
-CODE_HASH: 0343f9364c64
+LAST_CLEANED: 2026-10-09T21:29:21Z
+LAST_CHANGED: 2026-10-09T22:40:00Z
+CHANGE: Remove initial implementation modification constraint on submission
+CODE_HASH: 572134ed0efb
 -->
 
 # sandbox_run_control_impl implementation component
 
-imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config, template_format, dag_subgraph, sandbox, control_coordinate, control_asm
+imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config, template_format, dag_subgraph, sandbox, control_coordinate, dag_config
 implements: sandbox_run_control
 
 ## Purpose
@@ -22,7 +22,7 @@ Autonomous agents reaching task completion require strict verification enforceme
 
 ## Types and Behavior
 
-Tools cannot be configured against non-role/agent-specific state. The run controller initializes by unconditionally installing the submit tool, fail tool, check files tool, get work tool, and blame tool for the agent session, installing the advance tool only when guide step mode is active, obtaining verification checks and per-node blame targets from node config, and delegating active target tracking, verification evaluation, submission gating, defect attribution, and work discovery to control_coordinate. Verification checks exposed by the run controller include the session verification checks from node config.
+Tools cannot be configured against non-role/agent-specific state. The run controller initializes session tools by unconditionally installing the submit tool, fail tool, check files tool, get work tool, and blame tool for the agent session, installing the advance tool only when guide step mode is active, obtaining verification checks and per-node blame targets from node config, and delegating active target tracking, verification evaluation, submission gating, defect attribution, and work discovery to the session coordinator. Verification checks exposed by the run controller include the session verification checks from node config.
 
 Evaluation of verification checks for an active node is cached alongside the edit manager file hash of the target node read-write file. Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when the target read-write file hash has changed since the previous evaluation. When the target read-write file hash has not changed since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
 
@@ -75,8 +75,6 @@ The submit tool:
 - Fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call with reasoning text indicating that remaining guide steps must be completed before finishing.
 
 - Fails when verification is failing, reminding the agent that the check files tool should be called first and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before submitting.
-
-- Fails when an initial implementation change is assigned to the target node and no workspace files were modified, reminding the agent that workspace files must be modified to implement the change before submitting.
 
 - Fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
 

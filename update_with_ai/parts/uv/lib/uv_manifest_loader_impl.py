@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: 10aacce70297
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# CODE_HASH: ff46268f118e
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 import os
@@ -25,11 +25,6 @@ from support.lib.lifecycle import (
     get_singleton,
     system,
 )
-
-try:
-    from update_with_ai.parts.bazel.lib import bazel_manifest_loader
-except ImportError:
-    bazel_manifest_loader = None  # type: ignore
 
 
 class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
@@ -446,8 +441,6 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     keys = [UvManifestLoader, uv_manifest_loader.UvManifestLoader]
-    if bazel_manifest_loader is not None and hasattr(bazel_manifest_loader, "BazelManifestLoader"):
-        keys.append(bazel_manifest_loader.BazelManifestLoader)
     reg.register_singleton(
         UvManifestLoader,
         keys=keys,

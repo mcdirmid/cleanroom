@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T05:18:30Z
 CHANGE: Streamline manifest resolution to eliminate redundant dependency statements
-CODE_HASH: 225982be0fea
+CODE_HASH: 51d6a66876eb
 -->
 
 # bazel_manifest_loader interface component

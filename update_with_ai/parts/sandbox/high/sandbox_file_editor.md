@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 8ea72635b1ab
+LAST_CLEANED: 2026-10-09T21:29:15Z
+LAST_CHANGED: 2026-10-09T21:29:15Z
+CHANGE: Specify that the replace file content tool is installed for the agent session
+CODE_HASH: d794bb3a937e
 -->
 
 # sandbox_file_editor interface component
@@ -21,7 +21,7 @@ Autonomous agents require structured mechanisms to update code and configuration
 
 An *editing tool* is a tool that writes to a read-write file.
 
-An agent session's *replace file content tool* is an editing tool that replaces target content with replacement content in a read-write file within a line range bounded by a start line and end line, or across multiple occurrences when multiple replacements are permitted.
+An agent session's *replace file content tool* is an editing tool installed for the agent session that replaces target content with replacement content in a read-write file within a line range bounded by a start line and end line, or across multiple occurrences when multiple replacements are permitted.
 
 An agent session's *edit manager* writes to workspace files and tracks session edits.
 

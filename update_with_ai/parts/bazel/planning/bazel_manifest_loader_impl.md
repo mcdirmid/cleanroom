@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T05:29:29Z
 CHANGE: Add silent source file path contract, remove collaborator leakage, and align citations
 CODE_HASH: f9210d7d79c2
+SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
 -->
 
 # bazel_manifest_loader_impl implementation component

@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-06T10:45:00Z
 # CHANGE: new file
-# CODE_HASH: cf067c04c915
+# CODE_HASH: 7bdde095c67d
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -52,4 +52,3 @@ class WorkScheduler(Protocol):
     def format_task_prompt(
         self, nodes: Sequence[dag_storage.DagNode]
     ) -> str: ...
-

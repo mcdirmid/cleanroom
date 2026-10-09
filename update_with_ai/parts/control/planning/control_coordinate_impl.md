@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 90184464378d
+LAST_CLEANED: 2026-10-09T21:40:33Z
+LAST_CHANGED: 2026-10-09T21:37:05Z
+CHANGE: Synchronize active nodes sequence on role config during get work dispatch
+CODE_HASH: ef8d82b840d5
+SPEC_QA_AUDIT: 2026-10-09T21:40:33Z
 -->
 
 # control_coordinate_impl implementation component
@@ -25,6 +26,7 @@ The implementation maintains session dictionaries mapping `DagNode` instances to
 - The session coordinator selects the single open node when only one open target remains. [default_single_open_node]
 - The session coordinator selects the open node corresponding to the last modified file. [default_last_modified_file]
 - The session coordinator invokes the work scheduler to discover tasks and populates session nodes. [populate_scheduled_nodes]
+- The session coordinator updates the sequence of active nodes on role config when dispatching get work. [update_active_nodes_on_role_config]
 - The session coordinator delegates verification to the verification evaluator. [delegate_verification]
 - The session coordinator delegates submission to the submission coordinator. [delegate_submission]
 - The session coordinator delegates attribution to the attribution coordinator. [delegate_attribution]
@@ -32,7 +34,7 @@ The implementation maintains session dictionaries mapping `DagNode` instances to
 ### Woven Contracts
 
 - When resolving a default target with multiple open nodes, the coordinator checks last modified file timestamps to pick the active node. [default_last_modified_file, control_coordinate: [resolve_default_target_contract]]
-- When get work is called, the coordinator invokes the work scheduler, stores newly discovered nodes as open, and returns the work schedule. [populate_scheduled_nodes, store_node_states, control_coordinate: [dispatch_get_work]]
+- When get work is called, the coordinator invokes the work scheduler, stores newly discovered nodes as open, updates active nodes on role config, and returns the work schedule. [populate_scheduled_nodes, store_node_states, update_active_nodes_on_role_config, control_coordinate: [dispatch_get_work], agent_node_config: [role_config_set_nodes]]
 - When check files is called, the coordinator evaluates single or multiple targets via the verification evaluator and returns the combined results. [delegate_verification, control_coordinate: [dispatch_check_files]]
 
 ## Grounding
@@ -62,3 +64,5 @@ The implementation maintains session dictionaries mapping `DagNode` instances to
 
 - Mapping of file alias strings to registered dag nodes.
   - Grounded: [agent_file_alias: [alias_mapping]]
+- Synchronization of active session nodes with role configuration.
+  - Grounded: [agent_node_config: [node_configuration_service]]

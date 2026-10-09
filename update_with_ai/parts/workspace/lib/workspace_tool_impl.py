@@ -1,8 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-08T12:55:00Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
 # LAST_CHANGED: 2026-10-08T12:55:00Z
 # CHANGE: implement workspace tool runner
-# CODE_HASH: f04007864808
+# CODE_HASH: e1ba2d7726c6
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_tool_impl."""
@@ -273,7 +275,7 @@ def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
     if node_cfg_cls is not None:
         try:
             cfg = get_singleton(node_cfg_cls)
-        except (KeyError, LifecycleResolutionError, Exception):
+        except (KeyError, LifecycleResolutionError):
             cfg = None
 
     reg = get_default_registry()

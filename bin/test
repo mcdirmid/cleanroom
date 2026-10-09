@@ -18,6 +18,43 @@ fi
 
 TARGET="${1:-}"
 
+# Dynamically build PYTHONPATH from repository packages and target
+PYPATHS=("$REPO_ROOT")
+
+for sup in "$REPO_ROOT/update_python_with_ai" "$REPO_ROOT/update_python_with_ai/support/lib" "$REPO_ROOT/update_with_ai" "$REPO_ROOT/update_with_ai/support/lib"; do
+    if [ -d "$sup" ]; then
+        PYPATHS+=("$sup")
+    fi
+done
+
+for entry in "$REPO_ROOT"/*; do
+    if [ -d "$entry" ]; then
+        base="$(basename "$entry")"
+        case "$base" in
+            .*|bazel-*|venv*|node_modules|build|dist|*.bak|*.dead|update_python_with_ai|update_with_ai) ;;
+            *)
+                if [ -d "$entry/parts" ]; then
+                    PYPATHS+=("$entry")
+                fi
+                if [ -d "$entry/support/lib" ]; then
+                    PYPATHS+=("$entry" "$entry/support/lib")
+                fi
+                ;;
+        esac
+    fi
+done
+
+if [ -n "$TARGET" ] && [ -d "$REPO_ROOT/$TARGET" ]; then
+    PYPATHS+=("$REPO_ROOT/$TARGET")
+    for sub in "$REPO_ROOT/$TARGET"/lib "$REPO_ROOT/$TARGET"/low "$REPO_ROOT/$TARGET"/tests; do
+        if [ -d "$sub" ]; then
+            PYPATHS+=("$sub")
+        fi
+    done
+fi
+
+export PYTHONPATH="$(IFS=:; echo "${PYPATHS[*]}"):${PYTHONPATH:-}"
+
 if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
     echo "=== Type Checking: $TARGET ==="
     uv run pyright "$TARGET"

@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-06T22:55:00Z
 # CHANGE: new file
-# CODE_HASH: c219b0cb43f3
+# CODE_HASH: 45861940c040
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface for workspace_registry."""
@@ -328,9 +328,15 @@ class _DefaultWorkspaceRegistry:
 
         mod_dir = os.path.dirname(os.path.realpath(__file__))
         while mod_dir and mod_dir != os.path.dirname(mod_dir):
+            if os.path.exists(os.path.join(mod_dir, ".git")):
+                return mod_dir
+            if os.path.exists(os.path.join(mod_dir, "MODULE.bazel")) and not os.path.exists(
+                os.path.join(mod_dir, ".cleanroom_role.json")
+            ):
+                return mod_dir
             if any(
                 os.path.isfile(os.path.join(mod_dir, marker))
-                for marker in ("MODULE.bazel", "pyproject.toml", "cleanroom_roles.toml")
+                for marker in ("cleanroom_roles.toml", "cleanroom_python_roles.toml")
             ):
                 return mod_dir
             mod_dir = os.path.dirname(mod_dir)
@@ -705,4 +711,3 @@ class _DefaultWorkspaceRegistry:
 
 
 _DEFAULT_WORKSPACE_REGISTRY_CLS = _DefaultWorkspaceRegistry
-

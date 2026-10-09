@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-06T12:45:00Z
-# CHANGE: add grounding sections
-# CODE_HASH: 7b6f7f52b0be
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:39:36Z
+# LAST_CHANGED: 2026-10-09T22:20:00Z
+# CHANGE: Present dirty node role on role config without pre-priming nodes during session setup
+# CODE_HASH: 565097c50a8d
 # --- END CLEANROOM METADATA ---
 
 """Loop node cleaner implementation low-level specification."""
@@ -42,10 +41,11 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
             True if processing should continue, or False if an unhandleable failure occurred.
 
         GROUNDING:
-        - Grounded via establishing agent session phase, initializing conversation with
-          instructions to call get_work, executing turns via LoopDriver.drive, retrying once
-          on unexpected failures, resolving promptless nodes directly, and mutating DagStorage
-          node cleanliness and feedback messages according to turn termination outcomes.
+        - Grounded via establishing agent session phase, configuring role on RoleConfig
+          via RoleConfig.set_role, initializing conversation with instructions to call get_work,
+          executing turns via LoopDriver.drive, retrying once on unexpected failures,
+          resolving promptless nodes directly, and mutating DagStorage node cleanliness
+          and feedback messages according to turn termination outcomes.
 
         POSTCONDITIONS:
         - MUST clean dirty nodes within an agent session phase presenting the node role.

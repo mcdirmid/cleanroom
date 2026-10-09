@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
-LAST_CHANGED: 2026-10-05T05:06:19Z
-CHANGE: Add delegated collaborator statement and eliminate redundant outcome sentence
-CODE_HASH: 0bfb9c80e86b
+LAST_CLEANED: 2026-10-09T21:29:12Z
+LAST_CHANGED: 2026-10-09T22:20:00Z
+CHANGE: Present dirty node role on role config without pre-priming nodes during session setup
+CODE_HASH: ce1aa99a0538
 -->
 
 # loop_node_cleaner_impl implementation component

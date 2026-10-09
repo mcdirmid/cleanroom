@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-06T22:55:00Z
 # CHANGE: new file
-# CODE_HASH: 66972724e0f5
+# CODE_HASH: 9ff1a73c8154
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_provision."""

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-08T00:52:53Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-08T00:31:17Z
 CHANGE: Update dag_storage factored contracts: mark_node_dirty, mark_subgraph_clean, add_feedback_message, and refined change message semantics
 CODE_HASH: 96322a7cfc2a
-SPEC_QA_AUDIT: 2026-10-08T00:52:53Z
+SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
 -->
 
 # dag_storage interface component

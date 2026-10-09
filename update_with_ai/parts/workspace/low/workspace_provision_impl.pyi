@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-08T03:34:00Z
-# CHANGE: ignore __init__.py during modification checks
-# CODE_HASH: 366bd574b342
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T02:39:58Z
+# CHANGE: add contamination tripwire to AGENTS.md formatting grounding
+# CODE_HASH: 15bb7e542505
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_provision_impl."""
@@ -43,7 +43,8 @@ class WorkspaceProvisioner(
         GROUNDING:
         - Resolves role definition and paths via WorkspaceRegistry, copies directory trees,
           sets 0o444 on upstream contracts and 0o644 on targets, synthesizes read-only test
-          stubs for stub_role_deps without copying implementation files, creates bin zipapps,
+          stubs for stub_role_deps without copying implementation files, formats AGENTS.md with
+          boundary rules, contamination tripwires, and fail-stop constraints, creates bin zipapps,
           writes role metadata, and registers the workspace descriptor.
         """
         ...

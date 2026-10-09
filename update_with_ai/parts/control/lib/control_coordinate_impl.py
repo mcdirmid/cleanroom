@@ -1,10 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-07T18:18:00Z
-# CHANGE: materialize templates on scheduled tasks during dispatch_get_work
-# CODE_HASH: c35e418fdf65
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:47:23Z
+# LAST_CHANGED: 2026-10-09T22:20:00Z
+# CHANGE: Populate session targets and aliases strictly from scheduled work during dispatch_get_work
+# CODE_HASH: 17876f079fc3
+# QA_AUDIT: 2026-10-09T21:47:23Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -66,53 +65,13 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         self._node_to_alias: Dict[dag_storage.DagNode, str] = {}
         self._cleaned_in_turn: Set[dag_storage.DagNode] = set()
 
-    def _ensure_nodes(self) -> None:
-        if self._nodes:
-            return
-        cfg: Optional[agent_node_config.NodeConfig] = None
-        try:
-            cfg = get_singleton(agent_node_config.NodeConfig)
-        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
-            cfg = None
 
-        collected: List[dag_storage.DagNode] = []
-        try:
-            role_cfg = get_singleton(agent_node_config.RoleConfig)
-            if role_cfg.nodes:
-                collected.extend([n for n in role_cfg.nodes if n not in collected])
-        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
-            pass
-
-        if not collected and cfg is not None and getattr(cfg, "src_file_alias_by_node", None):
-            collected.extend([n for n in cfg.src_file_alias_by_node if n not in collected])
-
-        if not collected and cfg is not None and getattr(cfg, "read_write_files", None):
-            for f in sorted(cfg.read_write_files, key=lambda x: getattr(x, "relative_path", getattr(x, "short_name", ""))):
-                owner = getattr(f, "owning_node", None)
-                if owner is not None and owner not in collected:
-                    collected.append(owner)
-
-        if not collected:
-            has_role = False
-            try:
-                role_cfg = get_singleton(agent_node_config.RoleConfig)
-                has_role = bool(getattr(role_cfg, "role", None))
-            except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
-                pass
-            if not has_role:
-                dummy_node = dag_storage.DagNode(
-                    unit_address=dag_storage.UnitAddress("//session:target"),
-                    role_address=dag_storage.RoleAddress(""),
-                )
-                collected.append(dummy_node)
-
-        self._populate_node_aliases(collected)
 
     def _populate_node_aliases(self, nodes: Sequence[dag_storage.DagNode]) -> None:
-        self._nodes = list(nodes)
-        self._node_states = {n: "OPEN" for n in self._nodes}
-        self._alias_to_node = {}
-        self._node_to_alias = {}
+        for n in nodes:
+            if n not in self._nodes:
+                self._nodes.append(n)
+            self._node_states[n] = "OPEN"
         self._cleaned_in_turn = set()
 
         cfg: Optional[agent_node_config.NodeConfig] = None
@@ -143,7 +102,6 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
 
             display_alias = src_alias or (unit_name if is_unique_unit else (f"{pkg}/{unit_name}" if pkg else unit_name))
             self._node_to_alias[n] = display_alias
-            self._node_states[n] = "OPEN"
             self._alias_to_node[display_alias] = n
             if src_alias:
                 self._alias_to_node[src_alias] = n
@@ -151,21 +109,21 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
             self._alias_to_node[pkg_unit] = n
             if is_unique_unit:
                 self._alias_to_node[unit_name] = n
+            unit_addr = n.unit_address.lstrip("/")
+            self._alias_to_node[unit_addr] = n
+            self._alias_to_node[n.unit_address] = n
 
     @property
     def nodes(self) -> Sequence[dag_storage.DagNode]:
-        self._ensure_nodes()
         return self._nodes
 
     @property
     def is_multi_node(self) -> bool:
-        self._ensure_nodes()
         return len(self._nodes) > 1
 
     @property
     def open_targets(self) -> Sequence[dag_storage.DagNode]:
         """Sequence of nodes currently in OPEN state."""
-        self._ensure_nodes()
         return [n for n in self._nodes if self._node_states.get(n) == "OPEN"]
 
     def open_nodes(self) -> List[dag_storage.DagNode]:
@@ -175,7 +133,7 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         self,
         node: dag_storage.DagNode,
         alias: str,
-        state: control_coordinate.TargetState | str = "OPEN",
+        state: control_coordinate.TargetState = control_coordinate.TargetState.OPEN,
     ) -> None:
         self._initialized_nodes = True
         self._nodes = [n for n in self._nodes if n.unit_address != "//session:target"]
@@ -187,7 +145,6 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         self._node_to_alias[node] = clean_alias
 
     def get_node_for_alias(self, alias: str) -> Optional[dag_storage.DagNode]:
-        self._ensure_nodes()
         cand = alias.strip()
         if not cand:
             return None
@@ -223,7 +180,6 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         return matching[0] if len(matching) == 1 else None
 
     def get_alias_for_node(self, node: dag_storage.DagNode) -> str:
-        self._ensure_nodes()
         alias = self._node_to_alias.get(node)
         if alias:
             return alias
@@ -231,27 +187,22 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         return f"{pkg}/{unit_name}" if pkg else unit_name
 
     def get_target_state(self, node: dag_storage.DagNode) -> str:
-        self._ensure_nodes()
         return self._node_states.get(node, "OPEN")
 
     get_node_state = get_target_state
 
     def set_target_state(self, node: dag_storage.DagNode, state: str) -> None:
-        self._ensure_nodes()
         self._node_states[node] = state
 
     set_node_state = set_target_state
 
     def is_clean_in_turn(self, node: dag_storage.DagNode) -> bool:
-        self._ensure_nodes()
         return node in self._cleaned_in_turn or self.get_target_state(node) == "SUBMITTED"
 
     def mark_clean_in_turn(self, node: dag_storage.DagNode) -> None:
-        self._ensure_nodes()
         self._cleaned_in_turn.add(node)
 
     def get_in_batch_dependencies(self, node: dag_storage.DagNode) -> Set[dag_storage.DagNode]:
-        self._ensure_nodes()
         deps: Set[dag_storage.DagNode] = set()
         storage = get_singleton(dag_storage.DagStorage)
         for d in storage.get_dependencies(node):
@@ -263,7 +214,6 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         return self.get_in_batch_dependencies(node)
 
     def _get_in_batch_dependents(self, node: dag_storage.DagNode) -> Sequence[dag_storage.DagNode]:
-        self._ensure_nodes()
         storage = get_singleton(dag_storage.DagStorage)
         dependents = []
         for other in self._nodes:
@@ -274,7 +224,6 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         return dependents
 
     def fail_dependents(self, node: dag_storage.DagNode) -> None:
-        self._ensure_nodes()
         to_check = [node]
         while to_check:
             curr = to_check.pop(0)
@@ -290,8 +239,6 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         self._node_states.clear()
         self._cleaned_in_turn.clear()
         self._populate_node_aliases(nodes)
-        if not self._nodes:
-            self._ensure_nodes()
 
     def format_open_targets_reminder(self) -> str:
         open_n = self.open_nodes()
@@ -303,7 +250,6 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
     def resolve_default_target(
         self, last_accessed_file: Optional[Any] = None
     ) -> Optional[dag_storage.DagNode]:
-        self._ensure_nodes()
         open_nodes = self.open_nodes()
         if not open_nodes:
             return None
@@ -354,30 +300,17 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         schedule = scheduler.schedule_work(
             subgraph=subgraph, dir_scope=dir_scope, max_batch_size=max_batch_size
         )
-        role_cfg = None
-        try:
-            role_cfg = get_singleton(agent_node_config.RoleConfig)
-        except Exception:
-            pass
+        role_cfg = get_singleton(agent_node_config.RoleConfig)
 
         tasks = list(schedule.tasks)
-        if role_cfg is not None and getattr(role_cfg, "role", None):
-            expected = str(role_cfg.role).split(":")[-1].strip().lower()
-            tasks = [
-                t for t in tasks
-                if t.node.role_address.split(":")[-1].strip().lower() == expected
-            ]
-
-        storage = None
-        try:
-            storage = get_singleton(dag_storage.DagStorage)
-        except Exception:
-            pass
+        storage = get_singleton(dag_storage.DagStorage)
 
         for task in tasks:
-            if storage is not None and hasattr(storage, "materialize_template"):
+            if hasattr(storage, "materialize_template"):
                 storage.materialize_template(task.node)
-            self.register_node(task.node, alias=task.node.unit_address, state="OPEN")
+        self._populate_node_aliases([task.node for task in tasks])
+        if hasattr(role_cfg, "set_nodes"):
+            role_cfg.set_nodes([task.node for task in tasks])
         return control_work_scheduler.WorkSchedule(tasks=tasks)
 
     def dispatch_check_files(

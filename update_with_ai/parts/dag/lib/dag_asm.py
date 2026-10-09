@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T02:18:05Z
+# CHANGE: Align with dag_asm.pyi specification
+# CODE_HASH: 43881d3716cf
+# --- END CLEANROOM METADATA ---
+
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry

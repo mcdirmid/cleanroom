@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-07T18:24:00Z
-# CHANGE: test template materialization in evaluate_work and compute_role_work_queue
-# CODE_HASH: 481bc1d5e06a
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CHANGED: 2026-10-09T04:30:00Z
+# CHANGE: test auditor dirtiness across all feedback targets and strict pending target removal
+# CODE_HASH: 7bfb7d5a7e52
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_work_impl."""
@@ -320,6 +320,154 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             )
             self.assertTrue(is_dirty)
             self.assertEqual(len(self.mock_storage.materialized), 0)
+
+    def test_remove_pending_target_strictly_removes_matching(self) -> None:
+        with tempfile.TemporaryDirectory() as ws_dir:
+            self.work_mgr.set_pending_work(ws_dir, ["staging/parts/sample/lib/foo.py"])
+            # Remove a non-matching target
+            self.work_mgr.remove_pending_target(ws_dir, "staging/parts/sample/lib/bar.py")
+            # Foo must strictly remain in pending work
+            self.assertEqual(list(self.work_mgr.get_pending_work(ws_dir)), ["staging/parts/sample/lib/foo.py"])
+
+            # Remove matching target
+            self.work_mgr.remove_pending_target(ws_dir, "staging/parts/sample/lib/foo.py")
+            self.assertEqual(list(self.work_mgr.get_pending_work(ws_dir)), [])
+
+    def test_eval_auditor_unit_dirtiness_across_all_feedback_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as repo_root:
+            clean_md = (
+                "<!-- CLEANROOM METADATA\n"
+                "LAST_CLEANED: 2026-10-08T00:00:00Z\n"
+                "LAST_CHANGED: 2026-10-08T00:00:00Z\n"
+                "-->\n"
+            )
+            part_dir = os.path.join(repo_root, "staging/parts/sample")
+            for d in ["high", "planning", "low", "lib", "tests"]:
+                os.makedirs(os.path.join(part_dir, d), exist_ok=True)
+            with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+                f.write('update_python_with_ai(name="sample_impl")\n')
+            with open(os.path.join(part_dir, "high/sample_impl.md"), "w", encoding="utf-8") as f:
+                f.write(clean_md + "# sample_impl\n")
+            with open(os.path.join(part_dir, "planning/sample_impl.md"), "w", encoding="utf-8") as f:
+                f.write(clean_md + "# sample_impl\n")
+            with open(os.path.join(part_dir, "low/sample_impl.pyi"), "w", encoding="utf-8") as f:
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n"
+                    "# LAST_CLEANED: 2026-10-08T00:00:00Z\n"
+                    "# LAST_CHANGED: 2026-10-08T00:00:00Z\n"
+                    "# --- END CLEANROOM METADATA ---\n"
+                )
+            # lib has QA_AUDIT at 01:00:00Z
+            lib_content = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-08T00:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-08T00:00:00Z\n"
+                "# QA_AUDIT: 2026-10-08T01:00:00Z\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+            with open(os.path.join(part_dir, "lib/sample_impl.py"), "w", encoding="utf-8") as f:
+                f.write(lib_content)
+            # test was modified at 02:00:00Z without QA_AUDIT
+            test_content = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-08T02:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-08T02:00:00Z\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+            with open(os.path.join(part_dir, "tests/sample_impl_test.py"), "w", encoding="utf-8") as f:
+                f.write(test_content)
+
+            # Role qa must be dirty and ready because tests were modified without QA_AUDIT
+            ready, blocked = self.work_mgr.compute_role_work_queue(
+                role_name="qa",
+                dir_scope="staging",
+                repo_root=repo_root,
+            )
+            ready_files = [item.target_file for item in ready]
+            self.assertIn("staging/parts/sample/lib/sample_impl.py", ready_files)
+            self.assertEqual(len(blocked), 0)
+
+            # Check is_pending_target_dirty for qa
+            self.assertTrue(
+                self.work_mgr.is_pending_target_dirty(
+                    "staging/parts/sample/lib/sample_impl.py",
+                    repo_root,
+                    role_name="qa",
+                )
+            )
+
+            # Now certify tests with QA_AUDIT
+            audited_test_content = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-08T02:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-08T02:00:00Z\n"
+                "# QA_AUDIT: 2026-10-08T02:30:00Z\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+            with open(os.path.join(part_dir, "tests/sample_impl_test.py"), "w", encoding="utf-8") as f:
+                f.write(audited_test_content)
+
+            # Now qa should evaluate clean
+            self.assertFalse(
+                self.work_mgr.is_pending_target_dirty(
+                    "staging/parts/sample/lib/sample_impl.py",
+                    repo_root,
+                    role_name="qa",
+                )
+            )
+
+    def test_eval_auditor_unit_dirtiness_when_contract_dependency_modified(self) -> None:
+        with tempfile.TemporaryDirectory() as repo_root:
+            clean_md = (
+                "<!-- CLEANROOM METADATA\n"
+                "LAST_CLEANED: 2026-10-08T00:00:00Z\n"
+                "LAST_CHANGED: 2026-10-08T00:00:00Z\n"
+                "-->\n"
+            )
+            part_dir = os.path.join(repo_root, "staging/parts/sample")
+            for d in ["high", "planning", "low", "lib", "tests"]:
+                os.makedirs(os.path.join(part_dir, d), exist_ok=True)
+            with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+                f.write('update_python_with_ai(name="sample_impl")\n')
+            with open(os.path.join(part_dir, "high/sample_impl.md"), "w", encoding="utf-8") as f:
+                f.write(clean_md + "# sample_impl\n")
+            with open(os.path.join(part_dir, "planning/sample_impl.md"), "w", encoding="utf-8") as f:
+                f.write(clean_md + "# sample_impl\n")
+            # low contract modified at 03:00:00Z
+            with open(os.path.join(part_dir, "low/sample_impl.pyi"), "w", encoding="utf-8") as f:
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n"
+                    "# LAST_CLEANED: 2026-10-08T03:00:00Z\n"
+                    "# LAST_CHANGED: 2026-10-08T03:00:00Z\n"
+                    "# --- END CLEANROOM METADATA ---\n"
+                )
+            # lib has QA_AUDIT at 01:00:00Z
+            with open(os.path.join(part_dir, "lib/sample_impl.py"), "w", encoding="utf-8") as f:
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n"
+                    "# LAST_CLEANED: 2026-10-08T00:00:00Z\n"
+                    "# LAST_CHANGED: 2026-10-08T00:00:00Z\n"
+                    "# QA_AUDIT: 2026-10-08T01:00:00Z\n"
+                    "# --- END CLEANROOM METADATA ---\n"
+                )
+            # test has QA_AUDIT at 01:00:00Z
+            with open(os.path.join(part_dir, "tests/sample_impl_test.py"), "w", encoding="utf-8") as f:
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n"
+                    "# LAST_CLEANED: 2026-10-08T00:00:00Z\n"
+                    "# LAST_CHANGED: 2026-10-08T00:00:00Z\n"
+                    "# QA_AUDIT: 2026-10-08T01:00:00Z\n"
+                    "# --- END CLEANROOM METADATA ---\n"
+                )
+
+            # Even though lib and test are audited, low contract was modified after audit, so qa is dirty
+            self.assertTrue(
+                self.work_mgr.is_pending_target_dirty(
+                    "staging/parts/sample/lib/sample_impl.py",
+                    repo_root,
+                    role_name="qa",
+                )
+            )
 
 
 if __name__ == "__main__":

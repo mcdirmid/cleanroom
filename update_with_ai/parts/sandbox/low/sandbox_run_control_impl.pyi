@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 30aeb5812225
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:38:42Z
+# LAST_CHANGED: 2026-10-09T22:40:00Z
+# CHANGE: Remove initial implementation modification constraint on submission
+# CODE_HASH: 29d4deb47bd5
+# LOW_QA_AUDIT: 2026-10-09T22:40:00Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox run control implementation low-level specification."""
@@ -14,7 +14,6 @@ from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import agent_file_alias
 import agent_node_config
-import control_asm
 import control_coordinate
 import sandbox_run_control
 import tool_provider
@@ -24,6 +23,7 @@ import sandbox
 import sandbox_file_editor
 import sandbox_guide_delivery
 import template_format
+import dag_config
 
 
 @singleton_type("agent_session")
@@ -122,16 +122,17 @@ class SubmitTool(
         POSTCONDITIONS:
         - WHEN guide step mode is active and guide steps remain, MUST fail specifying advance as follow-up tool call.
         - WHEN verification is failing, MUST fail specifying follow-up execution of check files.
-        - WHEN an initial implementation change is assigned and no files were modified, MUST fail.
         - WHEN session feedback is present and no files were modified, MUST fail.
         - WHEN target is an auditor node and change summary is provided, MUST fail reminding agent that change summary is prohibited for audit nodes.
         - WHEN files were modified and change summary is omitted, MUST fail.
         - WHEN workspace files were not modified and change summary is provided, MUST fail reminding agent that change summaries are not permitted when submitting without workspace file modifications.
         - MUST mark the resolve target clean in storage via dag_storage with the provided change summary so that the node is no longer dirty.
         - MUST mark resolve target clean in current turn.
+        - WHEN all active nodes are resolved, MUST produce a terminating response.
+        - WHEN other active nodes remain, MUST produce a non-terminating response.
 
         GROUNDING:
-        - Resolves target node from SessionCoordinator or EditManager, verifies clean conditions, and delegates to DagStorage.mark_node_clean().
+        - Resolves target node from SessionCoordinator or EditManager, verifies clean conditions, delegates to DagStorage.mark_node_clean(), and checks SessionCoordinator.open_targets to set termination state.
         """
         ...
 
@@ -198,9 +199,11 @@ class BlameTool(
         - WHEN explanation contains newline characters, MUST fail reminding agent that explanation must be a single paragraph.
         - MUST record defect feedback for the blamed target via dag_storage so that the blamed node receives the feedback message.
         - MUST mark blame target as attributed.
+        - WHEN all active nodes are resolved, MUST produce a terminating response.
+        - WHEN other active nodes remain, MUST produce a non-terminating response.
 
         GROUNDING:
-        - Resolves active and blame target nodes, verifies single-paragraph explanation, and adds defect message in DagStorage.
+        - Resolves active and blame target nodes, verifies single-paragraph explanation, adds defect message in DagStorage, and checks SessionCoordinator.open_targets to set termination state.
         """
         ...
 
@@ -249,6 +252,17 @@ class RunController(
     GROUNDING:
     - Maintains cached verification results keyed by target node file hashes from EditManager.
     """
+
+    @operation
+    @override
+    def initialize(self) -> None:
+        """Initializes session outcome tools upon agent session entry.
+
+        GROUNDING:
+        - Registers submit, fail, check_files, get_work, and blame tools into ToolManager,
+          and conditionally registers advance tool when guide step mode is active.
+        """
+        ...
 
     @property
     @override

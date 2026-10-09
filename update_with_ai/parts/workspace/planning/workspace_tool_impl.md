@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-08T15:45:00Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-08T15:45:00Z
 CHANGE: update check_files contract for regenerable roles template regeneration
-CODE_HASH: 1d2e3f4a5b6c
+CODE_HASH: 00f33959539d
+SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
 -->
 
 # workspace_tool_impl implementation component

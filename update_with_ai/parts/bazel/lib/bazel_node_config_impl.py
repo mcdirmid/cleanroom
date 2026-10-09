@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-06T12:00:00Z
 # CHANGE: refactor bazel_node_config_impl under 500 lines
-# CODE_HASH: 2263e124dcf8
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# CODE_HASH: b1b16fe27698
+# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 import json
@@ -13,7 +13,7 @@ import re
 import subprocess
 import sys
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Type
-from . import bazel_manifest_loader, bazel_target
+from . import bazel_manifest_loader
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.agent.lib import agent_file_alias, agent_config, agent_node_config
 from update_with_ai.parts.agent.lib.agent_session import agent_session
@@ -160,12 +160,14 @@ def _search_paths(rel_paths: Sequence[str], pkg_path: str = "") -> List[str]:
     return res
 
 
-def _norm_node(node_util: Any, target_str: str) -> dag_storage.DagNode:
-    if node_util is not None:
-        try:
-            return node_util.normalize_target(bazel_target.TargetIdentifier(target_str))
-        except (ValueError, TypeError, KeyError, LookupError, AttributeError):
-            pass
+def _extract_pkg(n: dag_storage.DagNode) -> str:
+    unit = n.unit_address
+    if unit.startswith("//"):
+        unit = unit[2:]
+    return unit.split(":")[0] if ":" in unit else os.path.dirname(unit)
+
+
+def _norm_node(target_str: str) -> dag_storage.DagNode:
     return dag_storage.DagNode(unit_address=dag_storage.UnitAddress(target_str), role_address=dag_storage.RoleAddress(""))
 
 
@@ -173,7 +175,7 @@ def _make_bound(pkg: str, s: str, cls: Any, owner: dag_storage.DagNode) -> Any:
     norm_rel = os.path.normpath(s.lstrip("/") if (s.startswith(pkg + "/") or (pkg and s.startswith("/" + pkg + "/"))) else os.path.join(pkg, s))
     return cls(
         relative_path=agent_file_alias.RelativePath(norm_rel),
-        workspace_path=_make_host_path(agent_file_alias.WorkspacePath, norm_rel),
+        workspace_path=_make_host_path(file_paths.WorkspacePath, norm_rel),
         owning_node=owner,
     )
 
@@ -186,9 +188,8 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
         for m in msgs if isinstance(m, dag_storage.FeedbackMessage) and m.content
     )
     loader = _safe_get_singleton(bazel_manifest_loader.BazelManifestLoader)
-    node_util = _safe_get_singleton(bazel_target.BazelTarget)
     manifest = loader.retrieve_manifest(n) if loader else None
-    pkg_path = node_util.extract_node_dir(n).path.lstrip("/") if node_util else ""
+    pkg_path = _extract_pkg(n)
 
     rw_files: Set[agent_file_alias.ReadWriteFile] = set()
     src_alias: Optional[agent_file_alias.RelativePath] = None
@@ -230,7 +231,7 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
         if loader:
             for cl in c_labels:
                 try:
-                    g_manifest = loader.retrieve_manifest(_norm_node(node_util, cl))
+                    g_manifest = loader.retrieve_manifest(_norm_node(cl))
                     if g_manifest: break
                 except (LifecycleResolutionError, KeyError, LookupError, RuntimeError, ValueError, AttributeError):
                     pass
@@ -260,7 +261,7 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
         curr_label = frontier.pop(0)
         if curr_label in star_seen: continue
         star_seen.add(curr_label); star_closure.append(curr_label)
-        dm = loader.retrieve_manifest(_norm_node(node_util, curr_label)) if loader else None
+        dm = loader.retrieve_manifest(_norm_node(curr_label)) if loader else None
         if dm: frontier.extend(s for s in dm.star_dependencies if s not in star_seen and s not in silent_deps)
 
     blame_targets: Set[agent_file_alias.BoundFile] = set()
@@ -268,10 +269,10 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
     rw_paths = {rw.workspace_path.path for rw in rw_files}
     for dep_label in deps + [sd for sd in star_closure if sd not in deps]:
         if dep_label in silent_deps: continue
-        dep_node = _norm_node(node_util, dep_label)
+        dep_node = _norm_node(dep_label)
         is_blame = dep_label in feedback_deps
         dep_m = loader.retrieve_manifest(dep_node) if loader else None
-        dep_pkg = node_util.extract_node_dir(dep_node).path.lstrip("/") if node_util else ""
+        dep_pkg = _extract_pkg(dep_node)
         dep_srcs: List[str] = []
         if dep_m and dep_m.source_file:
             dep_srcs.append(dep_m.source_file)

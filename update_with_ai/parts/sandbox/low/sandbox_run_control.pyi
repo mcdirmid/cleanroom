@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 3b97d0c929c3
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:38:39Z
+# LAST_CHANGED: 2026-10-09T21:38:39Z
+# CHANGE: Contract run controller session tool initialization on agent session entry
+# CODE_HASH: 992d9b9a0230
 # --- END CLEANROOM METADATA ---
 
 """Sandbox run control low-level interface specification."""
@@ -54,6 +53,12 @@ class ResolveTool(tool_provider.Tool, Protocol):
     def execute_tool(
         self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]
     ) -> tool_provider.ToolResponse:
+        """Executes the resolve tool action.
+
+        POSTCONDITIONS:
+        - WHEN all active nodes are resolved, MUST produce a terminating response.
+        - WHEN other active nodes remain, MUST produce a non-terminating response.
+        """
         ...
 
 
@@ -134,6 +139,8 @@ class SubmitTool(ResolveTool, InTier[AgentSessionTier], Protocol):
         - WHEN verification passes, MUST conclude active node.
         - MUST mark the resolve target clean in the current turn.
         - MUST enforce change documentation when files were modified.
+        - WHEN all active nodes are resolved, MUST produce a terminating response.
+        - WHEN other active nodes remain, MUST produce a non-terminating response.
         """
         ...
 
@@ -201,6 +208,8 @@ class BlameTool(ResolveTool, InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST attribute task failure to an upstream dependency node.
+        - WHEN all active nodes are resolved, MUST produce a terminating response.
+        - WHEN other active nodes remain, MUST produce a non-terminating response.
         """
         ...
 
@@ -241,6 +250,16 @@ class GetWorkTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
 @singleton_type("agent_session")
 class RunController(InTier[AgentSessionTier], Protocol):
     """Coordinates session termination tools and verification caching."""
+
+    @operation
+    def initialize(self) -> None:
+        """Initializes session outcome tools upon agent session entry.
+
+        POSTCONDITIONS:
+        - MUST unconditionally install the submit tool, fail tool, check files tool, get work tool, and blame tool.
+        - WHEN guide step mode is active, MUST install the advance tool.
+        """
+        ...
 
     @property
     def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:

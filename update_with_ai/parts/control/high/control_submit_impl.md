@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 143650e6b0c9
+LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CHANGED: 2026-10-09T22:20:00Z
+CHANGE: Record change summary during clean status transition without appending dirty change message
+CODE_HASH: b2dd759fc96f
 -->
 
 # control_submit_impl implementation component
@@ -12,7 +12,7 @@ implements: control_submit
 
 ## Purpose
 
-The control_submit_impl implementation component realizes submission precondition validation, audit role restrictions, change message persistence, and graph status mutation.
+The control_submit_impl implementation component realizes submission precondition validation, audit role restrictions, change summary persistence, and graph status mutation.
 
 Enforcing submission integrity prevents corrupting the dependency graph with broken or improperly documented artifacts. The control_submit_impl implementation component queries the verification evaluator to ensure checks have passed, evaluates whether the target role is marked as an auditor in role configuration, checks file modification status, and records change descriptions directly into graph storage.
 
@@ -36,7 +36,7 @@ When submitting a target:
 
 - When workspace files were not modified and the target is not an auditor role, the submission coordinator forbids non-empty change summaries, rejecting submissions that attempt to document changes when no modifications occurred.
 
-- When all preconditions and change summary rules are satisfied, the submission coordinator marks the target node status as clean in graph storage, records the change message, and returns an accepted submission outcome.
+- When all preconditions and change summary rules are satisfied, the submission coordinator marks the target node status as clean in graph storage with the change summary and returns an accepted submission outcome.
 
 When submitting a file target:
 

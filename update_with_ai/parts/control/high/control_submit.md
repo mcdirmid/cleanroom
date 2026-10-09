@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 9c9391f140ee
+LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CHANGED: 2026-10-09T22:20:00Z
+CHANGE: Record change summary during clean status transition without appending dirty change message
+CODE_HASH: 0d9883b55b84
 -->
 
 # control_submit interface component
@@ -33,6 +33,6 @@ The submission coordinator:
 
 - Enforces change documentation rules by requiring a change summary when workspace files were modified, forbidding a change summary when workspace files were unmodified, and forbidding change summaries when resolving auditor roles.
 
-- Resolves accepted targets by marking the target node status as clean in graph storage and recording the change summary as a change message.
+- Resolves accepted targets by marking the target node status as clean in graph storage with the change summary.
 
 - Submits file targets in repository workspaces, validating auditor targets against test file submission prohibitions, validating producer targets against read-only permissions and directory scope patterns, requiring change summaries exclusively when source code was modified, and updating in-band audit tags and change metadata in canonical repositories.

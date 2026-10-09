@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-08T15:45:00Z
-LAST_CHANGED: 2026-10-08T15:45:00Z
-CHANGE: clarify starter template materialization for regenerable roles on check and discovery
-CODE_HASH: 8f5edf7b132f
+LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CHANGED: 2026-10-09T04:30:00Z
+CHANGE: specify auditor dirtiness across all feedback targets and strict pending target removal
+CODE_HASH: e85c46af29c4
 -->
 
 # workspace_work_impl implementation component
@@ -28,11 +28,13 @@ When managing pending target state:
 
 - The work manager records assigned target paths to `.cleanroom_pending_work.json`.
 
-- The work manager removes a resolved target path from `.cleanroom_pending_work.json` when submitted or blamed.
+- The work manager removes a resolved target path from `.cleanroom_pending_work.json` when submitted or blamed, matching target paths and unit stems strictly without clearing unmatched targets.
 
-- The work manager evaluates whether a pending target remains dirty by checking in-band source metadata across local and canonical repositories, materializing starter templates via graph storage for missing targets of roles with declared source patterns and upstream dependencies.
+- The work manager evaluates whether a pending target remains dirty by checking in-band source metadata across local and canonical repositories, verifying all configured feedback role targets for auditor roles against required role audit timestamps and forward contracts, and materializing starter templates via graph storage for missing targets of roles with declared source patterns and upstream dependencies.
 
 When evaluating work in a role workspace:
+
+- When evaluating whether an auditor role unit is dirty, the work manager inspects in-band metadata across all feedback role targets configured for the active auditor role, evaluating the unit as dirty when any feedback target is missing, unparseable, lacks the required role audit attribute, or has been modified more recently than its audit timestamp, or when any non-silent upstream contract dependency has been modified after the feedback target's audit timestamp.
 
 - The work manager checks whether a pending work buffer file exists at `.cleanroom_pending_work.json`. If pending targets exist, the manager re-evaluates each target's dirty status using in-band metadata. If any target remains dirty and force is false, work discovery aborts, returning an error directing the agent to complete or blame the pending target.
 

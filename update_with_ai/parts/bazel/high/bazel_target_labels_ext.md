@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T05:18:17Z
 CHANGE: Remove internal file alias component reference from external boundary specification
 CODE_HASH: 9915fbba9557

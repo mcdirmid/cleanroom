@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-08T00:45:00Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-08T00:45:00Z
 CHANGE: Define src_storage_impl high-level specification
-CODE_HASH: 000000000000
+CODE_HASH: c8df449f0848
 -->
 
 # src_storage_impl implementation component

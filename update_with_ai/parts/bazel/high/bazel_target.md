@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T05:17:47Z
 CHANGE: Remove code-level constructor constraint and introduce callable operations in infinitive form
 CODE_HASH: b0424439f038

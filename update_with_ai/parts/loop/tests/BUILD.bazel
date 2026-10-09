@@ -41,7 +41,6 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
-        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/core/lib:runner_logger",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/loop/lib:loop_conversation",
@@ -50,7 +49,6 @@ pyright_test(
         "//update_with_ai/parts/loop/lib:loop_node_cleaner_impl",
         "//update_with_ai/parts/sandbox/lib:sandbox",
         "//update_with_ai/parts/sandbox/lib:template_format",
-        "//update_with_ai/parts/sandbox/lib:tool_provider",
     ],
 )
 

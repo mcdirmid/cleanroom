@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-08T15:45:00Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-08T15:45:00Z
 CHANGE: clarify starter template regeneration before verification for regenerable roles
-CODE_HASH: 7a8b9c1d2e3f
+CODE_HASH: bd4625026b54
 -->
 
 # workspace_tool interface component

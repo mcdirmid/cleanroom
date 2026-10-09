@@ -1,14 +1,13 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-08T12:55:00Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-06T22:55:00Z
 # CHANGE: core constituents
-# CODE_HASH: 1cbcf4783178
+# CODE_HASH: d163cd923cdd
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry, get_default_registry
-from update_with_ai.parts.agent.lib import agent_session
 from . import (
     workspace_provision,
     workspace_provision_impl,
@@ -36,7 +35,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             workspace_registry.WorkspaceRegistry,
             workspace_registry_impl.WorkspaceRegistry,
         ],
-        tier=agent_session.agent_session,
     )
     reg.register_singleton(
         workspace_provision_impl.WorkspaceProvisioner,
@@ -44,7 +42,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             workspace_provision.WorkspaceProvisioner,
             workspace_provision_impl.WorkspaceProvisioner,
         ],
-        tier=agent_session.agent_session,
     )
     reg.register_singleton(
         workspace_sync_impl.WorkspaceSynchronizer,
@@ -52,7 +49,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             workspace_sync.WorkspaceSynchronizer,
             workspace_sync_impl.WorkspaceSynchronizer,
         ],
-        tier=agent_session.agent_session,
     )
     reg.register_singleton(
         workspace_work_impl.WorkspaceWorkManager,
@@ -60,7 +56,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             workspace_work.WorkspaceWorkManager,
             workspace_work_impl.WorkspaceWorkManager,
         ],
-        tier=agent_session.agent_session,
     )
 
 _initialize_ = __initialize__

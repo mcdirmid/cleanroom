@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: dd7206751876
+LAST_CLEANED: 2026-10-09T21:29:19Z
+LAST_CHANGED: 2026-10-09T21:29:19Z
+CHANGE: Contract run controller session tool initialization on agent session entry
+CODE_HASH: 53eacb472ba6
 -->
 
 # sandbox_run_control interface component
@@ -19,11 +19,13 @@ Autonomous agents require unambiguous control tools to signal when a task is fin
 
 ## Types and Behavior
 
-A polymorphic *resolve tool* defines a file alias *resolve target* parameter identifying the active node being resolved.
+A polymorphic *resolve tool* defines a file alias *resolve target* parameter identifying the active node being resolved. A resolve tool produces a terminating response when all active nodes are resolved, or a non-terminating response when other active nodes remain.
 
-An agent session's *run controller* is configured with per-node blame targets and node config verification checks. The run controller provides tools for terminating agent sessions and attributing outcomes.
+An agent session's *run controller* is configured with per-node blame targets and node config verification checks. The run controller initializes session tools upon agent session entry and provides tools for terminating agent sessions and attributing outcomes.
 
 The run controller:
+
+- Initializes session tools by unconditionally installing the submit tool, fail tool, check files tool, get work tool, and blame tool, and conditionally installing the advance tool when guide step mode is active.
 
 - Exposes verification checks that validate session criteria.
 

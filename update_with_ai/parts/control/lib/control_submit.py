@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-06T10:45:00Z
 # CHANGE: new file
-# CODE_HASH: 8ea4a4366d17
+# CODE_HASH: ff654c8a9b2b
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -79,18 +79,5 @@ def parse_unit_from_file_path(
 
 def is_auditor_node(node: dag_storage.DagNode) -> bool:
     """Checks whether the node's role is classified as an auditor."""
-    try:
-        from support.lib.lifecycle import get_singleton
-        from update_with_ai.parts.agent.lib import agent_node_config
-        cfg = get_singleton(agent_node_config.NodeConfig)
-        role_clean = node.role_address.split(":")[-1].strip().lower()
-        role_cfg = getattr(cfg, "role_definitions", {}).get(role_clean)
-        if role_cfg is not None:
-            if getattr(role_cfg, "is_auditor", False) or getattr(role_cfg, "audit_tag", None) or not getattr(role_cfg, "src_pattern", ""):
-                return True
-            return False
-    except Exception:
-        pass
     role_clean = node.role_address.split(":")[-1].strip().lower()
     return role_clean in ("grounding_qa", "qa", "coverage", "spec_qa", "low_qa")
-

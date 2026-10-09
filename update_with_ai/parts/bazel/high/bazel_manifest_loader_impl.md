@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T05:18:44Z
 CHANGE: Add delegated collaborator statement, remove collaborator name leakage, and resolve floating derivation paths
 CODE_HASH: 98e47d8b91eb

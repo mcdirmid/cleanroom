@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
-# CODE_HASH: bdee55d316a1
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# CODE_HASH: 4f2ef0bb98d2
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_work_scheduler_impl."""

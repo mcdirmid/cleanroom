@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-08T00:35:00Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
 # LAST_CHANGED: 2026-10-08T00:35:00Z
 # CHANGE: Delegate mark_subgraph_clean, mark_dirty, and inject_feedback to DagStorage
-# CODE_HASH: 528b98755edb
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# CODE_HASH: 0b3e0fa8da71
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 import time
@@ -24,12 +24,6 @@ from support.lib.lifecycle import (
     system,
 )
 
-try:
-    from update_with_ai.parts.bazel.lib import bazel_manifest_loader
-except ImportError:
-    bazel_manifest_loader = None  # type: ignore
-
-
 def _format_node(node: dag_storage.DagNode) -> str:
     if node.role_address:
         return f"{node.unit_address}#{node.role_address}"
@@ -42,17 +36,8 @@ class Loop(loop.Loop, Singleton):
     def __init__(self) -> None:
         pass
 
-    def _get_manifest_loader(self) -> Any:
-        try:
-            return get_singleton(uv_manifest_loader.UvManifestLoader)
-        except Exception:
-            pass
-        if bazel_manifest_loader is not None:
-            try:
-                return get_singleton(bazel_manifest_loader.BazelManifestLoader)
-            except Exception:
-                pass
-        raise RuntimeError("No manifest loader singleton registered")
+    def _get_manifest_loader(self) -> uv_manifest_loader.UvManifestLoader:
+        return get_singleton(uv_manifest_loader.UvManifestLoader)
 
     def clean_subgraph(self, target: dag_storage.DagNode) -> loop.BuildResult:
         root = target

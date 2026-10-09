@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 5d22abf3dc6e
-SPEC_QA_AUDIT: 2026-10-07T23:58:18Z
+LAST_CLEANED: 2026-10-09T21:40:42Z
+LAST_CHANGED: 2026-10-09T21:36:15Z
+CHANGE: Contract run controller session tool initialization on agent session entry
+CODE_HASH: a3f778ca5d5a
+SPEC_QA_AUDIT: 2026-10-09T21:40:42Z
 -->
 
 # sandbox_run_control interface component
@@ -38,8 +38,12 @@ By providing dedicated tools for verification inspection, milestone advancement,
 - The check files tool presents aggregated verification outcomes to the agent. [check_files_presents_outcomes]
 - The check files tool tracks last tested file hashes. [check_files_tracks_tested_hashes]
 - The check files tool fails when verification fails. [check_files_fails_on_verification_failure]
+- The run controller initializes session tools upon agent session entry. [initialize_session_tools_on_entry]
+- The run controller unconditionally installs the submit tool, fail tool, check files tool, get work tool, and blame tool. [unconditionally_install_session_tools]
 - The run controller installs an advance tool when guide step mode is active. [install_advance_tool_when_step_mode]
 - The advance tool coordinates step progression through guide delivery upon passing verification. [advance_tool_coordinates_step_progression]
+- A resolve tool produces a terminating response when all active nodes are resolved. [resolve_tool_terminates_when_all_resolved]
+- A resolve tool produces a non-terminating response when other active nodes remain. [resolve_tool_lists_remaining_nodes]
 - The submit tool concludes active nodes upon passing verification. [submit_concludes_nodes_on_pass]
 - The submit tool marks the resolve target clean in the current get work turn. [submit_marks_target_clean]
 - The submit tool enforces change documentation. [submit_enforces_change_documentation]
@@ -52,9 +56,11 @@ By providing dedicated tools for verification inspection, milestone advancement,
 
 ### Woven Contracts
 
+- Session outcome tools are initialized upon session entry, unconditionally installing termination and verification tools while gating the advance tool behind step mode. [initialize_session_tools_on_entry, unconditionally_install_session_tools, install_advance_tool_when_step_mode, tool_provider: [install_tools]]
 - The check files tool evaluates session verification checks, caching results against file hashes and reporting outcomes or failures. [expose_verification_checks, cache_verification_results, reuse_cached_verification_outcome, check_files_updates_outdated_results, check_files_evaluates_checks, check_files_presents_outcomes, check_files_tracks_tested_hashes, check_files_fails_on_verification_failure, agent_node_config: [session_config_verification_checks]]
 - In guide step mode, the advance tool coordinates progressive milestone advancement through guide delivery upon passing verification. [install_advance_tool_when_step_mode, advance_tool_coordinates_step_progression]
 - Concluding tasks via the submit tool validates passing verification, documents modifications, and marks resolved targets clean in the graph. [submit_concludes_nodes_on_pass, submit_marks_target_clean, submit_enforces_change_documentation, dag_storage: [clear_node_messages]]
+- Resolving active targets terminates the session when all active nodes are resolved, or produces a non-terminating response listing remaining targets when other nodes remain open. [resolve_tool_terminates_when_all_resolved, resolve_tool_lists_remaining_nodes]
 - Attributing task failure via the blame tool records diagnostic explanations blaming upstream dependency nodes. [blame_attributes_upstream_failure, dag_storage: [add_node_messages]]
 - The get work tool retrieves ready dirty nodes, materializes starter templates, delivers session prompts, and initiates step guidance when configured. [get_work_retrieves_dirty_nodes, get_work_materializes_templates, get_work_delivers_task_prompt, get_work_specifies_advance_followup_in_step_mode, tool_provider: [call_by_name]]
 

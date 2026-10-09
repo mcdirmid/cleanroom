@@ -283,9 +283,11 @@ def run_cleanroom_target(
         elif action == "prompt":
             for n in scope_nodes:
                 loader.load_manifest(n)
-                defn = storage.get_node_definition(n) if hasattr(storage, "get_node_definition") else None
-                if defn and defn.task_prompt:
-                    print(f"=== {n.unit_address}#{n.role_address} ===\n{defn.task_prompt}\n")
+                get_defn = getattr(storage, "get_node_definition", None)
+                defn = get_defn(n) if callable(get_defn) else None
+                prompt = getattr(defn, "task_prompt", None) if defn else None
+                if prompt:
+                    print(f"=== {n.unit_address}#{n.role_address} ===\n{prompt}\n")
             return 0
 
         elif len(scope_nodes) == 1:
@@ -299,7 +301,7 @@ def run_cleanroom_target(
             return 2
     else:
         target_util = get_singleton(uv_target.UvTarget)
-        node = target_util.normalize_target(target_str)
+        node = target_util.normalize_target(uv_target.TargetIdentifier(target_str))
         if not node.role_address:
             # Default role to 'lib' if unspecified
             node = dag_storage.DagNode(
@@ -372,9 +374,11 @@ def run_cleanroom_target(
         return 0
 
     elif action == "prompt":
-        defn = storage.get_node_definition(node) if hasattr(storage, "get_node_definition") else None
-        if defn and defn.task_prompt:
-            print(defn.task_prompt)
+        get_defn = getattr(storage, "get_node_definition", None)
+        defn = get_defn(node) if callable(get_defn) else None
+        prompt = getattr(defn, "task_prompt", None) if defn else None
+        if prompt:
+            print(prompt)
         else:
             print(f"No prompt configured for {node.unit_address}#{node.role_address}")
         return 0

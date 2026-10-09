@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
-# CODE_HASH: 4a011171eed3
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# CODE_HASH: a765a9731f9c
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_sync."""
@@ -106,7 +106,4 @@ class WorkspaceSynchronizer(InTier[AgentSessionTier], Protocol):
         - MUST return sequence of updated culprit file paths.
         """
         ...
-
-
-
 

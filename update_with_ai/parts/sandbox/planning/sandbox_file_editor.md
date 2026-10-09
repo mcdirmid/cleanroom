@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 571412a3ebe7
-SPEC_QA_AUDIT: 2026-10-07T23:58:18Z
+LAST_CLEANED: 2026-10-09T21:40:37Z
+LAST_CHANGED: 2026-10-09T21:35:44Z
+CHANGE: Specify that the replace file content tool is installed for the agent session
+CODE_HASH: 2284e431a8f8
+SPEC_QA_AUDIT: 2026-10-09T21:40:37Z
 -->
 
 # sandbox_file_editor interface component
@@ -40,6 +40,7 @@ By tracking file modifications, revision numbers, and the most recently accessed
 - The edit manager records file reads through record file read. [record_file_read_op]
 - The edit manager records file edits through record file edit. [record_file_edit_op]
 - The edit manager provides a can write operation validating write access for a read-write file. [can_write_validates_access]
+- The replace file content tool is installed for the agent session. [install_replace_file_content_tool]
 - The replace file content tool replaces target content with replacement content within the bounded line range. [replace_content_in_line_range]
 - The replace file content tool replaces multiple occurrences when multiple replacements are permitted. [replace_multiple_when_permitted]
 - Workspace file writes occurred is true when file contents differ from their in-band code hash. [writes_occurred_true_on_diff]
@@ -49,7 +50,7 @@ By tracking file modifications, revision numbers, and the most recently accessed
 
 - Recording file reads updates the tracked last read or edited file in the session. [record_read_supplied, track_last_read_or_edited, record_file_read_op]
 - Recording file edits updates the tracked last read or edited file in the session. [record_edit_supplied, track_last_read_or_edited, record_file_edit_op]
-- The replace file content tool replaces target content within the designated line range or across multiple occurrences when allowed. [replace_content_in_line_range, replace_multiple_when_permitted, tool_provider: [call_by_name, call_with_python_bindings]]
+- The replace file content tool is installed for the agent session to replace target content within the designated line range or across multiple occurrences when allowed. [install_replace_file_content_tool, replace_content_in_line_range, replace_multiple_when_permitted, tool_provider: [call_by_name, call_with_python_bindings]]
 - Workspace file writes status reflects whether current workspace file contents differ from their in-band code hash. [edit_mgr_tracks_session_edits, expose_workspace_writes_occurred, writes_occurred_true_on_diff, writes_occurred_false_on_match]
 
 ## Grounding

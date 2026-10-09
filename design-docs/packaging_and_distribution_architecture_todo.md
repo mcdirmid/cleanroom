@@ -239,13 +239,46 @@ typeCheckingMode = "standard"
 testpaths = ["tests"]
 ```
 
-### 5.3 Authoritative Type Checking Strategy: Approach A (`[tool.pyright]` in `pyproject.toml`)
+### 5.3 Authoritative Packaging & Type Checking Strategy: Package-Level `pyproject.toml`
 
-Cleanroom adopts **Approach A** as its authoritative type-checking configuration strategy:
-1. **Zero Global JSON Configuration**: Cleanroom completely eliminates reliance on the standalone root `pyrightconfig.json` file. All Pyright configuration directives are housed strictly within the standard `[tool.pyright]` table of `pyproject.toml` (PEP 518/621).
-2. **Built-in Pyright Discovery**: When developers, subagents, or verification scripts execute `pyright <file>` or `uv run pyright`, Pyright automatically discovers and applies `[tool.pyright]` from the repository root `pyproject.toml`.
-3. **Editable Package Resolution**: With `uv pip install -e .`, package namespaces (`update_with_ai`, `update_python_with_ai`) resolve through the active virtual environment, removing the historical need for brittle, path-dependent `extraPaths` arrays.
-4. **Hermetic Role Workspaces**: Role workspaces execute verification commands (`check_files`) directly against the environment defined by `pyproject.toml` without needing `pyrightconfig.json` copied into their root directory, eliminating accidental tampering by agents.
+Cleanroom adopts a **Package-Level Configuration Strategy** that strictly decouples the Cleanroom tool binary from consumer project packages, eliminating reliance on monolithic global JSON configs or fragmented per-part boilerplate:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                   TOOL DISTRIBUTION VS. CONSUMER PROJECT CONFIGURATION                 │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  [Cleanroom Tool Distribution]                 [Consumer Project Environment]          │
+│  ─────────────────────────────                 ──────────────────────────────          │
+│  • Root pyproject.toml (PEP 621)               • Consumer pyproject.toml               │
+│  • Hatchling wheel packaging                   • Declares project dependencies & tools │
+│  • Installs cleanroom & cleanroom-loop         • Contains parts/ subdirectories        │
+│  • Deployed via `uv tool install cleanroom`    • Operates without monorepo assumptions │
+│                                                                                        │
+│  [Dogfooding Monorepo Workspace]                                                       │
+│  ───────────────────────────────                                                       │
+│  • cleanroom/pyproject.toml        ──► [tool.uv.workspace] members                     │
+│  • update_with_ai/pyproject.toml   ──► Canonical production package                    │
+│  • staging/pyproject.toml          ──► Ephemeral test consumer package                 │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Package-Level `pyproject.toml` (No Fragmented Per-Part Configs)**:
+   - **Why Per-Part Configs are an Anti-Pattern**: Putting a separate `pyproject.toml` inside every individual part directory (`parts/agent/`, `parts/dag/`, `parts/control/`) creates extreme boilerplate (15+ duplicate configuration files, lockfiles, and dependency tables). Parts in Cleanroom are **architectural domains of a single application**, not separately versioned PyPI libraries.
+   - **Package Root Ownership**: A single `pyproject.toml` lives at the root of each directory containing `parts/` (e.g. `update_with_ai/pyproject.toml`, `staging/pyproject.toml`, or `my_user_project/pyproject.toml`). It declares package dependencies, wheel targets, and tool configurations (`[tool.pyright]`, `[tool.pytest.ini_options]`).
+   - **`uv` Workspace Integration**: In multi-package or monorepo repositories, the root `pyproject.toml` simply declares `[tool.uv.workspace] members = ["update_with_ai", "staging"]`, allowing `uv` to link packages together seamlessly.
+
+2. **Zero Global JSON Configuration (Deleted `pyrightconfig.json`)**:
+   - Cleanroom completely eliminates reliance on the standalone root `pyrightconfig.json` file.
+   - All static analysis directives are housed strictly within standard PEP 518/621 `[tool.pyright]` tables in `pyproject.toml`.
+   - Built-in Pyright discovery automatically honors `[tool.pyright]` when invoked via `pyright` or `uv run pyright`.
+
+3. **Role Workspaces & Incomplete Directory Handling**:
+   - Role workspaces (`cleanroom_lib_staging`, etc.) are **incomplete projections** containing only active writable targets, declared read-only dependencies, and generated stubs. They do not contain the full project repository.
+   - Therefore, Cleanroom's verification runner (`workspace_tool_impl.py`) does not rely on static directory structures or brittle regex rewriting of configuration files.
+   - Instead, the runner dynamically constructs an exact, hermetic `PYTHONPATH` reflecting the active part, its support libraries, and declared upstream dependencies before invoking `pyright` or `pytest`.
+   - The package-level `pyproject.toml` can be optionally copied into role workspaces for editor integration, but the runtime verification engine remains fully functional and robust even in incomplete workspace projections.
 
 ---
 
@@ -885,9 +918,11 @@ sequenceDiagram
 - **Step 1.3: Dual Test Parity**:
   - Run `uv run pytest update_with_ai/parts/workspace/tests/` to verify tests execute natively under pytest.
   - Expand execution across all 36 test targets to achieve 100% pass parity between `bazel test //...` and `uv run pytest`.
-- **Step 1.4: Pyright Parity (Approach A) & Config Retirement**:
-  - Run `uv run pyright` directly to confirm 0 errors against `[tool.pyright]`.
-  - Retire standalone root `pyrightconfig.json` once parity is proven.
+- **[COMPLETED] Step 1.4: Pyright Parity & Global Config Retirement**:
+  - Completely deleted standalone `pyrightconfig.json` from the repository root and Bazel exports.
+  - Configured package-level `pyproject.toml` files (`update_with_ai/pyproject.toml`, `staging/pyproject.toml`) and configured the root `pyproject.toml` as a `[tool.uv.workspace]`.
+  - Replaced hardcoded static paths (`extraPaths`) with dynamic `PYTHONPATH` resolution in `bin/test` and `workspace_tool_impl.py`.
+  - Confirmed 0 type errors across canonical code, and verified parity between `bin/test` and role workspace `bin/check_files`.
 
 ### Phase 2: Decoupling the Orchestration Engine
 *Goal: Switch Cleanroom role tools and verification templates to native Python/uv without touching underlying parts specifications.*
@@ -913,10 +948,10 @@ sequenceDiagram
 ### Phase 3: Verification Engine Parity
 - Ensure all determinism arbiters (`high_lint.py`, `spec_lint.py`, `low_lint.py`, `lib_lint.py`, `test_lint.py`, `tool_coverage.py`) run natively via `uv run`.
 - Confirm Pyright and coverage verification succeed with zero Bazel dependency.
-- **[DECISION] Pyright Decoupling from Global `pyrightconfig.json`**:
-  - Run Pyright without a standalone global `pyrightconfig.json` by placing type checking configuration into standard `[tool.pyright]` within `pyproject.toml` (PEP 518/621).
-  - For per-workspace or per-target hermeticity, Cleanroom runners can pass `-p <config>` using a transient or workspace-scoped configuration (e.g., `.cleanroom_pyright.json`), avoiding global file pollution or manual config edits.
-  - In standard packaging (`uv pip install -e .`), Pyright automatically resolves all module paths via the virtual environment's `site-packages`, eliminating the need for manual `extraPaths` arrays.
+- **[COMPLETED] Pyright Decoupling from Global `pyrightconfig.json`**:
+  - Permanently deleted root `pyrightconfig.json` and eliminated hardcoded path configurations.
+  - Placed standard `[tool.pyright]` within package-level `pyproject.toml` files (`update_with_ai/pyproject.toml`, `staging/pyproject.toml`) and the root `[tool.uv.workspace]`.
+  - Type checking in both `bin/test` and role workspace `bin/check_files` is driven by dynamic `PYTHONPATH` construction matching exact target dependencies, with 100% parity and zero global suppressions.
 - **[COMPLETED] Moved Coverage to `parts/tools` & Eliminated `bin/coverage`**: Coverage measurement was migrated from monolithic scripts to modularized [`tool_coverage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage.py) and [`tool_coverage_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage_impl.py) under `parts/tools/`. Standalone `bin/coverage` zipapp was eliminated in favor of direct execution via `bin/check_files` under the `coverage` role. Resolved AST vs execution root mismatches by evaluating AST against the local role workspace (`ws_root`), and expanded module cache purging to package-qualified names.
 - **[TODO] Linter Migration to Parts (`parts/lint` or `parts/tools`)**: Migrate the procedural AST linters currently in `update_python_with_ai/support/lib/` (`high_lint.py`, `spec_lint.py`, `low_lint.py`, `lib_lint.py`, `test_lint.py`, `build_lint_common.py`, `check_build_derived.py`) into proper Cleanroom parts under `update_with_ai/parts/` with full 4-stage specifications (`high/`, `planning/`, `low/`, `lib/`, `tests/`), eliminating monolithic support scripts.
 

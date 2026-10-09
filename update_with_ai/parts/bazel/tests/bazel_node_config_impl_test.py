@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-04T23:01:55Z
 # CHANGE: new file
-# CODE_HASH: 72d8405fb42b
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# CODE_HASH: 87359737c1b7
+# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for bazel_node_config_impl aligned with grounding specifications."""
@@ -37,7 +37,6 @@ from update_with_ai.parts.agent.lib.agent_node_config import (
     VerificationSuccessMessage,
 )
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
-from update_with_ai.parts.agent.lib.agent_storage import AgentStorage
 from update_with_ai.parts.bazel.lib.bazel_manifest_loader import (
     BazelManifestLoader,
     TargetManifest,
@@ -47,7 +46,6 @@ from update_with_ai.parts.bazel.lib.bazel_node_config_impl import (
     NodeConfig as NodeConfigImpl,
     __initialize__,
 )
-from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory
 from update_with_ai.parts.core.lib.file_paths import (
     AbsolutePath,
     FilePathManager,
@@ -96,20 +94,6 @@ class FakeFilePaths:
         return AbsolutePath(path=PathString(f"{root.path}/{relative.path}"))
 
 
-class FakeBazelTarget:
-    tier = "system"
-
-    def normalize_target(self, target_identifier: str) -> DagNode:
-        if "#" in target_identifier:
-            u, r = target_identifier.split("#", 1)
-            return _make_dag_node(u, r)
-        return _make_dag_node(target_identifier, "")
-
-    def extract_node_dir(self, node: DagNode) -> NodeDirectory:
-        pkg = node.unit_address.split(":")[0].lstrip("/")
-        return NodeDirectory(path=PathString(pkg))
-
-
 class FakeRoleConfig:
     tier = "agent_session"
 
@@ -151,7 +135,7 @@ class FakeAgentConfig:
         return self._is_step_mode
 
 
-class FakeAgentStorage:
+class FakeDagStorage:
     tier = "system"
 
     def __init__(self) -> None:
@@ -178,23 +162,19 @@ class BazelNodeConfigImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         self.file_paths = FakeFilePaths("/workspace")
-        self.bazel_target = FakeBazelTarget()
         self.role_config = FakeRoleConfig()
         self.agent_config = FakeAgentConfig(is_step_mode=True)
-        self.storage = FakeAgentStorage()
+        self.storage = FakeDagStorage()
         self.manifest_loader = FakeManifestLoader()
 
         self.registry.register_instance(
             self.file_paths, keys=[FilePathManager], tier="system"
         )
         self.registry.register_instance(
-            self.bazel_target, keys=[BazelTarget], tier="system"
-        )
-        self.registry.register_instance(
             self.agent_config, keys=[AgentConfig], tier="system"
         )
         self.registry.register_instance(
-            self.storage, keys=[AgentStorage, DagStorage], tier="system"
+            self.storage, keys=[DagStorage], tier="system"
         )
         self.registry.register_instance(
             self.manifest_loader, keys=[BazelManifestLoader], tier="system"

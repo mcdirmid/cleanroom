@@ -888,6 +888,135 @@ else
     echo "PASS: c34 no BUILD.bazel created on failure"
 fi
 
+# Case 35: scaffold interface with dataclass constructors, init=False, properties, and polytype overrides
+mkdir -p "$tmp/c35/parts/agent/low" "$tmp/c35/parts/agent/lib" "$tmp/c35/parts/sandbox/low" "$tmp/c35/parts/sandbox/lib"
+echo "class AgentSessionTier: pass" > "$tmp/c35/parts/agent/lib/agent_session.py"
+cat > "$tmp/c35/parts/sandbox/low/tool_provider.pyi" <<'EOF'
+from dataclasses import dataclass
+from typing import Any, Callable, Mapping, NewType, Optional, Protocol, Sequence, Set
+from framework import data_type, operation, override, poly_type
+from agent_session import AgentSessionTier
+
+ParameterName = NewType("ParameterName", str)
+
+@dataclass(frozen=True, init=False)
+@data_type
+class NoInitData:
+    raw: str
+
+@poly_type
+class ParameterType[ActualT, WireT](Protocol):
+    @property
+    def actual_type(self) -> type[ActualT]:
+        ...
+
+    @property
+    def wire_type(self) -> type[WireT]:
+        ...
+
+    @operation
+    def convert(self, wire_value: WireT) -> ActualT:
+        ...
+
+@dataclass(frozen=True)
+@data_type
+class IdentityParameterType[T](ParameterType[T, T]):
+    target_type: type[T]
+
+    @property
+    @override
+    def actual_type(self) -> type[T]:
+        ...
+
+    @property
+    @override
+    def wire_type(self) -> type[T]:
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: T) -> T:
+        ...
+EOF
+
+(
+    cd "$tmp/c35"
+    python3 "$bin/lib_lint.py" --scaffold parts/sandbox/lib/tool_provider.py --pyi parts/sandbox/low/tool_provider.pyi
+)
+check "c35 scaffold created" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "class IdentityParameterType"
+check "c35 init=False preserved" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "@dataclass(frozen=True, init=False)"
+check "c35 target_type field preserved" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "target_type: type\[T\]"
+check "c35 property actual_type preserved" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "def actual_type"
+check "c35 polytype override returns target" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "return self.target_type"
+check "c35 convert returns wire" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "return wire_value"
+check "c35 import agent_session rewritten" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "from c35.parts.agent.lib.agent_session import AgentSessionTier"
+
+if python3 -c "
+import sys
+sys.path.insert(0, '$tmp')
+from c35.parts.sandbox.lib.tool_provider import IdentityParameterType
+ipt = IdentityParameterType(str)
+assert ipt.actual_type is str
+assert ipt.convert('abc') == 'abc'
+"; then
+    echo "PASS: c35 generated skeleton executes and instantiates correctly"
+else
+    echo "FAIL: c35 generated skeleton failed execution" >&2
+    fail=1
+fi
+
+# Case 36: scaffold and verify assembly module (*_asm.py) from *_asm.pyi specification
+mkdir -p "$tmp/c36/parts/demo/low" "$tmp/c36/parts/demo/lib"
+cat > "$tmp/c36/parts/demo/low/demo_asm.pyi" <<'EOF'
+def __initialize__() -> None:
+    """Demo assembly.
+
+    CONSTITUENTS:
+    - demo_worker_impl
+    """
+    ...
+EOF
+
+# 1. Uninitialized / empty assembly is rejected
+touch "$tmp/c36/parts/demo/lib/demo_asm.py"
+if ( cd "$tmp/c36" && python3 "$bin/lib_lint.py" parts/demo/lib/demo_asm.py --pyi parts/demo/low/demo_asm.pyi 2>"$tmp/c36/uninit.log" ); then
+    echo "FAIL: c36 expected rejection of empty assembly without --scaffold" >&2
+    fail=1
+else
+    echo "PASS: c36 rejected empty assembly without --scaffold"
+fi
+
+# 2. Assembly with empty CONSTITUENTS = () is rejected
+cat > "$tmp/c36/parts/demo/lib/demo_asm.py" <<'EOF'
+CONSTITUENTS = ()
+def __initialize__(registry=None): pass
+_initialize_ = __initialize__
+EOF
+if ( cd "$tmp/c36" && python3 "$bin/lib_lint.py" parts/demo/lib/demo_asm.py --pyi parts/demo/low/demo_asm.pyi 2>"$tmp/c36/empty_constituents.log" ); then
+    echo "FAIL: c36 expected rejection of empty CONSTITUENTS" >&2
+    fail=1
+else
+    echo "PASS: c36 rejected empty CONSTITUENTS"
+fi
+
+# 3. Scaffold creates assembly populated from demo_asm.pyi
+(
+    cd "$tmp/c36"
+    python3 "$bin/lib_lint.py" --scaffold parts/demo/lib/demo_asm.py --pyi parts/demo/low/demo_asm.pyi
+)
+check "c36 scaffold import" "$tmp/c36/parts/demo/lib/demo_asm.py" "from . import demo_worker_impl"
+check "c36 scaffold constituent" "$tmp/c36/parts/demo/lib/demo_asm.py" "demo_worker_impl,"
+check "c36 scaffold __initialize__" "$tmp/c36/parts/demo/lib/demo_asm.py" "def __initialize__"
+
+# 4. Mock constituent file so lib_lint passes
+touch "$tmp/c36/parts/demo/lib/demo_worker_impl.py"
+if ( cd "$tmp/c36" && python3 "$bin/lib_lint.py" parts/demo/lib/demo_asm.py --pyi parts/demo/low/demo_asm.pyi ); then
+    echo "PASS: c36 scaffolded assembly passed lib_lint verification"
+else
+    echo "FAIL: c36 scaffolded assembly failed lib_lint verification" >&2
+    fail=1
+fi
+
 exit "$fail"
 
 

@@ -363,8 +363,7 @@ For full analysis of grounding problems that resist prompt engineering, see **[`
 | **Module Resolution** | Subsystem assembly cross-package constituent imports | **SOLVED** | Full package paths mandated for cross-package assembly constituents in `*_asm.py`. |
 | **Test Verification** | Mock collaborator protocol return type mismatch | **SOLVED** | Strict protocol signature & property return type checking matching `low/*.pyi`. |
 | **Test Verification** | Phantom types and illegal `TypeAliasType` constructor calls | **SOLVED** | Replaced phantom types with standard typing mappings in `low_to_test.md`. |
-| **API Hygiene** | Residual legacy members and divergent class names | **SOLVED** | Strict contract parity pruning against `low/*.pyi` enforced in `low_to_lib.md`. |
-| **Type Hermeticity** | Per-target closed typing vs. global `pyrightconfig.json` | **UNSOLVED** *(Hard)* | Requires generating per-target config files passed via `--project <file>`. |
+| **Type Hermeticity** | Per-target dynamic typing vs. global `pyrightconfig.json` | **SOLVED** | Completely eliminated standalone `pyrightconfig.json`; verification is driven by dynamic `PYTHONPATH` resolution matching exact target dependencies, paired with package-level `pyproject.toml`. |
 | **Agent QA** | Natural language diagnostic efficacy verification | **UNSOLVED** *(Hard)* | Requires asynchronous Supervising LLM evaluation questionnaire protocol. |
 
 ---

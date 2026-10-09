@@ -2,14 +2,13 @@
 # LAST_CLEANED: 2026-10-08T12:55:00Z
 # LAST_CHANGED: 2026-10-06T16:03:00Z
 # CHANGE: test assembly initialization
-# CODE_HASH: 1941f0b184d5
+# CODE_HASH: d40af934a2e3
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_asm."""
 
 import unittest
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
-from update_with_ai.parts.agent.lib import agent_session
 from update_with_ai.parts.workspace.lib import (
     workspace_asm,
     workspace_provision,
@@ -24,7 +23,7 @@ class WorkspaceAsmTest(unittest.TestCase):
         registry = LifecycleRegistry()
         workspace_asm.__initialize__(registry)
 
-        with enter_phase(agent_session.agent_session, registry=registry):
+        with enter_phase("agent_session", registry=registry):
             reg = get_singleton(workspace_registry.WorkspaceRegistry)
             self.assertIsNotNone(reg)
 

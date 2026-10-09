@@ -1,18 +1,19 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: e2173373e2b0
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CHANGED: 2026-10-09T02:22:49Z
+# CHANGE: Implement ToolManager in tool_provider_impl.py
+# CODE_HASH: cb1750fb6400
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
-# Requirements specified in tool_provider_impl.pyi
-from typing import Any, Dict, Mapping, Optional, Set
-from . import tool_provider
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
+from __future__ import annotations
+from typing import Any, Dict, Mapping, Optional, Set, cast
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
 from update_with_ai.parts.agent.lib.agent_session import agent_session
+from . import tool_provider
 
+# Requirements specified in tool_provider_impl.pyi
 
 class ToolManager(tool_provider.ToolManager, Singleton):
     tier = agent_session
@@ -25,18 +26,15 @@ class ToolManager(tool_provider.ToolManager, Singleton):
         return dict(self._tools)
 
     def install_tool(self, tool: tool_provider.Tool) -> None:
-        self._tools[tool_provider.ToolName(tool.name)] = tool
+        self._tools[tool.name] = tool
 
     def execute_tool(
         self,
         name: tool_provider.ToolName,
-        wire_parameter_bindings: Mapping[
-            tool_provider.ParameterName, tool_provider.WireType
-        ],
+        wire_parameter_bindings: Mapping[tool_provider.ParameterName, tool_provider.WireType],
     ) -> tool_provider.ToolResponse:
-        tool = self._tools.get(name)
-        if tool is None:
-            installed = ", ".join(self._tools.keys())
+        if name not in self._tools:
+            installed = ", ".join(sorted(self._tools.keys()))
             return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
@@ -45,96 +43,64 @@ class ToolManager(tool_provider.ToolManager, Singleton):
                 ),
             )
 
-        raw_wire: Any = wire_parameter_bindings
-        if isinstance(raw_wire, Mapping):
-            wire_dict = {str(k): v for k, v in raw_wire.items()}
-        elif hasattr(
-            raw_wire, "bindings"
-        ):  # pragma: no cover (assumption: arguments conform to Mapping interface)
-            wire_dict = {str(k): v for k, v in getattr(raw_wire, "bindings")}
-        elif hasattr(
-            raw_wire, "items"
-        ):  # pragma: no cover (assumption: arguments conform to Mapping interface)
-            items_fn: Any = getattr(raw_wire, "items")
-            raw_items: Any = items_fn() if callable(items_fn) else items_fn
-            wire_dict = {str(k): v for k, v in list(raw_items)}
-        else:  # pragma: no cover (assumption: arguments conform to Mapping interface)
-            wire_dict = {}
+        tool = self._tools[name]
+        valid_parameters = ", ".join(sorted(tool.parameters.keys()))
 
-        params_by_name: dict[
-            tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]
-        ] = {}
-        for k, v in tool.parameters.items():
-            params_by_name[tool_provider.ParameterName(k)] = v
-
-        for p_name in wire_dict:
-            if p_name not in params_by_name:
-                valid_params = ", ".join(params_by_name.keys())
+        for param_name in wire_parameter_bindings:
+            if param_name not in tool.parameters:
                 return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=tool_provider.ToolResponseContent(
-                        f"Error: Unknown parameter '{p_name}' for tool '{name}'. Valid parameters: {valid_params}"
+                        f"Error: Unknown parameter '{param_name}' for tool '{tool.name}'. Valid parameters: {valid_parameters}"
                     ),
-                    reminder=tool_provider.ToolReminder(
-                        "Only declared parameters of the tool can be provided."
-                    ),
+                    reminder=tool_provider.ToolReminder("Only declared parameters of the tool can be provided."),
                 )
 
-        actual_bindings: dict[tool_provider.ToolParameter[Any, Any], Any] = {}
-        for p_name, p in params_by_name.items():
-            if p_name not in wire_dict:
-                if p.is_required:
-                    note = ""
-                    if p.missing_message is not None:
-                        note = p.missing_message(
-                            {tool_provider.ParameterName(k) for k in wire_dict.keys()}
-                        )
-                    if note:
-                        content = f"Error: Required parameter '{p_name}' missing for tool '{name}'. Note: {note}"
-                    else:
-                        content = f"Error: Required parameter '{p_name}' missing for tool '{name}'."
-                    return tool_provider.ToolResponse(
-                        is_failed=True,
-                        is_terminated=False,
-                        content=tool_provider.ToolResponseContent(content),
-                        reminder=tool_provider.ToolReminder(
-                            "Required parameters of the tool must be supplied."
-                        ),
-                    )
-                if p.default_value is not None:
-                    actual_bindings[p] = p.default_value
-            else:
-                raw_val = wire_dict[p_name]
-                try:
-                    conv_val = p.parameter_type.convert(raw_val)
-                except tool_provider.ParameterConversionError as e:
+        present_params: Set[tool_provider.ParameterName] = set(wire_parameter_bindings.keys())
+        for param_name, param in tool.parameters.items():
+            if param.is_required and param_name not in present_params:
+                if param.missing_message is not None:
+                    note = param.missing_message(present_params)
                     return tool_provider.ToolResponse(
                         is_failed=True,
                         is_terminated=False,
                         content=tool_provider.ToolResponseContent(
-                            f"Error: Invalid argument for parameter '{p_name}': {e.message}"
+                            f"Error: Required parameter '{param_name}' missing for tool '{tool.name}'. Note: {note}"
                         ),
-                        reminder=tool_provider.ToolReminder(
-                            "Parameters must match their declared wire types."
-                        ),
+                        reminder=tool_provider.ToolReminder("Required parameters of the tool must be supplied."),
                     )
-                actual_bindings[p] = conv_val
+                else:
+                    return tool_provider.ToolResponse(
+                        is_failed=True,
+                        is_terminated=False,
+                        content=tool_provider.ToolResponseContent(
+                            f"Error: Required parameter '{param_name}' missing for tool '{tool.name}'."
+                        ),
+                        reminder=tool_provider.ToolReminder("Required parameters of the tool must be supplied."),
+                    )
 
-        return tool.execute_tool(
-            tool_provider._ActionParameterBindings(
-                actual_bindings,
-                parameters_by_name=params_by_name,
-            )
-        )
+        actual_bindings: Dict[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType] = {}
+        for param_name, param in tool.parameters.items():
+            if param_name in wire_parameter_bindings:
+                wire_val = wire_parameter_bindings[param_name]
+                try:
+                    actual_val = param.parameter_type.convert(cast(Any, wire_val))
+                except tool_provider.ParameterConversionError as e:
+                    error_msg = e.message if hasattr(e, "message") else str(e)
+                    return tool_provider.ToolResponse(
+                        is_failed=True,
+                        is_terminated=False,
+                        content=tool_provider.ToolResponseContent(
+                            f"Error: Invalid argument for parameter '{param_name}': {error_msg}"
+                        ),
+                        reminder=tool_provider.ToolReminder("Parameters must match their declared wire types."),
+                    )
+                actual_bindings[param] = cast(tool_provider.SomeParameterActualType, actual_val)
+            elif not param.is_required and param.default_value is not None:
+                actual_bindings[param] = cast(tool_provider.SomeParameterActualType, param.default_value)
 
-    def execute_tool_with_arguments(
-        self,
-        name: tool_provider.ToolName,
-        arguments: Mapping[tool_provider.ParameterName, tool_provider.WireType],
-    ) -> tool_provider.ToolResponse:
-        bindings = tool_provider._WireParameterBindings(arguments)
-        return self.execute_tool(name, bindings)
+        return tool.execute_tool(actual_bindings)
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
@@ -144,36 +110,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         keys=[ToolManager, tool_provider.ToolManager],
         tier=agent_session,
     )
-    str_type = tool_provider.IdentityParameterType(str)
-    reg.register_instance(
-        str_type,
-        keys=[
-            tool_provider.IdentityParameterType,
-            tool_provider.ParameterType,
-        ],
-        tier=agent_session,
-    )
-    int_type = tool_provider.IdentityParameterType(int)
-    reg.register_instance(
-        int_type,
-        keys=[
-            tool_provider.IdentityParameterType,
-        ],
-        tier=agent_session,
-    )
-    bool_type = tool_provider.IdentityParameterType(bool)
-    reg.register_instance(
-        bool_type,
-        keys=[
-            tool_provider.IdentityParameterType,
-        ],
-        tier=agent_session,
-    )
-    float_type = tool_provider.IdentityParameterType(float)
-    reg.register_instance(
-        float_type,
-        keys=[
-            tool_provider.IdentityParameterType,
-        ],
-        tier=agent_session,
-    )
+
+_initialize_ = __initialize__

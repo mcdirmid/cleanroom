@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-08T15:45:00Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-08T15:45:00Z
 CHANGE: clarify starter template materialization for regenerable roles on check
-CODE_HASH: daa469d8e547
+CODE_HASH: 7405c91a686a
 -->
 
 # workspace_work interface component

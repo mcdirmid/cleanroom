@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-08T03:34:00Z
-# CHANGE: add pull metadata and deletion test cases
-# CODE_HASH: 9b0cdb118dfb
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CHANGED: 2026-10-09T02:39:58Z
+# CHANGE: test contamination tripwire in refreshed AGENTS.md
+# CODE_HASH: 75f1a65b33e5
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_sync_impl."""
@@ -152,6 +152,12 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, "cleanroom_python_roles.toml")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "MODULE.bazel")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "pyrightconfig.json")))
+            agents_md = os.path.join(ws_dir, "AGENTS.md")
+            self.assertTrue(os.path.isfile(agents_md))
+            with open(agents_md, "r", encoding="utf-8") as f:
+                agents_text = f.read()
+            self.assertIn("## Contamination Tripwire (Poison Pill)", agents_text)
+            self.assertIn("CRITICAL CONTAMINATION: I read a file outside my assigned role workspace", agents_text)
 
 
     def test_pull_updates_unmodified_writable_target_and_ensures_perms(self) -> None:

@@ -1,15 +1,15 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-07T18:18:00Z
-# CHANGE: verify template materialization in test_dispatch_get_work
-# CODE_HASH: 7cc15bee2164
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:47:23Z
+# LAST_CHANGED: 2026-10-09T21:45:06Z
+# CHANGE: Verify active nodes sequence synchronization on role config during get work dispatch
+# CODE_HASH: 40904e8266ae
+# QA_AUDIT: 2026-10-09T21:47:23Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for control_coordinate_impl."""
 
 import unittest
+from typing import List, Sequence
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
 from update_with_ai.parts.agent.lib import agent_node_config, agent_session
 from update_with_ai.parts.dag.lib import dag_storage
@@ -21,6 +21,22 @@ from update_with_ai.parts.control.lib import (
     control_work_scheduler,
 )
 from update_with_ai.parts.control.lib.control_coordinate_impl import SessionCoordinator
+
+
+class MockRoleConfig:
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.role = agent_node_config.RoleName("dev")
+        self.nodes: List[dag_storage.DagNode] = []
+        self.version = agent_node_config.ExecutionVersion(0)
+
+    def set_role(self, role: agent_node_config.RoleName) -> None:
+        self.role = role
+
+    def set_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
+        self.nodes = list(nodes)
+        self.version = agent_node_config.ExecutionVersion(int(self.version) + 1)
 
 
 class MockVerificationEvaluator:
@@ -128,6 +144,12 @@ class ControlCoordinateImplTest(unittest.TestCase):
             keys=[dag_storage.DagStorage],
             tier=system,
         )
+        self.mock_role_config = MockRoleConfig()
+        self.registry.register_instance(
+            self.mock_role_config,
+            keys=[agent_node_config.RoleConfig],
+            tier=agent_session.agent_session,
+        )
         self.registry.register_instance(
             MockNodeConfig(),
             keys=[agent_node_config.NodeConfig],
@@ -153,6 +175,7 @@ class ControlCoordinateImplTest(unittest.TestCase):
             self.assertEqual(len(self.coordinator.open_targets), 1)
             self.assertEqual(len(self.mock_storage.materialized), 1)
             self.assertEqual(self.mock_storage.materialized[0], schedule.tasks[0].node)
+            self.assertEqual(list(self.mock_role_config.nodes), [schedule.tasks[0].node])
 
     def test_dispatch_check_files_all_work(self) -> None:
         with enter_phase(agent_session.agent_session, registry=self.registry):

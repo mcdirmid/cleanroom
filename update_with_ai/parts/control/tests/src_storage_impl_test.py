@@ -1,8 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-08T00:46:00Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-08T00:46:00Z
 # CHANGE: Unit tests for src_storage_impl
-# CODE_HASH: 40ec0b9d7099
+# CODE_HASH: a6a7b6b37dc2
+# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for src_storage_impl aligned with low-level specifications."""

@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-08T00:52:53Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-08T00:30:58Z
 CHANGE: Update dag_storage operations: mark_node_dirty, mark_subgraph_clean, add_feedback_message, and refined change message semantics
 CODE_HASH: 0239f4adf890

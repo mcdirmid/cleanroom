@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-08T00:46:00Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-08T00:46:00Z
 # CHANGE: Define src_storage_impl low-level specification
-# CODE_HASH: 3c78bb141480
-# LOW_QA_AUDIT: 2026-10-08T00:46:00Z
+# CODE_HASH: 8c4de6fac767
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom storage implementation low-level specification."""

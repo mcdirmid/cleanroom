@@ -1,23 +1,19 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: ad2ecf334360
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T03:02:02Z
+# CHANGE: Remove unreachable post-normalization absolute-path check in create_workspace_path
+# CODE_HASH: 5ec3e027f8c9
+# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
-# Requirements specified in file_paths_impl.pyi
+from __future__ import annotations
 import os
 from typing import Optional
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
 from . import file_paths
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    system,
-)
 
+# Requirements specified in file_paths_impl.pyi
 
 class FilePathManager(file_paths.FilePathManager, Singleton):
     tier = system
@@ -26,33 +22,26 @@ class FilePathManager(file_paths.FilePathManager, Singleton):
         pass
 
     def create_host_path(self, path: file_paths.PathString) -> file_paths.HostPath:
-        return file_paths.HostPath(path=path)
+        return file_paths.HostPath(path=file_paths.PathString(path))
 
-    def create_absolute_path(
-        self, path: file_paths.PathString
-    ) -> file_paths.AbsolutePath:
+    def create_absolute_path(self, path: file_paths.PathString) -> file_paths.AbsolutePath:
         if not os.path.isabs(path):
             raise file_paths.PathValidationError(
-                file_paths.ValidationMessage(f"Path is not absolute: {path}")
+                message=file_paths.ValidationMessage(f"Path is not absolute: {path}")
             )
-        return file_paths.AbsolutePath(file_paths.PathString(os.path.normpath(path)))
+        return file_paths.AbsolutePath(path=file_paths.PathString(os.path.normpath(path)))
 
-    def create_workspace_path(
-        self, path: file_paths.PathString
-    ) -> file_paths.WorkspacePath:
+    def create_workspace_path(self, path: file_paths.PathString) -> file_paths.WorkspacePath:
         if os.path.isabs(path) or path.startswith("/") or path.startswith("\\"):
             raise file_paths.PathValidationError(
-                file_paths.ValidationMessage(
-                    f"Workspace path must be relative, got absolute: {path}"
-                )
+                message=file_paths.ValidationMessage(f"Workspace path must be relative, got absolute: {path}")
             )
-        return file_paths.WorkspacePath(file_paths.PathString(os.path.normpath(path)))
+        norm = os.path.normpath(path)
+        return file_paths.WorkspacePath(path=file_paths.PathString(norm))
 
-    def resolve_path(
-        self, root: file_paths.AbsolutePath, relative: file_paths.WorkspacePath
-    ) -> file_paths.AbsolutePath:
-        joined = os.path.join(root.path, relative.path)
-        return file_paths.AbsolutePath(file_paths.PathString(os.path.normpath(joined)))
+    def resolve_path(self, root: file_paths.AbsolutePath, relative: file_paths.WorkspacePath) -> file_paths.AbsolutePath:
+        combined = os.path.normpath(os.path.join(root.path, relative.path))
+        return file_paths.AbsolutePath(path=file_paths.PathString(combined))
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
@@ -62,3 +51,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         keys=[FilePathManager, file_paths.FilePathManager],
         tier=system,
     )
+
+_initialize_ = __initialize__

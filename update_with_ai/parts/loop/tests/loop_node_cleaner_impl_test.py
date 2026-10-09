@@ -1,32 +1,22 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 2f9612f28885
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:46:18Z
+# LAST_CHANGED: 2026-10-09T22:20:00Z
+# CHANGE: Verify role configuration on role config without pre-priming nodes during session setup
+# CODE_HASH: 3c8df6108608
+# QA_AUDIT: 2026-10-09T21:46:18Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for loop_node_cleaner_impl aligned with grounding specifications."""
 
+from dataclasses import dataclass
 import unittest
 from typing import Any, List, Optional, Sequence, Set, cast
 
-from update_with_ai.parts.agent.lib.agent_file_alias import (
-    BoundFile,
-    FileContent,
-    ReadOnlyFile,
-    ReadWriteFile,
-    RelativePath,
-    UnboundFile,
-)
-from update_with_ai.parts.core.lib.file_paths import PathString, WorkspacePath
 from update_with_ai.parts.agent.lib.agent_node_config import (
     NodeConfig,
     RoleConfig,
     RoleName,
 )
-from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_storage import (
     AgentStorage,
     NodeDefinition,
@@ -58,13 +48,20 @@ from update_with_ai.parts.loop.lib.loop_node_cleaner_impl import (
     __initialize__,
 )
 from update_with_ai.parts.sandbox.lib.sandbox import Sandbox
-from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
-from update_with_ai.parts.sandbox.lib.tool_provider import (
-    ToolResponse,
-    ToolResponseContent,
-)
-from update_with_ai.parts.sandbox.lib import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+
+
+@dataclass(frozen=True)
+class MockBoundFile:
+    relative_path: str
+    owning_node: Optional[DagNode] = None
+
+
+@dataclass
+class MockResponse:
+    content: str = ""
+    is_failed: bool = False
+    is_terminated: bool = True
 
 
 def _make_dag_node(unit_address: str, role_address: str = "lib") -> DagNode:
@@ -75,10 +72,6 @@ def _make_dag_node(unit_address: str, role_address: str = "lib") -> DagNode:
 
 def _make_change(content: str) -> DagMessage:
     return cast(DagMessage, ChangeMessage(content=MessageContent(content)))
-
-
-def _make_workspace_path(path: str) -> WorkspacePath:
-    return WorkspacePath(PathString(path))
 
 
 class MockStorage:
@@ -109,7 +102,7 @@ class MockStorage:
 
 
 class MockSandbox:
-    tier = agent_session
+    tier = "agent_session"
 
     def __init__(self) -> None:
         self.has_modifications = False
@@ -120,7 +113,7 @@ class MockSandbox:
 
 
 class MockConversation:
-    tier = agent_session
+    tier = "agent_session"
 
     def __init__(self) -> None:
         self._messages: List[ConversationMessage] = []
@@ -133,7 +126,7 @@ class MockConversation:
 
     def append_tool_response(
         self,
-        tool_response: ToolResponse,
+        tool_response: Any,
         tool_call_id: str,
         tool_name: str,
         tool_arguments: str,
@@ -141,9 +134,9 @@ class MockConversation:
         self._messages.append(
             ConversationMessage(
                 role=MessageRole("tool"),
-                content=ConversationContent(str(tool_response.content)),
+                content=ConversationContent(str(getattr(tool_response, "content", ""))),
                 tool_call_id=ToolCallId(tool_call_id) if tool_call_id else None,
-                tool_name=tool_provider.ToolName(tool_name) if tool_name else None,
+                tool_name=cast(Any, tool_name) if tool_name else None,
             )
         )
 
@@ -152,13 +145,13 @@ class MockConversation:
 
 
 class MockRunner:
-    tier = agent_session
+    tier = "agent_session"
 
     def __init__(self) -> None:
         self.outcome = LoopOutcome(
-            response=ToolResponse(
-                is_failed=False, is_terminated=True, content=ToolResponseContent("Done")
-            ),
+            response=cast(Any, MockResponse(
+                is_failed=False, is_terminated=True, content="Done"
+            )),
             conversation=ModelRequest(messages=[]),
         )
         self.run_count = 0
@@ -184,31 +177,24 @@ class MockRunner:
 
 
 class MockNodeConfig:
-    tier = agent_session
+    tier = "agent_session"
 
     def __init__(self) -> None:
-        self.read_only_files: Set[ReadOnlyFile] = set()
-        self.read_write_files: Set[ReadWriteFile] = set()
-        self.guide_file: Optional[UnboundFile] = None
+        self.read_only_files: Set[Any] = set()
+        self.read_write_files: Set[Any] = set()
+        self.guide_file: Optional[Any] = None
         self.allows_step_mode: bool = True
         self.is_step_mode: bool = False
-        self.templates: Set[tuple[BoundFile, FileContent]] = set()
+        self.templates: Set[tuple[Any, Any]] = set()
         self.template_parameters: dict = {}
         self.guide = None
-        self.blame_targets_by_node: dict[DagNode, Set[BoundFile]] = {}
+        self.blame_targets_by_node: dict[DagNode, Set[Any]] = {}
         self.verification_checks: Sequence = []
         self.verification_checks_by_node: dict[DagNode, list] = {}
         self.src_file_alias_by_node: dict[DagNode, str] = {}
         self.verification_success_message: Optional[str] = None
         self.feedback: Sequence[str] = []
         self.per_node_info_by_node: dict = {}
-
-
-class MockTemplateFormatter:
-    tier = agent_session
-
-    def format_template(self, content: str, parameters: dict) -> str:
-        return content
 
 
 class MockLogger:
@@ -230,7 +216,6 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.history = MockConversation()
         self.runner = MockRunner()
         self.node_cfg = MockNodeConfig()
-        self.formatter = MockTemplateFormatter()
         self.logger = MockLogger()
 
         self.registry.register_instance(
@@ -238,19 +223,16 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         )
         self.registry.register_instance(self.storage, keys=[AgentStorage], tier=system)
         self.registry.register_instance(
-            self.sandbox, keys=[Sandbox], tier=agent_session
+            self.sandbox, keys=[Sandbox], tier="agent_session"
         )
         self.registry.register_instance(
-            self.history, keys=[Conversation], tier=agent_session
+            self.history, keys=[Conversation], tier="agent_session"
         )
         self.registry.register_instance(
-            self.runner, keys=[LoopDriver], tier=agent_session
+            self.runner, keys=[LoopDriver], tier="agent_session"
         )
         self.registry.register_instance(
-            self.node_cfg, keys=[NodeConfig], tier=agent_session
-        )
-        self.registry.register_instance(
-            self.formatter, keys=[TemplateFormatter], tier=agent_session
+            self.node_cfg, keys=[NodeConfig], tier="agent_session"
         )
 
     def test_clean_advancement_delivers_changes(self) -> None:
@@ -277,9 +259,8 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         """CUJ: Session outcome signaling blame delivers feedback message to blamed dependency."""
         node = _make_dag_node("//pkg:unit", "lib")
         dep_blamed = _make_dag_node("//pkg:dep_blamed", "lib")
-        bf = ReadOnlyFile(
-            relative_path=RelativePath("dep_blamed.py"),
-            workspace_path=_make_workspace_path("pkg/dep_blamed.py"),
+        bf = MockBoundFile(
+            relative_path="dep_blamed.py",
             owning_node=dep_blamed,
         )
         self.node_cfg.blame_targets_by_node = {node: {bf}}
@@ -289,11 +270,11 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.dependencies[node] = {DagDependency(node=dep_blamed)}
         self.storage.messages[node] = {_make_change("dirty")}
         self.runner.outcome = LoopOutcome(
-            response=ToolResponse(
+            response=cast(Any, MockResponse(
                 is_failed=False,
                 is_terminated=True,
-                content=ToolResponseContent("Blamed //pkg:dep_blamed: Broken API"),
-            ),
+                content="Blamed //pkg:dep_blamed: Broken API",
+            )),
             conversation=ModelRequest(messages=[]),
         )
 
@@ -318,11 +299,11 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         )
         self.storage.messages[node] = {_make_change("dirty")}
         self.runner.outcome = LoopOutcome(
-            response=ToolResponse(
+            response=cast(Any, MockResponse(
                 is_failed=True,
                 is_terminated=True,
-                content=ToolResponseContent("Fatal tool failure"),
-            ),
+                content="Fatal tool failure",
+            )),
             conversation=ModelRequest(messages=[]),
         )
 
@@ -363,11 +344,11 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             if attempts == 1:
                 raise RuntimeError("Transient crash")
             return LoopOutcome(
-                response=ToolResponse(
+                response=cast(Any, MockResponse(
                     is_failed=False,
                     is_terminated=True,
-                    content=ToolResponseContent("Success"),
-                ),
+                    content="Success",
+                )),
                 conversation=ModelRequest(messages=[]),
             )
 
@@ -384,9 +365,8 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         """CUJ: Extracting target and explanation from blame responses with backticks, colons, or package prefixes."""
         node = _make_dag_node("//pkg:unit", "lib")
         dep_blamed = _make_dag_node("//pkg:dep_blamed", "lib")
-        bf = ReadOnlyFile(
-            relative_path=RelativePath("dep_blamed.py"),
-            workspace_path=_make_workspace_path("pkg/dep_blamed.py"),
+        bf = MockBoundFile(
+            relative_path="dep_blamed.py",
             owning_node=dep_blamed,
         )
         self.node_cfg.blame_targets_by_node = {node: {bf}}
@@ -406,11 +386,11 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         for fmt in blame_formats:
             self.storage.messages[dep_blamed] = set()
             self.runner.outcome = LoopOutcome(
-                response=ToolResponse(
+                response=cast(Any, MockResponse(
                     is_failed=False,
                     is_terminated=True,
-                    content=ToolResponseContent(fmt),
-                ),
+                    content=fmt,
+                )),
                 conversation=ModelRequest(messages=[]),
             )
             with enter_phase(system, registry=self.registry) as scope:
@@ -432,13 +412,11 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.messages[node] = {_make_change("dirty")}
         self.node_cfg.blame_targets_by_node = {node: set()}
         self.runner.outcome = LoopOutcome(
-            response=ToolResponse(
+            response=cast(Any, MockResponse(
                 is_failed=False,
                 is_terminated=True,
-                content=ToolResponseContent(
-                    "Blamed //pkg:unknown_target: Unconfigured blame error"
-                ),
-            ),
+                content="Blamed //pkg:unknown_target: Unconfigured blame error",
+            )),
             conversation=ModelRequest(messages=[]),
         )
 
@@ -455,9 +433,8 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         node = _make_dag_node("//pkg:unit", "lib")
         dep_feedback = _make_dag_node("//pkg:feedback_dep", "lib")
         dep_non_feedback = _make_dag_node("//pkg:guide_dep", "lib")
-        bf = ReadOnlyFile(
-            relative_path=RelativePath("feedback_dep.py"),
-            workspace_path=_make_workspace_path("pkg/feedback_dep.py"),
+        bf = MockBoundFile(
+            relative_path="feedback_dep.py",
             owning_node=dep_feedback,
         )
         self.node_cfg.blame_targets_by_node = {node: {bf}}
@@ -470,13 +447,11 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         }
         self.storage.messages[node] = {_make_change("dirty")}
         self.runner.outcome = LoopOutcome(
-            response=ToolResponse(
+            response=cast(Any, MockResponse(
                 is_failed=False,
                 is_terminated=True,
-                content=ToolResponseContent(
-                    "Blamed //pkg:feedback_dep: Contract violation"
-                ),
-            ),
+                content="Blamed //pkg:feedback_dep: Contract violation",
+            )),
             conversation=ModelRequest(messages=[]),
         )
 
@@ -546,8 +521,8 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             cont = cleaner.clean([node1, node2])
             self.assertTrue(cont)
 
-    def test_clean_session_configures_role_without_prepopulating_nodes(self) -> None:
-        """CUJ: Session setup configures RoleConfig.role but leaves RoleConfig.nodes empty for get_work."""
+    def test_clean_session_configures_role_on_role_config(self) -> None:
+        """Postcondition: Session setup configures RoleConfig.role."""
         node = _make_dag_node("//pkg:role_target", "lib")
         self.storage.definitions[node] = NodeDefinition(
             task_prompt=TaskPrompt("Prompt")

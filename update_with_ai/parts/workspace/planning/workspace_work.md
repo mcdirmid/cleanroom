@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-08T15:45:00Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-08T15:45:00Z
 CHANGE: update is_pending_target_dirty_disk contract for regenerable roles template materialization
-CODE_HASH: 788f49448f99
-SPEC_QA_AUDIT: 2026-10-07T23:58:18Z
+CODE_HASH: a3ad69a4c8ea
+SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
 -->
 
 # workspace_work interface component

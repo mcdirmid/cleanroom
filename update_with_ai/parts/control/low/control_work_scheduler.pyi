@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
-# CODE_HASH: 8d77c99fce31
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# CODE_HASH: a97c2464ddda
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_work_scheduler."""
@@ -89,4 +89,3 @@ class WorkScheduler(InTier[AgentSessionTier], Protocol):
         - Formats aggregated prompt lines for specified candidate nodes.
         """
         ...
-

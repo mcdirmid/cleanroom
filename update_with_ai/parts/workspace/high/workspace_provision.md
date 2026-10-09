@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-08T18:30:00Z
 CHANGE: document stub role dependencies synthesis in commissioning contract
-CODE_HASH: 726de18091db
+CODE_HASH: 29781301e33e
 -->
 
 # workspace_provision interface component

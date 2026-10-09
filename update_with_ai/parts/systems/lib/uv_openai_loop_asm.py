@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T21:19:01Z
+# CHANGE: new file
+# CODE_HASH: ca5dd5008016
+# --- END CLEANROOM METADATA ---
+
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry

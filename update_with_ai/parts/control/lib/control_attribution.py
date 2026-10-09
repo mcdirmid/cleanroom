@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-06T10:45:00Z
 # CHANGE: new file
-# CODE_HASH: c557c0c97117
+# CODE_HASH: 0c94c4366bfa
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -66,4 +66,3 @@ class AttributionCoordinator(Protocol):
     def match_blame_target(
         self, node: dag_storage.DagNode, val: Any, val_str: str
     ) -> Optional[agent_file_alias.BoundFile]: ...
-

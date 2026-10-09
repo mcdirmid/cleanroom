@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: 7c8f86129fc3
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# CODE_HASH: 3eac2570857c
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 import json
@@ -14,7 +14,7 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Type
 
-from . import uv_manifest_loader, uv_target
+from . import uv_manifest_loader
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.agent.lib import agent_file_alias, agent_config, agent_node_config
 from update_with_ai.parts.agent.lib.agent_session import agent_session
@@ -27,12 +27,6 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
-
-try:
-    from update_with_ai.parts.bazel.lib import bazel_manifest_loader, bazel_target
-except ImportError:
-    bazel_manifest_loader = None  # type: ignore
-    bazel_target = None  # type: ignore
 
 
 class _CommandVerificationCheck(agent_node_config.VerificationCheck):
@@ -156,14 +150,6 @@ def _search_paths(rel_paths: Sequence[str], pkg_path: str = "") -> List[str]:
 
 
 def _norm_node(target_str: str) -> dag_storage.DagNode:
-    node_util = _safe_get_singleton(uv_target.UvTarget)
-    if node_util is None and bazel_target is not None:
-        node_util = _safe_get_singleton(bazel_target.BazelTarget)
-    if node_util is not None:
-        try:
-            return node_util.normalize_target(target_str)
-        except Exception:
-            pass
     if "#" in target_str:
         u, r = target_str.split("#", 1)
         return dag_storage.DagNode(unit_address=dag_storage.UnitAddress(u), role_address=dag_storage.RoleAddress(r))
@@ -171,23 +157,14 @@ def _norm_node(target_str: str) -> dag_storage.DagNode:
 
 
 def _extract_pkg(n: dag_storage.DagNode) -> str:
-    node_util = _safe_get_singleton(uv_target.UvTarget)
-    if node_util is None and bazel_target is not None:
-        node_util = _safe_get_singleton(bazel_target.BazelTarget)
-    if node_util is not None:
-        try:
-            return node_util.extract_node_dir(n).path.lstrip("/")
-        except Exception:
-            pass
     unit = n.unit_address
-    if unit.startswith("//"): unit = unit[2:]
+    if unit.startswith("//"):
+        unit = unit[2:]
     return unit.split(":")[0] if ":" in unit else os.path.dirname(unit)
 
 
 def _get_manifest(n: dag_storage.DagNode) -> Optional[Any]:
     loader = _safe_get_singleton(uv_manifest_loader.UvManifestLoader)
-    if loader is None and bazel_manifest_loader is not None:
-        loader = _safe_get_singleton(bazel_manifest_loader.BazelManifestLoader)
     if loader is not None:
         try:
             return loader.retrieve_manifest(n)
@@ -200,7 +177,7 @@ def _make_bound(pkg: str, s: str, cls: Any, owner: dag_storage.DagNode) -> Any:
     norm_rel = os.path.normpath(s.lstrip("/") if (s.startswith(pkg + "/") or (pkg and s.startswith("/" + pkg + "/"))) else os.path.join(pkg, s))
     return cls(
         relative_path=agent_file_alias.RelativePath(norm_rel),
-        workspace_path=_make_host_path(agent_file_alias.WorkspacePath, norm_rel),
+        workspace_path=_make_host_path(file_paths.WorkspacePath, norm_rel),
         owning_node=owner,
     )
 

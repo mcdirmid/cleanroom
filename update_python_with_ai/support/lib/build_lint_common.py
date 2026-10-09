@@ -815,6 +815,86 @@ def check_lib_structure(file_path: str) -> list[str]:
     return errors
 
 
+def extract_asm_constituents(spec_file: str) -> list[str]:
+    """Extract constituent module stems declared under CONSTITUENTS: in an assembly specification."""
+    constituents: list[str] = []
+    if not spec_file or not os.path.isfile(spec_file):
+        return constituents
+    try:
+        with open(spec_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        tree = ast.parse(content, filename=spec_file)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == "__initialize__"
+            ):
+                doc = ast.get_docstring(node)
+                if doc and "CONSTITUENTS:" in doc:
+                    in_constituents = False
+                    for line in doc.splitlines():
+                        sline = line.strip()
+                        if sline == "CONSTITUENTS:":
+                            in_constituents = True
+                        elif in_constituents:
+                            if sline.startswith("- "):
+                                constituents.append(sline[2:].strip())
+                            elif sline.endswith(":") and not sline.startswith("-"):
+                                in_constituents = False
+    except Exception:
+        pass
+    return constituents
+
+
+def check_asm_structure(module_path: str, spec_file: Optional[str] = None) -> list[str]:
+    """Check that assembly modules define CONSTITUENTS and __initialize__, matching spec_file."""
+    errors: list[str] = []
+    base = os.path.basename(module_path)
+    if not base.endswith("_asm.py") or not os.path.exists(module_path):
+        return errors
+
+    try:
+        with open(module_path, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=module_path)
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return errors
+
+    actual_constituents: Optional[list[str]] = None
+    has_initialize = False
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and t.id == "CONSTITUENTS":
+                    if isinstance(node.value, (ast.Tuple, ast.List)):
+                        actual_constituents = [
+                            elt.id for elt in node.value.elts if isinstance(elt, ast.Name)
+                        ]
+        elif (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "__initialize__"
+        ):
+            has_initialize = True
+
+    if actual_constituents is None:
+        errors.append(f"{module_path}: error: assembly module must define 'CONSTITUENTS'")
+    elif not actual_constituents:
+        errors.append(f"{module_path}: error: assembly CONSTITUENTS must not be empty")
+
+    if not has_initialize:
+        errors.append(f"{module_path}: error: assembly module must define '__initialize__'")
+
+    if spec_file and os.path.isfile(spec_file) and actual_constituents is not None:
+        expected = extract_asm_constituents(spec_file)
+        missing = [c for c in expected if c not in actual_constituents]
+        if missing:
+            msg = ", ".join(sorted(missing))
+            errors.append(
+                f"{module_path}: error: assembly CONSTITUENTS is missing declared constituent(s): {msg}"
+            )
+    return errors
+
+
+
 FRAMEWORK_DECORATORS = {
     "singleton_type",
     "poly_type",
@@ -2721,13 +2801,12 @@ def compute_allowed_spec_deps(
     sibling_stems: Optional[Sequence[str]] = None,
     extra_pyi_paths: Optional[Sequence[str]] = None,
     raw_deps: Optional[Sequence[str]] = None,
-    max_depth: int = 1,
+    max_depth: int = 0,
 ) -> set[str]:
-    """Compute the set of allowed module stems for a lib or test module based on the low-level specification.
+    """Compute the set of allowed module stems for a lib or test module based strictly on the low-level specification.
 
     Derives allowed dependencies directly from the low-level specification (.pyi),
-    including companion interface specifications, sibling modules, test frameworks,
-    and external specifications.
+    including companion interface specifications and declared external specifications.
     """
     allowed: set[str] = set()
     if stem:
@@ -2798,16 +2877,6 @@ def compute_allowed_spec_deps(
             except OSError:
                 pass
 
-            if is_test:
-                p_dir = os.path.dirname(p)
-                if os.path.isdir(p_dir):
-                    try:
-                        for asm_cand in os.listdir(p_dir):
-                            if asm_cand.endswith("_asm.pyi"):
-                                allowed.add(asm_cand[:-4])
-                    except OSError:
-                        pass
-
             if depth < max_depth:
                 p_dir = os.path.dirname(p)
                 for d in d_list:
@@ -2816,10 +2885,6 @@ def compute_allowed_spec_deps(
                         next_visit.append(cand)
         to_visit = next_visit
         depth += 1
-
-    if sibling_stems:
-        for s in sibling_stems:
-            allowed.add(s)
 
     if is_test:
         allowed.update(["unittest", "mock", "pytest"])

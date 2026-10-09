@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T05:19:03Z
 CHANGE: Add delegated statement, align session config ontology, eliminate regex and cache mechanics, and decompose parameter catalog
 CODE_HASH: ab2d297ab584

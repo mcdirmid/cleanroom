@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-08T03:34:00Z
-# CHANGE: test decommission ignores untracked __init__.py
-# CODE_HASH: dc5d0be75d00
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CHANGED: 2026-10-09T02:39:58Z
+# CHANGE: test contamination tripwire in generated AGENTS.md
+# CODE_HASH: c1c2e950c765
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_provision_impl."""
@@ -99,6 +99,10 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertTrue(os.path.isfile(role_cfg))
             agents_md = os.path.join(ws_dir, "AGENTS.md")
             self.assertTrue(os.path.isfile(agents_md))
+            with open(agents_md, "r", encoding="utf-8") as f:
+                agents_text = f.read()
+            self.assertIn("## Contamination Tripwire (Poison Pill)", agents_text)
+            self.assertIn("CRITICAL CONTAMINATION: I read a file outside my assigned role workspace", agents_text)
 
             # Decoupled project configurations copied as read-only
             ws_pyproj = os.path.join(ws_dir, "pyproject.toml")

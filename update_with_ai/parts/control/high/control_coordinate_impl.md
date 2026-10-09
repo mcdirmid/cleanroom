@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 5394f5d244d6
+LAST_CLEANED: 2026-10-09T21:29:23Z
+LAST_CHANGED: 2026-10-09T21:29:23Z
+CHANGE: Synchronize active nodes sequence on role config during get work dispatch
+CODE_HASH: 0c5768f0bf06
 -->
 
 # control_coordinate_impl implementation component
@@ -30,7 +30,7 @@ When coordinating active work:
 
 - When resolving a default target, the session coordinator selects the sole open target if exactly one remains, or selects the target corresponding to the most recently modified open file when multiple targets are open.
 
-- When dispatching get work, the session coordinator invokes the work scheduler using either the provided subgraph or directory scope, registers newly scheduled nodes as open targets, and returns the synthesized work schedule.
+- When dispatching get work, the session coordinator invokes the work scheduler using either the provided subgraph or directory scope, registers newly scheduled nodes as open targets, updates the sequence of active nodes on role config, and returns the synthesized work schedule.
 
 - When dispatching check files, the session coordinator evaluates verification for the specified target file if provided, or evaluates verification across all open session targets if no target is specified, returning sanitized diagnostic results and indicating whether cached results were reused.
 

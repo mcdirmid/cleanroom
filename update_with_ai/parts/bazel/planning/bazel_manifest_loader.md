@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T05:29:07Z
 CHANGE: Streamline manifest resolution by removing redundant dependency contract
-CODE_HASH: 0cbf42bd9903
+CODE_HASH: 43249d7a0c72
+SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
 -->
 
 # bazel_manifest_loader interface component

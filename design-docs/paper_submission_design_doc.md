@@ -1,14 +1,18 @@
-# Design Document: Pushing General-Purpose Languages to the Background via Epistemic Specification and Primal-Dual Certified Synthesis
+# Design Document: How to Stop Worrying About Executable Code with AI Cleanroom Synthesis
 
-**Target Venue:** ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI)  
+**Target Venue:** ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI) / OOPSLA / ICSE  
 **Track:** Research Track (Language Design, Program Synthesis, Formal Methods, Type Systems, Runtime Systems)  
 **Status:** Authoritative Submission Design & Theoretical Specification  
+**Working Title:** *How to Stop Worrying About Executable Code with AI Cleanroom Synthesis*  
 
 ---
 
 ## 1. Executive Summary & Research Thesis
 
 ### 1.0 Working Title Candidates & Selection Matrix
+
+**Selected Primary Working Title:**  
+> **How to Stop Worrying About Executable Code with AI Cleanroom Synthesis**  
 
 To ensure the paper is **prolific without over-promising**—balancing academic gravitas, visionary impact, and technical honesty—this section catalogs candidate titles across multiple strategic registers: from direct, plain-English titles that avoid heavy jargon to formal PL-theoretic formulations.
 
@@ -94,6 +98,7 @@ To ensure the paper is **prolific without over-promising**—balancing academic 
 
 | Option | Memorability | Technical Precision | Jargon Level | Risk of Over-Promising | Best Fit Venue / Audience |
 | :--- | :---: | :---: | :---: | :---: | :--- |
+| **How to Stop Worrying About Executable Code with AI Cleanroom Synthesis** *(Selected)* | ★★★★★ | ★★★★☆ | **Low** (Direct & grounded) | **Minimal** | Primary Paper Title / PLDI, OOPSLA, ICSE |
 | **Writing Specs, Not Code: Building Systems with Two Independent AIs** | ★★★★★ | ★★★★☆ | **Very Low** (No big words) | **Minimal** (Accurate to what it delivers) | Keynote / Broad Systems & PL Audience |
 | **Code You Never Read: Generating Software from Verified Specs** | ★★★★★ | ★★★☆☆ | **Very Low** (No big words) | **Minimal** | General Software Engineering / OOPSLA |
 | **Cleanroom: Building Real Software with Two AIs That Never Talk** | ★★★★★ | ★★★★☆ | **Very Low** (Punchy & direct) | **Minimal** | High-Impact Systems Track |
@@ -148,6 +153,19 @@ The Cleanroom Synthesis-as-Compilation Paradigm:
 ```
 
 > *Scope Note on Low-Level Specifications:* In full engineering environments, interface specifications may be elaborated from informal architectural canvases or conversational requirements. In this paper, we establish formal semantics, verification guarantees, and empirical evaluations exclusively at the **Low-Level Specification** layer ($S = \langle \Sigma, \mathcal{C} \rangle$). All human authoring, contract boundaries, compiler validation passes, and synthesis evaluations operate strictly over typed interface stubs (`low/*.pyi`) and their formal behavioral contracts. High-level human intent and conversational planning are treated as informal context (or related work), outside the boundary of the formal compilation calculus.
+
+### 1.1.1 The Operational Crisis of Human Code Review & The Empirical Risks of "Zero-Review" DevAI
+
+The rapid emergence of autonomous Developer AI (DevAI) has fundamentally broken the traditional software engineering review lifecycle. Historically, human peer review served as the primary gatekeeper for software reliability. However, combining machine-speed code generation with mandatory line-by-line human inspection creates an unsustainable operational bottleneck:
+
+1. **The Automation-Mediated Reality (The Abandonment of Code Inspection)**: Large-scale empirical analysis of modern software repositories reveals an unsettling industry reality: **the vast majority of AI-generated pull requests receive no rigorous human code review at all**. Confronted with massive diffs generated in seconds, human engineers increasingly abandon line-by-line reading, shifting instead into high-level "prompt steerers" who skim natural language summaries and ask agents to re-plan or re-generate.
+2. **Empirical Defect Spikes in "Zero-Review" AI Code**: Deploying generative coding agents without a formal verification architecture introduces severe systemic instability. Large-scale empirical data from developer analytics platforms (such as CodeRabbit) reveal a stark quality delta between human-authored and unvetted AI-generated pull requests:
+   - **Total & Critical Defect Surges**: AI-co-authored pull requests exhibit **1.7× more total issues and critical findings** than human-authored pull requests.
+   - **Logic & Correctness Regressions**: Core business logic and correctness errors jump by **75%**.
+   - **Security Vulnerability Escalation**: Security vulnerabilities increase by **2.74×**.
+   - **Performance Bottlenecks**: Performance degradations and I/O bottlenecks spike by **8×** when local verification guardrails are omitted.
+3. **The Core Paradigm Pivot: From Code Comprehension to Trust Calibration**:
+   The crisis of modern software development is not that AI generates code too slowly, but that humans cannot audit it at generation speed. Reviewing AI-generated software has ceased to be a **code comprehension problem**—human brains cannot scale to audit millions of lines of machine-generated procedural logic—and has transformed into a **trust calibration problem**: *How can an autonomous software engineering architecture deterministically guarantee correctness, security, and performance when humans never inspect the executable code?*
 
 ### 1.2 The Human Developer: Specification Custodian and Reviewer
 In a paradigm where programming language code is demoted to ephemeral intermediate bytecode, what is the role of the human developer? Human engineers are not eliminated; rather, their cognitive labor is elevated from low-level mechanical debugging to architectural curation:
@@ -238,6 +256,77 @@ A rigorous PL submission cannot simply report empirical benchmark scores on SWE-
 ---
 
 ## 2. Theoretical Foundations: Beyond Classical N-Version Programming
+
+### 2.0 The State of Practice: Implicit vs. Explicit Specifications, and the Collapse of Agent-to-Agent Consensus
+
+To understand why contemporary Developer AI (DevAI) workflows fail at scale, we must first analyze the state of practice in autonomous code generation and review. As established in Section 1.1.1, the sheer velocity of AI code generation has rendered traditional line-by-line human code review an unsustainable bottleneck. In response, modern engineering workflows are pivoting toward autonomous agent-to-agent verification pipelines.
+
+#### 2.0.1 The Naive Multi-Agent Consensus Loop
+In typical industrial DevAI architectures, human review is replaced by a conversational multi-agent debate loop:
+
+```
+┌─────────────────┐       Submits Code       ┌─────────────────┐
+│  Coding Agent   │ ───────────────────────> │  Critic Agent   │
+└─────────────────┘                          └─────────────────┘
+                                                      │
+                                                Reviews Code
+                                                      │
+                                                      ▼
+┌─────────────────┐      Peer Debate         ┌─────────────────┐
+│ Executive Agent │ <─────────────────────── │ Security Agent  │
+│ (Final Verdict) │                          └─────────────────┘
+└─────────────────┘
+```
+
+While aesthetically appealing, these unconstrained conversational consensus loops suffer from severe epistemic vulnerabilities: shared conversational context windows leak reasoning tokens between agents, inducing **epistemic contagion** and mutual confirmation bias. When the coding agent introduces a subtle semantic error, the critic agent frequently inherits the identical hallucinated assumption, resulting in polite agreement on defective code.
+
+#### 2.0.2 The Battleground: Implicit vs. Explicit Specifications
+How does an autonomous multi-agent system judge code quality when no formal requirement document (such as a rigorous PRD or formal specification) exists? The DevAI industry is currently split into two competing philosophical and architectural paradigms:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              THE BATTLEGROUND: IMPLICIT VS. EXPLICIT SPECIFICATIONS         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Approach A: The Implicit Paradigm ("The Codebase is Truth")                │
+│  - Concept: Live codebase, ASTs, and git history form the runtime contract. │
+│  - Mechanism: Centralized context engine indexes ASTs & dependency graphs.   │
+│  - Unofficial Spec: Dynamically calculated by fusing prompt + old codebase. │
+│  - Verification Hook: Execution-based differential testing against old code.│
+│  - Scratchpad: Episodic summaries, transient markdown ledgers.              │
+│                                                                             │
+│  Approach B: The Explicit Paradigm (Spec-Driven Development / SDD)          │
+│  - Concept: Prompts expanded into structured, machine-readable manifests.   │
+│  - Mechanism: Requirements Agent compiles intent into JSON/Markdown schemas.│
+│  - Verification Hook: Rigid compilation and compliance gate against spec.   │
+│  - Bidirectional Sync: Agent refactors spec manifest first before code.     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+| Architectural Attribute | The Implicit Paradigm ("Codebase as Truth") | The Explicit Paradigm (Agentic SDD) | Cleanroom Synthesis-as-Compilation |
+| :--- | :--- | :--- | :--- |
+| **Ground Truth Source** | Live Codebase, AST Index, & Local Environment | Version-Controlled Manifests / JSON Graphs | Typed Interface Model ($S = \langle \Sigma, \mathcal{C} \rangle$) |
+| **Primary Artifact** | Executable Code (Python, Rust, C++) | Natural Language / Markdown Manifest | Typed Stubs (`.pyi`) & Bipartite Contracts |
+| **Verification Mechanism** | AST Analysis, Differential Testing, Agent Debate | Spec Compliance Linters & Multi-Agent Review | Primal-Dual Zero-Sum Certificate Game ($\mathcal{I} = 0$) |
+| **Systemic Failure Mode** | Context Decay, Regression Cascades, Hallucination | Specification Rot, High Orchestration Overhead | Deterministic Non-Convergence (Fail-Safe Blame) |
+| **Human Role** | Code Inspector / Emergency Debugger | Document Author & Requirement Reviewer | Specification Custodian & Blame Arbiter |
+
+#### 2.0.3 The Fatal Vulnerabilities of the Implicit Paradigm: Context Drift & Semantic Decay
+While the implicit paradigm is popular for rapid prototyping ("vibe coding"), it lacks sound alignment guarantees. Without strict, external, machine-readable specifications, autonomous agent pipelines inevitably succumb to three fatal failure modes:
+
+1. **The "Summary of a Summary" Effect (Lossy Context Compression)**:  
+   As an agentic session expands across multi-file refactors, orchestration frameworks continuously compress earlier conversation turns and scratchpads to stay within finite context window budgets. In this recursive summarization process, fine-grained boundary conditions, defensive exception semantics, and subtle architectural invariants are the first details discarded. The agent's operational memory degrades into an approximation of an approximation, leading to silent regression cascades.
+2. **The Confirmation Bias of the Self-Reviewer (Grading One's Own Homework)**:  
+   When the same model family or shared conversational thread is tasked with reviewing code against its own implicit scratchpad, it suffers from severe self-affirmation bias. If the coding agent misinterprets an architectural design pattern, that misunderstanding is encoded directly into its review prompt. The critic agent validates the code against the *author's mistaken mental model* rather than ground-truth requirements, allowing severe correctness defects to escape undetected.
+3. **Statistically Dominant Hallucinations (Pre-Training Distribution Drift)**:  
+   In the absence of a rigid, explicit specification contract, neural models default to the most probable token paths in their pre-training distributions ($\mathcal{D}_\theta$). When encountering complex, proprietary, or domain-specific architectural patterns, the agent unconsciously substitutes generic open-source idioms found in public GitHub training corpora. This pulls bespoke enterprise architectures backward toward generic boilerplate, introducing subtle incompatibilities with upstream subsystem assumptions.
+
+#### 2.0.4 Cleanroom's Resolution: Transcending the Battle via Epistemic Isolation
+Cleanroom resolves the conflict between implicit context engines and explicit specifications by synthesizing their core strengths into a mathematically sound compilation calculus:
+* **Explicit Business Logic Boundaries ("The What")**: Cleanroom mandates formal **Typed Interface Specifications** ($S = \langle \Sigma, \mathcal{C} \rangle$). By expressing intent as typed stubs with bi-conditional bipartite contracts ($[s^+], [s^-]$), Cleanroom eliminates the "Summary of a Summary" effect and immunizes the system against pre-training distribution drift.
+* **Closed-World Hermetic Verification ("The How")**: Rather than relying on conversational peer debates between critic agents, Cleanroom enforces **Double Hermetic Confinement ($\mathcal{I} = 0$)**. The Primal Synthesizer $\mathcal{S}$ and Dual Certifier $\mathcal{D}$ are physically isolated into separate processes with zero cross-talk, deriving implementations and verification harnesses independently.
+* **Trust Calibration via Deterministic Gatekeeping**: Cleanroom transforms the DevAI trust crisis from a human code comprehension burden into a **deterministic compiler gate**: code is admitted into the executable build cache if, and only if, it achieves 100% statement and branch coverage against the independently synthesized adversarial certifier.
 
 ### 2.1 The Fallacy of Naive N-Version Synthesis
 N-Version Programming (NVP), introduced by Avizienis (1985), proposed building fault-tolerant critical systems by having independent human teams implement identical specifications, executing all versions concurrently, and voting on outputs at runtime. In 1986, Knight and Leveson published their seminal empirical study disproving NVP's foundational independence assumption: **statistically correlated coincident errors occurred across independent teams**. The root cause was twofold:
@@ -1119,15 +1208,15 @@ A fundamental invariant of Cleanroom's language design is the rigorous separatio
 │                                                                             │
 │  1. Declarative Interface Component: S_iface (e.g., workspace_registry.pyi) │
 │     • Types, Protocols, Data Models (@data_type), Sum Types (@variant).     │
-│     • Method bodies are pure non-executable ellipses (...).                 │
-│     • Contains ZERO executable code and has ZERO unit tests! (V_iface = ∅)  │
+│     • Value constructors and polytype method overrides (e.g. converters).   │
+│     • Zero standalone unit test suites (V_iface = ∅).                       │
 │                                                                             │
 │  2. Low-Level Implementation Spec: S_impl (workspace_registry_impl.pyi)    │
 │     • Concrete class binding: class WorkspaceRegistry(workspace_registry.P) │
 │     • Binds concrete contracts, internal dependencies, and lifecycle tiers. │
 │                                                                             │
 │  3. Synthesized Implementation: P_impl (lib/workspace_registry_impl.py)    │
-│     • THE ONLY COMPONENT CONTAINING EXECUTABLE CODE (P ∈ L_IR).             │
+│     • THE ONLY COMPONENT WITH SUBSYSTEM BEHAVIORAL LOGIC (P ∈ L_IR).        │
 │     • Synthesized by Primal Oracle S under chmod 444 isolation.             │
 │                                                                             │
 │  4. Dual Verification Certifier: V_impl (tests/workspace_registry_impl_test)│
@@ -1138,16 +1227,16 @@ A fundamental invariant of Cleanroom's language design is the rigorous separatio
 ```
 
 1. **Interface Components ($S_{\text{iface}} = \langle \Sigma_{\text{iface}}, \mathcal{C}_{\text{iface}} \rangle$, files `<name>.pyi` / `<name>.py`)**:
-   Interface components define declarative type signatures, protocol abstractions, sum types (`@variant`), and immutable record structures (`@data_type` / frozen dataclasses). Method declarations contain no algorithmic bodies, terminating strictly in non-executable ellipses (`...`). 
-   - **Crucial Invariant**: Interface components contain **no algorithmic execution code** and have **ZERO unit tests** ($\mathcal{V}_{\text{iface}} = \emptyset$). Authoring a unit test for an abstract protocol or empty type stub is mathematically vacuous.
+   Interface components define declarative type signatures, protocol abstractions, sum types (`@variant`), immutable record structures (`@data_type` / frozen dataclasses), value constructors, and polytype method overrides (e.g., standard parameter type converters in `tool_provider.py`). 
+   - **Crucial Invariant**: Interface components contain **no subsystem algorithmic business logic** and have **ZERO standalone unit test suites** ($\mathcal{V}_{\text{iface}} = \emptyset$). Authoring a standalone unit test suite for an abstract protocol or empty type stub is mathematically vacuous.
 
 2. **Implementation Components ($S_{\text{impl}}$, files `<name>_impl.pyi` and `<name>_impl.py`)**:
    Implementation components declare the concrete realization of one or more interfaces (`class ConcreteComponent(interface.Component): ...`). They specify low-level implementation contracts and bind internal subsystem dependencies.
-   - **Crucial Invariant**: Implementation components (`*_impl.py`) are the **sole targets of executable code synthesis** ($P \in \mathcal{L}_{IR}$, synthesized into `lib/<name>_impl.py`).
+   - **Crucial Invariant**: Implementation components (`*_impl.py`) are the **sole targets of subsystem algorithmic code synthesis** ($P \in \mathcal{L}_{IR}$, synthesized into `lib/<name>_impl.py`).
 
 3. **Dual Verification Certifiers ($V$, files `tests/<name>_impl_test.py`)**:
    Verification test suites are synthesized independently by dual certifier $\mathcal{D}$ strictly from the implementation specification $S_{\text{impl}}$ and associated interface contracts.
-   - **Crucial Invariant**: Because interface components contain no executable code, **only implementation components (`_impl`) have verification test suites**. Every verification test suite in Cleanroom is an `_impl_test.py` targeting an `_impl.py`.
+   - **Crucial Invariant**: While interface components can define concrete data types, public constructors, and polytype method overrides (e.g., standard parameter converters in `tool_provider.py`), **only implementation components (`_impl`) have standalone verification test suites**. Every verification test suite in Cleanroom is an `_impl_test.py` certifying an implementation component `_impl.py` against its specification contracts.
 
 4. **The Modularity Invariant for Implementation Components**:
    - In Cleanroom's dependency DAG, when component $A$ depends on component $B$, $A$'s implementation $A_{\text{impl}}$ imports strictly $B$'s interface component $S_{B,\text{iface}}$ (`import B`), never $B$'s implementation $B_{\text{impl}}$ ($\mathcal{I}(A_{\text{impl}}; B_{\text{impl}} \mid S_{B,\text{iface}}) = 0$).
@@ -1485,7 +1574,7 @@ A critical limitation of existing code generation benchmarks (e.g., HumanEval, M
 
 In real-world software engineering, systems are not monolithic single files or isolated functions; they are **compositional graphs of collaborating modules** communicating across typed interfaces. Standard benchmarks provide zero insight into how LLMs handle inter-module dependencies, interface stub linking, or modular decomposition strategies.
 
-Cleanroom directly addresses this gap: all four of our systems benchmark suites are structured as **acyclic dependency DAGs of fine-grained modular units**. Each unit imports strictly the typed interface stubs (`low/*.pyi`) of its dependencies under OS-enforced isolation (`chmod 444`), preventing implementation peeking ($\mathcal{I}(P_u; P_w \mid S) = 0$). Crucially, interface components (`*.pyi` / `*.py`) define only declarative types, protocols, and data models—they contain zero executable code and have zero tests. All executable logic lives strictly in implementation components (`*_impl.py`), which are the sole targets of library code synthesis ($P$) and verification test certification ($V$). Furthermore, Section 5.5 (RQ3) directly evaluates our modularization strategy by taking large monolithic implementation components (> 1,000–3,000 LOC) and dividing them into fine-grained collaborating `_impl` components.
+Cleanroom directly addresses this gap: all four of our systems benchmark suites are structured as **acyclic dependency DAGs of fine-grained modular units**. Each unit imports strictly the typed interface stubs (`low/*.pyi`) of its dependencies under OS-enforced isolation (`chmod 444`), preventing implementation peeking ($\mathcal{I}(P_u; P_w \mid S) = 0$). Crucially, interface components (`*.pyi` / `*.py`) establish declarative protocols, data types, value constructors, and polytype method overrides (e.g., standard type converters in `tool_provider.py`) without requiring standalone verification suites. All core subsystem business logic lives strictly in implementation components (`*_impl.py`), which are the sole targets of library code synthesis ($P$) and verification test certification ($V$). Furthermore, Section 5.5 (RQ3) directly evaluates our modularization strategy by taking large monolithic implementation components (> 1,000–3,000 LOC) and dividing them into fine-grained collaborating `_impl` components.
 
 #### 5.2.2 The "Parser Generator Question": Why Domain-Specific Generators Preempt Neural Synthesis
 
@@ -1661,7 +1750,7 @@ Therefore, evaluating our modularization strategy cannot mean dividing interface
 │       Lifecycle state machine transitions, dispatch coordinator, task queue.│
 │     • workspace_tool_impl (~800 LOC lib, ~250 LOC test)                     │
 │       Sandboxed subprocess containment, tool execution, timeout enforcement.│
-│     [Interfaces: registry, provision, sync, work, tool: NO CODE, NO TESTS]  │
+│     [Interfaces: registry, provision, sync, work, tool: TYPED DATA & PROTOCOLS, NO TEST SUITES]  │
 │                                                                             │
 │  CASE STUDY 2: Mini-SQLite Relational Query & B-Tree Storage Engine (~1,500)│
 │  ├─ Condition Monolith: sqlite_engine_monolith_impl (~1,500 LOC + 800 test) │
@@ -1674,7 +1763,7 @@ Therefore, evaluating our modularization strategy cannot mean dividing interface
 │       Row record serialization, slotted page offsets, secondary index keys. │
 │     • query_exec_impl (~500 LOC lib, ~350 LOC test)                         │
 │       Iterator query execution, sequential/index scan, join, transactions.  │
-│     [Interfaces: btree_pager, table_heap, query_exec: NO CODE, NO TESTS]    │
+│     [Interfaces: btree_pager, table_heap, query_exec: TYPED DATA & PROTOCOLS, NO TEST SUITES]    │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -1686,7 +1775,7 @@ Therefore, evaluating our modularization strategy cannot mean dividing interface
 
 2. **Condition Modular Cleanroom (Divided Component Decomposition)**:
    - The capability space is divided into decoupled implementation components (5 for Workspace, 3 for Mini-SQLite), with each component $< 850$ LOC (averaging ~400 LOC).
-   - Each implementation component realizes its own declarative interface component (`*.pyi`), which contains strictly declarative types, protocols, and data models with zero code and zero tests.
+   - Each implementation component realizes its own declarative interface component (`*.pyi`), which defines typed protocols, data models, constructors, and polytype method overrides without requiring standalone verification test suites.
    - Components depend on upstream units strictly via imported interface stubs under `chmod 444` isolation ($\mathcal{I}(P_u; P_w \mid S) = 0$).
    - Each implementation component is synthesized, audited, and verified independently to 100% normalized statement coverage before composition.
 
@@ -2039,6 +2128,9 @@ The PLDI and POPL communities have recently focused intense effort on making LLM
    - *Cleanroom Advance*: Cleanroom complements specification navigation by introducing **Branch-to-Specification Mining (AST Inoculation)**. Rather than relying solely on user prompts to clarify ambiguous specs, Cleanroom actively mutates the synthesized implementation AST to expose un-asserted boundary paths, mechanically surfacing hidden assumptions back into binding low-level specification contracts.
 5. **The Missing Dimension: Double Hermetic Confinement ($\mathcal{I} = 0$)**:
    - In all contemporary LLM synthesis literature (PLDI/POPL/ICSE), LLMs either operate in a single-agent self-repair loop or participate in unconstrained multi-agent dialogue where conversational history is shared. This causes fatal epistemic contamination and coincident hallucination. Cleanroom is the first to introduce **Kernel-Enforced Confinement** (`chmod 444`, isolated processes), formally proving that suppressing mutual information ($\mathcal{I}(C_P; C_V) = 0$) and maximizing task asymmetry eliminates accidental agreement.
+6. **Conversational Multi-Agent Consensus Loops vs. Primal-Dual Sandboxed Gatekeeping (2024–2026)**:
+   - *State of the Art*: Emerging DevAI workflows (e.g., ChatDev, MetaGPT, CodeRabbit review bots) deploy multi-agent consensus loops where Coding, Critic, Security, and Executive agents critique code through iterative natural-language dialogues. Other industrial systems adopt the "Implicit Paradigm" ("the codebase is truth"), indexing ASTs and attempting differential testing without explicit specifications.
+   - *Cleanroom Advance*: Unconstrained conversational debate fails due to the **Confirmation Bias of the Self-Reviewer**, **Epistemic Contagion** across shared prompts, and the **"Summary of a Summary" context degradation effect**. Cleanroom demonstrates that conversational consensus is structurally unsuited for software verification. Instead, Cleanroom separates agents with **physical, process-level isolation ($\mathcal{I} = 0$)**, replaces conversational critiques with **asymmetric task derivation ($X \to Y$ vs. $X \times Y \to \mathbb{B}$)**, and enforces trust via an **uncompromising, deterministic dynamic compiler gate** requiring 100% statement and branch coverage.
 
 ## 7. Threats to Validity & Mitigation
 
@@ -2063,11 +2155,11 @@ The artifact package will be released under an open-source license with complete
 - Raw evaluation logs, mutation kill tables, and LaTeX figure generators.
 
 ### 8.2 Paper Outline & Milestone Schedule (12 Pages ACM SIGPLAN Format)
-- **§1 Introduction**: The crisis of code maintenance; The Cleanroom Thesis; The Human Developer as Specification Custodian (and LLMs as specification drafters); The Philosophy of Testability (why specs have zero tests and tests verify code adherence); The Modularity-Specification Trade-Off (seam pressure and why broken specs increase); Summary of contributions.
-- **§2 Theoretical Foundations**: Fallacy of N-version programming; Reframing Knight & Leveson (Gatekeeping vs. Voting, Discordant Failure vs. Concordant Agreement); The Crucial Role of Edge-Case Coverage; Bipartite Boundary Principle; Primal-Dual Certificate Game; Concurrency as Executable Verification Harnesses; Historical lineage (DO-178C Level A, IV&V Verification vs. Validation, IBM Cleanroom Triad and Chinese Wall, Anti-Debugging Principle, divergence from Statistical Usage Testing, Davis-Weyuker Pseudo-Oracles, Beck's Double-Entry Bookkeeping); Chain-of-Thought task asymmetry & Littlewood-Miller negative covariance; Compositional Assume-Guarantee; Branch-to-Specification Edge-Case Mining; The Language Primitive Illusion and Syntactic Platform Symmetry; The Fail-Safe Invariant.
+- **§1 Introduction**: The crisis of code maintenance; The operational review crisis and empirical risks of zero-review DevAI (CodeRabbit defect surges); The pivot from code comprehension to trust calibration; The Cleanroom Thesis; The Human Developer as Specification Custodian (and LLMs as specification drafters); The Philosophy of Testability (why specs have zero tests and tests verify code adherence); The Modularity-Specification Trade-Off (seam pressure and why broken specs increase); Summary of contributions.
+- **§2 Theoretical Foundations**: The state of practice: Implicit vs. Explicit specifications (Codebase-as-Truth vs. Agentic SDD); Fatal vulnerabilities of implicit agent consensus (Summary-of-a-Summary effect, Self-Review Confirmation Bias, Statistically Dominant Hallucinations); Fallacy of N-version programming; Reframing Knight & Leveson (Gatekeeping vs. Voting, Discordant Failure vs. Concordant Agreement); The Crucial Role of Edge-Case Coverage; Bipartite Boundary Principle; Primal-Dual Certificate Game; Concurrency as Executable Verification Harnesses; Historical lineage (DO-178C Level A, IV&V Verification vs. Validation, IBM Cleanroom Triad and Chinese Wall, Anti-Debugging Principle, divergence from Statistical Usage Testing, Davis-Weyuker Pseudo-Oracles, Beck's Double-Entry Bookkeeping); Chain-of-Thought task asymmetry & Littlewood-Miller negative covariance; Compositional Assume-Guarantee; Branch-to-Specification Edge-Case Mining; The Language Primitive Illusion and Syntactic Platform Symmetry; The Fail-Safe Invariant.
 - **§3 The Typed Specification Model & Verification Calculus**: Syntax of low-level specifications $S = \langle \Sigma, \mathcal{C} \rangle$; Contract slugs as authoring scaffolding and their wipeability during synthesis; Interface vs. Implementation (`_impl`) architectural invariant; Primal-Dual game under Double Hermetic Confinement; Accidental Agreement Elimination (Theorem 1); and Compositional Inductive Soundness (Theorem 2).
 - **§4 Verification Toolchain & Blame Calculus**: Two-pass deterministic gateway; AST-normalized statement coverage and specification reverse-engineering; Semantic failure translation without code debugging; Non-convergence spec fault escalation; and Verification Soundness (Theorem 3).
 - **§5 Evaluation**: Pre-existing complete oracle benchmarks (CPython Stdlib with Specification Gap analysis, Mini-SQLite, Mini-Git, Raft Consensus); The modularity gap in existing benchmarks; Prior-Knowledge Probing Protocol; Modular decomposition vs. monolithic synthesis (Cleanroom Workspace and Mini-SQLite component division); Specification Pressure evaluation; and empirical results across RQ1–RQ6 (coincident failure analysis, boundary mutation kill rate, Chain-of-Thought task asymmetry, branch-to-spec mining, controlled ungrounding, DAG batching concurrency, model spectrum dynamics, evolution benchmark, and concurrency soundness with specialized triage).
-- **§6 Related Work**: Detailed positioning relative to Program Synthesis, Type Systems, N-Version Programming & Pseudo-Oracles, Independent V&V (DO-178C, TDD Double-Entry Bookkeeping), SMT/Property-based Fuzzing, and SIGPLAN descendants (Differential Testing/Csmith, MVE Compiler Diversity, APR Test Suite Overfitting).
+- **§6 Related Work**: Detailed positioning relative to Program Synthesis, Type Systems, N-Version Programming & Pseudo-Oracles, Independent V&V (DO-178C, TDD Double-Entry Bookkeeping), SMT/Property-based Fuzzing, SIGPLAN descendants (Differential Testing/Csmith, MVE Compiler Diversity, APR Test Suite Overfitting), and Conversational Multi-Agent DevAI Review Loops.
 - **§7 Threats to Validity**: Internal, external, and construct validity mitigations.
 - **§8 Conclusion**: Pushing programming languages to the background.

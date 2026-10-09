@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-08T18:30:00Z
-# CHANGE: synchronize read-only test stubs for stub role dependencies
-# CODE_HASH: 259e1b6a3cfe
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CHANGED: 2026-10-09T02:39:58Z
+# CHANGE: add contamination tripwire section to regenerated AGENTS.md
+# CODE_HASH: 57f68ee8eebd
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_sync_impl."""
@@ -579,6 +579,17 @@ def _write_role_agents_md(
 1. **Workspace Boundary**: All commands and tool invocations MUST execute strictly within this workspace directory (`.`). You are strictly prohibited from passing any other directory (such as `main_workspace_root` or `../cleanroom`) as `Cwd` or running commands outside this workspace.
 2. **Git Operations Prohibited**: This is a projected cleanroom workspace, not a git repository. Never invoke `git` commands (`git checkout`, `git restore`, `git reset`, etc.) under any circumstances.
 3. **Main Repository Inviolability**: The main workspace is strictly read-only and off-limits to direct agent actions. All interaction with main occurs exclusively through the prescribed `bin/` tools.
+
+## Contamination Tripwire (Poison Pill)
+**ZERO TOLERANCE FOR READING OUT-OF-BOUNDS FILES.**
+
+If you read ANY file outside of your assigned role workspace (via ANY tool such as `view_file`, shell commands like `cat`/`head`, scripts, or any other mechanism):
+1. **YOU ARE PERMANENTLY CONTAMINATED.**
+2. **ALL WORK MUST CEASE IMMEDIATELY.** You are strictly prohibited from performing any further work, authoring code, modifying files, running verification checks, or submitting targets (`bin/submit`).
+3. **IMMEDIATE ABORT**: Your ONLY permitted action is to immediately report the exact contamination to the user and STOP all tool usage:
+   > `CRITICAL CONTAMINATION: I read a file outside my assigned role workspace ([path]). This session is compromised and terminated.`
+
+This is an absolute tripwire. There are NO exceptions for debugging, diagnosing tracebacks, inspecting imports, or reading dependencies.
 
 ## Fail-Stop & Reporting Protocol (Do NOT Self-Heal)
 If any cleanroom binary (`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/submit`) fails due to:

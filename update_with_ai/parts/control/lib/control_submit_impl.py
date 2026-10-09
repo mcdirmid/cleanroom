@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-06T11:45:00Z
-# CHANGE: handle get_messages defensively for mock storage
-# CODE_HASH: 38f7d8edf49c
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T22:40:00Z
+# CHANGE: Remove initial implementation modification constraint on submission
+# CODE_HASH: 5d45e5406ad0
+# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -273,23 +273,7 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
                         message=f"Error: In-batch dependency '{dep.unit_address}:{dep.role_address}' must be submitted before dependent targets.",
                     )
 
-        # 3. Initial implementation and feedback checks
-        node_msgs = (
-            storage.get_messages(target_node)
-            if hasattr(storage, "get_messages")
-            else []
-        )
-        is_initial_implement = any(
-            isinstance(m, dag_storage.ChangeMessage)
-            and str(m.content).strip().lower().startswith("implement ")
-            for m in node_msgs
-        )
-        if is_initial_implement and not has_modifications:
-            return control_submit.SubmissionOutcome(
-                accepted=False,
-                message="Error: Initial implementation task requires workspace file modifications before submitting.",
-            )
-
+        # 3. Session feedback check
         cfg = get_singleton(agent_node_config.NodeConfig)
         if getattr(cfg, "feedback", None) and not has_modifications:
             return control_submit.SubmissionOutcome(
@@ -320,14 +304,9 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
                     message="Error: Change summaries are not permitted when submitting without workspace file modifications.",
                 )
 
-        # 5. Commit clean state and record change message
+        # 5. Commit clean state with change description
         change_desc = dag_storage.ChangeDescription(summary_str) if summary_str else None
         storage.mark_node_clean(target_node, change_desc)
-        if summary_str:
-            storage.add_message(
-                dag_storage.ChangeMessage(content=dag_storage.MessageContent(summary_str)),
-                to=target_node,
-            )
 
         return control_submit.SubmissionOutcome(
             accepted=True,

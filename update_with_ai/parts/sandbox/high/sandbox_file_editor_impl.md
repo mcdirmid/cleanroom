@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
-LAST_CHANGED: 2026-10-05T04:57:18Z
-CHANGE: Standardize on canonical check files tool over singular check file tool
-CODE_HASH: d110da470b5d
+LAST_CLEANED: 2026-10-09T21:29:17Z
+LAST_CHANGED: 2026-10-09T21:29:17Z
+CHANGE: Contract replace file content tool installation for agent session
+CODE_HASH: b387c8c2a0b3
 -->
 
 # sandbox_file_editor_impl implementation component
@@ -22,7 +22,7 @@ Unchecked writes to source code can introduce partial edits, exceed LLM window c
 
 ## Types and Behavior
 
-The edit manager provides the replace file content tool for the agent session, and provides a can write operation validating write access for a read-write file.
+The replace file content tool is installed for the agent session to enable targeted text replacement in declared read-write files. The edit manager provides a can write operation validating write access for a read-write file.
 
 The edit manager exposes whether workspace file writes occurred during the session by comparing current workspace file content against their in-band code hash, tracks a file update revision that increments whenever workspace files are updated, and computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of the content. The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
 

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-08T15:45:00Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-08T15:45:00Z
 # CHANGE: add template regeneration to run_check_files grounding
-# CODE_HASH: 7a8b9c0d1e2f
-# LOW_QA_AUDIT: 2026-10-08T12:00:00Z
+# CODE_HASH: 727fcdb047ed
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_tool_impl."""

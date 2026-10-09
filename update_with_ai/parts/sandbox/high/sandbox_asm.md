@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
 LAST_CHANGED: 2026-10-05T04:57:48Z
 CHANGE: Standardize on canonical check files tool over singular check file tool in assembly description
-CODE_HASH: 250b3b84336d
+CODE_HASH: 2fca53857f7b
 -->
 
 # sandbox_asm assembly component

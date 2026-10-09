@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: b4f2b273795e
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T22:20:00Z
+# CHANGE: Record change summary during clean status transition without appending dirty change message
+# CODE_HASH: e6f3f1a11088
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_submit."""
@@ -50,7 +50,7 @@ class SubmissionCoordinator(InTier[AgentSessionTier], Protocol):
         - When auditor role supplies a change summary, MUST reject submission.
         - When files modified and change summary omitted, MUST reject submission.
         - When files unmodified and change summary supplied, MUST reject submission.
-        - When accepted, MUST mark target node clean in graph storage and record change message.
+        - When accepted, MUST mark target node clean in graph storage with the change summary.
         """
         ...
 
@@ -92,5 +92,3 @@ class SubmissionCoordinator(InTier[AgentSessionTier], Protocol):
     ) -> Tuple[str, str, str]:
         """Parses part directory, unit name, and role name from file path."""
         ...
-
-

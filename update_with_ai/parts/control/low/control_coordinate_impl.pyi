@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-07T18:18:00Z
-# CHANGE: add template materialization to dispatch_get_work grounding docstring
-# CODE_HASH: 5052072fc1a2
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:39:12Z
+# LAST_CHANGED: 2026-10-09T21:39:12Z
+# CHANGE: Synchronize active nodes sequence on role config during get work dispatch
+# CODE_HASH: 159d93725e07
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_coordinate_impl."""
@@ -108,7 +107,8 @@ class SessionCoordinator(
         GROUNDING:
         - Grounded via WorkScheduler.schedule_work from control_work_scheduler,
           materializing starter templates via DagStorage.materialize_template,
-          and populating newly discovered tasks as OPEN nodes in the session registry.
+          populating newly discovered tasks as OPEN nodes in the session registry,
+          and updating the sequence of active nodes on RoleConfig via RoleConfig.set_nodes.
         """
         ...
 

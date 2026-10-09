@@ -1,8 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-08T00:46:00Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-07T18:18:00Z
 # CHANGE: support label resolution and role template fallbacks in materialize_template
-# CODE_HASH: 2537a4546420
+# CODE_HASH: 5d0a7834f272
+# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 import os
@@ -16,6 +18,7 @@ from update_with_ai.parts.dag.lib import dag_storage
 from . import src_metadata
 from support.lib.lifecycle import (
     LifecycleRegistry,
+    LifecycleResolutionError,
     Singleton,
     get_active_scope,
     get_ambient_system_scope,
@@ -84,7 +87,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         if manifest_loader is not None:
             try:
                 manifest_loader.load_manifest(node)
-            except Exception:
+            except (LifecycleResolutionError, LookupError, AttributeError, RuntimeError, OSError):
                 pass
 
     def _resolve_source_path(self, node: dag_storage.DagNode) -> Optional[Path]:
@@ -104,7 +107,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                 root, file_paths.WorkspacePath(file_paths.PathString(rel_path))
             )
             return Path(resolved.path)
-        except Exception:
+        except (LifecycleResolutionError, LookupError, AttributeError, ValueError, OSError):
             return Path(os.path.abspath(os.path.join(root_str, rel_path)))
 
     def get_node_definition(
@@ -441,45 +444,35 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()
         role_def: Any = None
         main_repo = None
-        try:
-            from update_with_ai.parts.workspace.lib import workspace_registry
-            reg = None
-            try:
-                reg = get_singleton(workspace_registry.WorkspaceRegistry)
-            except Exception:
-                pass
-            if reg is None:
-                default_cls = getattr(workspace_registry, "_DefaultWorkspaceRegistry", None)
-                if default_cls is not None:
-                    reg = default_cls()
-            if reg is not None:
-                main_repo = reg.discover_repository_root(bwd)
-                role_def = reg.resolve_role_definition(clean_role, repo_root=main_repo or bwd)
-        except Exception:
-            pass
 
-        if role_def is None:
-            for root in (bwd,):
-                for fname in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
-                    t_path = os.path.join(root, fname)
-                    if os.path.isfile(t_path):
-                        try:
-                            import tomllib
+        search_roots = [bwd]
+        cur = bwd
+        while cur and cur != os.path.dirname(cur):
+            search_roots.append(cur)
+            cur = os.path.dirname(cur)
 
-                            with open(t_path, "rb") as f:
-                                data = tomllib.load(f)
-                            r_info = data.get("roles", {}).get(clean_role, {})
-                            if r_info:
-                                role_def = _RoleDefFallback(
-                                    template=r_info.get("template", ""),
-                                    template_command=r_info.get("template_command", ""),
-                                    src_pattern=r_info.get("src_pattern", ""),
-                                )
-                                break
-                        except Exception:
-                            pass
-                if role_def is not None:
-                    break
+        import tomllib
+
+        for root in search_roots:
+            for fname in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
+                t_path = os.path.join(root, fname)
+                if os.path.isfile(t_path):
+                    try:
+                        with open(t_path, "rb") as f:
+                            data = tomllib.load(f)
+                        r_info = data.get("roles", {}).get(clean_role, {})
+                        if r_info:
+                            role_def = _RoleDefFallback(
+                                template=r_info.get("template", ""),
+                                template_command=r_info.get("template_command", ""),
+                                src_pattern=r_info.get("src_pattern", ""),
+                            )
+                            main_repo = root
+                            break
+                    except (tomllib.TOMLDecodeError, OSError):
+                        pass
+            if role_def is not None:
+                break
 
         if role_def and getattr(role_def, "template_command", ""):
             unit_str = str(node.unit_address).strip()
@@ -549,7 +542,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                 )
                 if src_path.is_file():
                     return
-            except Exception:
+            except (subprocess.SubprocessError, OSError):
                 pass
 
         manifest_loader = self._get_manifest_loader()
@@ -603,21 +596,14 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             clean_role = node.role_address.split(":")[-1].strip().lower()
             bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()
             roots = [bwd]
+            if main_repo and main_repo not in roots:
+                roots.append(main_repo)
             cands = []
-            try:
-                from update_with_ai.parts.workspace.lib import workspace_registry
-                reg = get_singleton(workspace_registry.WorkspaceRegistry)
-                main_repo = reg.discover_repository_root(bwd)
-                if main_repo and main_repo not in roots:
-                    roots.append(main_repo)
-                role_def = reg.resolve_role_definition(clean_role, repo_root=main_repo or bwd)
-                if role_def and getattr(role_def, "template", ""):
-                    t_spec = role_def.template
-                    for r in roots:
-                        cands.append(os.path.join(r, t_spec))
-                    cands.append(t_spec)
-            except Exception:
-                pass
+            if role_def and getattr(role_def, "template", ""):
+                t_spec = role_def.template
+                for r in roots:
+                    cands.append(os.path.join(r, t_spec))
+                cands.append(t_spec)
 
             role_to_filename = {
                 "high": "hls_template.md",
@@ -670,18 +656,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                 "has_imports": False,
                 "imported_modules": "",
             }
-            try:
-                from update_with_ai.parts.sandbox.lib import template_format
-                formatter = get_singleton(template_format.TemplateFormatter)
-                formatted = formatter.format_template(
-                    template_format.TemplateText(tmpl_content),
-                    context,  # type: ignore
-                )
-                tmpl_content = str(formatted)
-            except Exception:
-                for k, v in context.items():
-                    if isinstance(v, str):
-                        tmpl_content = tmpl_content.replace(f"<{k}>", v)
+            for k, v in context.items():
+                if isinstance(v, str):
+                    tmpl_content = tmpl_content.replace(f"<{k}>", v)
 
         src_path.parent.mkdir(parents=True, exist_ok=True)
         src_path.write_text(tmpl_content, encoding="utf-8")

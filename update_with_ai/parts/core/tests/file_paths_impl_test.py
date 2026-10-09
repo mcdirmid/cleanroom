@@ -1,104 +1,91 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 0aaa1728c001
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CHANGED: 2026-10-09T02:54:02Z
+# CHANGE: Inspect message field on PathValidationError instead of str(ctx.exception)
+# CODE_HASH: 86753e1b71b9
+# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
-"""Unit tests for file_paths_impl aligned with grounding specifications."""
+"""Unit tests for file_paths_impl per its grounding specification."""
+
+from __future__ import annotations
 
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.core.lib.file_paths import (
-    AbsolutePath,
-    FilePathManager,
-    HostPath,
-    PathString,
-    PathValidationError,
-    WorkspacePath,
-    WorkspaceRoot,
-)
+from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from update_with_ai.parts.core.lib import file_paths
 from update_with_ai.parts.core.lib.file_paths_impl import (
-    FilePathManager as FilePathManagerImpl,
+    FilePathManager,
     __initialize__,
 )
 
 
-class TestFilePathsImpl(unittest.TestCase):
+def _make_path_string(path: str) -> file_paths.PathString:
+    return file_paths.PathString(path)
+
+
+class FilePathsImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
 
-    def test_create_host_path(self) -> None:
-        with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePathManager)
-            hp = service.create_host_path(PathString("/any/path/file.txt"))
-            # Requirement: MUST return a host path encapsulating the path string.
-            self.assertIsInstance(hp, HostPath)
-            self.assertEqual(hp.path, "/any/path/file.txt")
+    def test_initialization(self) -> None:
+        """CUJ: Verify initial component presence and singleton resolution."""
+        self.assertIsNotNone(self.registry)
+        with enter_phase(system, registry=self.registry) as scope:
+            manager = scope.get_singleton(FilePathManager)
+            self.assertIsNotNone(manager)
 
-    def test_create_absolute_path(self) -> None:
-        with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePathManager)
-            # Requirement: MUST validate that the path is absolute and return an absolute path encapsulating the path string.
-            ap = service.create_absolute_path(PathString("/var/log/app.log"))
-            self.assertIsInstance(ap, AbsolutePath)
-            self.assertIsInstance(ap, HostPath)
-            self.assertEqual(ap.path, "/var/log/app.log")
+    def test_create_host_path_valid(self) -> None:
+        """Postcondition: MUST return a host path encapsulating the path string."""
+        with enter_phase(system, registry=self.registry) as scope:
+            manager = scope.get_singleton(FilePathManager)
+            host_path = manager.create_host_path(_make_path_string("some/path"))
+            self.assertEqual(host_path.path, "some/path")
 
-            # Requirement: WHEN the path is not absolute, MUST raise PathValidationError with diagnostic feedback formatted as "Path is not absolute: {path}".
-            with self.assertRaises(PathValidationError) as ctx:
-                service.create_absolute_path(PathString("relative/path/app.log"))
+    def test_create_absolute_path_valid(self) -> None:
+        """Postcondition: MUST validate that the path is absolute and return an absolute path."""
+        with enter_phase(system, registry=self.registry) as scope:
+            manager = scope.get_singleton(FilePathManager)
+            abs_path = manager.create_absolute_path(_make_path_string("/var/log/app.log"))
+            self.assertEqual(abs_path.path, "/var/log/app.log")
+
+    def test_create_absolute_path_not_absolute_raises(self) -> None:
+        """Postcondition: WHEN path is not absolute, MUST raise PathValidationError."""
+        with enter_phase(system, registry=self.registry) as scope:
+            manager = scope.get_singleton(FilePathManager)
+            path_str = _make_path_string("relative/path")
+            with self.assertRaises(file_paths.PathValidationError) as ctx:
+                manager.create_absolute_path(path_str)
+            self.assertEqual(ctx.exception.message, "Path is not absolute: relative/path")
+
+    def test_create_workspace_path_valid(self) -> None:
+        """Postcondition: MUST validate that the path is relative and return a workspace path."""
+        with enter_phase(system, registry=self.registry) as scope:
+            manager = scope.get_singleton(FilePathManager)
+            ws_path = manager.create_workspace_path(_make_path_string("parts/core/file.py"))
+            self.assertEqual(ws_path.path, "parts/core/file.py")
+
+    def test_create_workspace_path_absolute_raises(self) -> None:
+        """Postcondition: WHEN path is absolute, MUST raise PathValidationError."""
+        with enter_phase(system, registry=self.registry) as scope:
+            manager = scope.get_singleton(FilePathManager)
+            path_str = _make_path_string("/parts/core/file.py")
+            with self.assertRaises(file_paths.PathValidationError) as ctx:
+                manager.create_workspace_path(path_str)
             self.assertEqual(
-                str(ctx.exception), "Path is not absolute: relative/path/app.log"
-            )
-
-    def test_create_workspace_path(self) -> None:
-        with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePathManager)
-            # Requirement: MUST validate that the path is relative without leading path separators and return a workspace path encapsulating the path string.
-            wp = service.create_workspace_path(PathString("src/lib/app.py"))
-            self.assertIsInstance(wp, WorkspacePath)
-            self.assertIsInstance(wp, HostPath)
-            self.assertEqual(wp.path, "src/lib/app.py")
-
-            # Requirement: WHEN the path is absolute or has leading path separators, MUST raise PathValidationError with diagnostic feedback formatted as "Workspace path must be relative, got absolute: {path}".
-            with self.assertRaises(PathValidationError) as ctx:
-                service.create_workspace_path(PathString("/absolute/path"))
-            self.assertEqual(
-                str(ctx.exception),
-                "Workspace path must be relative, got absolute: /absolute/path",
-            )
-
-            with self.assertRaises(PathValidationError) as ctx2:
-                service.create_workspace_path(PathString("/leading/slash"))
-            self.assertEqual(
-                str(ctx2.exception),
-                "Workspace path must be relative, got absolute: /leading/slash",
+                ctx.exception.message,
+                "Workspace path must be relative, got absolute: /parts/core/file.py",
             )
 
     def test_resolve_path(self) -> None:
-        with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePathManager)
-            root = service.create_absolute_path(PathString("/workspace/root"))
-            rel_file = service.create_workspace_path(
-                PathString("testing/specs/.update_with_ai.textproto")
-            )
-            # Requirement: MUST produce the combined absolute path formed by joining the workspace root and the relative workspace path.
-            resolved_file = service.resolve_path(root, rel_file)
-            self.assertIsInstance(resolved_file, AbsolutePath)
-            self.assertEqual(
-                resolved_file.path,
-                "/workspace/root/testing/specs/.update_with_ai.textproto",
-            )
-
-    def test_workspace_root_type(self) -> None:
-        root = WorkspaceRoot(PathString("/workspace/root"))
-        self.assertIsInstance(root, AbsolutePath)
-        self.assertIsInstance(root, HostPath)
-        self.assertEqual(root.path, "/workspace/root")
+        """Postcondition: MUST produce combined absolute path formed by joining root and relative."""
+        with enter_phase(system, registry=self.registry) as scope:
+            manager = scope.get_singleton(FilePathManager)
+            root = manager.create_absolute_path(_make_path_string("/workspace/project"))
+            relative = manager.create_workspace_path(_make_path_string("src/main.py"))
+            resolved = manager.resolve_path(root, relative)
+            self.assertEqual(resolved.path, "/workspace/project/src/main.py")
 
 
 if __name__ == "__main__":

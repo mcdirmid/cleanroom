@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
-LAST_CHANGED: 2026-10-08T03:34:00Z
-CHANGE: update pull contract for writable target updates and deleted files
-CODE_HASH: 0389263a3afe
-SPEC_QA_AUDIT: 2026-10-07T23:58:18Z
+LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CHANGED: 2026-10-09T02:39:58Z
+CHANGE: recopy AGENTS.md with contamination tripwires during fast refresh
+CODE_HASH: 2196ca43313a
+SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
 -->
 
 # workspace_sync_impl implementation component
@@ -21,7 +21,7 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 - The workspace synchronizer copies newer upstream files from main to workspace setting 0o444 permissions on contracts and updating unmodified writable targets with 0o644 permissions while deleting missing files. [copy_upstream_files_with_perms]
 - The workspace synchronizer synthesizes read-only test stubs from companion specifications, replaces leaked implementation code, and deletes orphaned stubs for stub role dependencies. [sync_stub_role_dependencies]
-- The workspace synchronizer recopies tool runners, project configurations, guides, and AGENTS.md from main into the workspace without altering targets. [recopy_system_files_fast]
+- The workspace synchronizer recopies tool runners, project configurations, guides, and AGENTS.md (with boundary rules, contamination tripwires, and fail-stop constraints) from main into the workspace without altering targets. [recopy_system_files_fast]
 - The workspace synchronizer computes on-disk SHA-256 code hashes and extracts in-band metadata to identify modified files. [evaluate_target_file_modifications]
 - The workspace synchronizer compares main repository code hashes against workspace baselines to detect concurrent edits. [compare_main_and_workspace_hashes]
 - The workspace synchronizer copies validated target files into the canonical repository and updates in-band clean timestamps. [copy_validated_files_to_main]

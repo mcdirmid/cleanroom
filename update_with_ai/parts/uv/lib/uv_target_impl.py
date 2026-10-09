@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: 4357a9afd81b
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# CODE_HASH: 1c0ec6f122ff
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 import os
@@ -18,11 +18,6 @@ from support.lib.lifecycle import (
     get_default_registry,
     system,
 )
-
-try:
-    from update_with_ai.parts.bazel.lib import bazel_target
-except ImportError:
-    bazel_target = None  # type: ignore
 
 
 class UvTarget(uv_target.UvTarget, Singleton):
@@ -93,8 +88,6 @@ class UvTarget(uv_target.UvTarget, Singleton):
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     keys = [UvTarget, uv_target.UvTarget]
-    if bazel_target is not None and hasattr(bazel_target, "BazelTarget"):
-        keys.append(bazel_target.BazelTarget)
     reg.register_singleton(
         UvTarget,
         keys=keys,

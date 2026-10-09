@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: 611ced6177e2
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# CODE_HASH: 892b3b9e39dc
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for uv_node_config_impl aligned with low-level specifications."""
@@ -33,7 +33,6 @@ from update_with_ai.parts.agent.lib.agent_node_config import (
     StepSection,
     VerificationCheck,
 )
-from update_with_ai.parts.agent.lib.agent_storage import AgentStorage
 from update_with_ai.parts.uv.lib.uv_manifest_loader import (
     UvManifestLoader,
     TargetManifest,
@@ -45,7 +44,6 @@ from update_with_ai.parts.uv.lib.uv_node_config_impl import (
     NodeConfig as NodeConfigImpl,
     __initialize__,
 )
-from update_with_ai.parts.uv.lib.uv_target import UvTarget, NodeDirectory, TargetIdentifier
 from update_with_ai.parts.core.lib.file_paths import (
     AbsolutePath,
     FilePathManager,
@@ -135,7 +133,7 @@ class FakeAgentConfig:
         return self._is_step_mode
 
 
-class FakeAgentStorage:
+class FakeDagStorage:
     tier = "system"
 
     def __init__(self) -> None:
@@ -158,48 +156,23 @@ class FakeManifestLoader:
         return self.manifests.get(node.unit_address)
 
 
-class FakeUvTarget:
-    tier = "system"
-
-    def normalize_target(
-        self, target_identifier: TargetIdentifier
-    ) -> DagNode:
-        ident_str = str(target_identifier).strip()
-        role_part = ""
-        if "#" in ident_str:
-            ident_str, role_part = ident_str.split("#", 1)
-        if ":" not in ident_str:
-            pkg = ident_str
-            target_name = pkg.split("/")[-1] if "/" in pkg else pkg
-            ident_str = f"{pkg}:{target_name}"
-        return DagNode(unit_address=UnitAddress(ident_str), role_address=RoleAddress(role_part))
-
-    def extract_node_dir(self, node: DagNode) -> NodeDirectory:
-        raw_pkg = node.unit_address.split(":", 1)[0].lstrip("/")
-        return NodeDirectory(PathString(raw_pkg))
-
-
 class TestUvNodeConfigImpl(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         self.file_paths = FakeFilePaths("/workspace")
-        self.uv_target = FakeUvTarget()
         self.role_config = FakeRoleConfig()
         self.agent_config = FakeAgentConfig(is_step_mode=True)
-        self.storage = FakeAgentStorage()
+        self.storage = FakeDagStorage()
         self.manifest_loader = FakeManifestLoader()
 
         self.registry.register_instance(
             self.file_paths, keys=[FilePathManager], tier="system"
         )
         self.registry.register_instance(
-            self.uv_target, keys=[UvTarget], tier="system"
-        )
-        self.registry.register_instance(
             self.agent_config, keys=[AgentConfig], tier="system"
         )
         self.registry.register_instance(
-            self.storage, keys=[AgentStorage, DagStorage], tier="system"
+            self.storage, keys=[DagStorage], tier="system"
         )
         self.registry.register_instance(
             self.manifest_loader, keys=[UvManifestLoader], tier="system"

@@ -1,17 +1,16 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-04T23:01:55Z
 # CHANGE: new file
-# CODE_HASH: 6ee5883bf9c6
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# CODE_HASH: f4682851e239
+# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for bazel_loop_impl aligned with grounding specifications."""
 
 import unittest
 from typing import Optional, Sequence, Set
-from update_with_ai.parts.agent.lib import agent_storage
 from update_with_ai.parts.bazel.lib import bazel_manifest_loader
 from update_with_ai.parts.bazel.lib.bazel_loop_impl import (
     Loop as LoopImpl,

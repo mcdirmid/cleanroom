@@ -125,7 +125,13 @@ py_test(
     main = "cleanroom_role_tool_test.py",
     deps = [
         "//update_with_ai/support/lib:cleanroom_role_tool_lib",
+        "//update_with_ai/parts/control/lib:control_asm",
+        "//update_with_ai/parts/control/lib:src_metadata",
         "//update_with_ai/parts/core/lib:file_paths_impl",
+        "//update_with_ai/parts/tools/lib:tools_asm",
+        "//update_with_ai/parts/workspace/lib:workspace_asm",
+        "//update_with_ai/parts/workspace/lib:workspace_provision_impl",
+        "//update_with_ai/parts/workspace/lib:workspace_tool_impl",
     ],
 )
 

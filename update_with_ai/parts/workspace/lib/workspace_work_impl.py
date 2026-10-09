@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-07T18:24:00Z
-# CHANGE: materialize templates on missing ready targets via dag_storage
-# CODE_HASH: d96348a7cfba
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CHANGED: 2026-10-09T04:30:00Z
+# CHANGE: factor auditor unit dirtiness across all feedback targets and strict pending target removal
+# CODE_HASH: 756dccce122f
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_work_impl."""
@@ -294,10 +294,6 @@ def get_unit_contract_files(
             )
             if iface_c not in candidates:
                 candidates.append(iface_c)
-        elif clean_role == "test":
-            cand_impl = f"{part_dir}/lib/{unit_name}.py"
-            if cand_impl not in candidates:
-                candidates.append(cand_impl)
 
     existing: List[str] = []
     norm_target = target_file.replace("\\", "/").lstrip("/")
@@ -349,41 +345,84 @@ def _eval_unit_dirty(
         fb_deps = [d.split(":")[-1] for d in role_def.feedback_role_deps]
         if not fb_deps:
             return {"is_dirty": False, "reasons": []}
-        primary_fb = fb_deps[0]
-        fb_def = reg.resolve_role_definition(primary_fb, repo_root=main_root)
-        fb_pat = fb_def.src_pattern
-        if not fb_pat:
+
+        ctype = _classify_unit_type(unit_name)
+        fb_dep_set = set(fb_deps)
+        silent_deps = set(d.split(":")[-1] for d in role_def.silent_role_deps)
+        contract_dep_roles: List[str] = []
+        for d_lbl in list(role_def.role_deps) + list(role_def.star_role_deps):
+            clean_d = d_lbl.split(":")[-1]
+            if clean_d not in fb_dep_set and clean_d not in silent_deps and clean_d not in contract_dep_roles:
+                contract_dep_roles.append(clean_d)
+
+        audited_targets_count = 0
+        for fb_role in fb_deps:
+            fb_def = reg.resolve_role_definition(fb_role, repo_root=main_root)
+            if fb_def.active_component_types and ctype not in fb_def.active_component_types:
+                continue
+            fb_pat = fb_def.src_pattern
+            if not fb_pat:
+                continue
+            audited_targets_count += 1
+            fb_rel = fb_pat.format(unit_dir=part_dir, unit_name=unit_name)
+            fb_full = os.path.join(ws_root, fb_rel)
+            if curr_ws and curr_role == clean_role:
+                local_p = os.path.join(curr_ws, fb_rel)
+                if os.path.isfile(local_p):
+                    fb_full = local_p
+            if not os.path.isfile(fb_full) and main_root != ws_root:
+                fb_full = os.path.join(main_root, fb_rel)
+            if not os.path.isfile(fb_full):
+                reasons.append(f"Audited target {fb_rel} does not exist")
+                continue
+            fb_meta = src_metadata.extract_metadata(fb_full)
+            if fb_meta is None or not fb_meta.last_changed:
+                reasons.append(
+                    f"Target {fb_rel} missing valid in-band metadata header"
+                )
+                continue
+            if fb_meta.dirty:
+                reasons.append(f"Target {fb_rel} explicitly marked DIRTY: {fb_meta.dirty}")
+            if fb_meta.feedback:
+                for fb in fb_meta.feedback:
+                    reasons.append(f"Unacted feedback in {fb_rel}: {fb}")
+            audit_ts = fb_meta.audits.get(audit_tag)
+            if not audit_ts:
+                reasons.append(
+                    f"Target {fb_rel} has not been certified with {audit_tag}"
+                )
+            elif audit_ts < fb_meta.last_changed:
+                reasons.append(
+                    f"Target {fb_rel} modified ({fb_meta.last_changed}) after {audit_tag} ({audit_ts})"
+                )
+            else:
+                for c_name in contract_dep_roles:
+                    c_def = reg.resolve_role_definition(c_name, repo_root=main_root)
+                    if c_def.active_component_types and ctype not in c_def.active_component_types:
+                        continue
+                    if not c_def.src_pattern:
+                        continue
+                    c_rel = c_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)
+                    c_full = os.path.join(ws_root, c_rel)
+                    if curr_ws and curr_role == clean_role:
+                        local_c = os.path.join(curr_ws, c_rel)
+                        if os.path.isfile(local_c):
+                            c_full = local_c
+                    if not os.path.isfile(c_full) and main_root != ws_root:
+                        c_full = os.path.join(main_root, c_rel)
+                    if os.path.isfile(c_full):
+                        c_meta = src_metadata.extract_metadata(c_full)
+                        if (
+                            c_meta
+                            and c_meta.last_changed
+                            and audit_ts < c_meta.last_changed
+                        ):
+                            reasons.append(
+                                f"Upstream contract {c_rel} modified ({c_meta.last_changed}) after {audit_tag} ({audit_ts}) on {fb_rel}"
+                            )
+
+        if audited_targets_count == 0:
             return {"is_dirty": False, "reasons": []}
-        primary_rel = fb_pat.format(unit_dir=part_dir, unit_name=unit_name)
-        primary_full = os.path.join(ws_root, primary_rel)
-        if curr_ws and curr_role == clean_role:
-            local_p = os.path.join(curr_ws, primary_rel)
-            if os.path.isfile(local_p):
-                primary_full = local_p
-        if not os.path.isfile(primary_full) and main_root != ws_root:
-            primary_full = os.path.join(main_root, primary_rel)
-        if not os.path.isfile(primary_full):
-            return {
-                "is_dirty": True,
-                "reasons": [f"Audited target {primary_rel} does not exist"],
-            }
-        primary_meta = src_metadata.extract_metadata(primary_full)
-        if primary_meta is None or not primary_meta.last_changed:
-            return {
-                "is_dirty": True,
-                "reasons": [
-                    f"Target {primary_rel} missing valid in-band metadata header"
-                ],
-            }
-        audit_ts = primary_meta.audits.get(audit_tag)
-        if not audit_ts:
-            reasons.append(
-                f"Target {primary_rel} has not been certified with {audit_tag}"
-            )
-        elif audit_ts < primary_meta.last_changed:
-            reasons.append(
-                f"Target {primary_rel} modified ({primary_meta.last_changed}) after {audit_tag} ({audit_ts})"
-            )
         return {"is_dirty": bool(reasons), "reasons": reasons}
 
     # Producer role evaluation
@@ -651,8 +690,6 @@ class WorkspaceWorkManager(
             ):
                 continue
             remaining.append(t)
-        if len(remaining) == len(targets) and len(targets) == 1:
-            remaining = []
         self.set_pending_work(workspace_dir, remaining)
 
     def is_pending_target_dirty(
@@ -668,14 +705,14 @@ class WorkspaceWorkManager(
         r_name = ""
         try:
             part_dir, unit_name, r_name = _parse_unit_from_file_path(full_ws, workspace_dir)
-        except Exception:
+        except (ValueError, KeyError, OSError):
             pass
         eval_role = (role_name or r_name).split(":")[-1].strip().lower()
         m_root = main_root or workspace_dir
         reg = None
         try:
             reg = get_singleton(workspace_registry.WorkspaceRegistry)
-        except Exception:
+        except (LifecycleResolutionError, LookupError):
             pass
         role_def = reg.resolve_role_definition(eval_role, repo_root=m_root) if reg else None
 
@@ -816,6 +853,9 @@ class WorkspaceWorkManager(
             # Check 2: Auditor feedback dependencies
             if is_auditor:
                 for fb_r in feedback_roles:
+                    fb_r_def = reg.resolve_role_definition(fb_r, repo_root=repo_root)
+                    if fb_r_def.active_component_types and u_ctype not in fb_r_def.active_component_types:
+                        continue
                     if (part_dir, uname, fb_r) in dirty_part_lookup or (not part_dir and (uname, fb_r) in dirty_lookup):
                         blocked_reasons.append(
                             f"Feedback target '{fb_r}' is dirty or has unacted feedback for unit '{uname}'"
@@ -1010,7 +1050,7 @@ class WorkspaceWorkManager(
                                 reg = None
                                 try:
                                     reg = get_singleton(workspace_registry.WorkspaceRegistry)
-                                except Exception:
+                                except (LifecycleResolutionError, LookupError):
                                     pass
                                 r_def = reg.resolve_role_definition(task_role, repo_root=eval_root) if reg else None
                                 if r_def and r_def.src_pattern:

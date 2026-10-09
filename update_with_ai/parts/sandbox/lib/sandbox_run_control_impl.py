@@ -1,504 +1,923 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-07T18:18:00Z
-# CHANGE: delegate GetWorkTool to control_coordinate.dispatch_get_work
-# CODE_HASH: 180122e6a245
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:46:30Z
+# LAST_CHANGED: 2026-10-09T22:40:00Z
+# CHANGE: Remove initial implementation modification constraint on submission
+# CODE_HASH: a6af47232ea7
+# QA_AUDIT: 2026-10-09T21:46:30Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
-from support.lib.lifecycle import LifecycleRegistry, LifecycleResolutionError, Singleton, get_default_registry, get_singleton
-from update_with_ai.parts.agent.lib import agent_file_alias, agent_node_config, agent_session
-from update_with_ai.parts.agent.lib.agent_session import agent_session
-from update_with_ai.parts.control.lib import (
-    control_asm,
-    control_attribution,
-    control_coordinate,
-    control_submit,
-    control_verification,
-    control_work_scheduler,
+from dataclasses import dataclass
+from typing import Any, Mapping, Optional, Sequence, Set, cast
+from support.lib.lifecycle import (
+    InTier,
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
 )
+from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier, agent_session
+import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
+import update_with_ai.parts.agent.lib.agent_node_config as agent_node_config
+import update_with_ai.parts.control.lib.control_coordinate as control_coordinate
+import update_with_ai.parts.dag.lib.dag_config as dag_config
+import update_with_ai.parts.dag.lib.dag_storage as dag_storage
+import update_with_ai.parts.dag.lib.dag_subgraph as dag_subgraph
+from . import sandbox
+from . import sandbox_file_editor
+from . import sandbox_guide_delivery
+from . import sandbox_run_control
+from . import template_format
+from . import tool_provider
 
-from update_with_ai.parts.dag.lib import dag_storage, dag_subgraph
-from . import sandbox_file_editor, sandbox_guide_delivery, sandbox_run_control, tool_provider
-dag_config = sandbox_run_control.dag_config
-
-
-def _make_tool_response(
-    is_failed: bool, content: str, reminder: Optional[str] = None, is_terminated: bool = False,
-    suppression_key: Optional[str] = None, follow_up: Optional[tool_provider.FollowUpToolCall] = None,
-) -> tool_provider.ToolResponse:
-    return tool_provider.ToolResponse(
-        is_failed=is_failed, is_terminated=is_terminated, content=tool_provider.ToolResponseContent(content),
-        reminder=tool_provider.ToolReminder(reminder) if reminder is not None else None,
-        suppression_key=tool_provider.SuppressionKey(suppression_key) if suppression_key is not None else None,
-        follow_up_tool_call=follow_up,
-    )
-
-
-def _follow_up(tool: str, reasoning: str) -> tool_provider.FollowUpToolCall:
-    return tool_provider.FollowUpToolCall(tool_name=tool_provider.ToolName(tool), wire_parameter_bindings={}, reasoning_text=tool_provider.ReasoningText(reasoning))
+# Requirements specified in sandbox_run_control_impl.pyi
 
 
-def _finish_target_or_session(
-    rc: RunController, action_msg: str, term_msg: str, is_failed: bool = False, suppression_key: Optional[str] = None,
-) -> tool_provider.ToolResponse:
-    if rc.open_nodes():
-        rem = rc.format_open_targets_reminder()
-        return _make_tool_response(False, f"{action_msg}\n\n{rem}".strip(), reminder=rem, suppression_key=suppression_key)
-    return _make_tool_response(is_failed, term_msg, is_terminated=True, suppression_key=suppression_key)
+@dataclass(frozen=True)
+class _ChangeSummaryParamType(tool_provider.ParameterType[Optional[sandbox_run_control.ChangeSummary], str]):
+    @property
+    def actual_type(self) -> type[Optional[sandbox_run_control.ChangeSummary]]:
+        return cast(type[Optional[sandbox_run_control.ChangeSummary]], sandbox_run_control.ChangeSummary)
+
+    @property
+    def wire_type(self) -> type[str]:
+        return str
+
+    def convert(self, wire_value: str) -> Optional[sandbox_run_control.ChangeSummary]:
+        if wire_value is None:
+            return None
+        if not isinstance(wire_value, str):
+            raise tool_provider.ParameterConversionError(
+                message=tool_provider.ConversionErrorMessage(
+                    f"Expected str for change_summary, got {type(wire_value).__name__}"
+                )
+            )
+        stripped = wire_value.strip()
+        if not stripped:
+            return None
+        return sandbox_run_control.ChangeSummary(stripped)
 
 
-def _to_target_str(raw: Any) -> str:
-    return (getattr(raw, "relative_path", None) or getattr(raw, "short_name", None) or str(raw)).strip() if raw is not None else ""
+@dataclass(frozen=True)
+class _FailureExplanationParamType(tool_provider.ParameterType[sandbox_run_control.FailureExplanation, str]):
+    @property
+    def actual_type(self) -> type[sandbox_run_control.FailureExplanation]:
+        return cast(type[sandbox_run_control.FailureExplanation], sandbox_run_control.FailureExplanation)
+
+    @property
+    def wire_type(self) -> type[str]:
+        return str
+
+    def convert(self, wire_value: str) -> sandbox_run_control.FailureExplanation:
+        if not isinstance(wire_value, str):
+            raise tool_provider.ParameterConversionError(
+                message=tool_provider.ConversionErrorMessage(
+                    f"Expected str for explanation, got {type(wire_value).__name__}"
+                )
+            )
+        return sandbox_run_control.FailureExplanation(wire_value)
 
 
-def _alias_param(name: str, desc: str) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
-    return tool_provider.ToolParameter(name=tool_provider.ParameterName(name), description=tool_provider.ParameterDescription(desc), parameter_type=get_singleton(agent_file_alias.AliasManager), is_required=False)
+@dataclass(frozen=True)
+class _BlameExplanationParamType(tool_provider.ParameterType[sandbox_run_control.BlameExplanation, str]):
+    @property
+    def actual_type(self) -> type[sandbox_run_control.BlameExplanation]:
+        return cast(type[sandbox_run_control.BlameExplanation], sandbox_run_control.BlameExplanation)
+
+    @property
+    def wire_type(self) -> type[str]:
+        return str
+
+    def convert(self, wire_value: str) -> sandbox_run_control.BlameExplanation:
+        if not isinstance(wire_value, str):
+            raise tool_provider.ParameterConversionError(
+                message=tool_provider.ConversionErrorMessage(
+                    f"Expected str for explanation, got {type(wire_value).__name__}"
+                )
+            )
+        return sandbox_run_control.BlameExplanation(wire_value)
 
 
-def _string_param(name: str, desc: str, required: bool = True) -> tool_provider.ToolParameter[Any, str]:
-    return tool_provider.ToolParameter(name=tool_provider.ParameterName(name), description=tool_provider.ParameterDescription(desc), parameter_type=tool_provider.STRING_PARAMETER_TYPE, is_required=required)
+@dataclass(frozen=True)
+class _BatchSizeParamType(tool_provider.ParameterType[Optional[dag_config.BatchSize], int]):
+    @property
+    def actual_type(self) -> type[Optional[dag_config.BatchSize]]:
+        return cast(type[Optional[dag_config.BatchSize]], dag_config.BatchSize)
+
+    @property
+    def wire_type(self) -> type[int]:
+        return int
+
+    def convert(self, wire_value: int) -> Optional[dag_config.BatchSize]:
+        if wire_value is None:
+            return None
+        if isinstance(wire_value, bool) or not isinstance(wire_value, int):
+            raise tool_provider.ParameterConversionError(
+                message=tool_provider.ConversionErrorMessage(
+                    f"Expected int for max_batch_size, got {type(wire_value).__name__}"
+                )
+            )
+        return dag_config.BatchSize(wire_value)
 
 
-def _int_param(name: str, desc: str, required: bool = False) -> tool_provider.ToolParameter[Any, int]:
-    return tool_provider.ToolParameter(name=tool_provider.ParameterName(name), description=tool_provider.ParameterDescription(desc), parameter_type=tool_provider.INTEGER_PARAMETER_TYPE, is_required=required)
-
-
-def _resolve_target_node(
-    rc: RunController, raw_target: Any, suppression_key: Optional[str] = None
-) -> Tuple[Optional[dag_storage.DagNode], Optional[tool_provider.ToolResponse]]:
-    target_str = _to_target_str(raw_target)
-    target_node = rc.resolve_default_target() if not target_str else rc.get_node_for_alias(target_str)
-    if target_node is None or (target_str and rc.get_node_state(target_node) != "OPEN"):
-        open_t = ", ".join(f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes())
-        return None, _make_tool_response(True, f"Error: Target '{target_str}' is not an open target." if target_str else "Error: Target parameter must be specified when multiple unsubmitted targets exist.", reminder=f"Specify an open target: {open_t}", suppression_key=suppression_key)
-    return target_node, None
-
-
-def _resolve_blame(
-    rc: RunController, raw_target: Any, raw_blame: Any
-) -> Tuple[Optional[dag_storage.DagNode], Optional[agent_file_alias.BoundFile], str, str]:
-    target_str, blame_str = _to_target_str(raw_target), _to_target_str(raw_blame)
-    attrib, open_n = get_singleton(control_attribution.AttributionCoordinator), rc.open_nodes()
-    cands, src_node, matched, blamee = open_n or list(rc.nodes), None, None, ""
-    for val, s in ((raw_blame, blame_str), (raw_target, target_str)):
-        if (val is not None or s) and matched is None:
-            matches = [n for n in cands if attrib.match_blame_target(n, val, s)]
-            if matches:
-                def_t = rc.resolve_default_target()
-                src_node = def_t if (def_t is not None and def_t in matches) else matches[0]
-                matched, blamee = attrib.match_blame_target(src_node, val, s), s
-    if src_node is None:
-        cand = rc.get_node_for_alias(target_str) if (raw_target is not None or target_str) else None
-        src_node = cand if cand is not None and (rc.get_node_state(cand) == "OPEN" or not open_n) else (open_n[0] if len(open_n) == 1 else (rc.nodes[0] if not open_n and len(rc.nodes) == 1 else rc.resolve_default_target()))
-    if src_node is not None and matched is None:
-        if raw_blame is not None or blame_str: matched, blamee = attrib.match_blame_target(src_node, raw_blame, blame_str), blame_str
-        else:
-            targets = rc.get_blame_targets_for_node(src_node)
-            matched = next(iter(targets)) if len(targets) == 1 else None
-    return src_node, matched, blamee, target_str
-
-
-def _compute_file_hash(cfg: agent_node_config.NodeConfig, edit_mgr: sandbox_file_editor.EditManager, target: Optional[dag_storage.DagNode] = None) -> str:
-    rw = next((f for f in cfg.read_write_files if getattr(f, "owning_node", None) == target), None) if target else None
-    if rw: return edit_mgr.file_hash(rw)
-    if cfg.read_write_files:
-        return ":".join(edit_mgr.file_hash(f) for f in sorted(cfg.read_write_files, key=lambda x: getattr(x, "relative_path", getattr(x, "short_name", ""))))
-    return str(edit_mgr.file_update_revision)
-
-
-def _check_submit_gating(
-    target_node: dag_storage.DagNode, summary_str: str, edit_mgr: sandbox_file_editor.EditManager, cfg: agent_node_config.NodeConfig
-) -> Optional[tool_provider.ToolResponse]:
-    storage = get_singleton(dag_storage.DagStorage)
-    msgs = storage.get_messages(target_node) if hasattr(storage, "get_messages") else []
-    is_init, has_mod = any(isinstance(m, dag_storage.ChangeMessage) and str(m.content).strip().lower().startswith("implement ") for m in msgs), edit_mgr.has_modifications
-    for cond, msg, rem in [
-        (is_init and not has_mod, "Error: Initial implementation task requires workspace file modifications before submitting.", "Workspace files must be modified to implement the change before submitting."),
-        (bool(cfg.feedback and not has_mod), "Error: Session feedback is present but no workspace files were modified.", "Workspace files must be modified to address feedback or the fail tool must be used."),
-        (has_mod and not summary_str, "Error: Workspace files were modified but change_summary was not provided.", "A change summary must be provided when completing the session after modifying workspace files."),
-        (control_submit.is_auditor_node(target_node) and bool(summary_str), "Error: Change summary is prohibited for audit nodes.", "Do not provide a change summary when submitting audit nodes."),
-        (not has_mod and bool(summary_str), "Error: Workspace files were not modified, but change_summary was provided.", "Omit change_summary when submitting without workspace file modifications."),
-    ]:
-        if cond: return _make_tool_response(True, msg, reminder=rem, suppression_key="submit")
-    return None
-
-
-def _install_tools() -> None:
-    try:
-        tm, cfg = get_singleton(tool_provider.ToolManager), get_singleton(agent_node_config.NodeConfig)
-        for t in (SubmitTool, FailTool, CheckFilesTool, GetWorkTool, BlameTool): tm.install_tool(get_singleton(t))
-        if cfg.is_step_mode: tm.install_tool(get_singleton(AdvanceTool))
-    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError): pass
-
-
-class RunController(sandbox_run_control.RunController, Singleton):
-    """Facade delegating session lifecycle and verification caching to parts/control."""
-
+class CheckFilesTool(sandbox_run_control.CheckFilesTool, InTier[AgentSessionTier], Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
-        self._cache: Dict[Optional[dag_storage.DagNode], Tuple[int, str, bool, str]] = {}
-        _install_tools()
+        self._name = tool_provider.ToolName("check_files")
+        self._description = tool_provider.ToolDescription("Inspects verification checks across active files.")
+        self._parameters: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {}
 
     @property
-    def _coord(self) -> Any: return get_singleton(control_coordinate.SessionCoordinator)
-    @property
-    def _nodes(self) -> List[dag_storage.DagNode]: return getattr(self._coord, "_nodes", [])
-    @_nodes.setter
-    def _nodes(self, val: List[dag_storage.DagNode]) -> None:
-        coord: Any = self._coord
-        coord._nodes, coord._node_states = val, {n: "OPEN" for n in val}
-    @property
-    def _node_states(self) -> Dict[dag_storage.DagNode, str]: return getattr(self._coord, "_node_states", {})
-    @_node_states.setter
-    def _node_states(self, val: Dict[dag_storage.DagNode, str]) -> None:
-        coord: Any = self._coord
-        coord._node_states = val
+    def name(self) -> tool_provider.ToolName:
+        return self._name
 
-    @property
-    def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]: return get_singleton(agent_node_config.NodeConfig).verification_checks
-
-    def __getattr__(self, name: str) -> Any:
-        try: return getattr(self._coord, name)
-        except Exception: raise AttributeError(name)
-
-    def resolve_default_target(self) -> Optional[dag_storage.DagNode]:
-        return self._coord.resolve_default_target(last_accessed_file=get_singleton(sandbox_file_editor.EditManager).last_read_or_edited_file)
-
-    def get_blame_targets_for_node(self, node: dag_storage.DagNode) -> Set[agent_file_alias.BoundFile]:
-        return (getattr(get_singleton(agent_node_config.NodeConfig), "blame_targets_by_node", None) or {}).get(node, set())
-
-    def format_task_prompt(self, nodes: Sequence[dag_storage.DagNode]) -> str:
-        return get_singleton(control_work_scheduler.WorkScheduler).format_task_prompt(nodes)
-
-    def check_in_batch_dependencies(self, node: dag_storage.DagNode, suppression_key: Optional[str] = None) -> Optional[tool_provider.ToolResponse]:
-        for dep in self.get_in_batch_dependencies(node):
-            if not self.is_clean_in_turn(dep):
-                return _make_tool_response(True, f"Error: In-batch dependency `{self.get_alias_for_node(dep)}` must be submitted before `{self.get_alias_for_node(node)}`.", reminder=f"In-batch dependencies must be submitted before dependent targets. Submit `{self.get_alias_for_node(dep)}` first.", suppression_key=suppression_key)
-        return None
-
-    def reset_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
-        self._cache.clear()
-        self._coord.reset_nodes(nodes)
-        _install_tools()
-
-    def evaluate_verification(self, target: Optional[dag_storage.DagNode] = None) -> Tuple[bool, str]:
-        cfg = get_singleton(agent_node_config.NodeConfig)
-        by_node = getattr(cfg, "verification_checks_by_node", None)
-        if target is not None and (not by_node or target not in by_node): return self.evaluate_verification(target=None)
-        checks = (by_node.get(target) if target and by_node and target in by_node else cfg.verification_checks) or []
-        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
-        rev, h = edit_mgr.file_update_revision, _compute_file_hash(cfg, edit_mgr, target)
-        cached = self._cache.get(target)
-        if cached and cached[0] == rev and (not cached[1] or cached[1] == h): return cached[2], cached[3]
-        alias_mgr, passed, diag_out = get_singleton(agent_file_alias.AliasManager), True, ""
-        if target:
-            for dep in sorted(self.get_in_batch_dependencies(target), key=self.get_alias_for_node):
-                if self.get_node_state(dep) == "OPEN":
-                    dep_passed, dep_diag = self.evaluate_verification(dep)
-                    if not dep_passed:
-                        passed, prefix = False, f"In-batch dependency `{self.get_alias_for_node(dep)}` verification failed:\n{dep_diag}"
-                        diag_out = f"{prefix}\n\n{diag_out}" if diag_out else prefix
-        for chk in checks:
-            chk_passed, chk_diag = chk.verify()
-            s = alias_mgr.sanitize_text(agent_file_alias.UnsanitizedText(chk_diag)) if chk_diag else ""
-            if s: diag_out = f"{diag_out}\n\n{s}".strip() if diag_out else s
-            if not chk_passed:
-                passed = False; break
-        self._cache[target] = (rev, h, passed, diag_out)
-        return passed, diag_out
-
-    evaluate_verification_for_node = evaluate_verification
-
-    def evaluate_all_open_targets(self) -> Tuple[bool, str]:
-        open_n = self.open_nodes()
-        if not open_n: return self.evaluate_verification()
-        results = [self.evaluate_verification(n) for n in open_n]
-        passed, diag = all(p for p, _ in results), "\n".join(d for _, d in results if d).strip()
-        self._cache[None] = (get_singleton(sandbox_file_editor.EditManager).file_update_revision, _compute_file_hash(get_singleton(agent_node_config.NodeConfig), get_singleton(sandbox_file_editor.EditManager), None), passed, diag)
-        return passed, diag
-
-    def update_verification(self) -> None: self.evaluate_verification()
-
-    def is_verification_up_to_date_and_passing(self) -> Tuple[bool, bool]:
-        cached = self._cache.get(None)
-        if not cached: return False, False
-        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
-        cfg = get_singleton(agent_node_config.NodeConfig)
-        if cached[0] != edit_mgr.file_update_revision or (cfg.read_write_files and cached[1] and _compute_file_hash(cfg, edit_mgr, None) != cached[1]):
-            return False, False
-        return True, cached[2]
-
-
-class CheckFilesTool(sandbox_run_control.CheckFilesTool, Singleton):
-    tier = agent_session
-
-    def __init__(self) -> None:
-        self._last_tested_revision: Optional[int] = None
-        self._last_tested_hashes: Dict[Any, str] = {}
-
-    @property
-    def name(self) -> tool_provider.ToolName: return tool_provider.ToolName("check_files")
     @property
     def description(self) -> tool_provider.ToolDescription:
-        return tool_provider.ToolDescription("Checks static type correctness, syntax, and verification checks for all open targets and modified workspace files. Call check_files to verify syntax and type correctness after completing edits.")
+        return self._description
+
     @property
-    def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]: return {}
+    def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
+        return self._parameters
 
     def execute_tool(
-        self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        self,
+        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
     ) -> tool_provider.ToolResponse:
-        rc, guide_del = get_singleton(RunController), get_singleton(sandbox_guide_delivery.GuideDelivery)
-        edit_mgr, cfg = get_singleton(sandbox_file_editor.EditManager), get_singleton(agent_node_config.NodeConfig)
-        passed, diag = rc.evaluate_all_open_targets()
-        current_rev, current_hash = edit_mgr.file_update_revision, _compute_file_hash(cfg, edit_mgr, None)
+        run_ctrl = get_singleton(sandbox_run_control.RunController)
+        run_ctrl.update_verification()
 
-        is_repeated = self._last_tested_hashes.get("all_files") == current_hash and self._last_tested_revision == current_rev
-        self._last_tested_hashes["all_files"], self._last_tested_revision = current_hash, current_rev
-        reminder = f"Verification {'passes' if passed else 'failed'}, no new information will be revealed by this tool call until session read-write files are updated." if is_repeated else None
-        clean_diag = get_singleton(control_verification.VerificationEvaluator).clean_diagnostic_noise(diag) or diag
+        if getattr(run_ctrl, "_is_unchanged", False):
+            return tool_provider.ToolResponse(
+                is_failed=not getattr(run_ctrl, "_passed", True),
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent("Verification status is unchanged."),
+                reminder=tool_provider.ToolReminder(
+                    "Verification status is unchanged because target files have not been modified since the previous check."
+                ),
+            )
 
-        if not passed:
-            guide_obj = getattr(guide_del, "guide", None)
-            vf = f"\n\n## Verification failure\n{guide_obj.verification_failure}" if (guide_obj and getattr(guide_obj, "verification_failure", None)) else ""
-            return _make_tool_response(True, f"Verification failed: {clean_diag}{vf}".strip(), reminder=reminder, suppression_key="check_files")
+        if not getattr(run_ctrl, "_passed", True):
+            raw_diag = getattr(run_ctrl, "_diagnostic_output", "")
+            alias_mgr = get_singleton(agent_file_alias.AliasManager)
+            sanitized_diag = str(alias_mgr.sanitize_text(agent_file_alias.UnsanitizedText(raw_diag)))
+            node_cfg = get_singleton(agent_node_config.NodeConfig)
+            instructions = ""
+            if node_cfg.guide and node_cfg.guide.verification_failure:
+                instructions = str(node_cfg.guide.verification_failure)
 
-        base_msg = cfg.verification_success_message or "Verification passed: All checks succeeded."
-        return _make_tool_response(False, f"{base_msg}\n\n{clean_diag}".strip() if clean_diag else base_msg, reminder=reminder, suppression_key="check_files")
+            parts = []
+            if sanitized_diag:
+                parts.append(sanitized_diag)
+            if instructions:
+                parts.append(instructions)
+            msg = "\n\n".join(parts) if parts else "Verification failed."
+
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(msg),
+                reminder=tool_provider.ToolReminder("Fix the verification failures before proceeding."),
+            )
+
+        node_cfg = get_singleton(agent_node_config.NodeConfig)
+        success_msg = (
+            str(node_cfg.verification_success_message)
+            if getattr(node_cfg, "verification_success_message", None)
+            else "All verification checks passed."
+        )
+        return tool_provider.ToolResponse(
+            is_failed=False,
+            is_terminated=False,
+            content=tool_provider.ToolResponseContent(success_msg),
+        )
 
 
-class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
+class AdvanceTool(sandbox_run_control.AdvanceTool, InTier[AgentSessionTier], Singleton):
     tier = agent_session
 
+    def __init__(self) -> None:
+        self._name = tool_provider.ToolName("advance")
+        self._description = tool_provider.ToolDescription("Advances progressive guide steps upon passing verification.")
+        self._parameters: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {}
+
     @property
-    def name(self) -> tool_provider.ToolName: return tool_provider.ToolName("advance")
+    def name(self) -> tool_provider.ToolName:
+        return self._name
+
     @property
-    def description(self) -> tool_provider.ToolDescription: return tool_provider.ToolDescription("Advances guide steps or completes the session.")
+    def description(self) -> tool_provider.ToolDescription:
+        return self._description
+
     @property
-    def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]: return {}
+    def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
+        return self._parameters
 
     def execute_tool(
-        self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        self,
+        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
     ) -> tool_provider.ToolResponse:
-        guide_del, rc = get_singleton(sandbox_guide_delivery.GuideDelivery), get_singleton(RunController)
-        is_up_to_date, is_passing = rc.is_verification_up_to_date_and_passing()
-        if not is_up_to_date or not is_passing:
-            passed, diag = rc.evaluate_verification()
-            step_resp = guide_del.advance_step(verification_passed=False, failure_diagnostics=agent_node_config.VerificationDiagnostic(diag))
-            return _make_tool_response(True, step_resp.content if step_resp is not None else "Verification is failing. The check files tool should be called first.", reminder="The check files tool should be called first to inspect verification results.", suppression_key="advance", follow_up=_follow_up("check_files", "Verification results must be inspected before advancing."))
+        run_ctrl = get_singleton(sandbox_run_control.RunController)
+        run_ctrl.update_verification()
 
-        if guide_del.has_steps_remaining:
-            next_step = guide_del.advance_step(verification_passed=True, failure_diagnostics=agent_node_config.VerificationDiagnostic(""))
-            if next_step is not None: return next_step
+        guide_deliv = get_singleton(sandbox_guide_delivery.GuideDelivery)
+        if not getattr(run_ctrl, "_passed", True):
+            raw_diag = getattr(run_ctrl, "_diagnostic_output", "")
+            resp = cast(
+                tool_provider.ToolResponse,
+                guide_deliv.advance_step(
+                    verification_passed=False,
+                    failure_diagnostics=agent_node_config.VerificationDiagnostic(raw_diag),
+                ),
+            )
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=resp.content,
+                reminder=tool_provider.ToolReminder("Call check_files first to diagnose and resolve verification failures."),
+                follow_up_tool_call=tool_provider.FollowUpToolCall(
+                    tool_name=tool_provider.ToolName("check_files"),
+                    wire_parameter_bindings={},
+                ),
+            )
 
-        if get_singleton(sandbox_file_editor.EditManager).has_modifications:
-            return _make_tool_response(True, "All guide steps have been completed, but workspace files were modified.", reminder="Call the submit tool with a change summary describing modifications.", suppression_key="advance")
+        if guide_deliv.has_steps_remaining:
+            return cast(
+                tool_provider.ToolResponse,
+                guide_deliv.advance_step(
+                    verification_passed=True,
+                    failure_diagnostics=agent_node_config.VerificationDiagnostic(""),
+                ),
+            )
 
-        return _make_tool_response(False, "All guide steps have been completed.", suppression_key="advance", follow_up=_follow_up("submit", "All guide steps are complete."))
+        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+        if edit_mgr.has_modifications:
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(
+                    "All guide milestone steps completed. Workspace files were modified; call submit with a change summary."
+                ),
+                reminder=tool_provider.ToolReminder("Call submit with change_summary."),
+            )
+
+        return tool_provider.ToolResponse(
+            is_failed=False,
+            is_terminated=False,
+            content=tool_provider.ToolResponseContent(
+                "All guide milestone steps completed. No files were modified."
+            ),
+            follow_up_tool_call=tool_provider.FollowUpToolCall(
+                tool_name=tool_provider.ToolName("submit"),
+                wire_parameter_bindings={},
+            ),
+        )
 
 
-class _ResolveTool:
+def _is_auditor_node(node: Optional[dag_storage.DagNode]) -> bool:
+    candidate_roles: list[str] = []
+    if node is not None:
+        candidate_roles.append(str(node.role_address).split(":")[-1].strip().lower())
+    role_service = get_singleton(agent_node_config.RoleConfig)
+    if role_service and getattr(role_service, "role", None):
+        candidate_roles.append(str(role_service.role).split(":")[-1].strip().lower())
+
+    cfg = get_singleton(agent_node_config.NodeConfig)
+    role_defs = getattr(cfg, "role_definitions", {})
+    if isinstance(role_defs, dict):
+        for r in candidate_roles:
+            role_cfg = role_defs.get(r)
+            if role_cfg is not None:
+                if (
+                    getattr(role_cfg, "is_auditor", False)
+                    or getattr(role_cfg, "audit_tag", None)
+                    or not getattr(role_cfg, "src_pattern", "")
+                    or (hasattr(role_cfg, "writable_file_patterns") and not role_cfg.writable_file_patterns)
+                ):
+                    return True
+                return False
+
+    for r in candidate_roles:
+        if (
+            r.endswith(("_qa", "_audit", "_auditor", "_coverage"))
+            or r.startswith(("qa_", "audit_"))
+            or r in ("qa", "audit", "coverage")
+            or "qa" in r
+            or "audit" in r
+            or "coverage" in r
+        ):
+            return True
+
+    return False
+
+
+class SubmitTool(sandbox_run_control.SubmitTool, InTier[AgentSessionTier], Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        self._name = tool_provider.ToolName("submit")
+        self._description = tool_provider.ToolDescription("Marks an active node complete upon passing verification.")
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        self._target_parameter = tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
+            name=tool_provider.ParameterName("target"),
+            description=tool_provider.ParameterDescription("Target file alias to submit."),
+            parameter_type=alias_mgr,
+            is_required=False,
+            default_value=None,
+        )
+        self._change_summary_parameter = tool_provider.ToolParameter[Optional[sandbox_run_control.ChangeSummary], str](
+            name=tool_provider.ParameterName("change_summary"),
+            description=tool_provider.ParameterDescription("Description of changes made during the task."),
+            parameter_type=_ChangeSummaryParamType(),
+            is_required=False,
+            default_value=None,
+        )
+        self._parameters: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {
+            self._target_parameter.name: self._target_parameter,
+            self._change_summary_parameter.name: self._change_summary_parameter,
+        }
+
+    @property
+    def name(self) -> tool_provider.ToolName:
+        return self._name
+
+    @property
+    def description(self) -> tool_provider.ToolDescription:
+        return self._description
+
     @property
     def target_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
-        return _alias_param("target", "Target being resolved: source file alias (if any), unit_name (if unique among session units), or relative_path/unit_name (if ambiguous). May be omitted when only one unit is being processed.")
-    target = target_parameter
-    resolve_target = target_parameter
-    resolve_target_parameter = target_parameter
+        return self._target_parameter
 
-
-class SubmitTool(_ResolveTool, sandbox_run_control.SubmitTool, Singleton):
-    tier = agent_session
-
-    @property
-    def name(self) -> tool_provider.ToolName: return tool_provider.ToolName("submit")
-    @property
-    def description(self) -> tool_provider.ToolDescription: return tool_provider.ToolDescription("Submits a completed target file and enforces change documentation.")
     @property
     def change_summary_parameter(self) -> tool_provider.ToolParameter[Optional[sandbox_run_control.ChangeSummary], str]:
-        return cast(Any, _string_param("change_summary", "Summary of modifications made during the task", required=False))
-    change_summary = change_summary_parameter
+        return self._change_summary_parameter
+
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
-        return {self.target.name: self.target, self.change_summary.name: self.change_summary}
+        return self._parameters
 
     def execute_tool(
-        self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        self,
+        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
     ) -> tool_provider.ToolResponse:
-        summary_str = str(actual_parameter_bindings.get(self.change_summary) or "").strip()
-        guide_del, cfg = get_singleton(sandbox_guide_delivery.GuideDelivery), get_singleton(agent_node_config.NodeConfig)
-        edit_mgr, rc = get_singleton(sandbox_file_editor.EditManager), get_singleton(RunController)
-        rc.evaluate_verification()
+        node_cfg = get_singleton(agent_node_config.NodeConfig)
+        guide_deliv = get_singleton(sandbox_guide_delivery.GuideDelivery)
+        if node_cfg.is_step_mode and guide_deliv.has_steps_remaining:
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(
+                    "Guide step mode is active and guide steps remain. Advance through all steps before submitting."
+                ),
+                reminder=tool_provider.ToolReminder("Call advance to continue."),
+                follow_up_tool_call=tool_provider.FollowUpToolCall(
+                    tool_name=tool_provider.ToolName("advance"),
+                    wire_parameter_bindings={},
+                ),
+            )
 
-        if cfg.is_step_mode and guide_del.has_steps_remaining:
-            return _make_tool_response(True, "Error: Cannot finish while guide steps remain.", reminder="The advance tool must be called while guide steps remain.", suppression_key="submit", follow_up=_follow_up("advance", "Remaining guide steps must be completed before finishing."))
+        run_ctrl = get_singleton(sandbox_run_control.RunController)
+        run_ctrl.update_verification()
+        if not getattr(run_ctrl, "_passed", True):
+            raw_diag = getattr(run_ctrl, "_diagnostic_output", "")
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(
+                    f"Verification is failing. Please fix errors before submitting.\n{raw_diag}"
+                ),
+                reminder=tool_provider.ToolReminder("Call check_files to view verification diagnostics."),
+                follow_up_tool_call=tool_provider.FollowUpToolCall(
+                    tool_name=tool_provider.ToolName("check_files"),
+                    wire_parameter_bindings={},
+                ),
+            )
 
-        target_node, err_resp = _resolve_target_node(rc, actual_parameter_bindings.get(self.target) or actual_parameter_bindings.get(self.resolve_target), suppression_key="submit")
-        if err_resp or not target_node: return err_resp or _make_tool_response(True, "Target resolution error")
-        dep_resp = rc.check_in_batch_dependencies(target_node, suppression_key="submit")
-        if dep_resp: return dep_resp
-        target_alias = rc.get_alias_for_node(target_node)
+        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+        has_mods = edit_mgr.has_modifications
 
-        passed, _ = rc.evaluate_verification_for_node(target_node)
-        if not passed:
-            return _make_tool_response(True, "Verification is failing. The check files tool should be called first.", reminder="The check files tool should be called first to inspect verification results.", suppression_key="submit", follow_up=_follow_up("check_files", "Verification results must be inspected before submitting."))
+        raw_target = cast(Optional[agent_file_alias.FileAlias], actual_parameter_bindings.get(self.target_parameter))
+        target_alias = str(raw_target.relative_path) if raw_target is not None else None
+        raw_summary = actual_parameter_bindings.get(self.change_summary_parameter)
+        change_summary_str = str(raw_summary).strip() if (raw_summary is not None and str(raw_summary).strip()) else None
 
-        gating_err = _check_submit_gating(target_node, summary_str, edit_mgr, cfg)
-        if gating_err is not None: return gating_err
+        coord = get_singleton(control_coordinate.SessionCoordinator)
+        target_node = coord.get_node_for_alias(target_alias) if target_alias else coord.resolve_default_target()
 
-        is_auditor = control_submit.is_auditor_node(target_node)
-        get_singleton(dag_storage.DagStorage).mark_node_clean(target_node, dag_storage.ChangeDescription(summary_str) if (summary_str and not is_auditor) else None)
-        rc.set_node_state(target_node, "SUBMITTED")
-        rc.mark_clean_in_turn(target_node)
-        return _finish_target_or_session(rc, f"Target `{target_alias}` submitted successfully.", f"Session completed successfully: {summary_str}".strip() if summary_str else "Session completed successfully.", suppression_key="submit")
+        is_auditor = _is_auditor_node(target_node)
+        if is_auditor and change_summary_str:
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(
+                    "Error: Change summary is prohibited for audit nodes."
+                ),
+                reminder=tool_provider.ToolReminder(
+                    "Change summary is prohibited for audit nodes. Call submit without change_summary."
+                ),
+            )
+
+        if not is_auditor:
+            if has_mods and not change_summary_str:
+                return tool_provider.ToolResponse(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=tool_provider.ToolResponseContent(
+                        "Error: Workspace files were modified, so change_summary must be provided."
+                    ),
+                    reminder=tool_provider.ToolReminder(
+                        "Please provide a change_summary describing your modifications."
+                    ),
+                )
+            if not has_mods and change_summary_str:
+                return tool_provider.ToolResponse(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=tool_provider.ToolResponseContent(
+                        "Error: Change summaries are not permitted when submitting without workspace file modifications."
+                    ),
+                    reminder=tool_provider.ToolReminder(
+                        "Change summaries are not permitted when submitting without workspace file modifications."
+                    ),
+                )
+
+        if not is_auditor and not has_mods:
+            node_msgs: Set[dag_storage.DagMessage] = set()
+            if target_node is not None:
+                storage = get_singleton(dag_storage.DagStorage)
+                node_msgs = storage.get_messages(target_node)
+
+            has_feedback = bool(getattr(node_cfg, "feedback", None)) or any(
+                isinstance(m, dag_storage.FeedbackMessage) for m in node_msgs
+            )
+            if not has_feedback and target_node is not None and hasattr(node_cfg, "per_node_info_by_node") and node_cfg.per_node_info_by_node:
+                info = node_cfg.per_node_info_by_node.get(target_node)
+                if info and getattr(info, "feedback", None):
+                    has_feedback = True
+
+            if has_feedback:
+                return tool_provider.ToolResponse(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=tool_provider.ToolResponseContent(
+                        "Error: Session feedback is present but no workspace files were modified."
+                    ),
+                )
+
+        outcome = coord.dispatch_submit(
+            target_alias=target_alias,
+            change_summary=change_summary_str,
+            has_modifications=has_mods,
+        )
+
+        if not outcome.success:
+            reminder = None
+            if "change_summary" in outcome.message.lower() or "change summaries" in outcome.message.lower():
+                reminder = tool_provider.ToolReminder(
+                    "Please provide an appropriate change_summary or omit it as instructed."
+                )
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(outcome.message),
+                reminder=reminder,
+            )
+
+        is_term = not bool(coord.open_targets)
+        return tool_provider.ToolResponse(
+            is_failed=False,
+            is_terminated=is_term,
+            content=tool_provider.ToolResponseContent(outcome.message),
+        )
 
 
-class FailTool(_ResolveTool, sandbox_run_control.FailTool, Singleton):
+class FailTool(sandbox_run_control.FailTool, InTier[AgentSessionTier], Singleton):
     tier = agent_session
 
-    @property
-    def name(self) -> tool_provider.ToolName: return tool_provider.ToolName("fail")
-    @property
-    def description(self) -> tool_provider.ToolDescription: return tool_provider.ToolDescription("Terminates the run or marks a target in failure.")
-    @property
-    def explanation_parameter(self) -> tool_provider.ToolParameter[sandbox_run_control.FailureExplanation, str]:
-        return cast(Any, _string_param("explanation", "Explanation of why the run failed", required=True))
-    explanation = explanation_parameter
-    @property
-    def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
-        return {self.target.name: self.target, self.explanation.name: self.explanation}
-
-    def execute_tool(
-        self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
-    ) -> tool_provider.ToolResponse:
-        exp = str(actual_parameter_bindings.get(self.explanation) or "Failed")
-        rc = get_singleton(RunController)
-        target_node, err_resp = _resolve_target_node(rc, actual_parameter_bindings.get(self.target) or actual_parameter_bindings.get(self.resolve_target))
-        if err_resp or not target_node: return err_resp or _make_tool_response(True, "Target resolution error")
-        dep_resp = rc.check_in_batch_dependencies(target_node)
-        if dep_resp: return dep_resp
-        target_alias = rc.get_alias_for_node(target_node)
-        rc.set_node_state(target_node, "FAILED")
-        rc.fail_dependents(target_node)
-        return _finish_target_or_session(rc, f"Target `{target_alias}` failed: {exp}", f"Failed: {exp}", is_failed=True)
-
-
-class BlameTool(_ResolveTool, sandbox_run_control.BlameTool, Singleton):
-    tier = agent_session
+    def __init__(self) -> None:
+        self._name = tool_provider.ToolName("fail")
+        self._description = tool_provider.ToolDescription("Fails the active node and terminates session execution.")
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        self._target_parameter = tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
+            name=tool_provider.ParameterName("target"),
+            description=tool_provider.ParameterDescription("Target file alias to fail."),
+            parameter_type=alias_mgr,
+            is_required=False,
+            default_value=None,
+        )
+        self._explanation_parameter = tool_provider.ToolParameter[sandbox_run_control.FailureExplanation, str](
+            name=tool_provider.ParameterName("explanation"),
+            description=tool_provider.ParameterDescription("Explanation of failure reason."),
+            parameter_type=_FailureExplanationParamType(),
+            is_required=True,
+            default_value=None,
+        )
+        self._parameters: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {
+            self._target_parameter.name: self._target_parameter,
+            self._explanation_parameter.name: self._explanation_parameter,
+        }
 
     @property
-    def name(self) -> tool_provider.ToolName: return tool_provider.ToolName("blame")
-    @property
-    def description(self) -> tool_provider.ToolDescription: return tool_provider.ToolDescription("Attributes failure to a dependency node via a blame target.")
-    @property
-    def blame_target_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
-        return _alias_param("blame_target", "Target bound file to blame")
-    blame_target = blame_target_parameter
-    @property
-    def explanation_parameter(self) -> tool_provider.ToolParameter[sandbox_run_control.BlameExplanation, str]:
-        return cast(Any, _string_param("explanation", "Explanation of the defect", required=True))
-    explanation = explanation_parameter
-    @property
-    def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
-        return {self.target.name: self.target, self.blame_target.name: self.blame_target, self.explanation.name: self.explanation}
+    def name(self) -> tool_provider.ToolName:
+        return self._name
 
-    def execute_tool(
-        self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
-    ) -> tool_provider.ToolResponse:
-        raw_target = actual_parameter_bindings.get(self.target) or actual_parameter_bindings.get(self.resolve_target)
-        raw_blame, exp = actual_parameter_bindings.get(self.blame_target), str(actual_parameter_bindings.get(self.explanation) or "")
-        rc = get_singleton(RunController)
-        src_node, matched, blamee, target_str = _resolve_blame(rc, raw_target, raw_blame)
-
-        if src_node is None:
-            open_t = ", ".join(f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes())
-            return _make_tool_response(True, "Error: No open target found for blame.", reminder=f"Specify an open target: {open_t}")
-        if matched is None:
-            avail = ", ".join(getattr(t, "relative_path", getattr(t, "short_name", "")) for t in rc.get_blame_targets_for_node(src_node))
-            return _make_tool_response(True, f"Error: Target '{blamee or target_str}' is not a valid blame target. Available: {avail}", reminder="Only upstream files configured as blame targets can be blamed.")
-        if "\n" in exp or "\r" in exp:
-            return _make_tool_response(True, "Error: Blame explanation must be a single paragraph without newlines.", reminder="Provide the blame explanation as a single continuous paragraph without line breaks or bulleted lists.")
-
-        dep_resp = rc.check_in_batch_dependencies(src_node)
-        if dep_resp: return dep_resp
-
-        storage, blamed_node = get_singleton(dag_storage.DagStorage), getattr(matched, "owning_node", None)
-        if blamed_node is not None:
-            storage.add_message(dag_storage.FeedbackMessage(content=dag_storage.MessageContent(exp), target=blamed_node), to=blamed_node)
-
-        target_name = getattr(matched, "relative_path", getattr(matched, "short_name", ""))
-        rc.set_node_state(src_node, "BLAME")
-        rc.fail_dependents(src_node)
-        return _finish_target_or_session(rc, f"Target `{rc.get_alias_for_node(src_node)}` blamed `{target_name}`: {exp}", f"Blamed {target_name}: {exp}")
-
-
-class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
-    tier = agent_session
-
-    @property
-    def name(self) -> tool_provider.ToolName: return tool_provider.ToolName("get_work")
     @property
     def description(self) -> tool_provider.ToolDescription:
-        return tool_provider.ToolDescription("Retrieves active dirty targets, materializes startup templates, and returns the session task prompt.")
+        return self._description
+
     @property
-    def max_batch_size_parameter(self) -> tool_provider.ToolParameter[Optional[dag_config.BatchSize], int]:
-        return cast(Any, _int_param("max_batch_size", "Maximum number of dirty nodes to process together."))
-    max_batch_size = max_batch_size_parameter
+    def target_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
+        return self._target_parameter
+
+    @property
+    def explanation_parameter(self) -> tool_provider.ToolParameter[sandbox_run_control.FailureExplanation, str]:
+        return self._explanation_parameter
+
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
-        return {self.max_batch_size_parameter.name: self.max_batch_size_parameter}
+        return self._parameters
 
     def execute_tool(
-        self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+        self,
+        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
     ) -> tool_provider.ToolResponse:
-        rc = get_singleton(RunController)
-        open_nodes = [n for n in rc.open_nodes() if n.unit_address != "//session:target"]
-        if open_nodes:
-            open_t = ", ".join(f"`{rc.get_alias_for_node(n)}`" for n in open_nodes)
-            return _make_tool_response(True, f"Error: Open session targets remain: {open_t}.", reminder=f"Open session targets must be resolved before requesting new work: {open_t}.")
+        raw_target = cast(Optional[agent_file_alias.FileAlias], actual_parameter_bindings.get(self.target_parameter))
+        target_alias = str(raw_target.relative_path) if raw_target is not None else None
+        raw_expl = actual_parameter_bindings.get(self.explanation_parameter)
+        explanation = str(raw_expl) if raw_expl is not None else ""
 
-        subgraph, role_cfg = get_singleton(dag_subgraph.DagSubgraph), get_singleton(agent_node_config.RoleConfig)
-        raw_max = actual_parameter_bindings.get(self.max_batch_size_parameter)
-        max_b = None
-        if raw_max is not None:
-            try:
-                parsed = int(cast(Any, raw_max))
-                if parsed > 0:
-                    max_b = parsed
-            except (ValueError, TypeError): pass
+        coord = get_singleton(control_coordinate.SessionCoordinator)
+        outcome = coord.dispatch_fail(target_alias=target_alias, explanation=explanation)
+        return tool_provider.ToolResponse(
+            is_failed=True,
+            is_terminated=True,
+            content=tool_provider.ToolResponseContent(outcome.message),
+        )
 
-        schedule = rc.dispatch_get_work(subgraph=subgraph, max_batch_size=max_b)
-        batch = [task.node for task in schedule.tasks]
 
-        if not batch: return _make_tool_response(False, "No dirty nodes are ready for cleaning.", reminder="No dirty nodes are ready for cleaning.")
+class BlameTool(sandbox_run_control.BlameTool, InTier[AgentSessionTier], Singleton):
+    tier = agent_session
 
-        role_cfg.set_nodes(batch)
-        rc.reset_nodes(batch)
-        for obj in (get_singleton(agent_file_alias.AliasManager), get_singleton(sandbox_guide_delivery.GuideDelivery)):
-            try:
-                if callable(getattr(obj, "initialize", None)): getattr(obj, "initialize")()
-            except Exception: pass
+    def __init__(self) -> None:
+        self._name = tool_provider.ToolName("blame")
+        self._description = tool_provider.ToolDescription("Attributes failure to an upstream dependency node.")
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        self._target_parameter = tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
+            name=tool_provider.ParameterName("target"),
+            description=tool_provider.ParameterDescription("Active node file alias attributing blame."),
+            parameter_type=alias_mgr,
+            is_required=False,
+            default_value=None,
+        )
+        self._blame_target_parameter = tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
+            name=tool_provider.ParameterName("blame_target"),
+            description=tool_provider.ParameterDescription("Blamed upstream dependency file alias."),
+            parameter_type=alias_mgr,
+            is_required=False,
+            default_value=None,
+        )
+        self._explanation_parameter = tool_provider.ToolParameter[sandbox_run_control.BlameExplanation, str](
+            name=tool_provider.ParameterName("explanation"),
+            description=tool_provider.ParameterDescription("Explanation of defect in upstream dependency."),
+            parameter_type=_BlameExplanationParamType(),
+            is_required=True,
+            default_value=None,
+        )
+        self._parameters: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {
+            self._target_parameter.name: self._target_parameter,
+            self._blame_target_parameter.name: self._blame_target_parameter,
+            self._explanation_parameter.name: self._explanation_parameter,
+        }
 
-        prompt = rc.format_task_prompt(batch)
-        if get_singleton(agent_node_config.NodeConfig).is_step_mode:
-            get_singleton(sandbox_guide_delivery.GuideDelivery).record_initial_primer(sandbox_guide_delivery.InitialPrimer(prompt))
+    @property
+    def name(self) -> tool_provider.ToolName:
+        return self._name
 
-        return _make_tool_response(False, prompt)
+    @property
+    def description(self) -> tool_provider.ToolDescription:
+        return self._description
+
+    @property
+    def target_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
+        return self._target_parameter
+
+    @property
+    def blame_target_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
+        return self._blame_target_parameter
+
+    @property
+    def explanation_parameter(self) -> tool_provider.ToolParameter[sandbox_run_control.BlameExplanation, str]:
+        return self._explanation_parameter
+
+    @property
+    def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
+        return self._parameters
+
+    def execute_tool(
+        self,
+        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+    ) -> tool_provider.ToolResponse:
+        raw_expl = actual_parameter_bindings.get(self.explanation_parameter)
+        explanation = str(raw_expl).strip() if raw_expl is not None else ""
+        if "\n" in explanation or "\r" in explanation:
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(
+                    "Error: Explanation must be a single paragraph without newline characters."
+                ),
+                reminder=tool_provider.ToolReminder(
+                    "Format blame explanation as a single paragraph without newlines."
+                ),
+            )
+
+        coord = get_singleton(control_coordinate.SessionCoordinator)
+        raw_target = cast(Optional[agent_file_alias.FileAlias], actual_parameter_bindings.get(self.target_parameter))
+        target_alias = str(raw_target.relative_path) if raw_target is not None else None
+        active_node = coord.get_node_for_alias(target_alias) if target_alias else coord.resolve_default_target()
+        if active_node is None:
+            open_list = ", ".join(f"`{coord.get_alias_for_node(n)}`" for n in coord.open_targets)
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(
+                    f"Error: No active node found for blame. Available: {open_list}"
+                ),
+            )
+
+        node_cfg = get_singleton(agent_node_config.NodeConfig)
+        configured_targets = node_cfg.blame_targets_by_node.get(active_node, set())
+        configured_aliases = [str(bt.relative_path) for bt in configured_targets]
+
+        raw_blame = cast(Optional[agent_file_alias.FileAlias], actual_parameter_bindings.get(self.blame_target_parameter))
+        blame_alias: Optional[str] = None
+        if raw_blame is not None:
+            blame_alias = str(raw_blame.relative_path)
+        else:
+            if len(configured_targets) == 1:
+                blame_alias = str(list(configured_targets)[0].relative_path)
+            elif len(configured_targets) == 0:
+                return tool_provider.ToolResponse(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=tool_provider.ToolResponseContent(
+                        "Error: Active node has no configured blame targets."
+                    ),
+                )
+            else:
+                avail_str = ", ".join(f"`{a}`" for a in configured_aliases)
+                return tool_provider.ToolResponse(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=tool_provider.ToolResponseContent(
+                        f"Error: Blame target omitted but multiple blame targets exist: {avail_str}"
+                    ),
+                )
+
+        if configured_aliases and blame_alias not in configured_aliases:
+            avail_str = ", ".join(f"`{a}`" for a in configured_aliases)
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(
+                    f"Error: Blame target '{blame_alias}' is not valid for active node. Available: {avail_str}"
+                ),
+            )
+
+        # Ensure blame target node is registered in coordinator
+        matching_bts = [bt for bt in configured_targets if str(bt.relative_path) == blame_alias]
+        if matching_bts and hasattr(matching_bts[0], "owning_node"):
+            blame_node = matching_bts[0].owning_node
+            if coord.get_node_for_alias(blame_alias) is None:
+                coord.register_node(blame_node, alias=blame_alias, state=control_coordinate.TargetState.ATTRIBUTED)
+
+        outcome = coord.dispatch_blame(
+            source_alias=coord.get_alias_for_node(active_node),
+            blame_target_alias=blame_alias,
+            explanation=explanation,
+        )
+        if outcome.success:
+            is_term = not bool(coord.open_targets)
+            return tool_provider.ToolResponse(
+                is_failed=False,
+                is_terminated=is_term,
+                content=tool_provider.ToolResponseContent(outcome.message),
+            )
+        else:
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(outcome.message),
+            )
+
+
+class GetWorkTool(sandbox_run_control.GetWorkTool, InTier[AgentSessionTier], Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        self._name = tool_provider.ToolName("get_work")
+        self._description = tool_provider.ToolDescription("Retrieves active dirty nodes for processing.")
+        self._max_batch_size_parameter = tool_provider.ToolParameter[Optional[dag_config.BatchSize], int](
+            name=tool_provider.ParameterName("max_batch_size"),
+            description=tool_provider.ParameterDescription("Maximum batch size of dirty nodes to acquire."),
+            parameter_type=_BatchSizeParamType(),
+            is_required=False,
+            default_value=None,
+        )
+        self._parameters: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {
+            self._max_batch_size_parameter.name: self._max_batch_size_parameter,
+        }
+
+    @property
+    def name(self) -> tool_provider.ToolName:
+        return self._name
+
+    @property
+    def description(self) -> tool_provider.ToolDescription:
+        return self._description
+
+    @property
+    def max_batch_size_parameter(self) -> tool_provider.ToolParameter[Optional[dag_config.BatchSize], int]:
+        return self._max_batch_size_parameter
+
+    @property
+    def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
+        return self._parameters
+
+    def execute_tool(
+        self,
+        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+    ) -> tool_provider.ToolResponse:
+        coord = get_singleton(control_coordinate.SessionCoordinator)
+        if coord.open_targets:
+            open_list = ", ".join(f"`{coord.get_alias_for_node(n)}`" for n in coord.open_targets)
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(
+                    f"Open active nodes remain: {open_list}. Please resolve open nodes before getting new work."
+                ),
+                reminder=tool_provider.ToolReminder("Resolve all open targets before calling get_work."),
+            )
+
+        raw_batch = actual_parameter_bindings.get(self.max_batch_size_parameter)
+        batch_val = int(cast(Any, raw_batch)) if raw_batch is not None else None
+        subgraph = get_singleton(dag_subgraph.DagSubgraph)
+        schedule = coord.dispatch_get_work(subgraph=subgraph, max_batch_size=batch_val)
+
+        if not schedule.tasks:
+            return tool_provider.ToolResponse(
+                is_failed=False,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent("No dirty nodes are ready. Workspace is clean."),
+            )
+
+        prompts = [t.task_prompt for t in schedule.tasks if getattr(t, "task_prompt", None)]
+        task_prompt = "\n\n".join(prompts) if prompts else "Dirty nodes acquired for processing."
+
+        node_cfg = get_singleton(agent_node_config.NodeConfig)
+        guide_deliv = get_singleton(sandbox_guide_delivery.GuideDelivery)
+
+        if node_cfg.is_step_mode:
+            advance_prompt = "Call advance to continue."
+            prompt_content = task_prompt
+            if "call advance" not in prompt_content.lower():
+                prompt_content = f"{prompt_content}\n\n{advance_prompt}"
+            guide_deliv.record_initial_primer(sandbox_guide_delivery.InitialPrimer(prompt_content))
+            return tool_provider.ToolResponse(
+                is_failed=False,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(prompt_content),
+                reminder=tool_provider.ToolReminder(advance_prompt),
+                follow_up_tool_call=tool_provider.FollowUpToolCall(
+                    tool_name=tool_provider.ToolName("advance"),
+                    wire_parameter_bindings={},
+                ),
+            )
+
+        guide_deliv.record_initial_primer(sandbox_guide_delivery.InitialPrimer(task_prompt))
+        return tool_provider.ToolResponse(
+            is_failed=False,
+            is_terminated=False,
+            content=tool_provider.ToolResponseContent(task_prompt),
+        )
+
+
+class RunController(sandbox_run_control.RunController, InTier[AgentSessionTier], Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        self._cached_hashes: Optional[Mapping[agent_file_alias.FileAlias, sandbox_file_editor.FileHash]] = None
+        self._is_unchanged: bool = False
+        self._passed: bool = True
+        self._diagnostic_output: str = ""
+
+    def initialize(self) -> None:
+        tool_mgr = get_singleton(tool_provider.ToolManager)
+        tool_mgr.install_tool(get_singleton(sandbox_run_control.SubmitTool))
+        tool_mgr.install_tool(get_singleton(sandbox_run_control.FailTool))
+        tool_mgr.install_tool(get_singleton(sandbox_run_control.CheckFilesTool))
+        tool_mgr.install_tool(get_singleton(sandbox_run_control.GetWorkTool))
+        tool_mgr.install_tool(get_singleton(sandbox_run_control.BlameTool))
+        node_cfg = get_singleton(agent_node_config.NodeConfig)
+        if node_cfg.is_step_mode:
+            tool_mgr.install_tool(get_singleton(sandbox_run_control.AdvanceTool))
+
+    @property
+    def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        return cfg.verification_checks
+
+    def update_verification(self) -> None:
+        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+        node_cfg = get_singleton(agent_node_config.NodeConfig)
+
+        target_files: Set[agent_file_alias.FileAlias] = set(node_cfg.read_write_files)
+        if not target_files:
+            target_files = set(node_cfg.read_only_files)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        src_file_alias = getattr(node_cfg, "src_file_alias", None)
+        if src_file_alias:
+            target_files.add(alias_mgr.convert(str(src_file_alias)))
+        if hasattr(node_cfg, "src_file_alias_by_node"):
+            for rel in node_cfg.src_file_alias_by_node.values():
+                target_files.add(alias_mgr.convert(str(rel)))
+        if hasattr(node_cfg, "per_node_info_by_node") and node_cfg.per_node_info_by_node:
+            for info in node_cfg.per_node_info_by_node.values():
+                if getattr(info, "src_file_alias", None):
+                    target_files.add(alias_mgr.convert(str(info.src_file_alias)))
+                if getattr(info, "read_write_files", None):
+                    target_files.update(info.read_write_files)
+        if edit_mgr.last_read_or_edited_file is not None:
+            target_files.add(edit_mgr.last_read_or_edited_file)
+
+        current_hashes: dict[agent_file_alias.FileAlias, sandbox_file_editor.FileHash] = {}
+        if target_files:
+            for f in sorted(target_files, key=lambda x: str(x.relative_path)):
+                current_hashes[f] = edit_mgr.file_hash(f)
+        else:
+            alias_mgr = get_singleton(agent_file_alias.AliasManager)
+            default_alias = alias_mgr.convert("")
+            current_hashes[default_alias] = edit_mgr.file_hash(default_alias)
+
+        if self._cached_hashes is not None and self._cached_hashes == current_hashes:
+            self._is_unchanged = True
+            return
+
+        self._is_unchanged = False
+        self._cached_hashes = dict(current_hashes)
+
+        all_passed = True
+        diag_parts: list[str] = []
+        for check in self.verification_checks:
+            passed, diag = check.verify()
+            if not passed:
+                all_passed = False
+                if diag:
+                    diag_parts.append(str(diag))
+                break
+
+        self._passed = all_passed
+        self._diagnostic_output = "\n".join(diag_parts).strip()
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
-    control_asm.__initialize__(reg)
-    for cls, keys in [
-        (RunController, [RunController, sandbox_run_control.RunController]),
-        (CheckFilesTool, [CheckFilesTool, sandbox_run_control.CheckFilesTool, tool_provider.Tool]),
-        (AdvanceTool, [AdvanceTool, sandbox_run_control.AdvanceTool, tool_provider.Tool]),
-        (SubmitTool, [SubmitTool, sandbox_run_control.SubmitTool, sandbox_run_control.ResolveTool, tool_provider.Tool]),
-        (FailTool, [FailTool, sandbox_run_control.FailTool, sandbox_run_control.ResolveTool, tool_provider.Tool]),
-        (BlameTool, [BlameTool, sandbox_run_control.BlameTool, sandbox_run_control.ResolveTool, tool_provider.Tool]),
-        (GetWorkTool, [GetWorkTool, sandbox_run_control.GetWorkTool, tool_provider.Tool]),
-    ]:
-        reg.register_singleton(cls, keys=keys, tier=agent_session)
+    reg.register_singleton(
+        CheckFilesTool,
+        keys=[CheckFilesTool, sandbox_run_control.CheckFilesTool, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+    reg.register_singleton(
+        AdvanceTool,
+        keys=[AdvanceTool, sandbox_run_control.AdvanceTool, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+    reg.register_singleton(
+        SubmitTool,
+        keys=[SubmitTool, sandbox_run_control.SubmitTool, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+    reg.register_singleton(
+        FailTool,
+        keys=[FailTool, sandbox_run_control.FailTool, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+    reg.register_singleton(
+        BlameTool,
+        keys=[BlameTool, sandbox_run_control.BlameTool, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+    reg.register_singleton(
+        GetWorkTool,
+        keys=[GetWorkTool, sandbox_run_control.GetWorkTool, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+    reg.register_singleton(
+        RunController,
+        keys=[RunController, sandbox_run_control.RunController, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+
+_initialize_ = __initialize__

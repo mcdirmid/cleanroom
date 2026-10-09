@@ -1,658 +1,474 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 69fd0aec9e4e
-# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
-# QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CHANGED: 2026-10-09T04:19:04Z
+# CHANGE: Fix MockFilePathManager.resolve_path and path creation to handle string workspace_root paths
+# CODE_HASH: 268c736feb48
+# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
+# QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
-"""Unit tests for sandbox_file_reader_impl aligned with grounding specifications."""
+"""Unit tests for sandbox_file_reader_impl per its grounding specification."""
+
+from __future__ import annotations
 
 import os
-import shutil
 import tempfile
 import unittest
-from dataclasses import dataclass
-from typing import Any, cast, Mapping, Optional, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Set, cast
 
-from update_with_ai.parts.dag.lib.dag_storage import DagNode, RoleAddress, UnitAddress
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
-from update_with_ai.parts.agent.lib.agent_session import agent_session
-from update_with_ai.parts.agent.lib.agent_file_alias import (
-    AliasManager,
-    BoundFile,
-    FileAlias,
-    FileContent,
-    ReadOnlyFile,
-    ReadWriteFile,
-    RegexPattern,
-    RelativePath,
-    UnboundFile,
+from update_with_ai.parts.agent.lib import (
+    agent_file_alias,
+    agent_node_config,
+    agent_session,
 )
-from update_with_ai.parts.agent.lib.agent_node_config import NodeGuide, NodeConfig
-from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
-from update_with_ai.parts.sandbox.lib.sandbox_file_editor import EditManager
-from update_with_ai.parts.sandbox.lib.sandbox_file_reader import (
-    ReadManager,
-    ViewFileTool,
-    SearchTool,
+from update_with_ai.parts.core.lib import file_paths
+from update_with_ai.parts.sandbox.lib import (
+    sandbox_file_editor,
+    sandbox_file_reader,
+    template_format,
+    tool_provider,
 )
 from update_with_ai.parts.sandbox.lib.sandbox_file_reader_impl import (
-    ReadManager as ReadManagerImpl,
-    ViewFileTool as ViewFileToolImpl,
-    RegexPatternParameterType as RegexPatternParameterTypeImpl,
-    SearchTool as SearchToolImpl,
+    ReadManager,
+    ViewFileTool,
+    RegexPatternParameterType,
+    SearchTool,
     __initialize__,
 )
-from update_with_ai.parts.sandbox.lib.tool_provider import (
-    IdentityParameterType,
-    ParameterConversionError,
-    ParameterName,
-    ParameterType,
-    Tool,
-    ToolManager,
-    ToolParameter,
-    ToolResponse,
-    ToolResponseContent,
-    WireType,
-)
 
 
-class ActualParameterBindings(dict[Any, Any]):
-    def __init__(self, bindings: Any) -> None:
-        if isinstance(bindings, set):
-            super().__init__(dict(bindings))
-        else:
-            super().__init__(bindings)
+def _make_read_only_file(rel_path: str, host_path: Optional[str] = None) -> agent_file_alias.ReadOnlyFile:
+    path = host_path if host_path is not None else rel_path
+    obj = agent_file_alias.ReadOnlyFile(
+        relative_path=agent_file_alias.RelativePath(rel_path),
+        workspace_path=cast(Any, path),
+        owning_node=cast(Any, None),
+    )
+    object.__setattr__(obj, "resolve_path", lambda: path)
+    return obj
 
 
-class MockToolManager:
-    tier = agent_session
-
-    def __init__(self) -> None:
-        self.installed_tools: Set[Tool] = set()
-
-    def install_tool(self, tool: Tool) -> None:
-        self.installed_tools.add(tool)
-
-    def execute_tool(
-        self, name: Any, wire_parameter_bindings: Mapping[ParameterName, WireType]
-    ) -> ToolResponse:
-        return ToolResponse(
-            is_failed=False, is_terminated=False, content=ToolResponseContent("")
-        )
-
-
-class MockEditManager:
-    tier = agent_session
-
-    def __init__(self) -> None:
-        self.last_read_or_edited_file: Optional[FileAlias] = None
-
-    def record_file_read(self, file: FileAlias) -> None:
-        self.last_read_or_edited_file = file
-
-    def record_file_edit(self, file: ReadWriteFile) -> None:
-        self.last_read_or_edited_file = file
-
-
-class MockBooleanConverter:
-    tier = agent_session
-    actual_type = bool
-    wire_type = None
-
-    def convert(self, wire_value: Any) -> bool:
-        return bool(wire_value)
-
-
-
-@dataclass(frozen=True)
-class _WorkspacePathDouble:
-    path: str
-
-    def __str__(self) -> str:
-        return self.path
-
-    def __fspath__(self) -> str:
-        return self.path
-
-
-def _make_workspace_path(path: str) -> Any:
-    return _WorkspacePathDouble(path)
-
-
-def _make_workspace_root(path: str) -> Any:
-    return _WorkspacePathDouble(path)
-
-
-class MockAliasManager:
-    tier = agent_session
-
-    def __init__(self, workspace_root: str) -> None:
-        self.workspace_root = _make_workspace_root(workspace_root)
-        self.actual_type = FileAlias
-        self.wire_type = str
-        self.files: dict[str, FileAlias] = {}
-
-    def convert(self, wire_value: Any) -> Any:
-        if isinstance(wire_value, FileAlias):
-            return wire_value
-        if str(wire_value) in self.files:
-            return self.files[str(wire_value)]
-        return UnboundFile(relative_path=RelativePath(str(wire_value)))
-
-    def sanitize_text(self, text: str) -> str:
-        return text.replace(self.workspace_root.path, "[WORKSPACE]")
-
-
-class MockTemplateFormatter:
-    tier = agent_session
-
-    def format_template(self, content: str, parameters: Mapping[str, Any]) -> str:
-        res = content
-        for k, v in parameters.items():
-            res = res.replace(f"<{k}>", str(v))
-        return res
+def _make_read_write_file(rel_path: str, host_path: Optional[str] = None) -> agent_file_alias.ReadWriteFile:
+    path = host_path if host_path is not None else rel_path
+    obj = agent_file_alias.ReadWriteFile(
+        relative_path=agent_file_alias.RelativePath(rel_path),
+        workspace_path=cast(Any, path),
+        owning_node=cast(Any, None),
+    )
+    object.__setattr__(obj, "resolve_path", lambda: path)
+    return obj
 
 
 class MockNodeConfig:
-    tier = agent_session
+    tier = agent_session.agent_session
 
     def __init__(
         self,
-        ro_files: Set[BoundFile],
-        rw_files: Set[BoundFile],
-        guide_file: Optional[UnboundFile] = None,
-        template_parameters: Optional[Mapping[str, Any]] = None,
+        read_only_files: Optional[Set[agent_file_alias.ReadOnlyFile]] = None,
+        read_write_files: Optional[Set[agent_file_alias.ReadWriteFile]] = None,
+        template_parameters: Optional[Mapping[agent_node_config.TemplateParamKey, Any]] = None,
     ) -> None:
-        self.read_only_files = ro_files
-        self.read_write_files = rw_files
-        self.guide_file = guide_file
-        self._template_parameters = template_parameters or {}
+        self._read_only_files = read_only_files if read_only_files is not None else set()
+        self._read_write_files = read_write_files if read_write_files is not None else set()
+        self._template_parameters = template_parameters if template_parameters is not None else {}
 
     @property
-    def template_parameters(self) -> Mapping[str, Any]:
+    def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
+        return self._read_only_files
+
+    @property
+    def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
+        return self._read_write_files
+
+    @property
+    def template_parameters(self) -> Mapping[agent_node_config.TemplateParamKey, Any]:
         return self._template_parameters
 
-    @property
-    def templates(self) -> Mapping[BoundFile, FileContent]:
-        return {}
+
+class MockToolManager:
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.installed_tools: Dict[tool_provider.ToolName, tool_provider.Tool] = {}
+
+    def install_tool(self, tool: tool_provider.Tool) -> None:
+        self.installed_tools[tool.name] = tool
+
+    def execute_tool(
+        self,
+        name: tool_provider.ToolName,
+        wire_parameter_bindings: Mapping[tool_provider.ParameterName, Any],
+    ) -> tool_provider.ToolResponse:
+        raise NotImplementedError()
+
+
+class MockEditManager:
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.reads: List[agent_file_alias.FileAlias] = []
+        self._last_file: Optional[agent_file_alias.FileAlias] = None
 
     @property
-    def guide(self) -> Optional[NodeGuide]:
-        return None
+    def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
+        return self._last_file
+
+    def record_file_read(self, file: agent_file_alias.FileAlias) -> None:
+        self.reads.append(file)
+        self._last_file = file
+
+
+class MockTemplateFormatter:
+    tier = agent_session.agent_session
+
+    def format_template(
+        self,
+        text: template_format.TemplateText,
+        parameters: Mapping[template_format.TemplateKey, Any],
+    ) -> template_format.FormattedText:
+        res = str(text)
+        for k, v in parameters.items():
+            res = res.replace(f"<{k}>", str(v))
+        return template_format.FormattedText(res)
+
+
+class MockAliasManager:
+    tier = agent_session.agent_session
+
+    def __init__(self, workspace_root: str = "/tmp/workspace") -> None:
+        self._workspace_root = workspace_root
 
     @property
-    def blame_targets(self) -> Set[BoundFile]:
-        return set()
+    def workspace_root(self) -> Any:
+        return self._workspace_root
+
+    @property
+    def actual_type(self) -> type[agent_file_alias.FileAlias]:
+        return agent_file_alias.FileAlias
+
+    @property
+    def wire_type(self) -> type[str]:
+        return str
+
+    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+        return agent_file_alias.FileAlias(agent_file_alias.RelativePath(wire_value))
+
+    def sanitize_text(
+        self, text: agent_file_alias.UnsanitizedText
+    ) -> agent_file_alias.SanitizedText:
+        s = str(text)
+        if self._workspace_root in s:
+            s = s.replace(self._workspace_root, "<sanitized_root>")
+        return agent_file_alias.SanitizedText(s)
+
+
+class MockFilePathManager:
+    tier = system
+
+    def create_host_path(self, path: Any) -> file_paths.HostPath:
+        p = str(path.path) if hasattr(path, "path") else str(path)
+        return file_paths.HostPath(file_paths.PathString(p))
+
+    def create_absolute_path(self, path: Any) -> file_paths.AbsolutePath:
+        p = str(path.path) if hasattr(path, "path") else str(path)
+        return file_paths.AbsolutePath(file_paths.PathString(p))
+
+    def create_workspace_path(self, path: Any) -> file_paths.WorkspacePath:
+        p = str(path.path) if hasattr(path, "path") else str(path)
+        return file_paths.WorkspacePath(file_paths.PathString(p))
+
+    def resolve_path(
+        self, root: Any, relative: Any
+    ) -> file_paths.AbsolutePath:
+        root_str = str(root.path) if hasattr(root, "path") else str(root)
+        rel_str = str(relative.path) if hasattr(relative, "path") else str(relative)
+        return file_paths.AbsolutePath(file_paths.PathString(os.path.join(root_str, rel_str)))
+
+
+class MockRoleConfig:
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.role = agent_node_config.RoleName("developer")
+        self.nodes: List[Any] = []
+        self.version = agent_node_config.ExecutionVersion(1)
+
+    def set_role(self, role: Any) -> None:
+        self.role = role
+
+    def set_nodes(self, nodes: Any) -> None:
+        self.nodes = list(nodes)
 
 
 class SandboxFileReaderImplTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.test_dir = tempfile.mkdtemp()
-        self.rw_path = os.path.join(self.test_dir, "writable.txt")
-        self.ro_path = os.path.join(self.test_dir, "readonly.txt")
-        self.ro_py_path = os.path.join(self.test_dir, "readonly.py")
-        with open(self.rw_path, "w", encoding="utf-8") as f:
-            f.write("Line 1 writable\nLine 2 writable\n")
-        with open(self.ro_path, "w", encoding="utf-8") as f:
-            f.write(
-                f"Line 1 readonly at {self.test_dir}/readonly.txt\nLine 2 readonly\n"
-            )
-        with open(self.ro_py_path, "w", encoding="utf-8") as f:
-            f.write("def foo():\n    pass\n")
-        self.ro_md_path = os.path.join(self.test_dir, "spec.md")
-        with open(self.ro_md_path, "w", encoding="utf-8") as f:
-            f.write(
-                "# Title <doc_name>\n\n"
-                '> META: "Meta note at top."\n\n'
-                "First section content.\n\n"
-                '> META: "Multi-line meta note\n> continued on second line."\n\n'
-                "> NOTE: Non-meta quote.\n\n"
-                "Second section content.\n\n"
-                '> META: "Trailing meta note."\n'
-            )
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = self._tmp.name
 
-        self.ro_pyi_path = os.path.join(self.test_dir, "stub.pyi")
-        with open(self.ro_pyi_path, "w", encoding="utf-8") as f:
-            f.write("class Stub:\n    pass\n")
+        self.ro_host_path = os.path.join(self.root, "sample.py")
+        with open(self.ro_host_path, "w", encoding="utf-8") as fh:
+            fh.write(f"def hello():\n    return '{self.root}'\n")
 
-        node = DagNode(
-            unit_address=UnitAddress("//pkg:test"), role_address=RoleAddress("")
-        )
-        self.ro_file = ReadOnlyFile(
-            relative_path=RelativePath("readonly.txt"),
-            workspace_path=_make_workspace_path("readonly.txt"),
-            owning_node=node,
-        )
-        self.ro_py_file = ReadOnlyFile(
-            relative_path=RelativePath("readonly.py"),
-            workspace_path=_make_workspace_path("readonly.py"),
-            owning_node=node,
-        )
-        self.ro_pyi_file = ReadOnlyFile(
-            relative_path=RelativePath("stub.pyi"),
-            workspace_path=_make_workspace_path("stub.pyi"),
-            owning_node=node,
-        )
-        self.ro_md_file = ReadOnlyFile(
-            relative_path=RelativePath("spec.md"),
-            workspace_path=_make_workspace_path("spec.md"),
-            owning_node=node,
-        )
-        self.rw_file = ReadWriteFile(
-            relative_path=RelativePath("writable.txt"),
-            workspace_path=_make_workspace_path("writable.txt"),
-            owning_node=node,
-        )
-        self.guide_unbound = UnboundFile(relative_path=RelativePath("guide.md"))
+        self.ro_md_host_path = os.path.join(self.root, "guide.md")
+        with open(self.ro_md_host_path, "w", encoding="utf-8") as fh:
+            fh.write("# Title\n\n> META: internal note\n\nHello <user>!\n")
+
+        self.rw_host_path = os.path.join(self.root, "target.py")
+        with open(self.rw_host_path, "w", encoding="utf-8") as fh:
+            fh.write("class Target:\n    pass\n")
+
+        self.declared_read_only = _make_read_only_file("sample.py", self.ro_host_path)
+        self.declared_ro_md = _make_read_only_file("guide.md", self.ro_md_host_path)
+        self.missing_read_only = _make_read_only_file("missing.py", os.path.join(self.root, "missing.py"))
+        self.declared_read_write = _make_read_write_file("target.py", self.rw_host_path)
+        self.missing_read_write = _make_read_write_file("absent_target.py", os.path.join(self.root, "absent_target.py"))
 
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
-
-        self.tool_mgr = MockToolManager()
-        self.bool_conv = MockBooleanConverter()
-        self.alias_mgr = MockAliasManager(self.test_dir)
-        self.alias_mgr.files = {
-            self.ro_file.relative_path: self.ro_file,
-            self.ro_py_file.relative_path: self.ro_py_file,
-            self.ro_pyi_file.relative_path: self.ro_pyi_file,
-            self.ro_md_file.relative_path: self.ro_md_file,
-            self.rw_file.relative_path: self.rw_file,
-            self.guide_unbound.relative_path: self.guide_unbound,
-        }
-        self.template_formatter = MockTemplateFormatter()
-        self.edit_mgr = MockEditManager()
-        self.node_cfg = MockNodeConfig(
-            ro_files={self.ro_file, self.ro_py_file, self.ro_pyi_file, self.ro_md_file},
-            rw_files={self.rw_file},
-            guide_file=self.guide_unbound,
-            template_parameters={"doc_name": "MyDoc"},
-        )
-
-        self.registry.register_instance(
-            self.tool_mgr, keys=[ToolManager], tier=agent_session
+        self.mock_node_config = MockNodeConfig(
+            read_only_files={self.declared_read_only, self.declared_ro_md, self.missing_read_only},
+            read_write_files={self.declared_read_write, self.missing_read_write},
+            template_parameters={agent_node_config.TemplateParamKey("user"): "Developer"},
         )
         self.registry.register_instance(
-            self.bool_conv, keys=[IdentityParameterType], tier=agent_session
+            self.mock_node_config,
+            keys=[agent_node_config.NodeConfig],
+            tier=agent_session.agent_session,
         )
+        self.mock_tool_manager = MockToolManager()
         self.registry.register_instance(
-            self.alias_mgr, keys=[AliasManager], tier=agent_session
+            self.mock_tool_manager,
+            keys=[tool_provider.ToolManager],
+            tier=agent_session.agent_session,
         )
+        self.mock_edit_manager = MockEditManager()
         self.registry.register_instance(
-            self.node_cfg, keys=[NodeConfig], tier=agent_session
+            self.mock_edit_manager,
+            keys=[sandbox_file_editor.EditManager],
+            tier=agent_session.agent_session,
         )
+        self.mock_template_formatter = MockTemplateFormatter()
         self.registry.register_instance(
-            self.template_formatter, keys=[TemplateFormatter], tier=agent_session
+            self.mock_template_formatter,
+            keys=[template_format.TemplateFormatter],
+            tier=agent_session.agent_session,
         )
+        self.mock_alias_manager = MockAliasManager(self.root)
         self.registry.register_instance(
-            self.edit_mgr, keys=[EditManager], tier=agent_session
+            self.mock_alias_manager,
+            keys=[
+                agent_file_alias.AliasManager,
+                tool_provider.ParameterType[agent_file_alias.FileAlias, str],
+            ],
+            tier=agent_session.agent_session,
+        )
+        self.mock_file_path_manager = MockFilePathManager()
+        self.registry.register_instance(
+            self.mock_file_path_manager,
+            keys=[file_paths.FilePathManager],
+            tier=system,
+        )
+        self.mock_role_config = MockRoleConfig()
+        self.registry.register_instance(
+            self.mock_role_config,
+            keys=[agent_node_config.RoleConfig],
+            tier=agent_session.agent_session,
         )
 
-    def tearDown(self) -> None:
-        shutil.rmtree(self.test_dir, ignore_errors=True)
-
-    def test_regex_pattern_converter(self) -> None:
-        """CUJ: Converting wire string into RegexPattern."""
-        conv = RegexPatternParameterTypeImpl()
-        # Verify regex pattern parameter type converts a wire type string into a regex pattern
-        pattern = conv.convert(r"foo\d+")
-        self.assertEqual(pattern, r"foo\d+")
-
-    def test_read_manager_initialization_and_properties(self) -> None:
-        """CUJ: ReadManager installs tools and exposes declared files from NodeConfig."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            read_mgr = scope.get_singleton(ReadManagerImpl)
-            # Requirement: [ReadManager] The read manager installs the view file tool.
-            # Requirement: MUST omit the search tool.
-            # Requirement: [ReadManager] The read manager installs the view file tool and search tool.
-            tool_names = {t.name for t in self.tool_mgr.installed_tools}
-            # Verify the view file tool is named view_file
-            self.assertIn("view_file", tool_names)
-            # Verify the search tool is omitted
-            self.assertNotIn("search_files", tool_names)
-            self.assertNotIn("can_read", tool_names)
-
-            # Verify read manager exposes declared files from node config
-            # Requirement: [ReadManager] The read manager exposes the session's set of read-only files.
-            # Requirement: [ReadManager] The read manager exposes the session's set of read-write files.
-            self.assertIn(self.ro_file, read_mgr.read_only_files)
-            self.assertIn(self.ro_py_file, read_mgr.read_only_files)
-            self.assertIn(self.rw_file, read_mgr.read_write_files)
-
-    def test_view_file_tool_execution_and_formatting(self) -> None:
-        """CUJ: Formatting with right-aligned line numbers and suppression keys."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            view_tool = scope.get_singleton(ViewFileTool)
-            self.assertEqual(view_tool.name, "view_file")
-            self.assertIsInstance(view_tool.description, str)
-            self.assertEqual(
-                view_tool.parameters,
-                {view_tool.path_parameter.name: view_tool.path_parameter},
-            )
-            # Verify the view file tool path parameter uses the alias manager to convert a file alias
-            self.assertIs(view_tool.path_parameter.parameter_type, self.alias_mgr)
-
-            # 1. Read-only file formatting and sanitization
-            bindings1 = ActualParameterBindings(
-                bindings={(view_tool.path_parameter, self.ro_file)}
-            )
-            # Requirement: WHEN reading an existing file, MUST format file content with one-indexed right-aligned line numbers followed by a colon and space.
-            # Requirement: WHEN reading a read-only file, MUST omit suppression key and sanitize host paths.
-            resp1 = view_tool.execute_tool(bindings1)
-            self.assertFalse(resp1.is_failed)
-            self.assertIsNone(resp1.suppression_key)
-            self.assertIn(": Line 1 readonly", resp1.content)
-            self.assertIn("[WORKSPACE]/readonly.txt", resp1.content)
-
-            # 2. Read-write file formatting and suppression key
-            bindings2 = ActualParameterBindings(
-                bindings={(view_tool.path_parameter, self.rw_file)}
-            )
-            # Requirement: WHEN reading a read-write file, MUST set suppression key matching the file relative path.
-            resp2 = view_tool.execute_tool(bindings2)
-            self.assertFalse(resp2.is_failed)
-            self.assertEqual(resp2.suppression_key, self.rw_file.relative_path)
-            self.assertIn(": Line 1 writable", resp2.content)
-
-            # 3. Read-only source code file (.py) formatting
-            bindings3 = ActualParameterBindings(
-                bindings={(view_tool.path_parameter, self.ro_py_file)}
-            )
-            resp3 = view_tool.execute_tool(bindings3)
-            self.assertFalse(resp3.is_failed)
-            self.assertIsNone(resp3.suppression_key)
-            self.assertIn(": def foo():", resp3.content)
-
-    def test_read_tool_unbound_files(self) -> None:
-        """CUJ: Handling unbound file requests (guide vs unknown files)."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            view_tool = scope.get_singleton(ViewFileTool)
-
-            # Unbound matching guide file -> fails
-            bindings_guide = ActualParameterBindings(
-                bindings={(view_tool.path_parameter, self.guide_unbound)}
-            )
-            resp_guide = view_tool.execute_tool(bindings_guide)
-            self.assertTrue(resp_guide.is_failed)
-
-            # Unbound unknown file -> fails
-            unknown_unbound = UnboundFile(relative_path=RelativePath("unknown.txt"))
-            bindings_unknown = ActualParameterBindings(
-                bindings={(view_tool.path_parameter, unknown_unbound)}
-            )
-            resp_unknown = view_tool.execute_tool(bindings_unknown)
-            self.assertTrue(resp_unknown.is_failed)
-            self.assertTrue(resp_unknown.reminder)
-
-            # Requirement: WHEN path matches a declared file workspace path, MUST produce a successful Response indicating access is permitted.
-            # Transparent resolution: stub.py -> stub.pyi
-            resp_py = view_tool.execute_tool(
-                ActualParameterBindings(
-                    bindings={
-                        (
-                            view_tool.path_parameter,
-                            UnboundFile(relative_path=RelativePath("stub.py")),
-                        )
-                    }
-                )
-            )
-            self.assertFalse(resp_py.is_failed)
-            self.assertIn("class Stub:", resp_py.content)
-
-            # Transparent resolution: module path update_with_ai.parts.pkg.stub.py -> stub.pyi
-            resp_pkg = view_tool.execute_tool(
-                ActualParameterBindings(
-                    bindings={
-                        (
-                            view_tool.path_parameter,
-                            UnboundFile(
-                                relative_path=RelativePath(
-                                    "update_with_ai.parts.pkg.stub.py"
-                                )
-                            ),
-                        )
-                    }
-                )
-            )
-            self.assertFalse(resp_pkg.is_failed)
-            self.assertIn("class Stub:", resp_pkg.content)
-
-            # Transparent resolution: bare name stub -> stub.pyi
-            resp_bare = view_tool.execute_tool(
-                ActualParameterBindings(
-                    bindings={
-                        (
-                            view_tool.path_parameter,
-                            UnboundFile(relative_path=RelativePath("stub")),
-                        )
-                    }
-                )
-            )
-            self.assertFalse(resp_bare.is_failed)
-            self.assertIn("class Stub:", resp_bare.content)
-
-            # Transparent resolution: module path with bare name pkg.stub -> stub.pyi
-            resp_mod_bare = view_tool.execute_tool(
-                ActualParameterBindings(
-                    bindings={
-                        (
-                            view_tool.path_parameter,
-                            UnboundFile(relative_path=RelativePath("pkg.stub")),
-                        )
-                    }
-                )
-            )
-            self.assertFalse(resp_mod_bare.is_failed)
-            self.assertIn("class Stub:", resp_mod_bare.content)
-
-            # Requirement: WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
-            # Test files are rejected with dedicated guidance
-            resp_test = view_tool.execute_tool(
-                ActualParameterBindings(
-                    bindings={
-                        (
-                            view_tool.path_parameter,
-                            UnboundFile(
-                                relative_path=RelativePath("my_target_test.py")
-                            ),
-                        )
-                    }
-                )
-            )
-            self.assertTrue(resp_test.is_failed)
-            self.assertTrue(resp_test.content)
-
-    def test_read_tool_missing_file_handling(self) -> None:
-        """CUJ: Handling missing read-write files (treated as empty) vs missing read-only files (fails)."""
-        node = DagNode(
-            unit_address=UnitAddress("//pkg:test"), role_address=RoleAddress("")
-        )
-        missing_rw_file = ReadWriteFile(
-            relative_path=RelativePath("missing_rw.txt"),
-            workspace_path=_make_workspace_path("missing_rw.txt"),
-            owning_node=node,
-        )
-        missing_ro_file = ReadOnlyFile(
-            relative_path=RelativePath("missing_ro.txt"),
-            workspace_path=_make_workspace_path("missing_ro.txt"),
-            owning_node=node,
-        )
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            view_tool = scope.get_singleton(ViewFileTool)
-
-            # Requirement: WHEN reading a read-write file that does not exist on disk, MUST treat file content as empty.
-            rw_bindings = ActualParameterBindings(
-                bindings={(view_tool.path_parameter, missing_rw_file)}
-            )
-            rw_resp = view_tool.execute_tool(rw_bindings)
-            self.assertFalse(rw_resp.is_failed)
-            self.assertEqual(rw_resp.content, "")
-            self.assertEqual(rw_resp.suppression_key, missing_rw_file.relative_path)
-
-            # Reading missing read-only file fails with guidance
-            # Requirement: WHEN reading a missing read-only file, MUST produce a Response with failed set to True guiding agent recovery.
-            ro_bindings = ActualParameterBindings(
-                bindings={(view_tool.path_parameter, missing_ro_file)}
-            )
-            ro_resp = view_tool.execute_tool(ro_bindings)
-            self.assertTrue(ro_resp.is_failed)
-            self.assertTrue(ro_resp.reminder)
-
-    def test_read_tool_filters_meta_notes_in_markdown(self) -> None:
-        """CUJ: Filtering > META: paragraphs when reading markdown files."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            view_tool = scope.get_singleton(ViewFileTool)
-            b = ActualParameterBindings(
-                bindings={(view_tool.path_parameter, self.ro_md_file)}
-            )
-            # Requirement: WHEN reading a markdown file ending with .md, MUST filter out paragraphs beginning with '> META:'.
-            # Requirement: WHEN reading a read-only markdown file ending with .md, MUST format content with session template parameters.
-            resp = view_tool.execute_tool(b)
-            self.assertFalse(resp.is_failed)
-            self.assertNotIn("Meta note", resp.content)
-            self.assertNotIn("> META:", resp.content)
-            self.assertIn(": # Title MyDoc", resp.content)
-            self.assertIn("First section content.", resp.content)
-            self.assertIn("> NOTE: Non-meta quote.", resp.content)
-            self.assertIn("Second section content.", resp.content)
-
-    def test_search_tool_reporting_and_invalid_pattern(self) -> None:
-        """CUJ: Searching regex across files and handling invalid regex."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            search_tool = scope.get_singleton(SearchTool)
-            # Verify the search tool is named search_files
-            self.assertEqual(search_tool.name, "search_files")
-            self.assertIsInstance(search_tool.description, str)
-            self.assertGreater(len(search_tool.parameters), 0)
-            conv = search_tool.regex_pattern_parameter.parameter_type
-            # Requirement: [SearchTool] The search tool accepts a regex pattern parameter.
-            # Verify the search tool regex pattern parameter uses the regex pattern parameter type
-            self.assertIsNotNone(conv.actual_type)
-            self.assertIsNotNone(conv.wire_type)
-
-            # Valid search matching both files
-            bindings = ActualParameterBindings(
-                bindings={(search_tool.regex_pattern_parameter, "Line")}
-            )
-            # Verify search tool searches pattern matches across read-only and read-write files
-            # Requirement: [SearchTool] Executing the search tool searches pattern matches across the session's read-only and read-write files.
-            resp = search_tool.execute_tool(bindings)
-            self.assertFalse(resp.is_failed)
-            # Read-only shows line content
-            # Requirement: WHEN matches are found for read-only files, MUST return matched line contents and line numbers sanitized to mask host paths.
-            self.assertIn("readonly.txt:1: Line 1 readonly", resp.content)
-            # Read-write masks details to prevent unanchored edits
-            # Requirement: WHEN matches are found for read-write files, MUST state that matches were found but cannot be displayed to prevent unanchored edits.
-            self.assertIn(self.rw_file.relative_path, resp.content)
-            self.assertTrue(
-                "unanchored" in resp.content.lower()
-                or "matches" in resp.content.lower()
-            )
-
-            # Invalid regex pattern fails
-            bindings_invalid = ActualParameterBindings(
-                bindings={(search_tool.regex_pattern_parameter, "[unclosed")}
-            )
-            # Requirement: WHEN regex pattern is invalid, MUST return a Response with failed set to True.
-            resp_inv = search_tool.execute_tool(bindings_invalid)
-            self.assertTrue(resp_inv.is_failed)
-
-    def test_view_file_records_read_in_edit_manager(self) -> None:
-        """CUJ: ViewFileTool records read file in EditManager upon successful execution."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            view_tool = scope.get_singleton(ViewFileTool)
-            b = ActualParameterBindings(
-                bindings={(view_tool.path_parameter, self.rw_file)}
-            )
-            # Requirement: WHEN reading a file succeeds, MUST record the read file to establish the session's last read or written file.
-            resp = view_tool.execute_tool(b)
-            self.assertFalse(resp.is_failed)
-            self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.rw_file)
-
-    def test_can_read_operation(self) -> None:
-        """CUJ: ReadManager validates workspace file inspection access and alias resolution via can_read."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            read_mgr = scope.get_singleton(ReadManager)
-            # Requirement: [ReadManager] The read manager provides a can read operation validating inspection access for a file path.
-            # Assert on ReadManager.guide_file property accessor
-            self.assertEqual(cast(Any, read_mgr).guide_file, self.guide_unbound)
-
-            # 1. Successful bound file validation records file read
-            # Requirement: WHEN path matches a declared file workspace path, MUST produce a successful Response indicating access is permitted.
-            resp_ro = read_mgr.can_read(self.ro_file.relative_path)
-            self.assertFalse(resp_ro.is_failed)
-            self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.ro_file)
-
-            # Test passing FileAlias directly
-            resp_ro_direct = read_mgr.can_read(self.ro_file)
-            self.assertFalse(resp_ro_direct.is_failed)
-
-            # 2. Step-mode guide file rejection
-            # Requirement: WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
-            resp_guide = read_mgr.can_read(self.guide_unbound.relative_path)
-            self.assertTrue(resp_guide.is_failed)
-            self.assertIn("advance", resp_guide.content)
-
-            # 3. Transparent resolution from .py to .pyi
-            # Requirement: WHEN path matches a declared file workspace path, MUST produce a successful Response indicating access is permitted.
-            resp_py = read_mgr.can_read(RelativePath("stub.py"))
-            self.assertFalse(resp_py.is_failed)
-            self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.ro_pyi_file)
-
-            for cand in ["pkg.sub.stub.py", "pkg.stub", "pkg/stub.py"]:
-                resp_cand = read_mgr.can_read(RelativePath(cand))
-                self.assertFalse(resp_cand.is_failed)
-                self.assertEqual(
-                    self.edit_mgr.last_read_or_edited_file, self.ro_pyi_file
-                )
-
-            # 4. Cleanroom blindness: _test.py rejection
-            # Requirement: WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
-            resp_test = read_mgr.can_read(RelativePath("my_target_test.py"))
-            self.assertTrue(resp_test.is_failed)
-            self.assertTrue(resp_test.content)
-
-            # 5. Undeclared file rejection
-            # Requirement: WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
-            resp_unknown = read_mgr.can_read(RelativePath("unknown.txt"))
-            self.assertTrue(resp_unknown.is_failed)
-            self.assertIn(self.ro_file.relative_path, resp_unknown.content)
-            self.assertTrue(resp_unknown.reminder)
-
-    def test_regex_pattern_parameter_type_conversion(self) -> None:
-        """CUJ: RegexPatternParameterType converts between string wire representations and regex patterns."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            converter = scope.get_singleton(RegexPatternParameterTypeImpl)
-            # Verify regex pattern parameter type conversion
-            self.assertEqual(converter.actual_type, RegexPattern)
-            self.assertEqual(converter.wire_type, str)
-            pattern = converter.convert("matched_.*")
-            self.assertEqual(pattern, "matched_.*")
-
-            # Requirement: WHEN wire_value is not a valid regular expression pattern, MUST raise tool_provider.ParameterConversionError with message formatted as "Invalid regex pattern '{wire_value}': {error}".
-            with self.assertRaises(ParameterConversionError) as ctx:
-                converter.convert("[unclosed")
+    def test_initialization(self) -> None:
+        """CUJ: Verify initial component presence and singleton resolution."""
+        self.assertIsNotNone(self.registry)
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            for cls in [ReadManager, ViewFileTool, RegexPatternParameterType, SearchTool]:
+                instance = scope.get_singleton(cls)
+                self.assertIsNotNone(instance)
             self.assertIn(
-                "Invalid regex pattern '[unclosed':", str(ctx.exception.message)
+                tool_provider.ToolName("view_file"),
+                self.mock_tool_manager.installed_tools,
+            )
+            self.assertNotIn(
+                tool_provider.ToolName("search_files"),
+                self.mock_tool_manager.installed_tools,
             )
 
-    def test_read_manager_initialization_tool_installation(self) -> None:
-        """CUJ: Verify ReadManager installs ViewFileTool."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            # Requirement: MUST install the view file tool for the agent session.
-            # Requirement: MUST omit the search tool.
-            installed = self.tool_mgr.installed_tools
-            self.assertEqual(len(installed), 1)
-            installed_tool = next(iter(installed))
-            self.assertIsInstance(installed_tool, ViewFileToolImpl)
+    def test_read_manager_access_control(self) -> None:
+        """Postcondition: Check access permissions for declared and undeclared files."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            manager = scope.get_singleton(ReadManager)
+            # Declared file access
+            resp_decl = manager.can_read(agent_file_alias.RelativePath("sample.py"))
+            self.assertFalse(resp_decl.is_failed)
+            self.assertEqual(resp_decl.content, "Access permitted for 'sample.py'.")
+
+            # Undeclared file access
+            resp_undecl = manager.can_read(agent_file_alias.RelativePath("undeclared.py"))
+            self.assertTrue(resp_undecl.is_failed)
+            self.assertTrue(str(resp_undecl.content).startswith("Error: Unknown file 'undeclared.py'. Available files: "))
+            self.assertEqual(resp_undecl.reminder, "Only declared files can be inspected.")
+
+    def test_read_manager_file_properties(self) -> None:
+        """Postcondition: Exposes session read-only and read-write files resolved from NodeConfig."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            manager = scope.get_singleton(ReadManager)
+            self.assertEqual(manager.read_only_files, {self.declared_read_only, self.declared_ro_md, self.missing_read_only})
+            self.assertEqual(manager.read_write_files, {self.declared_read_write, self.missing_read_write})
+
+    def test_regex_pattern_conversion(self) -> None:
+        """Postcondition: Convert valid regex pattern and raise ParameterConversionError on invalid."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            param_type = scope.get_singleton(RegexPatternParameterType)
+            self.assertEqual(param_type.wire_type, str)
+            self.assertEqual(param_type.actual_type, agent_file_alias.RegexPattern)
+            valid = param_type.convert("^test.*[0-9]+$")
+            self.assertEqual(valid, agent_file_alias.RegexPattern("^test.*[0-9]+$"))
+
+            with self.assertRaises(tool_provider.ParameterConversionError) as ctx:
+                param_type.convert("[invalid(regex")
+            self.assertTrue(str(ctx.exception.message).startswith("Invalid regex pattern '[invalid(regex': "))
+
+    def test_view_file_tool_metadata(self) -> None:
+        """Postcondition: Verify view_file tool parameters and metadata."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(ViewFileTool)
+            self.assertEqual(tool.name, tool_provider.ToolName("view_file"))
+            self.assertTrue(len(tool.description) > 0)
+            self.assertIn(tool.path_parameter.name, tool.parameters)
+
+    def test_view_file_read_only_formatting_and_sanitization(self) -> None:
+        """Postcondition: Line-number formatting, path sanitization, suppression key omission, and read recording."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(ViewFileTool)
+            resp = tool.execute_tool({
+                tool.path_parameter: tool_provider.SomeParameterActualType(self.declared_read_only),
+            })
+            self.assertFalse(resp.is_failed)
+            # Verify 1-indexed right-aligned line numbers followed by a colon and space
+            content_str = str(resp.content)
+            self.assertIn("1: def hello():", content_str)
+            # Verify text sanitization of host paths
+            self.assertNotIn(self.root, content_str)
+            self.assertIn("<sanitized_root>", content_str)
+            # Verify suppression key is omitted for read-only files
+            self.assertIsNone(resp.suppression_key)
+            # Verify read was recorded
+            self.assertEqual(self.mock_edit_manager.last_read_or_edited_file, self.declared_read_only)
+
+    def test_view_file_read_write_suppression_and_missing_handling(self) -> None:
+        """Postcondition: Suppression key delivery for read-write file, and empty content for missing read-write file."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(ViewFileTool)
+            # Existing read-write file: suppression key matching relative path
+            resp = tool.execute_tool({
+                tool.path_parameter: tool_provider.SomeParameterActualType(self.declared_read_write),
+            })
+            self.assertFalse(resp.is_failed)
+            self.assertEqual(
+                resp.suppression_key,
+                tool_provider.SuppressionKey(str(self.declared_read_write.relative_path)),
+            )
+            self.assertEqual(self.mock_edit_manager.last_read_or_edited_file, self.declared_read_write)
+
+            # Missing read-write file: treated as empty
+            resp_missing = tool.execute_tool({
+                tool.path_parameter: tool_provider.SomeParameterActualType(self.missing_read_write),
+            })
+            self.assertFalse(resp_missing.is_failed)
+            self.assertEqual(str(resp_missing.content).strip(), "")
+
+    def test_view_file_markdown_template_and_meta_filtering(self) -> None:
+        """Postcondition: Filter > META: lines and substitute template parameters for markdown files."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(ViewFileTool)
+            resp = tool.execute_tool({
+                tool.path_parameter: tool_provider.SomeParameterActualType(self.declared_ro_md),
+            })
+            self.assertFalse(resp.is_failed)
+            content_str = str(resp.content)
+            # Filter out paragraphs beginning with '> META:'
+            self.assertNotIn("> META:", content_str)
+            self.assertNotIn("internal note", content_str)
+            # Format content with session template parameters
+            self.assertIn("Hello Developer!", content_str)
+            self.assertNotIn("<user>", content_str)
+
+    def test_view_file_missing_and_undeclared_errors(self) -> None:
+        """Postcondition: Missing read-only file and undeclared unbound file produce failures with guidance."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(ViewFileTool)
+
+            # Missing read-only file on disk
+            resp_missing = tool.execute_tool({
+                tool.path_parameter: tool_provider.SomeParameterActualType(self.missing_read_only),
+            })
+            self.assertTrue(resp_missing.is_failed)
+            self.assertEqual(
+                str(resp_missing.content),
+                f"Error: File '{self.missing_read_only.relative_path}' does not exist on disk.",
+            )
+            self.assertEqual(resp_missing.reminder, tool_provider.ToolReminder("Only declared files can be inspected."))
+
+            # Undeclared unbound file
+            unbound = agent_file_alias.UnboundFile(agent_file_alias.RelativePath("unbound.py"))
+            resp_unbound = tool.execute_tool({
+                tool.path_parameter: tool_provider.SomeParameterActualType(unbound),
+            })
+            self.assertTrue(resp_unbound.is_failed)
+            self.assertTrue(
+                str(resp_unbound.content).startswith(f"Error: Unknown file '{unbound.relative_path}'. Available files: ")
+            )
+            self.assertEqual(resp_unbound.reminder, tool_provider.ToolReminder("Only declared files can be inspected."))
+
+    def test_search_tool_metadata(self) -> None:
+        """Postcondition: Verify search tool parameters and metadata."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SearchTool)
+            self.assertEqual(tool.name, tool_provider.ToolName("search_files"))
+            self.assertTrue(len(tool.description) > 0)
+            self.assertIn(tool.regex_pattern_parameter.name, tool.parameters)
+
+    def test_search_tool_execution(self) -> None:
+        """Postcondition: Match read-only lines sanitized, redact read-write details, fallback on no-match, and fail on invalid regex."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(SearchTool)
+
+            # Pattern matching read-only and read-write files
+            resp_match = tool.execute_tool({
+                tool.regex_pattern_parameter: tool_provider.SomeParameterActualType(
+                    agent_file_alias.RegexPattern("def|class")
+                ),
+            })
+            self.assertFalse(resp_match.is_failed)
+            content_str = str(resp_match.content)
+            # Read-only match returns line contents and numbers, sanitized
+            self.assertIn("def hello():", content_str)
+            self.assertNotIn(self.root, content_str)
+            # Read-write match details hidden
+            expected_rw_msg = f"{self.declared_read_write.relative_path}: matches found (details hidden to prevent unanchored edits)"
+            self.assertIn(expected_rw_msg, content_str)
+
+            # No-match fallback response
+            resp_nomatch = tool.execute_tool({
+                tool.regex_pattern_parameter: tool_provider.SomeParameterActualType(
+                    agent_file_alias.RegexPattern("nonexistent_pattern_12345")
+                ),
+            })
+            self.assertFalse(resp_nomatch.is_failed)
+            self.assertIn("no match", str(resp_nomatch.content).lower())
+
+            # Invalid regex pattern failure
+            resp_invalid = tool.execute_tool({
+                tool.regex_pattern_parameter: tool_provider.SomeParameterActualType(
+                    agent_file_alias.RegexPattern("[invalid(")
+                ),
+            })
+            self.assertTrue(resp_invalid.is_failed)
+            self.assertTrue(str(resp_invalid.content).startswith("Error: Invalid regex pattern "))
 
 
 if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements:
-# - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-# - [Tool] When a parameter is required, an argument must be supplied for tool execution.
+# None

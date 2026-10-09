@@ -72,14 +72,45 @@ if [ ! -d "$FROM_DIR/parts" ]; then
     exit 1
 fi
 
+copy_tree() {
+    local src="$1"
+    local dst="$2"
+    python3 -B - "$src" "$dst" << 'PYEOF'
+import os
+import shutil
+import sys
+
+src = sys.argv[1]
+dst = sys.argv[2]
+os.makedirs(dst, exist_ok=True)
+
+for root, dirs, files in os.walk(src):
+    dirs[:] = sorted([d for d in dirs if d != "__pycache__"])
+    rel = os.path.relpath(root, src)
+    target_root = dst if rel == "." else os.path.join(dst, rel)
+    if rel != ".":
+        os.makedirs(target_root, exist_ok=True)
+        print(f"{root} -> {target_root}")
+    for f in sorted(files):
+        if f.endswith(".pyc") or f == ".DS_Store":
+            continue
+        src_file = os.path.join(root, f)
+        dst_file = os.path.join(target_root, f)
+        os.makedirs(target_root, exist_ok=True)
+        shutil.copy2(src_file, dst_file)
+        print(f"{src_file} -> {dst_file}")
+PYEOF
+}
+
 if [ ${#TARGET_DIRS[@]} -eq 0 ]; then
+    echo "Copying $FROM_DIR/parts -> $TO_DIR/parts"
     rm -rf "$TO_DIR/parts"
     mkdir -p "$TO_DIR/parts"
-    cp -R "$FROM_DIR/parts/." "$TO_DIR/parts/"
+    copy_tree "$FROM_DIR/parts" "$TO_DIR/parts"
     if [ "$TO_DIR" = "staging" ]; then
         for item in "$TO_DIR"/*; do
             base="$(basename "$item")"
-            if [ "$base" != "parts" ] && [ -e "$item" ]; then
+            if [ "$base" != "parts" ] && [ "$base" != "pyproject.toml" ] && [ -e "$item" ]; then
                 rm -rf "$item"
             fi
         done
@@ -105,8 +136,9 @@ else
                     echo "Skipping non-parts destination: $dest_dir" >&2
                     continue
                 fi
+                echo "Copying $src_dir -> $dest_dir"
                 mkdir -p "$dest_dir"
-                cp -R "$src_dir/." "$dest_dir/"
+                copy_tree "$src_dir" "$dest_dir"
             done <<< "$matched_dirs"
         fi
     done
@@ -125,7 +157,7 @@ export TARGET_DIRS="${TARGET_DIRS[*]:-}"
 export FROM_DIR="$FROM_DIR"
 export TO_DIR="$TO_DIR"
 
-python3 - << 'EOF'
+python3 -B - << 'EOF'
 import os
 import sys
 
@@ -225,7 +257,8 @@ for root, dirs, files in os.walk(to_parts_dir):
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
             new_content = content.replace(f"//{from_dir}/parts", f"//{to_dir}/parts")
-            if new_content != content:
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(new_content)
 EOF
+
+find "$TO_DIR/parts" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find "$TO_DIR/parts" -name "*.pyc" -delete 2>/dev/null || true
+

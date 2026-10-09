@@ -388,22 +388,11 @@ def main() -> int:
             return 1
 
     if args.build_path is None:
-        low_dir = os.path.join(dir_name, "..", "low") if dir_name else ""
-        sibling_stems = (
-            {
-                p[:-4]
-                for p in os.listdir(low_dir)
-                if p.endswith(".pyi") and not p.endswith("_ext.pyi")
-            }
-            if os.path.isdir(low_dir)
-            else set()
-        )
-
         allowed_deps = compute_allowed_spec_deps(
             pyi_path,
             impl_stem,
             is_test=True,
-            sibling_stems=sorted(sibling_stems),
+            sibling_stems=None,
             raw_deps=deps,
         )
 

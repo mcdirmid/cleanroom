@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-06T15:15:00Z
 # CHANGE: define tool_coverage interface and public helpers
-# CODE_HASH: 58a5055c607b
+# CODE_HASH: 5e95c8bf5d8a
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations

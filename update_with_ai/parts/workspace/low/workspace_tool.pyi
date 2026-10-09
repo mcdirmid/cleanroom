@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-08T15:45:00Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-08T15:45:00Z
 # CHANGE: add template regeneration to run_check_files postconditions
-# CODE_HASH: 123456789abc
+# CODE_HASH: c5b1f3646193
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_tool."""

@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T23:58:18Z
-# LAST_CHANGED: 2026-10-05T05:44:34Z
-# CHANGE: Standardize on check files tool in editing contracts
-# CODE_HASH: fd143525af9d
-# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
+# LAST_CLEANED: 2026-10-09T21:38:04Z
+# LAST_CHANGED: 2026-10-09T21:38:04Z
+# CHANGE: Contract replace file content tool installation for agent session
+# CODE_HASH: 5078c1da7db5
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file editor implementation low-level specification."""
@@ -136,6 +135,16 @@ class ReplaceFileContentTool(
     - Coordinates text replacements on ReadWriteFiles by delegating file resolution, matching,
       and modification tracking to EditManager and writing updated lines to filesystem.
     """
+
+    @operation
+    @override
+    def initialize(self) -> None:
+        """Installs the replace file content tool into the session environment.
+
+        GROUNDING:
+        - Registers replace_file_content into ToolManager.
+        """
+        ...
 
     @operation
     @override

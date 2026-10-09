@@ -27,6 +27,8 @@ Implementation modules (`lib/<name>_impl.py` or concrete service modules) transl
 - [ ] External libraries are imported only as documented in `low/<name>_ext.pyi`
 - [ ] Pyright type checking passes cleanly with zero errors across all classes
 - [ ] Obsolete public types, type aliases, and class properties not declared in `low/<name>.pyi` or `low/<name>_impl.pyi` are pruned to maintain strict contract alignment and avoid public API pollution
+- [ ] In assembly modules (`lib/<name>_asm.py`), `CONSTITUENTS` is defined as a non-empty tuple containing all constituent modules declared under `CONSTITUENTS:` in `low/<name>_asm.pyi`
+- [ ] In assembly modules (`lib/<name>_asm.py`), `__initialize__(registry=None)` is defined and iterates through `CONSTITUENTS` to invoke each constituent module's initialization routine
 
 ## Document layout and imports
 
@@ -36,7 +38,7 @@ Implementation modules (`lib/<name>_impl.py` or concrete service modules) transl
 - [ ] Collaborator interfaces are imported directly using package-relative imports
 - [ ] Implementation classes are separated by two blank lines, and class members are separated by one blank line
 - [ ] Cross-package types omitted from read-only build dependencies are isolated in private dummy containers in interface modules (e.g. `class _Types: Foo = NewType("Foo", str); pkg = _Types`), and paired implementation modules alias the exact container from the interface module (`pkg = interface_module.pkg`) to preserve nominal identity
-- [ ] Assembly modules (`*_asm.py`) import constituents located outside the current package directory using full package paths (e.g. `from parts.<pkg>.lib import ...`) rather than relative imports
+- [ ] Assembly modules (`*_asm.py`) import all constituent modules declared under `CONSTITUENTS:` in `low/<name>_asm.pyi`, using relative imports for sibling constituents and full package paths (e.g. `from parts.<pkg>.lib import ...`) for cross-package constituents
 
 ## Contract realization and control flow
 
@@ -70,3 +72,4 @@ Implementation modules (`lib/<name>_impl.py` or concrete service modules) transl
 - [ ] Getter properties in implementation singletons expose defensive copies or read-only views (`dict(self._tools)`) of internal state
 - [ ] Services in implementation modules resolve peer or ancestor singletons via `get_singleton(...)` on demand rather than caching stale instances in global variables
 - [ ] Initialization routines in `__initialize__` belong strictly to implementation modules and assembly modules, registering implementations and their realized interface protocol keys; interface modules omit `__initialize__`
+- [ ] Assembly modules (`*_asm.py`) aggregate and initialize all constituent modules via `CONSTITUENTS` in `__initialize__(registry=None)`, delegating initialization to each constituent module

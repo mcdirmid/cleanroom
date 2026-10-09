@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T23:58:18Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 499a71643701
-SPEC_QA_AUDIT: 2026-10-07T23:58:18Z
+LAST_CLEANED: 2026-10-09T21:40:44Z
+LAST_CHANGED: 2026-10-09T22:40:00Z
+CHANGE: Remove initial implementation modification constraint on submission
+CODE_HASH: cdc300b45306
+SPEC_QA_AUDIT: 2026-10-09T22:40:00Z
 -->
 
 # sandbox_run_control_impl implementation component
 
-imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config, template_format, dag_subgraph, sandbox, control_coordinate, control_asm
+imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config, template_format, dag_subgraph, sandbox, control_coordinate, dag_config
 implements: sandbox_run_control
 
 ## Intent
@@ -21,6 +21,7 @@ By providing atomic failure handling for out-of-order execution, preventing subm
 
 ### Contracts
 
+- The run controller initializes session tools upon agent session entry. [initialize_session_tools_on_entry]
 - The run controller installs the submit tool for the agent session. [install_submit_tool]
 - The run controller installs the fail tool for the agent session. [install_fail_tool]
 - The run controller installs the check files tool for the agent session. [install_check_files_tool]
@@ -59,7 +60,6 @@ By providing atomic failure handling for out-of-order execution, preventing subm
 - When guide step mode is active and guide steps remain, the submit tool specifies advance as a follow-up tool call. [submit_specifies_advance_followup]
 - When verification is failing, the submit tool fails. [submit_fails_when_verification_failing]
 - When verification is failing, the submit tool specifies a follow-up execution of check files. [submit_specifies_check_files_followup]
-- When an initial implementation change is assigned and no files were modified, the submit tool fails. [submit_fails_when_initial_change_unmodified]
 - When session feedback is present and no files were modified, the submit tool fails. [submit_fails_when_feedback_unmodified]
 - When the target is an auditor node and a change summary is provided, the submit tool fails. [submit_fails_when_summary_provided_for_auditor]
 - When files were modified and the change summary is omitted, the submit tool fails. [submit_fails_when_change_summary_omitted]
@@ -82,12 +82,13 @@ By providing atomic failure handling for out-of-order execution, preventing subm
 
 ### Woven Contracts
 
-- Session outcome tools are installed during controller initialization, restricting the advance tool strictly to guide step mode. [install_submit_tool, install_fail_tool, install_check_files_tool, install_get_work_tool, install_blame_tool, install_advance_tool_conditional, expose_session_verification_checks]
+- Session outcome tools are installed during controller initialization, restricting the advance tool strictly to guide step mode. [initialize_session_tools_on_entry, install_submit_tool, install_fail_tool, install_check_files_tool, install_get_work_tool, install_blame_tool, install_advance_tool_conditional, expose_session_verification_checks, sandbox_run_control: [initialize_session_tools_on_entry, unconditionally_install_session_tools, install_advance_tool_when_step_mode]]
 - Verification results are evaluated sequentially and cached against target file hashes, reusing cached evaluations when files remain unchanged. [cache_verification_with_file_hash, evaluate_verification_checks_sequentially, verification_outdated_initially, verification_outdated_on_hash_change, omit_checks_when_hashes_match, sandbox_run_control: [cache_verification_results, reuse_cached_verification_outcome]]
 - The check files tool executes verification across modified workspace files, presenting sanitized failure diagnostics or passing results. [present_sanitized_feedback_on_check_failure, present_passing_results_on_check_success, remind_verification_unchanged, share_check_files_suppression_key, sandbox_run_control: [check_files_evaluates_checks, check_files_presents_outcomes, check_files_fails_on_verification_failure]]
 - The advance tool gates step progression behind passing verification, guiding the agent to run verification checks or submit completed work. [advance_repeats_primer_on_first_step_failure, advance_reminds_call_check_files, advance_specifies_check_files_followup, advance_delivers_next_step_on_pass, advance_fails_reminding_submit_when_modified, advance_specifies_submit_followup_when_unmodified, share_advance_suppression_key, sandbox_guide_delivery: [advance_step_passed_supplied, advance_step_diagnostics_supplied]]
-- Resolve tools match and default target arguments and validate in-batch dependency ordering. [resolve_tool_accepts_target_alias, resolve_tool_matches_target, resolve_target_defaults_single_node, resolve_target_defaults_last_path, resolve_tool_fails_when_unresolvable, resolve_tool_fails_when_target_not_open, resolve_tool_fails_when_dependency_not_clean, resolve_tool_fails_dependent_nodes, resolve_tool_lists_remaining_nodes, resolve_tool_terminates_when_all_resolved]
-- The submit tool verifies that guide milestones are finished and tests pass before marking the node clean in storage and in turn with documented changes. [submit_fails_when_guide_steps_remain, submit_specifies_advance_followup, submit_fails_when_verification_failing, submit_specifies_check_files_followup, submit_fails_when_initial_change_unmodified, submit_fails_when_feedback_unmodified, submit_fails_when_summary_provided_for_auditor, submit_fails_when_change_summary_omitted, submit_fails_when_summary_provided_without_modifications, submit_marks_node_clean_in_storage, submit_marks_node_clean, share_submit_suppression_key, sandbox_run_control: [submit_concludes_nodes_on_pass, submit_marks_target_clean, submit_enforces_change_documentation], dag_storage: [mark_node_clean_in_storage, mark_clean_with_change_description, mark_auditor_node_clean_stamps_dependencies]]
+- Resolve tools match and default target arguments and validate in-batch dependency ordering. [resolve_tool_accepts_target_alias, resolve_tool_matches_target, resolve_target_defaults_single_node, resolve_target_defaults_last_path, resolve_tool_fails_when_unresolvable, resolve_tool_fails_when_target_not_open, resolve_tool_fails_when_dependency_not_clean, resolve_tool_fails_dependent_nodes]
+- A resolve tool produces a terminating response when all active nodes are resolved, or produces a non-terminating response listing remaining active nodes when other targets remain open. [resolve_tool_lists_remaining_nodes, resolve_tool_terminates_when_all_resolved, sandbox_run_control: [resolve_tool_terminates_when_all_resolved, resolve_tool_lists_remaining_nodes]]
+- The submit tool verifies that guide milestones are finished and tests pass before marking the node clean in storage and in turn with documented changes. [submit_fails_when_guide_steps_remain, submit_specifies_advance_followup, submit_fails_when_verification_failing, submit_specifies_check_files_followup, submit_fails_when_feedback_unmodified, submit_fails_when_summary_provided_for_auditor, submit_fails_when_change_summary_omitted, submit_fails_when_summary_provided_without_modifications, submit_marks_node_clean_in_storage, submit_marks_node_clean, share_submit_suppression_key, sandbox_run_control: [submit_concludes_nodes_on_pass, submit_marks_target_clean, submit_enforces_change_documentation], dag_storage: [mark_node_clean_in_storage, mark_clean_with_change_description, mark_auditor_node_clean_stamps_dependencies]]
 - The blame tool attributes defects to upstream dependencies using single-paragraph explanations, recording defect feedback in storage and identifying the active node from the blame target. [blame_identifies_active_node_from_target, blame_defaults_single_target, blame_fails_when_target_unconfigured, blame_fails_when_explanation_has_newlines, blame_records_defect_feedback_in_storage, blame_marks_target_attributed, sandbox_run_control: [blame_attributes_upstream_failure], dag_storage: [record_feedback_messages]]
 - The get work tool orchestrates batch acquisition from graph storage, template materialization via dag storage, and session initialization. [get_work_fails_when_open_nodes_remain, get_work_obtains_dirty_nodes, get_work_produces_idle_response, get_work_materializes_templates_via_storage, get_work_returns_primer_with_guide_file, get_work_returns_primer_with_advance_prompt, dag_storage: [materialize_node_template]]
 

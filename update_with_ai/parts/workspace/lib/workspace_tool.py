@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-09T21:19:01Z
 # LAST_CHANGED: 2026-10-06T23:30:00Z
 # CHANGE: define workspace tool runner interface
-# CODE_HASH: 23456789abcd
+# CODE_HASH: 8a4aafcea74a
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_tool."""
