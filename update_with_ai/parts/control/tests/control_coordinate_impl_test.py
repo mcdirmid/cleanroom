@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: 3dd33271440e
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CHANGED: 2026-10-07T18:18:00Z
+# CHANGE: verify template materialization in test_dispatch_get_work
+# CODE_HASH: 7cc15bee2164
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for control_coordinate_impl."""
@@ -75,11 +75,17 @@ class MockAttributionCoordinator:
 class MockDagStorage:
     tier = system
 
+    def __init__(self):
+        self.materialized = []
+
     def get_dependencies(self, node):
         return set()
 
     def is_dirty(self, node):
         return True
+
+    def materialize_template(self, node):
+        self.materialized.append(node)
 
 
 class MockNodeConfig:
@@ -91,6 +97,7 @@ class ControlCoordinateImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         self.coordinator = SessionCoordinator()
+        self.mock_storage = MockDagStorage()
         self.registry.register_instance(
             self.coordinator,
             keys=[control_coordinate.SessionCoordinator, SessionCoordinator],
@@ -117,7 +124,7 @@ class ControlCoordinateImplTest(unittest.TestCase):
             tier=agent_session.agent_session,
         )
         self.registry.register_instance(
-            MockDagStorage(),
+            self.mock_storage,
             keys=[dag_storage.DagStorage],
             tier=system,
         )
@@ -144,6 +151,8 @@ class ControlCoordinateImplTest(unittest.TestCase):
             schedule = self.coordinator.dispatch_get_work(dir_scope="pkg")
             self.assertEqual(len(schedule.tasks), 1)
             self.assertEqual(len(self.coordinator.open_targets), 1)
+            self.assertEqual(len(self.mock_storage.materialized), 1)
+            self.assertEqual(self.mock_storage.materialized[0], schedule.tasks[0].node)
 
     def test_dispatch_check_files_all_work(self) -> None:
         with enter_phase(agent_session.agent_session, registry=self.registry):

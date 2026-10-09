@@ -30,6 +30,7 @@ Checks:
  16. Grounding citations cite valid knowledge provisions (under '### Knowledge Provisions'), not factored contracts.
  17. Prohibited content: markdown tables ('|') and Python AST code expressions.
  18. Grounding DAG acyclicity: internal grounding dependencies between local provisions must form a strict DAG.
+ 19. In non-assembly specifications, front-matter 'imports:' contains all imported modules declared in the corresponding high-level specification (high/<name>.md).
 """
 
 from __future__ import annotations
@@ -228,9 +229,14 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
     if start_idx >= len(lines):
         return [f"{fname}:1: error: specification has no content after metadata"]
 
+    if is_ext:
+        return [
+            f"{fname}:1: error: external components (_ext) do not define planning specifications; external boundaries are specified in high and low specifications"
+        ]
+
     # 1. Header Check
     header_line = lines[start_idx].strip()
-    expected_type = "implementation" if is_impl else ("assembly" if is_asm else ("external" if is_ext else "interface"))
+    expected_type = "implementation" if is_impl else ("assembly" if is_asm else "interface")
     expected_header = f"# {stem} {expected_type} component"
     if header_line != expected_header:
         errors.append(
@@ -265,6 +271,35 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
     if is_impl and not implements_target:
         # Default target is stem without _impl
         implements_target = stem[:-5]
+
+    # 2b. High-Level Specification Import Parity Audit (for non-assembly specifications)
+    if not is_asm:
+        high_path = file_path.parent.parent / "high" / f"{stem}.md"
+        if not high_path.exists():
+            candidates = list(PARTS_DIR.glob(f"*/high/{stem}.md"))
+            if candidates:
+                high_path = candidates[0]
+            elif not candidates:
+                ws_high = list(Path(file_path.anchor).glob(f"**/parts/*/high/{stem}.md"))
+                if ws_high:
+                    high_path = ws_high[0]
+
+        if high_path.exists():
+            try:
+                high_content = high_path.read_text(encoding="utf-8")
+                for h_line in high_content.splitlines():
+                    h_stripped = h_line.strip()
+                    if h_stripped.startswith("imports:"):
+                        h_raw = h_stripped[len("imports:") :].strip()
+                        if h_raw:
+                            for h_imp in [i.strip() for i in h_raw.split(",") if i.strip()]:
+                                if h_imp not in declared_imports:
+                                    errors.append(
+                                        f"{fname}:{start_idx + 1}: error: planning canvas 'imports:' missing '{h_imp}' declared in '{high_path.name}'"
+                                    )
+                        break
+            except OSError:
+                pass
 
     # 3. Structural Sections and Headings
     section_order: list[tuple[str, int]] = []
@@ -518,7 +553,7 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
             valid_provision_count = 0
             for comp, slug in citations:
                 if comp is not None:
-                    if slug in index.comp_provisions.get(comp, set()):
+                    if comp.endswith("_ext") or slug in index.comp_provisions.get(comp, set()):
                         valid_provision_count += 1
                 else:
                     if slug in provision_slugs:
@@ -557,8 +592,8 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                         errors.append(
                             f"{fname}:{l_num}: error: grounding citation '[{slug}]' in '{comp}' is a factored contract slug, NOT a knowledge provision slug. Knowledge requirements must be grounded by knowledge provisions (under '### Knowledge Provisions'), not factored contracts."
                         )
-                    elif slug in index.comp_provisions.get(comp, set()):
-                        # Valid qualified imported provision
+                    elif comp.endswith("_ext") or slug in index.comp_provisions.get(comp, set()):
+                        # Valid qualified imported provision (external boundary or indexed provision)
                         pass
                     else:
                         errors.append(

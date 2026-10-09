@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T12:45:00Z
 # CHANGE: add grounding sections
 # CODE_HASH: 487cc8aca5f3
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Loop cleaner implementation low-level specification."""
@@ -12,6 +13,7 @@ from support.lib.lifecycle import InTier, SystemTier
 import dag_storage
 import loop_cleaner
 import loop_node_cleaner
+import dag_subgraph
 
 
 @singleton_type("system")

@@ -37,7 +37,31 @@ update_python_with_ai(
         '//update_with_ai/parts/core:file_paths_impl',
         '//update_with_ai/parts/tools:tools_asm',
         '//update_with_ai/parts/workspace:workspace_asm',
+        '//update_with_ai/parts/workspace:workspace_tool_impl',
     ],
 )
 
+update_python_with_ai(
+    name = "uv_openai_loop_asm",
+    module_deps = [
+        '//update_with_ai/parts/uv:uv_model_config_impl',
+        '//update_with_ai/parts/core:runner_logger_impl',
+        '//update_with_ai/parts/dag:dag_asm',
+        '//update_with_ai/parts/loop:loop_asm',
+        '//update_with_ai/parts/sandbox:sandbox_asm',
+        '//update_with_ai/parts/uv:uv_asm',
+        '//update_with_ai/parts/uv:uv_loop_impl',
+    ],
+)
 
+update_python_with_ai(
+    name = "uv_cleanroom_asm",
+    module_deps = [
+        ':uv_openai_loop_asm',
+        '//update_with_ai/parts/control:control_asm',
+        '//update_with_ai/parts/core:file_paths_impl',
+        '//update_with_ai/parts/tools:tools_asm',
+        '//update_with_ai/parts/workspace:workspace_asm',
+        '//update_with_ai/parts/workspace:workspace_tool_impl',
+    ],
+)

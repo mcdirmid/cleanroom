@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: ca2fff05018c
+# LAST_CLEANED: 2026-10-08T00:52:53Z
+# LAST_CHANGED: 2026-10-08T00:31:44Z
+# CHANGE: Update DagStorage protocol with add_feedback_message, mark_node_dirty, mark_subgraph_clean
+# CODE_HASH: 81b13bcfad98
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in dag_storage.pyi
@@ -50,10 +50,18 @@ class DagStorage(Protocol):
 
     def is_dirty(self, node: DagNode) -> bool: ...
 
+    def add_feedback_message(self, node: DagNode, message: FeedbackMessage) -> None: ...
+
     def add_message(self, message: DagMessage, to: DagNode) -> None: ...
 
+    def mark_node_dirty(self, node: DagNode, reason: Optional[str] = None) -> None: ...
+
+    def mark_subgraph_clean(self, node: DagNode) -> None: ...
+
     def clear_messages(self, node: DagNode) -> None: ...
+
     def mark_node_clean(
         self, node: DagNode, change_description: Optional[ChangeDescription] = None
     ) -> None: ...
+
     def materialize_template(self, node: DagNode) -> None: ...

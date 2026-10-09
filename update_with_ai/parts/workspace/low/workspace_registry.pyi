@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
-# CODE_HASH: 3eb0f82da16f
+# CODE_HASH: ffb998847b23
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_registry."""
@@ -41,6 +42,8 @@ class RoleDefinition:
         role_address: Optional full role target address.
         audit_tag: Optional metadata audit tag.
         task_prompt: Optional prompt template string.
+        template: Optional path to template file.
+        template_command: Optional shell command template for materializing starter templates.
     """
 
     role_name: str
@@ -64,6 +67,8 @@ class RoleDefinition:
     role_address: Optional[str] = None
     audit_tag: Optional[str] = None
     task_prompt: Optional[str] = None
+    template: str = ""
+    template_command: str = ""
 
 
 @data_type
@@ -109,8 +114,8 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
         """Resolves role definition from role name or target address.
 
         POSTCONDITIONS:
-        - MUST parse define_role declarations from BUILD.bazel.
-        - MUST raise KeyError when role is not declared in build file.
+        - MUST resolve role definition declarations from role configuration file or build file.
+        - MUST raise KeyError when role is not declared.
         - MUST return RoleDefinition with configured file patterns and guide.
         """
         ...
@@ -122,7 +127,7 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
         """Loads and resolves all role definitions declared in repository.
 
         POSTCONDITIONS:
-        - MUST parse role definition declarations from BUILD.bazel.
+        - MUST parse role definition declarations from role configuration file or build file.
         - MUST return RoleDefinition objects for all declared roles.
         """
         ...

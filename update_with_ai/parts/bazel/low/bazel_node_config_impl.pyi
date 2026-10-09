@@ -15,6 +15,9 @@ import agent_file_alias
 import agent_node_config
 import dag_storage
 import file_paths
+import agent_config
+import bazel_manifest_loader
+import tool_provider
 
 
 @singleton_type("agent_session")

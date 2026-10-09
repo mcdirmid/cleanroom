@@ -19,6 +19,7 @@ The Low QA arbiter's sole responsibility is auditing the low-level stubs against
 
 - [ ] In multi-node sessions, each target is identified by its package-relative file alias path (`low/<name>.pyi`), evaluated independently for its corresponding module, and submitted individually via `submit(target="<target_file>")`
 - [ ] Running Pyright type checking and `low_lint.py` internally confirms that the stub contains zero syntax errors, zero type errors, and zero lint violations
+- [ ] In implementation specifications (`<name>_impl.pyi`), top-level imports are verified to declare all non-external modules specified in front-matter `imports:` of the planning specification (`planning/<name>_impl.md`)
 - [ ] Every class definition is decorated with exactly one structural kind decorator from `framework`: `@singleton_type`, `@poly_type`, `@data_type`, or `@variant`
 - [ ] Lifecycle tiers and tier memberships inherit strictly from `ChildTierOf[ParentTier]` and `InTier[TierType]` from `support.lib.lifecycle`
 - [ ] In active services, every member is decorated with either `@property` or `@operation`, and overriding members declare `@override`

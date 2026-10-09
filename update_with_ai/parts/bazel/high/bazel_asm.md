@@ -7,15 +7,15 @@ CODE_HASH: 0a863486d444
 
 # bazel_asm assembly component
 
-assembles: bazel_manifest_loader_impl, bazel_node_config_impl, bazel_storage_impl, bazel_target_impl, file_paths_impl
+assembles: bazel_manifest_loader_impl, bazel_node_config_impl, bazel_target_impl, file_paths_impl
 imports: agent_config, bazel_manifest_ext, bazel_target_labels_ext, filesystem_ext, src_metadata_ext, tool_provider
-implements: agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_storage, file_paths
+implements: agent_file_alias, agent_node_config, bazel_manifest_loader, bazel_target, file_paths
 
 ## Purpose
 
-The bazel_asm assembly component aggregates workspace manifest loading, dependency graph storage, message persistence, target resolution, file paths resolution, and node configuration implementations into a unified Bazel workspace subsystem assembly.
+The bazel_asm assembly component aggregates workspace manifest loading, target resolution, file paths resolution, and node configuration implementations into a unified Bazel workspace subsystem assembly.
 
-Building an autonomous multi-agent development environment requires integrating build graph parsing, persistent message delivery, topological target execution, and sanitized file alias configuration into a cohesive Bazel subsystem. Fragmented workspace configuration forces callers to orchestrate individual Bazel infrastructure components imperatively, introducing initialization order defects and incomplete workspace bindings. The bazel_asm assembly component unifies these implementations into a dedicated assembly, realizing workspace contracts while propagating unclosed service dependencies to the root program assembly.
+Building an autonomous multi-agent development environment requires integrating build graph parsing, topological target execution, and sanitized file alias configuration into a cohesive Bazel subsystem. Fragmented workspace configuration forces callers to orchestrate individual Bazel infrastructure components imperatively, introducing initialization order defects and incomplete workspace bindings. The bazel_asm assembly component unifies these implementations into a dedicated assembly, realizing workspace contracts while propagating unclosed service dependencies to the root program assembly.
 
 **Out of scope:** The bazel_asm assembly component does not parse command-line options, define remote provider communication protocols, manage host operating system processes, or assemble other subsystems; these are handled by other components.
 
@@ -26,8 +26,6 @@ The *bazel assembly* unites the Bazel workspace implementations into a cohesive 
 The bazel assembly aggregates the following constituents:
 
 - The bazel manifest loader implementation from bazel_manifest_loader_impl, closing the bazel manifest loader interface to parse JSON manifests, resolve node references, and compute dependency closures.
-
-- The bazel storage implementation from bazel_storage_impl, closing the agent storage and dag storage interfaces to provide in-memory graph indexing, in-band source file metadata persistence, and dynamic dirty evaluation.
 
 - The bazel target implementation from bazel_target_impl, closing the bazel target interface to normalize target labels and resolve package directory paths.
 

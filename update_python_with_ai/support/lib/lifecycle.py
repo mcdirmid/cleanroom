@@ -698,7 +698,7 @@ def _create_scope(
     elif tier == system:
         p = None
     else:
-        if active is not None:
+        if active is not None and (registry is None or active.registry is registry):
             p = active
         elif registry is not None and registry is not _global_registry:
             p = LifecycleScope(system, registry=registry)

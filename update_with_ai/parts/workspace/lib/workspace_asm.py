@@ -1,14 +1,11 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-08T12:55:00Z
 # LAST_CHANGED: 2026-10-06T22:55:00Z
-# CHANGE: new file
-# CODE_HASH: 51097af9ce14
+# CHANGE: core constituents
+# CODE_HASH: 1cbcf4783178
 # --- END CLEANROOM METADATA ---
 
-"""Assembly component for workspace_asm."""
-
 from __future__ import annotations
-
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry, get_default_registry
 from update_with_ai.parts.agent.lib import agent_session
@@ -29,7 +26,6 @@ CONSTITUENTS = (
     workspace_sync_impl,
     workspace_work_impl,
 )
-
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Initializes the workspace assembly component and registers its singletons."""
@@ -66,3 +62,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         ],
         tier=agent_session.agent_session,
     )
+
+_initialize_ = __initialize__

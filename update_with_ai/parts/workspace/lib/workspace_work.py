@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T22:55:00Z
 # CHANGE: new file
-# CODE_HASH: 8d4c8fff50e5
+# CODE_HASH: a2cafac18fb3
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_work."""
@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
+
+PENDING_WORK_FILE: str = ".cleanroom_pending_work.json"
 
 
 @dataclass(frozen=True)

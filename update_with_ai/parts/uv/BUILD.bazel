@@ -1,0 +1,73 @@
+# update_with_ai/parts/uv/BUILD.bazel
+
+load("//update_python_with_ai/support/lib:update_python_with_ai.bzl", "update_python_with_ai")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "high_specs",
+    srcs = glob(["high/*.md"], allow_empty = True),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "grounding_specs",
+    srcs = glob(["grounding/*.gt", "grounding/*.py", "grounding/*.pyi", "low/*.pyi"], allow_empty = True),
+    visibility = ["//visibility:public"],
+)
+
+update_python_with_ai(
+    name = "uv_asm",
+    module_deps = [':uv_manifest_loader_impl', ':uv_node_config_impl', ':uv_target_impl', '//update_with_ai/parts/core:file_paths_impl'],
+)
+
+update_python_with_ai(
+    name = "uv_manifest_ext",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "uv_manifest_loader",
+    module_deps = ['//update_with_ai/parts/agent:agent_storage', ':uv_target', '//update_with_ai/parts/dag:dag_storage'],
+)
+
+update_python_with_ai(
+    name = "uv_manifest_loader_impl",
+    module_deps = [
+        '//update_with_ai/parts/agent:agent_storage', ':uv_manifest_ext', ':uv_manifest_loader', ':uv_target', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/core:file_paths'
+    ],
+)
+
+update_python_with_ai(
+    name = "uv_node_config_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_config', '//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', ':uv_manifest_loader', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/core:file_paths', '//update_with_ai/parts/sandbox:tool_provider'],
+)
+
+update_python_with_ai(
+    name = "uv_loop_impl",
+    module_deps = [':uv_manifest_loader', '//update_with_ai/parts/core:runner_logger', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/loop:loop', '//update_with_ai/parts/loop:loop_cleaner', '//update_with_ai/parts/loop:loop_node_cleaner'],
+)
+
+update_python_with_ai(
+    name = "uv_target",
+    module_deps = ['//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/core:file_paths'],
+)
+
+update_python_with_ai(
+    name = "uv_target_impl",
+    module_deps = [':uv_target', ':uv_target_labels_ext', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/core:file_paths'],
+)
+
+update_python_with_ai(
+    name = "uv_target_labels_ext",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "uv_model_config_impl",
+    module_deps = [
+        '//update_with_ai/parts/agent:agent_config',
+        '//update_with_ai/parts/dag:dag_config',
+        '//update_with_ai/parts/openai:openai_config',
+    ],
+)

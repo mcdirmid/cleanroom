@@ -1,14 +1,15 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
-# CODE_HASH: 590cd64b577f
+# CODE_HASH: b4f2b273795e
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_submit."""
 
 from dataclasses import dataclass
-from typing import Optional, Protocol, Sequence
+from typing import Optional, Protocol, Sequence, Tuple
 from framework import data_type, operation, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
@@ -51,6 +52,8 @@ class SubmissionCoordinator(InTier[AgentSessionTier], Protocol):
         - When files unmodified and change summary supplied, MUST reject submission.
         - When accepted, MUST mark target node clean in graph storage and record change message.
         """
+        ...
+
     @operation
     def submit_target_file(
         self,
@@ -67,7 +70,27 @@ class SubmissionCoordinator(InTier[AgentSessionTier], Protocol):
         - When producer role attempts to submit a read-only target, MUST reject submission.
         - When target is modified and change summary is omitted, MUST reject submission.
         - When target is unmodified and change summary is supplied, MUST reject submission.
-        - When accepted, MUST update in-band metadata or execute build submission target in main repository.
+        - When accepted, MUST update in-band metadata directly in main repository and reflect to workspace.
         - MUST return SubmissionOutcome indicating acceptance status and message.
         """
         ...
+
+    @operation
+    def resolve_submit_target(
+        self,
+        target: str,
+        repo_root: str,
+        role_name: str,
+        dir_scope: str = "staging",
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Resolves target specification to canonical or workspace file path and unit name."""
+        ...
+
+    @operation
+    def parse_unit_from_file_path(
+        self, file_path: str, repo_root: str
+    ) -> Tuple[str, str, str]:
+        """Parses part directory, unit name, and role name from file path."""
+        ...
+
+

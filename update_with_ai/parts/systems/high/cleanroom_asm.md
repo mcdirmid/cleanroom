@@ -1,15 +1,15 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-06T17:05:00Z
-CHANGE: new file
-CODE_HASH: 1a3f9aecee7a
+LAST_CLEANED: 2026-10-08T12:55:00Z
+LAST_CHANGED: 2026-10-08T12:55:00Z
+CHANGE: assemble workspace_tool_impl
+CODE_HASH: 42f61aaf4101
 -->
 
 # cleanroom_asm assembly component
 
-assembles: bazel_openai_loop_asm, control_asm, file_paths_impl, tools_asm, workspace_asm
+assembles: bazel_openai_loop_asm, control_asm, file_paths_impl, tools_asm, workspace_asm, workspace_tool_impl
 imports: agent_session, bazel_manifest_ext, bazel_target_labels_ext, commonmark_ext, filesystem_ext, json_ext, model_config_ext, openai_ext, src_metadata_ext
-implements: agent_config, agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, control_attribution, control_coordinate, control_submit, control_verification, control_work_scheduler, dag_config, dag_storage, dag_subgraph, file_paths, loop, loop_cleaner, loop_conversation, loop_driver, loop_guard, loop_node_cleaner, openai_config, runner_logger, sandbox, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, src_metadata, template_format, tool_coverage, tool_provider, workspace_provision, workspace_registry, workspace_sync, workspace_work
+implements: agent_config, agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, control_attribution, control_coordinate, control_submit, control_verification, control_work_scheduler, dag_config, dag_storage, dag_subgraph, file_paths, loop, loop_cleaner, loop_conversation, loop_driver, loop_guard, loop_node_cleaner, openai_config, runner_logger, sandbox, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, src_metadata, template_format, tool_coverage, tool_provider, workspace_provision, workspace_registry, workspace_sync, workspace_tool, workspace_work
 
 ## Purpose
 
@@ -34,3 +34,5 @@ The cleanroom assembly aggregates the following constituents:
 - The tools assembly from tools_asm, closing the tool coverage interface to measure statement coverage and certify execution thresholds.
 
 - The workspace assembly from workspace_asm, closing the workspace provisioning, workspace registry, workspace synchronization, and work queue interfaces.
+
+- The workspace tool runner implementation from workspace_tool_impl, closing the workspace tool runner interface for role workspace CLI execution and argument parsing.

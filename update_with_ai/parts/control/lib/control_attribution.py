@@ -1,13 +1,14 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T10:45:00Z
 # CHANGE: new file
-# CODE_HASH: 464c0c94162f
+# CODE_HASH: c557c0c97117
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional, Protocol, Sequence
+from typing import Any, Optional, Protocol, Sequence
+from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.dag.lib import dag_storage
 
 
@@ -61,3 +62,8 @@ class AttributionCoordinator(Protocol):
         repo_root: Optional[str] = None,
         workspace_root: Optional[str] = None,
     ) -> AttributionOutcome: ...
+
+    def match_blame_target(
+        self, node: dag_storage.DagNode, val: Any, val_str: str
+    ) -> Optional[agent_file_alias.BoundFile]: ...
+

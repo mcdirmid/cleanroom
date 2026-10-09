@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-06T23:30:00Z
-CHANGE: new file
+LAST_CLEANED: 2026-10-08T15:45:00Z
+LAST_CHANGED: 2026-10-08T15:45:00Z
+CHANGE: clarify starter template regeneration before verification for regenerable roles
 CODE_HASH: 7a8b9c1d2e3f
 -->
 
@@ -29,14 +29,14 @@ The workspace tool runner:
 
 - Evaluates ready tasks for the active role scope via the work manager, formatting structured console reports with target paths, companion specification contracts to read, and actionable next steps.
 
-- Submits target files, enforcing producer change summaries, attesting auditor stamps, and clearing pending target buffers upon success.
+- Submits target files, enforcing producer change summaries, attesting auditor stamps, appending submission records to the cleanroom log, and clearing pending target buffers upon success.
 
-- Attributes defect blame or failure diagnostics to culprit targets, propagating feedback and clearing pending target buffers upon success.
+- Attributes defect blame or failure diagnostics to culprit targets, propagating feedback, appending feedback records to the cleanroom log, and clearing pending target buffers upon success.
 
 - Evaluates statement test coverage across implementation and test pairs against target thresholds.
 
-- Evaluates static verification checks, linters, and type checking for specified or pending target files.
+- Evaluates static verification checks, linters, and type checking for specified or pending target files, ensuring missing target files for roles with declared source patterns and upstream dependencies are regenerated from starter templates prior to verification.
 
-- Commissions and decommissions isolated role workspaces for specified roles and directory scopes.
+- Commissions isolated role workspaces for specified roles and directory scopes.
 
 - Refreshes system configuration files, bin utilities, and companion guides across active role workspaces.

@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-07T23:58:18Z
 LAST_CHANGED: 2026-10-05T05:11:04Z
 CHANGE: Clarify that acyclic subgraph structure is an assumption because cycle checking is out of scope
 CODE_HASH: ddd26427e161

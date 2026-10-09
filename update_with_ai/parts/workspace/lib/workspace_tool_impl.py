@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-06T23:30:00Z
+# LAST_CLEANED: 2026-10-08T12:55:00Z
+# LAST_CHANGED: 2026-10-08T12:55:00Z
 # CHANGE: implement workspace tool runner
-# CODE_HASH: 3456789abcde
+# CODE_HASH: f04007864808
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_tool_impl."""
@@ -18,36 +18,34 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from support.lib.lifecycle import LifecycleRegistry, Singleton, enter_phase, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    LifecycleResolutionError,
+    Singleton,
+    enter_phase,
+    get_default_registry,
+    get_singleton,
+)
 from update_with_ai.parts.agent.lib import agent_session
 from update_with_ai.parts.control.lib import (
-    control_asm,
     control_attribution,
-    control_attribution_impl,
     control_submit,
-    control_submit_impl,
-    control_work_scheduler,
-    src_metadata,
 )
 from update_with_ai.parts.tools.lib import (
     tool_coverage,
-    tools_asm,
 )
 from update_with_ai.parts.workspace.lib import (
-    workspace_asm,
-    workspace_provision_impl,
+    workspace_provision,
     workspace_registry,
-    workspace_registry_impl,
     workspace_sync,
-    workspace_sync_impl,
     workspace_work,
-    workspace_work_impl,
 )
 from . import workspace_tool
 
 AUDIT_BUFFER_FILE = ".cleanroom_audit_buffer.json"
 BLAME_BUFFER_FILE = ".cleanroom_blame_buffer.json"
-PENDING_WORK_FILE = workspace_work_impl.PENDING_WORK_FILE
+PENDING_WORK_FILE = workspace_work.PENDING_WORK_FILE
+
 
 
 def is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
@@ -86,9 +84,7 @@ def copy_file_with_perms(
     executable: bool = False,
 ) -> None:
     """Copies file preserving permissions and content."""
-    workspace_sync_impl.copy_file_with_perms(
-        src, dst, readonly=readonly, executable=executable
-    )
+    workspace_sync.copy_file_with_perms(src, dst)
 
 
 def find_workspace_root() -> str:
@@ -109,13 +105,13 @@ def get_current_role_metadata() -> Optional[Dict[str, Any]]:
         try:
             with open(p, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             return None
     return None
 
 
 def _resolve_main_root(
-    ws_root: str, meta: Optional[Dict[str, Any]], repo_root: Optional[str]
+    ws_root: str, meta: Optional[Dict[str, Any]], repo_root: Optional[str] = None
 ) -> str:
     if repo_root:
         return os.path.realpath(repo_root)
@@ -123,7 +119,7 @@ def _resolve_main_root(
         m = meta.get("main_workspace_root") or meta.get("repo_root")
         if m:
             return os.path.realpath(m)
-    reg = workspace_registry_impl.WorkspaceRegistry()
+    reg = get_singleton(workspace_registry.WorkspaceRegistry)
     active = reg.load_active_workspaces(repo_root=ws_root)
     for ws in active:
         if os.path.realpath(ws.workspace_dir) == ws_root:
@@ -133,25 +129,25 @@ def _resolve_main_root(
 
 def get_pending_work(ws_root: str) -> List[str]:
     """Returns list of pending target paths assigned in previous get_work calls."""
-    mgr = workspace_work_impl.WorkspaceWorkManager()
+    mgr = get_singleton(workspace_work.WorkspaceWorkManager)
     return list(mgr.get_pending_work(ws_root))
 
 
 def set_pending_work(ws_root: str, targets: List[str]) -> None:
     """Records pending target paths assigned to the workspace."""
-    mgr = workspace_work_impl.WorkspaceWorkManager()
+    mgr = get_singleton(workspace_work.WorkspaceWorkManager)
     mgr.set_pending_work(ws_root, targets)
 
 
 def clear_pending_work(ws_root: str) -> None:
     """Clears pending work tracking file."""
-    mgr = workspace_work_impl.WorkspaceWorkManager()
+    mgr = get_singleton(workspace_work.WorkspaceWorkManager)
     mgr.clear_pending_work(ws_root)
 
 
 def remove_pending_target(ws_root: str, submitted_target: str) -> None:
     """Removes a submitted or resolved target from pending work."""
-    mgr = workspace_work_impl.WorkspaceWorkManager()
+    mgr = get_singleton(workspace_work.WorkspaceWorkManager)
     mgr.remove_pending_target(ws_root, submitted_target)
 
 
@@ -159,10 +155,52 @@ def is_pending_target_dirty(
     pt: str, ws_root: str, main_root: str, role_name: str
 ) -> bool:
     """Checks whether a pending target file is still dirty in ws_root or main."""
-    mgr = workspace_work_impl.WorkspaceWorkManager()
+    mgr = get_singleton(workspace_work.WorkspaceWorkManager)
     return mgr.is_pending_target_dirty(
         pt, ws_root, main_root=main_root, role_name=role_name
     )
+
+
+def resolve_cleanroom_log_path(
+    target_or_path: str, repo_root: Optional[str] = None
+) -> str:
+    """Resolves path to .cleanroom.log in the directory containing parts."""
+    root = os.path.realpath(repo_root or find_workspace_root())
+    norm_path = (
+        target_or_path
+        if os.path.isabs(target_or_path)
+        else os.path.join(root, target_or_path)
+    )
+    norm_path = os.path.normpath(norm_path)
+
+    curr = norm_path
+    while curr and curr != os.path.dirname(curr):
+        parent = os.path.dirname(curr)
+        if os.path.basename(curr) == "parts":
+            return os.path.join(parent, ".cleanroom.log")
+        curr = parent
+
+    if os.path.isdir(os.path.join(root, "parts")):
+        return os.path.join(root, ".cleanroom.log")
+    meta = get_current_role_metadata()
+    if meta and meta.get("parts_dir"):
+        parts_parent = os.path.join(root, meta["parts_dir"])
+        return os.path.join(parts_parent, ".cleanroom.log")
+
+    return os.path.join(root, ".cleanroom.log")
+
+
+def append_cleanroom_log(
+    target_or_path: str,
+    message: str,
+    repo_root: Optional[str] = None,
+) -> str:
+    """Appends action record message to .cleanroom.log in directory containing parts."""
+    log_path = resolve_cleanroom_log_path(target_or_path, repo_root=repo_root)
+    os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(message.rstrip("\n") + "\n")
+    return log_path
 
 
 def compute_role_work_queue(
@@ -171,10 +209,11 @@ def compute_role_work_queue(
     repo_root: str,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Computes ready and blocked dirty work items for a role."""
-    mgr = workspace_work_impl.WorkspaceWorkManager()
+    mgr = get_singleton(workspace_work.WorkspaceWorkManager)
     ready_items, blocked_items = mgr.compute_role_work_queue(
         role_name, dir_scope, repo_root
     )
+
 
     def _to_dict(it: workspace_work.WorkQueueItem) -> Dict[str, Any]:
         stem = os.path.splitext(os.path.basename(it.target_file))[0]
@@ -193,12 +232,49 @@ def compute_role_work_queue(
     return [_to_dict(it) for it in ready_items], [_to_dict(it) for it in blocked_items]
 
 
-def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
-    from update_with_ai.parts.agent.lib import agent_node_config
+def _find_agent_node_config_module() -> Any:
+    for k, m in list(sys.modules.items()):
+        if k.endswith(".parts.agent.lib.agent_node_config") or k == "parts.agent.lib.agent_node_config":
+            if hasattr(m, "NodeConfig"):
+                return m
+    ws_root = find_workspace_root()
+    roots = [ws_root]
+    meta = get_current_role_metadata()
+    main_r = _resolve_main_root(ws_root, meta)
+    if main_r and main_r not in roots:
+        roots.append(main_r)
+    for r in roots:
+        if not os.path.isdir(r):
+            continue
+        try:
+            for entry in os.listdir(r):
+                if entry.startswith((".", "bazel-", "venv")):
+                    continue
+                cand = os.path.join(r, entry, "parts", "agent", "lib", "agent_node_config.py")
+                if os.path.isfile(cand) and os.path.isdir(os.path.join(r, entry, "support", "lib")):
+                    try:
+                        import importlib
+                        return importlib.import_module(f"{entry}.parts.agent.lib.agent_node_config")
+                    except ImportError:
+                        pass
+        except OSError:
+            pass
     try:
-        cfg = get_singleton(agent_node_config.NodeConfig)
-    except Exception:
-        cfg = None
+        import importlib
+        return importlib.import_module("parts.agent.lib.agent_node_config")
+    except ImportError:
+        return None
+
+
+def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
+    node_cfg_mod = _find_agent_node_config_module()
+    node_cfg_cls = getattr(node_cfg_mod, "NodeConfig", None) if node_cfg_mod else None
+    cfg = None
+    if node_cfg_cls is not None:
+        try:
+            cfg = get_singleton(node_cfg_cls)
+        except (KeyError, LifecycleResolutionError, Exception):
+            cfg = None
 
     reg = get_default_registry()
     ws_reg = get_singleton(workspace_registry.WorkspaceRegistry)
@@ -230,9 +306,12 @@ def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
                 self.per_node_info_by_node = {}
 
         cli_cfg = CliNodeConfig(role_defs)
+        keys: List[Any] = [CliNodeConfig]
+        if node_cfg_cls is not None:
+            keys.append(node_cfg_cls)
         reg.register_instance(
             cli_cfg,
-            keys=[agent_node_config.NodeConfig, CliNodeConfig],
+            keys=keys,
             tier=agent_session.agent_session,
         )
     else:
@@ -256,23 +335,32 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         meta = get_current_role_metadata()
         role_name = (meta.get("role_name") or meta.get("role", "")) if meta else ""
         d_scope = dir_scope or (
-            (meta.get("dir_scope") or meta.get("parts_dir", "staging"))
+            (meta.get("dir_scope") or meta.get("parts_dir", ""))
             if meta
-            else "staging"
+            else ""
         )
+        if not d_scope:
+            try:
+                for entry in os.listdir(ws_root):
+                    if os.path.isdir(os.path.join(ws_root, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
+                        d_scope = entry
+                        break
+            except OSError:
+                pass
 
         main_root = _resolve_main_root(ws_root, meta, repo_root)
         _ensure_cli_node_config(main_root)
-        work_mgr = workspace_work_impl.WorkspaceWorkManager()
+        work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
 
         if main_root and os.path.isdir(main_root) and main_root != ws_root:
             try:
-                sync = workspace_sync_impl.WorkspaceSynchronizer()
+                sync = get_singleton(workspace_sync.WorkspaceSynchronizer)
+
                 sync.pull(ws_root, main_root, role_name, dir_scope=d_scope, silent=True)
                 sync.refresh_system_files(
                     ws_root, main_root, role_name, dir_scope=d_scope, silent=True
                 )
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 sys.stderr.write(f"Warning: automatic sync from main failed: {e}\n")
         elif meta and main_root == ws_root:
             sys.stderr.write(
@@ -414,8 +502,16 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         main_root = _resolve_main_root(ws_root, meta, repo_root)
         _ensure_cli_node_config(main_root)
         d_scope = (
-            meta.get("dir_scope") or meta.get("parts_dir", "staging")
-        ) if meta else "staging"
+            meta.get("dir_scope") or meta.get("parts_dir", "")
+        ) if meta else ""
+        if not d_scope:
+            try:
+                for entry in os.listdir(ws_root):
+                    if os.path.isdir(os.path.join(ws_root, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
+                        d_scope = entry
+                        break
+            except OSError:
+                pass
 
         targets_to_check: List[str] = []
         if target:
@@ -431,11 +527,11 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
 
         failed_count = 0
         for cand in targets_to_check:
-            target_path, unit_name = control_submit_impl._resolve_submit_target(
+            target_path, unit_name = control_submit.resolve_submit_target(
                 cand, ws_root, role_name, d_scope
             )
             if not target_path or not os.path.isfile(target_path):
-                target_path, unit_name = control_submit_impl._resolve_submit_target(
+                target_path, unit_name = control_submit.resolve_submit_target(
                     cand, main_root, role_name, d_scope
                 )
 
@@ -444,11 +540,19 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 failed_count += 1
                 continue
 
+            if ws_root != main_root and target_path.startswith(main_root):
+                rel = os.path.relpath(target_path, main_root)
+                ws_file = os.path.join(ws_root, rel)
+                if not os.path.isfile(ws_file):
+                    copy_file_with_perms(target_path, ws_file, readonly=False)
+                target_path = ws_file
+
             ref_root = ws_root if target_path.startswith(ws_root) else main_root
-            part_dir, u_name, _ = control_submit_impl._parse_unit_from_file_path(
+            part_dir, u_name, _ = control_submit.parse_unit_from_file_path(
                 target_path, ref_root
             )
-            active_unit = unit_name or u_name
+
+            active_unit = u_name or unit_name
 
             print(f"=== Checking {active_unit} (role: {role_name}, part: {part_dir}) ===")
             unit_failed = False
@@ -462,16 +566,26 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 formatted_cmd = cmd_tmpl.format(unit_dir=part_dir, unit_name=active_unit)
                 env = dict(os.environ)
                 env["BUILD_WORKSPACE_DIRECTORY"] = ws_root
-                pypaths = [
-                    ws_root,
-                    main_root,
-                    os.path.join(main_root, "update_python_with_ai"),
-                    os.path.join(main_root, "update_with_ai"),
-                    os.path.join(main_root, "update_python_with_ai/support/lib"),
-                    os.path.join(main_root, "update_with_ai/support/lib"),
-                    os.path.join(ws_root, "update_python_with_ai/support/lib"),
-                    os.path.join(ws_root, "update_with_ai/support/lib"),
-                ]
+                if "UV_PROJECT" not in env and main_root:
+                    env["UV_PROJECT"] = main_root
+                pypaths = [ws_root, main_root]
+                for root_cand in (main_root, ws_root):
+                    if not root_cand or not os.path.isdir(root_cand):
+                        continue
+                    if part_dir:
+                        pd_full = os.path.join(root_cand, part_dir)
+                        if os.path.isdir(pd_full):
+                            pypaths.append(pd_full)
+                    try:
+                        for entry in os.listdir(root_cand):
+                            pkg_dir = os.path.join(root_cand, entry)
+                            if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv", "__pycache__")):
+                                sup_lib = os.path.join(pkg_dir, "support", "lib")
+                                if os.path.isdir(sup_lib):
+                                    pypaths.append(pkg_dir)
+                                    pypaths.append(sup_lib)
+                    except OSError:
+                        pass
                 if "PYTHONPATH" in env:
                     pypaths.append(env["PYTHONPATH"])
                 env["PYTHONPATH"] = os.pathsep.join(pypaths)
@@ -496,7 +610,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                             msg = r_def.verification_success_message.format(
                                 unit_name=active_unit, unit_dir=part_dir
                             )
-                        except Exception:
+                        except (KeyError, ValueError, IndexError):
                             msg = r_def.verification_success_message
                         print(f"[OK] {msg}")
                     else:
@@ -522,7 +636,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         main_root = _resolve_main_root(ws_root, meta, repo_root)
         _ensure_cli_node_config(main_root)
 
-        sub_coord = control_submit_impl.SubmissionCoordinator()
+        sub_coord = get_singleton(control_submit.SubmissionCoordinator)
         outcome = sub_coord.submit_target_file(
             target=target,
             summary=summary,
@@ -534,8 +648,15 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
             print(outcome.message)
 
         if outcome.accepted:
+            if outcome.message:
+                append_cleanroom_log(target, outcome.message, repo_root=main_root)
+                if ws_root != main_root:
+                    try:
+                        append_cleanroom_log(target, outcome.message, repo_root=ws_root)
+                    except OSError:
+                        pass
             if meta:
-                work_mgr = workspace_work_impl.WorkspaceWorkManager()
+                work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
                 work_mgr.remove_pending_target(ws_root, target)
             return 0
         return 1
@@ -553,7 +674,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         _ensure_cli_node_config(main_root)
         caller = (meta.get("role_name") or meta.get("role", "")) if meta else ""
 
-        attr_coord = control_attribution_impl.AttributionCoordinator()
+        attr_coord = get_singleton(control_attribution.AttributionCoordinator)
         outcome = attr_coord.blame_culprit_file(
             culprit_file=culprit_file,
             critique=critique,
@@ -565,8 +686,17 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
             print(outcome.message)
 
         if outcome.accepted:
+            blame_msg = outcome.message or f"✔ Blamed {culprit_file}"
+            if critique and critique not in blame_msg:
+                blame_msg = f"{blame_msg}: {critique}"
+            append_cleanroom_log(culprit_file, blame_msg, repo_root=main_root)
+            if ws_root != main_root:
+                try:
+                    append_cleanroom_log(culprit_file, blame_msg, repo_root=ws_root)
+                except OSError:
+                    pass
             if meta:
-                work_mgr = workspace_work_impl.WorkspaceWorkManager()
+                work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
                 work_mgr.remove_pending_target(ws_root, culprit_file)
             return 0
         return 1
@@ -583,7 +713,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         main_root = _resolve_main_root(ws_root, meta, repo_root)
         _ensure_cli_node_config(main_root)
 
-        attr_coord = control_attribution_impl.AttributionCoordinator()
+        attr_coord = get_singleton(control_attribution.AttributionCoordinator)
         outcome = attr_coord.fail_target_file(
             target_file=file_path,
             reason=reason,
@@ -595,10 +725,11 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
 
         if outcome.accepted:
             if meta:
-                work_mgr = workspace_work_impl.WorkspaceWorkManager()
+                work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
                 work_mgr.remove_pending_target(ws_root, file_path)
             return 0
         return 1
+
 
     def run_coverage(
         self,
@@ -657,41 +788,26 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
     def run_commission(
         self,
         role_name: str,
-        dir_scope: str = "staging",
+        dir_scope: str = "",
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
     ) -> int:
         """Commissions an isolated role workspace."""
-        prov = workspace_provision_impl.WorkspaceProvisioner()
+        if not dir_scope:
+            root_cand = repo_root or find_workspace_root() or os.getcwd()
+            try:
+                for entry in os.listdir(root_cand):
+                    if os.path.isdir(os.path.join(root_cand, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
+                        dir_scope = entry
+                        break
+            except OSError:
+                pass
+        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
         desc = prov.commission(
             role_name, dir_scope, repo_root=repo_root, custom_dest=custom_dest
         )
         print(f"✔ Commissioned workspace for role '{role_name}' at: {desc.workspace_dir}")
         return 0
-
-    def run_decommission(
-        self,
-        role_name_or_dir: str,
-        dir_scope: Optional[str] = None,
-        repo_root: Optional[str] = None,
-        custom_dest: Optional[str] = None,
-        force: bool = False,
-    ) -> int:
-        """Decommissions a role workspace."""
-        prov = workspace_provision_impl.WorkspaceProvisioner()
-        success = prov.decommission(
-            role_name_or_dir,
-            dir_scope=dir_scope,
-            repo_root=repo_root,
-            custom_dest=custom_dest,
-            force=force,
-        )
-        if success:
-            print(f"✔ Decommissioned workspace: {role_name_or_dir}")
-            return 0
-        else:
-            print(f"Failed to decommission workspace: {role_name_or_dir}", file=sys.stderr)
-            return 1
 
     def run_refresh_sys(
         self,
@@ -701,9 +817,10 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
     ) -> int:
         """Refreshes system files, tools, configs, and guides across role workspaces."""
         root = repo_root or find_workspace_root() or os.getcwd()
-        reg = workspace_registry_impl.WorkspaceRegistry()
+        reg = get_singleton(workspace_registry.WorkspaceRegistry)
         active_workspaces = reg.load_active_workspaces(repo_root=root)
-        sync = workspace_sync_impl.WorkspaceSynchronizer()
+        sync = get_singleton(workspace_sync.WorkspaceSynchronizer)
+
         target_role = role_name.split(":")[-1].strip().lower() if role_name else None
         count = 0
         for ws in active_workspaces:
@@ -722,7 +839,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                         silent=False,
                     )
                     count += 1
-                except Exception as e:
+                except (OSError, RuntimeError) as e:
                     sys.stderr.write(
                         f"Warning: Failed to refresh system files for {ws.role_definition.role_name} in '{ws.workspace_dir}': {e}\n"
                     )
@@ -742,19 +859,9 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
             "commission", help="Commission an isolated role workspace"
         )
         p_comm.add_argument("role", help="Role name to commission (e.g. high, planning, low, lib, test, qa, coverage)")
-        p_comm.add_argument("dir", nargs="?", default="staging", help="Directory scope (default: staging)")
+        p_comm.add_argument("dir", nargs="?", default="", help="Directory scope")
         p_comm.add_argument("--repo-root", default=None, help="Root of canonical repository")
         p_comm.add_argument("--dest", default=None, help="Custom destination directory")
-
-        # decommission
-        p_decomm = subparsers.add_parser(
-            "decommission", help="Decommission a role workspace"
-        )
-        p_decomm.add_argument("target", help="Role name or workspace directory to decommission")
-        p_decomm.add_argument("dir", nargs="?", default=None, help="Directory scope")
-        p_decomm.add_argument("--repo-root", default=None, help="Root of canonical repository")
-        p_decomm.add_argument("--dest", default=None, help="Custom destination directory")
-        p_decomm.add_argument("--force", "-f", action="store_true", help="Force decommission")
 
         # refresh-sys
         p_ref = subparsers.add_parser(
@@ -785,9 +892,10 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         p_submit.add_argument("target", help="Target file path or unit name")
         p_submit.add_argument("summary", nargs="?", default=None, help="Change summary")
 
-        # blame
+        # blame / feedback
         p_blame = subparsers.add_parser(
             "blame",
+            aliases=["feedback"],
             help="Attribute blame feedback to a culprit file or upstream contract",
             description="Attributes actionable critique to a culprit specification, code, or test file.",
         )
@@ -864,14 +972,6 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 repo_root=args.repo_root,
                 custom_dest=args.dest,
             )
-        elif args.command == "decommission":
-            return self.run_decommission(
-                args.target,
-                dir_scope=args.dir,
-                repo_root=args.repo_root,
-                custom_dest=args.dest,
-                force=args.force,
-            )
         elif args.command in ("refresh-sys", "refresh_sys"):
             return self.run_refresh_sys(
                 role_name=args.role,
@@ -884,7 +984,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
             return self.run_check_files(target=args.target, repo_root=args.repo_root)
         elif args.command == "submit":
             return self.run_submit(args.target, summary=args.summary)
-        elif args.command == "blame":
+        elif args.command in ("blame", "feedback"):
             return self.run_blame(args.culprit_file, args.critique)
         elif args.command == "fail":
             return self.run_fail(args.target, reason=args.reason)
@@ -906,10 +1006,31 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """CLI Entrypoint executing within agent_session lifecycle phase."""
     raw_args = list(argv) if argv is not None else sys.argv[1:]
-    workspace_asm.__initialize__()
-    control_asm.__initialize__()
-    tools_asm.__initialize__()
     with enter_phase(agent_session.agent_session):
+        try:
+            get_singleton(workspace_registry.WorkspaceRegistry)
+        except (KeyError, LifecycleResolutionError):
+            for k, m in list(sys.modules.items()):
+                if (k.endswith(".parts.workspace.lib.workspace_asm") or k == "parts.workspace.lib.workspace_asm") and hasattr(m, "__initialize__"):
+                    m.__initialize__()
+                    break
+            else:
+                try:
+                    import importlib
+                    for p in sys.path:
+                        cand = os.path.join(p, "parts", "workspace", "lib", "workspace_asm.py")
+                        if os.path.isfile(cand):
+                            pkg = os.path.basename(p)
+                            mod_name = f"{pkg}.parts.workspace.lib.workspace_asm" if pkg else "parts.workspace.lib.workspace_asm"
+                            try:
+                                mod = importlib.import_module(mod_name)
+                                if hasattr(mod, "__initialize__"):
+                                    mod.__initialize__()
+                                break
+                            except ImportError:
+                                pass
+                except (ImportError, AttributeError, OSError):
+                    pass
         runner = WorkspaceToolRunner()
         return runner.execute_command(raw_args)
 
@@ -929,4 +1050,3 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         ],
         tier=agent_session.agent_session,
     )
-

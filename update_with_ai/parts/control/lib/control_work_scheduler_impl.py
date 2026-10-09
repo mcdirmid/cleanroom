@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-06T10:45:00Z
-# CHANGE: new file
-# CODE_HASH: 690fc1922090
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CHANGED: 2026-10-07T18:18:00Z
+# CHANGE: add fallback role precedence ranks when role_definitions unpopulated
+# CODE_HASH: d5678f0c0bd2
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -71,16 +71,33 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
 
     def _get_role_precedence_rank(self, role_address: str) -> int:
         """Determines precedence rank for a role address dynamically."""
-        cfg = get_singleton(agent_node_config.NodeConfig)
-        role_deps: Dict[str, Sequence[str]] = {}
-        for r_name, r_cfg in getattr(cfg, "role_definitions", {}).items():
-            role_deps[r_name] = getattr(r_cfg, "role_deps", ())
-        if not role_deps:
-            raise KeyError(f"No role definitions available to compute precedence rank for {role_address}")
-        ranks = self.compute_role_precedence(role_deps)
         clean = role_address.split(":")[-1].strip().lower()
+        default_ranks = {
+            "high": 1,
+            "planning": 2,
+            "spec_qa": 3,
+            "low": 4,
+            "low_qa": 5,
+            "lib": 6,
+            "tests": 7,
+            "test": 7,
+            "qa": 8,
+            "coverage": 9,
+        }
+        cfg = None
+        try:
+            cfg = get_singleton(agent_node_config.NodeConfig)
+        except Exception:
+            pass
+        role_deps: Dict[str, Sequence[str]] = {}
+        if cfg is not None:
+            for r_name, r_cfg in getattr(cfg, "role_definitions", {}).items():
+                role_deps[r_name] = getattr(r_cfg, "role_deps", ())
+        if not role_deps:
+            return default_ranks.get(clean, 999)
+        ranks = self.compute_role_precedence(role_deps)
         if clean not in ranks:
-            raise KeyError(f"Role '{clean}' not found in computed role precedence ranks: {list(ranks.keys())}")
+            return default_ranks.get(clean, 999)
         return ranks[clean]
 
     def schedule_work(

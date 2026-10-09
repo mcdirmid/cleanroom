@@ -11,7 +11,6 @@ pyright_library(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
         ":dag_config",
         ":dag_storage",
         ":dag_subgraph",
@@ -26,7 +25,6 @@ pyright_library(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
     ],
     visibility = ["//visibility:public"],
 )
@@ -37,7 +35,6 @@ pyright_library(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
     ],
     visibility = ["//visibility:public"],
 )
@@ -48,7 +45,6 @@ pyright_library(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
         ":dag_storage",
     ],
     visibility = ["//visibility:public"],
@@ -60,7 +56,6 @@ pyright_library(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
         ":dag_config",
         ":dag_storage",
         ":dag_subgraph",
@@ -71,4 +66,3 @@ pyright_library(
 build_derived_test(
     name = "targets_derived_test",
 )
-

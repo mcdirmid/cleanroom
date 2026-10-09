@@ -1,13 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-06T22:55:00Z
-CHANGE: new file
-CODE_HASH: 60fab809e202
+LAST_CLEANED: 2026-10-08T15:45:00Z
+LAST_CHANGED: 2026-10-08T15:45:00Z
+CHANGE: update contracts for regenerable roles template materialization on check and discovery
+CODE_HASH: 919197b4cd66
+SPEC_QA_AUDIT: 2026-10-07T23:58:18Z
 -->
 
 # workspace_work_impl implementation component
 
-imports: agent_session, workspace_registry, control_work_scheduler, src_metadata
+imports: agent_session, workspace_registry, control_work_scheduler, src_metadata, dag_storage
 implements: workspace_work
 
 ## Intent
@@ -28,12 +29,15 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
 - The workspace work manager discovers companion specification contracts and interface files for target units on disk using role definitions from workspace_registry. [discover_unit_contract_files]
 - The workspace work manager filters cross-unit dependencies using silent_cross_role_deps and expands star_role_deps from workspace_registry. [filter_and_expand_dependencies]
 - The workspace work manager raises ValueError or KeyError on unrecognized roles or file paths. [fail_loud_on_unrecognized_roles]
-- The workspace work manager checks local and main repository metadata to test if a pending target is dirty. [test_pending_target_dirty_state]
+- The workspace work manager checks local and main repository metadata to test if a pending target is dirty, materializing starter templates via graph storage for missing targets of roles with source patterns and upstream dependencies. [test_pending_target_dirty_state]
+- The workspace work manager discovers part units and dependencies from build definitions, High-Level Specifications, or filesystem component stems. [discover_part_units_and_dependencies]
 - The workspace work manager inspects parts in scope to compute ready and blocked role units with topological ordering. [compute_and_sort_role_work_queue]
+- The workspace work manager materializes starter templates via graph storage for missing ready target files of roles with source patterns and upstream dependencies. [materialize_ready_target_templates]
 
 ### Woven Contracts
 
 - When checking work status, the work manager checks the pending buffer, invokes the work scheduler with dir_scope, resolves companion contracts, filters cross-unit dependencies, writes ready targets to disk, and renders the text summary. [read_and_check_pending_buffer, invoke_scheduler_with_dir_scope, discover_unit_contract_files, filter_and_expand_dependencies, fail_loud_on_unrecognized_roles, write_ready_targets_buffer, render_work_queue_text_summary, workspace_work: [check_pending_work_status, discover_directory_scope_work, resolve_unit_contract_files, filter_role_dependencies, enforce_strict_role_resolution, record_ready_targets_buffer, format_work_queue_diagnostics], workspace_registry: [resolve_role_definition, list_roles], control_work_scheduler: [work_scheduling_service]]
+- When computing role work queues, the work manager discovers part units and dependencies across parts in scope, materializes starter templates via graph storage for missing ready files, and sorts ready and blocked units topologically. [discover_part_units_and_dependencies, compute_and_sort_role_work_queue, materialize_ready_target_templates, workspace_work: [compute_role_work_queue_targets, materialize_ready_target_templates], dag_storage: [materialize_node_template]]
 - When all targets are clean, the manager deletes the pending work buffer and renders a clean summary. [delete_pending_work_buffer, render_work_queue_text_summary, workspace_work: [clear_pending_work_buffer]]
 - When managing target assignments, the work manager writes assigned targets to disk, removes submitted targets, and checks dirtiness against repository metadata. [write_assigned_pending_targets, filter_out_resolved_pending_target, test_pending_target_dirty_state, workspace_work: [set_pending_work_targets, remove_pending_target_path, is_pending_target_dirty_disk], src_metadata: [extract_metadata_disk]]
 
@@ -44,6 +48,7 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
 - Pending target buffer reading, writing, and deletion mechanics. [pending_work_buffer_mechanics]
 - Queue formatting and diagnostic text generation logic. [queue_diagnostic_rendering_logic]
 - Role work queue computation and topological dependency sorting algorithms. [role_work_queue_algorithm]
+- Part unit and dependency discovery mechanics across build definitions, specifications, and directory stems. [part_unit_discovery_mechanics]
 
 ### Inherited Deferred Requirements
 
@@ -56,5 +61,7 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
   - Grounded: [control_work_scheduler: [work_schedule_provision]]
 - In-band source metadata extraction.
   - Grounded: [src_metadata: [source_metadata_service]]
+- Materialization of starter templates for missing target files.
+  - Grounded: [dag_storage: [materialize_node_template]]
 - File reading and writing on the filesystem.
   - Grounded: [pending_work_buffer_mechanics, queue_diagnostic_rendering_logic]

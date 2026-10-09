@@ -1,13 +1,13 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T10:45:00Z
 # CHANGE: new file
-# CODE_HASH: 78f4f673ecca
+# CODE_HASH: 8ea4a4366d17
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional, Protocol, Sequence
+from typing import Optional, Protocol, Sequence, Tuple
 from update_with_ai.parts.dag.lib import dag_storage
 
 
@@ -43,3 +43,54 @@ class SubmissionCoordinator(Protocol):
         workspace_root: Optional[str] = None,
         role_name: Optional[str] = None,
     ) -> SubmissionOutcome: ...
+
+    def resolve_submit_target(
+        self,
+        target: str,
+        repo_root: str,
+        role_name: str,
+        dir_scope: str = "staging",
+    ) -> Tuple[Optional[str], Optional[str]]: ...
+
+    def parse_unit_from_file_path(
+        self, file_path: str, repo_root: str
+    ) -> Tuple[str, str, str]: ...
+
+
+def resolve_submit_target(
+    target: str,
+    repo_root: str,
+    role_name: str,
+    dir_scope: str = "staging",
+) -> Tuple[Optional[str], Optional[str]]:
+    from support.lib.lifecycle import get_singleton
+    coord = get_singleton(SubmissionCoordinator)
+    return coord.resolve_submit_target(target, repo_root, role_name, dir_scope)
+
+
+def parse_unit_from_file_path(
+    file_path: str, repo_root: str
+) -> Tuple[str, str, str]:
+    from support.lib.lifecycle import get_singleton
+    coord = get_singleton(SubmissionCoordinator)
+    return coord.parse_unit_from_file_path(file_path, repo_root)
+
+
+
+def is_auditor_node(node: dag_storage.DagNode) -> bool:
+    """Checks whether the node's role is classified as an auditor."""
+    try:
+        from support.lib.lifecycle import get_singleton
+        from update_with_ai.parts.agent.lib import agent_node_config
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        role_clean = node.role_address.split(":")[-1].strip().lower()
+        role_cfg = getattr(cfg, "role_definitions", {}).get(role_clean)
+        if role_cfg is not None:
+            if getattr(role_cfg, "is_auditor", False) or getattr(role_cfg, "audit_tag", None) or not getattr(role_cfg, "src_pattern", ""):
+                return True
+            return False
+    except Exception:
+        pass
+    role_clean = node.role_address.split(":")[-1].strip().lower()
+    return role_clean in ("grounding_qa", "qa", "coverage", "spec_qa", "low_qa")
+

@@ -681,6 +681,51 @@ def check_sibling_imports(modules_dir: str, file_path: str) -> list[str]:
     return errors
 
 
+def check_cross_part_imports(modules_dir: str, file_path: str) -> list[str]:
+    """Check that non-sibling, non-stdlib imports of parts components use full package paths."""
+    errors: list[str] = []
+    if not os.path.exists(file_path):
+        return errors
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=file_path)
+    except (OSError, SyntaxError):
+        return errors
+
+    stdlib = getattr(sys, "stdlib_module_names", set()) | {
+        "framework", "support", "lifecycle", "typing_extensions", "pytest"
+    }
+
+    build_path = os.path.join(modules_dir, "BUILD.bazel")
+    import_map, _, sibling_stems = build_module_resolution_map(build_path, modules_dir, [])
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                mod_name = alias.name
+                root_stem = mod_name.split(".")[0]
+                if root_stem in stdlib or root_stem in sibling_stems:
+                    continue
+                if root_stem in import_map:
+                    canonical_path = import_map[root_stem]
+                    if ".parts." in canonical_path and not mod_name.startswith(canonical_path.rsplit(".", 1)[0]):
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: bare import of cross-part module '{mod_name}' is not allowed; must use full package path 'import {canonical_path}'"
+                        )
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0 and node.module:
+                root_stem = node.module.split(".")[0]
+                if root_stem in stdlib or root_stem in sibling_stems:
+                    continue
+                if root_stem in import_map:
+                    canonical_path = import_map[root_stem]
+                    if ".parts." in canonical_path and not node.module.startswith(canonical_path.rsplit(".", 1)[0]):
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: bare import of cross-part module '{node.module}' is not allowed; must use full package path 'from {canonical_path} import ...'"
+                        )
+    return errors
+
+
 def check_impl_imports(file_path: str) -> list[str]:
     """Check that non-assembly library modules do not import any Impl classes or *_impl modules.
     Only assembly modules (*_asm.py) are permitted to import implementation classes or modules."""
@@ -705,17 +750,37 @@ def check_impl_imports(file_path: str) -> list[str]:
                     )
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                mod_name = node.module.split(".")[-1]
-                if mod_name.endswith("_impl"):
+                mod_parts = node.module.split(".")
+                if any(p.endswith("_impl") for p in mod_parts):
                     errors.append(
                         f"{file_path}:{node.lineno}: error: non-assembly module must not import from implementation module '{node.module}'"
                     )
             for alias in node.names:
-                if alias.name.endswith("Impl"):
+                if alias.name.endswith("Impl") or alias.name.endswith("_impl"):
                     errors.append(
-                        f"{file_path}:{node.lineno}: error: non-assembly module must not import implementation class '{alias.name}'"
+                        f"{file_path}:{node.lineno}: error: non-assembly module must not import implementation class or module '{alias.name}'"
                     )
+        elif isinstance(node, ast.Call):
+            func = node.func
+            is_import_call = False
+            if isinstance(func, ast.Name) and func.id == "__import__":
+                is_import_call = True
+            elif (
+                isinstance(func, ast.Attribute)
+                and func.attr == "import_module"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "importlib"
+            ):
+                is_import_call = True
+            if is_import_call and node.args:
+                arg0 = node.args[0]
+                if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str):
+                    if any(p.endswith("_impl") for p in arg0.value.split(".")) or arg0.value.endswith("Impl"):
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: non-assembly module must not dynamically import implementation module '{arg0.value}'"
+                        )
     return errors
+
 
 
 def check_lib_structure(file_path: str) -> list[str]:
@@ -732,6 +797,21 @@ def check_lib_structure(file_path: str) -> list[str]:
         errors.append(
             f"{file_path}: error: library module must not call 'unittest.main()'; test runners belong in test modules only"
         )
+    try:
+        tree = ast.parse(text, filename=file_path)
+        base_name = os.path.basename(file_path)
+        is_impl = base_name.endswith("_impl.py") or base_name.endswith("_asm.py")
+        if not is_impl:
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    for b in node.bases:
+                        b_str = ast.unparse(b)
+                        if b_str.startswith("InTier[") or b_str == "InTier":
+                            errors.append(
+                                f"{file_path}:{node.lineno}: error: interface module class '{node.name}' must not inherit from InTier (tier bindings belong only to concrete implementations in _impl modules)"
+                            )
+    except Exception:
+        pass
     return errors
 
 
@@ -1085,6 +1165,7 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
         return errors
 
     target_imported = False
+    module_imported = False
     imported_target_classes: set[str] = set()
 
     for node in ast.walk(tree):
@@ -1099,18 +1180,18 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
                     errors.append(
                         f"{file_path}:{node.lineno}: error: implementation classes do not use an 'Impl' suffix; import '{alias.name[:-4]}' instead of '{alias.name}'"
                     )
-                if alias.name in (
-                    f"lib.{target_stem}",
-                    target_stem,
-                ) or alias.name.endswith(f".{target_stem}"):
+                if mod_name == target_stem:
                     target_imported = True
+                    module_imported = True
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                mod_name = node.module.split(".")[-1]
-                if mod_name.endswith("_impl") and mod_name != target_stem:
-                    errors.append(
-                        f"{file_path}:{node.lineno}: error: test module must only import target implementation module '{target_stem}', but imports from '{node.module}'"
-                    )
+                mod_parts = node.module.split(".")
+                for p in mod_parts:
+                    if p.endswith("_impl") and p != target_stem:
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: test module must only import target implementation module '{target_stem}', but imports from '{node.module}'"
+                        )
+                        break
                 if node.module in (
                     f"lib.{target_stem}",
                     target_stem,
@@ -1119,10 +1200,47 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
                     for alias in node.names:
                         imported_target_classes.add(alias.name)
             for alias in node.names:
+                if alias.name.endswith("_impl") and alias.name != target_stem:
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: test module must only import target implementation module '{target_stem}', but imports '{alias.name}'"
+                    )
+                if alias.name == target_stem:
+                    target_imported = True
+                    module_imported = True
                 if alias.name.endswith("Impl"):
                     errors.append(
                         f"{file_path}:{node.lineno}: error: implementation classes do not use an 'Impl' suffix; import '{alias.name[:-4]}' instead of '{alias.name}'"
                     )
+        elif isinstance(node, ast.Call):
+            func = node.func
+            is_import_call = False
+            if isinstance(func, ast.Name) and func.id == "__import__":
+                is_import_call = True
+            elif (
+                isinstance(func, ast.Attribute)
+                and func.attr == "import_module"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "importlib"
+            ):
+                is_import_call = True
+            if is_import_call and node.args:
+                arg0 = node.args[0]
+                if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str):
+                    for p in arg0.value.split("."):
+                        if p.endswith("_impl") and p != target_stem:
+                            errors.append(
+                                f"{file_path}:{node.lineno}: error: test module must only import target implementation module '{target_stem}', but dynamically imports '{arg0.value}'"
+                            )
+
+
+    if module_imported:
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == target_stem
+            ):
+                imported_target_classes.add(node.attr)
 
     impl_py = os.path.join(lib_pkg, target_stem + ".py")
     if target_stem.endswith("_impl") and os.path.isfile(impl_py):
@@ -1356,22 +1474,26 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
     mod_stem = os.path.splitext(os.path.basename(module_path))[0]
 
     repo_root = str(Path(__file__).resolve().parents[3])
-    py_ai_dir = os.path.join(repo_root, "update_python_with_ai")
-    ai_dir = os.path.join(repo_root, "update_with_ai")
+    extra_dirs = [repo_root, os.path.abspath("."), os.path.abspath(lib_parent), os.path.abspath(test_dir)]
+    if os.path.isdir(repo_root):
+        for entry in os.listdir(repo_root):
+            cand = os.path.join(repo_root, entry)
+            if os.path.isdir(cand) and (
+                os.path.isdir(os.path.join(cand, "parts"))
+                or os.path.isdir(os.path.join(cand, "support"))
+            ):
+                extra_dirs.append(cand)
+                sup = os.path.join(cand, "support", "lib")
+                if os.path.isdir(sup):
+                    extra_dirs.append(sup)
 
+    path_inserts = "; ".join(f"sys.path.insert(0, os.path.abspath('{d}'))" for d in extra_dirs)
     cmd = [
         sys.executable,
         "-c",
         (
             f"import sys, os, unittest; "
-            f"sys.path.insert(0, os.path.abspath('{repo_root}')); "
-            f"sys.path.insert(0, os.path.abspath('{py_ai_dir}')); "
-            f"sys.path.insert(0, os.path.abspath('{ai_dir}')); "
-            f"sys.path.insert(0, os.path.abspath('.')); "
-            f"sys.path.insert(0, os.path.abspath('update_python_with_ai')); "
-            f"sys.path.insert(0, os.path.abspath('update_with_ai')); "
-            f"sys.path.insert(0, os.path.abspath('{lib_parent}')); "
-            f"sys.path.insert(0, os.path.abspath('{test_dir}')); "
+            f"{path_inserts}; "
             f"import importlib; "
             f"mod = importlib.import_module('{mod_stem}'); "
             f"suite = unittest.defaultTestLoader.loadTestsFromModule(mod)"
@@ -1439,39 +1561,54 @@ def find_spec_pyi(
     pyi_deps: Sequence[str] = (),
     build_path: Optional[str] = None,
 ) -> Optional[str]:
-    """Locate the grounding specification .pyi file corresponding to a module."""
+    """Locate the low-level specification .pyi file corresponding to a module."""
     if pyi_path and os.path.isfile(pyi_path):
         return pyi_path
     base = os.path.basename(module_path)
     stem = base[:-3] if base.endswith(".py") else base
-    spec_name = f"{stem}.pyi"
-    for p in pyi_deps:
-        if os.path.basename(p) == spec_name and os.path.isfile(p):
-            return p
-    module_dir = os.path.dirname(module_path)
-    search_dirs = [
-        os.path.join(module_dir, "..", "grounding"),
-        os.path.join(module_dir, "..", "specs", "grounding"),
-    ]
-    if build_path:
-        search_dirs.append(os.path.join(os.path.dirname(build_path), "..", "grounding"))
-        search_dirs.append(
-            os.path.join(os.path.dirname(build_path), "..", "specs", "grounding")
-        )
-    search_dirs.extend(
-        [
-            "update_with_ai/specs/grounding",
-            "specs/grounding",
+    stems_to_try = [stem]
+    if stem.endswith("_test"):
+        stems_to_try.append(stem[:-5])
+
+    for s in stems_to_try:
+        spec_name = f"{s}.pyi"
+        for p in pyi_deps:
+            if os.path.basename(p) == spec_name and os.path.isfile(p):
+                return p
+        module_dir = os.path.dirname(module_path)
+        search_dirs = [
+            os.path.join(module_dir, "..", "low"),
+            os.path.join(module_dir, "..", "grounding"),
+            os.path.join(module_dir, "..", "specs", "grounding"),
         ]
-    )
-    for d in search_dirs:
-        candidate = os.path.join(d, spec_name)
-        if os.path.isfile(candidate):
-            return candidate
-    for cand in Path("update_with_ai/parts").glob(f"*/grounding/{spec_name}"):
-        if cand.is_file():
-            return str(cand)
+        if build_path:
+            bp_dir = os.path.dirname(build_path)
+            search_dirs.append(os.path.join(bp_dir, "..", "low"))
+            search_dirs.append(os.path.join(bp_dir, "..", "grounding"))
+            search_dirs.append(os.path.join(bp_dir, "..", "specs", "grounding"))
+
+        for d in search_dirs:
+            candidate = os.path.join(d, spec_name)
+            if os.path.isfile(candidate):
+                return candidate
+
+        curr = os.path.abspath(module_dir)
+        while curr and curr != os.path.dirname(curr):
+            direct = os.path.join(curr, "low", spec_name)
+            if os.path.isfile(direct):
+                return direct
+            parts_dir = os.path.join(curr, "parts")
+            if os.path.isdir(parts_dir):
+                for cand in Path(parts_dir).glob(f"*/low/{spec_name}"):
+                    if cand.is_file():
+                        return str(cand)
+            for cand in Path(curr).glob(f"*/parts/*/low/{spec_name}"):
+                if cand.is_file():
+                    return str(cand)
+            curr = os.path.dirname(curr)
+
     return None
+
 
 
 def check_public_types(
@@ -1904,11 +2041,17 @@ def build_module_resolution_map(
 
     # 2. Local package directory (modules_dir)
     if os.path.isdir(modules_dir):
-        pkg_prefix = modules_dir.replace("/", ".").lstrip(".")
-        if pkg_prefix.startswith("update_with_ai.parts."):
-            pkg_prefix = "staging." + pkg_prefix[len("staging.") :]
-        elif pkg_prefix.startswith("update_with_ai.parts."):
-            pkg_prefix = "update_with_ai." + pkg_prefix[len("update_with_ai.") :]
+        if os.path.isabs(modules_dir):
+            curr = modules_dir
+            while curr and curr != os.path.dirname(curr):
+                if any(
+                    os.path.isfile(os.path.join(curr, marker))
+                    for marker in ("MODULE.bazel", "pyproject.toml", "cleanroom_roles.toml")
+                ):
+                    modules_dir = os.path.relpath(modules_dir, curr).replace("\\", "/")
+                    break
+                curr = os.path.dirname(curr)
+        pkg_prefix = modules_dir.replace("/", ".").strip(".")
         pkg_label = modules_dir.lstrip("./").rstrip("/")
         for fname in os.listdir(modules_dir):
             if fname.endswith(".py") and fname != "__init__.py":
@@ -1934,13 +2077,7 @@ def build_module_resolution_map(
         else:
             stem = d.split(":")[-1]
             if stem not in import_map:
-                pkg_prefix = modules_dir.replace("/", ".").lstrip(".")
-                if pkg_prefix.startswith("update_with_ai.parts."):
-                    pkg_prefix = "staging." + pkg_prefix[len("staging.") :]
-                elif pkg_prefix.startswith("update_with_ai.parts."):
-                    pkg_prefix = (
-                        "update_with_ai." + pkg_prefix[len("update_with_ai.") :]
-                    )
+                pkg_prefix = modules_dir.replace("/", ".").strip(".")
                 pkg_label = modules_dir.lstrip("./").rstrip("/")
                 import_map[stem] = f"{pkg_prefix}.{stem}" if pkg_prefix else stem
                 label_map[stem] = f"//{pkg_label}:{stem}" if pkg_label else f":{stem}"
@@ -1966,27 +2103,41 @@ def build_module_resolution_map(
         except OSError:
             pass
 
-    # 5. Global discovery across update_with_ai/parts/*/lib/*.py
-    parts_dir = None
-    for candidate in [
-        Path("update_with_ai/parts"),
-        Path(__file__).resolve().parent.parent.parent.parent
-        / "update_with_ai"
-        / "parts",
-        Path("parts"),
-    ]:
-        if candidate.is_dir():
-            parts_dir = candidate
+    # 5. Dynamic discovery across parts/*/lib/*.py
+    parts_dirs: list[Path] = []
+    curr_p = Path(modules_dir).resolve()
+    while curr_p != curr_p.parent:
+        if curr_p.name == "parts" and curr_p.is_dir():
+            parts_dirs.append(curr_p)
             break
+        if (curr_p / "parts").is_dir():
+            parts_dirs.append(curr_p / "parts")
+            break
+        curr_p = curr_p.parent
 
-    if parts_dir:
-        for p in parts_dir.glob("*/lib/*.py"):
+    repo_p = Path(__file__).resolve().parent.parent.parent.parent
+    if (repo_p / "parts").is_dir() and (repo_p / "parts") not in parts_dirs:
+        parts_dirs.append(repo_p / "parts")
+    try:
+        for entry in repo_p.iterdir():
+            if entry.is_dir() and (entry / "parts").is_dir() and (entry / "parts") not in parts_dirs:
+                parts_dirs.append(entry / "parts")
+    except OSError:
+        pass
+
+    for pdir in parts_dirs:
+        pkg_pfx = "" if pdir.parent == repo_p else pdir.parent.name
+        for p in pdir.glob("*/lib/*.py"):
             if p.name != "__init__.py" and p.is_file():
                 stem = p.stem
                 if stem not in import_map:
                     domain = p.parent.parent.name
-                    import_map[stem] = f"update_with_ai.parts.{domain}.lib.{stem}"
-                    label_map[stem] = f"//update_with_ai/parts/{domain}/lib:{stem}"
+                    if pkg_pfx:
+                        import_map[stem] = f"{pkg_pfx}.parts.{domain}.lib.{stem}"
+                        label_map[stem] = f"//{pkg_pfx}/parts/{domain}/lib:{stem}"
+                    else:
+                        import_map[stem] = f"parts.{domain}.lib.{stem}"
+                        label_map[stem] = f"//parts/{domain}/lib:{stem}"
 
     return import_map, label_map, sibling_stems
 
@@ -2021,7 +2172,7 @@ def rewrite_test_imports(
                     target_stem = node.module
                 elif node.module.startswith("lib.") and node.module[4:] in import_map:
                     target_stem = node.module[4:]
-                elif node.module.startswith("update_with_ai.parts."):
+                elif ".parts." in node.module:
                     last = node.module.split(".")[-1]
                     if last in import_map:
                         target_stem = last
@@ -2051,7 +2202,7 @@ def rewrite_test_imports(
                     target_stem = alias.name
                 elif alias.name.startswith("lib.") and alias.name[4:] in import_map:
                     target_stem = alias.name[4:]
-                elif alias.name.startswith("update_with_ai.parts."):
+                elif ".parts." in alias.name:
                     last = alias.name.split(".")[-1]
                     if last in import_map:
                         target_stem = last
@@ -2443,9 +2594,9 @@ def rewrite_lib_imports(
 def parse_pyi_dependencies(
     pyi_path: str, pyi_deps: Optional[Sequence[str]] = None
 ) -> list[str]:
-    """Extract declared dependency stems from a .pyi grounding specification and any pyi_deps.
+    """Extract declared dependency stems from a .pyi low specification and any pyi_deps.
 
-    Collects imported module stems from the AST (excluding stdlib, framework, typing, and _ext)
+    Collects imported module stems from the AST (excluding stdlib, framework, typing, support, lifecycle)
     and external build dependencies parsed from ## Build Dependencies.
     """
     deps: set[str] = set()
@@ -2463,7 +2614,15 @@ def parse_pyi_dependencies(
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for alias in node.names:
-                        stem = alias.name.split(".")[0]
+                        name = alias.name
+                        if ".lib." in name:
+                            stem = name.split(".lib.")[1].split(".")[0]
+                        elif ".low." in name:
+                            stem = name.split(".low.")[1].split(".")[0]
+                        elif ".grounding." in name:
+                            stem = name.split(".grounding.")[1].split(".")[0]
+                        else:
+                            stem = name.split(".")[0]
                         if (
                             stem not in stdlib
                             and stem not in ignored
@@ -2472,9 +2631,14 @@ def parse_pyi_dependencies(
                             deps.add(stem)
                 elif isinstance(node, ast.ImportFrom):
                     if node.module:
-                        if ".grounding." in node.module:
-                            stem = node.module.split(".grounding.")[1].split(".")[0]
-                        elif node.module.endswith(".grounding"):
+                        mod = node.module
+                        if ".lib." in mod:
+                            stem = mod.split(".lib.")[1].split(".")[0]
+                        elif ".low." in mod:
+                            stem = mod.split(".low.")[1].split(".")[0]
+                        elif ".grounding." in mod:
+                            stem = mod.split(".grounding.")[1].split(".")[0]
+                        elif mod.endswith((".lib", ".low", ".grounding")):
                             for alias in node.names:
                                 stem = alias.name.split(".")[0]
                                 if (
@@ -2484,8 +2648,10 @@ def parse_pyi_dependencies(
                                 ):
                                     deps.add(stem)
                             continue
+                        elif node.level > 0:
+                            stem = mod.split(".")[0]
                         else:
-                            stem = node.module.split(".")[0]
+                            stem = mod.split(".")[0]
                         if (
                             stem not in stdlib
                             and stem not in ignored
@@ -2501,6 +2667,35 @@ def parse_pyi_dependencies(
                                 and not stem.endswith("_ext")
                             ):
                                 deps.add(stem)
+                elif isinstance(node, ast.ClassDef):
+                    for dec in node.decorator_list:
+                        tier_name = None
+                        if isinstance(dec, ast.Call):
+                            func = dec.func
+                            is_singleton = (
+                                (isinstance(func, ast.Name) and func.id == "singleton_type")
+                                or (isinstance(func, ast.Attribute) and func.attr == "singleton_type")
+                            )
+                            if is_singleton and dec.args:
+                                first_arg = dec.args[0]
+                                if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+                                    tier_name = first_arg.value
+                                elif isinstance(first_arg, ast.Name):
+                                    tier_name = first_arg.id
+                            elif is_singleton:
+                                for kw in dec.keywords:
+                                    if kw.arg in ("tier", "name"):
+                                        if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                                            tier_name = kw.value.value
+                                        elif isinstance(kw.value, ast.Name):
+                                            tier_name = kw.value.id
+                        if (
+                            tier_name
+                            and tier_name not in stdlib
+                            and tier_name not in ignored
+                            and not tier_name.endswith("_ext")
+                        ):
+                            deps.add(tier_name)
             for build_dep in parse_spec_build_dependencies(p):
                 m = re.search(r'requirement\(["\']([^"\']+)["\']\)', build_dep)
                 if m:
@@ -2517,6 +2712,133 @@ def parse_pyi_dependencies(
             pass
 
     return sorted(d for d in deps if not d.endswith("_ext"))
+
+
+def compute_allowed_spec_deps(
+    pyi_path: Optional[str],
+    stem: str,
+    is_test: bool = False,
+    sibling_stems: Optional[Sequence[str]] = None,
+    extra_pyi_paths: Optional[Sequence[str]] = None,
+    raw_deps: Optional[Sequence[str]] = None,
+    max_depth: int = 1,
+) -> set[str]:
+    """Compute the set of allowed module stems for a lib or test module based on the low-level specification.
+
+    Derives allowed dependencies directly from the low-level specification (.pyi),
+    including companion interface specifications, sibling modules, test frameworks,
+    and external specifications.
+    """
+    allowed: set[str] = set()
+    if stem:
+        allowed.add(stem)
+
+    if stem.endswith("_impl"):
+        iface_stem = stem[:-5]
+        allowed.add(iface_stem)
+    elif is_test:
+        impl_stem = stem[:-5] if stem.endswith("_test") else stem
+        allowed.add(impl_stem)
+        if impl_stem.endswith("_impl"):
+            allowed.add(impl_stem[:-5])
+
+    # Discover and collect spec paths
+    to_visit: list[str] = []
+    if pyi_path and os.path.isfile(pyi_path):
+        to_visit.append(pyi_path)
+        pyi_dir = os.path.dirname(pyi_path)
+        base_pyi = os.path.basename(pyi_path)
+        if base_pyi.endswith("_impl.pyi"):
+            iface_file = os.path.join(pyi_dir, base_pyi[:-9] + ".pyi")
+            if os.path.isfile(iface_file):
+                to_visit.append(iface_file)
+        elif is_test:
+            impl_stem = stem[:-5] if stem.endswith("_test") else stem
+            if impl_stem.endswith("_impl"):
+                iface_file = os.path.join(pyi_dir, f"{impl_stem[:-5]}.pyi")
+                if os.path.isfile(iface_file):
+                    to_visit.append(iface_file)
+
+    if extra_pyi_paths:
+        to_visit.extend([p for p in extra_pyi_paths if os.path.isfile(p)])
+
+    seen_specs: set[str] = set()
+    depth = 0
+    while to_visit and depth <= max_depth:
+        next_visit: list[str] = []
+        for p in to_visit:
+            norm_p = os.path.abspath(p)
+            if norm_p in seen_specs:
+                continue
+            seen_specs.add(norm_p)
+
+            d_list = parse_pyi_dependencies(p)
+            for d in d_list:
+                allowed.add(d)
+
+            # Check for assembly CONSTITUENTS:
+            try:
+                content = read_text(p)
+                if "CONSTITUENTS:" in content:
+                    in_c = False
+                    for line in content.splitlines():
+                        if "CONSTITUENTS:" in line:
+                            in_c = True
+                        elif in_c:
+                            if line.strip().startswith("- "):
+                                c = line.strip()[2:].strip()
+                                allowed.add(c)
+                                if c.endswith("_impl"):
+                                    allowed.add(c[:-5])
+                                cand = find_spec_pyi(os.path.join(os.path.dirname(p), f"{c}.py"), pyi_path=os.path.join(os.path.dirname(p), f"{c}.pyi"))
+                                if cand and os.path.isfile(cand):
+                                    next_visit.append(cand)
+                            elif line.strip().endswith(":") and not line.strip().startswith("-"):
+                                in_c = False
+            except OSError:
+                pass
+
+            if is_test:
+                p_dir = os.path.dirname(p)
+                if os.path.isdir(p_dir):
+                    try:
+                        for asm_cand in os.listdir(p_dir):
+                            if asm_cand.endswith("_asm.pyi"):
+                                allowed.add(asm_cand[:-4])
+                    except OSError:
+                        pass
+
+            if depth < max_depth:
+                p_dir = os.path.dirname(p)
+                for d in d_list:
+                    cand = find_spec_pyi(os.path.join(p_dir, f"{d}.py"), pyi_path=os.path.join(p_dir, f"{d}.pyi"))
+                    if cand and os.path.isfile(cand):
+                        next_visit.append(cand)
+        to_visit = next_visit
+        depth += 1
+
+    if sibling_stems:
+        for s in sibling_stems:
+            allowed.add(s)
+
+    if is_test:
+        allowed.update(["unittest", "mock", "pytest"])
+
+    if raw_deps:
+        for d in raw_deps:
+            m = re.search(r'requirement\(["\']([^"\']+)["\']\)', d)
+            if m:
+                allowed.add(m.group(1))
+            elif ":" in d:
+                allowed.add(d.split(":")[-1])
+            elif d and not d.startswith("//"):
+                allowed.add(d)
+
+    for d in list(allowed):
+        if d.endswith("_ext"):
+            allowed.add(d[:-4])
+
+    return {d for d in allowed if not d.endswith("_ext")}
 
 
 def extract_target_pyright_deps(build_path: str, rule: str, name: str) -> list[str]:
@@ -2865,6 +3187,8 @@ def extract_imported_stems(file_path: str) -> list[tuple[int, str]]:
                     continue
                 if ".lib." in name:
                     stem = name.split(".lib.")[1].split(".")[0]
+                elif ".low." in name:
+                    stem = name.split(".low.")[1].split(".")[0]
                 elif ".grounding." in name:
                     stem = name.split(".grounding.")[1].split(".")[0]
                 elif ".tests." in name:
@@ -2882,15 +3206,16 @@ def extract_imported_stems(file_path: str) -> list[tuple[int, str]]:
                 if "support" in mod.split("."):
                     continue
                 if (
-                    mod in ("lib", "tests", "grounding")
-                    or mod.endswith(".lib")
-                    or mod.endswith(".tests")
-                    or mod.endswith(".grounding")
+                    mod in ("lib", "tests", "low", "grounding")
+                    or mod.endswith((".lib", ".tests", ".low", ".grounding"))
                 ):
                     for alias in node.names:
                         results.append((node.lineno, alias.name))
                 elif ".lib." in mod:
                     stem = mod.split(".lib.")[1].split(".")[0]
+                    results.append((node.lineno, stem))
+                elif ".low." in mod:
+                    stem = mod.split(".low.")[1].split(".")[0]
                     results.append((node.lineno, stem))
                 elif ".grounding." in mod:
                     stem = mod.split(".grounding.")[1].split(".")[0]
@@ -2932,14 +3257,9 @@ def check_undeclared_imports(
     allowed_set = {d for d in allowed_set if not d.endswith("_ext")}
 
     stdlib = getattr(sys, "stdlib_module_names", set()) | {
-        "support",
         "framework",
-        "lifecycle",
-        "agent_session",
         "typing_extensions",
-        "pkg_resources",
         "pytest",
-        "mock",
     }
 
     imported = extract_imported_stems(file_path)
@@ -2950,7 +3270,9 @@ def check_undeclared_imports(
         if (
             stem in allowed_set
             or stem in stdlib
+            or stem == "support"
             or stem.startswith("support.")
+            or stem == "lifecycle"
             or stem in ("lib", "tests")
         ):
             continue
@@ -3183,12 +3505,6 @@ def compute_lib_derived_info(
         lifecycle_label = "//update_python_with_ai/support/lib:lifecycle"
         lib_deps.append(lifecycle_label)
         allowed_deps.add("lifecycle")
-        if stem != "agent_session":
-            agent_base = (
-                parent_pkg.split("/")[0] if "/" in parent_pkg else "update_with_ai"
-            )
-            lib_deps.append(f"//{agent_base}/parts/agent/lib:agent_session")
-            allowed_deps.add("agent_session")
 
     # Canonicalize per ensure_target
     want_list = []
@@ -3218,7 +3534,13 @@ def compute_lib_derived_info(
             if dep_expr not in target_deps:
                 target_deps.append(dep_expr)
 
-    if pyi_path and os.path.isfile(pyi_path):
+    if pyi_path and os.path.isfile(pyi_path) and not stem.endswith("_asm"):
+        pyi_deps = set(parse_pyi_dependencies(pyi_path, ext_pyi_paths))
+        # allowed_deps must correspond to what is declared in low (*.pyi)
+        allowed_deps = (allowed_deps & pyi_deps) | {stem}
+        if uses_lifecycle:
+            allowed_deps.add("lifecycle")
+    elif pyi_path and os.path.isfile(pyi_path):
         for d in parse_pyi_dependencies(pyi_path, ext_pyi_paths):
             allowed_deps.add(d)
     elif ext_pyi_paths:
@@ -3492,7 +3814,16 @@ def check_lib_targets(
                 f"  Expected: {info.expected_deps}"
             )
 
+    # 3. Source import boundary checks
+    lib_dir = os.path.dirname(os.path.abspath(build_file))
+    if os.path.isdir(lib_dir):
+        for py_name in sorted(os.listdir(lib_dir)):
+            if py_name.endswith(".py"):
+                py_path = os.path.join(lib_dir, py_name)
+                errors.extend(check_impl_imports(py_path))
+
     return errors
+
 
 
 def generate_lib_build_content(
@@ -3619,9 +3950,11 @@ def check_test_targets(
     actual_targets = parse_targets_by_rule(build_file, "pyright_test")
     test_dir = os.path.dirname(os.path.abspath(build_file))
 
-    # 1. Existence checks: only _impl units have tests.
+    # 1. Existence checks: only _impl units require tests; _asm units may optionally have tests.
     expected_test_stems = {u for u in units.keys() if u.endswith("_impl")}
     expected_test_names = {f"{stem}_test" for stem in expected_test_stems}
+    allowed_test_stems = {u for u in units.keys() if u.endswith("_impl") or u.endswith("_asm")}
+    allowed_test_names = {f"{stem}_test" for stem in allowed_test_stems}
 
     missing_tests = expected_test_names - set(actual_targets.keys())
     if missing_tests:
@@ -3630,7 +3963,7 @@ def check_test_targets(
             f"{sorted(missing_tests)}"
         )
 
-    extra_tests = set(actual_targets.keys()) - expected_test_names
+    extra_tests = set(actual_targets.keys()) - allowed_test_names
     if extra_tests:
         errors.append(
             f"Target(s) in {build_file} do not correspond to any unit declared in {parent_build_file}: "
@@ -3677,7 +4010,15 @@ def check_test_targets(
                 f"  Expected: {info.expected_deps}"
             )
 
+    # 3. Test import boundary checks
+    if os.path.isdir(test_dir):
+        for py_name in sorted(os.listdir(test_dir)):
+            if py_name.endswith("_test.py"):
+                py_path = os.path.join(test_dir, py_name)
+                errors.extend(check_test_impl_imports(lib_pkg, py_path))
+
     return errors
+
 
 
 def generate_test_build_content(

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-04T23:01:55Z
 # CHANGE: new file
 # CODE_HASH: 69fd0aec9e4e
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_file_reader_impl aligned with grounding specifications."""
@@ -18,7 +18,6 @@ from typing import Any, cast, Mapping, Optional, Set, Tuple
 
 from update_with_ai.parts.dag.lib.dag_storage import DagNode, RoleAddress, UnitAddress
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
-from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
@@ -106,12 +105,6 @@ class MockBooleanConverter:
     def convert(self, wire_value: Any) -> bool:
         return bool(wire_value)
 
-
-class MockAgentConfig:
-    tier = agent_session
-
-    def __init__(self) -> None:
-        pass
 
 
 @dataclass(frozen=True)
@@ -271,7 +264,6 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         }
         self.template_formatter = MockTemplateFormatter()
         self.edit_mgr = MockEditManager()
-        self.agent_cfg = MockAgentConfig()
         self.node_cfg = MockNodeConfig(
             ro_files={self.ro_file, self.ro_py_file, self.ro_pyi_file, self.ro_md_file},
             rw_files={self.rw_file},
@@ -296,9 +288,6 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         )
         self.registry.register_instance(
             self.edit_mgr, keys=[EditManager], tier=agent_session
-        )
-        self.registry.register_instance(
-            self.agent_cfg, keys=[AgentConfig], tier=agent_session
         )
 
     def tearDown(self) -> None:

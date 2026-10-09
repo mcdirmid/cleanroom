@@ -1,13 +1,14 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: e3fa32f70719
+# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CHANGED: 2026-10-07T18:18:00Z
+# CHANGE: add template materialization to dispatch_get_work grounding docstring
+# CODE_HASH: 5052072fc1a2
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_coordinate_impl."""
 
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
@@ -18,6 +19,8 @@ import control_verification
 import control_work_scheduler
 import dag_storage
 import dag_subgraph
+import agent_file_alias
+import agent_node_config
 
 
 @singleton_type("agent_session")
@@ -61,7 +64,9 @@ class SessionCoordinator(
 
     @operation
     @override
-    def resolve_default_target(self) -> Optional[dag_storage.DagNode]:
+    def resolve_default_target(
+        self, last_accessed_file: Optional[Any] = None
+    ) -> Optional[dag_storage.DagNode]:
         """Resolves the default target node when omitted from command invocation.
 
         GROUNDING:
@@ -102,7 +107,8 @@ class SessionCoordinator(
 
         GROUNDING:
         - Grounded via WorkScheduler.schedule_work from control_work_scheduler,
-          populating newly discovered tasks as OPEN nodes in the session registry.
+          materializing starter templates via DagStorage.materialize_template,
+          and populating newly discovered tasks as OPEN nodes in the session registry.
         """
         ...
 

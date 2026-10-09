@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-06T22:55:00Z
-CHANGE: new file
-CODE_HASH: fa845f714b93
+LAST_CLEANED: 2026-10-08T15:45:00Z
+LAST_CHANGED: 2026-10-08T18:30:00Z
+CHANGE: document stub role dependencies synchronization in pull and refresh behavior
+CODE_HASH: 047cff2d557c
 -->
 
 # workspace_sync_impl implementation component
@@ -24,13 +24,17 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 When pulling changes from the canonical main repository into a role workspace, the workspace synchronizer:
 
-- Identifies files within the target directory scope and declared role dependencies.
+- Identifies files within the target directory scope, declared role dependencies, and stub role dependencies.
 
-- Copies newer files from the main repository into the role workspace, enforcing read-only permissions (`chmod 444`) on upstream dependencies and read-write permissions (`chmod 644`) on role targets.
+- For files matching stub role dependencies, verifies that workspace files are valid read-only test stubs (`chmod 444`) containing no implementation details; if missing, outdated compared to upstream companion specifications, or containing leaked implementation code, synthesizes read-only test stubs with `raise NotImplementedError` from companion specification files (`low/*.pyi`) in the main repository, and deletes orphaned stubs whose companion specifications no longer exist in the main repository. Real implementation files matching stub role dependencies are never copied from the canonical main repository into the role workspace.
+
+- Copies newer files from the main repository into the role workspace, enforcing read-only permissions (`chmod 444`) on upstream dependencies and read-write permissions (`chmod 644`) on role targets. For existing writable targets, pulls updates from the main repository whenever the local target has no uncommitted code modifications and the main repository version differs in content or metadata, preserving pending local targets and deleted targets awaiting template regeneration, and ensures standard write permissions (`chmod 644`).
 
 - Preserves uncommitted local modifications on writable targets, failing fast if an upstream modification conflicts with an active local change.
 
-When refreshing system files, the workspace synchronizer recopies tool runners, build rules, guide files, and linters from the main repository into the role workspace and regenerates `AGENTS.md` with strict boundary rules and fail-stop constraints without touching in-scope source files.
+- Deletes files within the role workspace scope that no longer exist in the canonical main repository.
+
+When refreshing system files, the workspace synchronizer recopies tool runners, project configurations, guide files, and linters from the main repository into the role workspace, regenerates `AGENTS.md` with strict boundary rules and fail-stop constraints without touching in-scope source files, and validates that all stub role dependency files remain read-only test stubs.
 
 When harvesting changes from a role workspace back to the canonical main repository, the workspace synchronizer performs two-phase synchronization:
 

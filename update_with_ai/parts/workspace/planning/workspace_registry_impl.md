@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-07T23:58:18Z
 LAST_CHANGED: 2026-10-06T22:55:00Z
 CHANGE: new file
-CODE_HASH: b5fd06abb413
+CODE_HASH: 810d79cfedcc
+SPEC_QA_AUDIT: 2026-10-07T23:58:18Z
 -->
 
 # workspace_registry_impl implementation component
@@ -19,7 +20,7 @@ Reliable multi-role orchestration depends on atomic registry file updates and de
 ### Contracts
 
 - The workspace registry searches ancestor directories for MODULE.bazel or .git markers (distinguishing canonical repositories from projected role workspaces) to locate the canonical repository root. [search_ancestor_markers]
-- The workspace registry parses define_role declarations from repository build files into role definitions with fail-fast exception signaling. [parse_build_file_role_definitions]
+- The workspace registry parses role configuration declarations from declarative role files or repository build files into role definitions with fail-fast exception signaling. [parse_role_definitions]
 - The workspace registry normalizes role address strings into canonical role names. [normalize_role_identifier]
 - The workspace registry replaces directory separator characters with underscores to construct workspace folder names. [sanitize_directory_folder_name]
 - The workspace registry writes JSON descriptors atomically to .cleanroom_workspaces.json using temporary sibling files. [write_json_registry_atomically]
@@ -28,7 +29,7 @@ Reliable multi-role orchestration depends on atomic registry file updates and de
 ### Woven Contracts
 
 - When discovering repository roots, the registry searches ancestor markers and falls back to ambient working directories if markers are absent. [search_ancestor_markers, workspace_registry: [discover_repo_root]]
-- When resolving or listing role definitions, the registry normalizes identifiers and parses define_role declarations from repository build files. [normalize_role_identifier, parse_build_file_role_definitions, workspace_registry: [resolve_role_definition, list_all_role_definitions]]
+- When resolving or listing role definitions, the registry normalizes identifiers and parses role configuration declarations from declarative role files or repository build files. [normalize_role_identifier, parse_role_definitions, workspace_registry: [resolve_role_definition, list_all_role_definitions]]
 - When computing workspace paths, the registry combines sanitized directory names with parent projects roots. [sanitize_directory_folder_name, workspace_registry: [compute_workspace_directory_path]]
 - When recording or unregistering workspaces, the registry reads existing descriptors, updates the collection, and writes the JSON file atomically. [read_json_registry_descriptors, write_json_registry_atomically, workspace_registry: [record_workspace_descriptor, unregister_workspace_descriptor]]
 

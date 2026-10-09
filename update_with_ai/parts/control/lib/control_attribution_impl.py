@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T11:45:00Z
 # CHANGE: add missing imports
-# CODE_HASH: 96e0e4d00495
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# CODE_HASH: b95dfc77712d
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -12,24 +12,13 @@ import json
 import os
 import shutil
 import stat
-import subprocess
 import sys
+import tomllib
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from support.lib.lifecycle import Singleton, get_singleton
 from update_with_ai.parts.agent.lib import agent_file_alias, agent_node_config, agent_session
 from update_with_ai.parts.dag.lib import dag_storage
 from . import control_attribution, src_metadata
-
-
-def _can_run_bazel(main_root: str) -> bool:
-    if os.environ.get("CLEANROOM_DIRECT_MUTATION") == "1":
-        return False
-    if not (
-        os.path.isfile(os.path.join(main_root, "MODULE.bazel"))
-        or os.path.isfile(os.path.join(main_root, "WORKSPACE"))
-    ):
-        return False
-    return shutil.which("bazel") is not None
 
 
 def _copy_file_with_perms(
@@ -193,6 +182,27 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
                 affected_nodes=[],
             )
 
+        # 2b. Feedback configuration validation
+        try:
+            cfg = get_singleton(agent_node_config.NodeConfig)
+            role_defs = getattr(cfg, "role_definitions", {})
+        except (KeyError, AttributeError, RuntimeError):
+            role_defs = {}
+        src_role = str(source_node.role_address).split(":")[-1].strip().lower()
+        tgt_role = str(blame_target_node.role_address).split(":")[-1].strip().lower()
+        if role_defs and src_role in role_defs:
+            src_def = role_defs[src_role]
+            fb_deps = [
+                d.split(":")[-1].strip().lower()
+                for d in (getattr(src_def, "feedback_role_deps", None) or (src_def.get("feedback_role_deps") if isinstance(src_def, dict) else ()) or ())
+            ]
+            if tgt_role not in fb_deps:
+                return control_attribution.AttributionOutcome(
+                    accepted=False,
+                    message=f"Error: Role '{src_role}' is not configured to deliver feedback to role '{tgt_role}'.",
+                    affected_nodes=[],
+                )
+
         # 3. In-batch dependencies must be clean
         if in_batch_dependencies:
             for dep in in_batch_dependencies:
@@ -263,7 +273,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
             try:
                 with open(meta_p, "r", encoding="utf-8") as f:
                     meta = json.load(f)
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 pass
 
         main_root = repo_root or (meta.get("main_workspace_root") or meta.get("repo_root") if meta else None) or ws_root
@@ -285,41 +295,69 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
         part_dir, unit_name, blamed_role = _parse_unit_from_file_path(dep_path, ref_root)
         main_dep_path = os.path.join(main_root, os.path.relpath(dep_path, ref_root))
 
-        if _can_run_bazel(main_root):
-            blame_target = f"//{part_dir}:{unit_name}_{blamed_role}_blame"
-            cmd = ["bazel", "run", blame_target, "--", critique]
-            res = subprocess.run(cmd, cwd=main_root)
-            if res.returncode != 0:
+        # Validate that caller is configured to deliver feedback to blamed_role
+        try:
+            cfg = get_singleton(agent_node_config.NodeConfig)
+            role_defs = getattr(cfg, "role_definitions", {})
+        except (KeyError, AttributeError, RuntimeError):
+            role_defs = {}
+        if not role_defs:
+            roles_toml = None
+            for cand in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
+                p = os.path.join(main_root, cand)
+                if os.path.isfile(p):
+                    roles_toml = p
+                    break
+            if not roles_toml:
+                for entry in os.listdir(main_root):
+                    pkg = os.path.join(main_root, entry)
+                    if os.path.isdir(pkg) and not entry.startswith((".", "bazel-", "venv")):
+                        for cand in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
+                            p = os.path.join(pkg, cand)
+                            if os.path.isfile(p):
+                                roles_toml = p
+                                break
+                    if roles_toml:
+                        break
+            if roles_toml and os.path.isfile(roles_toml):
+                try:
+                    with open(roles_toml, "rb") as tf:
+                        r_data = tomllib.load(tf)
+                    role_defs = r_data.get("roles", {})
+                except (tomllib.TOMLDecodeError, OSError):
+                    role_defs = {}
+
+        caller_clean = str(caller).split(":")[-1].strip().lower()
+        blamed_clean = str(blamed_role).split(":")[-1].strip().lower()
+        if role_defs and caller_clean in role_defs:
+            c_def = role_defs[caller_clean]
+            fb_deps = [
+                d.split(":")[-1].strip().lower()
+                for d in (getattr(c_def, "feedback_role_deps", None) or (c_def.get("feedback_role_deps") if isinstance(c_def, dict) else ()) or ())
+            ]
+            if blamed_clean not in fb_deps:
                 return control_attribution.AttributionOutcome(
                     accepted=False,
-                    message=f"Bazel blame target failed with exit code {res.returncode}",
+                    message=f"Error: Role '{caller}' is not configured to deliver feedback to role '{blamed_role}'.",
                     affected_nodes=[],
                 )
-            if ws_root != main_root and os.path.isfile(main_dep_path):
-                ws_dep = os.path.join(ws_root, os.path.relpath(dep_path, ref_root))
-                if os.path.exists(ws_dep):
-                    _copy_file_with_perms(main_dep_path, ws_dep, readonly=True)
-            return control_attribution.AttributionOutcome(
-                accepted=True,
-                message=f"✔ Attributed blame to {culprit_file} via Bazel {blame_target}",
-                affected_nodes=[],
-            )
-        else:
-            target_to_mutate = main_dep_path if os.path.exists(main_dep_path) else dep_path
-            src_metadata.append_feedback(target_to_mutate, critique, sender=caller)
-            src_metadata.mark_dirty(target_to_mutate, f"Blamed by {caller}: {critique}")
-            src_metadata.update_metadata(
-                target_to_mutate, last_cleaned=src_metadata.current_utc_timestamp()
-            )
-            if ws_root != main_root and os.path.isfile(main_dep_path):
-                ws_dep = os.path.join(ws_root, os.path.relpath(dep_path, ref_root))
-                if os.path.exists(ws_dep):
-                    _copy_file_with_perms(main_dep_path, ws_dep, readonly=True)
-            return control_attribution.AttributionOutcome(
-                accepted=True,
-                message=f"Appended FEEDBACK: into {target_to_mutate}",
-                affected_nodes=[],
-            )
+
+        target_to_mutate = main_dep_path if os.path.exists(main_dep_path) else dep_path
+        src_metadata.append_feedback(target_to_mutate, critique, sender=caller)
+        src_metadata.mark_dirty(target_to_mutate, f"Blamed by {caller}: {critique}")
+        src_metadata.update_metadata(
+            target_to_mutate, last_cleaned=src_metadata.current_utc_timestamp()
+        )
+        if ws_root != main_root and os.path.isfile(main_dep_path):
+            ws_dep = os.path.join(ws_root, os.path.relpath(dep_path, ref_root))
+            if os.path.exists(ws_dep):
+                _copy_file_with_perms(main_dep_path, ws_dep, readonly=True)
+        culprit_rel = os.path.relpath(target_to_mutate, main_root)
+        return control_attribution.AttributionOutcome(
+            accepted=True,
+            message=f"[BLAME] {culprit_rel}: {critique}",
+            affected_nodes=[],
+        )
 
     def fail_target_file(
         self,
@@ -336,7 +374,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
             try:
                 with open(meta_p, "r", encoding="utf-8") as f:
                     meta = json.load(f)
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 pass
 
         main_root = repo_root or (meta.get("main_workspace_root") or meta.get("repo_root") if meta else None) or ws_root

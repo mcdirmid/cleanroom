@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
 # CODE_HASH: ba7e3b3204c1
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_submit_impl."""
@@ -11,8 +12,12 @@ from typing import Optional, Sequence
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import agent_file_alias
+import agent_node_config
 import control_submit
+import control_verification
 import dag_storage
+import src_metadata
 
 
 @singleton_type("agent_session")

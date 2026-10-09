@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T10:45:00Z
 # CHANGE: new file
 # CODE_HASH: 35e3b925fbfc
@@ -8,7 +8,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Protocol, Sequence
+from typing import Any, Optional, Protocol, Sequence
 from update_with_ai.parts.dag.lib import dag_storage, dag_subgraph
 from . import (
     control_attribution,
@@ -55,9 +55,14 @@ class SessionCoordinator(Protocol):
         state: TargetState = TargetState.OPEN,
     ) -> None: ...
 
-    def resolve_default_target(self) -> Optional[dag_storage.DagNode]: ...
+    def reset_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None: ...
+
+    def resolve_default_target(
+        self, last_accessed_file: Optional[Any] = None
+    ) -> Optional[dag_storage.DagNode]: ...
 
     def get_node_for_alias(self, alias: str) -> Optional[dag_storage.DagNode]: ...
+
 
     def get_alias_for_node(self, node: dag_storage.DagNode) -> str: ...
 

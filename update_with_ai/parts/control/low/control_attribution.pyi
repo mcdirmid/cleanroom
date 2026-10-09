@@ -1,18 +1,22 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
-# CODE_HASH: e5bafa80b3b6
+# CODE_HASH: 712fdf002958
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_attribution."""
 
 from dataclasses import dataclass
-from typing import Optional, Protocol, Sequence
+from typing import Any, Optional, Protocol, Sequence
 from framework import data_type, operation, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import agent_file_alias
+import agent_node_config
 import dag_storage
+import src_metadata
 
 
 @data_type
@@ -48,6 +52,7 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - When blame target is not an upstream dependency, MUST reject blame.
+        - When source node role is not configured to deliver feedback to blame target role, MUST reject blame.
         - When explanation contains newline characters, MUST reject blame.
         - When in-batch dependency is not clean, MUST reject blame.
         - When accepted, MUST record feedback message on culprit node in graph storage.
@@ -86,7 +91,8 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - When critique contains newline characters, MUST reject blame.
         - When culprit file cannot be resolved, MUST reject blame.
-        - When accepted, MUST record in-band feedback and dirty status via build target or direct metadata mutation.
+        - When caller role is not configured to deliver feedback to culprit role, MUST reject blame.
+        - When accepted, MUST record in-band feedback and dirty status via direct metadata mutation in canonical repository.
         - MUST return AttributionOutcome indicating acceptance status and message.
         """
         ...
@@ -107,3 +113,11 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
         - MUST return AttributionOutcome indicating acceptance status and message.
         """
         ...
+
+    @operation
+    def match_blame_target(
+        self, node: dag_storage.DagNode, val: Any, val_str: str
+    ) -> Optional[agent_file_alias.BoundFile]:
+        """Matches a blame target value against configured blame targets for a node."""
+        ...
+

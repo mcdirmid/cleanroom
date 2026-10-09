@@ -1,7 +1,17 @@
 # update_python_with_ai/support/tests/BUILD.bazel
 
+load("@rules_python//python:defs.bzl", "py_test")
 load("//bin:pyright_library.bzl", "pyright_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+exports_files([
+    "high_lint_test.sh",
+    "low_lint_test.sh",
+    "lib_lint_test.sh",
+    "test_lint_test.sh",
+    "import_boundaries_lint_test.py",
+], visibility = ["//visibility:public"])
+
 
 pyright_test(
     name = "lifecycle_test",
@@ -19,6 +29,14 @@ pyright_test(
         "//update_with_ai/parts/dag/lib:dag_subgraph_impl",
         "//update_with_ai/parts/openai/lib:openai_driver_impl",
         "//update_with_ai/parts/systems/lib:bazel_openai_loop_asm",
+        "//update_with_ai/parts/systems/lib:uv_openai_loop_asm",
+        "//update_with_ai/parts/systems/lib:uv_cleanroom_asm",
+        "//update_with_ai/parts/control/lib:control_asm",
+        "//update_with_ai/parts/core/lib:file_paths_impl",
+        "//update_with_ai/parts/tools/lib:tools_asm",
+        "//update_with_ai/parts/workspace/lib:workspace_asm",
+        "//update_with_ai/parts/uv/lib:uv_asm",
+        "//update_with_ai/parts/uv/lib:uv_loop_impl",
         "//update_with_ai/parts/sandbox/lib:sandbox_asm",
         "//update_with_ai/parts/sandbox/lib:sandbox_impl",
     ],
@@ -62,3 +80,13 @@ sh_test(
     ],
     tags = ["lint"],
 )
+
+py_test(
+    name = "import_boundaries_lint_test",
+    srcs = ["import_boundaries_lint_test.py"],
+    deps = [
+        "//update_python_with_ai/support/lib:build_lint_common",
+    ],
+    tags = ["local", "lint"],
+)
+

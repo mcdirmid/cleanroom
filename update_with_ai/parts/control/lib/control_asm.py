@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-06T11:15:00Z
-# CHANGE: implement singleton registration in control_asm
-# CODE_HASH: 722a22fbc736
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry, get_default_registry
@@ -22,17 +15,18 @@ from . import (
     control_work_scheduler_impl,
     src_metadata,
     src_metadata_impl,
+    src_storage_impl,
 )
 
 CONSTITUENTS = (
+    control_attribution_impl,
     control_coordinate_impl,
+    control_submit_impl,
     control_verification_impl,
     control_work_scheduler_impl,
-    control_submit_impl,
-    control_attribution_impl,
     src_metadata_impl,
+    src_storage_impl,
 )
-
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Initializes the control assembly component and registers its singletons."""
@@ -67,3 +61,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         keys=[src_metadata.SourceMetadataCoordinator, src_metadata_impl.SourceMetadataCoordinator],
         tier=agent_session.agent_session,
     )
+    src_storage_impl.__initialize__(reg)
+
+_initialize_ = __initialize__

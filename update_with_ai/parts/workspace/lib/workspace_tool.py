@@ -81,22 +81,11 @@ class WorkspaceToolRunner(Protocol):
     def run_commission(
         self,
         role_name: str,
-        dir_scope: str = "staging",
+        dir_scope: str = "",
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
     ) -> int:
         """Commissions an isolated role workspace."""
-        ...
-
-    def run_decommission(
-        self,
-        role_name_or_dir: str,
-        dir_scope: Optional[str] = None,
-        repo_root: Optional[str] = None,
-        custom_dest: Optional[str] = None,
-        force: bool = False,
-    ) -> int:
-        """Decommissions an isolated role workspace."""
         ...
 
     def run_refresh_sys(

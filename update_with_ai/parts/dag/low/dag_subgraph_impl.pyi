@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T12:45:00Z
 # CHANGE: add grounding sections
 # CODE_HASH: c3337f9edbc0
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Dag subgraph implementation specification."""
@@ -12,6 +13,7 @@ from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier, SystemTier
 from dag_storage import DagNode
 import dag_subgraph
+import dag_config
 
 
 @singleton_type("system")

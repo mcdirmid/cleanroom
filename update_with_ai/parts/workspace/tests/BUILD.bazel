@@ -5,18 +5,6 @@ load("//bin:pyright_library.bzl", "pyright_test")
 package(default_visibility = ["//visibility:public"])
 
 pyright_test(
-    name = "workspace_registry_impl_test",
-    srcs = ["workspace_registry_impl_test.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/workspace/lib:workspace_registry",
-        "//update_with_ai/parts/workspace/lib:workspace_registry_impl",
-    ],
-)
-
-pyright_test(
     name = "workspace_provision_impl_test",
     srcs = ["workspace_provision_impl_test.py"],
     deps = [],
@@ -25,6 +13,17 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/workspace/lib:workspace_provision",
         "//update_with_ai/parts/workspace/lib:workspace_provision_impl",
+        "//update_with_ai/parts/workspace/lib:workspace_registry",
+    ],
+)
+
+pyright_test(
+    name = "workspace_registry_impl_test",
+    srcs = ["workspace_registry_impl_test.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/workspace/lib:workspace_registry",
         "//update_with_ai/parts/workspace/lib:workspace_registry_impl",
     ],
@@ -38,11 +37,33 @@ pyright_test(
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/control/lib:src_metadata",
-        "//update_with_ai/parts/control/lib:src_metadata_impl",
         "//update_with_ai/parts/workspace/lib:workspace_registry",
-        "//update_with_ai/parts/workspace/lib:workspace_registry_impl",
         "//update_with_ai/parts/workspace/lib:workspace_sync",
         "//update_with_ai/parts/workspace/lib:workspace_sync_impl",
+    ],
+)
+
+pyright_test(
+    name = "workspace_tool_impl_test",
+    srcs = ["workspace_tool_impl_test.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/control/lib:control_asm",
+        "//update_with_ai/parts/control/lib:control_attribution",
+        "//update_with_ai/parts/control/lib:control_submit",
+        "//update_with_ai/parts/control/lib:control_work_scheduler",
+        "//update_with_ai/parts/control/lib:src_metadata",
+        "//update_with_ai/parts/tools/lib:tool_coverage",
+        "//update_with_ai/parts/tools/lib:tools_asm",
+        "//update_with_ai/parts/workspace/lib:workspace_asm",
+        "//update_with_ai/parts/workspace/lib:workspace_provision",
+        "//update_with_ai/parts/workspace/lib:workspace_registry",
+        "//update_with_ai/parts/workspace/lib:workspace_sync",
+        "//update_with_ai/parts/workspace/lib:workspace_tool",
+        "//update_with_ai/parts/workspace/lib:workspace_tool_impl",
+        "//update_with_ai/parts/workspace/lib:workspace_work",
     ],
 )
 
@@ -55,57 +76,10 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/control/lib:control_work_scheduler",
         "//update_with_ai/parts/control/lib:src_metadata",
-        "//update_with_ai/parts/control/lib:src_metadata_impl",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/workspace/lib:workspace_registry",
-        "//update_with_ai/parts/workspace/lib:workspace_registry_impl",
         "//update_with_ai/parts/workspace/lib:workspace_work",
         "//update_with_ai/parts/workspace/lib:workspace_work_impl",
     ],
 )
 
-pyright_test(
-    name = "workspace_asm_test",
-    srcs = ["workspace_asm_test.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/control/lib:control_work_scheduler",
-        "//update_with_ai/parts/control/lib:src_metadata",
-        "//update_with_ai/parts/workspace/lib:workspace_asm",
-        "//update_with_ai/parts/workspace/lib:workspace_provision",
-        "//update_with_ai/parts/workspace/lib:workspace_registry",
-        "//update_with_ai/parts/workspace/lib:workspace_sync",
-        "//update_with_ai/parts/workspace/lib:workspace_work",
-    ],
-)
-
-pyright_test(
-    name = "workspace_tool_impl_test",
-    srcs = ["workspace_tool_impl_test.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/workspace/lib:workspace_asm",
-        "//update_with_ai/parts/workspace/lib:workspace_provision_impl",
-        "//update_with_ai/parts/workspace/lib:workspace_registry",
-        "//update_with_ai/parts/workspace/lib:workspace_registry_impl",
-        "//update_with_ai/parts/workspace/lib:workspace_sync",
-        "//update_with_ai/parts/workspace/lib:workspace_sync_impl",
-        "//update_with_ai/parts/workspace/lib:workspace_tool",
-        "//update_with_ai/parts/workspace/lib:workspace_tool_impl",
-        "//update_with_ai/parts/workspace/lib:workspace_work",
-        "//update_with_ai/parts/workspace/lib:workspace_work_impl",
-        "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/control/lib:control_asm",
-        "//update_with_ai/parts/control/lib:control_attribution",
-        "//update_with_ai/parts/control/lib:control_attribution_impl",
-        "//update_with_ai/parts/control/lib:control_submit",
-        "//update_with_ai/parts/control/lib:control_submit_impl",
-        "//update_with_ai/parts/control/lib:control_work_scheduler",
-        "//update_with_ai/parts/control/lib:src_metadata",
-        "//update_with_ai/parts/tools/lib:tool_coverage",
-        "//update_with_ai/parts/tools/lib:tools_asm",
-    ],
-)

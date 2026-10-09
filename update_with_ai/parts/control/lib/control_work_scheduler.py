@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T10:45:00Z
 # CHANGE: new file
 # CODE_HASH: cf067c04c915
@@ -48,3 +48,8 @@ class WorkScheduler(Protocol):
     def compute_role_precedence(
         self, role_dependencies: Mapping[str, Sequence[str]]
     ) -> Mapping[str, int]: ...
+
+    def format_task_prompt(
+        self, nodes: Sequence[dag_storage.DagNode]
+    ) -> str: ...
+

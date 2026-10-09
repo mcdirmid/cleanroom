@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-06T22:55:00Z
-CHANGE: new file
-CODE_HASH: e035cf393fb4
+LAST_CLEANED: 2026-10-07T23:58:18Z
+LAST_CHANGED: 2026-10-08T03:34:00Z
+CHANGE: update pull contract for writable target updates and deleted files
+CODE_HASH: 0389263a3afe
+SPEC_QA_AUDIT: 2026-10-07T23:58:18Z
 -->
 
 # workspace_sync_impl implementation component
@@ -18,8 +19,9 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 ### Contracts
 
-- The workspace synchronizer copies newer upstream files from main to workspace setting 0o444 permissions on contracts. [copy_upstream_files_with_perms]
-- The workspace synchronizer recopies tool runners, build rules, guides, and AGENTS.md from main into the workspace without altering targets. [recopy_system_files_fast]
+- The workspace synchronizer copies newer upstream files from main to workspace setting 0o444 permissions on contracts and updating unmodified writable targets with 0o644 permissions while deleting missing files. [copy_upstream_files_with_perms]
+- The workspace synchronizer synthesizes read-only test stubs from companion specifications, replaces leaked implementation code, and deletes orphaned stubs for stub role dependencies. [sync_stub_role_dependencies]
+- The workspace synchronizer recopies tool runners, project configurations, guides, and AGENTS.md from main into the workspace without altering targets. [recopy_system_files_fast]
 - The workspace synchronizer computes on-disk SHA-256 code hashes and extracts in-band metadata to identify modified files. [evaluate_target_file_modifications]
 - The workspace synchronizer compares main repository code hashes against workspace baselines to detect concurrent edits. [compare_main_and_workspace_hashes]
 - The workspace synchronizer copies validated target files into the canonical repository and updates in-band clean timestamps. [copy_validated_files_to_main]
@@ -28,7 +30,7 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 ### Woven Contracts
 
-- When pulling updates from main, the synchronizer copies upstream files with read-only permissions and fast-refreshes system files. [copy_upstream_files_with_perms, recopy_system_files_fast, workspace_sync: [pull_upstream_contracts, refresh_system_files_into_workspace]]
+- When pulling updates from main, the synchronizer copies upstream files with read-only permissions, synchronizes stub role dependencies, and fast-refreshes system files. [copy_upstream_files_with_perms, sync_stub_role_dependencies, recopy_system_files_fast, workspace_sync: [pull_upstream_contracts, sync_stub_dependencies, refresh_system_files_into_workspace]]
 - When harvesting changes, the synchronizer evaluates target modifications, detects concurrent edits against main, copies validated files, stamps audits, and flushes blame entries. [evaluate_target_file_modifications, compare_main_and_workspace_hashes, copy_validated_files_to_main, stamp_audit_on_targets, process_blame_buffer_entries, workspace_sync: [scan_modified_targets, validate_harvest_baselines, commit_harvested_files, stamp_auditor_role_audits, flush_blame_buffer_entries], src_metadata: [extract_metadata_disk, update_metadata_disk, stamp_audit_entry, append_feedback_entry]]
 
 ## Grounding

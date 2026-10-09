@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
 # CODE_HASH: 8d77c99fce31
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_work_scheduler."""
@@ -77,3 +78,15 @@ class WorkScheduler(InTier[AgentSessionTier], Protocol):
         - MUST assign integer rank matching longest path from root roles.
         """
         ...
+
+    @operation
+    def format_task_prompt(
+        self, nodes: Sequence[dag_storage.DagNode]
+    ) -> str:
+        """Formats synthesized task prompt for candidate nodes.
+
+        POSTCONDITIONS:
+        - Formats aggregated prompt lines for specified candidate nodes.
+        """
+        ...
+

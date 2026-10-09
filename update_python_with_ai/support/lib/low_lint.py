@@ -21,6 +21,7 @@ Checks:
   9. Contract entries under `CONSTITUENTS:`, `INVARIANTS:`, `PRECONDITIONS:`, `POSTCONDITIONS:` must start with `- `.
  10. Contract sentences under `INVARIANTS:`, `PRECONDITIONS:`, and `POSTCONDITIONS:` must end with a period (`.`).
  11. Class invariants must not be repeated as operation preconditions in the same class.
+ 12. In implementation specifications (*_impl.pyi), top-level imports declare all non-external modules specified in front-matter 'imports:' of the planning specification (planning/<name>_impl.md).
 """
 
 from __future__ import annotations
@@ -336,6 +337,44 @@ def lint_low_file(file_path: Path) -> list[str]:
     if module_doc:
         d_errs, _, _ = _check_docstring_contracts(module_doc, fname, "module", 1, is_impl=is_impl)
         errors.extend(d_errs)
+
+    # 5a. Implementation Specification Planning Import Parity Audit (*_impl.pyi)
+    if is_impl:
+        plan_path = file_path.parent.parent / "planning" / f"{stem}.md"
+        if not plan_path.exists():
+            candidates = list(PARTS_DIR.glob(f"*/planning/{stem}.md"))
+            if candidates:
+                plan_path = candidates[0]
+            elif not candidates:
+                ws_plan = list(Path(file_path.anchor).glob(f"**/parts/*/planning/{stem}.md"))
+                if ws_plan:
+                    plan_path = ws_plan[0]
+
+        if plan_path.exists():
+            tree_imports: set[str] = set()
+            for stmt in tree.body:
+                if isinstance(stmt, ast.Import):
+                    for a in stmt.names:
+                        tree_imports.add(a.name)
+                elif isinstance(stmt, ast.ImportFrom):
+                    if stmt.module:
+                        tree_imports.add(stmt.module)
+
+            try:
+                plan_content = plan_path.read_text(encoding="utf-8")
+                for p_line in plan_content.splitlines():
+                    p_stripped = p_line.strip()
+                    if p_stripped.startswith("imports:"):
+                        p_raw = p_stripped[len("imports:") :].strip()
+                        if p_raw:
+                            for p_imp in [i.strip() for i in p_raw.split(",") if i.strip()]:
+                                if not p_imp.endswith("_ext") and p_imp not in tree_imports:
+                                    errors.append(
+                                        f"{fname}:1: error: implementation stub missing import for '{p_imp}' declared in '{plan_path.name}'"
+                                    )
+                        break
+            except OSError:
+                pass
 
     for stmt in tree.body:
         if isinstance(stmt, (ast.Import, ast.ImportFrom)):

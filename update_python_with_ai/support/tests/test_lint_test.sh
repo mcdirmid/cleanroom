@@ -501,10 +501,25 @@ def __initialize__(registry=None):
     pass
 EOF
 touch "$tmp/c20/tests/worker_impl_test.py"
-if ( cd "$tmp/c20" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/worker_impl_test.py --lib-pkg lib --pyi "$tmp/c20/grounding/worker_impl.pyi" ); then
-    echo "PASS: c20 auto-generated test skeleton from .pyi"
+if ( cd "$tmp/c20" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/worker_impl_test.py --lib-pkg lib --pyi "$tmp/c20/grounding/worker_impl.pyi" 2>"$tmp/c20/uninit.log" ); then
+    echo "FAIL: c20 expected rejection of empty test module without --scaffold" >&2
+    fail=1
 else
-    echo "FAIL: c20 failed to generate test skeleton from .pyi" >&2
+    echo "PASS: c20 rejected empty test module without --scaffold"
+fi
+check "c20 uninit diagnostic" "$tmp/c20/uninit.log" "tests/worker_impl_test.py is uninitialized"
+
+if ( cd "$tmp/c20" && python3 "$bin/test_lint.py" --scaffold tests/worker_impl_test.py --lib-pkg lib --pyi "$tmp/c20/grounding/worker_impl.pyi" ); then
+    echo "PASS: c20 generated test skeleton via --scaffold"
+else
+    echo "FAIL: c20 failed to generate test skeleton via --scaffold" >&2
+    fail=1
+fi
+
+if ( cd "$tmp/c20" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/worker_impl_test.py --lib-pkg lib --pyi "$tmp/c20/grounding/worker_impl.pyi" ); then
+    echo "PASS: c20 validated generated test skeleton"
+else
+    echo "FAIL: c20 failed to validate generated test skeleton" >&2
     fail=1
 fi
 check "c20 target class import" "$tmp/c20/tests/worker_impl_test.py" 'from lib\.worker_impl import'
@@ -547,10 +562,25 @@ cat > "$tmp/c21/tests/service_impl_test.py" <<'EOF'
 class <TargetClass>Test(unittest.TestCase):
     pass
 EOF
-if ( cd "$tmp/c21" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/service_impl_test.py --lib-pkg lib --pyi "$tmp/c21/grounding/service_impl.pyi" ); then
-    echo "PASS: c21 replaced <TargetClass> test placeholder with valid skeleton"
+if ( cd "$tmp/c21" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/service_impl_test.py --lib-pkg lib --pyi "$tmp/c21/grounding/service_impl.pyi" 2>"$tmp/c21/uninit.log" ); then
+    echo "FAIL: c21 expected rejection of <TargetClass> placeholder without --scaffold" >&2
+    fail=1
 else
-    echo "FAIL: c21 failed to replace <TargetClass> placeholder" >&2
+    echo "PASS: c21 rejected <TargetClass> placeholder without --scaffold"
+fi
+check "c21 uninit diagnostic" "$tmp/c21/uninit.log" "tests/service_impl_test.py is uninitialized"
+
+if ( cd "$tmp/c21" && python3 "$bin/test_lint.py" --scaffold tests/service_impl_test.py --lib-pkg lib --pyi "$tmp/c21/grounding/service_impl.pyi" ); then
+    echo "PASS: c21 replaced <TargetClass> test placeholder via --scaffold"
+else
+    echo "FAIL: c21 failed to replace <TargetClass> test placeholder via --scaffold" >&2
+    fail=1
+fi
+
+if ( cd "$tmp/c21" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/service_impl_test.py --lib-pkg lib --pyi "$tmp/c21/grounding/service_impl.pyi" ); then
+    echo "PASS: c21 validated replaced test skeleton"
+else
+    echo "FAIL: c21 failed to validate replaced test skeleton" >&2
     fail=1
 fi
 check "c21 service class import" "$tmp/c21/tests/service_impl_test.py" 'from lib\.service_impl import'
@@ -604,6 +634,120 @@ if grep -q "helper_ext" "$tmp/c22/tests/BUILD.bazel"; then
     fail=1
 else
     echo "PASS: c22 correctly excluded _ext dependency from tests/BUILD.bazel"
+fi
+
+# Case 24: test module importing foreign _impl -> fails with impl error
+mkdir -p "$tmp/c24/lib" "$tmp/c24/tests" "$tmp/c24/grounding"
+cat > "$tmp/c24/grounding/unit_impl.pyi" <<'EOF'
+class Foo:
+    pass
+EOF
+cat > "$tmp/c24/tests/unit_impl_test.py" <<'EOF'
+import unittest
+from lib.unit_impl import Foo
+from lib.other_impl import OtherFoo
+
+class UnitTest(unittest.TestCase):
+    def test_ok(self):
+        pass
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c24" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/unit_impl_test.py --lib-pkg lib --pyi "$tmp/c24/grounding/unit_impl.pyi" 2>"$tmp/c24/err.log" ); then
+    echo "FAIL: c24 expected failure on foreign _impl import" >&2
+    fail=1
+else
+    echo "PASS: c24 rejected foreign _impl import in test"
+fi
+check "c24 foreign impl error diagnostic" "$tmp/c24/err.log" "test module must only import target implementation module 'unit_impl', but imports from 'lib.other_impl'"
+
+# Case 25: pure-Python test_lint invocation on test file with --pyi -> succeeds without creating BUILD.bazel
+mkdir -p "$tmp/c25/lib" "$tmp/c25/tests" "$tmp/c25/low"
+cat > "$tmp/c25/low/worker_impl.pyi" <<'EOF'
+from framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+cat > "$tmp/c25/lib/worker_impl.py" <<'EOF'
+class Worker:
+    def process_item(self, item: str) -> bool:
+        return True
+EOF
+cat > "$tmp/c25/tests/worker_impl_test.py" <<'EOF'
+import unittest
+from lib.worker_impl import Worker
+
+class WorkerTest(unittest.TestCase):
+    def test_process(self):
+        w = Worker()
+        self.assertTrue(w.process_item("test"))
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c25" && python3 "$bin/test_lint.py" tests/worker_impl_test.py --pyi low/worker_impl.pyi ); then
+    echo "PASS: c25 pure-Python test_lint succeeded"
+else
+    echo "FAIL: c25 expected pass on pure-Python test_lint" >&2
+    fail=1
+fi
+if [ -f "$tmp/c25/tests/BUILD.bazel" ] || [ -f "$tmp/c25/BUILD.bazel" ]; then
+    echo "FAIL: c25 BUILD.bazel should not be created" >&2
+    fail=1
+else
+    echo "PASS: c25 no BUILD.bazel created"
+fi
+
+# Case 26: pure-Python test_lint invocation with undeclared import -> fails and creates no BUILD.bazel
+mkdir -p "$tmp/c26/lib" "$tmp/c26/tests" "$tmp/c26/low"
+cat > "$tmp/c26/low/worker_impl.pyi" <<'EOF'
+from framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+cat > "$tmp/c26/lib/worker_impl.py" <<'EOF'
+class Worker:
+    def process_item(self, item: str) -> bool:
+        return True
+EOF
+cat > "$tmp/c26/tests/worker_impl_test.py" <<'EOF'
+import unittest
+import unauthorized_package
+from lib.worker_impl import Worker
+
+class WorkerTest(unittest.TestCase):
+    def test_process(self):
+        w = Worker()
+        self.assertTrue(w.process_item("test"))
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c26" && python3 "$bin/test_lint.py" tests/worker_impl_test.py --pyi low/worker_impl.pyi 2>"$tmp/c26/err.log" ); then
+    echo "FAIL: c26 expected failure on undeclared import" >&2
+    fail=1
+else
+    if grep -q "undeclared dependency 'unauthorized_package'" "$tmp/c26/err.log"; then
+        echo "PASS: c26 rejected undeclared import in pure-Python mode"
+    else
+        echo "FAIL: c26 did not report undeclared dependency in err.log" >&2
+        cat "$tmp/c26/err.log" >&2
+        fail=1
+    fi
+fi
+if [ -f "$tmp/c26/tests/BUILD.bazel" ] || [ -f "$tmp/c26/BUILD.bazel" ]; then
+    echo "FAIL: c26 BUILD.bazel should not be created" >&2
+    fail=1
+else
+    echo "PASS: c26 no BUILD.bazel created on failure"
 fi
 
 exit "$fail"

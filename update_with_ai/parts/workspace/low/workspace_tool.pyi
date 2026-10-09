@@ -1,7 +1,7 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-06T23:30:00Z
-# CHANGE: define workspace tool runner interface
+# LAST_CLEANED: 2026-10-08T15:45:00Z
+# LAST_CHANGED: 2026-10-08T15:45:00Z
+# CHANGE: add template regeneration to run_check_files postconditions
 # CODE_HASH: 123456789abc
 # --- END CLEANROOM METADATA ---
 
@@ -38,7 +38,12 @@ class WorkspaceToolRunner(InTier[AgentSessionTier], Protocol):
         target: Optional[str] = None,
         repo_root: Optional[str] = None,
     ) -> int:
-        """Executes role-specific verification checks, linters, and type checking for targets."""
+        """Executes role-specific verification checks, linters, and type checking for targets.
+
+        POSTCONDITIONS:
+        - When a target file for a regenerable role is missing or deleted, MUST regenerate it from starter template.
+        - MUST execute verification checks and return exit code.
+        """
         ...
 
     @operation
@@ -48,7 +53,12 @@ class WorkspaceToolRunner(InTier[AgentSessionTier], Protocol):
         summary: Optional[str] = None,
         repo_root: Optional[str] = None,
     ) -> int:
-        """Verifies and submits target to canonical main repository."""
+        """Verifies and submits target to canonical main repository.
+
+        POSTCONDITIONS:
+        - WHEN submission is accepted, MUST append submission message to .cleanroom.log in directory containing parts.
+        - WHEN submission is accepted, MUST clear target from pending work.
+        """
         ...
 
     @operation
@@ -58,7 +68,12 @@ class WorkspaceToolRunner(InTier[AgentSessionTier], Protocol):
         critique: str,
         repo_root: Optional[str] = None,
     ) -> int:
-        """Attributes defect critique to culprit target in main repository."""
+        """Attributes defect critique to culprit target in main repository.
+
+        POSTCONDITIONS:
+        - WHEN critique is accepted, MUST append blame message to .cleanroom.log in directory containing parts.
+        - WHEN critique is accepted, MUST clear target from pending work.
+        """
         ...
 
     @operation
@@ -95,18 +110,6 @@ class WorkspaceToolRunner(InTier[AgentSessionTier], Protocol):
         custom_dest: Optional[str] = None,
     ) -> int:
         """Commissions an isolated role workspace."""
-        ...
-
-    @operation
-    def run_decommission(
-        self,
-        role_name_or_dir: str,
-        dir_scope: Optional[str] = None,
-        repo_root: Optional[str] = None,
-        custom_dest: Optional[str] = None,
-        force: bool = False,
-    ) -> int:
-        """Decommissions an isolated role workspace."""
         ...
 
     @operation

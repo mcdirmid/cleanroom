@@ -531,11 +531,26 @@ class Worker:
         ...
 EOF
 touch "$tmp/c23/lib/worker_impl.py"
+if ( cd "$tmp/c23" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/worker_impl.py --pyi "$tmp/c23/grounding/worker_impl.pyi" 2>"$tmp/c23/uninit.log" ); then
+    echo "FAIL: c23 expected rejection of empty module without --scaffold" >&2
+    fail=1
+else
+    echo "PASS: c23 rejected empty module without --scaffold"
+fi
+check "c23 uninit diagnostic" "$tmp/c23/uninit.log" "lib/worker_impl.py is uninitialized"
+
+if ( cd "$tmp/c23" && python3 "$bin/lib_lint.py" --scaffold lib/worker_impl.py --pyi "$tmp/c23/grounding/worker_impl.pyi" ); then
+    echo "PASS: c23 generated skeleton with --scaffold"
+else
+    echo "FAIL: c23 failed to generate skeleton with --scaffold" >&2
+    fail=1
+fi
+
 if ( cd "$tmp/c23" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/worker_impl.py --pyi "$tmp/c23/grounding/worker_impl.pyi" 2>"$tmp/c23/err.log" ); then
     echo "FAIL: c23 expected rejection due to stubs in generated skeleton" >&2
     fail=1
 else
-    echo "PASS: c23 auto-generated skeleton from .pyi and rejected stubs"
+    echo "PASS: c23 rejected stubs in generated skeleton"
 fi
 check "c23 stub error" "$tmp/c23/err.log" "contains stub 'raise NotImplementedError'"
 check "c23 spec reference header" "$tmp/c23/lib/worker_impl.py" '# Requirements specified in worker_impl.pyi'
@@ -561,10 +576,18 @@ cat > "$tmp/c24/lib/service.py" <<'EOF'
 class <TargetClass>(Protocol):
     pass
 EOF
-if ( cd "$tmp/c24" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/service.py --pyi "$tmp/c24/grounding/service.pyi" ); then
-    echo "PASS: c24 replaced <TargetClass> with valid skeleton"
+if ( cd "$tmp/c24" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/service.py --pyi "$tmp/c24/grounding/service.pyi" 2>"$tmp/c24/uninit.log" ); then
+    echo "FAIL: c24 expected rejection of <TargetClass> placeholder without --scaffold" >&2
+    fail=1
 else
-    echo "FAIL: c24 failed to replace <TargetClass>" >&2
+    echo "PASS: c24 rejected <TargetClass> placeholder without --scaffold"
+fi
+check "c24 uninit diagnostic" "$tmp/c24/uninit.log" "lib/service.py is uninitialized"
+
+if ( cd "$tmp/c24" && python3 "$bin/lib_lint.py" --scaffold lib/service.py --pyi "$tmp/c24/grounding/service.pyi" ); then
+    echo "PASS: c24 replaced <TargetClass> with valid skeleton via --scaffold"
+else
+    echo "FAIL: c24 failed to replace <TargetClass> via --scaffold" >&2
     fail=1
 fi
 check "c24 spec reference header" "$tmp/c24/lib/service.py" '# Requirements specified in service.pyi'
@@ -747,5 +770,124 @@ else
 fi
 check "c30 non-union type alias error diagnostic" "$tmp/c30/err.log" "type aliasing is not permitted in grounding specifications ('SingleAlias')"
 
+# Case 32: from . import sibling_impl in non-assembly module -> rejected with error.
+mkdir -p "$tmp/c32/lib"
+cat > "$tmp/c32/lib/sibling_impl.py" <<'EOF'
+class Helper:
+    pass
+EOF
+cat > "$tmp/c32/lib/main.py" <<'EOF'
+from . import sibling_impl
+
+class Service:
+    pass
+EOF
+if ( cd "$tmp/c32" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>"$tmp/c32/err.log" ); then
+    echo "FAIL: c32 expected failure on relative impl import" >&2
+    fail=1
+else
+    if grep -q "non-assembly module must not import implementation class or module 'sibling_impl'" "$tmp/c32/err.log"; then
+        echo "PASS: c32 rejected relative impl import"
+    else
+        echo "FAIL: c32 did not report relative impl import error" >&2
+        cat "$tmp/c32/err.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 33: pure-Python lib_lint invocation on .py file with --pyi -> succeeds without creating BUILD.bazel
+mkdir -p "$tmp/c33/lib" "$tmp/c33/low"
+cat > "$tmp/c33/low/worker_impl.pyi" <<'EOF'
+from framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+cat > "$tmp/c33/lib/worker_impl.py" <<'EOF'
+from __future__ import annotations
+from typing import Optional
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, system
+from update_with_ai.parts.agent.lib.agent_session import agent_session
+
+# Requirements specified in worker_impl.pyi
+
+class Worker(Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        pass
+
+    def process_item(self, item: str) -> bool:
+        return True
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        Worker,
+        keys=[Worker],
+        tier=agent_session,
+    )
+
+_initialize_ = __initialize__
+EOF
+if ( cd "$tmp/c33" && python3 "$bin/lib_lint.py" lib/worker_impl.py --pyi low/worker_impl.pyi ); then
+    echo "PASS: c33 pure-Python lib_lint succeeded"
+else
+    echo "FAIL: c33 expected pass on pure-Python lib_lint" >&2
+    fail=1
+fi
+if [ -f "$tmp/c33/lib/BUILD.bazel" ] || [ -f "$tmp/c33/BUILD.bazel" ]; then
+    echo "FAIL: c33 BUILD.bazel should not be created" >&2
+    fail=1
+else
+    echo "PASS: c33 no BUILD.bazel created"
+fi
+
+# Case 34: pure-Python lib_lint invocation with undeclared import -> fails and creates no BUILD.bazel
+mkdir -p "$tmp/c34/lib" "$tmp/c34/low"
+cat > "$tmp/c34/low/worker_impl.pyi" <<'EOF'
+from framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+cat > "$tmp/c34/lib/worker_impl.py" <<'EOF'
+from __future__ import annotations
+import unauthorized_package
+from support.lib.lifecycle import Singleton
+from update_with_ai.parts.agent.lib.agent_session import agent_session
+
+class Worker(Singleton):
+    tier = agent_session
+
+    def process_item(self, item: str) -> bool:
+        return True
+EOF
+if ( cd "$tmp/c34" && python3 "$bin/lib_lint.py" lib/worker_impl.py --pyi low/worker_impl.pyi 2>"$tmp/c34/err.log" ); then
+    echo "FAIL: c34 expected failure on undeclared import" >&2
+    fail=1
+else
+    if grep -q "undeclared dependency 'unauthorized_package'" "$tmp/c34/err.log"; then
+        echo "PASS: c34 rejected undeclared import in pure-Python mode"
+    else
+        echo "FAIL: c34 did not report undeclared dependency in err.log" >&2
+        cat "$tmp/c34/err.log" >&2
+        fail=1
+    fi
+fi
+if [ -f "$tmp/c34/lib/BUILD.bazel" ] || [ -f "$tmp/c34/BUILD.bazel" ]; then
+    echo "FAIL: c34 BUILD.bazel should not be created" >&2
+    fail=1
+else
+    echo "PASS: c34 no BUILD.bazel created on failure"
+fi
+
 exit "$fail"
+
 

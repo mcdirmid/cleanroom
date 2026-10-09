@@ -11,6 +11,7 @@ from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier, SystemTier
 import bazel_target
 import dag_storage
+import file_paths
 
 
 @singleton_type("system")

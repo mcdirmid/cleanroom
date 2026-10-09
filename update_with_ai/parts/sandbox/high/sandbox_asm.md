@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-07T23:58:18Z
 LAST_CHANGED: 2026-10-05T04:57:48Z
 CHANGE: Standardize on canonical check files tool over singular check file tool in assembly description
 CODE_HASH: 250b3b84336d
@@ -25,7 +25,7 @@ The *sandbox assembly* unites the concrete implementation components that realiz
 
 The sandbox assembly aggregates the following implementation components:
 
-- The sandbox implementation from sandbox_impl, closing the sandbox interface to materialize templates and expose session modification state.
+- The sandbox implementation from sandbox_impl, closing the sandbox interface to expose session modification state.
 
 - The sandbox file reader implementation from sandbox_file_reader_impl, closing the sandbox file reader interface to provide guarded file reading and regular expression pattern searching.
 

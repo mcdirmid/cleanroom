@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 8e7ebc5e0215
+# LAST_CLEANED: 2026-10-08T00:52:53Z
+# LAST_CHANGED: 2026-10-08T00:31:35Z
+# CHANGE: Update DagStorage low-level operations: add_feedback_message, mark_node_dirty, mark_subgraph_clean
+# CODE_HASH: 373a52388f6c
+# LOW_QA_AUDIT: 2026-10-08T00:52:53Z
 # --- END CLEANROOM METADATA ---
 
 """Dag storage low-level interface specification."""
@@ -129,22 +130,63 @@ class DagStorage(InTier[SystemTier], Protocol):
         - WHEN the declared source file is missing from disk, MUST return true.
         - WHEN in-band metadata is missing or invalid, MUST return true.
         - WHEN in-band metadata is uncleaned with a change description, MUST return true.
+        - WHEN in-band metadata contains a dirty tag, MUST return true.
         - WHEN unacted feedback messages exist for the node, MUST return true.
         - WHEN any non-silent dependency was changed after the node was last cleaned, MUST return true.
         """
         ...
 
     @operation
+    def add_feedback_message(self, node: DagNode, message: FeedbackMessage) -> None:
+        """Adds a feedback message blaming a dependency target node.
+
+        Args:
+            node: The dependency target node receiving the feedback message.
+            message: The feedback message to record for the node.
+
+        POSTCONDITIONS:
+        - MUST record the feedback message in the target node's in-band metadata as unacted feedback.
+        """
+        ...
+
+    @operation
     def add_message(self, message: DagMessage, to: DagNode) -> None:
-        """Adds a message to a node explaining why it needs cleaning.
+        """Adds a message to a node.
 
         Args:
             message: The message to record for the node.
             to: The target node receiving the message.
 
         POSTCONDITIONS:
-        - MUST add the message to the node.
-        - WHEN a change message is added, MUST mark the node dirty by clearing its last cleaned status.
+        - MUST record the message for the node.
+        """
+        ...
+
+    @operation
+    def mark_node_dirty(self, node: DagNode, reason: Optional[str] = ...) -> None:
+        """Marks a node dirty by clearing its clean status in in-band metadata.
+
+        Args:
+            node: The node to mark dirty.
+            reason: Optional reason explaining why the node is marked dirty.
+
+        POSTCONDITIONS:
+        - MUST mark the node dirty so that is_dirty returns true.
+        - MUST clear the last cleaned status in the node's in-band metadata.
+        """
+        ...
+
+    @operation
+    def mark_subgraph_clean(self, node: DagNode) -> None:
+        """Marks the target node and all reachable dependencies in its subgraph clean.
+
+        Args:
+            node: The root node of the subgraph to mark clean.
+
+        POSTCONDITIONS:
+        - MUST mark the target node clean.
+        - MUST mark all reachable dependencies of the node clean.
+        - MUST materialize missing templates for all nodes in the subgraph.
         """
         ...
 
@@ -171,8 +213,8 @@ class DagStorage(InTier[SystemTier], Protocol):
             change_description: Optional summary of modifications made to the node.
 
         POSTCONDITIONS:
-        - WHEN node has a source file and change description is provided, MUST update last changed timestamp, last cleaned timestamp, and change description, and clear unacted feedback.
-        - WHEN node has a source file and change description is omitted, MUST update last cleaned timestamp and clear unacted feedback, preserving existing last changed timestamp.
+        - WHEN node has a source file and change description is provided, MUST update last changed timestamp, last cleaned timestamp, and change description, and clear unacted feedback and dirty tags.
+        - WHEN node has a source file and change description is omitted, MUST update last cleaned timestamp and clear unacted feedback and dirty tags, preserving existing last changed timestamp.
         - WHEN node is an auditor role, MUST stamp audit metadata on all feedback dependencies.
         - MUST clear messages for node.
         - MUST mark node clean so that node is no longer dirty.

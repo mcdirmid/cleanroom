@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: af15feced92f
+# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CHANGED: 2026-10-08T03:34:00Z
+# CHANGE: update pull grounding for writable target updates and deleted files
+# CODE_HASH: 46a2d7bcb3b8
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_sync_impl."""
@@ -13,6 +14,7 @@ from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import workspace_sync
 import src_metadata
+import workspace_registry
 
 
 @singleton_type("agent_session")
@@ -41,7 +43,9 @@ class WorkspaceSynchronizer(
         """Pulls updated upstream contracts and source files into role workspace.
 
         GROUNDING:
-        - Copies newer files from main to workspace setting 0o444 on contracts.
+        - Copies newer files from main to workspace setting 0o444 on contracts,
+          updates unmodified writable targets with 0o644, deletes missing files,
+          and synthesizes read-only test stubs for stub_role_deps.
         """
         ...
 
@@ -58,7 +62,8 @@ class WorkspaceSynchronizer(
         """Refreshes non-parts system files into role workspace.
 
         GROUNDING:
-        - Recopies build rules, tools, linters, and guides into workspace.
+        - Recopies build rules, tools, linters, and guides into workspace,
+          and enforces read-only test stubs for stub_role_deps.
         """
         ...
 

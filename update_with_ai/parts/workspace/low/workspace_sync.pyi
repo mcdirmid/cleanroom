@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
 # CODE_HASH: 4a011171eed3
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_sync."""
@@ -50,6 +51,7 @@ class WorkspaceSynchronizer(InTier[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - MUST copy newer upstream files into workspace.
         - MUST preserve 0o444 read-only permissions on upstream contracts.
+        - For roles with stub_role_deps, MUST synthesize read-only test stubs with NotImplementedError and MUST NOT copy implementation files into workspace.
         - MUST return count of pulled files.
         """
         ...
@@ -67,6 +69,7 @@ class WorkspaceSynchronizer(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST recopy system tools, linters, and guides without modifying targets.
+        - MUST enforce read-only test stubs for stub_role_deps across workspace.
         - MUST return count of refreshed files.
         """
         ...
@@ -103,3 +106,7 @@ class WorkspaceSynchronizer(InTier[AgentSessionTier], Protocol):
         - MUST return sequence of updated culprit file paths.
         """
         ...
+
+
+
+

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-05T06:00:02Z
 # CHANGE: Align log opening and unbuffered flush mechanics with low/runner_logger_impl.pyi
 # CODE_HASH: 083b03e78689
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for runner_logger_impl per its grounding specification."""

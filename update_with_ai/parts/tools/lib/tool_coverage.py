@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T15:15:00Z
 # CHANGE: define tool_coverage interface and public helpers
 # CODE_HASH: 58a5055c607b
@@ -94,18 +94,16 @@ def get_coverage_evaluator() -> CoverageEvaluator:
     if _evaluator_instance is not None:
         return _evaluator_instance
     try:
-        from support.lib import lifecycle
+        from support.lib.lifecycle import LifecycleError, get_singleton
 
         try:
-            return lifecycle.get_singleton(CoverageEvaluator)
-        except lifecycle.LifecycleError:
+            return get_singleton(CoverageEvaluator)
+        except LifecycleError:
             pass
     except (ImportError, LookupError, RuntimeError, TypeError):
         pass
 
-    from . import tool_coverage_impl
-
-    return tool_coverage_impl.CoverageEvaluator()
+    raise RuntimeError("No CoverageEvaluator singleton registered in lifecycle.")
 
 
 def set_coverage_evaluator(evaluator: Optional[CoverageEvaluator]) -> None:

@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-07T23:58:18Z
 LAST_CHANGED: 2026-10-06T22:55:00Z
 CHANGE: new file
 CODE_HASH: 5dd783090a15
+SPEC_QA_AUDIT: 2026-10-07T23:58:18Z
 -->
 
 # workspace_sync interface component
@@ -23,6 +24,7 @@ Operating across isolated role workspaces requires atomic data movement to preve
 ### Contracts
 
 - The workspace synchronizer pulls updated upstream contracts and source files from the canonical main repository into a role workspace. [pull_upstream_contracts]
+- The workspace synchronizer synchronizes read-only test stubs for stub role dependencies without copying implementation code. [sync_stub_dependencies]
 - The workspace synchronizer refreshes non-parts system files from the canonical main repository into a role workspace. [refresh_system_files_into_workspace]
 - The workspace synchronizer scans writable target files in a role workspace to identify modified content. [scan_modified_targets]
 - The workspace synchronizer verifies that canonical main targets match workspace baseline hashes before committing harvested files. [validate_harvest_baselines]
@@ -32,7 +34,7 @@ Operating across isolated role workspaces requires atomic data movement to preve
 
 ### Woven Contracts
 
-- When pulling updates from the canonical repository, the synchronizer copies newer upstream files into the role workspace while enforcing read-only permissions on contracts. [pull_upstream_contracts, workspace_registry: [resolve_standard_role_definition]]
+- When pulling updates from the canonical repository, the synchronizer copies newer upstream files into the role workspace, synchronizes stub dependencies, and enforces read-only permissions on contracts. [pull_upstream_contracts, sync_stub_dependencies, workspace_registry: [resolve_standard_role_definition]]
 - When harvesting changes, the synchronizer scans modified targets, validates baseline hashes against the main repository, commits validated files, stamps audits for auditor roles, and flushes buffered blame feedback. [scan_modified_targets, validate_harvest_baselines, commit_harvested_files, stamp_auditor_role_audits, flush_blame_buffer_entries, src_metadata: [extract_metadata_disk, update_metadata_disk, stamp_audit_entry, append_feedback_entry]]
 
 ## Grounding

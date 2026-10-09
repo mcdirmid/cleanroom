@@ -16,7 +16,6 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
-        "//update_with_ai/parts/control/lib:src_metadata",
         "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/core/lib:file_paths_impl",
         "//update_with_ai/parts/dag/lib:dag_storage",
@@ -24,7 +23,6 @@ pyright_library(
         ":bazel_manifest_loader",
         ":bazel_manifest_loader_impl",
         ":bazel_node_config_impl",
-        ":bazel_storage_impl",
         ":bazel_target",
         ":bazel_target_impl",
     ],
@@ -37,7 +35,6 @@ pyright_library(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
         "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
@@ -52,7 +49,6 @@ pyright_library(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
         "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
@@ -69,7 +65,6 @@ pyright_library(
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
-        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/dag/lib:dag_config",
         "//update_with_ai/parts/openai/lib:openai_config",
     ],
@@ -102,7 +97,6 @@ pyright_library(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
         "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/core/lib:runner_logger",
@@ -117,28 +111,11 @@ pyright_library(
 )
 
 pyright_library(
-    name = "bazel_storage_impl",
-    srcs = ["bazel_storage_impl.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/agent/lib:agent_storage",
-        "//update_with_ai/parts/control/lib:src_metadata",
-        "//update_with_ai/parts/core/lib:file_paths",
-        "//update_with_ai/parts/dag/lib:dag_storage",
-        ":bazel_target",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
     name = "bazel_target",
     srcs = ["bazel_target.py"],
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
     ],
@@ -151,7 +128,6 @@ pyright_library(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":bazel_target",

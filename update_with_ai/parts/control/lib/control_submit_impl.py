@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T11:45:00Z
 # CHANGE: handle get_messages defensively for mock storage
-# CODE_HASH: 6d8ed9315739
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# CODE_HASH: 38f7d8edf49c
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -12,24 +12,12 @@ import json
 import os
 import shutil
 import stat
-import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from support.lib.lifecycle import Singleton, get_singleton
 from update_with_ai.parts.agent.lib import agent_node_config, agent_session
 from update_with_ai.parts.dag.lib import dag_storage
 from . import control_submit, control_verification, src_metadata
-
-
-def _can_run_bazel(main_root: str) -> bool:
-    if os.environ.get("CLEANROOM_DIRECT_MUTATION") == "1":
-        return False
-    if not (
-        os.path.isfile(os.path.join(main_root, "MODULE.bazel"))
-        or os.path.isfile(os.path.join(main_root, "WORKSPACE"))
-    ):
-        return False
-    return shutil.which("bazel") is not None
 
 
 def _is_test_file(target: str) -> bool:
@@ -149,12 +137,38 @@ def _resolve_submit_target(
     target: str,
     repo_root: str,
     role_name: str,
-    dir_scope: str = "staging",
+    dir_scope: str = "",
 ) -> Tuple[Optional[str], Optional[str]]:
+    if not dir_scope and repo_root:
+        try:
+            for entry in os.listdir(repo_root):
+                if os.path.isdir(os.path.join(repo_root, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
+                    dir_scope = entry
+                    break
+        except OSError:
+            pass
     target_str = target.strip()
     cand_path = _resolve_target_path(target_str, repo_root)
     if os.path.isfile(cand_path):
+        try:
+            _, u_name, _ = _parse_unit_from_file_path(cand_path, repo_root)
+            return cand_path, u_name
+        except (KeyError, ValueError, OSError):
+            pass
+        clean_role = role_name.split(":")[-1].strip().lower()
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        role_defs = getattr(cfg, "role_definitions", {})
+        role_def = role_defs.get(clean_role)
         stem = os.path.splitext(os.path.basename(cand_path))[0]
+        if role_def:
+            src_pat = getattr(role_def, "src_pattern", "")
+            if src_pat:
+                _, pfx, sfx = _parse_pattern_info(src_pat)
+                sfx_no_ext = os.path.splitext(sfx)[0] if sfx else ""
+                if sfx_no_ext and stem.endswith(sfx_no_ext):
+                    stem = stem[: -len(sfx_no_ext)]
+                if pfx and stem.startswith(pfx):
+                    stem = stem[len(pfx) :]
         return cand_path, stem
 
     clean_role = role_name.split(":")[-1].strip().lower()
@@ -204,16 +218,8 @@ def _resolve_submit_target(
     return None, None
 
 
-def _is_auditor_node(node: dag_storage.DagNode) -> bool:
-    """Checks whether the node's role is classified as an auditor."""
-    cfg = get_singleton(agent_node_config.NodeConfig)
-    role_clean = node.role_address.split(":")[-1].strip().lower()
-    role_cfg = getattr(cfg, "role_definitions", {}).get(role_clean)
-    if role_cfg is not None:
-        if getattr(role_cfg, "is_auditor", False) or getattr(role_cfg, "audit_tag", None) or not getattr(role_cfg, "src_pattern", ""):
-            return True
-        return False
-    raise KeyError(f"Role '{role_clean}' not found in NodeConfig.role_definitions")
+_is_auditor_node = control_submit.is_auditor_node
+
 
 
 class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
@@ -223,6 +229,22 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
 
     def __init__(self) -> None:
         pass
+
+    def resolve_submit_target(
+        self,
+        target: str,
+        repo_root: str,
+        role_name: str,
+        dir_scope: str = "",
+    ) -> tuple[str | None, str | None]:
+        return _resolve_submit_target(target, repo_root, role_name, dir_scope)
+
+    def parse_unit_from_file_path(
+        self, file_path: str, repo_root: str
+    ) -> tuple[str, str, str]:
+        return _parse_unit_from_file_path(file_path, repo_root)
+
+
 
     def submit_target(
         self,
@@ -328,12 +350,20 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
             try:
                 with open(meta_p, "r", encoding="utf-8") as f:
                     meta = json.load(f)
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 pass
 
         r_name = role_name or (meta.get("role_name") or meta.get("role") if meta else "") or ""
         clean_role = r_name.split(":")[-1].strip().lower()
-        d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "staging")) if meta else "staging"
+        d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+        if not d_scope:
+            try:
+                for entry in os.listdir(ws_root):
+                    if os.path.isdir(os.path.join(ws_root, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
+                        d_scope = entry
+                        break
+            except OSError:
+                pass
 
         main_root = repo_root or (meta.get("main_workspace_root") or meta.get("repo_root") if meta else None) or ws_root
         main_root = os.path.realpath(main_root)
@@ -373,7 +403,7 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
             audit_tag = getattr(role_def, "audit_tag", None) or f"{clean_role.upper()}_AUDIT"
             ref_root = ws_root if target_path.startswith(ws_root) else main_root
             part_dir, u_name, _ = _parse_unit_from_file_path(target_path, ref_root)
-            active_unit = unit_name or u_name
+            active_unit = u_name or unit_name
 
             targets_to_audit: List[str] = []
             for fb_role in [d.split(":")[-1] for d in getattr(role_def, "feedback_role_deps", ())]:
@@ -387,22 +417,16 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
                     if os.path.isfile(fb_cand) and fb_cand not in targets_to_audit:
                         targets_to_audit.append(fb_cand)
 
-            if _can_run_bazel(main_root):
-                submit_target = f"//{part_dir}:{active_unit}_{clean_role}_submit"
-                cmd = ["bazel", "run", submit_target]
-                res = subprocess.run(cmd, cwd=main_root)
-                if res.returncode != 0:
-                    return control_submit.SubmissionOutcome(
-                        accepted=False,
-                        message=f"Bazel submit target failed with exit code {res.returncode}",
-                    )
-            else:
-                stamped = []
-                for tf in targets_to_audit:
-                    if os.path.isfile(tf):
-                        src_metadata.stamp_audit(tf, clean_role)
-                        src_metadata.update_metadata(tf, clear_dirty=True)
-                        stamped.append(os.path.relpath(tf, main_root))
+            rel_path = (
+                os.path.relpath(target_path, ws_root)
+                if target_path.startswith(ws_root)
+                else os.path.relpath(target_path, main_root)
+            )
+
+            for tf in targets_to_audit:
+                if os.path.isfile(tf):
+                    src_metadata.stamp_audit(tf, clean_role)
+                    src_metadata.update_metadata(tf, clear_dirty=True)
 
             # Reflect attested audits to local role workspace if present
             if ws_root != main_root:
@@ -414,7 +438,7 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
 
             return control_submit.SubmissionOutcome(
                 accepted=True,
-                message=f"✔ Audited target stamped for unit '{active_unit}' (Tagged: {audit_tag})",
+                message=f"[AUDIT] {rel_path}: {audit_tag}",
             )
 
         # --- PRODUCER ROLE SUBMIT ---
@@ -484,32 +508,12 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
         part_dir, u_name, _ = _parse_unit_from_file_path(target_path, ws_root)
         active_unit = unit_name or u_name
 
-        if _can_run_bazel(main_root):
-            submit_target = f"//{part_dir}:{active_unit}_{clean_role}_submit"
-            cmd = ["bazel", "run", submit_target]
-            if summary_provided:
-                cmd.extend(["--", summary_text])
-            else:
-                cmd.append("--")
-            res = subprocess.run(cmd, cwd=main_root)
-            if res.returncode != 0:
-                return control_submit.SubmissionOutcome(
-                    accepted=False,
-                    message=f"Bazel submit target failed with exit code {res.returncode}",
-                )
-            if ws_root != main_root and os.path.isfile(main_file):
-                _copy_file_with_perms(main_file, target_path, readonly=False)
-            return control_submit.SubmissionOutcome(
-                accepted=True,
-                message=f"✔ Submitted {target_path} via Bazel {submit_target}",
-            )
+        if is_modified:
+            src_metadata.record_change(main_file, summary_text)
+            msg = f"[CHANGE] {rel_path}: {summary_text}"
         else:
-            if is_modified:
-                src_metadata.record_change(main_file, summary_text)
-                msg = f"✔ Submitted {target_path}: code modified and in-band metadata updated (CHANGE: {summary_text})"
-            else:
-                src_metadata.mark_clean(main_file)
-                msg = f"✔ Submitted {target_path}: code unchanged, in-band metadata marked clean (LAST_CLEANED updated, DIRTY cleared)"
-            if ws_root != main_root and os.path.isfile(main_file):
-                _copy_file_with_perms(main_file, target_path, readonly=False)
-            return control_submit.SubmissionOutcome(accepted=True, message=msg)
+            src_metadata.mark_clean(main_file)
+            msg = f"[CLEAN] {rel_path}"
+        if ws_root != main_root and os.path.isfile(main_file):
+            _copy_file_with_perms(main_file, target_path, readonly=False)
+        return control_submit.SubmissionOutcome(accepted=True, message=msg)

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-06T22:55:00Z
-# CHANGE: implement pending target tracking and role work queue evaluation
-# CODE_HASH: c123a278fab6
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CHANGED: 2026-10-07T18:24:00Z
+# CHANGE: materialize templates on missing ready targets via dag_storage
+# CODE_HASH: d96348a7cfba
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_work_impl."""
@@ -16,9 +16,16 @@ import json
 import os
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    LifecycleResolutionError,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
 from update_with_ai.parts.agent.lib import agent_session
 from update_with_ai.parts.control.lib import control_work_scheduler, src_metadata
+from update_with_ai.parts.dag.lib import dag_storage
 from . import workspace_registry, workspace_work
 
 PENDING_WORK_FILE = ".cleanroom_pending_work.json"
@@ -56,7 +63,7 @@ def _parse_part_units(pkg_build_path: str) -> Dict[str, List[str]]:
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
             call = node.value
             func_name = call.func.id if isinstance(call.func, ast.Name) else ""
-            if func_name in ("update_python_with_ai", "update_with_ai"):
+            if "cleanroom" in func_name or "update" in func_name or any(kw.arg in ("module_deps", "unit_deps") for kw in call.keywords):
                 name: Optional[str] = None
                 deps: List[str] = []
                 for kw in call.keywords:
@@ -81,7 +88,91 @@ def _parse_part_units(pkg_build_path: str) -> Dict[str, List[str]]:
     return units
 
 
-def _find_part_dirs_in_scope(repo_root: str, dir_scope: str) -> List[str]:
+def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
+    # 1) Check BUILD.bazel if present
+    build_file = os.path.join(repo_root, part_dir, "BUILD.bazel")
+    if os.path.isfile(build_file):
+        units = _parse_part_units(build_file)
+        if units:
+            return units
+
+    # 2) Read part_dir/high/*.md to extract unit names and dependencies
+    high_dir = os.path.join(repo_root, part_dir, "high")
+    if os.path.isdir(high_dir):
+        units = {}
+        for fname in sorted(os.listdir(high_dir)):
+            if not fname.endswith(".md") or fname.startswith("."):
+                continue
+            unit_name = fname[:-3]
+            if unit_name == "__init__":
+                continue
+            hls_path = os.path.join(high_dir, fname)
+            deps: List[str] = []
+            try:
+                with open(hls_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        s = line.strip()
+                        if s.startswith("imports:"):
+                            raw = s[len("imports:") :].strip()
+                            deps.extend(x.strip() for x in raw.split(",") if x.strip())
+                        elif s.startswith("implements:"):
+                            raw = s[len("implements:") :].strip()
+                            deps.extend(x.strip() for x in raw.split(",") if x.strip())
+                        elif s.startswith("assembles:"):
+                            raw = s[len("assembles:") :].strip()
+                            deps.extend(x.strip() for x in raw.split(",") if x.strip())
+                        elif s.startswith("## "):
+                            break
+            except (OSError, UnicodeDecodeError):
+                pass
+            seen_deps: Set[str] = set()
+            ordered_deps: List[str] = []
+            for d in deps:
+                if d and d not in seen_deps:
+                    seen_deps.add(d)
+                    ordered_deps.append(d)
+            units[unit_name] = ordered_deps
+        if units:
+            return units
+
+    # 3) Fall back to filesystem stems across subdirectories
+    full_part = os.path.join(repo_root, part_dir)
+    if os.path.isdir(full_part):
+        discovered_stems: Set[str] = set()
+        for sub in os.listdir(full_part):
+            sub_path = os.path.join(full_part, sub)
+            if os.path.isdir(sub_path) and not sub.startswith("."):
+                for sf in os.listdir(sub_path):
+                    if sf.startswith("."):
+                        continue
+                    if sf.endswith(".py"):
+                        discovered_stems.add(sf[:-3])
+                    elif sf.endswith(".pyi"):
+                        discovered_stems.add(sf[:-4])
+                    elif sf.endswith(".md"):
+                        discovered_stems.add(sf[:-3])
+        return {
+            stem: [] for stem in sorted(discovered_stems) if stem != "__init__"
+        }
+    return {}
+
+
+def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
+    if not dir_scope:
+        parts_p = os.path.join(repo_root, "parts")
+        if os.path.isdir(parts_p):
+            return [
+                os.path.join("parts", d)
+                for d in sorted(os.listdir(parts_p))
+                if os.path.isdir(os.path.join(parts_p, d)) and not d.startswith(".")
+            ]
+        for entry in sorted(os.listdir(repo_root)):
+            cand = os.path.join(repo_root, entry, "parts")
+            if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv")):
+                dir_scope = entry
+                break
+    if not dir_scope:
+        return []
     scope_p = os.path.join(repo_root, dir_scope)
     if not os.path.isdir(scope_p):
         return []
@@ -250,7 +341,7 @@ def _eval_unit_dirty(
             curr_role = str(
                 meta_data.get("role_name") or meta_data.get("role") or ""
             ).split(":")[-1].strip().lower()
-        except Exception:
+        except (OSError, json.JSONDecodeError):
             pass
 
     if _is_auditor_role(clean_role, repo_root=main_root):
@@ -324,11 +415,28 @@ def _eval_unit_dirty(
         for fb in meta.feedback:
             reasons.append(f"Unacted feedback in {target_rel}: {fb}")
 
+    ctype = _classify_unit_type(unit_name)
+
     # Forward dependency timestamp comparison
     dep_role_labels = [d.split(":")[-1] for d in role_def.role_deps]
+    effective_dep_roles: List[str] = []
     for d_name in dep_role_labels:
         if d_name == clean_role:
             continue
+        d_def = reg.resolve_role_definition(d_name, repo_root=main_root)
+        if d_def.active_component_types and ctype not in d_def.active_component_types:
+            chain = _get_role_upstream_chain(d_name, repo_root=main_root)
+            for anc in reversed(chain):
+                anc_def = reg.resolve_role_definition(anc, repo_root=main_root)
+                if not anc_def.active_component_types or ctype in anc_def.active_component_types:
+                    if anc not in effective_dep_roles:
+                        effective_dep_roles.append(anc)
+                    break
+        else:
+            if d_name not in effective_dep_roles:
+                effective_dep_roles.append(d_name)
+
+    for d_name in effective_dep_roles:
         d_def = reg.resolve_role_definition(d_name, repo_root=main_root)
         d_pat = d_def.src_pattern
         if not d_pat:
@@ -351,7 +459,7 @@ def _eval_unit_dirty(
 
 
 def _find_all_dirty_in_scope(
-    repo_root: str, dir_scope: str = "staging", role_filter: Optional[str] = None
+    repo_root: str, dir_scope: str = "", role_filter: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     part_dirs = _find_part_dirs_in_scope(repo_root, dir_scope)
     reg = get_singleton(workspace_registry.WorkspaceRegistry)
@@ -363,28 +471,7 @@ def _find_all_dirty_in_scope(
     dirty_units: List[Dict[str, Any]] = []
 
     for part_dir in part_dirs:
-        build_file = os.path.join(repo_root, part_dir, "BUILD.bazel")
-        units = _parse_part_units(build_file) if os.path.isfile(build_file) else {}
-        if not units:
-            full_part = os.path.join(repo_root, part_dir)
-            if os.path.isdir(full_part):
-                discovered_stems: Set[str] = set()
-                for sub in os.listdir(full_part):
-                    sub_path = os.path.join(full_part, sub)
-                    if os.path.isdir(sub_path) and not sub.startswith("."):
-                        for sf in os.listdir(sub_path):
-                            if sf.startswith("."):
-                                continue
-                            if sf.endswith(".py"):
-                                discovered_stems.add(sf[:-3])
-                            elif sf.endswith(".pyi"):
-                                discovered_stems.add(sf[:-4])
-                            elif sf.endswith(".md"):
-                                discovered_stems.add(sf[:-3])
-                units = {
-                    stem: [] for stem in sorted(discovered_stems) if stem != "__init__"
-                }
-
+        units = _get_part_units(repo_root, part_dir)
         for unit_name in sorted(units.keys()):
             ctype = _classify_unit_type(unit_name)
             for r_def in target_roles:
@@ -501,7 +588,7 @@ class WorkspaceWorkManager(
                 return list(data.get("targets", []))
             elif isinstance(data, list):
                 return list(data)
-        except Exception:
+        except (OSError, json.JSONDecodeError):
             return ()
         return ()
 
@@ -576,11 +663,62 @@ class WorkspaceWorkManager(
         role_name: Optional[str] = None,
     ) -> bool:
         full_ws = os.path.join(workspace_dir, target_path) if not os.path.isabs(target_path) else target_path
-        part_dir, unit_name, r_name = _parse_unit_from_file_path(full_ws, workspace_dir)
+        part_dir = ""
+        unit_name = ""
+        r_name = ""
+        try:
+            part_dir, unit_name, r_name = _parse_unit_from_file_path(full_ws, workspace_dir)
+        except Exception:
+            pass
         eval_role = (role_name or r_name).split(":")[-1].strip().lower()
         m_root = main_root or workspace_dir
+        reg = None
+        try:
+            reg = get_singleton(workspace_registry.WorkspaceRegistry)
+        except Exception:
+            pass
+        role_def = reg.resolve_role_definition(eval_role, repo_root=m_root) if reg else None
+
+        if not unit_name and role_def and role_def.src_pattern:
+            d_name, pfx, sfx = _parse_pattern_info(role_def.src_pattern)
+            sfx_no_ext = os.path.splitext(sfx)[0] if sfx else ""
+            stem = os.path.splitext(os.path.basename(target_path))[0]
+            if sfx_no_ext and stem.endswith(sfx_no_ext):
+                stem = stem[:-len(sfx_no_ext)]
+            if pfx and stem.startswith(pfx):
+                stem = stem[len(pfx):]
+            unit_name = stem
+            part_dirs = _find_part_dirs_in_scope(m_root, "")
+            for pd in part_dirs:
+                cand_rel = role_def.src_pattern.format(unit_dir=pd, unit_name=unit_name)
+                part_dir = pd
+                target_path = cand_rel
+                full_ws = os.path.join(workspace_dir, cand_rel)
+                break
+
         if not _is_auditor_role(eval_role, repo_root=m_root):
             if not os.path.isfile(full_ws):
+                can_regenerate = bool(role_def and role_def.src_pattern and role_def.role_deps)
+                if can_regenerate:
+                    storage = None
+                    try:
+                        storage = get_singleton(dag_storage.DagStorage)
+                    except (LifecycleResolutionError, LookupError, AttributeError):
+                        pass
+                    if storage is not None and hasattr(storage, "materialize_template"):
+                        node = dag_storage.DagNode(
+                            unit_address=dag_storage.UnitAddress(target_path),
+                            role_address=dag_storage.RoleAddress(eval_role),
+                        )
+                        old_bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
+                        try:
+                            os.environ["BUILD_WORKSPACE_DIRECTORY"] = workspace_dir
+                            storage.materialize_template(node)
+                        finally:
+                            if old_bwd is not None:
+                                os.environ["BUILD_WORKSPACE_DIRECTORY"] = old_bwd
+                            elif "BUILD_WORKSPACE_DIRECTORY" in os.environ:
+                                del os.environ["BUILD_WORKSPACE_DIRECTORY"]
                 return True
             meta_ws = src_metadata.extract_metadata(full_ws)
             if (
@@ -608,8 +746,7 @@ class WorkspaceWorkManager(
         raw_module_deps: Dict[str, List[str]] = {}
 
         for pd in part_dirs:
-            bf = os.path.join(repo_root, pd, "BUILD.bazel")
-            u_map = _parse_part_units(bf) if os.path.isfile(bf) else {}
+            u_map = _get_part_units(repo_root, pd)
             for uname, mdeps in u_map.items():
                 all_units[uname] = pd
                 raw_module_deps[uname] = list(mdeps)
@@ -618,6 +755,10 @@ class WorkspaceWorkManager(
         all_dirty = _find_all_dirty_in_scope(repo_root, dir_scope=dir_scope)
         dirty_lookup: Dict[Tuple[str, str], Dict[str, Any]] = {
             (item["unit_name"], item["role"]): item for item in all_dirty
+        }
+        dirty_part_lookup: Dict[Tuple[str, str, str], Dict[str, Any]] = {
+            (item.get("part_dir", ""), item["unit_name"], item["role"]): item
+            for item in all_dirty
         }
 
         reg = get_singleton(workspace_registry.WorkspaceRegistry)
@@ -657,14 +798,17 @@ class WorkspaceWorkManager(
             blocked_reasons: List[str] = []
 
             # Check 1: Intra-unit upstream roles
+            u_ctype = _classify_unit_type(uname)
             for up_r in upstream_roles:
                 up_r_def = reg.resolve_role_definition(up_r, repo_root=repo_root)
+                if up_r_def.active_component_types and u_ctype not in up_r_def.active_component_types:
+                    continue
                 up_r_pat = up_r_def.src_pattern
                 if up_r_pat and part_dir:
                     up_dir, _, _ = _parse_pattern_info(up_r_pat)
                     if not os.path.isdir(os.path.join(repo_root, part_dir, up_dir)):
                         continue
-                if (uname, up_r) in dirty_lookup:
+                if (part_dir, uname, up_r) in dirty_part_lookup or (not part_dir and (uname, up_r) in dirty_lookup):
                     blocked_reasons.append(
                         f"Upstream role '{up_r}' is dirty for unit '{uname}'"
                     )
@@ -672,7 +816,7 @@ class WorkspaceWorkManager(
             # Check 2: Auditor feedback dependencies
             if is_auditor:
                 for fb_r in feedback_roles:
-                    if (uname, fb_r) in dirty_lookup:
+                    if (part_dir, uname, fb_r) in dirty_part_lookup or (not part_dir and (uname, fb_r) in dirty_lookup):
                         blocked_reasons.append(
                             f"Feedback target '{fb_r}' is dirty or has unacted feedback for unit '{uname}'"
                         )
@@ -682,14 +826,17 @@ class WorkspaceWorkManager(
             roles_to_check = upstream_roles
             for dep_u in sorted(transitive_deps):
                 dep_part = all_units.get(dep_u, part_dir)
+                dep_ctype = _classify_unit_type(dep_u)
                 for r_check in roles_to_check:
                     r_check_def = reg.resolve_role_definition(r_check, repo_root=repo_root)
+                    if r_check_def.active_component_types and dep_ctype not in r_check_def.active_component_types:
+                        continue
                     r_check_pat = r_check_def.src_pattern
                     if r_check_pat and dep_part:
                         r_dir, _, _ = _parse_pattern_info(r_check_pat)
                         if not os.path.isdir(os.path.join(repo_root, dep_part, r_dir)):
                             continue
-                    if (dep_u, r_check) in dirty_lookup:
+                    if (dep_part, dep_u, r_check) in dirty_part_lookup or (not dep_part and (dep_u, r_check) in dirty_lookup):
                         blocked_reasons.append(
                             f"Prerequisite unit '{dep_u}' is dirty in role '{r_check}'"
                         )
@@ -736,6 +883,36 @@ class WorkspaceWorkManager(
                 ready_candidates.append(item)
 
         sorted_ready = _topological_sort_units(ready_candidates, module_deps)
+
+        storage = None
+        try:
+            storage = get_singleton(dag_storage.DagStorage)
+        except (LifecycleResolutionError, LookupError, AttributeError):
+            pass
+
+        if storage is not None and hasattr(storage, "materialize_template"):
+            old_bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
+            try:
+                if repo_root:
+                    os.environ["BUILD_WORKSPACE_DIRECTORY"] = repo_root
+                for item in sorted_ready:
+                    item_role = item["role"]
+                    r_def = reg.resolve_role_definition(item_role, repo_root=repo_root) if reg else None
+                    if not (r_def and r_def.src_pattern):
+                        continue
+                    target_file = item["target_file"]
+                    full_target = os.path.join(repo_root, target_file)
+                    if not os.path.isfile(full_target):
+                        node = dag_storage.DagNode(
+                            unit_address=dag_storage.UnitAddress(target_file),
+                            role_address=dag_storage.RoleAddress(item_role),
+                        )
+                        storage.materialize_template(node)
+            finally:
+                if old_bwd is not None:
+                    os.environ["BUILD_WORKSPACE_DIRECTORY"] = old_bwd
+                elif "BUILD_WORKSPACE_DIRECTORY" in os.environ:
+                    del os.environ["BUILD_WORKSPACE_DIRECTORY"]
 
         ready_items: List[workspace_work.WorkQueueItem] = [
             workspace_work.WorkQueueItem(
@@ -801,13 +978,19 @@ class WorkspaceWorkManager(
                 m_root = meta.get("main_workspace_root") or meta.get("repo_root")
                 if m_root and os.path.isdir(m_root):
                     eval_root = os.path.realpath(m_root)
-            except Exception:
+            except (OSError, json.JSONDecodeError):
                 pass
 
         scheduler = None
         try:
             scheduler = get_singleton(control_work_scheduler.WorkScheduler)
-        except Exception:
+        except (LifecycleResolutionError, LookupError, AttributeError):
+            pass
+
+        storage = None
+        try:
+            storage = get_singleton(dag_storage.DagStorage)
+        except (LifecycleResolutionError, LookupError, AttributeError):
             pass
 
         if scheduler is not None:
@@ -821,6 +1004,17 @@ class WorkspaceWorkManager(
                             continue
                         reasons = [m.content for m in task.feedback_messages] or ["target is dirty"]
                         target_file = str(task.node.unit_address)
+                        if storage is not None and hasattr(storage, "materialize_template"):
+                            full_target = os.path.join(eval_root, target_file)
+                            if not os.path.isfile(full_target):
+                                reg = None
+                                try:
+                                    reg = get_singleton(workspace_registry.WorkspaceRegistry)
+                                except Exception:
+                                    pass
+                                r_def = reg.resolve_role_definition(task_role, repo_root=eval_root) if reg else None
+                                if r_def and r_def.src_pattern:
+                                    storage.materialize_template(task.node)
                         sched_ready.append(
                             workspace_work.WorkQueueItem(
                                 target_file=target_file,
@@ -846,7 +1040,7 @@ class WorkspaceWorkManager(
                         blocked_items=(),
                         is_clean=is_clean,
                     )
-            except Exception:
+            except (RuntimeError, ValueError, AttributeError, KeyError):
                 pass
 
         ready_items, blocked_items = self.compute_role_work_queue(

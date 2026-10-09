@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-08T12:55:00Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
+# CHANGE: core constituents
 # CODE_HASH: 72d29f461e79
+# LOW_QA_AUDIT: 2026-10-08T12:55:00Z
 # --- END CLEANROOM METADATA ---
 
 """Assembly specification for workspace_asm."""

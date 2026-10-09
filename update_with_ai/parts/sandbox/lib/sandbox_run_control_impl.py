@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-06T12:55:00Z
-# CHANGE: compact wire conversions and tool calling to ~400 lines
-# CODE_HASH: 32fa4158de3e
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CHANGED: 2026-10-07T18:18:00Z
+# CHANGE: delegate GetWorkTool to control_coordinate.dispatch_get_work
+# CODE_HASH: 180122e6a245
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -13,9 +13,14 @@ from support.lib.lifecycle import LifecycleRegistry, LifecycleResolutionError, S
 from update_with_ai.parts.agent.lib import agent_file_alias, agent_node_config, agent_session
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.control.lib import (
-    control_asm, control_attribution_impl, control_coordinate_impl,
-    control_submit_impl, control_verification_impl, control_work_scheduler_impl,
+    control_asm,
+    control_attribution,
+    control_coordinate,
+    control_submit,
+    control_verification,
+    control_work_scheduler,
 )
+
 from update_with_ai.parts.dag.lib import dag_storage, dag_subgraph
 from . import sandbox_file_editor, sandbox_guide_delivery, sandbox_run_control, tool_provider
 dag_config = sandbox_run_control.dag_config
@@ -77,7 +82,7 @@ def _resolve_blame(
     rc: RunController, raw_target: Any, raw_blame: Any
 ) -> Tuple[Optional[dag_storage.DagNode], Optional[agent_file_alias.BoundFile], str, str]:
     target_str, blame_str = _to_target_str(raw_target), _to_target_str(raw_blame)
-    attrib, open_n = get_singleton(control_attribution_impl.AttributionCoordinator), rc.open_nodes()
+    attrib, open_n = get_singleton(control_attribution.AttributionCoordinator), rc.open_nodes()
     cands, src_node, matched, blamee = open_n or list(rc.nodes), None, None, ""
     for val, s in ((raw_blame, blame_str), (raw_target, target_str)):
         if (val is not None or s) and matched is None:
@@ -115,7 +120,7 @@ def _check_submit_gating(
         (is_init and not has_mod, "Error: Initial implementation task requires workspace file modifications before submitting.", "Workspace files must be modified to implement the change before submitting."),
         (bool(cfg.feedback and not has_mod), "Error: Session feedback is present but no workspace files were modified.", "Workspace files must be modified to address feedback or the fail tool must be used."),
         (has_mod and not summary_str, "Error: Workspace files were modified but change_summary was not provided.", "A change summary must be provided when completing the session after modifying workspace files."),
-        (control_submit_impl._is_auditor_node(target_node) and bool(summary_str), "Error: Change summary is prohibited for audit nodes.", "Do not provide a change summary when submitting audit nodes."),
+        (control_submit.is_auditor_node(target_node) and bool(summary_str), "Error: Change summary is prohibited for audit nodes.", "Do not provide a change summary when submitting audit nodes."),
         (not has_mod and bool(summary_str), "Error: Workspace files were not modified, but change_summary was provided.", "Omit change_summary when submitting without workspace file modifications."),
     ]:
         if cond: return _make_tool_response(True, msg, reminder=rem, suppression_key="submit")
@@ -140,15 +145,20 @@ class RunController(sandbox_run_control.RunController, Singleton):
         _install_tools()
 
     @property
-    def _coord(self) -> control_coordinate_impl.SessionCoordinator: return get_singleton(control_coordinate_impl.SessionCoordinator)
+    def _coord(self) -> Any: return get_singleton(control_coordinate.SessionCoordinator)
     @property
-    def _nodes(self) -> List[dag_storage.DagNode]: return self._coord._nodes
+    def _nodes(self) -> List[dag_storage.DagNode]: return getattr(self._coord, "_nodes", [])
     @_nodes.setter
-    def _nodes(self, val: List[dag_storage.DagNode]) -> None: self._coord._nodes, self._coord._node_states = val, {n: "OPEN" for n in val}
+    def _nodes(self, val: List[dag_storage.DagNode]) -> None:
+        coord: Any = self._coord
+        coord._nodes, coord._node_states = val, {n: "OPEN" for n in val}
     @property
-    def _node_states(self) -> Dict[dag_storage.DagNode, str]: return self._coord._node_states
+    def _node_states(self) -> Dict[dag_storage.DagNode, str]: return getattr(self._coord, "_node_states", {})
     @_node_states.setter
-    def _node_states(self, val: Dict[dag_storage.DagNode, str]) -> None: self._coord._node_states = val
+    def _node_states(self, val: Dict[dag_storage.DagNode, str]) -> None:
+        coord: Any = self._coord
+        coord._node_states = val
+
     @property
     def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]: return get_singleton(agent_node_config.NodeConfig).verification_checks
 
@@ -163,7 +173,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
         return (getattr(get_singleton(agent_node_config.NodeConfig), "blame_targets_by_node", None) or {}).get(node, set())
 
     def format_task_prompt(self, nodes: Sequence[dag_storage.DagNode]) -> str:
-        return get_singleton(control_work_scheduler_impl.WorkScheduler).format_task_prompt(nodes)
+        return get_singleton(control_work_scheduler.WorkScheduler).format_task_prompt(nodes)
 
     def check_in_batch_dependencies(self, node: dag_storage.DagNode, suppression_key: Optional[str] = None) -> Optional[tool_provider.ToolResponse]:
         for dep in self.get_in_batch_dependencies(node):
@@ -250,7 +260,7 @@ class CheckFilesTool(sandbox_run_control.CheckFilesTool, Singleton):
         is_repeated = self._last_tested_hashes.get("all_files") == current_hash and self._last_tested_revision == current_rev
         self._last_tested_hashes["all_files"], self._last_tested_revision = current_hash, current_rev
         reminder = f"Verification {'passes' if passed else 'failed'}, no new information will be revealed by this tool call until session read-write files are updated." if is_repeated else None
-        clean_diag = control_verification_impl.VerificationEvaluator().clean_diagnostic_noise(diag) or diag
+        clean_diag = get_singleton(control_verification.VerificationEvaluator).clean_diagnostic_noise(diag) or diag
 
         if not passed:
             guide_obj = getattr(guide_del, "guide", None)
@@ -339,7 +349,7 @@ class SubmitTool(_ResolveTool, sandbox_run_control.SubmitTool, Singleton):
         gating_err = _check_submit_gating(target_node, summary_str, edit_mgr, cfg)
         if gating_err is not None: return gating_err
 
-        is_auditor = control_submit_impl._is_auditor_node(target_node)
+        is_auditor = control_submit.is_auditor_node(target_node)
         get_singleton(dag_storage.DagStorage).mark_node_clean(target_node, dag_storage.ChangeDescription(summary_str) if (summary_str and not is_auditor) else None)
         rc.set_node_state(target_node, "SUBMITTED")
         rc.mark_clean_in_turn(target_node)
@@ -451,15 +461,17 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
             return _make_tool_response(True, f"Error: Open session targets remain: {open_t}.", reminder=f"Open session targets must be resolved before requesting new work: {open_t}.")
 
         subgraph, role_cfg = get_singleton(dag_subgraph.DagSubgraph), get_singleton(agent_node_config.RoleConfig)
-        batch = list(subgraph.next_ready_batch())
-        if role_cfg.role and any(n.role_address != role_cfg.role for n in batch): batch = []
-
         raw_max = actual_parameter_bindings.get(self.max_batch_size_parameter)
+        max_b = None
         if raw_max is not None:
             try:
-                max_b = int(cast(Any, raw_max))
-                if max_b > 0: batch = batch[:max_b]
+                parsed = int(cast(Any, raw_max))
+                if parsed > 0:
+                    max_b = parsed
             except (ValueError, TypeError): pass
+
+        schedule = rc.dispatch_get_work(subgraph=subgraph, max_batch_size=max_b)
+        batch = [task.node for task in schedule.tasks]
 
         if not batch: return _make_tool_response(False, "No dirty nodes are ready for cleaning.", reminder="No dirty nodes are ready for cleaning.")
 
@@ -469,9 +481,6 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
             try:
                 if callable(getattr(obj, "initialize", None)): getattr(obj, "initialize")()
             except Exception: pass
-
-        storage = get_singleton(dag_storage.DagStorage)
-        for n in batch: storage.materialize_template(n)
 
         prompt = rc.format_task_prompt(batch)
         if get_singleton(agent_node_config.NodeConfig).is_step_mode:

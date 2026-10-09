@@ -15,7 +15,6 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/control/lib:src_metadata",
-        "//update_with_ai/parts/control/lib:src_metadata_impl",
         "//update_with_ai/parts/sandbox/lib:sandbox_file_editor",
         "//update_with_ai/parts/sandbox/lib:sandbox_file_editor_impl",
         "//update_with_ai/parts/sandbox/lib:template_format",

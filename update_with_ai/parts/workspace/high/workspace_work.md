@@ -1,13 +1,13 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-06T22:55:00Z
-CHANGE: new file
-CODE_HASH: 473bd42798ae
+LAST_CLEANED: 2026-10-08T15:45:00Z
+LAST_CHANGED: 2026-10-08T15:45:00Z
+CHANGE: clarify starter template materialization for regenerable roles on check
+CODE_HASH: daa469d8e547
 -->
 
 # workspace_work interface component
 
-imports: agent_session, workspace_registry, control_work_scheduler, src_metadata
+imports: agent_session, workspace_registry, control_work_scheduler, src_metadata, dag_storage
 
 ## Purpose
 
@@ -17,7 +17,7 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 
 **Out of scope:** The workspace_work interface component does not commission workspace directories, transfer source files, or execute test commands; these are handled by other components.
 
-**Delegated:** Role configuration lookups and path resolution are delegated to workspace_registry; topological dependency scheduling and dirtiness evaluation across directory scopes are delegated to control_work_scheduler; in-band source metadata extraction is delegated to src_metadata.
+**Delegated:** Role configuration lookups and path resolution are delegated to workspace_registry; topological dependency scheduling and dirtiness evaluation across directory scopes are delegated to control_work_scheduler; in-band source metadata extraction is delegated to src_metadata; starter template materialization is delegated to dag_storage.
 
 ## Types and Behavior
 
@@ -29,17 +29,17 @@ A session's *workspace work manager* evaluates and presents actionable work item
 
 The workspace work manager:
 
-- Evaluates dirty targets and topological readiness across a specified directory scope, discovering ready and blocked work items according to dynamic role precedence without requiring a subgraph.
+- Evaluates dirty targets and topological readiness across a specified directory scope, discovering ready and blocked work items according to dynamic role precedence without requiring a subgraph, materializing starter templates via graph storage for missing ready target files.
 
-- Resolves companion upstream specification contracts and interface definitions for target units from role definitions in workspace_registry to guide agent implementation and verification.
+- Resolves companion upstream specification contracts and interface definitions for target units from role definitions to guide agent implementation and verification.
 
-- Filters cross-unit dependencies based on star_role_deps and silent_cross_role_deps in workspace_registry, suppressing peer implementation files matching silent cross-role dependencies and expanding star-role specification contracts.
+- Filters cross-unit dependencies based on configured star-role dependencies and silent cross-role dependencies, suppressing peer implementation files matching silent cross-role dependencies and expanding star-role specification contracts.
 
 - Enforces strict role resolution without synthetic fallbacks, failing loudly when unknown roles or unrecognized file patterns are encountered.
 
 - Rejects new work discovery requests when uncompleted dirty work remains pending from a previous query in the role workspace, unless forced.
 
-- Manages pending target tracking by recording assigned targets into a local pending work buffer, removing submitted targets, and checking target dirtiness.
+- Manages pending target tracking by recording assigned targets into a local pending work buffer, removing submitted targets, and checking target dirtiness, materializing starter templates via graph storage when checking missing target files for roles with source patterns and upstream dependencies.
 
 - Clears the pending work buffer when all targets in scope evaluate clean.
 

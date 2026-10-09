@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-05T05:44:34Z
 # CHANGE: Standardize on check files tool in editing contracts
 # CODE_HASH: fd143525af9d
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file editor implementation low-level specification."""
@@ -14,6 +15,9 @@ from agent_session import AgentSessionTier
 import agent_file_alias
 import sandbox_file_editor
 import tool_provider
+import agent_config
+import agent_node_config
+import src_metadata
 
 
 @singleton_type("agent_session")

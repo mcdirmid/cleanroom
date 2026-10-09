@@ -2098,6 +2098,7 @@ def _define_role_impl(ctx):
         "tools": ctx.attr.tools,
         "node_deps": ctx.attr.node_deps,
         "derive_build_template": ctx.attr.derive_build_template,
+        "template_command": ctx.attr.template_command,
     }
     ctx.actions.write(
         output = manifest,
@@ -2191,6 +2192,10 @@ _define_role_rule = rule(
         "derive_build_template": attr.string(
             default = "",
             doc = "Command template executed before workspace provisioning/sync to derive child BUILD.bazel from parent BUILD.bazel (parameterized with {unit_dir})",
+        ),
+        "template_command": attr.string(
+            default = "",
+            doc = "Command template executed to materialize starter templates",
         ),
     },
 )
@@ -2329,6 +2334,7 @@ def define_role(
         workspace_files = [],
         tools = [],
         derive_build_template = "",
+        template_command = "",
         visibility = None):
     """Defines a role target encapsulating role metadata, dependency relationships, and templates.
 
@@ -2389,6 +2395,7 @@ def define_role(
         workspace_files = workspace_files,
         tools = tools,
         derive_build_template = derive_build_template,
+        template_command = template_command,
         **_rule_kwargs
     )
     return ":" + name
@@ -2523,6 +2530,8 @@ def _update_ai_batch_mark_clean_impl(ctx):
         "",
         "TEMPLATES = {",
         '    "high": "update_python_with_ai/templates/hls_template.md",',
+        '    "planning": "update_python_with_ai/templates/planning_template.md",',
+        '    "low": "update_python_with_ai/templates/low_template.pyi",',
         '    "lib": "update_python_with_ai/templates/lib_template.py",',
         '    "test": "update_python_with_ai/templates/test_template.py",',
         "}",

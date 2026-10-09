@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+export PYTHONPATH="$REPO_ROOT:$REPO_ROOT/update_python_with_ai:$REPO_ROOT/update_with_ai:$REPO_ROOT/update_with_ai/support/lib:$REPO_ROOT/update_python_with_ai/support/lib:$PYTHONPATH"
+if command -v uv >/dev/null 2>&1 && [ -f "$REPO_ROOT/pyproject.toml" ]; then
+    exec uv run python "$REPO_ROOT/update_with_ai/support/lib/cleanroom_uv_runner.py" "$@"
+else
+    exec python3 "$REPO_ROOT/update_with_ai/support/lib/cleanroom_uv_runner.py" "$@"
+fi

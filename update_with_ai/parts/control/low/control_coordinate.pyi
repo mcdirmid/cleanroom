@@ -1,15 +1,16 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
 # CODE_HASH: 2a2419d57e11
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_coordinate."""
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Mapping, Optional, Protocol, Sequence
+from typing import Any, Mapping, Optional, Protocol, Sequence
 from framework import data_type, operation, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
@@ -66,9 +67,25 @@ class SessionCoordinator(InTier[AgentSessionTier], Protocol):
         ...
 
     @operation
-    def resolve_default_target(self) -> Optional[dag_storage.DagNode]:
-        """Resolves the default target node when omitted by the caller."""
+    def reset_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
+        """Resets session node tracking to specified nodes.
+
+        POSTCONDITIONS:
+        - Replaces internal open targets with provided nodes.
+        """
         ...
+
+    @operation
+    def resolve_default_target(
+        self, last_accessed_file: Optional[Any] = None
+    ) -> Optional[dag_storage.DagNode]:
+        """Resolves the default target node when omitted by the caller.
+
+        POSTCONDITIONS:
+        - Resolves single open target or disambiguates by last accessed file.
+        """
+        ...
+
 
     @operation
     def get_node_for_alias(self, alias: str) -> Optional[dag_storage.DagNode]:

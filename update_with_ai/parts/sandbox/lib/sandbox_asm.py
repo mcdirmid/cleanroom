@@ -1,13 +1,7 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: c5b2cce89812
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry
+from update_with_ai.parts.control.lib import control_asm
 from . import sandbox_file_editor_impl
 from . import sandbox_file_reader_impl
 from . import sandbox_guide_delivery_impl
@@ -17,6 +11,7 @@ from . import template_format_impl
 from . import tool_provider_impl
 
 CONSTITUENTS = (
+    control_asm,
     sandbox_file_editor_impl,
     sandbox_file_reader_impl,
     sandbox_guide_delivery_impl,
@@ -26,10 +21,8 @@ CONSTITUENTS = (
     tool_provider_impl,
 )
 
-
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     for mod in CONSTITUENTS:
         mod.__initialize__(registry)
-
 
 _initialize_ = __initialize__

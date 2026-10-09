@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: 80b0b24799b8
+# CHANGE: add template materialization to grounding
+# CODE_HASH: 531dad3a7a19
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_work_impl."""
@@ -14,6 +15,8 @@ from agent_session import AgentSessionTier
 import workspace_work
 import control_work_scheduler
 import src_metadata
+import dag_storage
+import workspace_registry
 
 
 @singleton_type("agent_session")
@@ -25,7 +28,8 @@ class WorkspaceWorkManager(
 
     GROUNDING:
     - Realizes work discovery by delegating directory-scoped scheduling to
-      control_work_scheduler.WorkScheduler, checking target metadata via src_metadata,
+      control_work_scheduler.WorkScheduler, materializing starter templates via
+      dag_storage.DagStorage.materialize_template, checking target metadata via src_metadata,
       and managing pending work state in .cleanroom_pending_work.json.
     """
 
@@ -46,6 +50,23 @@ class WorkspaceWorkManager(
 
         GROUNDING:
         - Deletes .cleanroom_pending_work.json from workspace directory if it exists.
+        """
+        ...
+
+    @operation
+    @override
+    def compute_role_work_queue(
+        self,
+        role_name: str,
+        dir_scope: str,
+        repo_root: str,
+    ) -> tuple[Sequence[workspace_work.WorkQueueItem], Sequence[workspace_work.WorkQueueItem]]:
+        """Computes ready and blocked dirty units directly from build manifests and metadata.
+
+        GROUNDING:
+        - Scans part directories in scope, checks dependencies, sorts ready tasks
+          topologically, and materializes starter templates via dag_storage.DagStorage.materialize_template
+          for missing ready files.
         """
         ...
 

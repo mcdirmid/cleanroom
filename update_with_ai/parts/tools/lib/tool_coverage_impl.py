@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T15:00:00Z
 # CHANGE: new file
-# CODE_HASH: 93aa0091b544
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# CODE_HASH: 4e0051dc3a48
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -323,6 +323,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
                 fail_lines = []
                 for test_case, err in res.failures + res.errors:
                     fail_lines.append(f"{test_case}:\n{err}")
+                test_failures_str = "\n".join(fail_lines)
         orig_sys_path = list(sys.path)
         try:
             if str(ipath.parent) not in sys.path:

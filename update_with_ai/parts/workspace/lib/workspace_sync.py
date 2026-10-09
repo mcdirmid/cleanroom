@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T22:55:00Z
 # CHANGE: new file
 # CODE_HASH: 62c1357b69e0
@@ -62,3 +62,21 @@ class WorkspaceSynchronizer(Protocol):
     def flush_blame_buffer(
         self, workspace_dir: str, main_root: str
     ) -> Sequence[str]: ...
+
+
+def copy_file_with_perms(src: str, dst: str) -> None:
+    """Copies a file from src to dst ensuring parent directories exist and destination is writable."""
+    import os
+    import shutil
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    if os.path.exists(dst):
+        try:
+            os.chmod(dst, 0o644)
+        except OSError:
+            pass
+    shutil.copy2(src, dst)
+    try:
+        os.chmod(dst, 0o644)
+    except OSError:
+        pass
+

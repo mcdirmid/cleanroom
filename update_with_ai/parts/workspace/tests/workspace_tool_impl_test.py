@@ -14,16 +14,17 @@ import shutil
 import tempfile
 import unittest
 
-from support.lib.lifecycle import enter_phase
+from support.lib.lifecycle import enter_phase, get_singleton
 from update_with_ai.parts.agent.lib import agent_session
 from update_with_ai.parts.control.lib import control_asm, src_metadata
 from update_with_ai.parts.tools.lib import tools_asm
 from update_with_ai.parts.workspace.lib import (
     workspace_asm,
-    workspace_provision_impl,
+    workspace_provision,
     workspace_tool,
     workspace_tool_impl,
 )
+
 
 
 class WorkspaceToolImplTest(unittest.TestCase):
@@ -36,7 +37,7 @@ class WorkspaceToolImplTest(unittest.TestCase):
         self.phase_cm.__enter__()
 
         self.test_dir = tempfile.mkdtemp()
-        self.fake_repo = os.path.join(self.test_dir, "fake_repo")
+        self.fake_repo = os.path.realpath(os.path.join(self.test_dir, "fake_repo"))
         os.makedirs(self.fake_repo, exist_ok=True)
         self.orig_cwd = os.getcwd()
 
@@ -65,7 +66,7 @@ class WorkspaceToolImplTest(unittest.TestCase):
             last_changed="2026-10-04T12:00:00Z",
         )
 
-        prov = workspace_provision_impl.WorkspaceProvisioner()
+        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
         desc = prov.commission("lib", "staging", repo_root=self.fake_repo)
         os.chdir(desc.workspace_dir)
 
@@ -87,8 +88,8 @@ class WorkspaceToolImplTest(unittest.TestCase):
             last_changed="2026-10-04T12:00:00Z",
         )
 
-        prov = workspace_provision_impl.WorkspaceProvisioner()
-        desc = prov.commission("lib", "staging", repo_root=self.fake_repo)
+        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
+        desc = prov.commission("low_qa", "staging", repo_root=self.fake_repo)
         os.chdir(desc.workspace_dir)
 
         # Blame contract
@@ -102,6 +103,22 @@ class WorkspaceToolImplTest(unittest.TestCase):
         assert meta_low is not None
         self.assertIn("Spec missing parameter", meta_low.feedback[0])
 
+        # Verify .cleanroom.log recorded blame in staging (same directory as parts)
+        main_log = os.path.join(self.fake_repo, "staging/.cleanroom.log")
+        self.assertTrue(os.path.isfile(main_log))
+        with open(main_log, "r", encoding="utf-8") as f:
+            log_content = f.read()
+        self.assertIn("Spec missing parameter", log_content)
+
+        # Test feedback CLI alias
+        ret_fb = runner.execute_command(
+            ["feedback", "staging/parts/agent/low/config.pyi", "Second critique via feedback"]
+        )
+        self.assertEqual(ret_fb, 0)
+        with open(main_log, "r", encoding="utf-8") as f:
+            log_content = f.read()
+        self.assertIn("Second critique via feedback", log_content)
+
     def test_runner_check_files(self) -> None:
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "high"), exist_ok=True)
@@ -109,7 +126,7 @@ class WorkspaceToolImplTest(unittest.TestCase):
         with open(high_file, "w", encoding="utf-8") as f:
             f.write("# config\n")
 
-        prov = workspace_provision_impl.WorkspaceProvisioner()
+        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
         desc = prov.commission("high", "staging", repo_root=self.fake_repo)
         os.chdir(desc.workspace_dir)
 
@@ -146,7 +163,7 @@ class WorkspaceToolImplTest(unittest.TestCase):
             last_changed="2026-10-04T12:00:00Z",
         )
 
-        prov = workspace_provision_impl.WorkspaceProvisioner()
+        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
         desc = prov.commission("lib", "staging", repo_root=self.fake_repo)
         os.chdir(desc.workspace_dir)
 
@@ -158,6 +175,68 @@ class WorkspaceToolImplTest(unittest.TestCase):
         self.assertEqual(ret, 1)
         self.assertIn("Contracts / Specifications to Read:", out)
         self.assertIn("staging/parts/agent/low/config.pyi", out)
+
+    def test_runner_submit_cleanroom_log(self) -> None:
+        part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+
+        lib_file = os.path.join(part_dir, "lib/config.py")
+        with open(lib_file, "w", encoding="utf-8") as f:
+            f.write("# Initial config\n")
+        src_metadata.update_metadata(
+            lib_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+
+        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
+        desc = prov.commission("lib", "staging", repo_root=self.fake_repo)
+        os.chdir(desc.workspace_dir)
+
+        # Submit target with change summary
+        runner = workspace_tool_impl.WorkspaceToolRunner()
+        ret = runner.execute_command(
+            ["submit", "staging/parts/agent/lib/config.py", "Updated config"]
+        )
+        self.assertEqual(ret, 0)
+
+        main_log = os.path.join(self.fake_repo, "staging/.cleanroom.log")
+        self.assertTrue(os.path.isfile(main_log))
+        with open(main_log, "r", encoding="utf-8") as f:
+            log_content = f.read()
+        self.assertIn("[CHANGE] staging/parts/agent/lib/config.py: Updated config", log_content)
+
+    def test_cleanroom_log_resolution_and_append(self) -> None:
+        # 1. Staging path resolves to staging/.cleanroom.log
+        p1 = workspace_tool_impl.resolve_cleanroom_log_path(
+            "staging/parts/foo/lib/bar.py", repo_root=self.fake_repo
+        )
+        self.assertEqual(p1, os.path.join(self.fake_repo, "staging/.cleanroom.log"))
+
+        # 2. update_with_ai path resolves to update_with_ai/.cleanroom.log
+        p2 = workspace_tool_impl.resolve_cleanroom_log_path(
+            "update_with_ai/parts/foo/lib/bar.py", repo_root=self.fake_repo
+        )
+        self.assertEqual(p2, os.path.join(self.fake_repo, "update_with_ai/.cleanroom.log"))
+
+        # 3. Direct parts path resolves to root .cleanroom.log
+        p3 = workspace_tool_impl.resolve_cleanroom_log_path(
+            "parts/foo/lib/bar.py", repo_root=self.fake_repo
+        )
+        self.assertEqual(p3, os.path.join(self.fake_repo, ".cleanroom.log"))
+
+        # 4. Appending to cleanroom log writes line correctly
+        written_path = workspace_tool_impl.append_cleanroom_log(
+            "staging/parts/foo/lib/bar.py",
+            "Test log entry for submit",
+            repo_root=self.fake_repo,
+        )
+        self.assertEqual(written_path, p1)
+        with open(written_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("Test log entry for submit\n", content)
 
 
 if __name__ == "__main__":

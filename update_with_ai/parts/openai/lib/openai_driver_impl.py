@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T12:00:00Z
 # CHANGE: refactor openai_driver_impl under 500 lines
-# CODE_HASH: c33b7dbb9353
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# CODE_HASH: 7bb8e4617cdf
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 import json
@@ -259,7 +259,8 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
             tok_sum, tok_trans = _format_token_usage(last_turn_prompt_tokens, last_turn_cached_tokens)
             logger.consume(_log_event("model_request", f"[Turn {turns}] {tok_sum}", f"=== Turn {turns} ===\nMessages: {len(messages_payload)}\n{tok_trans}"))
 
-            if client is None: break  # pragma: no cover
+            if client is None:  # pragma: no cover
+                raise RuntimeError("OpenAI client could not be initialized. Please ensure 'openai' is installed and credentials are configured.")
 
             try:
                 kw: dict[str, Any] = {"model": openai_cfg.model_name, "messages": messages_payload, "tools": tools_payload or None, "temperature": openai_cfg.temperature, "timeout": float(openai_cfg.timeout)}

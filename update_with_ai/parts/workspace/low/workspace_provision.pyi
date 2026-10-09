@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
 # CODE_HASH: af3eb6d4918a
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_provision."""
@@ -32,28 +33,10 @@ class WorkspaceProvisioner(InTier[AgentSessionTier], Protocol):
         - MUST create workspace directory tree with bin directory.
         - MUST copy writable targets with 0o644 permissions.
         - MUST copy upstream contract dependencies with 0o444 permissions.
+        - For roles with stub_role_deps, MUST synthesize read-only test stubs with NotImplementedError from companion specifications without copying real implementation files.
         - MUST package runner zipapps in bin/ with 0o755 permissions.
         - MUST write .cleanroom_role.json configuration and AGENTS.md instructions.
         - MUST record workspace descriptor in the workspace registry.
         - MUST return the created WorkspaceDescriptor.
-        """
-        ...
-
-    @operation
-    def decommission(
-        self,
-        role_name_or_dir: str,
-        dir_scope: Optional[str] = None,
-        repo_root: Optional[str] = None,
-        custom_dest: Optional[str] = None,
-        force: bool = False,
-    ) -> bool:
-        """Decommissions and safely removes an active role workspace.
-
-        POSTCONDITIONS:
-        - When force is false and unharvested modifications exist, MUST raise RuntimeError.
-        - MUST unregister workspace from the workspace registry.
-        - MUST recursively delete the workspace directory tree.
-        - MUST return true upon successful decommissioning.
         """
         ...

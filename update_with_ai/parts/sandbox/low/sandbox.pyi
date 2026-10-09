@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-04T23:01:55Z
 # CHANGE: new file
 # CODE_HASH: 8a1bf3ffb100
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox low-level interface specification."""
@@ -15,7 +16,7 @@ from agent_session import AgentSessionTier
 
 @singleton_type("agent_session")
 class Sandbox(InTier[AgentSessionTier], Protocol):
-    """Coordinates session template materialization and file modification tracking."""
+    """Coordinates session file modification tracking."""
 
     @property
     def has_modifications(self) -> bool:
@@ -23,14 +24,5 @@ class Sandbox(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST return whether workspace file modifications occurred during the session.
-        """
-        ...
-
-    @operation
-    def materialize_templates(self) -> None:
-        """Materializes startup templates into missing read-write files.
-
-        POSTCONDITIONS:
-        - MUST materialize startup templates into missing read-write files without overwriting existing files.
         """
         ...

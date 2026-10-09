@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-04T23:01:55Z
 # CHANGE: new file
 # CODE_HASH: 79adcea3bf23
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 import os
@@ -137,6 +137,14 @@ def _extract_blame(content: str) -> Optional[Tuple[str, str]]:
     return None
 
 
+def _strip_leading_scope(path: str) -> str:
+    parts = path.split("/")
+    if "parts" in parts:
+        idx = parts.index("parts")
+        return "/".join(parts[idx:])
+    return path
+
+
 def _matches_blame_target(bf: Any, target_str: str) -> bool:
     if not target_str:
         return False
@@ -145,10 +153,7 @@ def _matches_blame_target(bf: Any, target_str: str) -> bool:
         return False
 
     norm_target = os.path.normpath(target_clean)
-    stripped_target = norm_target
-    for pfx in ("staging/", "update_with_ai/", "update_python_with_ai/"):
-        if stripped_target.startswith(pfx):
-            stripped_target = stripped_target[len(pfx) :]
+    stripped_target = _strip_leading_scope(norm_target)
 
     if norm_target in (".", "/", "") or stripped_target in (".", "/", ""):
         return False
@@ -180,10 +185,7 @@ def _matches_blame_target(bf: Any, target_str: str) -> bool:
     candidate_paths = [p for p in (rel_path, ws_path, short) if p]
     for p in candidate_paths:
         norm_p = os.path.normpath(p)
-        stripped_p = norm_p
-        for pfx in ("staging/", "update_with_ai/", "update_python_with_ai/"):
-            if stripped_p.startswith(pfx):
-                stripped_p = stripped_p[len(pfx) :]
+        stripped_p = _strip_leading_scope(norm_p)
 
         if not stripped_p or stripped_p in (".", "/"):
             continue

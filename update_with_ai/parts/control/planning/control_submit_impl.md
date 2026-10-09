@@ -29,7 +29,7 @@ The implementation evaluates verification results from the verification evaluato
 - The submission coordinator invokes graph storage to update node status to clean. [update_storage_clean]
 - The submission coordinator invokes graph storage to append the change message. [append_storage_change]
 - The submission coordinator validates file targets against auditor and producer file submission constraints. [validate_file_target_submission_constraints]
-- The submission coordinator executes build submission targets or updates in-band file metadata headers. [execute_file_target_submission_execution]
+- The submission coordinator updates in-band file metadata headers directly in the canonical repository. [update_canonical_file_metadata]
 
 ### Woven Contracts
 
@@ -37,7 +37,7 @@ The implementation evaluates verification results from the verification evaluato
 - When an in-batch dependency is not clean, the coordinator rejects the submission with a dependency error. [format_dependency_error, control_submit: [assert_in_batch_dependencies_clean]]
 - When change summary rules fail based on file modifications or auditor role status, the coordinator rejects the submission with a summary error. [check_auditor_role, inspect_file_modifications, format_summary_error, control_submit: [require_summary_when_modified, forbid_summary_when_unmodified, forbid_summary_for_auditors]]
 - When all checks succeed, the coordinator updates node status to clean and appends the change message in graph storage. [update_storage_clean, append_storage_change, control_submit: [mark_node_clean, record_change_message]]
-- When submitting a file target, the coordinator validates submission constraints, executes submission targets, and updates in-band headers. [validate_file_target_submission_constraints, execute_file_target_submission_execution, control_submit: [reject_test_submission_for_auditors, reject_invalid_producer_file_submission, validate_file_change_summary, execute_file_submission_mutation], src_metadata: [source_metadata_service]]
+- When submitting a file target, the coordinator validates submission constraints, updates in-band headers, and constructs formatted outcome messages. [validate_file_target_submission_constraints, update_canonical_file_metadata, control_submit: [reject_test_submission_for_auditors, reject_invalid_producer_file_submission, validate_file_change_summary, execute_file_submission_mutation], src_metadata: [update_metadata_disk, record_change_status, stamp_audit_entry]]
 
 ## Grounding
 

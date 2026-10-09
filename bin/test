@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
+# Explicit Bazel flag for legacy execution during turn-down transition
+if [ "${1:-}" = "--bazel" ] || [ "${1:-}" = "bazel" ]; then
+    shift
+    exec bazel test //update_with_ai/... \
+        --test_output=errors \
+        --test_timeout=100 \
+        --noshow_progress \
+        --noshow_loading_progress \
+        "$@"
+fi
+
+TARGET="${1:-}"
+
+if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
+    echo "=== Type Checking: $TARGET ==="
+    uv run pyright "$TARGET"
+    echo ""
+    echo "=== Tests & Linters: $TARGET ==="
+    shift || true
+    exec uv run pytest -q --tb=short "$TARGET" "$@"
+else
+    echo "=== Type Checking (pyright) ==="
+    uv run pyright
+    echo ""
+    echo "=== Tests & Linters (pytest) ==="
+    exec uv run pytest -q --tb=short "$@"
+fi

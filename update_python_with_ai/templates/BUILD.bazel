@@ -14,6 +14,18 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+filegroup(
+    name = "planning",
+    srcs = ["planning_template.md"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "low",
+    srcs = ["low_template.pyi"],
+    visibility = ["//visibility:public"],
+)
+
 
 filegroup(
     name = "lib",

@@ -1,3 +1,10 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-08T12:55:00Z
+# LAST_CHANGED: 2026-10-06T16:03:00Z
+# CHANGE: test assembly initialization
+# CODE_HASH: 1941f0b184d5
+# --- END CLEANROOM METADATA ---
+
 """Unit tests for workspace_asm."""
 
 import unittest

@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: a7c0a99e9fcf
+# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CHANGED: 2026-10-08T03:34:00Z
+# CHANGE: ignore __init__.py during modification checks
+# CODE_HASH: 366bd574b342
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_provision_impl."""
@@ -41,25 +42,8 @@ class WorkspaceProvisioner(
 
         GROUNDING:
         - Resolves role definition and paths via WorkspaceRegistry, copies directory trees,
-          sets 0o444 on upstream contracts and 0o644 on targets, creates bin zipapps,
+          sets 0o444 on upstream contracts and 0o644 on targets, synthesizes read-only test
+          stubs for stub_role_deps without copying implementation files, creates bin zipapps,
           writes role metadata, and registers the workspace descriptor.
-        """
-        ...
-
-    @operation
-    @override
-    def decommission(
-        self,
-        role_name_or_dir: str,
-        dir_scope: Optional[str] = None,
-        repo_root: Optional[str] = None,
-        custom_dest: Optional[str] = None,
-        force: bool = False,
-    ) -> bool:
-        """Decommissions and safely removes an active role workspace.
-
-        GROUNDING:
-        - Checks for unharvested modifications across writable targets, aborts if dirty
-          unless force is true, unregisters descriptor, and removes tree with shutil.rmtree.
         """
         ...

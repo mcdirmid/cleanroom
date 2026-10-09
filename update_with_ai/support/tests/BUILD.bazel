@@ -56,25 +56,55 @@ pyright_test(
     ],
 )
 
-test_suite(
+sh_test(
     name = "high_lint_test",
-    tests = ["//update_python_with_ai/support/tests:high_lint_test"],
+    srcs = ["//update_python_with_ai/support/tests:high_lint_test.sh"],
+    data = [
+        "//update_python_with_ai/support/lib:high_lint.py",
+    ],
+    tags = ["lint"],
 )
 
-test_suite(
+sh_test(
     name = "low_lint_test",
-    tests = ["//update_python_with_ai/support/tests:low_lint_test"],
+    srcs = ["//update_python_with_ai/support/tests:low_lint_test.sh"],
+    data = [
+        "//update_python_with_ai/support/lib:low_lint.py",
+    ],
+    tags = ["lint"],
 )
 
-test_suite(
+sh_test(
     name = "lib_lint_test",
-    tests = ["//update_python_with_ai/support/tests:lib_lint_test"],
+    srcs = ["//update_python_with_ai/support/tests:lib_lint_test.sh"],
+    data = [
+        "//update_python_with_ai/support/lib:build_lint_common.py",
+        "//update_python_with_ai/support/lib:lib_lint.py",
+    ],
+    tags = ["lint"],
 )
 
-test_suite(
+sh_test(
     name = "test_lint_test",
-    tests = ["//update_python_with_ai/support/tests:test_lint_test"],
+    srcs = ["//update_python_with_ai/support/tests:test_lint_test.sh"],
+    data = [
+        "//update_python_with_ai/support/lib:build_lint_common.py",
+        "//update_python_with_ai/support/lib:test_lint.py",
+    ],
+    tags = ["lint"],
 )
+
+py_test(
+    name = "import_boundaries_lint_test",
+    srcs = ["//update_python_with_ai/support/tests:import_boundaries_lint_test.py"],
+    main = "import_boundaries_lint_test.py",
+    deps = [
+        "//update_python_with_ai/support/lib:build_lint_common",
+    ],
+    tags = ["local", "lint"],
+)
+
+
 
 sh_test(
     name = "clean_binary_integration_test",
@@ -95,6 +125,7 @@ py_test(
     main = "cleanroom_role_tool_test.py",
     deps = [
         "//update_with_ai/support/lib:cleanroom_role_tool_lib",
+        "//update_with_ai/parts/core/lib:file_paths_impl",
     ],
 )
 

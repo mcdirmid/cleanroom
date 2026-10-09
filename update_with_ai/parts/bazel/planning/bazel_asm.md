@@ -7,11 +7,11 @@ CODE_HASH: 0bd1242f65d1
 
 # bazel_asm assembly component
 
-imports: bazel_manifest_loader_impl, bazel_node_config_impl, bazel_storage_impl, bazel_target_impl, file_paths_impl
+imports: bazel_manifest_loader_impl, bazel_node_config_impl, bazel_target_impl, file_paths_impl
 
 ## Intent
 
-Aggregates workspace manifest loading, dependency graph storage, message persistence, target resolution, file paths resolution, and node configuration implementations into a unified Bazel workspace subsystem assembly.
+Aggregates workspace manifest loading, target resolution, file paths resolution, and node configuration implementations into a unified Bazel workspace subsystem assembly.
 
 ## Factored Contracts
 

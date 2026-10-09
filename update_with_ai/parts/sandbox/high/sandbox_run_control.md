@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-07T23:58:18Z
 LAST_CHANGED: 2026-10-04T23:01:55Z
 CHANGE: new file
 CODE_HASH: dd7206751876
@@ -7,7 +7,7 @@ CODE_HASH: dd7206751876
 
 # sandbox_run_control interface component
 
-imports: tool_provider, agent_file_alias, dag_storage, agent_node_config
+imports: tool_provider, agent_file_alias, dag_storage, agent_node_config, dag_config
 
 ## Purpose
 

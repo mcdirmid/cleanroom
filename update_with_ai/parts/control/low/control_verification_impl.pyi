@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
 # CODE_HASH: f09ef009f032
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_verification_impl."""
@@ -13,6 +14,8 @@ from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import control_verification
 import dag_storage
+import agent_file_alias
+import agent_node_config
 
 
 @singleton_type("agent_session")

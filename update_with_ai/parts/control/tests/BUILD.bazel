@@ -15,6 +15,7 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/control/lib:control_attribution",
         "//update_with_ai/parts/control/lib:control_attribution_impl",
+        "//update_with_ai/parts/control/lib:src_metadata",
         "//update_with_ai/parts/dag/lib:dag_storage",
     ],
 )
@@ -51,6 +52,7 @@ pyright_test(
         "//update_with_ai/parts/control/lib:control_submit",
         "//update_with_ai/parts/control/lib:control_submit_impl",
         "//update_with_ai/parts/control/lib:control_verification",
+        "//update_with_ai/parts/control/lib:src_metadata",
         "//update_with_ai/parts/dag/lib:dag_storage",
     ],
 )
@@ -92,8 +94,23 @@ pyright_test(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/control/lib:src_metadata",
         "//update_with_ai/parts/control/lib:src_metadata_impl",
+    ],
+)
+
+pyright_test(
+    name = "src_storage_impl_test",
+    srcs = ["src_storage_impl_test.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/control/lib:src_metadata",
+        "//update_with_ai/parts/control/lib:src_storage_impl",
+        "//update_with_ai/parts/core/lib:file_paths",
+        "//update_with_ai/parts/dag/lib:dag_storage",
     ],
 )
 

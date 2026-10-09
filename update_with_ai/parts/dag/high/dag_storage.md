@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-05T04:52:49Z
-CHANGE: Remove forbidden optional keyword from change description condition
-CODE_HASH: f67cefe8fd65
+LAST_CLEANED: 2026-10-08T00:52:53Z
+LAST_CHANGED: 2026-10-08T00:30:58Z
+CHANGE: Update dag_storage operations: mark_node_dirty, mark_subgraph_clean, add_feedback_message, and refined change message semantics
+CODE_HASH: 0239f4adf890
 -->
 
 # dag_storage interface component
@@ -25,14 +25,20 @@ A system's *dag storage* stores node graph structure, status, and messages.
 
 A dag storage provides access to a node's *dag dependencies* that refer to its direct upstream nodes in the graph, identifying whether a dependency is *silent* to preclude change message propagation from that dependency.
 
-A *dag message* is text content explaining to the agent why a node requires cleaning, and is either a *change message* informing of changes made to upstream dependencies, or a *feedback message* blaming a specific dependency target node for defects detected by downstream dependents.
+A *dag message* is text content explaining to the agent why a node requires cleaning, and is either a *change message* informing how an upstream dependency changed, or a *feedback message* blaming a specific dependency target node for defects detected by downstream dependents.
 
-A dag storage provides access to messages for a node, can record feedback messages blaming dependency target nodes, can record change messages marking a target node dirty, can *materialize a template* for a node when its source artifact is missing on disk, can *mark a node clean* in graph storage, and exposes whether a node is *dirty*, meaning it requires cleaning.
+A dag storage provides access to messages for a node, can *add a feedback message* blaming a dependency target node, can *materialize a template* for a node when its source artifact is missing on disk, can *mark a node clean* in graph storage, can *mark a node dirty*, can *mark a subgraph clean*, and exposes whether a node is *dirty*, meaning it requires cleaning.
 
-A node is considered dirty if its source artifact is missing on disk, if its in-band metadata is missing, invalid, or uncleaned, if it has unacted feedback messages, or if any non-silent dependency was changed after the node was last cleaned.
+A node evaluates as dirty when its source artifact is missing on disk, when its in-band metadata is missing, invalid, or uncleaned, when it has been marked dirty with a dirty tag, when it contains unacted feedback messages, or when any non-silent dependency was changed after the node was last cleaned.
 
-Recording a change message against a target node marks it dirty by updating its in-band metadata with the change description and clearing its last cleaned status.
+Change messages communicate how upstream dependencies changed to their downstream dependents rather than marking nodes dirty directly.
+
+Adding a feedback message blaming a dependency target node records the critique in the target node's in-band metadata as unacted feedback.
+
+Marking a node clean clears messages for the node and updates in-band metadata with a clean timestamp. When a change message is provided for a node with a source artifact, marking the node clean updates its change timestamp and change summary in its in-band metadata with the change message content, and clears unacted feedback and dirty tags. When marking an auditor node clean, audit metadata is stamped across all of its feedback dependencies.
+
+Marking a node dirty removes its clean status and records an optional dirty reason in its in-band metadata header.
+
+Marking a subgraph clean materializes missing templates and marks the target node and all reachable dependencies in its subgraph clean in graph storage.
 
 Materializing a template for a node writes initial template content to disk if its source artifact is missing on disk, preserving existing files without overwriting.
-
-Marking a node clean clears messages for the node and updates in-band metadata with a clean timestamp. When a change description is provided for a node with a source artifact, marking the node clean updates its last changed timestamp and change description in its in-band metadata, and clears unacted feedback. When marking an auditor node clean, audit metadata is stamped across all of its feedback dependencies.

@@ -1,0 +1,60 @@
+# model_configs.toml
+# Native model configuration definitions for Cleanroom UV runner.
+
+default = "qwen-moe-q6"
+
+[models.qwen-moe-q4]
+model = "stamsam-Qwen3.6-35B-A3B-Q4"
+base_url = "http://localhost:8000/v1"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 100.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 2048
+
+[models.coder-next-reap]
+model = "Coder-Next-REAP-48B-A3B-Q4"
+base_url = "http://localhost:8000/v1"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 100.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 2048
+
+[models.coder-next]
+model = "Qwen3-Coder-Next-4bit"
+base_url = "http://localhost:8000/v1"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 100.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 2048
+
+[models.qwen-dense-q4]
+model = "Qwen3.8-27B-MLX-oQ4e-mtp"
+base_url = "http://localhost:8000/v1"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 100.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 2048
+
+[models.qwen-moe-q6]
+model = "Qwen3.6-35B-A3B-oQ6-mtp"
+base_url = "http://localhost:8000/v1"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 100.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 8192
+batch_size = 1
+
+[models.qwen-flash-next-q2]
+model = "Qwen3.8-Flash-Next-MLX-oQ2"
+base_url = "http://localhost:8000/v1"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 100.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 4096
+batch_size = 2

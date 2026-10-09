@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-04T23:01:55Z
 # CHANGE: new file
 # CODE_HASH: ce65cb9a3015
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file reader implementation low-level specification."""
@@ -12,8 +13,12 @@ from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import agent_file_alias
+import agent_node_config
+import sandbox_file_editor
 import sandbox_file_reader
+import template_format
 import tool_provider
+import file_paths
 
 
 @singleton_type("agent_session")

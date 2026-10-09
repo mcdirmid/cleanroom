@@ -168,34 +168,6 @@ pyright_library(
 )
 
 pyright_library(
-    name = "control_asm",
-    srcs = ["control_asm.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_config",
-        "//update_with_ai/parts/agent/lib:agent_file_alias",
-        "//update_with_ai/parts/agent/lib:agent_node_config",
-        "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/dag/lib:dag_storage",
-        "//update_with_ai/parts/dag/lib:dag_subgraph",
-        ":control_attribution",
-        ":control_attribution_impl",
-        ":control_coordinate",
-        ":control_coordinate_impl",
-        ":control_submit",
-        ":control_submit_impl",
-        ":control_verification",
-        ":control_verification_impl",
-        ":control_work_scheduler",
-        ":control_work_scheduler_impl",
-        ":src_metadata",
-        ":src_metadata_impl",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
     name = "src_metadata",
     srcs = ["src_metadata.py"],
     deps = [],
@@ -218,6 +190,51 @@ pyright_library(
     visibility = ["//visibility:public"],
 )
 
+pyright_library(
+    name = "src_storage_impl",
+    srcs = ["src_storage_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/core/lib:file_paths",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        ":src_metadata",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "control_asm",
+    srcs = ["control_asm.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_file_alias",
+        "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/core/lib:file_paths",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        ":control_attribution",
+        ":control_attribution_impl",
+        ":control_coordinate",
+        ":control_coordinate_impl",
+        ":control_submit",
+        ":control_submit_impl",
+        ":control_verification",
+        ":control_verification_impl",
+        ":control_work_scheduler",
+        ":control_work_scheduler_impl",
+        ":src_metadata",
+        ":src_metadata_impl",
+        ":src_storage_impl",
+    ],
+    visibility = ["//visibility:public"],
+)
 
 build_derived_test(
     name = "targets_derived_test",

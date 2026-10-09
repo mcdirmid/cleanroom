@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
 # CODE_HASH: 2795f4333839
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for control_attribution_impl."""
@@ -45,6 +45,23 @@ class MockDagStorage:
         self._dirty_nodes.add(to)
 
 
+class MockRoleDef:
+    def __init__(self, feedback_role_deps):
+        self.feedback_role_deps = feedback_role_deps
+
+
+class MockNodeConfig:
+    tier = agent_session.agent_session
+
+    def __init__(self):
+        self.role_definitions = {
+            "lib": MockRoleDef(feedback_role_deps=[]),
+            "low_qa": MockRoleDef(feedback_role_deps=["low"]),
+            "qa": MockRoleDef(feedback_role_deps=["lib", "test"]),
+        }
+        self.blame_targets_by_node = {}
+
+
 class ControlAttributionImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
@@ -60,15 +77,21 @@ class ControlAttributionImplTest(unittest.TestCase):
             keys=[dag_storage.DagStorage],
             tier=system,
         )
+        self.node_config = MockNodeConfig()
+        self.registry.register_instance(
+            self.node_config,
+            keys=[agent_node_config.NodeConfig],
+            tier=agent_session.agent_session,
+        )
 
     def test_blame_requires_upstream_dependency(self) -> None:
         source = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("foo"),
-            role_address=dag_storage.RoleAddress("lib"),
+            role_address=dag_storage.RoleAddress("low_qa"),
         )
         unrelated = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("bar"),
-            role_address=dag_storage.RoleAddress("lib"),
+            role_address=dag_storage.RoleAddress("low"),
         )
         self.storage.dependencies[source] = set()
 
@@ -77,10 +100,28 @@ class ControlAttributionImplTest(unittest.TestCase):
             self.assertFalse(outcome.accepted)
             self.assertIn("not an upstream dependency", outcome.message)
 
-    def test_blame_requires_single_paragraph(self) -> None:
+    def test_blame_requires_feedback_configuration(self) -> None:
         source = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("foo"),
             role_address=dag_storage.RoleAddress("lib"),
+        )
+        upstream = dag_storage.DagNode(
+            unit_address=dag_storage.UnitAddress("foo"),
+            role_address=dag_storage.RoleAddress("low"),
+        )
+        self.storage.dependencies[source] = {
+            dag_storage.DagDependency(node=upstream, is_silent=False)
+        }
+
+        with enter_phase(agent_session.agent_session, registry=self.registry):
+            outcome = self.coordinator.blame_target(source, upstream, "Contract error.")
+            self.assertFalse(outcome.accepted)
+            self.assertIn("not configured to deliver feedback", outcome.message)
+
+    def test_blame_requires_single_paragraph(self) -> None:
+        source = dag_storage.DagNode(
+            unit_address=dag_storage.UnitAddress("foo"),
+            role_address=dag_storage.RoleAddress("low_qa"),
         )
         upstream = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("foo"),
@@ -100,7 +141,7 @@ class ControlAttributionImplTest(unittest.TestCase):
     def test_blame_success_and_cascade(self) -> None:
         source = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("foo"),
-            role_address=dag_storage.RoleAddress("lib"),
+            role_address=dag_storage.RoleAddress("low_qa"),
         )
         upstream = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("foo"),

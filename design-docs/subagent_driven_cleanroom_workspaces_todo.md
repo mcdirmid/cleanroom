@@ -790,6 +790,13 @@ stateDiagram-v2
 
 The implementation of Subagent-Driven Cleanroom Workspaces proceeds across four distinct phases:
 
+### Phase 0: Workspace & Packaging Decoupling (COMPLETED)
+- **[COMPLETED] 100% Native Python / uv Runtime**: Cleanroom workspace lifecycle, role provisioning, and in-band synchronization (`parts/workspace`) operate purely via native Python and `uv`.
+- **[COMPLETED] Scaffolding vs. Verification Decoupling**: Missing files are safely scaffolded via `get_work --scaffold` from upstream `low/*.pyi` stubs; `check_files` strictly fails on missing or incomplete source code.
+- **[COMPLETED] Dual-Toolchain Verification & Pyright Clean**: Passed 203/203 Bazel tests, 357/358 Pytest tests, and 0 Pyright errors across all packages.
+- **[COMPLETED] Zero Hardcoded Paths**: Dynamic upward hierarchical search (`cleanroom.toml` and package namespace detection) enables isolated workspaces anywhere on the filesystem.
+- **[COMPLETED] Pre-Bazel Deletion Ready**: Sibling role workspaces (`../role_workspaces/<ws>_<role>_<dir>/`) are fully decoupled from Bazel manifests and ready for direct subagent binding.
+
 ### Phase 1: Shared Canonical Core & Telemetry Engine
 - **`CleanroomCoordinatorEngine`** (`update_with_ai/support/lib/cleanroom_coordinator_engine.py`):
   - Headless, zero-execution DAG queue evaluator built on `cleanroom_workspace_tool.py`.

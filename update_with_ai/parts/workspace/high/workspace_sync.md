@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-06T22:55:00Z
-CHANGE: new file
+LAST_CLEANED: 2026-10-07T23:58:18Z
+LAST_CHANGED: 2026-10-08T18:30:00Z
+CHANGE: document stub role dependencies synchronization in pull and refresh contracts
 CODE_HASH: 3da7a23421ad
 -->
 
@@ -27,9 +27,9 @@ A session's *workspace synchronizer* transfers files and in-band metadata betwee
 
 The workspace synchronizer:
 
-- Pulls updated upstream contracts, guides, and source files from the canonical main repository into a role workspace, preserving read-only permissions on upstream contracts.
+- Pulls updated upstream contracts, guides, and source files from the canonical main repository into a role workspace, preserving read-only permissions on upstream contracts while generating, updating, or purging read-only test stubs for stub role dependencies without copying implementation code.
 
-- Refreshes non-parts system files, including build macros, guide documents, tools, and linters, keeping role workspaces aligned with the canonical main repository.
+- Refreshes non-parts system files, including build macros, guide documents, tools, and linters, keeping role workspaces aligned with the canonical main repository and enforcing test stub integrity.
 
 - Harvests modified writable files and attested audits from a role workspace back to the canonical main repository, validating in-band code hashes to ensure modifications are non-empty and non-conflicting before applying writes.
 

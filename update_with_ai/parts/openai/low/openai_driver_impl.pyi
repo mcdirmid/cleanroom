@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-06T12:45:00Z
 # CHANGE: add grounding sections
 # CODE_HASH: 0917cf702a1f
+# LOW_QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 """OpenAI driver implementation low-level specification."""
@@ -11,6 +12,12 @@ from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import loop_driver
+import agent_config
+import loop_conversation
+import loop_guard
+import openai_config
+import runner_logger
+import tool_provider
 
 
 @singleton_type("agent_session")

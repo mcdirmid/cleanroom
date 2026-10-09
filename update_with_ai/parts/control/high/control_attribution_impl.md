@@ -48,7 +48,7 @@ When attributing blame to a culprit file:
 
 - The attribution coordinator validates that the critique explanation contains no newline characters, rejecting explanations that contain multiple lines or breaks.
 
-- The attribution coordinator invokes the build blame target when supported or appends in-band feedback and marks dirty status directly in the canonical repository, and synchronizes updated files back to the local role workspace.
+- The attribution coordinator appends in-band feedback and marks dirty status directly in the canonical repository, constructs an attribution outcome message formatted with the blame critique, and synchronizes updated files back to the local role workspace.
 
 When recording task failure for a file target:
 

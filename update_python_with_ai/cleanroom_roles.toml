@@ -1,0 +1,173 @@
+# cleanroom_roles.toml
+# Cleanroom Python methodology role definitions
+# Canonical package address: //update_python_with_ai
+
+[methodology]
+name = "python"
+description = "Cleanroom literate specification and verification methodology for Python"
+
+[roles.high]
+name = "high"
+persona = "High-Level Spec Engineer"
+src_pattern = "{unit_dir}/high/{unit_name}.md"
+guide = "update_python_with_ai/guides/high_level_spec.md"
+template = "update_python_with_ai/templates/hls_template.md"
+prompt_template = "Files are aligned according to the guide."
+allows_step_mode = true
+role_deps = []
+star_role_deps = ["high"]
+tools = [
+    "update_python_with_ai.support.lib.high_lint",
+    "update_python_with_ai.support.lib.build_lint_common",
+]
+active_component_types = ["implementation", "assembly", "interface", "external"]
+verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md"
+
+[roles.planning]
+name = "planning"
+persona = "Planning Engineer"
+src_pattern = "{unit_dir}/planning/{unit_name}.md"
+guide = "update_python_with_ai/guides/high_to_planning.md"
+template = "update_python_with_ai/templates/planning_template.md"
+prompt_template = "Files are aligned according to the guide."
+allows_step_mode = true
+role_deps = ["high"]
+star_role_deps = ["planning"]
+feedback_role_deps = ["high"]
+tools = [
+    "update_with_ai.support.lib.build_lint_common",
+]
+active_component_types = ["implementation", "assembly", "interface"]
+verify_template = "# Planning canvas verified against high_to_planning.md"
+
+[roles.spec_qa]
+name = "spec_qa"
+persona = "Specification QA Arbiter"
+src_pattern = ""
+guide = "update_python_with_ai/guides/spec_qa.md"
+prompt_template = "Files are aligned according to the guide."
+allows_step_mode = false
+role_deps = ["planning"]
+star_role_deps = ["high", "planning"]
+feedback_role_deps = ["planning"]
+tools = [
+    "update_python_with_ai.support.lib.high_lint",
+    "update_python_with_ai.support.lib.spec_lint",
+    "update_python_with_ai.support.lib.build_lint_common",
+]
+active_component_types = ["implementation", "assembly", "interface"]
+verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md && uv run python -m update_python_with_ai.support.lib.spec_lint {unit_dir}/planning/{unit_name}.md"
+verification_success_message = "Specification and planning verified for {unit_name}."
+
+[roles.low]
+name = "low"
+persona = "Low-Level Spec Engineer"
+src_pattern = "{unit_dir}/low/{unit_name}.pyi"
+guide = "update_python_with_ai/guides/planning_to_low.md"
+template = "update_python_with_ai/templates/low_template.pyi"
+prompt_template = "Files are aligned according to the guide."
+allows_step_mode = true
+role_deps = ["planning"]
+star_role_deps = ["low"]
+silent_role_deps = ["spec_qa"]
+feedback_role_deps = ["planning"]
+tools = [
+    "update_with_ai.support.lib.build_lint_common",
+]
+active_component_types = ["implementation", "assembly", "interface", "external"]
+verify_template = "uv run pyright {unit_dir}/low/{unit_name}.pyi"
+
+[roles.low_qa]
+name = "low_qa"
+persona = "Low-Level QA Arbiter"
+src_pattern = ""
+guide = "update_python_with_ai/guides/low_qa.md"
+prompt_template = "Files are aligned according to the guide."
+allows_step_mode = false
+role_deps = ["low"]
+star_role_deps = ["planning", "low"]
+feedback_role_deps = ["low"]
+tools = [
+    "update_python_with_ai.support.lib.low_lint",
+    "update_python_with_ai.support.lib.build_lint_common",
+]
+active_component_types = ["implementation", "assembly", "interface", "external"]
+verify_template = "uv run python -m update_python_with_ai.support.lib.low_lint {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/low/{unit_name}.pyi"
+verification_success_message = "Low-level specification verified for {unit_name}."
+
+[roles.lib]
+name = "lib"
+persona = "Lib Engineer"
+src_pattern = "{unit_dir}/lib/{unit_name}.py"
+guide = "update_python_with_ai/guides/low_to_lib.md"
+template = "update_python_with_ai/templates/lib_template.py"
+template_command = "uv run python -m update_python_with_ai.support.lib.lib_lint --scaffold {unit_dir}/lib/{unit_name}.py --pyi {unit_dir}/low/{unit_name}.pyi"
+prompt_template = "Files are aligned according to the guide."
+allows_step_mode = true
+role_deps = ["low"]
+star_role_deps = ["low"]
+silent_role_deps = ["low_qa"]
+silent_cross_role_deps = ["lib"]
+tools = [
+    "update_python_with_ai.support.lib.lib_lint",
+    "update_python_with_ai.support.lib.build_lint_common",
+]
+active_component_types = ["implementation", "assembly", "interface"]
+verify_template = "uv run python -m update_python_with_ai.support.lib.lib_lint {unit_dir}/lib/{unit_name}.py --pyi {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/lib/{unit_name}.py"
+verification_success_message = "Verification passed: {unit_name}.py compiles correctly and passes all static checks. Call check_file often to verify edits. Note: Unit tests are executed separately by the QA agent in a later session."
+
+[roles.test]
+name = "test"
+persona = "Test Engineer"
+src_pattern = "{unit_dir}/tests/{unit_name}_test.py"
+guide = "update_python_with_ai/guides/low_to_test.md"
+template = "update_python_with_ai/templates/test_template.py"
+template_command = "uv run python -m update_python_with_ai.support.lib.test_lint --scaffold {unit_dir}/tests/{unit_name}_test.py --pyi {unit_dir}/low/{unit_name}.pyi"
+prompt_template = "Files are aligned according to the guide."
+allows_step_mode = true
+role_deps = ["low"]
+star_role_deps = ["low"]
+silent_role_deps = ["lib", "low_qa"]
+stub_role_deps = ["lib"]
+silent_cross_role_deps = ["lib"]
+tools = [
+    "update_python_with_ai.support.lib.test_lint",
+    "update_python_with_ai.support.lib.build_lint_common",
+]
+active_component_types = ["implementation"]
+verify_template = "uv run python -m update_python_with_ai.support.lib.test_lint {unit_dir}/tests/{unit_name}_test.py --pyi {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/tests/{unit_name}_test.py"
+
+verification_success_message = "Verification passed: {unit_name}.py compiles correctly and passes all static checks. Call check_file often to verify edits. Note: Unit tests are executed separately by the QA agent in a later session."
+
+[roles.qa]
+name = "qa"
+persona = "QA Arbiter"
+src_pattern = ""
+guide = "update_python_with_ai/guides/qa.md"
+prompt_template = "Files are aligned according to the guide."
+allows_step_mode = false
+role_deps = ["lib", "test"]
+star_role_deps = ["low"]
+feedback_role_deps = ["lib", "test"]
+tools = []
+active_component_types = ["implementation"]
+verify_template = "uv run pytest {unit_dir}/tests/{unit_name}_test.py"
+verification_success_message = "Test {unit_name}_test.py passed."
+
+[roles.coverage]
+name = "coverage"
+persona = "Coverage Arbiter"
+src_pattern = ""
+guide = "update_python_with_ai/guides/coverage.md"
+prompt_template = "Files are aligned according to the guide."
+allows_step_mode = false
+role_deps = ["qa"]
+silent_role_deps = ["qa"]
+star_role_deps = ["low"]
+feedback_role_deps = ["lib", "test"]
+tools = [
+    "update_with_ai.support.lib.cleanroom_role_tool",
+]
+active_component_types = ["implementation"]
+verify_template = "uv run pytest {unit_dir}/tests/{unit_name}_test.py && uv run python -m update_with_ai.support.lib.cleanroom_role_tool coverage --impl {unit_dir}/lib/{unit_name}.py --test {unit_dir}/tests/{unit_name}_test.py --threshold 100.0"
+verification_success_message = "All lines of {unit_name}.py are covered by {unit_name}_test.py."

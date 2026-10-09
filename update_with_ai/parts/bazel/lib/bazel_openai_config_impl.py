@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
 # LAST_CHANGED: 2026-10-04T23:01:55Z
 # CHANGE: new file
-# CODE_HASH: 97808b2464a4
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# CODE_HASH: faa36ee61ee7
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in bazel_openai_config_impl.pyi
@@ -92,6 +92,127 @@ def _find_target_config_file(target_label: str) -> Optional[str]:
     return None
 
 
+def _parse_model_config_from_workspace(target_label: str) -> Optional[dict[str, Any]]:
+    clean = target_label.strip()
+    if clean.startswith("@@//"):
+        clean = clean[2:]
+    elif clean.startswith("@//"):
+        clean = clean[1:]
+    elif clean.startswith("@@") or (
+        clean.startswith("@") and not clean.startswith("//")
+    ):
+        clean = "//" + clean.lstrip("@").lstrip("/")
+
+    if clean.startswith(":"):
+        pkg = "model_configs"
+        name = clean[1:]
+    elif ":" in clean:
+        pkg, name = clean.split(":", 1)
+        pkg = pkg.lstrip("/")
+    else:
+        parts = clean.lstrip("/").split("/")
+        name = parts[-1]
+        pkg = "/".join(parts[:-1]) if len(parts) > 1 else "model_configs"
+
+    ws = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
+    build_path = None
+    for cand_name in ("BUILD.bazel", "BUILD"):
+        cand_path = os.path.join(ws, pkg, cand_name)
+        if os.path.isfile(cand_path):
+            build_path = cand_path
+            break
+    if not build_path:
+        return None
+
+    try:
+        import ast
+
+        with open(build_path, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=build_path)
+    except (OSError, SyntaxError):
+        return None
+
+    configs: dict[str, dict[str, Any]] = {}
+    aliases: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            func_name = getattr(node.value.func, "id", None)
+            if func_name in ("model_config", "agent_config"):
+                cfg: dict[str, Any] = {}
+                for kw in node.value.keywords:
+                    if kw.arg is not None:
+                        try:
+                            cfg[kw.arg] = ast.literal_eval(kw.value)
+                        except (ValueError, SyntaxError):
+                            pass
+                if "name" in cfg:
+                    configs[str(cfg["name"])] = cfg
+            elif func_name == "alias":
+                alias_name = None
+                actual = None
+                for kw in node.value.keywords:
+                    if kw.arg == "name":
+                        try:
+                            alias_name = ast.literal_eval(kw.value)
+                        except (ValueError, SyntaxError):
+                            pass
+                    elif kw.arg == "actual":
+                        try:
+                            actual = ast.literal_eval(kw.value)
+                        except (ValueError, SyntaxError):
+                            pass
+                if alias_name and actual:
+                    actual_str = str(actual).lstrip(":").split(":")[-1]
+                    aliases[str(alias_name)] = actual_str
+
+    curr = name
+    for _ in range(5):
+        if curr in aliases:
+            curr = aliases[curr]
+        else:
+            break
+
+    if curr in configs:
+        raw = configs[curr]
+        timeout_val = raw.get("timeout_seconds", 60.0)
+        try:
+            timeout_float = float(timeout_val)
+        except (ValueError, TypeError):
+            timeout_float = 60.0
+
+        temp_val = raw.get("temperature", 0.0)
+        try:
+            temp_float = float(temp_val)
+        except (ValueError, TypeError):
+            temp_float = 0.0
+
+        step_mode = bool(
+            raw.get("do_step_mode", True) and raw.get("step_sections", True)
+        )
+        return {
+            "name": curr,
+            "label": f"//{pkg}:{curr}",
+            "model": raw.get("model", "gpt-4o"),
+            "base_url": raw.get("base_url"),
+            "api_key_env": raw.get("api_key_env", ""),
+            "timeout": timeout_float,
+            "max_iterations": int(raw.get("max_iterations", 100)),
+            "temperature": temp_float,
+            "max_tokens": (
+                int(raw["max_tokens"]) if raw.get("max_tokens") else None
+            ),
+            "session_start_reads": bool(raw.get("session_start_reads", True)),
+            "do_step_mode": step_mode,
+            "step_sections": step_mode,
+            "inject_followups": bool(raw.get("inject_followups", True)),
+            "edit_delta_output": bool(raw.get("edit_delta_output", True)),
+            "node_visit_limit": int(raw.get("node_visit_limit", 500)),
+            "batch_size": int(raw.get("batch_size", 1)),
+            "supersede_arg_keep": int(raw.get("supersede_arg_keep", 20)),
+        }
+    return None
+
+
 class _ConfigData:
     def __init__(self) -> None:
         target_label = _resolve_target_label()
@@ -108,6 +229,8 @@ class _ConfigData:
                 json.JSONDecodeError,
             ):  # pragma: no cover (assumption: valid workspace config file)
                 pass
+        else:
+            data = _parse_model_config_from_workspace(target_label) or {}
 
         self.model_name = (
             str(data["model"])

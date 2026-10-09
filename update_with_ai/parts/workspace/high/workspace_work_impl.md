@@ -1,13 +1,13 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
-LAST_CHANGED: 2026-10-06T22:55:00Z
-CHANGE: new file
-CODE_HASH: a26a475c8f28
+LAST_CLEANED: 2026-10-08T15:45:00Z
+LAST_CHANGED: 2026-10-08T15:45:00Z
+CHANGE: clarify starter template materialization for regenerable roles on check and discovery
+CODE_HASH: 8f5edf7b132f
 -->
 
 # workspace_work_impl implementation component
 
-imports: agent_session, workspace_registry, control_work_scheduler, src_metadata
+imports: agent_session, workspace_registry, control_work_scheduler, src_metadata, dag_storage
 implements: workspace_work
 
 ## Purpose
@@ -18,7 +18,7 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
 
 **Out of scope:** The workspace_work_impl implementation component does not commission workspace directories, transfer source files, or execute test commands; these are handled by other components.
 
-**Delegated:** Role configuration lookups and path resolution are delegated to workspace_registry; topological dependency scheduling and dirtiness evaluation across directory scopes are delegated to control_work_scheduler; in-band source metadata extraction is delegated to src_metadata.
+**Delegated:** Role configuration lookups and path resolution are delegated to workspace_registry; topological dependency scheduling and dirtiness evaluation across directory scopes are delegated to control_work_scheduler; in-band source metadata extraction is delegated to src_metadata; starter template materialization is delegated to dag_storage.
 
 ## Types and Behavior
 
@@ -30,7 +30,7 @@ When managing pending target state:
 
 - The work manager removes a resolved target path from `.cleanroom_pending_work.json` when submitted or blamed.
 
-- The work manager evaluates whether a pending target remains dirty by checking in-band source metadata across local and canonical repositories.
+- The work manager evaluates whether a pending target remains dirty by checking in-band source metadata across local and canonical repositories, materializing starter templates via graph storage for missing targets of roles with declared source patterns and upstream dependencies.
 
 When evaluating work in a role workspace:
 
@@ -40,13 +40,17 @@ When evaluating work in a role workspace:
 
 - The work manager schedules work for the directory scope using the work scheduler without providing a subgraph, scanning units in scope, checking dependency dirtiness, and sorting candidate tasks by dynamic role precedence.
 
+- When discovering units and dependencies in a part directory, the work manager inspects build definitions when present, High-Level Specifications extracting imported, implemented, and assembled dependencies, or filesystem component stems.
+
 - The work manager partitions candidate tasks into ready items whose forward dependencies are clean, and blocked items whose prerequisites remain dirty.
+
+- The work manager materializes starter templates via graph storage for any ready tasks of roles with declared source patterns and upstream dependencies whose target source files do not exist on disk.
 
 - If ready items exist and a role workspace is active, the manager records the ready target file paths into the pending work buffer.
 
-- The work manager resolves companion upstream specification contract files and interface definitions for candidate targets using dynamic role definitions from workspace_registry, avoiding peer implementation file leakage.
+- The work manager resolves companion upstream specification contract files and interface definitions for candidate targets using dynamic role definitions, avoiding peer implementation file leakage.
 
-- The work manager resolves cross-unit dependencies by filtering out silent cross-role dependencies and expanding star-role specification contracts dynamically defined in workspace_registry.
+- The work manager resolves cross-unit dependencies by filtering out silent cross-role dependencies and expanding star-role specification contracts dynamically defined for the active role.
 
 - The work manager enforces fail-loud resolution for unknown roles or unmatched paths, raising explicit exceptions without synthetic fallbacks.
 

@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T00:13:59Z
+LAST_CLEANED: 2026-10-07T23:58:18Z
 LAST_CHANGED: 2026-10-06T22:55:00Z
 CHANGE: new file
-CODE_HASH: 9d647f68df2a
+CODE_HASH: 2c0341918784
 -->
 
 # workspace_registry interface component
@@ -19,7 +19,7 @@ Managing multiple directory-scoped and role-specific workspaces requires consist
 
 ## Types and Behavior
 
-A *role definition* record encapsulates configuration for an autonomous development role: a *role name*, an optional *role address*, a *guide path*, a *source pattern*, a sequence of *writable file patterns*, a sequence of *read-only file patterns*, a sequence of *role dependencies*, a sequence of *star role dependencies*, a sequence of *silent role dependencies*, a sequence of *stub role dependencies*, a sequence of *silent cross-role dependencies*, a sequence of *feedback role dependencies*, a sequence of *active component types*, a *verification template*, a *verification success message*, a *persona*, a sequence of *workspace files*, a sequence of *tools*, an optional *audit tag*, and an optional *task prompt*.
+A *role definition* record encapsulates configuration for an autonomous development role: a *role name*, an optional *role address*, a *guide path*, an optional *template*, an optional *template command*, a *source pattern*, a sequence of *writable file patterns*, a sequence of *read-only file patterns*, a sequence of *role dependencies*, a sequence of *star role dependencies*, a sequence of *silent role dependencies*, a sequence of *stub role dependencies*, a sequence of *silent cross-role dependencies*, a sequence of *feedback role dependencies*, a sequence of *active component types*, a *verification template*, a *verification success message*, a *persona*, a sequence of *workspace files*, a sequence of *tools*, an optional *audit tag*, and an optional *task prompt*.
 
 A *workspace descriptor* record encapsulates metadata identifying an active role workspace: a *workspace directory*, a *main repository root*, a *directory scope*, a *role definition*, and an optional *last sync timestamp*.
 
@@ -29,9 +29,9 @@ The workspace registry:
 
 - Resolves the canonical repository root from the filesystem environment or current working directory.
 
-- Resolves role definitions dynamically from repository build files using the Starlark define_role schema, raising an explicit failure if a queried role is undeclared.
+- Resolves role definitions dynamically from declarative role configuration files (such as cleanroom_python_roles.toml) or repository build files, raising an explicit failure if a queried role is undeclared.
 
-- Lists all declared role definitions from repository build files.
+- Lists all declared role definitions from repository role configuration files or build files.
 
 - Computes deterministic, sanitized role workspace directory paths from repository roots, role names, and directory scopes.
 

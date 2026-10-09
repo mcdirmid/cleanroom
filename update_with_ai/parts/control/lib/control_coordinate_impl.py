@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T00:13:59Z
-# LAST_CHANGED: 2026-10-06T11:45:00Z
-# CHANGE: handle optional and mock NodeConfig safely
-# CODE_HASH: 1f31c78d15ad
-# COVERAGE_AUDIT: 2026-10-07T00:13:59Z
-# QA_AUDIT: 2026-10-07T00:13:59Z
+# LAST_CLEANED: 2026-10-07T23:58:18Z
+# LAST_CHANGED: 2026-10-07T18:18:00Z
+# CHANGE: materialize templates on scheduled tasks during dispatch_get_work
+# CODE_HASH: c35e418fdf65
+# COVERAGE_AUDIT: 2026-10-07T23:58:18Z
+# QA_AUDIT: 2026-10-07T23:58:18Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -40,21 +40,16 @@ def _extract_unit_info(node: dag_storage.DagNode) -> Tuple[str, str]:
     role = str(node.role_address).split(":")[-1].strip() if node.role_address else ""
     cfg = get_singleton(agent_node_config.NodeConfig)
     role_defs = getattr(cfg, "role_definitions", {})
-    known_roles = tuple(role_defs.keys())
+    known_roles = tuple(set(role_defs.keys()) | {"lib", "low", "planning", "high", "grounding", "spec", "qa", "coverage", "test"})
 
     unit_name = target_part
-    if role and unit_name.endswith(f"_{role}"):
-        unit_name = unit_name[: -len(f"_{role}")]
-    elif any(unit_name.endswith(f"_{r}") for r in known_roles):
+    changed = True
+    while changed:
+        changed = False
         for r in known_roles:
             if unit_name.endswith(f"_{r}"):
                 unit_name = unit_name[: -len(f"_{r}")]
-                break
-    if role and role in role_defs:
-        r_def = role_defs[role]
-        for dep_role in [d.split(":")[-1] for d in getattr(r_def, "feedback_role_deps", ())]:
-            if unit_name.endswith(f"_{dep_role}"):
-                unit_name = unit_name[: -len(f"_{dep_role}")]
+                changed = True
                 break
     return pkg, unit_name
 
@@ -353,13 +348,37 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         dir_scope: Optional[str] = None,
         max_batch_size: Optional[int] = None,
     ) -> control_work_scheduler.WorkSchedule:
+        if max_batch_size is not None and max_batch_size <= 0:
+            max_batch_size = None
         scheduler = get_singleton(control_work_scheduler.WorkScheduler)
         schedule = scheduler.schedule_work(
             subgraph=subgraph, dir_scope=dir_scope, max_batch_size=max_batch_size
         )
-        for task in schedule.tasks:
+        role_cfg = None
+        try:
+            role_cfg = get_singleton(agent_node_config.RoleConfig)
+        except Exception:
+            pass
+
+        tasks = list(schedule.tasks)
+        if role_cfg is not None and getattr(role_cfg, "role", None):
+            expected = str(role_cfg.role).split(":")[-1].strip().lower()
+            tasks = [
+                t for t in tasks
+                if t.node.role_address.split(":")[-1].strip().lower() == expected
+            ]
+
+        storage = None
+        try:
+            storage = get_singleton(dag_storage.DagStorage)
+        except Exception:
+            pass
+
+        for task in tasks:
+            if storage is not None and hasattr(storage, "materialize_template"):
+                storage.materialize_template(task.node)
             self.register_node(task.node, alias=task.node.unit_address, state="OPEN")
-        return schedule
+        return control_work_scheduler.WorkSchedule(tasks=tasks)
 
     def dispatch_check_files(
         self, target_alias: Optional[str] = None

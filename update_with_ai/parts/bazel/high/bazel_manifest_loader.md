@@ -7,7 +7,7 @@ CODE_HASH: 225982be0fea
 
 # bazel_manifest_loader interface component
 
-imports: agent_storage, bazel_target, dag_storage
+imports: agent_storage, bazel_target, dag_storage, agent_file_alias
 
 ## Purpose
 

@@ -391,6 +391,46 @@ class TestLifecycle(unittest.TestCase):
         self.assertIn(dag_subgraph_impl, dag_asm.CONSTITUENTS)
         self.assertIn(sandbox_impl, sandbox_asm.CONSTITUENTS)
 
+    def test_uv_assembly_initialize_traversal(self) -> None:
+        from update_with_ai.parts.systems.lib import uv_openai_loop_asm
+        from update_with_ai.parts.uv.lib import uv_asm, uv_loop_impl, uv_model_config_impl
+        from update_with_ai.parts.loop.lib import loop_asm
+        from update_with_ai.parts.dag.lib import dag_asm, dag_subgraph_impl
+        from update_with_ai.parts.sandbox.lib import sandbox_asm, sandbox_impl
+        from update_with_ai.parts.openai.lib import openai_driver_impl
+
+        test_reg = LifecycleRegistry()
+        # Verify uv_openai_loop_asm recursively invokes constituent assemblies without error
+        uv_openai_loop_asm.__initialize__(test_reg)
+
+        # Confirm constituents are registered in uv_openai_loop_asm CONSTITUENTS
+        self.assertIn(loop_asm, uv_openai_loop_asm.CONSTITUENTS)
+        self.assertIn(uv_asm, uv_openai_loop_asm.CONSTITUENTS)
+        self.assertIn(dag_asm, uv_openai_loop_asm.CONSTITUENTS)
+        self.assertIn(sandbox_asm, uv_openai_loop_asm.CONSTITUENTS)
+        self.assertIn(uv_loop_impl, uv_openai_loop_asm.CONSTITUENTS)
+        self.assertIn(uv_model_config_impl, uv_openai_loop_asm.CONSTITUENTS)
+        self.assertIn(openai_driver_impl, loop_asm.CONSTITUENTS)
+        self.assertIn(dag_subgraph_impl, dag_asm.CONSTITUENTS)
+        self.assertIn(sandbox_impl, sandbox_asm.CONSTITUENTS)
+
+    def test_uv_cleanroom_assembly_initialize_traversal(self) -> None:
+        """CUJ: Bootstrapping initializes root uv_cleanroom_asm recursively without error."""
+        from update_with_ai.parts.systems.lib import uv_cleanroom_asm, uv_openai_loop_asm
+        from update_with_ai.parts.control.lib import control_asm
+        from update_with_ai.parts.core.lib import file_paths_impl
+        from update_with_ai.parts.tools.lib import tools_asm
+        from update_with_ai.parts.workspace.lib import workspace_asm
+
+        test_reg = LifecycleRegistry()
+        uv_cleanroom_asm.__initialize__(test_reg)
+
+        self.assertIn(uv_openai_loop_asm, uv_cleanroom_asm.CONSTITUENTS)
+        self.assertIn(control_asm, uv_cleanroom_asm.CONSTITUENTS)
+        self.assertIn(file_paths_impl, uv_cleanroom_asm.CONSTITUENTS)
+        self.assertIn(tools_asm, uv_cleanroom_asm.CONSTITUENTS)
+        self.assertIn(workspace_asm, uv_cleanroom_asm.CONSTITUENTS)
+
     def test_register_instance_for_mock_injection(self) -> None:
         """CUJ: Unit test sets up mock instances for collaborator singletons.
 

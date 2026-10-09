@@ -237,8 +237,15 @@ typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["*_test.py", "test_*.py"]
 ```
+
+### 5.3 Authoritative Type Checking Strategy: Approach A (`[tool.pyright]` in `pyproject.toml`)
+
+Cleanroom adopts **Approach A** as its authoritative type-checking configuration strategy:
+1. **Zero Global JSON Configuration**: Cleanroom completely eliminates reliance on the standalone root `pyrightconfig.json` file. All Pyright configuration directives are housed strictly within the standard `[tool.pyright]` table of `pyproject.toml` (PEP 518/621).
+2. **Built-in Pyright Discovery**: When developers, subagents, or verification scripts execute `pyright <file>` or `uv run pyright`, Pyright automatically discovers and applies `[tool.pyright]` from the repository root `pyproject.toml`.
+3. **Editable Package Resolution**: With `uv pip install -e .`, package namespaces (`update_with_ai`, `update_python_with_ai`) resolve through the active virtual environment, removing the historical need for brittle, path-dependent `extraPaths` arrays.
+4. **Hermetic Role Workspaces**: Role workspaces execute verification commands (`check_files`) directly against the environment defined by `pyproject.toml` without needing `pyrightconfig.json` copied into their root directory, eliminating accidental tampering by agents.
 
 ---
 
@@ -341,44 +348,83 @@ python = "cleanroom.methodologies.python:methodology"
 typescript = "cleanroom_typescript:methodology"
 ```
 
-### 6.4 Project Scope Binding & Configuration
+### 6.4 Hierarchical Scope Binding & Methodology Discovery
 
-In a target repository, Cleanroom determines which methodology governs which scope:
+In a target repository, Cleanroom eliminates the need for BUILD files by using an **Upward Hierarchical Search** to discover which methodology governs a given part or unit:
 
-1. **Standard Python Project (`pyproject.toml`)**:
-   ```toml
-   [tool.cleanroom]
-   methodology = "python"  # uses built-in Cleanroom Python methodology
-   dir_scope = "src/myapp"
-   ```
-   No `define_role` calls or `BUILD.bazel` files are needed. Cleanroom automatically knows how to locate specs, stubs, library files, tests, and verification linters.
+```
+[Target Unit] //staging/parts/systems:uv_cleanroom_asm
+      │
+      ▼ (Check 1: Directory Scope)
+staging/parts/systems/cleanroom.toml  ---> If exists, specifies methodology
+      │
+      ▼ (Check 2: Parent Parts Scope)
+staging/parts/cleanroom.toml          ---> If exists, specifies methodology (e.g. "//update_python_with_ai")
+      │
+      ▼ (Check 3: Repository Root)
+cleanroom.toml or pyproject.toml      ---> Global fallback methodology
+```
 
-2. **Polyglot Monorepo**:
-   For multi-language repositories, different scopes bind to different methodologies:
-   ```toml
-   [tool.cleanroom.scopes.backend]
-   methodology = "python"
-   path = "services/backend"
+#### Syntax for `cleanroom.toml`:
+```toml
+# staging/parts/cleanroom.toml
+# For local in-repo methodology packages (starts with // or ./)
+methodology = "//update_python_with_ai"
 
-   [tool.cleanroom.scopes.frontend]
-   methodology = "typescript"
-   path = "services/frontend"
-   ```
+# Or for external packages installed via uv (bare package name)
+# methodology = "cleanroom-python"
+```
 
-3. **CLI Invocation with Role Namespacing**:
-   Roles can be addressed with explicit methodology namespaces or inferred from the scope:
-   ```bash
-   # Explicit namespace
-   cleanroom commission python:low services/backend
-   cleanroom commission typescript:low services/frontend
+Cleanroom's resolver checks:
+1. **If it starts with `//` or `./`**: Resolves as a **local repository package**, loading `<repo_root>/update_python_with_ai/cleanroom_roles.toml`.
+2. **Otherwise (bare name)**: Resolves as an **installed Python package**, loading `cleanroom_roles.toml` via `importlib.resources.files(pkg)`.
 
-   # Inferred from scope configuration
-   cleanroom commission low services/backend
-   ```
+#### CLI Invocation & Canonical Role Addressing:
+A node's full address unites the unit target with the methodology package:
+```bash
+# Explicit canonical target (fully qualified):
+uv run cleanroom-loop --action mark-clean //staging/parts/systems:uv_cleanroom_asm#//update_python_with_ai:coverage
 
-### 6.5 What Constitutes a Methodology Package?
+# Shorthand (inferred from hierarchical search):
+uv run cleanroom-loop --action mark-clean //staging/parts/systems:uv_cleanroom_asm#coverage
+```
+When an unqualified role `#coverage` is supplied, the runner searches upwards from `staging/parts/systems`, finds `methodology = "//update_python_with_ai"` in `staging/parts/cleanroom.toml`, and expands the role to its canonical package address `//update_python_with_ai:coverage`.
 
-A methodology is **not just a flat list of roles**—it is the complete operational bundle required for AI agents and arbiters to author and verify code in that language:
+### 6.5 Methodology Packaging & Approach A Tool Execution
+
+A methodology package is a self-contained bundle that ships its own roles, guides, templates, and deterministic verification tools:
+
+```
+update_python_with_ai/ (or cleanroom-python wheel)
+├── cleanroom_roles.toml           # The role definitions (high, planning, low, lib, test, qa, coverage)
+├── guides/                        # Markdown instructions injected into agent context
+│   ├── high_level_spec.md
+│   ├── low_to_lib.md
+│   └── qa.md
+├── templates/                     # Skeletons for stubs and specs
+│   ├── hls_template.md
+│   └── stub_template.pyi
+└── support/lib/                   # Deterministic zero-token verification linters
+    ├── high_lint.py
+    ├── low_lint.py
+    ├── spec_lint.py
+    └── test_lint.py
+```
+
+#### Approach A: Portable Module Execution (`python -m`)
+Because `check_files` and the agent loop execute inside consumer workspaces (such as `staging/` or `parts/`), verification commands must not rely on brittle relative file paths. Under **Approach A**, all verification tools are invoked as Python modules or console scripts:
+```toml
+# Inside update_python_with_ai/cleanroom_roles.toml
+[roles.high]
+verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md"
+
+[roles.spec_qa]
+verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md && uv run python -m update_python_with_ai.support.lib.spec_lint {unit_dir}/planning/{unit_name}.md"
+
+[roles.low]
+verify_template = "uv run python -m update_python_with_ai.support.lib.low_lint {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/low/{unit_name}.pyi"
+```
+Because the methodology package is installed in the active virtual environment, `python -m` locates and runs the tools reliably from any current working directory.
 
 ```
 cleanroom_python/ (or update_python_with_ai/)
@@ -502,39 +548,33 @@ Repository Root
 │                                UNIT DECLARATION MODES                                  │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                        │
-│  [Mode 1: Zero-Config Convention Discovery]                                            │
-│  • Scans high/, planning/, or low/ directory for base filenames.                       │
-│  • Automatically detects: dag_storage, dag_subgraph, dag_subgraph_impl.                │
-│  • Dependencies inferred in <1ms via AST import inspection (from . import ...).        │
-│  • Best for: standard Python projects with zero configuration overhead.               │
+│  [Mode 1: HLS Specification-First Discovery (Authoritative Standard)]                 │
+│  • Discovers units from high/<unit>.md files.                                          │
+│  • Component type read from title: # <unit> [implementation|assembly|interface]       │
+│  • Horizontal dependencies read from headers: imports:, implements:, assembles:       │
+│  • Eliminates all BUILD files and redundant unit-level TOML manifests.                │
 │                                                                                        │
-│  [Mode 2: Declarative Scope Manifest (cleanroom.toml)]                                 │
-│  • Explicitly defines units, dependencies, and component types.                        │
-│  • Best for: complex dependency graphs or projects wanting rigid explicit tracking.    │
+│  [Mode 2: Minimal Scope Methodology Binding (cleanroom.toml)]                          │
+│  • Merely declares the methodology binding for the package directory:                 │
+│    methodology = "//update_python_with_ai" (or "cleanroom-python")                     │
+│  • Units within the directory inherit this methodology automatically.                  │
 │                                                                                        │
 │  [Mode 3: Legacy Bazel BUILD Reader (parse_part_units)]                                │
 │  • Parses update_python_with_ai(...) calls directly from BUILD.bazel via AST.          │
-│  • Best for: backwards compatibility in existing Cleanroom monorepos.                  │
+│  • Used strictly for backward compatibility during phased transition.                  │
 │                                                                                        │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Mode 2 Example: Declarative `cleanroom.toml`
-```toml
-# parts/dag/cleanroom.toml
-[package]
-name = "dag"
-methodology = "python"
+#### The Zero-BUILD Paradigm: The Specification is the Build Manifest
+Rather than keeping parallel configuration files (`BUILD.bazel` or `[units.*]` tables in TOML) in sync with architecture, Cleanroom uses the unit's **High-Level Specification** (`high/<unit>.md`) as the canonical declaration:
+```markdown
+# dag_subgraph_impl implementation component
 
-[units.dag_storage]
-deps = []
-
-[units.dag_subgraph]
-deps = ["dag_storage"]
-
-[units.dag_subgraph_impl]
-deps = ["dag_config", "dag_storage", "dag_subgraph"]
+implements: dag_subgraph
+imports: dag_config, dag_storage
 ```
+Horizontal unit dependencies (`implements:`, `imports:`, `assembles:`) are extracted directly from the HLS, while vertical role dependencies (`role_deps`, `star_role_deps`) are defined in the methodology's `cleanroom_roles.toml`. Combining these two sources dynamically generates the complete, hermetic Cleanroom DAG with zero boilerplate.
 
 ---
 
@@ -833,27 +873,71 @@ sequenceDiagram
     OSS->>OSS: Run 'uvx cleanroom commission .' on any project without Bazel
 ```
 
-### Phase 1: Foundation (`pyproject.toml` & `uv`)
-- Author `pyproject.toml` in repository root with `hatchling` backend.
-- Define core dependencies and `[project.scripts]` mapping `cleanroom = "cleanroom_workspace_tool:main"`.
-- Generate `uv.lock` using `uv lock`.
-- Add developer instructions to run all tests via `uv run pytest`.
+### Phase 1: Dual Toolchain Coexistence (`pyproject.toml` & `uv`)
+*Goal: Introduce `pyproject.toml` and `uv` alongside Bazel with zero breaking changes, verifying parity before changing any runner behavior.*
+- **Step 1.1: Author Root `pyproject.toml`**:
+  - Configure Hatchling build backend (`requires = ["hatchling"]`, `build-backend = "hatchling.build"`).
+  - Define core dependencies: `pydantic>=2.5.0`, `pyright>=1.1.350`, `pytest>=8.0.0`, `typing-extensions>=4.8.0`, `python-dotenv>=1.0.0`, `tqdm>=4.66.0`.
+  - Configure `[tool.pytest.ini_options]` with `pythonpath = [".", "update_with_ai", "update_python_with_ai"]` and `python_files = ["*_test.py", "test_*.py"]`.
+  - Configure `[tool.pyright]` (Approach A) mirroring settings from `pyrightconfig.json` (`pythonVersion = "3.12"`, `typeCheckingMode = "standard"`, `reportMissingImports = "none"`, `include = ["update_with_ai", "update_python_with_ai"]`, `extraPaths = [".", "update_with_ai", "update_python_with_ai", "update_python_with_ai/support/lib"]`).
+- **Step 1.2: Generate `uv.lock`**:
+  - Run `uv lock` in repository root to establish a deterministic lockfile without modifying any Bazel files.
+- **Step 1.3: Dual Test Parity**:
+  - Run `uv run pytest update_with_ai/parts/workspace/tests/` to verify tests execute natively under pytest.
+  - Expand execution across all 36 test targets to achieve 100% pass parity between `bazel test //...` and `uv run pytest`.
+- **Step 1.4: Pyright Parity (Approach A) & Config Retirement**:
+  - Run `uv run pyright` directly to confirm 0 errors against `[tool.pyright]`.
+  - Retire standalone root `pyrightconfig.json` once parity is proven.
 
 ### Phase 2: Decoupling the Orchestration Engine
-- Refactor [`cleanroom_workspace_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/support/lib/cleanroom_workspace_tool.py) to remove the hard dependency on `MODULE.bazel` and `BUILD.bazel`.
-- Add convention-based discovery for parts directories containing `high/`, `planning/`, `low/`, `lib/`, `tests/`.
-- Replace `bazel run //...:submit` commands in role workspace launcher scripts with direct Python invocations.
+*Goal: Switch Cleanroom role tools and verification templates to native Python/uv without touching underlying parts specifications.*
+- **Step 2.1: Python Methodology Profile**:
+  - Create typed Python methodology profile (in `update_with_ai/parts/workspace/lib/python_profile.py` or `.cleanroom_profile.toml`) defining the 7 roles (`high`, `planning`, `low`, `lib`, `test`, `qa`, `coverage`, `spec_qa`, `low_qa`).
+  - Update [`workspace_registry_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/lib/workspace_registry_impl.py) to load role definitions directly from this profile, eliminating AST parsing of `update_python_with_ai/BUILD.bazel`.
+- **Step 2.2: Native Verification Templates**:
+  - Switch `verify_template` in the Python methodology profile to execute native commands:
+    - `low`: `uv run pyright {unit_dir}/low/{unit_name}.pyi`
+    - `lib`: `uv run pyright {unit_dir}/lib/{unit_name}.py`
+    - `qa`: `uv run pytest {unit_dir}/tests/{unit_name}_test.py`
+    - `coverage`: `uv run pytest {unit_dir}/tests/{unit_name}_test.py && python3 update_with_ai/support/lib/cleanroom_role_tool.py coverage --impl {unit_dir}/lib/{unit_name}.py --test {unit_dir}/tests/{unit_name}_test.py --threshold 100.0`
+- **Step 2.3: Decouple Workspace Provisioning**:
+  - In [`workspace_provision_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/lib/workspace_provision_impl.py#L292) and `workspace_sync_impl.py`, remove the loop copying `MODULE.bazel`, `BUILD.bazel`, `.bazelversion`, and `pyrightconfig.json` into role workspaces.
+  - Role workspaces run as lightweight directories executing `bin/check_files` via `uv` against the root `pyproject.toml`.
 - **[COMPLETED] Deleted `support/lib/src_metadata.py`**: `src_metadata` has been canonicalized into [`src_metadata.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/lib/src_metadata.py). Residual imports across `parts/`, tests, and `cleanroom_role_tool.py` have been migrated to `update_with_ai.parts.control.lib.src_metadata`. `update_with_ai/support/lib/src_metadata.py` and `update_python_with_ai/support/lib/src_metadata.py` (along with `cleanroom_workspace_tool.py` and `evaluate_coverage.py`) have been permanently deleted.
 - **[COMPLETED] Modularized Workspace Orchestration into `parts/workspace`**: Workspace lifecycle, synchronization, provisioning, queue computation, and runner dispatch have been modularized into `update_with_ai/parts/workspace/` (`workspace_tool.py`, `workspace_tool_impl.py`, `workspace_sync_impl.py`, `workspace_provision_impl.py`, `workspace_registry_impl.py`, `workspace_work_impl.py`). `cleanroom_role_tool.py` was reduced to an ultra-slim 45-line entrypoint ($\le 50$ lines constraint) that dynamically resolves `main_workspace_root` from `.cleanroom_role.json`.
 - **[COMPLETED] Role Hardcoding & Synthetic Fallbacks Purged**: Eliminated all hardcoded role dictionaries and synthetic fallback logic across `workspace_registry_impl.py` and `workspace_tool_impl.py`. Tools now parse role definitions directly via AST or manifest abstractions and fail loud on invalid configurations or missing dependencies rather than masking errors.
 - **[COMPLETED] Inbound Workspace Sync Ordering in `get_work`**: Fixed `run_get_work` in `workspace_tool_impl.py` to execute inbound `sync.pull` and `sync.refresh_system_files` *before* checking pending work dirtiness, ensuring work queue evaluation reflects the latest state from `main`. Clarified that `run_check_files` strictly verifies assigned files without inbound sync, preserving reactive scheduling exclusively within `get_work`.
 - **[COMPLETED] Deprecated Grounding Role Elimination**: Completely purged deprecated `grounding` and `grounding_qa` roles, collapsing Cleanroom into a clean 4-stage pipeline: High $\to$ Planning $\to$ Low $\to$ Lib/Test, gated by `spec_qa`, `low_qa`, `qa`, and `coverage`.
+- **[ARCHITECTURAL INVARIANT] Core Primitives (`framework.py`, `lifecycle.py`) Will Never Be Modularized**: Core primitives define the fundamental metaclasses, decorator annotations (`@singleton_type`, `@data_type`, `@variant`, `@operation`), and lifecycle tier scopes upon which the Cleanroom specification language itself is built. Because they rely on advanced metaprogramming, dynamic class mutation, and reflection that are intentionally prohibited in consumer-level parts code under our Python methodology, they remain permanent foundational runtime primitives and will never be modularized into 4-stage Cleanroom parts.
 
 ### Phase 3: Verification Engine Parity
 - Ensure all determinism arbiters (`high_lint.py`, `spec_lint.py`, `low_lint.py`, `lib_lint.py`, `test_lint.py`, `tool_coverage.py`) run natively via `uv run`.
 - Confirm Pyright and coverage verification succeed with zero Bazel dependency.
+- **[DECISION] Pyright Decoupling from Global `pyrightconfig.json`**:
+  - Run Pyright without a standalone global `pyrightconfig.json` by placing type checking configuration into standard `[tool.pyright]` within `pyproject.toml` (PEP 518/621).
+  - For per-workspace or per-target hermeticity, Cleanroom runners can pass `-p <config>` using a transient or workspace-scoped configuration (e.g., `.cleanroom_pyright.json`), avoiding global file pollution or manual config edits.
+  - In standard packaging (`uv pip install -e .`), Pyright automatically resolves all module paths via the virtual environment's `site-packages`, eliminating the need for manual `extraPaths` arrays.
 - **[COMPLETED] Moved Coverage to `parts/tools` & Eliminated `bin/coverage`**: Coverage measurement was migrated from monolithic scripts to modularized [`tool_coverage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage.py) and [`tool_coverage_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage_impl.py) under `parts/tools/`. Standalone `bin/coverage` zipapp was eliminated in favor of direct execution via `bin/check_files` under the `coverage` role. Resolved AST vs execution root mismatches by evaluating AST against the local role workspace (`ws_root`), and expanded module cache purging to package-qualified names.
 - **[TODO] Linter Migration to Parts (`parts/lint` or `parts/tools`)**: Migrate the procedural AST linters currently in `update_python_with_ai/support/lib/` (`high_lint.py`, `spec_lint.py`, `low_lint.py`, `lib_lint.py`, `test_lint.py`, `build_lint_common.py`, `check_build_derived.py`) into proper Cleanroom parts under `update_with_ai/parts/` with full 4-stage specifications (`high/`, `planning/`, `low/`, `lib/`, `tests/`), eliminating monolithic support scripts.
+
+- **[COMPLETED] Scaffolding vs. Verification Separation in AST Linters**:
+  - Implemented `--scaffold` CLI flag in `lib_lint.py` and `test_lint.py`.
+  - When `check_files` runs (verification mode, without `--scaffold`), missing or empty source files report errors and fail validation immediately.
+  - When `get_work` runs (scaffold mode, with `--scaffold`), missing or deleted source files are automatically materialized from rich AST skeletons derived from upstream `low/*.pyi` interface stubs.
+  - Removed `is_pending_target_dirty` checks from `workspace_tool_impl.run_check_files` so `check_files` never inadvertently regenerates templates for deleted files.
+  - Added defensive fallback instantiation of `_DefaultWorkspaceRegistry` in `src_storage_impl.materialize_template` when `WorkspaceRegistry` cannot be resolved outside `agent_session`.
+- **[COMPLETED] Target Resolution Alignment for Test Roles**:
+  - Corrected `cleanroom_roles.toml` test role target handling so `unit_name` does not duplicate the `_test` suffix (e.g. `sandbox_file_editor_impl_test_test.py` bug eliminated).
+  - Verified across all 7 role workspaces (`cleanroom_test_staging`, etc.) with `bin/cleanroom refresh-sys`.
+- **[COMPLETED] Dual Toolchain Pass Parity (100%)**:
+  - Bazel test suite: 203 of 203 tests PASSED (`bazel test //...`).
+  - Pytest test suite: 357 of 358 tests PASSED (1 skipped) in 7.70s (`uv run pytest`).
+  - Pyright static typing: 0 errors, 0 warnings across the entire repository under standard `[tool.pyright]` in `pyproject.toml` (`uv run pyright`).
+- **[COMPLETED] Zero Hardcoding across Framework**:
+  - Replaced hardcoded package names (`update_with_ai`, `update_python_with_ai`, `staging`) with dynamic directory and upward hierarchical discovery (`cleanroom.toml` / package namespace search).
+- **[COMPLETED] Native Test & Loop CLI Runners**:
+  - `bin/test`: Pure `pyright` + `pytest` runner script with optional `--bazel` legacy flag.
+  - `bin/cleanroom_loop`: Standalone native `uv` autonomous agent loop runner powered by `uv_cleanroom_asm` and `cleanroom_uv_runner.py`.
 
 ### Phase 4: Packaging, CI/CD, & Open Source Distribution
 - Configure GitHub Actions to run CI on PRs using `astral-sh/setup-uv@v3`.
@@ -866,7 +950,55 @@ sequenceDiagram
 
 ---
 
-## 11. Conclusion & Impact
+## 11. Pre-Bazel Deletion Checklist & Verification Gates
+
+Before permanently deleting `MODULE.bazel`, `BUILD.bazel` files, `.bazelversion`, and Starlark macros, the following concrete gates must be satisfied:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        PRE-BAZEL DELETION VERIFICATION GATES                           │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  [Gate 1: Systems Assembly Unification]                                                │
+│  • Switch parts/systems/lib/cleanroom_asm.py from bazel_asm to uv_asm.                 │
+│  • Ensure cleanroom_asm.__initialize__() boots purely under uv with zero Bazel deps.   │
+│                                                                                        │
+│  [Gate 2: Archive / Retire parts/bazel and Starlark Rules]                             │
+│  • Archive or delete update_with_ai/parts/bazel/ (bazel_manifest_loader, etc.).         │
+│  • Delete update_with_ai/support/lib/update_with_ai.bzl and pyright_library.bzl.       │
+│  • Retire update_with_ai/support/tests/bazel_macros_test.py and clean binary test.     │
+│                                                                                        │
+│  [Gate 3: Purge Bazel Flags from Shell Scripts]                                        │
+│  • Remove --bazel legacy fallback from bin/test (make it pure pyright + pytest).       │
+│  • Verify bin/cleanroom and bin/cleanroom_loop have zero Bazel references.             │
+│                                                                                        │
+│  [Gate 4: Clean Manifest Removal]                                                      │
+│  • Delete MODULE.bazel, MODULE.bazel.lock, .bazelversion, and .bazelrc.                │
+│  • Delete all BUILD.bazel files across packages and parts.                             │
+│                                                                                        │
+│  [Gate 5: Post-Deletion Verification Run]                                              │
+│  • Execute ./bin/test: must achieve 0 Pyright errors and 100% pytest pass rate.        │
+│  • Execute bin/cleanroom refresh-sys: must refresh all 7 role workspaces cleanly.      │
+│  • Execute bin/cleanroom_loop --help and smoke-test against a clean target.            │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Remaining Action Items Before Subagents Kickoff:
+1. **Unify Systems Assembly**:
+   Update [`cleanroom_asm.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/systems/lib/cleanroom_asm.py) to assemble `uv_asm` instead of `bazel_asm`, retiring `bazel_openai_loop_asm`.
+2. **Retire Bazel-Specific Tests**:
+   Remove `update_with_ai/support/tests/bazel_macros_test.py` and `clean_binary_integration_test.sh` from test paths, as they test Starlark rule evaluation and Bazel `py_binary` compilation.
+3. **Execute File Deletion**:
+   Delete root Bazel manifests (`MODULE.bazel`, `MODULE.bazel.lock`, `.bazelversion`, `.bazelrc`, root `BUILD.bazel`) and all downstream `BUILD.bazel` files.
+4. **Post-Deletion Verification**:
+   Run `./bin/test` to confirm the entire test suite (350+ tests) passes with 0 Pyright errors on a 100% pure-Python repository.
+5. **Kick off Subagent-Driven Workspaces (Option 4)**:
+   Begin implementation of Phase 1 from [`subagent_driven_cleanroom_workspaces_todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md) (`cleanroom_coordinator_engine.py` and harness adapters).
+
+---
+
+## 12. Conclusion & Impact
 
 Transitioning to `uv` and Hatchling solves Cleanroom's distribution bottleneck:
 1. **Zero-Friction Adoption**: Anyone with terminal access can run `uvx cleanroom` instantly. No Bazel, no Bazelisk, no Starlark, no JVM.

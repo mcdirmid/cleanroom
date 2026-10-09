@@ -42,6 +42,8 @@ class CleanroomRoleToolTest(unittest.TestCase):
         from update_with_ai.parts.agent.lib import agent_session
 
         from update_with_ai.parts.control.lib import control_asm
+        from update_with_ai.parts.core.lib import file_paths_impl
+        file_paths_impl.__initialize__()
         workspace_asm.__initialize__()
         control_asm.__initialize__()
         self.phase_cm = enter_phase(agent_session.agent_session)
@@ -95,15 +97,17 @@ class CleanroomRoleToolTest(unittest.TestCase):
         ret = cleanroom_role_tool.main(["get_work"])
         self.assertEqual(ret, 1)
 
-        # 2. Worker stamps lib/config.py clean
+        # 2. Worker stamps lib/config.py clean and submits
         ws_lib = os.path.join(lib_ws, "staging/parts/agent/lib/config.py")
         src_metadata.update_metadata(
             ws_lib,
             last_cleaned="2026-10-04T12:05:00Z",
             last_changed="2026-10-04T12:05:00Z",
         )
+        cleanroom_role_tool.main(["submit", ws_lib, "Initial implementation"])
         ret_clean = cleanroom_role_tool.main(["get_work"])
         self.assertEqual(ret_clean, 0)
+
 
     def test_submit_command_producer(self) -> None:
         """Verifies that submit enforces symmetric change summary rules based on code modification."""
@@ -226,7 +230,22 @@ class CleanroomRoleToolTest(unittest.TestCase):
                 ]
             )
 
-        # 2-arg blame succeeds
+        # Producer role 'lib' cannot blame upstream 'low'
+        ret_unauth = cleanroom_role_tool.main(
+            [
+                "blame",
+                "staging/parts/agent/low/config.pyi",
+                "Contract missing parameter X",
+            ]
+        )
+        self.assertEqual(ret_unauth, 1)
+
+        # Arbiter role 'low_qa' can blame upstream 'low'
+        low_qa_ws = commission_workspace(
+            "low_qa", dir_scope="staging", repo_root=self.fake_repo
+        )
+        os.chdir(low_qa_ws)
+
         ret = cleanroom_role_tool.main(
             [
                 "blame",
@@ -237,7 +256,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.assertEqual(ret, 0)
 
         # No buffer written
-        buf_path = os.path.join(lib_ws, ".cleanroom_blame_buffer.json")
+        buf_path = os.path.join(low_qa_ws, ".cleanroom_blame_buffer.json")
         self.assertFalse(os.path.isfile(buf_path))
 
         # Directly mutated in main
@@ -556,11 +575,11 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.assertEqual(ret3, 1)
         self.assertEqual(len(cleanroom_role_tool.get_pending_work(lib_ws)), 1)
 
-        # 7. Blaming upstream contract clears pending work
-        ret_blame = cleanroom_role_tool.main(
-            ["blame", "staging/parts/agent/low/config.pyi", "Changed spec broken"]
+        # 7. Failing target clears pending work
+        ret_fail = cleanroom_role_tool.main(
+            ["fail", "staging/parts/agent/lib/config.py", "Changed spec broken"]
         )
-        self.assertEqual(ret_blame, 0)
+        self.assertEqual(ret_fail, 0)
         self.assertEqual(cleanroom_role_tool.get_pending_work(lib_ws), [])
 
     def test_coverage_command(self) -> None:
