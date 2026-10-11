@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: cc8044ccb5e6
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:15:46Z
+# CHANGE: State the coverage evaluator as a system service on the system tier
+# CODE_HASH: b8b157b97bf2
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for tool_coverage_impl."""
@@ -11,51 +11,62 @@
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
-from agent_session import AgentSessionTier
+from support.lib.lifecycle import InTier, SystemTier
 import tool_coverage
 
 
-@singleton_type("agent_session")
+@singleton_type("system")
 class CoverageEvaluator(
     tool_coverage.CoverageEvaluator,
-    InTier[AgentSessionTier],
+    InTier[SystemTier],
 ):
-    """Implementation of coverage evaluator.
+    """Realizes the system coverage evaluator as a system service.
 
     GROUNDING:
-    - Realizes AST line analysis, trace execution counting, and report generation
-      by parsing abstract syntax trees, resetting module caches, executing unittest
-      suites with redirect streams, and writing formatted reports.
+    - Provides the tool_coverage.CoverageEvaluator service realization registered within
+      SystemTier, coordinating available target discovery,
+      non-executable line extraction, traced unit test execution, and coverage report
+      formatting for the system.
+    - Projects every reported metric into the tool_coverage.ModuleCoverage fields
+      (module_name, test_name, file_path, test_path, total_executable, covered, missed,
+      coverage_pct, missing_lines, missing_ranges, missing_spans, test_passed, test_error)
+      by mutating a per-invocation mapping of implementation file paths to executed line
+      numbers built under tracing and never retained beyond the measurement operation.
     """
 
     @operation
     @override
     def format_ranges(self, lines: Sequence[int]) -> str:
-        """Formats a sorted sequence of line numbers into compact comma-separated ranges.
+        """Formats missing statement line numbers into compact comma-separated range strings.
 
         GROUNDING:
-        - Grounded via sequential run grouping and comma-separated string assembly.
+        - Projects tool_coverage.ModuleCoverage.missing_lines into
+          tool_coverage.ModuleCoverage.missing_ranges by grouping sequential runs of line
+          numbers and joining each range or isolated number with commas.
         """
         ...
 
     @operation
     @override
     def group_into_spans(self, lines: Sequence[int]) -> List[Tuple[int, int]]:
-        """Groups sorted line numbers into contiguous (start, end) span tuples.
+        """Groups sorted missing statement line numbers into contiguous span tuples.
 
         GROUNDING:
-        - Grounded via linear iteration aggregating consecutive integers into range bounds.
+        - Projects tool_coverage.ModuleCoverage.missing_lines into
+          tool_coverage.ModuleCoverage.missing_spans by aggregating consecutive line
+          numbers into contiguous (start, end) bounds.
         """
         ...
 
     @operation
     @override
     def normalize_target_query(self, raw_query: str) -> str:
-        """Normalizes query string by stripping Bazel target or path prefixes.
+        """Normalizes a target query string by stripping Bazel target or path prefixes.
 
         GROUNDING:
-        - Grounded via string splitting and suffix truncation.
+        - Truncates leading '//' target prefixes, package specifiers, and '.py' file
+          extension suffixes so the normalized name resolves against the target name keys
+          exposed by tool_coverage.CoverageEvaluator.get_available_targets.
         """
         ...
 
@@ -64,10 +75,13 @@ class CoverageEvaluator(
     def format_spans_report(
         self, cov: tool_coverage.ModuleCoverage, max_spans: Optional[int] = None
     ) -> str:
-        """Formats uncovered statement spans with source code lines and optional clamping.
+        """Formats source snippet reports for uncovered statement spans with presentation span clamping.
 
         GROUNDING:
-        - Grounded via source line extraction, span indexing, and presentation clamping.
+        - Reads the source text named by tool_coverage.ModuleCoverage.file_path through the
+          pathlib filesystem operations declared by the filesystem_ext external boundary,
+          indexes the lines of tool_coverage.ModuleCoverage.missing_spans against that
+          source text, and clamps the presented spans when max_spans is configured.
         """
         ...
 
@@ -79,10 +93,15 @@ class CoverageEvaluator(
         threshold: float,
         max_spans: Optional[int] = None,
     ) -> str:
-        """Formats structured coverage report suitable for console output and log files.
+        """Formats structured coverage reports with agent guidance and deficit metrics.
 
         GROUNDING:
-        - Grounded via template string interpolation and agent guidance text generation.
+        - Composes the report from tool_coverage.ModuleCoverage.coverage_pct,
+          tool_coverage.ModuleCoverage.missed, tool_coverage.ModuleCoverage.test_passed,
+          and tool_coverage.ModuleCoverage.test_error, delegates uncovered source span
+          context to this evaluator's format_spans_report under the supplied threshold and
+          max_spans, and appends agent guidance for translating uncovered lines into
+          grounding defects.
         """
         ...
 
@@ -91,21 +110,31 @@ class CoverageEvaluator(
     def get_available_targets(
         self, repo_root: Path | str
     ) -> Dict[str, Tuple[Path, Path]]:
-        """Scans repository for implementation files and companion test suites.
+        """Discovers available implementation and test file pairs across repository part packages.
 
         GROUNDING:
-        - Grounded via pathlib globbing of parts library implementations and tests.
+        - Globs part library implementation files and companion test files through the
+          pathlib filesystem operations declared by the filesystem_ext external boundary,
+          pairs each implementation file with its companion test file, and maps target
+          names to the tool_coverage.ModuleCoverage.file_path and
+          tool_coverage.ModuleCoverage.test_path path values recorded by the measurement
+          operation.
         """
         ...
 
     @operation
     @override
     def get_non_executable_lines(self, file_path: Path | str) -> Set[int]:
-        """Analyzes AST to identify lines that are not executable statements.
+        """Extracts candidate executable lines from an implementation source file by filtering non-executable lines.
 
         GROUNDING:
-        - Grounded via ast.parse, walking statement nodes, identifying docstrings,
-          continuation lines, and comments matching pragma no cover.
+        - Reads the implementation source through the pathlib filesystem operations
+          declared by the filesystem_ext external boundary, parses it with the ast.parse
+          syntax tree operation, and walks statement nodes to detect docstring expression
+          lines, function and class signature continuation lines, and pragma comment lines
+          matched by regular expression patterns whose statement bodies are excluded,
+          realizing the tool_coverage.CoverageEvaluator.get_non_executable_lines contract
+          consumed by this evaluator's measure_single_target_coverage.
         """
         ...
 
@@ -114,11 +143,24 @@ class CoverageEvaluator(
     def measure_single_target_coverage(
         self, impl_path: Path | str, test_path: Path | str
     ) -> tool_coverage.ModuleCoverage:
-        """Executes single target test suite under trace instrumentation and calculates metrics.
+        """Measures single-target statement coverage by executing the companion test suite under execution tracing.
 
         GROUNDING:
-        - Grounded via trace.Trace line counting, unittest.TestLoader execution,
-          stream redirection, and set operations on executable line sets.
+        - Clears the sys.modules entries of the measured module and injects the local
+          package directories of the implementation and test files into sys.path before
+          execution, then runs the companion unittest suite under trace instrumentation
+          through trace.Trace, mutating a per-invocation mapping of implementation file
+          paths to executed line numbers from the trace callback and capturing suite import
+          and execution failures into tool_coverage.ModuleCoverage.test_error with
+          tool_coverage.ModuleCoverage.test_passed cleared.
+        - Intersects the accumulated traced line numbers with the candidate executable
+          lines extracted by this evaluator's get_non_executable_lines and populates
+          tool_coverage.ModuleCoverage.total_executable,
+          tool_coverage.ModuleCoverage.covered, tool_coverage.ModuleCoverage.missed,
+          tool_coverage.ModuleCoverage.coverage_pct,
+          tool_coverage.ModuleCoverage.missing_lines,
+          tool_coverage.ModuleCoverage.missing_ranges through format_ranges, and
+          tool_coverage.ModuleCoverage.missing_spans through group_into_spans.
         """
         ...
 
@@ -133,10 +175,15 @@ class CoverageEvaluator(
         update_log: Optional[Path | str] = None,
         max_spans: Optional[int] = None,
     ) -> tool_coverage.ModuleCoverage:
-        """Measures target coverage, validates threshold, and optionally writes coverage log.
+        """Evaluates module coverage against a percentage threshold and updates coverage log files.
 
         GROUNDING:
-        - Grounded via measure_single_target_coverage invocation, threshold comparison,
-          and filesystem report writing.
+        - Resolves target_or_impl through normalize_target_query against the target name
+          keys exposed by tool_coverage.CoverageEvaluator.get_available_targets when
+          test_path is omitted, delegates measurement to measure_single_target_coverage,
+          compares tool_coverage.ModuleCoverage.coverage_pct against the supplied
+          threshold to derive the threshold exit status indication, and synchronizes the
+          report produced by format_coverage_report to the update_log path through the
+          pathlib filesystem operations declared by the filesystem_ext external boundary.
         """
         ...

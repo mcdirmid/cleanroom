@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: 8944f51dbfbc
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:37:01Z
+# CHANGE: Align role workspace commissioning, permissions, and runner deployment contracts
+# CODE_HASH: e58062319520
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_provision."""
@@ -17,7 +17,7 @@ import workspace_registry
 
 @singleton_type("agent_session")
 class WorkspaceProvisioner(InTier[AgentSessionTier], Protocol):
-    """Service commissioning and decommissioning isolated role workspaces."""
+    """Service creating and configuring isolated, directory-scoped role workspaces."""
 
     @operation
     def commission(
@@ -30,13 +30,15 @@ class WorkspaceProvisioner(InTier[AgentSessionTier], Protocol):
         """Commissions an isolated role workspace with permission boundaries.
 
         POSTCONDITIONS:
-        - MUST create workspace directory tree with bin directory.
-        - MUST copy writable targets with 0o644 permissions.
+        - MUST resolve the role definition for the requested role and directory scope.
+        - MUST create the workspace directory tree including a bin directory.
+        - MUST copy writable target files with 0o644 permissions.
         - MUST copy upstream contract dependencies with 0o444 permissions.
-        - For roles with stub_role_deps, MUST synthesize read-only test stubs with NotImplementedError from companion specifications without copying real implementation files.
-        - MUST package runner zipapps in bin/ with 0o755 permissions.
-        - MUST write .cleanroom_role.json configuration and AGENTS.md instructions.
-        - MUST record workspace descriptor in the workspace registry.
-        - MUST return the created WorkspaceDescriptor.
+        - WHEN the role definition declares stub role dependencies, MUST synthesize read-only test stubs raising NotImplementedError from companion specifications without copying real implementation files.
+        - MUST package executable runner tools into the bin directory with 0o755 permissions.
+        - MUST write .cleanroom_role.json role configuration in the workspace root.
+        - MUST synthesize role-tailored AGENTS.md instructions in the workspace root.
+        - MUST record the created workspace descriptor in the persistent registry.
+        - MUST return a workspace descriptor for the newly created workspace directory.
         """
         ...

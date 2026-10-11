@@ -1,18 +1,16 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 0170083672a7
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:00:55Z
+CHANGE: Align node definition, manifest-backed storage, and dirty evaluation with the high-level contract and drop planning front-matter
+CODE_HASH: 9fc82ec13625
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # agent_storage interface component
 
-imports: dag_storage
-
 ## Intent
 
-Task execution across structured projects requires maintaining target dependency relationships alongside durable node state. The agent_storage interface component preserves propagating and non-propagating graph relationships, task prompts, and node definitions populated from workspace target manifests, while evaluating node dirty state and pending messages backed by in-band source file metadata.
+Task execution across structured projects requires maintaining target dependency relationships alongside durable node state. The agent_storage interface component preserves propagating and silent graph relationships, task prompts, and node definitions populated from workspace target manifests, while evaluating node dirty state and pending messages backed by in-band source file metadata.
 
 By extending dag storage with manifest-backed node definitions and prompt metadata, the component provides a unified graph authority for scheduling node cleaning passes.
 
@@ -21,17 +19,17 @@ By extending dag storage with manifest-backed node definitions and prompt metada
 ### Typing
 
 - A task prompt is an instruction describing the work required to clean a node.
-- A node definition encapsulates a declared target's execution configuration, role attributes, and task prompts.
+- A node definition encapsulates the execution configuration and task prompt a declared target carries.
 
 ### Contracts
 
 - A caller supplies a dag node when querying node definitions. [query_node_def_supplied]
 - A caller supplies a dag node when querying task prompts. [query_task_prompt_supplied]
-- The agent storage is a system service that is a dag storage backed by workspace build target manifests. [agent_storage_is_dag_storage]
+- The agent storage is a system service that is a dag storage backed by workspace build target manifests, where target manifest metadata configures node execution and dependency structure. [agent_storage_is_dag_storage]
 - The agent storage maintains nodes and dependencies from workspace targets. [maintain_workspace_targets]
 - The agent storage provides task prompts for declared nodes. [provide_task_prompts]
 - The agent storage provides node definitions for declared nodes. [provide_node_definitions]
-- The agent storage evaluates node dirty status and derives pending messages from in-band source file metadata. [evaluate_dirty_from_source_metadata]
+- The agent storage evaluates whether a node is dirty from the in-band source file metadata of the node and the change state of its non-silent dependencies. [evaluate_dirty_from_source_metadata]
 
 ### Woven Contracts
 

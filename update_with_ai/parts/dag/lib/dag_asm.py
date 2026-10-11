@@ -1,13 +1,13 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-09T02:18:05Z
-# CHANGE: Align with dag_asm.pyi specification
-# CODE_HASH: 43881d3716cf
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:59:18Z
+# CHANGE: Resolve the default lifecycle registry in assembly initialization before delegating to constituents
+# CODE_HASH: 6252ba29acfc
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
 from typing import Optional
-from support.lib.lifecycle import LifecycleRegistry
+from support.lib.lifecycle import LifecycleRegistry, get_default_registry
 from . import dag_subgraph_impl
 
 CONSTITUENTS = (
@@ -15,7 +15,9 @@ CONSTITUENTS = (
 )
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    for mod in CONSTITUENTS:
-        mod.__initialize__(registry)
+    """Aggregates topological subgraph queries and bounded visit tracking into the dag subsystem assembly."""
+    reg = get_default_registry() if registry is None else registry
+    for constituent in CONSTITUENTS:
+        constituent.__initialize__(reg)
 
 _initialize_ = __initialize__

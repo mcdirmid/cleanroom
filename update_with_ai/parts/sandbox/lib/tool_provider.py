@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-09T18:47:37Z
-# CHANGE: Replace ellipsis defaults with valid defaults in ToolParameter, FollowUpToolCall, and ToolResponse
-# CODE_HASH: 95c83c08d780
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:03:45Z
+# CHANGE: Make the follow-up tool call reasoning text a required member as the grounding specification declares
+# CODE_HASH: beaaf2ba2946
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -148,7 +148,7 @@ class FollowUpToolCall:
     # TODO_FollowUpToolCall_body
     tool_name: ToolName
     wire_parameter_bindings: Mapping[ParameterName, WireType]
-    reasoning_text: Optional[ReasoningText] = None
+    reasoning_text: ReasoningText
 
 
 @dataclass(frozen=True)

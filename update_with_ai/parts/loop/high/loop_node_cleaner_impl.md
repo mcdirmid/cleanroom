@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:29:12Z
-LAST_CHANGED: 2026-10-09T22:20:00Z
-CHANGE: Present dirty node role on role config without pre-priming nodes during session setup
-CODE_HASH: ce1aa99a0538
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Split the phase execution paragraph, canonicalize change timestamps, and state the feedback routing invariant
+CODE_HASH: 9f59a0f134ba
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_node_cleaner_impl implementation component
@@ -18,11 +19,13 @@ Driving node execution requires bridging abstract graph clean directives to conc
 
 **Out of scope:** The loop_node_cleaner_impl implementation component does not parse JSON build manifests, enforce repetition thresholds, or write transcript logs to disk; these are handled by other components.
 
-**Delegated:** Turn loop execution is delegated to loop_driver; session services are delegated to sandbox; graph storage updates are delegated to dag_storage.
+**Delegated:** Turn loop execution is delegated to loop_driver; session services are delegated to sandbox; graph storage updates are delegated to dag_storage; unexpected execution failures are logged through runner_logger.
 
 ## Types and Behavior
 
-The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, logging unexpected execution failures to the runner logger and retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+The node cleaner cleans dirty nodes within an agent session phase, where the role config presents the role of the dirty nodes to session services.
+
+When an unexpected execution failure occurs, the node cleaner logs the failure to the runner logger, retries the session phase once, and propagates the failure when the retry also fails.
 
 The conversation is initialized with instructions directing the agent to call the get work tool.
 
@@ -30,12 +33,12 @@ Cleaning resolves dirty nodes by evaluating the loop driver outcome.
 
 Resolving dirty nodes results in:
 
-- Marking the nodes clean in graph storage with the change summary from the outcome when the outcome signals successful advancement with workspace file modifications, and marking the nodes clean without advancing last changed timestamps when no workspace files were modified.
+- Marking the nodes clean in graph storage with the change summary from the outcome when the outcome signals successful advancement with workspace file modifications, and marking the nodes clean without advancing their change timestamps when no workspace files were modified.
 
-- Feedback messages containing the blame explanation and addressed strictly to the declared feedback dependency node owning the blamed file when the outcome signals blame attributed to a configured blame target of the dirty nodes, leaving the nodes dirty when the blamed file does not match a configured blame target.
+- Recording a feedback message containing the blame explanation and addressed strictly to the declared feedback dependency node that owns the blamed file when the outcome signals blame attributed to a configured blame target of the dirty nodes, leaving the nodes dirty when the blamed file does not match a configured blame target.
 
 - Leaving the nodes dirty without updating clean state when the outcome signals run failure, communicating that processing cannot continue.
 
-When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, marking the nodes clean with a change summary when incoming pending messages indicate changes from upstream dependencies, and marking the nodes clean without changes otherwise.
+When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, marking the nodes clean with a change summary when incoming pending messages indicate changes from upstream dependencies, and marking the nodes clean without a change summary otherwise.
 
-Delivering feedback messages to arbitrary dependencies, non-feedback dependencies, guides, or fixed node specifications is prohibited.
+A feedback message is delivered only to the declared feedback dependency node that owns the blamed file, never to an arbitrary dependency, a non-feedback dependency, a guide, or a fixed node specification.

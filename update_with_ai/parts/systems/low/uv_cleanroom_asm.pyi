@@ -1,15 +1,12 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-08T12:55:00Z
-# CHANGE: assemble workspace_tool_impl
-# CODE_HASH: 58a1072c3cc0
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:31:16Z
+# CHANGE: Remove unused top-level imports from the root system assembly
+# CODE_HASH: d36ec0a9c22a
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom UV master root system assembly specification."""
-
-from typing import Optional
-from support.lib.lifecycle import LifecycleRegistry
 
 
 def __initialize__() -> None:

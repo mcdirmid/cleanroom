@@ -1,28 +1,27 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: a40fa813fd44
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:05:55Z
+CHANGE: Canonicalize change message terminology and align build result and subgraph clean statements with the high-level contract
+CODE_HASH: d596d4738abf
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop interface component
 
-imports: dag_storage
-
 ## Intent
 
-Executing multi-stage agent workflows across interdependent graph structures requires evaluating dirty state and coordinating cleaning passes in dependency order. Without a centralized orchestration boundary, callers must manually coordinate node invalidations, state transitions, and change notifications across graph storage. The loop interface component coordinates this end-to-end lifecycle: dispatching cleaning passes across target subgraphs, routing feedback into target nodes, and recording change descriptions on modified nodes to dynamically invalidate downstream dependencies.
+Executing multi-stage agent workflows across interdependent graph structures requires evaluating dirty state and coordinating cleaning passes in dependency order. Without a centralized orchestration boundary, callers must manually coordinate node invalidations, state transitions, and change notifications across graph storage. The loop interface component coordinates this end-to-end lifecycle: dispatching cleaning passes across target subgraphs, routing feedback into target nodes, and recording change messages on modified nodes to dynamically invalidate downstream dependencies.
 
-By managing end-to-end cleaning runs, injecting change and feedback messages, and recording change descriptions, the loop isolates build coordination complexity from execution runners.
+By managing end-to-end cleaning runs, injecting change and feedback messages, and recording change messages, the loop isolates build coordination complexity from execution runners.
 
 ## Factored Contracts
 
 ### Typing
 
 - A cleaning pass is an execution run that cleans dirty nodes across a target subgraph.
-- A build result indicates overall success.
+- A build result indicates overall success or failure.
 - A build result provides an execution summary.
+- A system's loop executes topological build and cleaning passes across workspace nodes.
 
 ### Contracts
 
@@ -43,10 +42,10 @@ By managing end-to-end cleaning runs, injecting change and feedback messages, an
 ### Woven Contracts
 
 - Executing a cleaning pass traverses the subgraph rooted at a target node and yields a build result. [clean_pass_target_supplied, execute_cleaning_pass, produce_build_result, dag_storage: [access_dag_dependencies]]
-- Marking an acyclic subgraph clean primes target and dependency source files with clean timestamps, materializing missing templates and clearing unacted feedback. [mark_clean_target_supplied, mark_subgraph_clean, dag_storage: [access_dag_dependencies, clear_node_messages]]
+- Marking an acyclic subgraph clean materializes missing templates, stamps clean timestamps and default change descriptions on target and dependency source files, and clears unacted feedback. [mark_clean_target_supplied, mark_subgraph_clean, dag_storage: [access_dag_dependencies, mark_node_clean_in_storage]]
 - Marking a target node dirty removes its last cleaned timestamp from in-band source metadata. [mark_dirty_target_supplied, mark_node_dirty, dag_storage: [mark_node_dirty]]
-- Injecting feedback messages records diagnostic updates in target node messages. [inject_feedback_target_supplied, inject_feedback_message_supplied, inject_feedback_message, dag_storage: [add_node_messages]]
-- Recording change messages updates a modified node in graph storage with a change description, clearing unacted feedback and dynamically invalidating downstream dependencies. [record_change_node_supplied, record_change_message_supplied, record_node_change_message, dag_storage: [mark_clean_with_change_description]]
+- Injecting feedback messages records diagnostic updates in target node messages. [inject_feedback_target_supplied, inject_feedback_message_supplied, inject_feedback_message, dag_storage: [add_feedback_messages, record_feedback_in_metadata]]
+- Recording change messages updates a modified node in graph storage with a change message, updating in-band source metadata and dynamically invalidating downstream dependencies. [record_change_node_supplied, record_change_message_supplied, record_node_change_message, dag_storage: [mark_node_clean_in_storage, mark_clean_records_change_summary]]
 
 ## Grounding
 

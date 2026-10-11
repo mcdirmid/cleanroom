@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: b64f0f72df8b
+CODE_HASH: 4627fcd2bab2
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_loop_impl implementation component
@@ -22,28 +23,26 @@ Executing multi-stage agent workflows requires coordinating target loading, dirt
 
 ## Types and Behavior
 
-The loop service coordinates build graph execution and change propagation across workspace targets.
+The loop service coordinates build graph execution and change propagation across workspace targets. The loop service resolves target labels against workspace directories to populate graph storage.
 
 When executing a cleaning pass:
 
-- Target labels are resolved against workspace directories to populate graph storage.
+- Cleaning halts immediately and produces a failing build result when node cleaning fails, when any reachable node in the target subgraph remains dirty after cleaning, or when an unexpected failure occurs during cleaning, capturing the failure reason in the build summary.
 
-- Cleaning halts immediately and produces a failing build result if node cleaning fails, if any reachable node in the target subgraph remains dirty after cleaning, or if an unexpected failure occurs during cleaning, capturing the failure reason in the build summary.
-
-- Telemetry capturing execution events, pass duration, and build outcome is streamed to standard output and transcript files.
+- Telemetry capturing execution events, pass duration, and the build outcome is streamed to standard output and the transcript files.
 
 When marking an acyclic subgraph clean:
 
 - Missing source files across the target subgraph are materialized from declared templates or initialized as empty files.
 
-- Node metadata headers are stamped with the current timestamp as the last cleaned timestamp, initializing missing last changed timestamps and default change descriptions, and clearing unacted feedback.
+- Node metadata headers are stamped with the current timestamp as the last cleaned timestamp, initializing a missing last changed timestamp and a default change summary, and clearing unacted feedback.
 
 Deleting the last cleaned timestamp from a target node's source file metadata header marks the target node dirty.
 
 When recording feedback:
 
-- Injects caller-supplied feedback into the target node's source file metadata in graph storage, identifying the blamed dependency node and diagnostic reason, and appends the feedback entry to the `.cleanroom.log` file in the directory containing parts.
+- Injects caller-supplied feedback into the target node's source file metadata in graph storage, identifying the blamed dependency node and the diagnostic reason, and appends the feedback entry to the `.cleanroom.log` file in the directory containing the parts.
 
 When recording changes:
 
-- Records a caller-supplied change message against a target node in graph storage, clearing the last cleaned timestamp and updating the change description to dynamically invalidate downstream dependencies, and appends the change message to the `.cleanroom.log` file in the directory containing parts.
+- Records a caller-supplied change message against a target node in graph storage, clearing the last cleaned timestamp and updating the change summary to dynamically invalidate downstream dependencies, and appends the change message to the `.cleanroom.log` file in the directory containing the parts.

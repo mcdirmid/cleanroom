@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 3eac2570857c
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:10:00Z
+# CHANGE: Resolve declared feedback dependencies into per-node blame targets and read-only files, include the guide target manifest source file in guide candidates, construct workspace paths through the declared frozen constructors, derive role-aware dependency fallbacks, prune uncontracted members and dead override state, and register the alias manager with the realized parameterized key
+# CODE_HASH: 437f6c800c62
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 import json
@@ -51,12 +51,9 @@ class _CommandVerificationCheck(agent_node_config.VerificationCheck):
             return False, agent_node_config.VerificationDiagnostic(str(e))
 
 
-def _make_host_path(cls: Any, path: str) -> Any:
-    if issubclass(cls, str):
-        return cls(path)
-    obj = object.__new__(cls)
-    object.__setattr__(obj, "path", path)
-    return obj
+def _workspace_path(relative: str) -> file_paths.WorkspacePath:
+    """Builds a workspace-relative host path record from a relative path string."""
+    return file_paths.WorkspacePath(path=file_paths.PathString(relative))
 
 
 def _safe_get_singleton(cls: Any) -> Any:
@@ -168,7 +165,7 @@ def _get_manifest(n: dag_storage.DagNode) -> Optional[Any]:
     if loader is not None:
         try:
             return loader.retrieve_manifest(n)
-        except Exception:
+        except (OSError, KeyError, LookupError, AttributeError, TypeError, ValueError):
             pass
     return None
 
@@ -177,9 +174,43 @@ def _make_bound(pkg: str, s: str, cls: Any, owner: dag_storage.DagNode) -> Any:
     norm_rel = os.path.normpath(s.lstrip("/") if (s.startswith(pkg + "/") or (pkg and s.startswith("/" + pkg + "/"))) else os.path.join(pkg, s))
     return cls(
         relative_path=agent_file_alias.RelativePath(norm_rel),
-        workspace_path=_make_host_path(file_paths.WorkspacePath, norm_rel),
+        workspace_path=_workspace_path(norm_rel),
         owning_node=owner,
     )
+
+
+def _dependency_source_paths(dep_label: str, dep_manifest: Optional[Any]) -> List[str]:
+    """Resolves the declared source paths of an upstream dependency target."""
+    if dep_manifest is not None and dep_manifest.source_file:
+        return [str(dep_manifest.source_file)]
+    unit_part, _, role_part = dep_label.partition("#")
+    if "guides" in dep_label or role_part.strip().lower() == "guide":
+        unit_name = unit_part.split(":")[-1].split("/")[-1]
+        return [unit_name if unit_name.endswith(".md") else f"{unit_name}.md"]
+
+    dep_node = _norm_node(dep_label)
+    m = dep_manifest or _get_manifest(dep_node)
+    if m is not None and m.source_file:
+        return [str(m.source_file)]
+
+    root = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
+    loader = _safe_get_singleton(uv_manifest_loader.UvManifestLoader)
+    pkg = _extract_pkg(dep_node)
+    clean_role = role_part.strip().lower()
+    if loader is not None and hasattr(loader, "_get_methodology_roles"):
+        try:
+            _, roles_dict = loader._get_methodology_roles(root, pkg)
+            r_cfg = roles_dict.get(clean_role)
+            if r_cfg and r_cfg.get("src_pattern"):
+                unit_name = unit_part.split(":")[-1].split("/")[-1]
+                pat = r_cfg["src_pattern"].format(unit_dir=pkg, unit_name=unit_name)
+                if pat.startswith(pkg + "/") or pat.startswith(pkg + "\\"):
+                    pat = pat[len(pkg) + 1 :]
+                return [pat]
+        except Exception:
+            pass
+
+    return []
 
 
 def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo:
@@ -222,44 +253,47 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
     guide_file: Optional[agent_file_alias.UnboundFile] = None
     guide: Optional[agent_node_config.NodeGuide] = None
     if guide_target:
+        guide_paths: List[str] = []
+        guide_manifest = _get_manifest(_norm_node(guide_target))
+        if guide_manifest is not None and guide_manifest.source_file:
+            guide_paths.append(str(guide_manifest.source_file))
         g_fn = guide_target.split(":")[-1] if ":" in guide_target else os.path.basename(guide_target)
         if not g_fn.endswith(".md"): g_fn += ".md"
         guide_file = agent_file_alias.UnboundFile(relative_path=agent_file_alias.RelativePath(g_fn))
-        cands = [g_fn, guide_target, f"{guide_target}.md", os.path.basename(guide_target), f"{os.path.basename(guide_target)}.md"]
-        g_text = _read_cand_file(_search_paths(cands, pkg_path))
+        guide_paths.extend([g_fn, guide_target, f"{guide_target}.md", os.path.basename(guide_target), f"{os.path.basename(guide_target)}.md"])
+        g_text = _read_cand_file(_search_paths(guide_paths, pkg_path))
         if g_text is not None: guide = _parse_guide_markdown(g_text)
 
     deps = list(manifest.dependencies) if manifest else []
     star_deps = list(manifest.star_dependencies) if manifest else []
     silent_deps = set(manifest.silent_dependencies) if manifest else set()
-    feedback_deps = set(manifest.feedback_dependencies) if manifest else set()
+    feedback_deps = list(manifest.feedback_dependencies) if manifest else []
+    feedback_labels = {str(label) for label in feedback_deps}
 
     blame_targets: Set[agent_file_alias.BoundFile] = set()
     read_only_files: Set[agent_file_alias.ReadOnlyFile] = set()
     rw_paths = {rw.workspace_path.path for rw in rw_files}
-    for dep_label in deps + [sd for sd in star_deps if sd not in deps]:
+    referenced_deps = list(dict.fromkeys(deps + [sd for sd in star_deps if sd not in deps] + feedback_deps))
+    for dep_label in referenced_deps:
         dep_str = str(dep_label)
         if dep_str in silent_deps: continue
         dep_node = _norm_node(dep_str)
-        is_blame = dep_str in feedback_deps
         dep_m = _get_manifest(dep_node)
         dep_pkg = _extract_pkg(dep_node)
-        dep_srcs: List[str] = []
-        if dep_m and dep_m.source_file:
-            dep_srcs.append(str(dep_m.source_file))
-        elif "guides" in dep_str:
-            g_f = dep_str.split(":")[-1]
-            dep_srcs.append(g_f if g_f.endswith(".md") else f"{g_f}.md")
-        elif "specs" in dep_str or "high" in dep_str:
-            tb = dep_str.split(":")[-1].replace("_low", "").replace("_high", "").replace("_lib", "")
-            dep_srcs.append(f"high/{tb}.md")
-        else:
-            dep_srcs.append(f"{dep_str.split(':')[-1]}.py")
-
-        for ds in dep_srcs:
+        for ds in _dependency_source_paths(dep_str, dep_m):
             bf = _make_bound(dep_pkg, ds, agent_file_alias.ReadOnlyFile, dep_node)
             if bf.workspace_path.path not in rw_paths: read_only_files.add(bf)
-            if is_blame: blame_targets.add(bf)
+            if dep_str in feedback_labels: blame_targets.add(bf)
+
+    for fb_label in feedback_deps:
+        fb_str = str(fb_label)
+        if fb_str not in silent_deps: continue
+        fb_node = _norm_node(fb_str)
+        fb_m = _get_manifest(fb_node)
+        for ds in _dependency_source_paths(fb_str, fb_m):
+            blame_targets.add(
+                _make_bound(_extract_pkg(fb_node), ds, agent_file_alias.ReadOnlyFile, fb_node)
+            )
 
     ws_dir = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
     v_cmd = str(manifest.verification_check).strip() if manifest and manifest.verification_check else ""
@@ -280,8 +314,6 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     def __init__(self) -> None:
         self._per_node_cache: Dict[dag_storage.DagNode, agent_node_config.PerNodeInfo] = {}
         self._cached_version: int = -1
-        self._allows_step_mode_override: Optional[bool] = None
-        self._is_step_mode_override: Optional[bool] = None
 
     def initialize(self) -> None:
         self._sync_cache()
@@ -316,13 +348,11 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
 
     @property
     def allows_step_mode(self) -> bool:
-        if self._allows_step_mode_override is not None: return self._allows_step_mode_override
         self._sync_cache(); infos = self._active_per_node_infos()
         return infos[0].allows_step_mode if len(infos) == 1 else (True if not infos else False)
 
     @property
     def is_step_mode(self) -> bool:
-        if self._is_step_mode_override is not None: return self._is_step_mode_override
         self._sync_cache(); infos = self._active_per_node_infos()
         if len(infos) != 1: return False
         m_cfg = _safe_get_singleton(agent_config.AgentConfig)
@@ -371,21 +401,6 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     def feedback(self) -> Sequence[agent_node_config.NodeFeedback]:
         self._sync_cache(); return tuple(fb for pni in self._active_per_node_infos() for fb in pni.feedback)
 
-    @property
-    def blame_targets(self) -> Mapping[agent_file_alias.ReadWriteFile, agent_file_alias.ReadOnlyFile]:
-        self._sync_cache(); res = {}
-        for pni in self._active_per_node_infos():
-            ro = [bt for bt in pni.blame_targets if isinstance(bt, agent_file_alias.ReadOnlyFile)]
-            if ro:
-                for rw in pni.read_write_files: res[rw] = ro[0]
-        return res
-
-    @property
-    def messages(self) -> Mapping[agent_file_alias.ReadWriteFile, Sequence[dag_storage.DagMessage]]:
-        self._sync_cache(); storage = _safe_get_singleton(dag_storage.DagStorage)
-        if not storage: return {}
-        return {rw: tuple(storage.get_messages(n)) for n, pni in self._per_node_cache.items() for rw in pni.read_write_files}
-
 
 _EXECROOT_PATTERN: re.Pattern[str] = re.compile(
     r"/(?:[^\s:;\"\'`()<>{}\[\]/]+/)*execroot/[^\s:;\"\'`()<>{}\[\]/]+/"
@@ -406,7 +421,9 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         self._cached_version: Optional[int] = None
         fp_mgr = _safe_get_singleton(file_paths.FilePathManager)
         root = fp_mgr.get_workspace_root().path if fp_mgr and hasattr(fp_mgr, "get_workspace_root") else (os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd())
-        self._workspace_root: file_paths.WorkspaceRoot = _make_host_path(file_paths.WorkspaceRoot, os.path.normpath(str(root)))
+        self._workspace_root: file_paths.WorkspaceRoot = file_paths.WorkspaceRoot(
+            path=file_paths.PathString(os.path.normpath(str(root)))
+        )
 
     def initialize(self) -> None:
         self._sync_cache()
@@ -439,8 +456,6 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         matches = self._short_name_to_aliases.get(s)
         return matches[0] if matches and len(matches) == 1 else agent_file_alias.UnboundFile(relative_path=agent_file_alias.RelativePath(s))
 
-    def to_file_alias(self, wire_path: str) -> agent_file_alias.FileAlias: return self.convert(wire_path)
-
     def sanitize_text(self, text: agent_file_alias.UnsanitizedText) -> agent_file_alias.SanitizedText:
         self._sync_cache(); res = str(text)
         for pat, rel in self._masking_patterns: res = pat.sub(rel, res)
@@ -456,7 +471,21 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
     def workspace_root(self) -> file_paths.WorkspaceRoot: return self._workspace_root
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(NodeConfig, keys=[NodeConfig, agent_node_config.NodeConfig], tier=agent_session)
-    reg.register_singleton(AliasManager, keys=[AliasManager, agent_file_alias.AliasManager, tool_provider.ParameterType], tier=agent_session)
+    reg.register_singleton(
+        NodeConfig,
+        keys=[NodeConfig, agent_node_config.NodeConfig],
+        tier=agent_session,
+    )
+    reg.register_singleton(
+        AliasManager,
+        keys=[AliasManager, agent_file_alias.AliasManager, tool_provider.ParameterType[agent_file_alias.FileAlias, str]],
+        tier=agent_session,
+    )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

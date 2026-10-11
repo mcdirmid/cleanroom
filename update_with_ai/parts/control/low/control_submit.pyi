@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-09T22:20:00Z
-# CHANGE: Record change summary during clean status transition without appending dirty change message
-# CODE_HASH: e6f3f1a11088
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:55:49Z
+# CHANGE: Reject producer file targets outside directory scope
+# CODE_HASH: 373a2e9c9afc
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_submit."""
@@ -68,6 +68,7 @@ class SubmissionCoordinator(InTier[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - When auditor role attempts to submit a verification or test file, MUST reject submission.
         - When producer role attempts to submit a read-only target, MUST reject submission.
+        - When producer role attempts to submit a file target outside the directory scope, MUST reject submission.
         - When target is modified and change summary is omitted, MUST reject submission.
         - When target is unmodified and change summary is supplied, MUST reject submission.
         - When accepted, MUST update in-band metadata directly in main repository and reflect to workspace.

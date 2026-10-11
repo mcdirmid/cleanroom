@@ -1,13 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-06T00:52:26Z
 CHANGE: import commonmark_ext and declare delegated token patterns
-CODE_HASH: 10149d0058df
+CODE_HASH: d3b3c391fcba
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # template_format interface component
 
-imports: agent_session, commonmark_ext
+imports: agent_session
 
 ## Purpose
 
@@ -17,7 +18,7 @@ Multi-stage agent pairing requires readable template files that survive Abstract
 
 **Out of scope:** The template_format interface component does not parse JSON manifests, read files from disk, or manage agent session lifecycles; these are handled by other components.
 
-**Delegated:** The template_format interface component delegates Markdown token conventions, comment directives, and parameter placeholder patterns to commonmark_ext.
+**Delegated:** Session lifecycle scoping is delegated to agent_session.
 
 ## Types and Behavior
 

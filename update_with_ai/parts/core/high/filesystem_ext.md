@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-05T04:26:30Z
 CHANGE: new file
-CODE_HASH: a65380e350b1
+CODE_HASH: 70e774a45a8b
 -->
 
 # filesystem_ext external component
@@ -21,8 +21,8 @@ The filesystem_ext component provides the external domain knowledge and native o
 
 Grounding gaps covered include:
 
-- Host filesystem reading and writing: Reads UTF-8 encoded text content from host filesystem paths, writes updated file content to designated host paths, automatically creates missing parent directory structures when writing files, and translates operating system file errors into structured failure outcomes.
+- Host filesystem reading and writing: Reads UTF-8 encoded text content from host filesystem paths, writes updated file content to designated host paths, creates missing parent directory structures when writing files, and reports operating system file errors as structured failure outcomes.
 
 - File existence and path inspection: Checks whether files and directories exist at physical host paths, distinguishes regular files from directories, and queries filesystem metadata across operating system platforms.
 
-- Regular expression pattern matching: Recursively traverses directory paths, scans file lines against compiled regular expression patterns, collects matching line numbers and line contents, and handles regular expression compilation errors.
+- Regular expression pattern matching: Recursively traverses directory paths, scans file lines against compiled regular expression patterns, collects matching line numbers and line contents, and reports regular expression compilation errors.

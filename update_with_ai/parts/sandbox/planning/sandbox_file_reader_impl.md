@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 2dae2e447223
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T03:10:58Z
+CHANGE: Remove the contradicted search tool omission statement
+CODE_HASH: 7c2614cc4dfb
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # sandbox_file_reader_impl implementation component
-
-imports: agent_session, filesystem_ext, tool_provider, agent_file_alias, agent_node_config, template_format, sandbox_file_editor, file_paths
-implements: sandbox_file_reader
 
 ## Intent
 
@@ -24,7 +21,6 @@ By formatting lines with right-aligned line numbers, filtering metadata paragrap
 - The view file tool is named `view_file`. [view_file_name]
 - The view file tool is installed for the agent session. [view_file_installed]
 - The search tool is named `search_files`. [search_files_name]
-- The search tool is omitted from installation. [search_files_omitted]
 - The regex pattern parameter type converts a wire type string into a regex pattern. [convert_regex_pattern]
 - Reading file content formats lines with one-indexed right-aligned line numbers followed by a colon and space. [format_numbered_lines]
 - Template evaluation filters out paragraphs beginning with `> META:` in read-only markdown files. [filter_meta_paragraphs]
@@ -43,7 +39,6 @@ By formatting lines with right-aligned line numbers, filtering metadata paragrap
 ### Woven Contracts
 
 - The view_file tool is installed for the agent session to provide structured file access. [view_file_name, view_file_installed, tool_provider: [install_tools]]
-- Search tool search_files is defined but omitted from installation across all session modes. [search_files_name, search_files_omitted]
 - Read file content formats lines with one-indexed right-aligned line numbers, filters metadata paragraphs, and renders markdown templates for read-only files. [format_numbered_lines, filter_meta_paragraphs, render_markdown_templates, template_format: [format_template_text, substitute_bound_placeholders]]
 - Responses for read-write files carry suppression keys to supersede earlier turns, while read-only responses omit suppression keys and sanitize host paths. [rw_response_suppression_key, ro_response_omit_suppression_key, ro_response_sanitize_paths, tool_provider: [supersede_by_key], agent_file_alias: [sanitize_mask_ws_paths, sanitize_mask_preceding_prefixes]]
 - When reading a missing read-write file, empty content is returned, whereas a missing read-only file fails with recovery guidance. [read_missing_rw_empty, missing_ro_file_fails, tool_provider: [call_improper_fails, failed_call_feedback]]

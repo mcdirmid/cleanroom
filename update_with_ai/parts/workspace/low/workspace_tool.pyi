@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-08T15:45:00Z
-# CHANGE: add template regeneration to run_check_files postconditions
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T16:00:00Z
+# CHANGE: add verification check failure postcondition and no_verify parameter to run_submit
 # CODE_HASH: c5b1f3646193
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_tool."""
@@ -53,10 +53,12 @@ class WorkspaceToolRunner(InTier[AgentSessionTier], Protocol):
         target: str,
         summary: Optional[str] = None,
         repo_root: Optional[str] = None,
+        no_verify: bool = False,
     ) -> int:
         """Verifies and submits target to canonical main repository.
 
         POSTCONDITIONS:
+        - WHEN verification checks fail and no_verify is False, MUST reject submission and return non-zero exit code.
         - WHEN submission is accepted, MUST append submission message to .cleanroom.log in directory containing parts.
         - WHEN submission is accepted, MUST clear target from pending work.
         """

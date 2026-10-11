@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
 # LAST_CHANGED: 2026-10-09T02:23:45Z
 # CHANGE: Implement Sandbox in sandbox_impl.py
-# CODE_HASH: a9863ff8ddee
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# CODE_HASH: b15ef226ec2b
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 from typing import Optional
@@ -27,7 +27,9 @@ class Sandbox(sandbox.Sandbox, InTier[AgentSessionTier], Singleton):
         return edit_mgr.has_modifications
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         Sandbox,
@@ -35,4 +37,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier=agent_session,
     )
 
+
 _initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

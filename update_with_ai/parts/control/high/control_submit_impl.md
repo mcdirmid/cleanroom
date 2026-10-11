@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-09T22:20:00Z
 CHANGE: Record change summary during clean status transition without appending dirty change message
-CODE_HASH: b2dd759fc96f
+CODE_HASH: 3f376f45cb7a
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_submit_impl implementation component
@@ -22,26 +23,26 @@ Enforcing submission integrity prevents corrupting the dependency graph with bro
 
 ## Types and Behavior
 
-The submission coordinator implements submission coordination for the session.
+The submission coordinator implements submission coordination for an agent session.
 
 When submitting a target:
 
 - The submission coordinator checks whether verification for the target node is passing, rejecting the submission with an explanatory error message when verification has failed or has not run.
 
-- The submission coordinator checks each in-batch dependency of the target, rejecting the submission if any dependency remains unsubmitted or dirty.
+- The submission coordinator checks each in-batch dependency of the target, rejecting the submission when any dependency remains unsubmitted or dirty.
 
-- When resolving a target whose role configuration marks it as an auditor role, the submission coordinator rejects submissions that supply a non-empty change summary, reminding the caller that auditor roles must not submit change summaries.
+- The submission coordinator rejects a non-empty change summary when the role configuration marks the resolved target as an auditor role, reminding the caller that auditor roles must not submit change summaries.
 
-- When workspace files were modified, the submission coordinator requires a non-empty change summary, rejecting submissions with an empty summary.
+- The submission coordinator requires a non-empty change summary when workspace files were modified, rejecting submissions with an empty summary.
 
-- When workspace files were not modified and the target is not an auditor role, the submission coordinator forbids non-empty change summaries, rejecting submissions that attempt to document changes when no modifications occurred.
+- The submission coordinator forbids a non-empty change summary when workspace files were unmodified and the target is not an auditor role, rejecting submissions that document changes when no modification occurred.
 
-- When all preconditions and change summary rules are satisfied, the submission coordinator marks the target node status as clean in graph storage with the change summary and returns an accepted submission outcome.
+- The submission coordinator marks the target node status as clean in graph storage with the change summary and returns an accepted submission outcome once every precondition and change summary rule is satisfied.
 
 When submitting a file target:
 
 - The submission coordinator resolves the target file path and unit name against the local workspace and canonical repository roots.
 
-- When submitting in an auditor role, the submission coordinator rejects test files, resolves audited implementation and companion test files, stamps in-band audit tags directly in the canonical repository, constructs an audit outcome message formatted with the audit tag, and synchronizes updated files back to the role workspace.
+- The submission coordinator submits an auditor role by rejecting test files, resolving the audited implementation and companion test files, stamping in-band audit tags directly in the canonical repository, constructing an audit outcome message formatted with the audit tag, and synchronizing the updated files back to the role workspace.
 
-- When submitting in a producer role, the submission coordinator verifies write permissions and active directory scope patterns, validates that a change summary was provided if and only if code was modified, updates in-band change metadata directly in the canonical repository, constructs an outcome message formatted with a change summary or clean status, and synchronizes updated files back to the role workspace.
+- The submission coordinator submits a producer role by verifying write permissions and active directory scope patterns, requiring a change summary exactly when code was modified, updating in-band change metadata directly in the canonical repository, constructing an outcome message formatted with a change summary or clean status, and synchronizing the updated files back to the role workspace.

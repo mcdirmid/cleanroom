@@ -27,13 +27,13 @@ In the previous subagent integration attempt (**Option 2**), Cleanroom attempted
 To solve these challenges, Cleanroom established **Option 3: Subagentless Cleanroom Workspaces** ([`subagentless_cleanroom_workspaces.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)), which moved isolation from the software runtime to the operating system filesystem:
 - Role workspaces live in isolated sibling directories (`../role_workspaces/<ws>_<role>_<dir>/`).
 - Implementers physically have no `tests/` directory; test authors physically have no real `lib/*.py` (replaced with `chmod 444` interface stubs containing `raise NotImplementedError`).
-- In-band source metadata headers (`LAST_CLEANED`, `LAST_CHANGED`, `FEEDBACK:`) and direct Bazel targets (`_submit`, `_blame`, `_fail`) eliminate synchronization daemons and buffer files.
+- In-band source metadata headers (`LAST_CLEANED`, `LAST_CHANGED`, `FEEDBACK:`) and direct Python CLI mutations (`bin/submit`, `bin/blame`, `bin/fail`) eliminate synchronization daemons and buffer files.
 - Role sessions run `bin/get_work`, edit files with native editor tools, and call `bin/submit`.
 
 While Option 3 succeeded brilliantly for interactive, human-driven pair programming, it required a developer to manually switch between IDE chat tabs to prompt each role when upstream work was ready.
 
 **The Subagent-Driven Cleanroom Workspaces Architecture** closes this loop:
-1. **Zero-Execution Coordinator**: A central coordinator that **never** reads code, edits files, runs tests, or executes Bazel builds. Its sole responsibility is inspecting the global directed acyclic graph (DAG) work queue and waking up the subagent bound to an active role workspace when work is available.
+1. **Zero-Execution Coordinator**: A central coordinator that **never** reads code, edits files, or runs tests. Its sole responsibility is inspecting the global directed acyclic graph (DAG) work queue and waking up the subagent bound to an active role workspace when work is available.
 2. **Workspace-Bound Subagents**: Subagents are persistently bound to their respective role workspace directories (`cwd = ../role_workspaces/<ws>_<role>_<dir>`). They possess standard native tools (read file, edit file, shell command) and **zero custom MCP or framework tools**.
 3. **Self-Synchronizing In-Band Protocol**: Subagents communicate through existing workspace tools (`bin/get_work`, `bin/submit`, `bin/blame`, `bin/fail`). The subagent drains its role queue autonomously and sends a lean completion status back to the coordinator.
 4. **Multi-Harness Flexibility**: The architecture runs identically across **Google Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose**, breaking vendor lock-in and slashing token costs via **DeepSeek-V4 Flash**.
@@ -42,13 +42,13 @@ While Option 3 succeeded brilliantly for interactive, human-driven pair programm
 flowchart TD
     subgraph CanonicalRepo ["Canonical Main Workspace (/projects/<workspace_name>)"]
         MainFiles["Canonical Source Files & Contracts\n(high/, planning/, low/, grounding/, lib/, tests/)"]
-        BuildGraph["Bazel Build Graph & DAG State Engine\n(MODULE.bazel, update_with_ai.bzl, src_metadata.py)"]
+        BuildGraph["Cleanroom Workspace & DAG State Engine\n(parts/workspace, parts/control, src_metadata.py)"]
         CleanroomCLI["bin/cleanroom CLI\n(commission, decommission, dirty, work-queue)"]
     end
 
     subgraph CoordinatorTier ["Coordinator Layer (Zero Execution)"]
         CoordAgent["Cleanroom Coordinator Agent\n(Antigravity / DeepSeek Harness / Goose)"]
-        CoordQueue["Evaluates Global DAG Work Queue\n(No file edits, no test runs, no Bazel builds)"]
+        CoordQueue["Evaluates Global DAG Work Queue\n(No file edits, no test runs)"]
         CoordAgent --> CoordQueue
     end
 
@@ -81,9 +81,9 @@ flowchart TD
     TestSubagent -->|"2. Run bin/get_work -> Edit -> bin/submit"| TestTools
     QASubagent -->|"5. Run bin/get_work -> Audit -> bin/submit"| QATools
 
-    LibTools ==>|"Direct Bazel Mutation (bazel run //pkg:lib_submit)"| MainFiles
-    TestTools ==>|"Direct Bazel Mutation (bazel run //pkg:test_submit)"| MainFiles
-    QATools ==>|"Direct Bazel Mutation (bazel run //pkg:qa_submit)"| MainFiles
+    LibTools ==>|"Direct Python Mutation (bin/submit)"| MainFiles
+    TestTools ==>|"Direct Python Mutation (bin/submit)"| MainFiles
+    QATools ==>|"Direct Python Mutation (bin/submit)"| MainFiles
 
     LibSubagent -.->|"3. Done: {submitted: [foo]}"| CoordAgent
     TestSubagent -.->|"3. Done: {submitted: [foo_test]}"| CoordAgent
@@ -115,8 +115,8 @@ In traditional multi-agent systems, the supervisor agent frequently becomes a bo
 
 In this architecture, the Coordinator is strictly **zero-execution**:
 1. **No Code Custody**: The coordinator never opens, reads, or edits a source file (`lib/`, `tests/`, `low/`, etc.).
-2. **No Build/Test Execution**: The coordinator never runs `bazel test`, `pyright`, or test runners.
-3. **Queue Evaluation Only**: The coordinator evaluates the repository DAG state by invoking `cleanroom_workspace_tool` (or reading `bin/cleanroom work-queue <role>`).
+2. **No Build/Test Execution**: The coordinator never runs `pytest`, `pyright`, or test runners.
+3. **Queue Evaluation Only**: The coordinator evaluates the repository DAG state by invoking `parts/workspace` (or reading `bin/cleanroom work-queue <role>`).
 4. **Reactive Wakeup & Sleep**:
    - The coordinator identifies all roles with topologically unblocked, ready work.
    - It issues an asynchronous notification message to the subagents bound to those roles:
@@ -139,7 +139,7 @@ Subagents are not ephemeral workers dispatched arbitrarily into the repository; 
 Because the workspace is physically isolated at the filesystem level:
 - In `LibSubagent`'s workspace, `tests/` does not exist. There is no software filter to bypass; test files are physically absent.
 - In `TestSubagent`'s workspace, `lib/*.py` files are read-only (`chmod 444`) interface stubs containing `raise NotImplementedError`. The test author cannot cheat or overfit to real implementation code.
-- Upstream specifications (`high/*.md`, `planning/*.md`, `low/*.pyi`, `grounding/*.py`) and build manifests (`BUILD.bazel`) are set to `chmod 444`. Any unauthorized modification is rejected directly by the OS kernel with `Permission denied`.
+- Upstream specifications (`high/*.md`, `planning/*.md`, `low/*.pyi`, `grounding/*.py`) and configs are set to `chmod 444`. Any unauthorized modification is rejected directly by the OS kernel with `Permission denied`.
 
 ### 3.3 The Autonomous Subagent Turn Loop
 When woken by the coordinator, the workspace-bound subagent executes its standardized Cleanroom turn sequence:
@@ -151,7 +151,7 @@ sequenceDiagram
     actor Subagent as Role Subagent (Lib/Test/QA)
     participant WS as Role Workspace (Physical OS)
     participant Main as Canonical Main Repo
-    participant Bazel as Hermetic Bazel Engine
+    participant Control as Control Engine (parts/control)
 
     Coord->>Subagent: Wakeup: "Ready work available"
     activate Subagent
@@ -165,18 +165,18 @@ sequenceDiagram
     loop Drain Ready Units
         Note over Subagent,WS: Read companion guide, inspect contract, edit code
         Subagent->>WS: Native file edit (replace_file_content / write_to_file)
-        Subagent->>WS: Run local verification (pyright lib/ or bazel test :unit_test)
+        Subagent->>WS: Run local verification (pyright lib/ or uv run pytest)
         
         alt Verification Succeeded
             Subagent->>WS: bin/submit staging/parts/pkg/lib/unit_a.py "Implement unit_a"
             WS->>Main: Copy modified file to main
-            WS->>Bazel: bazel run //pkg:unit_a_lib_submit -- "Implement unit_a"
-            Bazel-->>WS: 0 (Success: stamped LAST_CLEANED, cleared FEEDBACK)
+            WS->>Control: Submit via control_submit_impl.py -- "Implement unit_a"
+            Control-->>WS: 0 (Success: stamped LAST_CLEANED, cleared FEEDBACK)
             WS-->>Subagent: ✔ Submitted unit_a.py
         else Upstream Contract Defect Found
             Subagent->>WS: bin/blame staging/parts/pkg/low/unit_a.pyi "Missing parameter 'ctx'"
-            WS->>Bazel: bazel run //pkg:unit_a_blame -- "Missing parameter 'ctx'"
-            Bazel-->>WS: 0 (Success: injected FEEDBACK, advanced LAST_CLEANED)
+            WS->>Control: Blame via control_attribution_impl.py -- "Missing parameter 'ctx'"
+            Control-->>WS: 0 (Success: injected FEEDBACK, advanced LAST_CLEANED)
             WS-->>Subagent: ✔ Blamed unit_a.pyi (marked upstream dirty)
         end
 
@@ -210,8 +210,8 @@ To avoid maintaining separate orchestration engines for each agent framework, Cl
 ```mermaid
 flowchart TD
     subgraph CommonCore ["100% Shared Canonical Cleanroom Core"]
-        CoordEngine["CleanroomCoordinatorEngine (update_with_ai/support/lib/)\n• Evaluates repository DAG via cleanroom_workspace_tool\n• Computes topological execution waves\n• Manages role state machine & blame feedback routing"]
-        RoleBinaries["Universal In-Band Binaries (bin/*)\n• bin/get_work (self-syncing pull & DAG queue)\n• bin/submit (direct Bazel mutation targets)\n• bin/blame (direct feedback injection)\n• bin/fail (failure diagnostic stamping)"]
+        CoordEngine["CleanroomCoordinatorEngine\n• Evaluates repository DAG via parts/workspace\n• Computes topological execution waves\n• Manages role state machine & blame feedback routing"]
+        RoleBinaries["Universal In-Band Binaries (bin/*)\n• bin/get_work (self-syncing pull & DAG queue)\n• bin/submit (direct Python CLI mutations)\n• bin/blame (direct feedback injection)\n• bin/fail (failure diagnostic stamping)"]
         GuidesAndSpecs["Universal Contract Guides & Prompts\n• low_to_lib.md, low_to_test.md, qa.md\n• Canonical AGENTS.md constraints & templates"]
         TelemetryEngine["Universal Telemetry & Cost Engine\n• TokenUsage normalizer (input, output, cached)\n• Standardized multi-model pricing registry"]
     end
@@ -248,7 +248,7 @@ flowchart TD
 #### What is 100% Common Across All Platforms:
 1. **The Core Orchestrator Engine (`CleanroomCoordinatorEngine`)**:
    - Pure Python, zero external framework dependencies.
-   - Evaluates the global build graph (`cleanroom_workspace_tool.py`), computes ready/blocked roles, groups parallel execution waves (e.g. `lib` and `test` running simultaneously), and updates in-band DAG state.
+   - Evaluates the global DAG via `parts/workspace` (`workspace_work_impl.py`), computes ready/blocked roles, groups parallel execution waves (e.g. `lib` and `test` running simultaneously), and updates in-band DAG state.
 2. **The Universal In-Band Role Binaries (`bin/*`)**:
    - `bin/get_work`, `bin/submit`, `bin/blame`, `bin/fail` are compiled as self-contained executable zipapps or shell scripts.
    - Any agent harness that can execute terminal shell commands or edit files calls these tools identically.
@@ -535,7 +535,7 @@ goose run --session cleanroom-lib -t "Work is available in scope 'staging'. Run 
 
 ### 4.5 Phase 2 Future Harnesses: Anthropic Claude Code & OpenAI Codex
 
-Because Cleanroom decouples orchestration via the `CleanroomHarnessAdapter` interface and relies strictly on physical OS workspace confinement, adding new agent backends requires **zero changes** to Cleanroom's core build graph, Bazel rules, or role tools.
+Because Cleanroom decouples orchestration via the `CleanroomHarnessAdapter` interface and relies strictly on physical OS workspace confinement, adding new agent backends requires **zero changes** to Cleanroom's core build graph, role definitions, or tools.
 
 #### 1. Anthropic Claude Code (`ClaudeCodeAdapter`)
 **Claude Code** is Anthropic's agentic CLI tool. It operates natively in a target directory with access to file viewing, file editing, and bash execution:
@@ -696,7 +696,6 @@ flowchart TD
         subgraph LibContainer ["Role Workspace: ../role_workspaces/cleanroom_lib_staging/"]
             LibSrc["lib/*.py (rw-r--r--)"]
             LibSpec["low/*.pyi & grounding/*.py (r--r--r-- chmod 444)"]
-            LibBuild["BUILD.bazel (r--r--r-- chmod 444)"]
             LibMissing["tests/ DIRECTORY DOES NOT EXIST!"]
         end
 
@@ -718,7 +717,7 @@ flowchart TD
 ```
 
 ### 6.1 Kernel-Enforced Immutability (`chmod 444`)
-- All contract files (`low/*.pyi`, `grounding/*.py`, `high/*.md`, `planning/*.md`), guides, and build files (`BUILD.bazel`) are set to read-only mode (`chmod 444`) when copied into the role workspace.
+- All contract files (`low/*.pyi`, `high/*.md`, `planning/*.md`) and guides are set to read-only mode (`chmod 444`) when copied into the role workspace.
 - Any attempt by an LLM tool (`write_to_file`, `replace_file_content`) or shell redirection (`>`) to alter an upstream specification triggers an immediate OS-level `Permission denied` error.
 - The `AGENTS.md` instruction file explicitly forbids running `chmod` or changing file permissions.
 - Inbound pull routines verify the SHA-256 hashes of read-only files before each turn, terminating immediately if unauthorized tampering is detected.
@@ -726,7 +725,7 @@ flowchart TD
 ### 6.2 Structural Non-Existence
 - Rather than policing access to unauthorized files, Cleanroom ensures they do not exist:
   - **In Lib Workspaces**: The `tests/` directory is never created.
-  - **In Test Workspaces**: Real implementation files (`lib/*.py`) are never copied. Instead, `cleanroom_workspace_tool.py` generates typed interface stubs where all method bodies contain `raise NotImplementedError("Cleanroom Test Stub")`.
+  - **In Test Workspaces**: Real implementation files (`lib/*.py`) are never copied. Instead, `parts/workspace` (`workspace_provision_impl.py`) generates typed interface stubs where all method bodies contain `raise NotImplementedError("Cleanroom Test Stub")`.
 
 ### 6.3 Pathless Workspace Descriptors
 Role workspaces store no absolute host paths:
@@ -758,7 +757,7 @@ The Coordinator implements dependency-first topological scheduling:
 ### 7.2 Blame & Defect Routing
 When a downstream role identifies a specification ambiguity or contradiction:
 1. The role agent executes `bin/blame <culprit_file> "<critique>"`.
-2. The Bazel `_blame` target directly injects the critique into the culprit file's `FEEDBACK:` header in canonical main and advances its `LAST_CLEANED` timestamp.
+2. The attribution engine directly injects the critique into the culprit file's `FEEDBACK:` header in canonical main and advances its `LAST_CLEANED` timestamp.
 3. The culprit file is immediately marked **dirty** in the global DAG.
 4. The role agent reports `blamed` in its completion message to the Coordinator.
 5. The Coordinator detects that an upstream role has become dirty, suspends execution of dependent roles, and re-wakes the upstream role subagent to address the feedback.
@@ -793,13 +792,13 @@ The implementation of Subagent-Driven Cleanroom Workspaces proceeds across four 
 ### Phase 0: Workspace & Packaging Decoupling (COMPLETED)
 - **[COMPLETED] 100% Native Python / uv Runtime**: Cleanroom workspace lifecycle, role provisioning, and in-band synchronization (`parts/workspace`) operate purely via native Python and `uv`.
 - **[COMPLETED] Scaffolding vs. Verification Decoupling**: Missing files are safely scaffolded via `get_work --scaffold` from upstream `low/*.pyi` stubs; `check_files` strictly fails on missing or incomplete source code.
-- **[COMPLETED] Dual-Toolchain Verification & Pyright Clean**: Passed 203/203 Bazel tests, 357/358 Pytest tests, and 0 Pyright errors across all packages.
+- **[COMPLETED] Native Python / uv Verification & Pyright Clean**: Passed 354 Pytest tests with 0 Pyright errors across all packages.
 - **[COMPLETED] Zero Hardcoded Paths**: Dynamic upward hierarchical search (`cleanroom.toml` and package namespace detection) enables isolated workspaces anywhere on the filesystem.
-- **[COMPLETED] Pre-Bazel Deletion Ready**: Sibling role workspaces (`../role_workspaces/<ws>_<role>_<dir>/`) are fully decoupled from Bazel manifests and ready for direct subagent binding.
+- **[COMPLETED] Pure-uv Architecture Operational**: Sibling role workspaces (`../role_workspaces/<ws>_<role>_<dir>/`) are fully decoupled from Bazel manifests and ready for direct subagent binding.
 
 ### Phase 1: Shared Canonical Core & Telemetry Engine
 - **`CleanroomCoordinatorEngine`** (`update_with_ai/support/lib/cleanroom_coordinator_engine.py`):
-  - Headless, zero-execution DAG queue evaluator built on `cleanroom_workspace_tool.py`.
+  - Headless, zero-execution DAG queue evaluator built on `parts/workspace` (`workspace_work_impl.py`).
   - Exposes `CleanroomHarnessAdapter` abstract base class.
 - **`CleanroomTelemetry`** (`update_with_ai/support/lib/cleanroom_telemetry.py`):
   - Normalizes token telemetry (`input_tokens`, `output_tokens`, `cached_tokens`) across all harnesses.

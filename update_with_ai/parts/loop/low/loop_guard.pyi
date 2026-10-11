@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 0e314b906130
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:19:48Z
+# CHANGE: Align loop guard evaluation contracts and repetition tracking orphan
+# CODE_HASH: 13ddfd954622
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Loop guard low-level interface specification."""
@@ -43,7 +43,7 @@ class LoopFailure:
 
 @singleton_type("agent_session")
 class LoopGuard(InTier[AgentSessionTier], Protocol):
-    """Session service tracking repetitive tool executions and edit oscillations."""
+    """Session service tracking repetitive tool executions and edit oscillations across turns."""
 
     @operation
     def evaluate(
@@ -61,7 +61,8 @@ class LoopGuard(InTier[AgentSessionTier], Protocol):
             Optional loop reminder or loop failure.
 
         POSTCONDITIONS:
-        - MUST evaluate consecutive executions of identical tools and file edits.
+        - MUST evaluate consecutive executions of identical tools.
+        - MUST evaluate consecutive edits to the same file location.
         - WHEN consecutive repetitions reach the warning threshold, MUST produce a loop reminder.
         - WHEN consecutive repetitions reach the fatal threshold, MUST produce a loop failure communicating session termination.
         """
@@ -72,6 +73,15 @@ class LoopGuard(InTier[AgentSessionTier], Protocol):
         """Clears repetition tracking when a tool execution demonstrates forward progress.
 
         POSTCONDITIONS:
-        - MUST clear repetition tracking when a tool execution demonstrates forward progress.
+        - MUST clear repetition tracking.
         """
         ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for the loop guard.
+
+    POSTCONDITIONS:
+    - MUST track repetitive execution patterns across turns for an agent session.
+    """
+    ...

@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: a776ba85228c
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 85f641bea3ab
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_asm assembly component
-
-imports: file_paths_impl, uv_manifest_loader_impl, uv_node_config_impl, uv_target_impl
 
 ## Intent
 

@@ -1,19 +1,16 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: f89cbd993393
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:16:17Z
+CHANGE: Add interaction turn coordination typing and correct intent phrasing
+CODE_HASH: 6c9e84dec62e
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # openai_driver_impl implementation component
 
-imports: agent_config, json_ext, loop_conversation, loop_guard, openai_config, openai_ext, runner_logger, tool_provider
-implements: loop_driver
-
 ## Intent
 
-Executes robust model loops requires managing protocol-level token limits, handling tool failures gracefully, and binding runtime parameters to API completion endpoints. The openai_driver_impl implementation component constructs completion requests using configuration parameters from openai config and agent config, dispatches model-invoked tool executions through the tool manager, injects recovery guidance on failures, and resumes truncated completions.
+Executing robust model loops requires managing protocol-level token limits, handling tool failures gracefully, and binding runtime parameters to API completion endpoints. The openai_driver_impl implementation component constructs completion requests using configuration parameters from openai config and agent config, dispatches model-invoked tool executions through the tool manager, injects recovery guidance on failures, and resumes truncated completions.
 
 By repairing incomplete code edits using indented sentinel exceptions, supporting follow-up tool chains with prior-thought reasoning, and streaming audit summaries to runner loggers, the driver maintains resilient autonomous problem-solving loops.
 
@@ -21,6 +18,7 @@ By repairing incomplete code edits using indented sentinel exceptions, supportin
 
 ### Contracts
 
+- The loop driver coordinates interaction turns using the session conversation, installed tools, the loop guard, the openai config, the agent config, and the runner logger. [coordinate_interaction_turns]
 - The loop driver transmits a completion request following OpenAI chat completion conventions. [transmit_openai_completion_request]
 - The loop driver binds model parameters from openai config. [bind_model_parameters]
 - The loop driver orders tools deterministically by tool name. [order_tools_by_name]

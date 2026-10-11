@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-09T22:20:00Z
 CHANGE: Record change summary during clean status transition without appending dirty change message
-CODE_HASH: 8248ae5a112c
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 4dd72b475fc6
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_submit interface component
-
-imports: agent_session, dag_storage, agent_node_config, control_verification, src_metadata
 
 ## Intent
 
@@ -40,7 +38,7 @@ Allowing untested code to enter the repository creates regressions. The submissi
 
 - When submitting a target node with passing verification, clean in-batch dependencies, and valid change summary, the coordinator marks the target clean with the change summary. [assert_verification_passed, assert_in_batch_dependencies_clean, mark_node_clean]
 - When submitting an auditor node, the coordinator rejects any submission containing a change summary. [forbid_summary_for_auditors]
-- When submitting a file target, the coordinator validates role permissions, enforces change summary consistency, executes submission mutations, and stamps in-band metadata. [reject_test_submission_for_auditors, reject_invalid_producer_file_submission, validate_file_change_summary, execute_file_submission_mutation, src_metadata: [source_metadata_service]]
+- When submitting a file target, the coordinator validates role permissions, enforces change summary consistency, executes submission mutations, and stamps in-band metadata. [reject_test_submission_for_auditors, reject_invalid_producer_file_submission, validate_file_change_summary, execute_file_submission_mutation]
 
 ## Grounding
 
@@ -58,5 +56,3 @@ Allowing untested code to enter the repository creates regressions. The submissi
   - Deferred: Queried from role configuration in implementation.
 - Mutation of target node status to clean and persistence of change summary in graph storage.
   - Deferred: Delegated to DagStorage in implementation.
-- Extraction and mutation of in-band source metadata.
-  - Grounded: [src_metadata: [source_metadata_service]]

@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-04T23:01:55Z
 CHANGE: new file
-CODE_HASH: 0dc4a99e521c
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 4cfa3e8c4898
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # sandbox_file_reader interface component
-
-imports: agent_session, agent_file_alias, tool_provider, file_paths
 
 ## Intent
 

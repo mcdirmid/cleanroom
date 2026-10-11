@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 8ccba856c177
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Split detection from threshold outcomes into declarative statements
+CODE_HASH: de33d286b482
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_guard interface component
@@ -23,12 +24,8 @@ A *loop reminder* is diagnostic *feedback* warning an agent of detected repetiti
 
 An agent session's *loop guard* tracks repetitive execution patterns across turns.
 
-The loop guard:
+The loop guard evaluates consecutive executions of identical tools and consecutive edits to the same file location.
 
-- Evaluates consecutive executions of identical tools and file edits.
+The loop guard produces a loop reminder when consecutive repetitions reach a warning threshold, and produces a loop failure communicating session termination when consecutive repetitions reach a fatal threshold.
 
-- Produces a loop reminder when consecutive repetitions reach a warning threshold.
-
-- Produces a loop failure communicating session termination when consecutive repetitions reach a fatal threshold.
-
-- Clears repetition tracking when a tool execution demonstrates forward progress.
+The loop guard clears repetition tracking when a tool execution demonstrates forward progress.

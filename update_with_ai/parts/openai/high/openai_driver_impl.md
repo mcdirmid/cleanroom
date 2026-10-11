@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-05T05:11:30Z
-CHANGE: Add delegated collaborator statement, decompose dense turn driving block, and replace code reference with literate prose
-CODE_HASH: e9ae51250ecc
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Split the repair and logging sentences and state guard and termination handling declaratively
+CODE_HASH: a573ab813aad
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # openai_driver_impl implementation component
@@ -30,25 +31,25 @@ When a model response is truncated at the generation limit, the loop driver reco
 
 When repairing a truncated invocation:
 
-- A replace file content invocation providing a target file, target content, and partial replacement content deletes any trailing incomplete line without a terminating newline, replacing it with a sentinel that raises a non implemented error carrying an incrementing session truncation identifier matching the indentation of the deleted line (or appending the sentinel on the next line matching the last line's indentation when the last line is complete), executes the tool to persist partial modifications, and returns an actionable notice directing the model to resume implementation targeting the sentinel.
+- A replace file content invocation providing a target file, target content, and partial replacement content deletes any trailing incomplete line without a terminating newline, replacing it with a sentinel that raises a non implemented error carrying an incrementing session truncation identifier matching the indentation of the deleted line, or appends the sentinel on the next line matching the last line's indentation when the last line is complete. The loop driver then executes the tool to persist the partial modifications and returns an actionable notice directing the model to resume implementation targeting the sentinel.
 
-- Any other tool invocation terminates by appending a tool failure response with the tool's suppression key, resuming generation with a continuation turn.
+- Any other tool invocation terminates by appending a tool failure response carrying the suppression key of the tool, then resuming generation with a continuation turn.
 
-When a model completion response fails with an incomplete tool call error, the loop driver appends an actionable recovery notice directing smaller edits and continues the turn loop, or halts with an unexpected failure when repeated consecutive truncation failures occur.
+When a model completion response fails with an incomplete tool call error, the loop driver appends an actionable recovery notice directing smaller edits and continues the turn loop, halting with an unexpected failure when consecutive truncation failures repeat.
 
-The loop driver logs log events for turn requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool call names and arguments or text response previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in the transcript when present.
+The loop driver logs an event to the runner logger for every turn request, completion, and tool result. Each event carries a compact summary containing the turn identifier, the conversation token size rounded to the nearest thousand tokens, the percentage of tokens cached on the last turn from the model response usage fields, the tool call names and arguments or text response previews, and the tool execution status naming the file read or written with its timestamp without inlining file content. Corrective reminders appear in the transcript when present.
 
 Evaluating a tool invocation with the loop guard:
 
-- Halts execution with an unexpected failure carrying the loop failure explanation if the loop guard produces a loop failure.
+- Halts execution with an unexpected failure carrying the loop failure explanation when the loop guard produces a loop failure.
 
-- Appends the reminder to the conversation and proceeds with execution if the loop guard produces a loop reminder.
+- Appends the reminder to the conversation and proceeds with execution when the loop guard produces a loop reminder.
 
-Productive tool executions that modify workspace files or advance the guide step clear repetition tracking in the loop guard.
+A productive tool execution that modifies a workspace file or advances a guide step clears repetition tracking in the loop guard.
 
 When tool execution produces a response indicating failure without terminating the run, the loop driver appends the failure feedback to the conversation and continues the turn loop. When tool execution produces a response indicating terminating failure, the loop driver halts execution with an unexpected failure carrying the failure explanation. When tool execution produces a response indicating successful session termination, the loop driver concludes the run and returns a successful loop outcome.
 
-When configured by agent configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
+When agent configuration requests follow-up injection, a tool response specifying a follow-up tool call prompts execution of that tool, appending a synthetic assistant invocation that carries the reasoning text of the follow-up tool call as preceding thought, followed by the resulting follow-up response immediately after the originating response.
 
 When a model response produces no tool executions, the loop driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
 

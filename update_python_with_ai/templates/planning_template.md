@@ -1,12 +1,5 @@
 # <name> <component_type> component
 
-<!-- if: has_imports -->
-imports: <imported_modules>
-<!-- endif -->
-<!-- if: needs_implements -->
-implements: <implemented_interfaces>
-<!-- endif -->
-
 ## Intent
 
 <TODO: continuous prose paragraphs explaining architectural rationale, UX motivations, and trade-offs.>

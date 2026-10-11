@@ -1,13 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-09T22:20:00Z
 CHANGE: Record change summary during clean status transition without appending dirty change message
-CODE_HASH: 0d9883b55b84
+CODE_HASH: 0433704faf59
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_submit interface component
 
-imports: agent_session, dag_storage, agent_node_config, control_verification, src_metadata
+imports: agent_session, dag_storage
 
 ## Purpose
 
@@ -17,13 +18,13 @@ Premature or undocumented task completion introduces regressions into software b
 
 **Out of scope:** The control_submit interface component does not edit file contents, interact with git remotes, or schedule subsequent turns; these are handled by other components.
 
-**Delegated:** Verification status checks are delegated to control_verification; in-band source metadata extraction and header updates are delegated to src_metadata; graph storage mutations are delegated to dag_storage.
+**Delegated:** Graph storage mutations are delegated to dag_storage; session lifecycle scoping is delegated to agent_session.
 
 ## Types and Behavior
 
 A *submission outcome* reports the resolution of a target submission, indicating whether the submission was *accepted*, and providing an outcome *message*.
 
-A session's *submission coordinator* validates and executes target submissions.
+An agent session's *submission coordinator* validates and executes target submissions.
 
 The submission coordinator:
 
@@ -35,4 +36,6 @@ The submission coordinator:
 
 - Resolves accepted targets by marking the target node status as clean in graph storage with the change summary.
 
-- Submits file targets in repository workspaces, validating auditor targets against test file submission prohibitions, validating producer targets against read-only permissions and directory scope patterns, requiring change summaries exclusively when source code was modified, and updating in-band audit tags and change metadata in canonical repositories.
+- Submits an auditor file target in a repository workspace by validating the target against test file submission prohibitions and updating in-band audit tags in the canonical repository.
+
+- Submits a producer file target in a repository workspace by validating the target against read-only permissions and directory scope patterns, requiring a change summary exactly when source code was modified, and updating in-band change metadata in the canonical repository.

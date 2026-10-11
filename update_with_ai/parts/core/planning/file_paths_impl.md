@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: d42f67f1b9b0
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:01:18Z
+CHANGE: Drop planning front-matter for the path implementation canvas
+CODE_HASH: b41c4b26046b
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # file_paths_impl implementation component
-
-imports: filesystem_ext
-implements: file_paths
 
 ## Intent
 

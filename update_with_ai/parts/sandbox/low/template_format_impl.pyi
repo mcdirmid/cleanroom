@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 6a53ab9e1bad
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:19:50Z
+# CHANGE: Ground directive scanning and align conditional, loop, and normalization contracts
+# CODE_HASH: 3428d6a7185d
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Template format implementation low-level specification."""
@@ -22,8 +22,11 @@ class TemplateFormatter(
     """Realizes Markdown document formatting using CommonMark comment directives.
 
     GROUNDING:
-    - Formats markdown templates by parsing comment directives via CommonMark and regex scanners,
-      resolving dot-separated parameter paths in bindings within the agent session tier.
+    - Implements the template_format.TemplateFormatter.format_template provisions by scanning
+      template text with the regular expression patterns and the HTML comment directive and
+      angle-bracket placeholder token structures declared by the commonmark_ext external boundary,
+      resolving dot-separated parameter paths in the supplied parameters mapping, and returning
+      normalized formatted text within the agent session tier.
     """
 
     @operation
@@ -41,13 +44,18 @@ class TemplateFormatter(
             The formatted text resulting from directive evaluation and normalization.
 
         POSTCONDITIONS:
-        - MUST resolve dot-separated parameter keys in supplied parameters.
-        - MUST evaluate line-suffix and block conditional comments, retaining or omitting content based on truthiness.
+        - MUST scan template text for angle-bracket parameter placeholders and HTML comment conditional and loop directives using the regular expression patterns and token structures declared by the commonmark_ext external boundary.
+        - MUST resolve dot-separated parameter keys against nested parameters mappings.
+        - MUST evaluate line-suffix and block conditional comments, retaining the preceding line or enclosed lines when the condition key is true or absent and omitting them when the condition key is false.
+        - MUST evaluate line-suffix and block loop directives, repeating the preceding line or enclosed lines for each element of the resolved sequence and binding the loop item variable in the parameter context during repetition.
         - MUST strip template comment markers from produced content.
-        - MUST evaluate loop directive comments repeating block content for each element in matched collections.
+        - MUST normalize extraneous blank lines introduced around block directive comments.
 
         GROUNDING:
-        - Parses text for conditional markers and loop blocks, resolves nested parameters,
-          expands repetitions, strips directive comments, and normalizes blank lines.
+        - Scans text with the regular expression patterns and token structures declared by the
+          commonmark_ext external boundary, traverses the parameters mapping along dot-separated
+          keys to resolve values, evaluates conditionals and loops against the parameter context
+          with loop item variables bound, strips directive comment markers, and collapses
+          extraneous blank lines around block directive comments.
         """
         ...

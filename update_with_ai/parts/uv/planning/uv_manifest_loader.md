@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: d4a7bcbcf08e
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 17d1ee3d255e
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_manifest_loader interface component
-
-imports: agent_storage, dag_storage, uv_target, agent_file_alias
 
 ## Intent
 

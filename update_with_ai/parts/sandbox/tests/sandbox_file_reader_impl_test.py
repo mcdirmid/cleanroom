@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-09T04:19:04Z
-# CHANGE: Fix MockFilePathManager.resolve_path and path creation to handle string workspace_root paths
-# CODE_HASH: 268c736feb48
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:48:53Z
+# CHANGE: Carry workspace_path as the contracted file_paths.WorkspacePath record, expose a WorkspaceRoot record, and drop the undeclared resolve_path alias attribute
+# CODE_HASH: 921458873efd
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_file_reader_impl per its grounding specification."""
@@ -40,24 +40,20 @@ from update_with_ai.parts.sandbox.lib.sandbox_file_reader_impl import (
 
 def _make_read_only_file(rel_path: str, host_path: Optional[str] = None) -> agent_file_alias.ReadOnlyFile:
     path = host_path if host_path is not None else rel_path
-    obj = agent_file_alias.ReadOnlyFile(
+    return agent_file_alias.ReadOnlyFile(
         relative_path=agent_file_alias.RelativePath(rel_path),
-        workspace_path=cast(Any, path),
+        workspace_path=file_paths.WorkspacePath(file_paths.PathString(path)),
         owning_node=cast(Any, None),
     )
-    object.__setattr__(obj, "resolve_path", lambda: path)
-    return obj
 
 
 def _make_read_write_file(rel_path: str, host_path: Optional[str] = None) -> agent_file_alias.ReadWriteFile:
     path = host_path if host_path is not None else rel_path
-    obj = agent_file_alias.ReadWriteFile(
+    return agent_file_alias.ReadWriteFile(
         relative_path=agent_file_alias.RelativePath(rel_path),
-        workspace_path=cast(Any, path),
+        workspace_path=file_paths.WorkspacePath(file_paths.PathString(path)),
         owning_node=cast(Any, None),
     )
-    object.__setattr__(obj, "resolve_path", lambda: path)
-    return obj
 
 
 class MockNodeConfig:
@@ -137,10 +133,12 @@ class MockAliasManager:
     tier = agent_session.agent_session
 
     def __init__(self, workspace_root: str = "/tmp/workspace") -> None:
-        self._workspace_root = workspace_root
+        self._workspace_root = file_paths.WorkspaceRoot(
+            file_paths.PathString(str(workspace_root))
+        )
 
     @property
-    def workspace_root(self) -> Any:
+    def workspace_root(self) -> file_paths.WorkspaceRoot:
         return self._workspace_root
 
     @property
@@ -158,8 +156,9 @@ class MockAliasManager:
         self, text: agent_file_alias.UnsanitizedText
     ) -> agent_file_alias.SanitizedText:
         s = str(text)
-        if self._workspace_root in s:
-            s = s.replace(self._workspace_root, "<sanitized_root>")
+        root = str(self._workspace_root.path)
+        if root in s:
+            s = s.replace(root, "<sanitized_root>")
         return agent_file_alias.SanitizedText(s)
 
 

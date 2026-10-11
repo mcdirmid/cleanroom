@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-08T15:45:00Z
-CHANGE: clarify check_files template regeneration for regenerable roles
-CODE_HASH: 0d7dcc1ed470
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T16:00:00Z
+CHANGE: gate submit on role verification checks and support verification bypass
+CODE_HASH: fed7fdd41c82
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # workspace_tool_impl implementation component
@@ -22,22 +23,22 @@ Command-line subagents in Cleanroom workspaces require a robust entrypoint that 
 
 ## Types and Behavior
 
-The workspace tool runner realization implements command execution, CLI argument parsing, and diagnostic formatting.
+The workspace tool runner realization implements command execution, command-line argument parsing, and diagnostic formatting.
+
+The realization parses command-line arguments across the work, check files, submit, blame, feedback, fail, coverage, commission, and refresh system subcommands.
 
 The realization:
 
-- Parses command-line arguments across get_work, check_files, submit, blame, feedback, fail, coverage, commission, and refresh-sys subcommands.
+- Pulls inbound changes from the canonical main workspace during work execution, verifies whether prior dirty targets remain pending in the role workspace, evaluates ready and blocked items from the work manager, records pending targets, and formats actionable next steps.
 
-- In get_work execution, pulls inbound changes from the canonical main workspace, verifies whether prior dirty targets remain pending in the role workspace, evaluates ready and blocked items from the work manager, records pending targets, and formats actionable next steps.
+- Resolves the active role and target files during check files execution, regenerates a missing target file from its starter template for roles that declare source patterns and upstream dependencies before verification, executes the corresponding static linting, type-checking, or test rules, formats clean diagnostic outcomes, and returns the verification exit status.
 
-- In check_files execution, resolves active role and target files, regenerates missing target files from starter templates for roles with declared source patterns and upstream dependencies before verification, executes corresponding static linting, type-checking, or test rules, formats clean diagnostic outcomes, and returns verification exit status.
+- Evaluates role verification checks on the target file during submit execution, rejecting submission when verification fails unless bypassed, delegates file validation and metadata stamping to the submission coordinator, reflects stamped files into the role workspace, appends submission records to the cleanroom log, and clears the target from pending work on success.
 
-- In submit execution, delegates file validation and metadata stamping to the submission coordinator, reflecting stamped files to the role workspace, appending submission records to the cleanroom log, and clearing the target from pending work on success.
+- Verifies single-paragraph critique constraints during blame and feedback execution, delegates attribution to the attribution coordinator, appends blame records to the cleanroom log, and clears the target from pending work on success.
 
-- In blame and feedback execution, verifies single-paragraph critique constraints, delegates attribution to the attribution coordinator, appends blame records to the cleanroom log, and clears the target from pending work on success.
+- Delegates failure tagging and diagnostic recording to the attribution coordinator during fail execution, clearing the target from pending work on success.
 
-- In fail execution, delegates failure tagging and diagnostic recording to the attribution coordinator, clearing the target from pending work on success.
+- Delegates statement coverage evaluation to the coverage evaluator during coverage execution, using the local workspace files when present, and formats diagnostic span reports.
 
-- In coverage execution, delegates statement coverage evaluation to the coverage evaluator using local workspace files when present and formats diagnostic span reports.
-
-- In commission and refresh-sys execution, delegates workspace provisioning, registration, and system synchronization across active role workspaces.
+- Delegates workspace provisioning, registration, and system synchronization across the active role workspaces during commission and refresh system execution.

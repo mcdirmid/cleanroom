@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
 # LAST_CHANGED: 2026-10-06T14:35:00Z
 # CHANGE: new file
-# CODE_HASH: 283606d131f6
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# CODE_HASH: 1f9dd82a626a
+# SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
 r"""
@@ -46,7 +46,7 @@ The `src_metadata_ext` external component specifies the grammar, comment convent
 - `CODE_HASH`: 12-character SHA-256 hexadecimal hash of the file body excluding the metadata comment header.
 - `DIRTY`: Optional reason string present when a node is marked dirty manually or by dependency failure.
 - `FEEDBACK`: Optional list of unacted feedback items formatted as `- [<timestamp> from <blamer>]: <explanation>`.
-- `<ROLE>_AUDIT`: Audit timestamp for an auditor role (e.g. `QA_AUDIT`, `COVERAGE_AUDIT`, `SPEC_QA_AUDIT`, `LOW_QA_AUDIT`).
+- `<ROLE>_AUDIT`: Audit timestamp for an auditor role (e.g. `QA_AUDIT`, `COVERAGE_AUDIT`, `SPEC_QA_AUDIT`).
 
 **In-Place Rewriting Semantics**
 

@@ -1,21 +1,18 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:40:33Z
-LAST_CHANGED: 2026-10-09T21:37:05Z
-CHANGE: Synchronize active nodes sequence on role config during get work dispatch
-CODE_HASH: ef8d82b840d5
-SPEC_QA_AUDIT: 2026-10-09T21:40:33Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T04:27:23Z
+CHANGE: Contract dispatch state transitions for submit, blame, and fail with in-batch dependent failure marks
+CODE_HASH: 53361977594d
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_coordinate_impl implementation component
-
-imports: agent_session, dag_storage, control_verification, control_work_scheduler, control_submit, control_attribution, agent_node_config, agent_file_alias, dag_subgraph
-implements: control_coordinate
 
 ## Intent
 
 The control_coordinate_impl implementation component provides concrete mechanics for session node registration, default target resolution algorithms, and dispatching to constituent control services.
 
-The implementation maintains session dictionaries mapping `DagNode` instances to states (`OPEN`, `CLEAN`, `FAILED`, `ATTRIBUTED`) and file aliases, resolves string arguments to target nodes, routes commands to specialized coordinators, and aggregates outcomes into control dispatch outcomes.
+The implementation maintains session dictionaries mapping dag nodes to their target states and file aliases, resolves string arguments to target nodes, routes commands to specialized coordinators, and aggregates outcomes into control dispatch outcomes.
 
 ## Factored Contracts
 
@@ -30,12 +27,17 @@ The implementation maintains session dictionaries mapping `DagNode` instances to
 - The session coordinator delegates verification to the verification evaluator. [delegate_verification]
 - The session coordinator delegates submission to the submission coordinator. [delegate_submission]
 - The session coordinator delegates attribution to the attribution coordinator. [delegate_attribution]
+- Dispatching submission delegates validation and resolution to the submission coordinator and updates the target state to clean upon success. [dispatch_submit_updates_clean_state]
+- Dispatching blame delegates defect attribution to the attribution coordinator, updates the target state to attributed, and marks any in-batch dependents as failed. [dispatch_blame_updates_attributed_state]
+- Dispatching fail delegates failure logging to the attribution coordinator, updates the target state to failed, and marks any in-batch dependents as failed. [dispatch_fail_updates_failed_state]
 
 ### Woven Contracts
 
 - When resolving a default target with multiple open nodes, the coordinator checks last modified file timestamps to pick the active node. [default_last_modified_file, control_coordinate: [resolve_default_target_contract]]
 - When get work is called, the coordinator invokes the work scheduler, stores newly discovered nodes as open, updates active nodes on role config, and returns the work schedule. [populate_scheduled_nodes, store_node_states, update_active_nodes_on_role_config, control_coordinate: [dispatch_get_work], agent_node_config: [role_config_set_nodes]]
 - When check files is called, the coordinator evaluates single or multiple targets via the verification evaluator and returns the combined results. [delegate_verification, control_coordinate: [dispatch_check_files]]
+- When submission is dispatched, the coordinator delegates validation and resolution to the submission coordinator and updates the target state to clean upon success. [delegate_submission, dispatch_submit_updates_clean_state, control_coordinate: [dispatch_submit]]
+- When blame or fail is dispatched, the coordinator delegates to the attribution coordinator, updates the target state to attributed or failed, and marks in-batch dependents as failed. [delegate_attribution, dispatch_blame_updates_attributed_state, dispatch_fail_updates_failed_state, control_coordinate: [dispatch_blame, dispatch_fail]]
 
 ## Grounding
 

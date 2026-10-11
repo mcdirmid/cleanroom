@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 168c259d47c1
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:00:56Z
+CHANGE: Align alias manager parameter conversion typing with the high-level contract and drop planning front-matter
+CODE_HASH: 2e76a1727f63
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # agent_file_alias interface component
-
-imports: agent_session, dag_storage, file_paths, tool_provider
 
 ## Intent
 
@@ -29,7 +27,7 @@ By acting as a converter for tool parameters, the alias manager maps wire-level 
 - A read-only file is a bound file restricted to read access.
 - A read-write file is a bound file permitted for read and write access.
 - An unbound file is a file alias not mapped to an actual workspace file.
-- The alias manager is a parameter type with python type file alias and wire type string.
+- The alias manager is a tool parameter type performing the parameter conversion contract over file aliases with wire type string and actual type file alias.
 
 ### Contracts
 

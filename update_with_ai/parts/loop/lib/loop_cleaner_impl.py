@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: a5dc0c07b589
-# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:57:57Z
+# CHANGE: Call DagSubgraph.is_complete directly instead of a defensive attribute shim, realizing the grounded completion check
+# CODE_HASH: 501418d227e0
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in loop_cleaner_impl.pyi
@@ -34,11 +34,7 @@ class LoopCleaner(loop_cleaner.LoopCleaner, Singleton):
         subgraph = get_singleton(dag_subgraph.DagSubgraph)
         subgraph.set_target(target)
 
-        def _is_complete() -> bool:
-            comp = getattr(subgraph, "is_complete")
-            return bool(comp()) if callable(comp) else bool(comp)
-
-        while not _is_complete():
+        while not subgraph.is_complete():
             batch = subgraph.next_ready_batch()
             if (
                 not batch
@@ -49,13 +45,19 @@ class LoopCleaner(loop_cleaner.LoopCleaner, Singleton):
             if not should_continue:
                 return False
 
-        return _is_complete()
+        return subgraph.is_complete()
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         LoopCleaner,
         keys=[LoopCleaner, loop_cleaner.LoopCleaner],
         tier=system,
     )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

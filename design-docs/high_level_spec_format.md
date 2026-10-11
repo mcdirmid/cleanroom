@@ -124,7 +124,7 @@ Object types do not form containment or ownership hierarchies:
 
 ### 4.3 Implementation Components (`<name>_impl.md`)
 - The concrete unit of library code and unit test execution.
-- Declares `implements: <types>` in front-matter to explicitly specify all realized singleton interface services, tools, or types. In flat lifecycle specifications, `implements:` must list all realized singleton interfaces explicitly (e.g., `implements: bazel graph storage, dag storage` or `implements: agent node cleaner, cleaned node`). Polymorphic types (`poly type`) must NEVER be listed in `implements:` clauses; only concrete singleton interface services, tools, or types being realized are listed.
+- Declares `implements: <types>` in front-matter to explicitly specify all realized singleton interface services, tools, or types. In flat lifecycle specifications, `implements:` must list all realized singleton interfaces explicitly (e.g., `implements: uv manifest loader, dag storage` or `implements: agent node cleaner, cleaned node`). Polymorphic types (`poly type`) must NEVER be listed in `implements:` clauses; only concrete singleton interface services, tools, or types being realized are listed.
 - Refine capabilities into concrete algorithms, naming, validation rules, and error conditions for the installed tools and services.
 - Can declare implementation-private data types and parameters (e.g., `regex pattern parameter`).
 - **Implementation Isolation & The Model Interaction Boundary**:
@@ -135,8 +135,9 @@ Object types do not form containment or ownership hierarchies:
     - `ToolManager.execute_tool` is the defensive boundary protecting the system against the black-box model. Resolving tool names, resolving parameter names, validating that required wire parameters were supplied, catching conversion failures, and generating diagnostic error strings for the model context are strictly **private implementation mechanics of `ToolManagerImpl`**. They are not contracts that other software components implement or inherit.
 
 ### 4.4 External Boundary Components (`<name>_ext.md`)
-- Remain the strict boundary for external libraries, serialization formats (JSON, Proto), and OS APIs (e.g., `filesystem_ext`).
-- Do not perform grounding satisfaction checks; they encapsulate foreign environments.
+- Cover the grounding gaps that model weights cannot supply. The gap is foreign when it involves an external library, a serialization format (JSON, Proto), or an OS API (e.g., `filesystem_ext`), and it is computational when the specification demands an algorithm it does not fix, such as the ordering, tie-breaking, cycle handling, and comparability of a topological sort. An external specification may describe how to call a foreign API, and it may equally describe how to perform a computation.
+- Do not perform grounding satisfaction checks; they encapsulate knowledge that must be documented rather than inferred, whether that knowledge is foreign or computational.
+- State a computational gap as a complete procedure rather than a hint: its input and output domains, its traversal or operational invariant, its determinism and tie-breaking rules, and its degenerate cases such as cycles, disconnected inputs, and undeclared references. The corresponding low-level stub documents the mechanics and a reference usage snippet, exactly as a foreign boundary stub documents modules, call signatures, and error types. Subject differs between the two kinds; rigor does not.
 
 ### 4.5 Assembly Components (`<name>_asm.md`)
 - Aggregate and close a cohesive set of implementation components into a subsystem assembly.

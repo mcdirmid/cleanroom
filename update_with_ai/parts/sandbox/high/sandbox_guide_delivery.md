@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: cfa297ff64b6
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Declare guide delivery capabilities as complete statements and name step advancement canonically
+CODE_HASH: 3b35f5f52a2d
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # sandbox_guide_delivery interface component
@@ -19,14 +20,10 @@ Autonomous agents given monolithic instructions frequently attempt all objective
 
 ## Types and Behavior
 
-An agent session's *guide delivery* is configured with a guide that delivers instructions to an agent progressively.
+An agent session's *guide delivery* delivers the instructions of a configured guide to an agent progressively.
 
-A guide delivery:
+A guide delivery can *parse* file content into a guide, and can record an *initial primer* presenting the first instructional content of a session.
 
-- Can *parse* file content into a guide.
+A guide delivery can *advance step* given a boolean *verification passed* indicator and text *failure diagnostics*, delivering the instructional text of the next milestone when verification passes or retaining the current milestone and reporting failure diagnostics alongside verification failure instructions when verification fails.
 
-- Can record an *initial primer*.
-
-- Can *advance step* with a boolean *verification passed* indicator and text *failure diagnostics*, delivering instructional text when verification passes, or retaining the current milestone and reporting failure diagnostics alongside verification failure instructions when verification fails.
-
-- Exposes whether progressive *steps remain* to be completed, and exposes its configured guide.
+A guide delivery exposes whether progressive *steps remain* to be completed, and exposes its configured guide.

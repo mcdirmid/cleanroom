@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: aac14abb0b84
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:58:45Z
+CHANGE: Declare runner log event as an observable execution event record
+CODE_HASH: 62ccbc07c12c
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # runner_logger interface component
@@ -18,9 +18,10 @@ By centralizing event consumption within a system-level logging service, the com
 
 ### Typing
 
+- A runner log event is a record of an observable execution event.
 - A runner log event has an event name.
 - A runner log event has a single-line summary.
-- A runner log event has a transcript representation.
+- A runner log event has a verbose transcript representation.
 
 ### Contracts
 

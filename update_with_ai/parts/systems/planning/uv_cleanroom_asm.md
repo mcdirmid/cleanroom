@@ -1,18 +1,16 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-08T12:55:00Z
-CHANGE: assemble workspace_tool_impl
-CODE_HASH: d6211714179a
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T03:16:33Z
+CHANGE: Restate the root assembly structurally without constituent enumeration
+CODE_HASH: ec6ae74d87c9
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_cleanroom_asm assembly component
 
-imports: control_asm, file_paths_impl, tools_asm, uv_openai_loop_asm, workspace_asm, workspace_tool_impl
-
 ## Intent
 
-Assembles all Cleanroom UV subsystems including the UV OpenAI loop, session control, file paths, developer tools, role workspace management, and the workspace tool runner into the comprehensive Cleanroom root system assembly.
+Assembles all Cleanroom UV subsystems into the unified master root system assembly encompassing methodology configuration, language model loops, session control, coverage evaluation, and isolated workspace management.
 
 ## Factored Contracts
 

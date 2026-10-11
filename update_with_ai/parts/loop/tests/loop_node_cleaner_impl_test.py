@@ -1,9 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:46:18Z
-# LAST_CHANGED: 2026-10-09T22:20:00Z
-# CHANGE: Verify role configuration on role config without pre-priming nodes during session setup
-# CODE_HASH: 3c8df6108608
-# QA_AUDIT: 2026-10-09T21:46:18Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:59:56Z
+# CHANGE: Model node dirtiness from in-band metadata state instead of message presence and keep clear_messages from altering dirtiness
+# CODE_HASH: 3a646427fde9
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for loop_node_cleaner_impl aligned with grounding specifications."""
@@ -13,6 +14,7 @@ import unittest
 from typing import Any, List, Optional, Sequence, Set, cast
 
 from update_with_ai.parts.agent.lib.agent_node_config import (
+    ExecutionVersion,
     NodeConfig,
     RoleConfig,
     RoleName,
@@ -81,24 +83,56 @@ class MockStorage:
         self.definitions: dict[DagNode, NodeDefinition] = {}
         self.messages: dict[DagNode, Set[DagMessage]] = {}
         self.dependencies: dict[DagNode, Set[DagDependency]] = {}
+        self.feedback: dict[DagNode, List[FeedbackMessage]] = {}
+        self.cleaned_nodes: List[DagNode] = []
+        self.change_descriptions: dict[DagNode, Optional[Any]] = {}
+        self.dirty_nodes: Set[DagNode] = set()
+
+    def seed_dirty_node(self, node: DagNode, message: Optional[DagMessage] = None) -> None:
+        """Records a node whose in-band metadata reports it as requiring cleaning."""
+        self.dirty_nodes.add(node)
+        if message is not None:
+            self.messages.setdefault(node, set()).add(message)
 
     def get_node_definition(self, node: DagNode) -> Optional[NodeDefinition]:
         return self.definitions.get(node)
+
+    def get_task_prompt(self, node: DagNode) -> TaskPrompt:
+        definition = self.definitions.get(node)
+        if definition is None:
+            return TaskPrompt("")
+        return definition.task_prompt
 
     def get_messages(self, node: DagNode) -> Set[DagMessage]:
         return self.messages.get(node, set())
 
     def clear_messages(self, node: DagNode) -> None:
+        # Clearing messages does not by itself alter the node's dirty status.
         self.messages[node] = set()
 
     def add_message(self, message: DagMessage, to: DagNode) -> None:
         self.messages.setdefault(to, set()).add(message)
 
+    def add_feedback_message(self, node: DagNode, message: FeedbackMessage) -> None:
+        self.feedback.setdefault(node, []).append(message)
+        self.messages.setdefault(node, set()).add(message)
+
+    def mark_node_dirty(self, node: DagNode, reason: Optional[str] = None) -> None:
+        self.dirty_nodes.add(node)
+
+    def mark_node_clean(
+        self, node: DagNode, change_description: Optional[Any] = None
+    ) -> None:
+        self.cleaned_nodes.append(node)
+        self.change_descriptions[node] = change_description
+        self.messages[node] = set()
+        self.dirty_nodes.discard(node)
+
     def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
         return self.dependencies.get(node, set())
 
     def is_dirty(self, node: DagNode) -> bool:
-        return bool(self.messages.get(node))
+        return node in self.dirty_nodes
 
 
 class MockSandbox:
@@ -207,6 +241,22 @@ class MockLogger:
         self.events.append(event)
 
 
+class MockRoleConfig:
+    tier = "agent_session"
+
+    def __init__(self) -> None:
+        self.role = RoleName("")
+        self.nodes: List[DagNode] = []
+        self.version = ExecutionVersion(0)
+
+    def set_role(self, role: RoleName) -> None:
+        self.role = role
+
+    def set_nodes(self, nodes: Sequence[DagNode]) -> None:
+        self.nodes = list(nodes)
+        self.version = ExecutionVersion(int(self.version) + 1)
+
+
 class LoopNodeCleanerImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
@@ -217,11 +267,15 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.runner = MockRunner()
         self.node_cfg = MockNodeConfig()
         self.logger = MockLogger()
+        self.role_cfg = MockRoleConfig()
 
         self.registry.register_instance(
             self.logger, keys=[runner_logger.RunnerLogger], tier=system
         )
         self.registry.register_instance(self.storage, keys=[AgentStorage], tier=system)
+        self.registry.register_instance(
+            self.role_cfg, keys=[RoleConfig], tier="agent_session"
+        )
         self.registry.register_instance(
             self.sandbox, keys=[Sandbox], tier="agent_session"
         )
@@ -241,7 +295,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.definitions[node] = NodeDefinition(
             task_prompt=TaskPrompt("Prompt")
         )
-        self.storage.messages[node] = {_make_change("dirty")}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
         self.sandbox.has_modifications = True
 
         with enter_phase(system, registry=self.registry) as scope:
@@ -254,6 +308,8 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             cont = cleaner.clean([node])
             self.assertTrue(cont)
             self.assertEqual(self.storage.messages.get(node, set()), set())
+            self.assertIn(node, self.storage.cleaned_nodes)
+            self.assertIsNotNone(self.storage.change_descriptions[node])
 
     def test_clean_blame_delivers_feedback(self) -> None:
         """CUJ: Session outcome signaling blame delivers feedback message to blamed dependency."""
@@ -268,7 +324,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             task_prompt=TaskPrompt("Prompt")
         )
         self.storage.dependencies[node] = {DagDependency(node=dep_blamed)}
-        self.storage.messages[node] = {_make_change("dirty")}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
         self.runner.outcome = LoopOutcome(
             response=cast(Any, MockResponse(
                 is_failed=False,
@@ -290,6 +346,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.assertIsInstance(msgs[0], FeedbackMessage)
             assert isinstance(msgs[0], FeedbackMessage)
             self.assertEqual(msgs[0].content, "Broken API")
+            self.assertEqual(msgs[0].target, dep_blamed)
 
     def test_clean_run_failure_leaves_nodes_dirty(self) -> None:
         """CUJ: Outcome signaling run failure leaves nodes dirty and returns False."""
@@ -297,7 +354,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.definitions[node] = NodeDefinition(
             task_prompt=TaskPrompt("Prompt")
         )
-        self.storage.messages[node] = {_make_change("dirty")}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
         self.runner.outcome = LoopOutcome(
             response=cast(Any, MockResponse(
                 is_failed=True,
@@ -318,15 +375,19 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
     def test_clean_promptless_nodes_resolves_without_session(self) -> None:
         """CUJ: Dirty nodes without task prompt resolve pass-through changes without session phase."""
         node = _make_dag_node("//pkg:pass_thru", "lib")
-        self.storage.messages[node] = {_make_change("upstream change")}
+        self.storage.definitions[node] = NodeDefinition(task_prompt=TaskPrompt(""))
+        self.storage.seed_dirty_node(node, _make_change("upstream change"))
 
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: WHEN dirty nodes define no task prompt, MUST resolve pass-through changes without establishing an agent session.
+            # Requirement: WHEN dirty nodes define no task prompt and incoming messages indicate upstream changes, MUST mark the nodes clean with a change summary.
             cont = cleaner.clean([node])
             self.assertTrue(cont)
             self.assertEqual(self.runner.run_count, 0)
             self.assertEqual(self.storage.messages.get(node, set()), set())
+            self.assertIn(node, self.storage.cleaned_nodes)
+            self.assertIsNotNone(self.storage.change_descriptions[node])
 
     def test_clean_retries_on_unexpected_failure(self) -> None:
         """CUJ: Retries session phase once upon encountering unexpected failure before propagating."""
@@ -334,7 +395,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.definitions[node] = NodeDefinition(
             task_prompt=TaskPrompt("Prompt")
         )
-        self.storage.messages[node] = {_make_change("dirty")}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
 
         attempts = 0
 
@@ -374,7 +435,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             task_prompt=TaskPrompt("Prompt")
         )
         self.storage.dependencies[node] = {DagDependency(node=dep_blamed)}
-        self.storage.messages[node] = {_make_change("dirty")}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
 
         blame_formats = [
             "Blamed `//pkg:dep_blamed`: Spec contract defect",
@@ -384,7 +445,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         ]
 
         for fmt in blame_formats:
-            self.storage.messages[dep_blamed] = set()
+            self.storage.clear_messages(dep_blamed)
             self.runner.outcome = LoopOutcome(
                 response=cast(Any, MockResponse(
                     is_failed=False,
@@ -409,7 +470,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             task_prompt=TaskPrompt("Prompt")
         )
         self.storage.dependencies[node] = {DagDependency(node=dep_guide)}
-        self.storage.messages[node] = {_make_change("dirty")}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
         self.node_cfg.blame_targets_by_node = {node: set()}
         self.runner.outcome = LoopOutcome(
             response=cast(Any, MockResponse(
@@ -427,6 +488,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.assertTrue(cont)
             self.assertTrue(self.storage.is_dirty(node))
             self.assertEqual(len(self.storage.get_messages(dep_guide)), 0)
+            self.assertEqual(len(self.storage.feedback.get(dep_guide, [])), 0)
 
     def test_clean_blame_never_delivered_to_non_feedback_dependencies(self) -> None:
         """CUJ: Blame feedback is strictly delivered to declared feedback dependencies and never non-feedback dependencies."""
@@ -445,7 +507,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             DagDependency(node=dep_feedback),
             DagDependency(node=dep_non_feedback),
         }
-        self.storage.messages[node] = {_make_change("dirty")}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
         self.runner.outcome = LoopOutcome(
             response=cast(Any, MockResponse(
                 is_failed=False,
@@ -469,7 +531,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.definitions[node] = NodeDefinition(
             task_prompt=TaskPrompt("Prompt")
         )
-        self.storage.messages[node] = {_make_change("dirty")}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
 
         call_count = 0
 
@@ -494,7 +556,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.definitions[node] = NodeDefinition(
             task_prompt=TaskPrompt("Prompt")
         )
-        self.storage.messages[node] = {_make_change("dirty")}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
         self.sandbox.has_modifications = False
 
         with enter_phase(system, registry=self.registry) as scope:
@@ -502,6 +564,9 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             cont = cleaner.clean([node])
             self.assertTrue(cont)
             self.assertEqual(len(self.storage.messages.get(node, set())), 0)
+            # Requirement: WHEN no workspace files were modified, MUST mark the nodes clean without advancing change timestamps.
+            self.assertIn(node, self.storage.cleaned_nodes)
+            self.assertIsNone(self.storage.change_descriptions[node])
 
     def test_clean_multi_node_session(self) -> None:
         """CUJ: Cleaning multiple nodes sharing a role within a single agent session."""
@@ -513,13 +578,15 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.definitions[node2] = NodeDefinition(
             task_prompt=TaskPrompt("Prompt 2")
         )
-        self.storage.messages[node1] = {_make_change("dirty 1")}
-        self.storage.messages[node2] = {_make_change("dirty 2")}
+        self.storage.seed_dirty_node(node1, _make_change("dirty 1"))
+        self.storage.seed_dirty_node(node2, _make_change("dirty 2"))
 
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             cont = cleaner.clean([node1, node2])
             self.assertTrue(cont)
+            self.assertIn(node1, self.storage.cleaned_nodes)
+            self.assertIn(node2, self.storage.cleaned_nodes)
 
     def test_clean_session_configures_role_on_role_config(self) -> None:
         """Postcondition: Session setup configures RoleConfig.role."""
@@ -527,7 +594,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.definitions[node] = NodeDefinition(
             task_prompt=TaskPrompt("Prompt")
         )
-        self.storage.messages[node] = {_make_change("dirty")}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
         self.runner.inspect_role = True
 
         with enter_phase(system, registry=self.registry) as scope:

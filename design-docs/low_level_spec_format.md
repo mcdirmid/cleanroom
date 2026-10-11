@@ -16,8 +16,8 @@ In the Cleanroom engineering pipeline, the **Low-Level Specification** (`low/<na
                        │                              GROUNDING: (natural language arguments)
                        ▼
 ┌──────────────────────────────────────────────┐
-│ LOW_QA Arbiter (low_qa)                      │  <-- Audits low against planning; runs Pyright &
-└──────────────────────┬───────────────────────┘      low_lint internally; stamps LOW_QA_AUDIT
+│ SPEC_QA Arbiter (spec_qa)                    │  <-- Audits planning and low against high; runs Pyright &
+└──────────────────────┬───────────────────────┘      low_lint/spec_lint internally; stamps SPEC_QA_AUDIT
                        │  low_to_lib.md / low_to_test.md
                        ▼
 ┌──────────────────────────────────────────────┐

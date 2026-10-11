@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-09T02:39:58Z
 CHANGE: add contamination tripwire to AGENTS.md refresh specification
-CODE_HASH: d30619091086
+CODE_HASH: cc98fbd579a1
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # workspace_sync_impl implementation component
@@ -24,17 +25,17 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 When pulling changes from the canonical main repository into a role workspace, the workspace synchronizer:
 
-- Identifies files within the target directory scope, declared role dependencies, and stub role dependencies.
+- Identifies the files within the target directory scope, the declared role dependencies, and the stub role dependencies.
 
-- For files matching stub role dependencies, verifies that workspace files are valid read-only test stubs (`chmod 444`) containing no implementation details; if missing, outdated compared to upstream companion specifications, or containing leaked implementation code, synthesizes read-only test stubs with `raise NotImplementedError` from companion specification files (`low/*.pyi`) in the main repository, and deletes orphaned stubs whose companion specifications no longer exist in the main repository. Real implementation files matching stub role dependencies are never copied from the canonical main repository into the role workspace.
+- Verifies that the workspace files matching stub role dependencies are valid read-only test stubs that contain no implementation details, and synthesizes read-only test stubs raising `NotImplementedError` from the companion specification files of the main repository when such a file is missing, is outdated against its companion specification, or contains leaked implementation code. Orphaned stubs whose companion specifications no longer exist in the main repository are deleted, and an implementation file matching a stub role dependency is never copied from the canonical main repository into the role workspace.
 
-- Copies newer files from the main repository into the role workspace, enforcing read-only permissions (`chmod 444`) on upstream dependencies and read-write permissions (`chmod 644`) on role targets. For existing writable targets, pulls updates from the main repository whenever the local target has no uncommitted code modifications and the main repository version differs in content or metadata, preserving pending local targets and deleted targets awaiting template regeneration, and ensures standard write permissions (`chmod 644`).
+- Copies newer files from the main repository into the role workspace, enforcing read-only permissions on upstream dependencies and read-write permissions on role targets. An existing writable target is pulled from the main repository whenever the local target carries no uncommitted code modification and the main repository version differs in content or metadata, preserving pending local targets and deleted targets that await template regeneration.
 
-- Preserves uncommitted local modifications on writable targets, failing fast if an upstream modification conflicts with an active local change.
+- Preserves the uncommitted local modifications of a writable target, failing fast when an upstream modification conflicts with an active local change.
 
-- Deletes files within the role workspace scope that no longer exist in the canonical main repository.
+- Deletes the files within the role workspace scope that no longer exist in the canonical main repository.
 
-When refreshing system files, the workspace synchronizer recopies tool runners, project configurations, guide files, and linters from the main repository into the role workspace, regenerates `AGENTS.md` with strict boundary rules, contamination tripwires, and fail-stop constraints without touching in-scope source files, and validates that all stub role dependency files remain read-only test stubs.
+When refreshing system files, the workspace synchronizer recopies the tool runners, project configurations, guide files, and linters from the main repository into the role workspace, regenerates `AGENTS.md` with its boundary rules, contamination tripwires, and fail-stop constraints without touching an in-scope source file, and validates that every stub role dependency file remains a read-only test stub.
 
 When harvesting changes from a role workspace back to the canonical main repository, the workspace synchronizer performs two-phase synchronization:
 

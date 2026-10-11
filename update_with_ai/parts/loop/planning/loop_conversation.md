@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 0aeef22f0ea6
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:06:38Z
+CHANGE: Complete conversation capability statements and canonicalize stubbing terminology
+CODE_HASH: fdbc662fdb15
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_conversation interface component
-
-imports: tool_provider
 
 ## Intent
 
@@ -23,12 +21,13 @@ By tracking message roles, correlating tool calls, and stubbing obsolete tool pa
 - A conversation message is an entry in an agent conversation.
 - A conversation message has a role.
 - A conversation message has text content.
-- A conversation message has a tool call id.
+- A conversation message has a tool call id when correlating tool invocations and responses.
 - A conversation message has a tool name.
 - A conversation message has a reminder.
 - A conversation message has serialized tool arguments.
 - A conversation message indicates whether the message is a stub.
 - A model request is a formatted sequence of messages prepared for transmission to a language model.
+- An agent session's conversation maintains the chronological messages of an agent run.
 
 ### Contracts
 

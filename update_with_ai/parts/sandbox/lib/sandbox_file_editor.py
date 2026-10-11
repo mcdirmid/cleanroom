@@ -1,12 +1,12 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:42:30Z
-# LAST_CHANGED: 2026-10-09T21:42:30Z
-# CHANGE: Add initialize method to ReplaceFileContentTool protocol
-# CODE_HASH: 799925910787
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:03:47Z
+# CHANGE: Prune the unused Set import that the grounding specification does not declare
+# CODE_HASH: 971e42e5e86b
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
-from typing import Any, Mapping, NewType, Optional, Protocol, Set, Union
+from typing import Any, Mapping, NewType, Optional, Protocol, Union
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
 import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
 from . import tool_provider

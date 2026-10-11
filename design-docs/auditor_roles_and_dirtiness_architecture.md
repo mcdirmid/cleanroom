@@ -43,7 +43,7 @@ THE FLAWED DUMMY LOG ARCHITECTURE
    With the rollout of **In-Band Source Metadata** ([`in_band_source_metadata.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/in_band_source_metadata.md)), every tracked file requires an in-band header block (`LAST_CLEANED`, `LAST_CHANGED`, `CHANGE:`).
    - Stamping metadata into `logs/<name>_qa.log` gives the file a size $> 0$ bytes.
    - The verification script fails immediately: `QA log is not empty: delete all lines (0 bytes, remove any headers).`
-   - If the agent empties the log to 0 bytes, `src_metadata.extract_metadata` finds no header. `bazel_storage_impl.is_dirty()` evaluates as **permanently dirty** (`meta is None or not meta.last_cleaned`).
+   - If the agent empties the log to 0 bytes, `src_metadata.extract_metadata` finds no header. The DAG dirty checking engine evaluates the node as **permanently dirty** (`meta is None or not meta.last_cleaned`).
 2. **The Metadata Clearance Trap**:
    When told to "clear modification metadata when you have no more work to do", clearing the metadata deletes the timestamp evidence proving that the audit was executed *after* the upstream contracts or code files changed. On the next DAG pass, the cleaner observes missing timestamps and dispatches the auditor in an infinite re-cleaning loop.
 3. **Ontological Distortion**:
@@ -63,17 +63,16 @@ $$\texttt{<ROLE\_NAME\_IN\_CAPS>\_AUDIT: <UTC timestamp>}$$
 
 | Auditor Role | Verified Target Files | Pipeline Gate | Audit Metadata Tag | Example Header Line |
 | :--- | :--- | :--- | :--- | :--- |
-| **`spec_qa`** | `planning/<unit>.md` | Gate 1 | `SPEC_QA_AUDIT` | `SPEC_QA_AUDIT: 2026-10-06T20:15:00Z` |
-| **`low_qa`** | `low/<unit>.pyi` | Gate 2 | `LOW_QA_AUDIT` | `LOW_QA_AUDIT: 2026-10-06T20:16:00Z` |
-| **`qa`** | `lib/<unit>.py`, `tests/<unit>_test.py` | Gate 3 | `QA_AUDIT` | `QA_AUDIT: 2026-10-06T20:18:00Z` |
-| **`coverage`** | `lib/<unit>.py`, `tests/<unit>_test.py` | Gate 3 | `COVERAGE_AUDIT` | `COVERAGE_AUDIT: 2026-10-06T20:20:00Z` |
+| **`spec_qa`** | `planning/<unit>.md`, `low/<unit>.pyi` | Gate 1 | `SPEC_QA_AUDIT` | `SPEC_QA_AUDIT: 2026-10-06T20:15:00Z` |
+| **`qa`** | `lib/<unit>.py`, `tests/<unit>_test.py` | Gate 2 | `QA_AUDIT` | `QA_AUDIT: 2026-10-06T20:18:00Z` |
+| **`coverage`** | `lib/<unit>.py`, `tests/<unit>_test.py` | Gate 2 | `COVERAGE_AUDIT` | `COVERAGE_AUDIT: 2026-10-06T20:20:00Z` |
 
 ```
 THE CLEAN ZERO-LOG IN-BAND AUDIT ARCHITECTURE
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │  parts/agent/                                                                          │
 │  ├── planning/agent_config.md      ◄── SPEC_QA_AUDIT: 2026-10-06T20:15:00Z             │
-│  ├── low/agent_config.pyi          ◄── LOW_QA_AUDIT: 2026-10-06T20:16:00Z              │
+│  ├── low/agent_config.pyi          ◄── SPEC_QA_AUDIT: 2026-10-06T20:16:00Z             │
 │  ├── lib/agent_config.py           ◄── QA_AUDIT: 2026-10-06T20:18:00Z                  │
 │  │                                 ◄── COVERAGE_AUDIT: 2026-10-06T20:20:00Z            │
 │  └── tests/agent_config_test.py    ◄── QA_AUDIT: 2026-10-06T20:18:00Z                  │
@@ -204,7 +203,7 @@ When `qa` fails, `QA_AUDIT` is **not** updated; instead, blame is injected into 
 
 ## 4. The Formal `is_dirty` Algorithm for Audit Roles
 
-The core dirty checking engine in [`bazel_storage_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/bazel/lib/bazel_storage_impl.py#L131) branches based on role type:
+The core dirty checking engine (implemented in [`workspace_work_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/lib/workspace_work_impl.py) using metadata from [`src_metadata.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/lib/src_metadata.py)) branches based on role type:
 1. **Authoring Roles**: Check target source file existence, valid `LAST_CLEANED`, unacted feedback, and forward dependency timestamps ($N.\text{last\_cleaned} \ge D.\text{last\_changed}$).
 2. **Auditor Roles**: Do **NOT** look for their own source file! Instead, they evaluate the verification status of their **audited feedback targets**.
 
@@ -257,143 +256,105 @@ For dual-target roles like `qa` and `coverage`, the auditor verifies **both** `l
 
 Zero reverse dependencies are stored on disk. Dirty detection is purely forward-evaluating, dynamic, and mathematically airtight.
 
-### 4.3 Concrete Implementation in `bazel_storage_impl.py`
+### 4.3 Concrete Implementation in `parts/workspace` and `parts/control`
 
 ```python
-AUDITOR_ROLE_TAGS = {
-    "grounding_qa": "GROUNDING_QA_AUDIT",
-    "qa": "QA_AUDIT",
-    "coverage": "COVERAGE_AUDIT",
-}
+# Evaluated dynamically in update_with_ai/parts/workspace/lib/workspace_work_impl.py
+# using in-band metadata from update_with_ai/parts/control/lib/src_metadata.py
 
-def is_auditor_role(role_name: str) -> bool:
-    return role_name in AUDITOR_ROLE_TAGS
+def is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
+    reg = get_singleton(workspace_registry.WorkspaceRegistry)
+    r_def = reg.resolve_role_definition(role_name, repo_root=repo_root)
+    return bool(r_def.audit_tag or not r_def.src_pattern)
 
-class AgentStorage:
-    ...
-    def is_dirty(self, node: dag_storage.DagNode) -> bool:
-        role_name = node.role_address.split(":")[-1]
-        
-        # --- AUDITOR ROLE EVALUATION ---
-        if is_auditor_role(role_name):
-            audit_tag = AUDITOR_ROLE_TAGS[role_name]
-            feedback_deps = self.get_feedback_dependencies(node)
-            if not feedback_deps:
-                return False
-            
-            contract_deps = [d for d in self.get_dependencies(node) if not d.is_silent]
-            
-            for fb_dep in feedback_deps:
-                fb_src = self._resolve_source_path(fb_dep.node)
-                if fb_src is None or not fb_src.is_file():
-                    return True
-                
-                # If target itself is dirty, auditor must run (or wait for target clean)
-                if self.is_dirty(fb_dep.node):
-                    return True
-                
-                meta = src_metadata.extract_metadata(fb_src)
-                if meta is None or not meta.last_changed:
-                    return True
-                
-                audit_ts = meta.audits.get(audit_tag)
-                if not audit_ts:
-                    return True # Never audited
-                
-                # Target modified after audit
-                if audit_ts < meta.last_changed:
-                    return True
-                
-                # Upstream contract modified after audit
-                for c_dep in contract_deps:
-                    c_src = self._resolve_source_path(c_dep.node)
-                    if c_src is not None and c_src.is_file():
-                        c_meta = src_metadata.extract_metadata(c_src)
-                        if c_meta and c_meta.last_changed and audit_ts < c_meta.last_changed:
-                            return True
-            return False
-
-        # --- AUTHORING ROLE EVALUATION (Existing Logic) ---
-        src_path = self._resolve_source_path(node)
-        if src_path is None or not src_path.is_file():
-            return True
-        meta = src_metadata.extract_metadata(src_path)
-        if meta is None or not meta.last_cleaned:
-            return True
-        if meta.feedback:
-            return True
-        for dep in self.get_dependencies(node):
-            if not dep.is_silent:
-                dep_src = self._resolve_source_path(dep.node)
-                if dep_src is None or not dep_src.is_file():
-                    return True
-                dep_meta = src_metadata.extract_metadata(dep_src)
-                if dep_meta is None or not dep_meta.last_changed:
-                    return True
-                if meta.last_cleaned < dep_meta.last_changed:
-                    return True
+def is_auditor_dirty(
+    role_def: RoleDefinition,
+    target_node: DagNode,
+    repo_root: str,
+) -> bool:
+    audit_tag = role_def.audit_tag
+    feedback_targets = get_feedback_target_files(target_node, repo_root)
+    if not feedback_targets:
         return False
+    
+    contract_files = get_contract_files(target_node, repo_root)
+    for fb_path in feedback_targets:
+        if not os.path.isfile(fb_path):
+            return True
+        meta = src_metadata.extract_metadata(fb_path)
+        if meta is None or not meta.last_changed:
+            return True
+        audit_ts = meta.audits.get(audit_tag)
+        if not audit_ts:
+            return True # Target has never been audited
+        if audit_ts < meta.last_changed:
+            return True # Target was modified after audit pass
+        for c_path in contract_files:
+            if os.path.isfile(c_path):
+                c_meta = src_metadata.extract_metadata(c_path)
+                if c_meta and c_meta.last_changed and audit_ts < c_meta.last_changed:
+                    return True # Contract was modified after audit pass
+    return False
 ```
 
 ---
 
-## 5. Bazel Role Declarations: Removing Dummy Log Patterns
+## 5. Cleanroom Role Declarations (`cleanroom_roles.toml`): Removing Dummy Log Patterns
 
-In [`update_python_with_ai/BUILD.bazel`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/BUILD.bazel), the auditor roles are redefined to remove `src_pattern` pointing to `logs/` and remove shell predicates inspecting log size.
+In [`update_python_with_ai/cleanroom_roles.toml`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/cleanroom_roles.toml), the auditor roles are defined with `src_pattern = ""` and execute real verification commands via `uv run`:
 
-### 5.1 Updated `BUILD.bazel` Definitions
+### 5.1 Declarations in `cleanroom_roles.toml`
 
-```python
-define_role(
-    name = "grounding_qa",
-    persona = "Grounding QA Arbiter",
-    src_pattern = "",  # Auditor roles have no primary output artifact file
-    guide = "//update_python_with_ai/guides:grounding_qa",
-    allows_step_mode = False,
-    star_role_deps = [":low", ":grounding"],
-    feedback_role_deps = [":grounding"],
-    workspace_files = PYTHON_WORKSPACE_FILES,
-    tools = [],
-    active_component_types = ["implementation", "assembly", "interface"],
-    verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/support/lib/grounding_lint.py {unit_dir}/grounding/{unit_name}.py && bazel test //{unit_dir}/grounding:{unit_name}_type_check --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
-    verification_success_message = "Grounding specification verified for {unit_name}.",
-    visibility = ["//visibility:public"],
-)
+```toml
+[roles.spec_qa]
+name = "spec_qa"
+persona = "Specification QA Arbiter"
+src_pattern = ""
+guide = "update_python_with_ai/guides/spec_qa.md"
+allows_step_mode = false
+role_deps = ["low"]
+star_role_deps = ["high", "planning", "low"]
+feedback_role_deps = ["planning", "low"]
+tools = [
+    "update_python_with_ai.support.lib.high_lint",
+    "update_python_with_ai.support.lib.spec_lint",
+    "update_python_with_ai.support.lib.low_lint",
+    "update_python_with_ai.support.lib.build_lint_common",
+]
+active_component_types = ["implementation", "assembly", "interface", "external"]
+verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md && uv run python -c \"import os, sys, subprocess; sys.exit(subprocess.run(['uv', 'run', 'python', '-m', 'update_python_with_ai.support.lib.spec_lint', '{unit_dir}/planning/{unit_name}.md']).returncode if os.path.exists('{unit_dir}/planning/{unit_name}.md') else 0)\" && uv run python -m update_python_with_ai.support.lib.low_lint {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/low/{unit_name}.pyi"
+verification_success_message = "Specification, planning, and low-level specification verified for {unit_name}."
 
-define_role(
-    name = "qa",
-    persona = "QA Arbiter",
-    src_pattern = "",
-    guide = "//update_python_with_ai/guides:qa",
-    allows_step_mode = False,
-    star_role_deps = [":low", ":grounding"],
-    feedback_role_deps = [":lib", ":test"],
-    workspace_files = PYTHON_WORKSPACE_FILES,
-    tools = [],
-    active_component_types = ["implementation"],
-    verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{unit_dir}/tests:{unit_name}_test --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
-    verification_success_message = "Test {unit_name}_test.py passed.",
-    visibility = ["//visibility:public"],
-)
+[roles.qa]
+name = "qa"
+persona = "QA Arbiter"
+src_pattern = ""
+guide = "update_python_with_ai/guides/qa.md"
+allows_step_mode = false
+role_deps = ["lib", "test"]
+star_role_deps = ["low"]
+feedback_role_deps = ["lib", "test"]
+tools = []
+active_component_types = ["implementation"]
+verify_template = "uv run pytest {unit_dir}/tests/{unit_name}_test.py"
+verification_success_message = "Test {unit_name}_test.py passed."
 
-define_role(
-    name = "coverage",
-    persona = "Coverage Arbiter",
-    src_pattern = "",
-    guide = "//update_python_with_ai/guides:coverage",
-    allows_step_mode = False,
-    silent_role_deps = [":qa"],
-    star_role_deps = [":low", ":grounding"],
-    feedback_role_deps = [":lib", ":test"],
-    workspace_files = PYTHON_WORKSPACE_FILES,
-    tools = [
-        "update_with_ai/support/lib/evaluate_coverage.py",
-    ],
-    active_component_types = ["implementation"],
-    verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{unit_dir}/tests:{unit_name}_test --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1 && python3 update_with_ai/support/lib/evaluate_coverage.py --impl {unit_dir}/lib/{unit_name}.py --test {unit_dir}/tests/{unit_name}_test.py --threshold 100.0",
-    verification_success_message = "All lines of {unit_name}.py are covered by {unit_name}_test.py.",
-    visibility = ["//visibility:public"],
-)
+[roles.coverage]
+name = "coverage"
+persona = "Coverage Arbiter"
+src_pattern = ""
+guide = "update_python_with_ai/guides/coverage.md"
+allows_step_mode = false
+role_deps = ["qa"]
+silent_role_deps = ["qa"]
+star_role_deps = ["low"]
+feedback_role_deps = ["lib", "test"]
+tools = [
+    "update_with_ai.support.lib.cleanroom_role_tool",
+]
+active_component_types = ["implementation"]
+verify_template = "uv run pytest {unit_dir}/tests/{unit_name}_test.py && uv run python -m update_with_ai.support.lib.cleanroom_role_tool coverage --impl {unit_dir}/lib/{unit_name}.py --test {unit_dir}/tests/{unit_name}_test.py --threshold 100.0"
+verification_success_message = "All lines of {unit_name}.py are covered by {unit_name}_test.py."
 ```
 
 #### Key Improvements:
@@ -412,7 +373,7 @@ Because auditor nodes have no primary source files (`src_pattern = ""`), they re
 - **Relative Path Disambiguation**: When `unit_name` is ambiguous across the batch (e.g. two widgets in different packages), the target is referenced as `<relative_path>/<unit_name>` (e.g. `pkg_a/widget` vs `pkg_b/widget`).
 - **Source File Alias**: For nodes with declared source files, the relative file path alias continues to be accepted.
 - **Target Omission**: When only one unit is being processed in the session, the `target` parameter in `submit` and `fail` may be omitted entirely.
-- **No Fully Qualified Build Addresses**: Fully qualified Bazel addresses (e.g. `//pkg:unit_qa`, `//pkg:unit`) are internal build addresses never communicated to the agent and are rejected by resolve tools.
+- **No Internal Build Addresses**: Internal addresses (e.g. `//pkg:unit_qa`, `//pkg:unit`) are never communicated to the agent and are rejected by resolve tools.
 
 ### 2. Streamlined Blame Attribution
 - Because active nodes never share feedback targets, the `blame` tool determines the attributing active node directly from `blame_target` (e.g. blaming `lib/widget.py` attributes blame from the active `widget` QA or coverage auditor). The agent only specifies `blame_target` and the single-paragraph `explanation`.
@@ -430,9 +391,9 @@ Because auditor nodes have no primary source files (`src_pattern = ""`), they re
 
 ---
 
-## 6. Metadata Engine Updates (`src_metadata.py`)
+## 6. Metadata Engine (`src_metadata.py`)
 
-[`update_python_with_ai/support/lib/src_metadata.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/support/lib/src_metadata.py) is updated to parse, format, and stamp flat audit tags.
+[`update_with_ai/parts/control/lib/src_metadata.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/lib/src_metadata.py) is the canonical Cleanroom component responsible for parsing, formatting, and stamping flat audit tags.
 
 ### 6.1 Data Structure
 ```python
@@ -484,13 +445,13 @@ def stamp_audit(file_path: Path | str, role_name: str) -> None:
 
 ## 7. Migration Plan & Deprecations
 
-1. **Step 1: Extend `src_metadata.py`**:
+1. **Step 1: Extend `src_metadata.py` in `parts/control`**:
    - Add parsing and formatting for flat `<ROLE>_AUDIT` tags.
    - Ensure `stamp_audit()` preserves `LAST_CHANGED`.
-2. **Step 2: Update `bazel_storage_impl.py`**:
-   - Replace the dummy log check in `is_dirty()` with the auditor dirty predicate comparing feedback target `<ROLE>_AUDIT` against `LAST_CHANGED`.
-3. **Step 3: Update `update_python_with_ai/BUILD.bazel`**:
-   - Remove `src_pattern` and `verify_template` shell checks from `grounding_qa`, `qa`, and `coverage`.
+2. **Step 2: Update DAG Dirty Checking in `parts/workspace`**:
+   - Replace dummy log checks in `is_dirty()` with the auditor dirty predicate comparing feedback target `<ROLE>_AUDIT` against `LAST_CHANGED`.
+3. **Step 3: Update `update_python_with_ai/cleanroom_roles.toml`**:
+   - Set `src_pattern = ""` and specify `verify_template` using `uv run`.
 4. **Step 4: Cleanup**:
    - Delete dummy templates:
      - `update_python_with_ai/templates/grounding_qa_template.txt`

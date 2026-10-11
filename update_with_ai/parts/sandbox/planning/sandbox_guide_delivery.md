@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: af056b5c196f
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T03:10:53Z
+CHANGE: Declare progressive guide delivery, primer, and step advancement typing statements
+CODE_HASH: 20548bbc54e4
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # sandbox_guide_delivery interface component
-
-imports: tool_provider, agent_file_alias, agent_node_config
 
 ## Intent
 
@@ -20,7 +18,9 @@ By parsing markdown guides into sequential milestone sections, retaining active 
 
 ### Typing
 
-- An initial primer provides initial instructional context recorded prior to step delivery.
+- An agent session's guide delivery delivers the instructions of a configured guide to an agent progressively.
+- An initial primer presents the first instructional content of a session.
+- A guide delivery can advance step given a verification passed indicator and failure diagnostics.
 
 ### Contracts
 

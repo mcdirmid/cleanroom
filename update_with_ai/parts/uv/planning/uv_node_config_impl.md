@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: 60cf0aa8e680
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 7b0f006a17cb
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_node_config_impl implementation component
-
-imports: agent_config, dag_storage, file_paths, tool_provider, uv_manifest_loader
-implements: agent_node_config, agent_file_alias
 
 ## Intent
 

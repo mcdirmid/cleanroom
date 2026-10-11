@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: ed502e6a41cd
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 4b47360e8174
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_coordinate interface component
-
-imports: agent_session, dag_storage, control_verification, control_work_scheduler, control_submit, control_attribution, agent_node_config, agent_file_alias
 
 ## Intent
 

@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-05T04:57:48Z
-CHANGE: Standardize on canonical check files tool over singular check file tool in assembly description
-CODE_HASH: 2fca53857f7b
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Reduce the assembly narrative to a single structural sentence and remove collaborator naming from prose
+CODE_HASH: 4c375e5af26f
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # sandbox_asm assembly component
@@ -21,20 +22,4 @@ Autonomous agents operating on source workspaces require isolated environments t
 
 ## Types and Behavior
 
-The *sandbox assembly* unites the concrete implementation components that realize agent session tools, workspace safety guardrails, instruction delivery, and run control verifiers. The assembly initializes its constituent implementation components and registers their singleton services with the system lifecycle prototype.
-
-The sandbox assembly aggregates the following implementation components:
-
-- The sandbox implementation from sandbox_impl, closing the sandbox interface to expose session modification state.
-
-- The sandbox file reader implementation from sandbox_file_reader_impl, closing the sandbox file reader interface to provide guarded file reading and regular expression pattern searching.
-
-- The sandbox file editor implementation from sandbox_file_editor_impl, closing the sandbox file editor interface to provide text replacement and line update tools with template materialization.
-
-- The sandbox run control implementation from sandbox_run_control_impl, closing the sandbox run control interface to provide advance, finish, fail, blame, and check files execution control tools with sequential verification checks.
-
-- The sandbox guide delivery implementation from sandbox_guide_delivery_impl, closing the sandbox guide delivery interface to parse markdown instructions and deliver progressive milestone steps.
-
-- The tool provider implementation from tool_provider_impl, closing the tool provider interface to manage session tool registration, parameter conversion, and tool invocation dispatch.
-
-- The template format implementation from template_format_impl, closing the template format interface to provide commonmark directive template formatting for missing files and read-only markdown files.
+The sandbox_asm assembly component aggregates the implementations of the sandbox, sandbox file reader, sandbox file editor, sandbox run control, sandbox guide delivery, tool provider, and template format interfaces, providing a unified assembly for agent session tools, workspace safety guardrails, instruction delivery, and run control verification.

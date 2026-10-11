@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: adca6b21dfa1
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# CODE_HASH: 3bc0162778a4
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom UV model and runtime configuration implementation."""
@@ -369,7 +369,9 @@ class OpenAIConfig(openai_config.OpenAIConfig, Singleton):
         )
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         AgentConfig,
@@ -389,3 +391,4 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
 
 
 _initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

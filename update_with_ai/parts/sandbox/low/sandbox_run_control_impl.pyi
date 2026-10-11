@@ -1,15 +1,15 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:38:42Z
-# LAST_CHANGED: 2026-10-09T22:40:00Z
-# CHANGE: Remove initial implementation modification constraint on submission
-# CODE_HASH: 29d4deb47bd5
-# LOW_QA_AUDIT: 2026-10-09T22:40:00Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:30:00Z
+# CHANGE: Declare sandbox and template_format imports with grounding for modification state and primer rendering
+# CODE_HASH: 7a3fe325d829
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox run control implementation low-level specification."""
 
 from typing import Any, Mapping, Optional, Sequence, Set
-from framework import operation, override, poly_type, singleton_type
+from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import agent_file_alias
@@ -19,11 +19,11 @@ import sandbox_run_control
 import tool_provider
 import dag_storage
 import dag_subgraph
-import sandbox
 import sandbox_file_editor
 import sandbox_guide_delivery
-import template_format
 import dag_config
+import sandbox
+import template_format
 
 
 @singleton_type("agent_session")
@@ -33,8 +33,21 @@ class CheckFilesTool(
     """Realizes verification check execution and diagnostic aggregation.
 
     GROUNDING:
-    - Evaluates session verification checks sequentially, caching results against file hashes from EditManager.
+    - Evaluates the session verification checks declared by
+      agent_node_config.NodeConfig.verification_checks sequentially, caching outcomes against the
+      target file hashes computed by sandbox_file_editor.EditManager.file_hash.
     """
+
+    @property
+    @override
+    def name(self) -> tool_provider.ToolName:
+        """Exposes the constant check files tool identity.
+
+        GROUNDING:
+        - Reports the constant tool name "check_files" under which this tool is registered and
+          invoked through tool_provider.ToolManager.install_tool.
+        """
+        ...
 
     @operation
     @override
@@ -55,7 +68,9 @@ class CheckFilesTool(
         - WHEN verification passes, MUST produce response presenting passing results.
 
         GROUNDING:
-        - Invokes RunController.update_verification() to execute outdated checks and aggregates formatted results.
+        - Invokes RunController.update_verification to execute outdated checks against the target
+          file hashes reported by sandbox_file_editor.EditManager.file_hash, and aggregates the
+          formatted outcomes into the returned tool_provider.ToolResponse.
         """
         ...
 
@@ -67,8 +82,21 @@ class AdvanceTool(
     """Realizes guide milestone advancement gated by verification checks.
 
     GROUNDING:
-    - Coordinates milestone advancement through GuideDelivery.advance_step(), gating progression behind verification.
+    - Coordinates milestone advancement through
+      sandbox_guide_delivery.GuideDelivery.advance_step, gating progression behind the verification
+      status obtained from RunController.
     """
+
+    @property
+    @override
+    def name(self) -> tool_provider.ToolName:
+        """Exposes the constant advance tool identity.
+
+        GROUNDING:
+        - Reports the constant tool name "advance" under which this tool is registered and invoked
+          through tool_provider.ToolManager.install_tool.
+        """
+        ...
 
     @operation
     @override
@@ -91,7 +119,9 @@ class AdvanceTool(
         - WHEN verification passes, no steps remain, and no files were modified, MUST specify follow-up execution of submit without change summary.
 
         GROUNDING:
-        - Checks verification status via RunController and advances guide milestone via GuideDelivery.
+        - Checks verification status through RunController.update_verification and advances the
+          milestone through sandbox_guide_delivery.GuideDelivery.advance_step, which repeats the
+          recorded primer and reports the failure diagnostics when verification fails.
         """
         ...
 
@@ -103,8 +133,26 @@ class SubmitTool(
     """Realizes node completion verification and clean submission.
 
     GROUNDING:
-    - Validates verification status, change summaries, and milestones, marking nodes clean via DagStorage.
+    - Validates verification status, change summaries, and guide milestones, then marks the resolved
+      target clean through dag_storage.DagStorage.mark_node_clean with the supplied change
+      description.
+    - Inspects whether workspace files were modified during the session through the
+      sandbox.Sandbox.has_modifications property before enforcing the change summary requirement.
     """
+
+    @property
+    @override
+    def change_summary_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[Optional[sandbox_run_control.ChangeSummary], str]:
+        """Parameter describing modifications made during the task.
+
+        GROUNDING:
+        - Declares an optional tool_provider.ToolParameter over the
+          sandbox_run_control.ChangeSummary change description that execute_tool reads from the
+          actual parameter bindings and passes to dag_storage.DagStorage.mark_node_clean.
+        """
+        ...
 
     @operation
     @override
@@ -132,7 +180,12 @@ class SubmitTool(
         - WHEN other active nodes remain, MUST produce a non-terminating response.
 
         GROUNDING:
-        - Resolves target node from SessionCoordinator or EditManager, verifies clean conditions, delegates to DagStorage.mark_node_clean(), and checks SessionCoordinator.open_targets to set termination state.
+        - Resolves the target node through
+          control_coordinate.SessionCoordinator.resolve_default_target or the last path recorded by
+          sandbox_file_editor.EditManager.last_read_or_edited_file, refreshes outdated verification
+          results through RunController.update_verification, delegates the clean transition to
+          dag_storage.DagStorage.mark_node_clean, and checks
+          control_coordinate.SessionCoordinator.open_targets to set the termination state.
         """
         ...
 
@@ -144,8 +197,24 @@ class FailTool(
     """Realizes task failure termination.
 
     GROUNDING:
-    - Marks the active target as failed in session state.
+    - Records the active target as failed through
+      control_coordinate.SessionCoordinator.dispatch_fail.
     """
+
+    @property
+    @override
+    def explanation_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[sandbox_run_control.FailureExplanation, str]:
+        """Parameter explaining the reason for failure.
+
+        GROUNDING:
+        - Declares a tool_provider.ToolParameter over the
+          sandbox_run_control.FailureExplanation reason that execute_tool reads from the actual
+          parameter bindings and records through
+          control_coordinate.SessionCoordinator.dispatch_fail.
+        """
+        ...
 
     @operation
     @override
@@ -164,7 +233,8 @@ class FailTool(
         - MUST mark active node as failed.
 
         GROUNDING:
-        - Resolves active node and updates status to failed in SessionCoordinator.
+        - Resolves the active node and updates its status to failed through
+          control_coordinate.SessionCoordinator.dispatch_fail.
         """
         ...
 
@@ -176,8 +246,37 @@ class BlameTool(
     """Realizes defect attribution to upstream prerequisites.
 
     GROUNDING:
-    - Attributes failure to upstream dependency node, adding defect message to DagStorage.
+    - Attributes failure to the upstream dependency node and records the defect feedback through
+      dag_storage.DagStorage.add_feedback_message.
     """
+
+    @property
+    @override
+    def blame_target_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
+        """Parameter identifying the blamed upstream dependency.
+
+        GROUNDING:
+        - Declares a tool_provider.ToolParameter over the agent_file_alias.FileAlias blame target
+          that execute_tool matches against the per-node blame targets exposed by
+          RunController.blame_targets_by_node.
+        """
+        ...
+
+    @property
+    @override
+    def explanation_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[sandbox_run_control.BlameExplanation, str]:
+        """Parameter explaining the defect in the upstream dependency.
+
+        GROUNDING:
+        - Declares a tool_provider.ToolParameter over the
+          sandbox_run_control.BlameExplanation defect text that execute_tool validates as a single
+          paragraph and records through dag_storage.DagStorage.add_feedback_message.
+        """
+        ...
 
     @operation
     @override
@@ -203,7 +302,11 @@ class BlameTool(
         - WHEN other active nodes remain, MUST produce a non-terminating response.
 
         GROUNDING:
-        - Resolves active and blame target nodes, verifies single-paragraph explanation, adds defect message in DagStorage, and checks SessionCoordinator.open_targets to set termination state.
+        - Resolves the active node for the supplied blame target through
+          control_coordinate.SessionCoordinator.get_node_for_alias, verifies the single-paragraph
+          explanation, adds the defect message through
+          dag_storage.DagStorage.add_feedback_message, and checks
+          control_coordinate.SessionCoordinator.open_targets to set the termination state.
         """
         ...
 
@@ -215,8 +318,24 @@ class GetWorkTool(
     """Realizes batch acquisition and session task prompt delivery.
 
     GROUNDING:
-    - Acquires ready dirty nodes from DagStorage and DagSubgraph, materializes startup templates, and delivers session primer.
+    - Acquires ready dirty nodes from dag_storage.DagStorage together with
+      dag_subgraph.DagSubgraph.next_ready_batch, materializes startup templates through
+      dag_storage.DagStorage.materialize_template, and prepares the session task primer.
     """
+
+    @property
+    @override
+    def max_batch_size_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[Optional[dag_config.BatchSize], int]:
+        """Parameter specifying the maximum number of nodes to acquire.
+
+        GROUNDING:
+        - Declares an optional tool_provider.ToolParameter over the dag_config.BatchSize bound that
+          execute_tool forwards as the maximum acquisition batch size through
+          control_coordinate.SessionCoordinator.dispatch_get_work.
+        """
+        ...
 
     @operation
     @override
@@ -238,7 +357,11 @@ class GetWorkTool(
         - WHEN ready dirty nodes are obtained and guide step mode is active, MUST return task primer prompting advance.
 
         GROUNDING:
-        - Queries DagStorage for ready dirty nodes, writes starter templates via DagStorage, and prepares session prompt.
+        - Queries dag_storage.DagStorage for ready dirty nodes, writes starter templates through
+          dag_storage.DagStorage.materialize_template, and prepares the session prompt with
+          agent_node_config.NodeConfig.guide_file attribution.
+        - Renders the task primer content through the template_format.TemplateFormatter.format_template
+          operation, substituting the session template parameters into the primer template text.
         """
         ...
 
@@ -250,7 +373,11 @@ class RunController(
     """Realizes tool installation and verification check result caching.
 
     GROUNDING:
-    - Maintains cached verification results keyed by target node file hashes from EditManager.
+    - Installs the session outcome tools through tool_provider.ToolManager.install_tool during agent
+      session entry and maintains cached verification results keyed by the target file hashes
+      computed by sandbox_file_editor.EditManager.file_hash.
+    - Exposes the per-node blame targets declared by
+      agent_node_config.NodeConfig.blame_targets_by_node for defect attribution.
     """
 
     @operation
@@ -259,14 +386,34 @@ class RunController(
         """Initializes session outcome tools upon agent session entry.
 
         GROUNDING:
-        - Registers submit, fail, check_files, get_work, and blame tools into ToolManager,
-          and conditionally registers advance tool when guide step mode is active.
+        - Registers the submit, fail, check files, get work, and blame tools through
+          tool_provider.ToolManager.install_tool, and conditionally registers the advance tool when
+          agent_node_config.NodeConfig.is_step_mode is active.
         """
         ...
 
     @property
     @override
     def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
+        """Exposes session verification checks validating session criteria.
+
+        GROUNDING:
+        - Exposes the verification checks declared by
+          agent_node_config.NodeConfig.verification_checks.
+        """
+        ...
+
+    @property
+    @override
+    def blame_targets_by_node(self) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
+        """Exposes per-node blame targets eligible for defect attribution.
+
+        GROUNDING:
+        - Exposes the per-node blame targets declared by
+          agent_node_config.NodeConfig.blame_targets_by_node, mapping each session
+          dag_storage.DagNode to the agent_file_alias.BoundFile entries eligible for blame, without
+          mutating the configured mapping.
+        """
         ...
 
     @operation
@@ -279,6 +426,8 @@ class RunController(
         - WHEN target file hashes have not changed since previous evaluation, MUST omit check execution and reuse cached outcome.
 
         GROUNDING:
-        - Compares current file hashes against cached hashes and runs verification check commands if outdated.
+        - Compares the current sandbox_file_editor.EditManager.file_hash values against the cached
+          hashes and runs the outdated agent_node_config.VerificationCheck.verify evaluations
+          sequentially, caching each outcome alongside the target file hash.
         """
         ...

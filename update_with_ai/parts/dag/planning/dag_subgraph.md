@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: bf5e272b40a1
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:49:24Z
+CHANGE: Contract the empty next ready batch when no dirty node has all target subgraph dependencies clean
+CODE_HASH: a50dfddce639
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # dag_subgraph interface component
-
-imports: dag_storage
 
 ## Intent
 
@@ -18,11 +16,18 @@ By calculating dependency-first topological ordering, evaluating subgraph comple
 
 ## Factored Contracts
 
+### Typing
+
+- A role tier depth is a role's position in the declared role dependency order, where a role with no role dependency has a depth of zero and any other role has a depth one greater than the deepest role it depends on.
+- A role tier depth makes upstream roles precede downstream roles without naming any role.
+
 ### Contracts
 
 - A caller supplies a target node in dag storage when setting a target node. [set_target_node_supplied]
 - The dag subgraph collects reachable dependency nodes from the target node in dag storage. [collect_reachable_dependencies]
 - The dag subgraph computes the dependency-first topological order of reachable dependency nodes. [compute_topological_order]
+- Nodes that no dependency orders relative to one another are ordered by role tier depth first. [order_ties_by_role_tier_depth]
+- Nodes that no dependency orders relative to one another are ordered by unit address second. [order_ties_by_unit_address]
 - The dag subgraph reports whether the target subgraph is complete. [report_subgraph_complete]
 - The target subgraph is complete if, but only if, all reachable nodes in the target subgraph are clean in dag storage. [subgraph_complete_when_all_clean]
 - The dag subgraph provides the next ready batch of dirty nodes to clean. [provide_next_ready_batch]
@@ -31,15 +36,17 @@ By calculating dependency-first topological ordering, evaluating subgraph comple
 - Dependencies in the target subgraph for each selected dirty node in the next ready batch are clean in dag storage or present in the same ready batch. [ready_batch_dependencies_satisfied]
 - Selected dirty nodes in the next ready batch share the same role address. [ready_batch_grouped_by_role]
 - The next ready batch is bounded by a maximum batch size. [ready_batch_bounded_by_size]
+- The next ready batch is an empty sequence when no dirty node in the target subgraph has all of its dependencies in the target subgraph clean in dag storage. [empty_batch_when_no_dependencies_clean]
 - A caller supplies a batch of nodes when recording a visit. [record_visit_batch_supplied]
 - The dag subgraph increments visit counts for each node in the recorded batch. [record_visit_increment_counts]
 - The dag subgraph enforces execution iteration limits across recorded node visits. [record_visit_enforce_iteration_limits]
 
 ### Woven Contracts
 
-- Setting a target node establishes an active execution subgraph containing reachable dependency nodes arranged in dependency-first topological order. [set_target_node_supplied, collect_reachable_dependencies, compute_topological_order, dag_storage: [access_dag_dependencies]]
+- Setting a target node establishes an active execution subgraph containing reachable dependency nodes arranged in dependency-first topological order, where nodes that no dependency orders relative to one another are ordered by role tier depth first and by unit address second. [set_target_node_supplied, collect_reachable_dependencies, compute_topological_order, order_ties_by_role_tier_depth, order_ties_by_unit_address, dag_storage: [access_dag_dependencies]]
 - Evaluating completion status reports true if, but only if, every reachable node in the target subgraph is clean in dag storage. [report_subgraph_complete, subgraph_complete_when_all_clean, dag_storage: [expose_node_dirty]]
 - Requesting the next ready batch yields uncleaned dirty nodes of the same role address prioritized by role tier precedence whose dependencies are clean or present in the same ready batch, up to the maximum batch size. [provide_next_ready_batch, ready_batch_nodes_uncleaned, ready_batch_prioritized_by_role_tier, ready_batch_dependencies_satisfied, ready_batch_grouped_by_role, ready_batch_bounded_by_size, dag_storage: [expose_node_dirty]]
+- When no dirty node in the target subgraph has all of its dependencies in the target subgraph clean in dag storage, the next ready batch is an empty sequence. [provide_next_ready_batch, ready_batch_dependencies_satisfied, empty_batch_when_no_dependencies_clean, dag_storage: [expose_node_dirty]]
 - Recording a visit for a batch increments each node's visit count and enforces execution iteration limits. [record_visit_batch_supplied, record_visit_increment_counts, record_visit_enforce_iteration_limits]
 
 ## Grounding

@@ -1,13 +1,14 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
 # LAST_CHANGED: 2026-10-06T14:35:00Z
 # CHANGE: new file
-# CODE_HASH: becff36c8489
-# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# CODE_HASH: bd890eb01a7e
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
+from support.lib.lifecycle import get_default_registry
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry, Singleton
 from update_with_ai.parts.agent.lib import agent_session
@@ -29,15 +30,16 @@ class SourceMetadataCoordinator(
     tier = agent_session.agent_session
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    from support.lib.lifecycle import get_default_registry
-
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         SourceMetadataCoordinator,
-        keys=[
-            src_metadata.SourceMetadataCoordinator,
-            SourceMetadataCoordinator,
-        ],
+        keys=[src_metadata.SourceMetadataCoordinator, SourceMetadataCoordinator, src_metadata._DefaultSourceMetadataCoordinator],
         tier=agent_session.agent_session,
     )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

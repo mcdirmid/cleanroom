@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-06T22:55:00Z
-CHANGE: new file
-CODE_HASH: 51b6898713c5
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T03:16:22Z
+CHANGE: Name the provisioner typing and contract workspace commissioning
+CODE_HASH: af74961ed576
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # workspace_provision interface component
-
-imports: agent_session, workspace_registry
 
 ## Intent
 
@@ -18,10 +16,11 @@ Uncontrolled read-write access across an entire codebase leads to accidental cro
 
 ### Typing
 
-- A workspace provisioner operates within the agent session lifecycle tier.
+- An agent session's workspace provisioner creates and configures directory-scoped role workspaces.
 
 ### Contracts
 
+- The workspace provisioner commissions an isolated role workspace for a specified role and directory scope, creating the workspace directory structure, configuring role metadata, and registering the workspace in the persistent registry. [commission_role_workspace]
 - The workspace provisioner creates directory structures for commissioned role workspaces. [create_workspace_directories]
 - The workspace provisioner copies writable target files into role workspaces with read-write permissions. [copy_writable_targets]
 - The workspace provisioner copies upstream contract dependencies into role workspaces with read-only permissions. [copy_readonly_contracts]
@@ -32,7 +31,7 @@ Uncontrolled read-write access across an entire codebase leads to accidental cro
 
 ### Woven Contracts
 
-- When commissioning a workspace, the provisioner resolves the role definition, creates directory structures, copies files with appropriate permissions, synthesizes stub dependencies, deploys runner tools, writes configuration, and registers the workspace. [create_workspace_directories, copy_writable_targets, copy_readonly_contracts, synthesize_readonly_test_stubs, deploy_runner_executables, write_role_configuration, write_role_agents_instructions, workspace_registry: [resolve_standard_role_definition, compute_workspace_directory_path, record_workspace_descriptor]]
+- When commissioning a workspace, the provisioner resolves the role definition, creates directory structures, copies files with appropriate permissions, synthesizes stub dependencies, deploys runner tools, writes configuration, and registers the workspace. [create_workspace_directories, copy_writable_targets, copy_readonly_contracts, synthesize_readonly_test_stubs, deploy_runner_executables, write_role_configuration, write_role_agents_instructions, commission_role_workspace, workspace_registry: [resolve_role_definition, compute_workspace_directory_path, record_workspace_descriptor]]
 
 ## Grounding
 

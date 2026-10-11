@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 972efcb88455
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:26:00Z
+# CHANGE: Align configured guide delivery, milestone advancement, and failure reporting contracts
+# CODE_HASH: 8948e9f16fed
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox guide delivery low-level interface specification."""
@@ -21,7 +21,7 @@ InitialPrimer = NewType("InitialPrimer", str)
 
 @singleton_type("agent_session")
 class GuideDelivery(InTier[AgentSessionTier], Protocol):
-    """Delivers sequential task guidance and gates progression behind verification checks."""
+    """Delivers the instructions of a configured guide progressively and gates progression behind verification checks."""
 
     @property
     def guide(self) -> Optional[agent_node_config.NodeGuide]:
@@ -52,7 +52,7 @@ class GuideDelivery(InTier[AgentSessionTier], Protocol):
             The structured node guide.
 
         POSTCONDITIONS:
-        - MUST parse file content into a structured node guide.
+        - MUST construct a guide containing a summary, sequential step sections, and verification failure instructions derived from the supplied file content.
         """
         ...
 
@@ -64,7 +64,7 @@ class GuideDelivery(InTier[AgentSessionTier], Protocol):
             primer: The initial instructional text.
 
         POSTCONDITIONS:
-        - MUST record the initial primer text.
+        - MUST record the initial primer as the first instructional content of the session.
         """
         ...
 
@@ -82,7 +82,9 @@ class GuideDelivery(InTier[AgentSessionTier], Protocol):
             Optional response containing instructional text or failure diagnostics.
 
         POSTCONDITIONS:
-        - WHEN verification passes, MUST deliver instructional text.
-        - WHEN verification fails, MUST retain current milestone and report failure diagnostics alongside verification failure instructions.
+        - WHEN verification passes, MUST deliver instructional text for the next milestone.
+        - WHEN verification fails, MUST retain the current milestone.
+        - WHEN verification fails, MUST report the failure diagnostics.
+        - WHEN verification fails, MUST report the verification failure instructions.
         """
         ...

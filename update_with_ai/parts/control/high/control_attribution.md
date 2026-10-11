@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 4f1672fa2e1c
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:45:00Z
+CHANGE: Name the session attribution coordinator and split the multi-concern file attribution bullets
+CODE_HASH: 8351f2584a6f
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_attribution interface component
@@ -17,24 +18,18 @@ When an implementation cannot be completed due to missing contracts, contradicto
 
 **Out of scope:** The control_attribution interface component does not modify source code files or trigger automatic retries; these are handled by other components.
 
-**Delegated:** Feedback message storage and node status mutations are delegated to dag_storage; in-band source metadata extraction and feedback formatting are delegated to src_metadata.
+**Delegated:** Feedback message storage and node status mutations are delegated to dag_storage; in-band source metadata extraction and feedback formatting are delegated to src_metadata; file alias addressing is delegated to agent_file_alias; session lifecycle scoping is delegated to agent_session.
 
 ## Types and Behavior
 
 An *attribution outcome* records the result of an attribution or failure action, reporting whether the action was *accepted*, carrying an outcome *message*, and identifying any *affected nodes*.
 
-A session's *attribution coordinator* manages blame attribution and failure recording.
+An agent session's *attribution coordinator* manages blame attribution and failure recording.
 
-The attribution coordinator:
+The attribution coordinator validates that a blamed culprit is an upstream dependency of the source target node configured to receive feedback, and enforces that blame explanations consist of a single continuous paragraph without newline characters.
 
-- Validates that a blamed culprit is an upstream dependency of the source target node configured to receive feedback.
+The attribution coordinator attributes blame by recording a feedback message on the culprit node in graph storage, marking the culprit node status as dirty, and marking in-batch dependent nodes as failed. The attribution coordinator records task failure for a target node by logging the failure explanation, preserving dirty status on the target node, and marking dependent nodes as failed.
 
-- Enforces that blame explanations consist of a single continuous paragraph without newline characters or line breaks.
+The attribution coordinator attributes defect blame to a culprit file in a repository workspace by validating that the critique explanation contains no newline characters, then invoking a build blame target or appending in-band feedback and dirty markers directly to the culprit file in the canonical repository and synchronizing the updated file back to the local role workspace.
 
-- Attributes blame by recording a feedback message on the culprit node in graph storage, marking the culprit node status as dirty, and marking in-batch dependent nodes as failed.
-
-- Records task failure for a target node by logging the failure explanation, preserving dirty status on the target node, and marking dependent nodes as failed.
-
-- Attributes defect blame to culprit files in repository workspaces by validating that critique explanations contain no newline characters, invoking build blame targets or appending in-band feedback messages and dirty markers directly to culprit files in canonical repositories, and synchronizing updated files back to local role workspaces.
-
-- Records task failure for file targets by appending failure diagnostics and marking dirty status in canonical repositories, synchronizing updated files back to local role workspaces.
+The attribution coordinator records task failure for a file target by appending failure diagnostics and marking dirty status in the canonical repository, then synchronizing the updated file back to the local role workspace.

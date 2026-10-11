@@ -1,21 +1,18 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 808670e0b205
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:07:14Z
+CHANGE: Canonicalize warning and fatal thresholds and split reminder content statements
+CODE_HASH: 6303af4c1696
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_guard_impl implementation component
 
-imports: tool_provider
-implements: loop_guard
-
 ## Intent
 
-Detecting loops requires maintaining state across consecutive turns to distinguish productive tool retries from unproductive oscillations. The loop_guard_impl implementation component records parameter signatures for identical invocations and coordinate spans for file modifications, injecting advisory guidance at early reminder boundaries and terminating runaway loops at fatal limits.
+Detecting loops requires maintaining state across consecutive turns to distinguish productive tool retries from unproductive oscillations. The loop_guard_impl implementation component records parameter signatures for identical invocations and coordinate spans for file modifications, injecting advisory guidance at early warning boundaries and terminating runaway loops at fatal limits.
 
-By enforcing an explicit reminder threshold of two repetitions and fatal thresholds for stubborn loops, the implementation keeps agent runs focused and prevents cost overruns.
+By enforcing an explicit warning threshold of two repetitions and fatal thresholds for stubborn loops, the implementation keeps agent runs focused and prevents cost overruns.
 
 ## Factored Contracts
 
@@ -23,11 +20,11 @@ By enforcing an explicit reminder threshold of two repetitions and fatal thresho
 
 - The loop guard tracks consecutive executions of identical tools with identical arguments. [track_identical_tool_executions]
 - The loop guard tracks consecutive edits to the same file and line range. [track_consecutive_file_range_edits]
-- When consecutive identical tool executions reach the reminder threshold of two repetitions, the loop guard produces a loop reminder. [remind_tool_repetition_at_two]
-- The tool repetition reminder advises the agent that no new information will be revealed until session files are updated. [advise_no_new_info_until_files_updated]
+- When consecutive identical tool executions reach the warning threshold of two repetitions, the loop guard produces a loop reminder. [remind_tool_repetition_at_two]
+- The tool repetition reminder advises the agent that no new information will be revealed until session read-write files are updated. [advise_no_new_info_until_files_updated]
 - The tool repetition reminder warns that repeating without modifying files will trigger fatal termination. [warn_repetition_triggers_fatal]
-- When consecutive identical tool executions reach the fatal threshold, the loop guard produces a loop failure. [fail_tool_repetition_at_fatal]
-- When consecutive edits target the same file and line range, the loop guard produces a loop reminder at two repetitions. [remind_edit_repetition_at_two]
+- When consecutive identical tool executions reach the fatal threshold, the loop guard produces a loop failure communicating session failure. [fail_tool_repetition_at_fatal]
+- When consecutive edits target the same file and line range, the loop guard produces a loop reminder when they reach the warning threshold of two repetitions. [remind_edit_repetition_at_two]
 - When consecutive edits target the same file and line range, the loop guard produces a loop failure at the fatal threshold. [fail_edit_repetition_at_fatal]
 - Any tool execution demonstrating forward progress resets repetition counters in the loop guard. [reset_counters_on_forward_progress]
 

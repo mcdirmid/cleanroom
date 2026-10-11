@@ -233,4 +233,31 @@ else
     fail=1
 fi
 
+# Case 10: Interface stub with unused high-level import blames high spec
+mkdir -p "$tmp/c10/high" "$tmp/c10/low"
+cat > "$tmp/c10/high/service.md" <<'EOF'
+# service
+imports: unused_module
+
+## Purpose
+A service.
+
+## Types and Behavior
+Defines types.
+EOF
+cat > "$tmp/c10/low/service.pyi" <<'EOF'
+from typing import Protocol
+from framework import singleton_type
+
+@singleton_type
+class Service(Protocol):
+    ...
+EOF
+if python3 "$bin/low_lint.py" "$tmp/c10/low/service.pyi" 2>"$tmp/c10/err.log"; then
+    echo "FAIL: c10 interface with unused high import should fail" >&2
+    fail=1
+else
+    check "c10 interface unused high import" "$tmp/c10/err.log" "service.md:2: error: interface specification imports 'unused_module', but low-level specification 'service.pyi' does not use it (unnecessary interface import)"
+fi
+
 exit "$fail"

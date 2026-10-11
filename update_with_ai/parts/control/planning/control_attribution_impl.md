@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: 063ed5bb9d56
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: c32fb9d8ab63
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_attribution_impl implementation component
-
-imports: agent_session, dag_storage, agent_file_alias, agent_node_config, src_metadata
-implements: control_attribution
 
 ## Intent
 

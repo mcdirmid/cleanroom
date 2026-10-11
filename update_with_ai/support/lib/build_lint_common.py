@@ -810,6 +810,31 @@ def check_lib_structure(file_path: str) -> list[str]:
                             errors.append(
                                 f"{file_path}:{node.lineno}: error: interface module class '{node.name}' must not inherit from InTier (tier bindings belong only to concrete implementations in _impl modules)"
                             )
+        elif base_name.endswith("_impl.py"):
+            has_singleton = any(
+                isinstance(node, ast.ClassDef)
+                and (
+                    any(
+                        ast.unparse(b) in ("Singleton", "lifecycle.Singleton")
+                        for b in node.bases
+                    )
+                    or any(
+                        (isinstance(item, ast.Assign) and any(getattr(t, "id", "") == "tier" for t in item.targets))
+                        or (isinstance(item, ast.AnnAssign) and getattr(item.target, "id", "") == "tier")
+                        for item in node.body
+                    )
+                )
+                for node in tree.body
+            )
+            has_init = any(
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == "__initialize__"
+                for node in tree.body
+            )
+            if has_singleton and not has_init:
+                errors.append(
+                    f"{file_path}: error: implementation module defines Singleton class but is missing '__initialize__'"
+                )
     except Exception:
         pass
     return errors
@@ -1635,6 +1660,26 @@ def extract_public_types(file_path: str) -> dict[str, int]:
     return types
 
 
+def extract_public_functions(file_path: str) -> dict[str, int]:
+    """Extract top-level public functions defined in a Python or .pyi file,
+    mapping each function name to its definition line number.
+    Private functions (prefixed with '_') and dunder methods are ignored."""
+    if not os.path.exists(file_path):
+        return {}
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=file_path)
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return {}
+
+    funcs: dict[str, int] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if not node.name.startswith("_"):
+                funcs[node.name] = node.lineno
+    return funcs
+
+
 def find_spec_pyi(
     module_path: str,
     pyi_path: Optional[str] = None,
@@ -1737,6 +1782,52 @@ def check_public_types(
     return errors
 
 
+def check_public_functions(
+    module_path: str,
+    pyi_path: Optional[str] = None,
+    pyi_deps: Sequence[str] = (),
+    build_path: Optional[str] = None,
+) -> list[str]:
+    """Check that only functions declared in the grounding specification are defined
+    in interface library code without a preceding underscore, and that all declared functions
+    are defined in the library code."""
+    errors: list[str] = []
+    base = os.path.basename(module_path)
+    if not base.endswith(".py") or base.endswith("_asm.py") or base.endswith("_impl.py"):
+        return errors
+    if not os.path.exists(module_path):
+        return errors
+
+    spec_file = find_spec_pyi(
+        module_path, pyi_path=pyi_path, pyi_deps=pyi_deps, build_path=build_path
+    )
+    if not spec_file:
+        return errors
+
+    expected_funcs = extract_public_functions(spec_file)
+    actual_funcs = extract_public_functions(module_path)
+    spec_display = os.path.basename(spec_file)
+
+    # Extra public functions in interface module
+    for name, lineno in sorted(actual_funcs.items()):
+        if name not in expected_funcs:
+            errors.append(
+                f"{module_path}:{lineno}: error: public function '{name}' is defined in interface module "
+                f"but is not declared in grounding specification '{spec_display}'; "
+                f"interface modules must not contain uncontracted runtime functions"
+            )
+
+    # Missing public functions in interface module
+    for name in sorted(expected_funcs.keys()):
+        if name not in actual_funcs:
+            errors.append(
+                f"{module_path}: error: function '{name}' declared in grounding specification "
+                f"'{spec_display}' is not defined in library code"
+            )
+
+    return errors
+
+
 def _is_allowed_nominal_or_typevar(node: Optional[ast.AST]) -> bool:
     """Return True if the node is a NewType or TypeVar creation call."""
     if node is None or not isinstance(node, ast.Call):
@@ -1791,6 +1882,32 @@ def check_pyi_no_aliases(pyi_path: str) -> list[str]:
         elif isinstance(node, ast.AnnAssign):
             if _is_allowed_nominal_or_typevar(node.value) or _is_union_type(node.value):
                 continue
+            # A typed constant or variable declaration (e.g. `NAME: type = ...` or `NAME: type`) is not a type alias.
+            # An AnnAssign is only a type alias if it is explicitly annotated with TypeAlias or type,
+            # or if it is not an ellipsis/literal constant stub.
+            is_type_alias_ann = False
+            ann = node.annotation
+            if isinstance(ann, ast.Name) and ann.id in ("TypeAlias", "type"):
+                is_type_alias_ann = True
+            elif isinstance(ann, ast.Attribute) and ann.attr in ("TypeAlias", "type"):
+                is_type_alias_ann = True
+            elif isinstance(ann, ast.Subscript):
+                val = ann.value
+                if isinstance(val, ast.Name) and val.id == "type":
+                    is_type_alias_ann = True
+                elif isinstance(val, ast.Attribute) and val.attr == "type":
+                    is_type_alias_ann = True
+
+            if not is_type_alias_ann:
+                if node.value is None or (
+                    isinstance(node.value, ast.Constant)
+                    and (
+                        node.value.value is ...
+                        or isinstance(node.value.value, (str, int, float, bool, bytes))
+                    )
+                ):
+                    continue
+
             target_name = (
                 node.target.id
                 if isinstance(node.target, ast.Name)
@@ -2039,6 +2156,49 @@ def check_signature_alignment(
                     f"specification '{spec_display}' declares '{s_ann}', implementation defines '{p_ann}'"
                 )
 
+    spec_funcs: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {
+        n.name: n
+        for n in pyi_tree.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and not n.name.startswith("_")
+    }
+    py_funcs: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {
+        n.name: n
+        for n in py_tree.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and not n.name.startswith("_")
+    }
+
+    for fname, s_func in spec_funcs.items():
+        if fname not in py_funcs:
+            continue
+        p_func = py_funcs[fname]
+
+        s_ret = normalize_ast_type(s_func.returns)
+        p_ret = normalize_ast_type(p_func.returns)
+        if s_ret and p_ret and s_ret != p_ret:
+            errors.append(
+                f"{module_path}:{p_func.lineno}: error: return type mismatch in '{fname}': "
+                f"specification '{spec_display}' declares '{s_ret}', implementation defines '{p_ret}'"
+            )
+
+        s_args = [a for a in s_func.args.args if a.arg not in ("self", "cls")]
+        p_args = [a for a in p_func.args.args if a.arg not in ("self", "cls")]
+        if len(s_args) == len(p_args):
+            for sa, pa in zip(s_args, p_args):
+                if sa.arg != pa.arg:
+                    errors.append(
+                        f"{module_path}:{p_func.lineno}: error: parameter name mismatch in '{fname}': "
+                        f"specification '{spec_display}' declares '{sa.arg}', implementation defines '{pa.arg}'"
+                    )
+                sa_ann = normalize_ast_type(sa.annotation)
+                pa_ann = normalize_ast_type(pa.annotation)
+                if sa_ann and pa_ann and sa_ann != pa_ann:
+                    errors.append(
+                        f"{module_path}:{p_func.lineno}: error: parameter '{sa.arg}' type mismatch in '{fname}': "
+                        f"specification '{spec_display}' declares '{sa_ann}', implementation defines '{pa_ann}'"
+                    )
+
     return errors
 
 
@@ -2200,7 +2360,12 @@ def build_module_resolution_map(
         parts_dirs.append(repo_p / "parts")
     try:
         for entry in repo_p.iterdir():
-            if entry.is_dir() and (entry / "parts").is_dir() and (entry / "parts") not in parts_dirs:
+            if (
+                entry.is_dir()
+                and not entry.name.startswith((".", "venv", "bazel-"))
+                and (entry / "parts").is_dir()
+                and (entry / "parts") not in parts_dirs
+            ):
                 parts_dirs.append(entry / "parts")
     except OSError:
         pass
@@ -3148,6 +3313,215 @@ def strip_do_not_edit_markers(file_path: str) -> bool:
         new_lines.append(line)
     if changed:
         write_text(file_path, "".join(new_lines))
+        return True
+    return False
+
+
+AUTO_INIT_START = "# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---"
+AUTO_INIT_END = "# --- END CLEANROOM AUTO-GENERATED ---"
+
+
+def maintain_impl_lifecycle(
+    module_path: str, spec_file: Optional[str] = None
+) -> bool:
+    """Maintains the auto-generated __initialize__ lifecycle registration block for implementation modules.
+
+    1. Checks if module_path is an implementation module (*_impl.py) and exists.
+    2. Identifies all Singleton classes defined in the module.
+    3. If no singletons exist, removes any existing __initialize__ block and auto-generated markers.
+    4. If singletons exist, generates or updates the delimited __initialize__ block with exact keys and tier.
+    5. Returns True if the file content was modified, False otherwise.
+    """
+    if not module_path.endswith("_impl.py") or not os.path.isfile(module_path):
+        return False
+
+    try:
+        content = read_text(module_path)
+        tree = ast.parse(content, filename=module_path)
+    except (OSError, SyntaxError):
+        return False
+
+    singleton_nodes: list[ast.ClassDef] = []
+    existing_regs: dict[str, tuple[list[str], str]] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "__initialize__":
+            for call in ast.walk(node):
+                if isinstance(call, ast.Call) and getattr(call.func, "attr", "") == "register_singleton":
+                    if call.args:
+                        cls_name = ast.unparse(call.args[0])
+                        keys_kw = [k.value for k in call.keywords if k.arg == "keys"]
+                        tier_kw = [k.value for k in call.keywords if k.arg == "tier"]
+                        ex_keys = (
+                            [ast.unparse(e) for e in keys_kw[0].elts]
+                            if keys_kw and isinstance(keys_kw[0], (ast.List, ast.Tuple))
+                            else []
+                        )
+                        ex_tier = ast.unparse(tier_kw[0]) if tier_kw else ""
+                        existing_regs[cls_name] = (ex_keys, ex_tier)
+
+    singleton_nodes: list[ast.ClassDef] = []
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            has_tier = any(
+                (isinstance(item, ast.Assign) and any(getattr(t, "id", "") == "tier" for t in item.targets))
+                or (isinstance(item, ast.AnnAssign) and getattr(item.target, "id", "") == "tier")
+                for item in node.body
+            )
+            is_singleton = (
+                any(
+                    ast.unparse(b) in ("Singleton", "lifecycle.Singleton")
+                    for b in node.bases
+                )
+                or has_tier
+                or node.name in existing_regs
+            )
+            if is_singleton:
+                singleton_nodes.append(node)
+
+    spec_bases_by_cls: dict[str, list[str]] = {}
+    if spec_file and os.path.isfile(spec_file):
+        try:
+            spec_tree = ast.parse(read_text(spec_file), filename=spec_file)
+            for node in spec_tree.body:
+                if isinstance(node, ast.ClassDef):
+                    s_bases = [
+                        ast.unparse(b)
+                        for b in node.bases
+                        if not ast.unparse(b).startswith("InTier")
+                        and ast.unparse(b) not in ("Singleton", "lifecycle.Singleton", "object")
+                    ]
+                    spec_bases_by_cls[node.name] = s_bases
+        except Exception:
+            pass
+
+    new_content = content
+    if AUTO_INIT_START in new_content and AUTO_INIT_END in new_content:
+        start_idx = new_content.find(AUTO_INIT_START)
+        end_idx = new_content.find(AUTO_INIT_END) + len(AUTO_INIT_END)
+        new_content = new_content[:start_idx].rstrip() + "\n" + new_content[end_idx:].lstrip()
+
+    try:
+        cur_tree = ast.parse(new_content, filename=module_path)
+    except SyntaxError:
+        return False
+
+    init_nodes = [
+        n
+        for n in cur_tree.body
+        if (isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "__initialize__")
+        or (isinstance(n, ast.Assign) and any(getattr(t, "id", "") == "_initialize_" for t in n.targets))
+    ]
+    if init_nodes:
+        lines = new_content.splitlines(keepends=True)
+        min_line = min(n.lineno for n in init_nodes)
+        end_linenos = [n.end_lineno for n in init_nodes if n.end_lineno is not None]
+        max_line = max(end_linenos) if end_linenos else min_line
+        kept_lines = lines[: min_line - 1]
+        after_lines = lines[max_line:]
+        new_content = "".join(kept_lines).rstrip() + "\n"
+        if any(l.strip() for l in after_lines):
+            new_content += "".join(after_lines).rstrip() + "\n"
+
+    if not singleton_nodes:
+        new_content = new_content.rstrip() + "\n"
+        if new_content != content:
+            write_text(module_path, new_content)
+            return True
+        return False
+
+    singleton_entries: list[tuple[str, list[str], str]] = []
+    for node in singleton_nodes:
+        cls_name = node.name
+        raw_bases = [
+            ast.unparse(b)
+            for b in node.bases
+            if not ast.unparse(b).startswith("InTier")
+            and ast.unparse(b) not in ("Singleton", "lifecycle.Singleton", "object")
+        ]
+        candidate_bases = spec_bases_by_cls.get(cls_name, raw_bases)
+        computed_keys = [cls_name] + [b for b in candidate_bases if b != cls_name]
+        for b in raw_bases:
+            if b != cls_name and b not in computed_keys:
+                computed_keys.append(b)
+
+        if cls_name in existing_regs:
+            ex_keys, ex_tier = existing_regs[cls_name]
+            final_keys = list(ex_keys)
+            for k in computed_keys:
+                if k not in final_keys:
+                    final_keys.append(k)
+            tier_val = ex_tier if ex_tier else f"{cls_name}.tier"
+        else:
+            final_keys = computed_keys
+            tier_val = f"{cls_name}.tier"
+
+        singleton_entries.append((cls_name, final_keys, tier_val))
+
+    has_opt = False
+    has_lc_reg = False
+    has_get_default = False
+    for n in cur_tree.body:
+        if isinstance(n, ast.ImportFrom):
+            if n.module == "typing" and any(a.name == "Optional" for a in n.names):
+                has_opt = True
+            elif n.module in ("support.lib.lifecycle", "lifecycle"):
+                if any(a.name == "LifecycleRegistry" for a in n.names):
+                    has_lc_reg = True
+                if any(a.name == "get_default_registry" for a in n.names):
+                    has_get_default = True
+
+    import_lines_to_add: list[str] = []
+    if not has_opt:
+        import_lines_to_add.append("from typing import Optional\n")
+    missing_lc = []
+    if not has_lc_reg:
+        missing_lc.append("LifecycleRegistry")
+    if not has_get_default:
+        missing_lc.append("get_default_registry")
+    if missing_lc:
+        import_lines_to_add.append(
+            f"from support.lib.lifecycle import {', '.join(missing_lc)}\n"
+        )
+
+    if import_lines_to_add:
+        c_lines = new_content.splitlines(keepends=True)
+        ins_idx = 0
+        for idx, line in enumerate(c_lines):
+            if line.startswith("from __future__"):
+                ins_idx = idx + 1
+            elif ins_idx > 0 and (line.startswith("#") or line.strip() == ""):
+                ins_idx = idx + 1
+            elif ins_idx > 0:
+                break
+        for imp in reversed(import_lines_to_add):
+            c_lines.insert(ins_idx, imp)
+        new_content = "".join(c_lines)
+
+    block_lines = [
+        "",
+        "",
+        AUTO_INIT_START,
+        "def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:",
+        '    """Registers constituent singletons into the lifecycle registry."""',
+        "    reg = get_default_registry() if registry is None else registry",
+    ]
+    for cls_name, keys, tier in singleton_entries:
+        keys_str = ", ".join(keys)
+        block_lines.append("    reg.register_singleton(")
+        block_lines.append(f"        {cls_name},")
+        block_lines.append(f"        keys=[{keys_str}],")
+        block_lines.append(f"        tier={tier},")
+        block_lines.append("    )")
+    block_lines.append("")
+    block_lines.append("")
+    block_lines.append("_initialize_ = __initialize__")
+    block_lines.append(AUTO_INIT_END)
+    block_lines.append("")
+
+    final_content = new_content.rstrip() + "\n" + "\n".join(block_lines)
+
+    if final_content != content:
+        write_text(module_path, final_content)
         return True
     return False
 

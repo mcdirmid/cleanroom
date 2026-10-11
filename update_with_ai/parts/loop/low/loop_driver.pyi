@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 756b563fbcfb
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:19:48Z
+# CHANGE: Align loop driver turn, correlation, reminder, and termination contracts
+# CODE_HASH: d64f6418d1e5
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Loop driver low-level interface specification."""
@@ -32,22 +32,27 @@ class LoopOutcome:
 
 @singleton_type("agent_session")
 class LoopDriver(InTier[AgentSessionTier], Protocol):
-    """Coordinates turn loops, tool dispatches, and audit telemetry for an agent session."""
+    """Coordinates the turn loop, model request dispatch, and tool execution for an agent session."""
 
     @operation
     def run(self) -> LoopOutcome:
-        """Drives iterative turns until tool termination or turn limit exhaustion.
+        """Drives iterative turns until tool termination or conversation limit exhaustion.
 
         Returns:
-            The loop outcome record.
+            The loop outcome record carrying the termination outcome and the final conversation state.
 
         POSTCONDITIONS:
         - MUST drive turns by sending model requests and executing requested tools.
-        - MUST append model responses and correlate tool responses in conversation.
+        - MUST append model responses and correlate tool responses with their originating tool call identifiers.
         - MUST dispatch follow-up tool calls specified by tool responses.
-        - MUST record log events for interaction turns, tool executions, and turn outcomes.
-        - WHEN tool execution produces a termination outcome, MUST produce a loop outcome.
+        - MUST record follow-up executions in the conversation.
+        - MUST evaluate tool executions for consecutive repetition.
+        - WHEN repetition is detected, MUST inject loop reminders into the conversation.
+        - WHEN a model response contains no tool executions, MUST inject a tool reminder into the conversation stating that session progress and conclusion require executing tools.
+        - WHEN a model response contains no tool executions, MUST continue the turn loop.
+        - WHEN tool execution produces a termination outcome, MUST conclude atomically and produce a loop outcome carrying the final conversation state.
+        - WHEN the termination outcome indicates a failing outcome, MUST halt with an unexpected failure.
         - WHEN consecutive repetitions reach the fatal threshold, MUST halt with an unexpected failure.
-        - WHEN the conversation turn limit is exceeded, MUST halt with an unexpected failure.
+        - WHEN the conversation limit is exceeded, MUST halt with an unexpected failure.
         """
         ...

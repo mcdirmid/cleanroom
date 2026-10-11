@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: 61d6c9deaf86
+CODE_HASH: 6b4f52f74a91
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_verification_impl implementation component
@@ -22,16 +23,16 @@ Subprocess execution of compilers, type checkers, and test runners generates ver
 
 ## Types and Behavior
 
-The verification evaluator implements verification check evaluation for the session.
+The verification evaluator implements verification check evaluation for an agent session.
 
 When evaluating verification checks:
 
-- The verification evaluator retrieves verification checks configured on the target node or configured globally for the active session from node config.
+- The verification evaluator retrieves the verification checks configured on the target node or configured globally for the active session.
 
-- When target read-write file hashes match the cached file hash recorded from the previous evaluation, the verification evaluator reuses the cached verification result, setting the is cached flag to true without invoking check subprocesses.
+- The verification evaluator reuses the cached verification result and reports it as reused, without invoking check subprocesses, while target read-write file hashes match the file hash recorded from the previous evaluation.
 
-- When evaluating verification checks for a target whose files have changed or which has not yet been evaluated, the verification evaluator executes each configured check command sequentially.
+- The verification evaluator executes each configured check command sequentially when evaluating a target whose files have changed or that has not yet been evaluated.
 
-- If any verification check exits with a non-zero exit code or writes failure diagnostics, the verification evaluator marks the verification result as failing, captures the error output, strips compiler diagnostic noise lines starting with build progress indicators or load banners, and stores the failing outcome in the file hash cache.
+- The verification evaluator marks the verification result as failing when any verification check exits with a non-zero exit code or writes failure diagnostics, capturing the error output, stripping compiler diagnostic noise lines that begin with build progress indicators or load banners, and storing the failing outcome in the file hash cache.
 
-- If all verification checks complete with exit code zero, the verification evaluator marks the verification result as passed, captures any standard output, strips compiler diagnostic noise, and caches the passing outcome alongside the current file hashes.
+- The verification evaluator marks the verification result as passed when every verification check completes with exit code zero, capturing any standard output, stripping compiler diagnostic noise, and caching the passing outcome alongside the current file hashes.

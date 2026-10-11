@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: a2c35dc78022
-# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:58:00Z
+# CHANGE: Track independent repetition streaks for identical tool invocations and for repeated edits to the same file and line range, each with warning and fatal thresholds, and clear both on reset
+# CODE_HASH: 6242a3830abb
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 from typing import Any, Mapping, Optional, Tuple, Union
@@ -13,6 +13,19 @@ from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
+# Tools whose arguments name a session read-write file and an edited line range.
+_EDIT_TOOLS = ("replace_file_content", "edit_file", "edit")
+
+# Threshold of two repetitions that warns an agent of a detected repetition.
+_WARNING_THRESHOLD = 2
+
+# Repetition count at which a detected repetition terminates the session.
+_FATAL_THRESHOLD = 3
+
+
+def _parameter_name(parameter: Any) -> str:
+    return str(getattr(parameter, "name", parameter))
+
 
 class LoopGuard(loop_guard.LoopGuard, Singleton):
     tier = agent_session
@@ -20,8 +33,29 @@ class LoopGuard(loop_guard.LoopGuard, Singleton):
     def __init__(self) -> None:
         self._last_call: Optional[Tuple[str, Any]] = None
         self._consecutive_count: int = 0
-        self._reminder_threshold: int = 2
-        self._fatal_threshold: int = 5
+        self._last_edit: Optional[Tuple[str, Any, Any]] = None
+        self._edit_count: int = 0
+
+    def _edit_location(
+        self,
+        tool_name: tool_provider.ToolName,
+        arguments: Mapping[
+            tool_provider.ToolParameter[Any, Any],
+            tool_provider.SomeParameterActualType,
+        ],
+    ) -> Optional[Tuple[str, Any, Any]]:
+        params = {_parameter_name(name): value for name, value in arguments.items()}
+        target_file = (
+            params.get("path")
+            or params.get("target_file")
+            or params.get("file_name")
+            or ""
+        )
+        start_line = params.get("start_line")
+        end_line = params.get("end_line")
+        if not target_file:
+            return None
+        return (str(tool_name), str(target_file), (start_line, end_line))
 
     def evaluate(
         self,
@@ -30,59 +64,64 @@ class LoopGuard(loop_guard.LoopGuard, Singleton):
             tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType
         ],
     ) -> Optional[Union[loop_guard.LoopReminder, loop_guard.LoopFailure]]:
-        params = {getattr(name, "name", str(name)): v for name, v in arguments.items()}
-        if tool_name in ("replace_file_content", "edit_file", "edit"):
-            target_file = (
-                params.get("path")
-                or params.get(
-                    "target_file"
-                )  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
-                or params.get(
-                    "file_name"
-                )  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
-                or ""  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
-            )
-            start_line = params.get("start_line")
-            end_line = params.get("end_line")
-            if start_line is not None and end_line is not None:
-                call_key = (
-                    str(tool_name),
-                    (str(target_file), str(start_line), str(end_line)),
-                )
-            elif target_file:  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
-                call_key = (str(tool_name), str(target_file))
-            else:  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
-                call_key = (
-                    str(tool_name),
-                    frozenset(
-                        (getattr(name, "name", str(name)), str(v))
-                        for name, v in arguments.items()
-                    ),
-                )
-        else:
-            call_key = (
-                str(tool_name),
-                frozenset(
-                    (getattr(name, "name", str(name)), str(v))
-                    for name, v in arguments.items()
-                ),
-            )
-        if self._last_call == call_key:
+        signature = (
+            str(tool_name),
+            frozenset(
+                (_parameter_name(name), repr(value))
+                for name, value in arguments.items()
+            ),
+        )
+        if self._last_call == signature:
             self._consecutive_count += 1
         else:
-            self._last_call = call_key
+            self._last_call = signature
             self._consecutive_count = 1
 
-        if self._consecutive_count >= self._fatal_threshold:
+        edit_location: Optional[Tuple[str, Any, Any]] = None
+        if str(tool_name) in _EDIT_TOOLS:
+            edit_location = self._edit_location(tool_name, arguments)
+        if edit_location is not None:
+            if self._last_edit == edit_location:
+                self._edit_count += 1
+            else:
+                self._last_edit = edit_location
+                self._edit_count = 1
+        else:
+            self._last_edit = None
+            self._edit_count = 0
+
+        if self._consecutive_count >= _FATAL_THRESHOLD:
             return loop_guard.LoopFailure(
                 explanation=loop_guard.FailureExplanation(
-                    f"Fatal loop detected: tool '{tool_name}' executed {self._consecutive_count} times consecutively."
+                    f"Fatal loop detected: tool '{tool_name}' executed "
+                    f"{self._consecutive_count} times consecutively."
                 )
             )
-        elif self._consecutive_count >= self._reminder_threshold:
+        if self._edit_count >= _FATAL_THRESHOLD:
+            return loop_guard.LoopFailure(
+                explanation=loop_guard.FailureExplanation(
+                    f"Fatal loop detected: the same file and line range were edited "
+                    f"{self._edit_count} times consecutively."
+                )
+            )
+        if self._consecutive_count >= _WARNING_THRESHOLD:
             return loop_guard.LoopReminder(
                 feedback=loop_guard.LoopFeedback(
-                    f"Warning: tool '{tool_name}' has been executed {self._consecutive_count} times consecutively, no new information will be revealed by this tool call until session read-write files are updated. Repeating this tool call without modifying files will trigger fatal loop termination."
+                    f"Warning: tool '{tool_name}' has been executed "
+                    f"{self._consecutive_count} times consecutively, no new information "
+                    "will be revealed by this tool call until session read-write files "
+                    "are updated. Repeating this tool call without modifying files will "
+                    "trigger fatal loop termination."
+                )
+            )
+        if self._edit_count >= _WARNING_THRESHOLD:
+            return loop_guard.LoopReminder(
+                feedback=loop_guard.LoopFeedback(
+                    f"Warning: the same file and line range were edited "
+                    f"{self._edit_count} times consecutively, no new information will be "
+                    "revealed until session read-write files are updated. Repeating this "
+                    "edit without changing the file or line range will trigger fatal loop "
+                    "termination."
                 )
             )
         return None
@@ -90,12 +129,20 @@ class LoopGuard(loop_guard.LoopGuard, Singleton):
     def reset(self) -> None:
         self._consecutive_count = 0
         self._last_call = None
+        self._edit_count = 0
+        self._last_edit = None
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         LoopGuard,
         keys=[LoopGuard, loop_guard.LoopGuard],
         tier=agent_session,
     )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

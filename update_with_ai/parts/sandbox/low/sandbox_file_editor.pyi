@@ -1,14 +1,15 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:38:02Z
-# LAST_CHANGED: 2026-10-09T21:38:02Z
-# CHANGE: Specify that the replace file content tool is installed for the agent session
-# CODE_HASH: 2c0d33a5a911
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:21:34Z
+# CHANGE: Remove stale EditManager installation claim and unused imports
+# CODE_HASH: 8762bd16fc16
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file editor low-level interface specification."""
 
-from typing import Any, Mapping, NewType, Optional, Protocol, Set, Union
-from framework import data_type, operation, override, poly_type, singleton_type
+from typing import Any, Mapping, NewType, Optional, Protocol, Union
+from framework import operation, override, poly_type, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import agent_file_alias
@@ -52,7 +53,7 @@ class EditingTool(tool_provider.Tool, Protocol):
 
 @singleton_type("agent_session")
 class EditManager(InTier[AgentSessionTier], Protocol):
-    """Agent session service that installs editing tools and tracks session modifications."""
+    """Agent session service that tracks session edits and exposes workspace file modification state."""
 
     @property
     def has_modifications(self) -> bool:

@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 7ca5af56ab58
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T04:12:06Z
+CHANGE: Move the tools assembly to the system lifecycle tier
+CODE_HASH: c9e640f8b270
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # tools_asm assembly component
-
-imports: tool_coverage_impl
 
 ## Intent
 
@@ -18,7 +16,7 @@ Assembles tool and inspection services, including module statement test coverage
 
 ### Contracts
 
-- Assembles tools service implementations into the agent session lifecycle tier. [assemble_tools_services]
+- Assembles tools service implementations into the system lifecycle tier. [assemble_tools_services]
 
 ## Grounding
 

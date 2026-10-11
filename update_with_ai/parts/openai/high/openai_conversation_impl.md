@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-05T05:11:14Z
-CHANGE: Add delegated collaborator statement for imported external and peer components
-CODE_HASH: bd167a457883
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Split the stubbing paragraph and state argument preservation as a parallel list
+CODE_HASH: c10d471c70d8
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # openai_conversation_impl implementation component
@@ -22,12 +23,14 @@ Language model APIs impose strict role alternation invariants and reject uncoord
 
 ## Types and Behavior
 
-The conversation formats messages in a model request according to OpenAI chat completion conventions for system, user, assistant, and tool messages.
+The conversation formats the messages of a model request according to OpenAI chat completion conventions for system, user, assistant, and tool messages.
 
-A tool response's suppression key retains a buffer of up to three most recent responses sharing that key in the conversation, replacing older preceding responses beyond the buffer limit with stubs, while responses with unmatched keys are preserved intact. When a response is replaced with a stub, tool arguments in the correlating assistant invocation message retain their parameter keys, preserving file path parameters, preserving non-string values, and replacing other string values with a stub marker. A stub retains the reminder from the superseded tool response, which newly appended responses inherit when omitted.
+A tool response's suppression key retains a buffer of up to three most recent responses sharing that key, replacing older responses beyond the buffer limit with stubs. Responses with unmatched suppression keys are preserved intact.
+
+When a response is replaced with a stub, the tool arguments in the correlating assistant invocation message retain their parameter keys and non-string values, file path parameters are preserved, and every other string value is replaced with a stub marker. A stub retains the reminder of the superseded tool response, which newly appended responses inherit when they omit a reminder.
 
 When assembling a model request from messages in the conversation:
 
-- Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
+- Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs so the agent remains reminded in the assembled model request.
 
-- Each unprompted tool response presented at session start is preceded in the conversation by a synthetic assistant tool invocation message formatted according to OpenAI tool calling conventions, correlating with the response tool call identifier and ordering serialized argument parameters deterministically by parameter name, presenting the tool execution as if initiated by the model.
+- Each unprompted tool response presented at session start is preceded in the conversation by a synthetic assistant tool invocation message formatted according to OpenAI tool calling conventions, correlating with the response tool call identifier and ordering serialized argument parameters deterministically by parameter name, so the tool execution appears as if initiated by the model.

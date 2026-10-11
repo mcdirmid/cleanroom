@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-06T14:35:00Z
 CHANGE: new file
-CODE_HASH: 903e1ab0f625
+CODE_HASH: 4b9f543b8803
 -->
 
 # src_metadata_ext external component
@@ -25,6 +25,6 @@ Grounding gaps covered include:
 
 - Header placement and boundary extraction: Locates metadata comment blocks positioned at the beginning of files, placing blocks below initial shebang directives or encoding lines in executable scripts, placing blocks after YAML frontmatter delimiters in Markdown specifications, and isolating metadata content from surrounding source code.
 
-- In-band metadata grammar parsing: Parses structured metadata fields from comment content, extracting UTC ISO 8601 timestamps for last cleaned and last changed attributes, extracting single-line change descriptions, code hash signatures, dirty status flags, role audit timestamps, and parsing conditional unacted feedback lists carrying timestamp, source node, and diagnostic explanation attributes.
+- In-band metadata grammar parsing: Parses structured metadata fields from comment content, extracting UTC ISO 8601 timestamps for last cleaned and last changed attributes, extracting single-line change summaries, code hash signatures, dirty status flags, role audit timestamps, and parsing conditional unacted feedback lists carrying timestamp, source node, and diagnostic explanation attributes.
 
-- In-place metadata block rewriting: Rewrites source files in-place with updated timestamps, revised change descriptions, cleared last cleaned timestamps, appended unacted feedback entries, role audit stamps, or stripped feedback sections, preserving exact source code content, shebang headers, and frontmatter formatting below the comment header.
+- In-place metadata block rewriting: Rewrites source files in-place with updated timestamps, revised change summaries, cleared last cleaned timestamps, appended unacted feedback entries, role audit stamps, or stripped feedback sections, preserving exact source code content, shebang headers, and frontmatter formatting below the comment header.

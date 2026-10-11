@@ -16,28 +16,28 @@
 │                                  ▼                                               │
 │   2. Planning Canvas (planning/*.md)                                             │
 │      Intent prose, Factored Contracts with slugs, Epistemic Grounding DAG        │
-│                                  │                                               │
-│                                  ├── Gate 1: SPEC_QA Arbiter (spec_qa)           │
-│                                  ▼  planning_to_low.md                           │
+│                                  │  planning_to_low.md                           │
+│                                  ▼                                               │
 │   3. Low-Level Spec (low/*.pyi)                                                  │
 │      Typed Python stubs, DbC docstrings, Natural Language GROUNDING: arguments   │
 │                                  │                                               │
-│                                  ├── Gate 2: LOW_QA Arbiter (low_qa)             │
+│                                  ├── Gate 1: SPEC_QA Arbiter (spec_qa)           │
 │                                  ▼  low_to_lib.md / low_to_test.md               │
 │   4. Library & Tests (lib/*.py & tests/*_test.py)                                │
 │      Double-blind implementation and contract tests                              │
 │                                  │                                               │
-│                                  └── Gate 3: QA & Coverage Arbiters              │
+│                                  └── Gate 2: QA & Coverage Arbiters              │
 │                                                                                  │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Foundational Principles
 1. **Mandatory Specification-First (HLS-First)**: Production code and tests are never authored directly. Every capability and constraint originates in literate High-Level Specifications (`high/*.md`) and cascades automatically downstream.
-2. **The Anti-Drift Principle**: Structural validation, closed-world symbol linking, relational feasibility, and test coverage auditing are enforced by **100% deterministic, zero-token Python tooling** running in milliseconds. LLMs are reserved for generative synthesis; deterministic tools enforce the guardrails.
+2. **The Anti-Drift Principle**: Structural validation, closed-world symbol linking, relational feasibility, and test coverage auditing are enforced by **100% deterministic, zero-token Python tooling** running in milliseconds under native **`uv`**. LLMs are reserved for generative synthesis; deterministic tools enforce the guardrails.
 3. **Double-Blind Verification**: Implementers write code against specifications without seeing tests. Test authors write assertions against specifications without seeing implementation code. Neither role can cheat or bias the other.
 4. **Epistemic Feasibility in Planning**: Knowledge provisions and consumer requirements form an acyclic reachability DAG directly in planning specifications, proving capability reachability before low-level stub formalization and implementation.
-5. **Authors Author; Arbiters Lint and Audit**: Authoring models are insulated from interactive linters and type checkers to prevent mechanistic gaming; independent auditor roles (`spec_qa`, `low_qa`, `qa`, `coverage`) run automated verification suites internally and deliver diagnostic blame attribution.
+5. **Authors Author; Arbiters Lint and Audit**: Authoring models are insulated from interactive linters and type checkers to prevent mechanistic gaming; independent auditor roles (`spec_qa`, `qa`, `coverage`) run automated verification suites internally and deliver diagnostic blame attribution.
+6. **Canonical `parts/` Over `support/lib/`**: All production domain logic, workspace management, statement coverage measurement, and session coordination live in modular 4-stage Cleanroom parts (`parts/workspace`, `parts/tools`, `parts/control`, `parts/uv`, `parts/systems`), leaving `support/lib/` strictly for foundational metaclasses (`framework.py`, `lifecycle.py`) and procedural AST linters.
 
 ---
 
@@ -71,7 +71,7 @@
   - Structural decorators: `@singleton_type`, `@poly_type`, `@data_type`, `@variant`, `@operation`, `@override`.
   - Design-by-Contract docstrings organizing obligations into `INVARIANTS:`, `PRECONDITIONS:`, and `POSTCONDITIONS:`.
   - Natural Language Grounding Arguments (`GROUNDING:`) in `low/*_impl.pyi` translating planning provisions into concrete collaborator classes and methods.
-  - Verified hermetically by Pyright and `low_lint.py` via the `low_qa` arbiter (Gate 2).
+  - Verified hermetically by native Pyright, `low_lint.py`, and `spec_lint.py` via the `spec_qa` arbiter (Gate 1).
 - **Reference**: [`low_level_spec_format.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/low_level_spec_format.md)
 
 ### Stage 4: Library Code & Contract-Driven Tests
@@ -80,7 +80,7 @@
   - `lib/*.py`: Implements production runtime logic against low-level stubs.
   - `tests/*_test.py`: Verifies contracts by citing verbatim requirement strings (`# Requirement: <exact text>`).
   - Double-blind isolation: test authors never see implementation code; implementers never see tests.
-  - Validated by hermetic Bazel type checking (Pyright) and 100% statement test coverage via `evaluate_coverage.py` through `qa` and `coverage` arbiters (Gate 3).
+  - Validated by native type checking (`uv run pyright`) and 100% statement test coverage via `parts/tools` (`tool_coverage.py`) through `qa` and `coverage` arbiters (Gate 3).
 - **Reference**: [`toolchain_and_verification.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md)
 
 ---
@@ -115,12 +115,12 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 ```
 
 1. **Option 1: Custom Loop Cleanroom** ([`custom_loop_cleanroom.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/custom_loop_cleanroom.md)):
-   - In-process autonomous runner driving the OpenAI API (`update_with_ai/parts/systems/bazel_openai_loop_asm`).
-   - Traverses build graph nodes in topological dependency order (`loop_cleaner.py`), running isolated turn loops (`loop_driver.py`) with repetition guards (`loop_guard.py`).
-   - Production engine for headless continuous integration and batch cleaning.
+   - In-process autonomous runner driving the OpenAI API (`update_with_ai/parts/systems/uv_cleanroom_asm`).
+   - Traverses dependency graph nodes in topological order (`loop_cleaner.py`), running isolated turn loops (`loop_driver.py`) with repetition guards (`loop_guard.py`).
+   - Production engine for headless continuous integration and batch cleaning via `bin/cleanroom_loop`.
 2. **Option 3: Subagentless Cleanroom Workspaces** ([`subagentless_cleanroom_workspaces.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)):
    - Sibling workspace directories (`../role_workspaces/<workspace-name>_<role>_<dir>`) running independent conversational sessions in Antigravity.
-   - Enforces double-blind isolation via OS-level `chmod 444` read-only mounts and orchestrates role coordination via relative convention discovery, direct Bazel mutations (`submit`, `blame`, `fail`), and self-synchronizing `bin/get_work`.
+   - Enforces double-blind isolation via OS-level `chmod 444` read-only mounts and orchestrates role coordination via `parts/workspace`, direct CLI mutations (`submit`, `blame`, `fail`), and self-synchronizing `bin/get_work`.
    - Production architecture for interactive AI pair programming managed via `bin/cleanroom`.
 3. **Option 4: Subagent-Driven Cleanroom Workspaces** ([`subagent_driven_cleanroom_workspaces_todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md)):
    - Autonomous multi-agent architecture driving Option 3's pre-confined workspaces via a **Zero-Execution Coordinator**.
@@ -137,24 +137,24 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 
 ### 4.1 Specification Formats & Verification Pipeline
 - **[High-Level Specification Format (HLS)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/high_level_spec_format.md)** (`high_level_spec_format.md`): Literate prose specifications, italic semantic markers, single-level bullets, and lifecycle tiers.
-- **[Planning Canvas Specification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/planning_format.md)** (`planning_format.md`): Authoritative specification for Intent separation, factored typing/contracts with slugs, flat woven interactions, epistemic grounding DAG, external boundary specs (`_ext`), and `spec_qa`/`low_qa` auditor verification.
+- **[Planning Canvas Specification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/planning_format.md)** (`planning_format.md`): Authoritative specification for Intent separation, factored typing/contracts with slugs, flat woven interactions, epistemic grounding DAG, external boundary specs (`_ext`), and `spec_qa` auditor verification.
 - **[Low-Level Specification Architecture (LLS)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/low_level_spec_format.md)** (`low_level_spec_format.md`): Strong AST types, lifecycle decorators, Design-by-Contract docstrings, and Natural Language Grounding Arguments (`GROUNDING:`).
 - **[Auditor Roles & Verification Dirtiness Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/auditor_roles_and_dirtiness_architecture.md)** (`auditor_roles_and_dirtiness_architecture.md`): In-band verification attestations (`<ROLE>_AUDIT:`), resolving the 0-byte paradox, and formalizing auditor dirty predicates.
-- **[Toolchain & Verification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md)** (`toolchain_and_verification.md`): Deterministic linters, test coverage arbiter (`evaluate_coverage.py`), and Bazel type checking.
+- **[Toolchain & Verification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md)** (`toolchain_and_verification.md`): Deterministic linters, modular test coverage engine (`update_with_ai/parts/tools/lib/tool_coverage.py`), and native Pyright static type checking.
+- **[Merged QA & Coverage Auditor Role Architecture (TODO)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/merged_qa_and_coverage_auditor_todo.md)** (`merged_qa_and_coverage_auditor_todo.md`): Architectural design for consolidating `qa` and `coverage` arbiters into a unified dynamic verification pass (`do_unit_tests && do_coverage`).
+- **[Concrete Scenario Validation for HLS Translation](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/concrete_scenario_validation.md)** (`concrete_scenario_validation.md`): Concrete scenario-based evaluation of the HLS-to-LLS translation, with per-action interface requirement support and implementation realization checks, a triage for requirements no walk exercises, and a worked `workspace_work` example whose findings name the translation losses, missing realizations, and ungrounded imports.
 
 ### 4.2 Execution & Cleaning Paradigms
 - **[Subagent-Driven Cleanroom Workspaces (TODO)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md)** (`subagent_driven_cleanroom_workspaces_todo.md`): Authoritative design for multi-harness autonomous subagent orchestration across Antigravity, DeepSeek Harness, and Goose with DeepSeek-V4 Flash economics.
-- **[Subagentless Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)** (`subagentless_cleanroom_workspaces.md`): Primary interactive architecture with convention-driven zero-sync isolated role workspaces, pathless descriptors, direct Bazel mutations, and self-synchronizing global DAG work queues.
-- **[Custom Loop Cleanroom](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/custom_loop_cleanroom.md)** (`custom_loop_cleanroom.md`): Headless in-process autonomous runner driving the OpenAI API.
+- **[Subagentless Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)** (`subagentless_cleanroom_workspaces.md`): Primary interactive architecture with convention-driven zero-sync isolated role workspaces, pathless descriptors, direct Python CLI mutations, and self-synchronizing global DAG work queues.
+- **[Custom Loop Cleanroom](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/custom_loop_cleanroom.md)** (`custom_loop_cleanroom.md`): Headless in-process autonomous runner driving the OpenAI API via `parts/systems/uv_cleanroom_asm`.
 - **[Archived Post-Mortem: Antigravity Subagents](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)** (`antigravity_integration_failed.md`): Comprehensive post-mortem on why in-tree subagents failed (superseded by `subagent_driven_cleanroom_workspaces_todo.md`).
 - **[Cleaning Paradigms Comparative Overview](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleaning_paradigms.md)** (`cleaning_paradigms.md`): Architectural comparison across all cleaning paradigms.
 
-### 4.3 Workspace Architecture & Shared Infrastructure
-- **[In-Band Source Metadata & State Persistence](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/in_band_source_metadata.md)** (`in_band_source_metadata.md`): Completed production architecture eliminating `.update_with_ai.textproto` in favor of comment-embedded timestamps, single-entry change summaries, unacted feedback sections, and dynamic forward dirty evaluation.
+### 4.3 Packaging, Workspaces, & Shared Infrastructure
+- **[Packaging, Distribution, & uv Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/packaging_and_distribution_architecture.md)** (`packaging_and_distribution_architecture.md`): Authoritative architecture for Hatchling wheel packaging, uv toolchain, PEP 621 pyproject.toml configuration, zero-install uvx CLI execution, hierarchical cleanroom.toml discovery, and complete Bazel retirement.
+- **[In-Band Source Metadata & State Persistence](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/in_band_source_metadata.md)** (`in_band_source_metadata.md`): Completed production architecture eliminating `.update_with_ai.textproto` in favor of comment-embedded timestamps, single-entry change summaries, unacted feedback sections, dynamic forward dirty evaluation, and canonicalization into `parts/control/lib/src_metadata.py`.
 - **[Markdown Template Format & System Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/template_format.md)** (`template_format.md`): CommonMark HTML comment template directives (`<!-- if -->`, `<!-- for -->`, `<var>`).
-- **[Packaging, Distribution, & uv Migration Architecture (TODO)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/packaging_and_distribution_architecture_todo.md)** (`packaging_and_distribution_architecture_todo.md`): Authoritative design for migrating from Bazel monorepo constraints to uv and Hatchling, enabling zero-friction PyPI distribution, uvx CLI execution, convention-based DAG discovery, and pre-Bazel deletion checklist.
 
 ### 4.4 Research & Academic Publications
-- **[Paper Submission Design Document: Pushing General-Purpose Languages to the Background via Epistemic Specification and Primal-Dual Certified Synthesis](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md)** (`paper_submission_design_doc.md`): Authoritative research paper design, specification calculus, information-flow isolation invariants, multi-gate verification pipeline, and 5-RQ experimental evaluation plan.
-
-
+- **[Paper Submission Design Document](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md)** (`paper_submission_design_doc.md`): Authoritative research paper design, specification calculus, information-flow isolation invariants, multi-gate verification pipeline, and 5-RQ experimental evaluation plan.

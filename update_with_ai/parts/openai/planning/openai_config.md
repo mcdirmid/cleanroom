@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 0db8af2cc15b
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:16:06Z
+CHANGE: Declare the openai config system lifecycle tier typing
+CODE_HASH: c1e815ff98b8
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # openai_config interface component
@@ -18,6 +18,7 @@ By consolidating model configuration into an ambient system service, the compone
 
 ### Typing
 
+- A system's openai config provides the connection coordinates and model parameters of a system for language model requests.
 - A model name designates the target model.
 - A base url designates the remote model API endpoint address.
 - An api key provides authentication credentials.

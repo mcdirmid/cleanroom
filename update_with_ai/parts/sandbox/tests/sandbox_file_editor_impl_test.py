@@ -1,16 +1,16 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:46:23Z
-# LAST_CHANGED: 2026-10-09T22:20:00Z
-# CHANGE: Test has_modifications with dataclass workspace_root
-# CODE_HASH: 98d71cccf0f7
-# QA_AUDIT: 2026-10-09T21:46:23Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T06:00:31Z
+# CHANGE: Assert the contracted syntax and type verification reminder instead of an unmandated check substring
+# CODE_HASH: e46f407e4c93
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_file_editor_impl per its grounding specification."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import os
 import tempfile
@@ -46,7 +46,9 @@ INITIAL_CONTENT = (
 def _make_read_only_file(rel_path: str) -> agent_file_alias.ReadOnlyFile:
     return agent_file_alias.ReadOnlyFile(
         relative_path=agent_file_alias.RelativePath(rel_path),
-        workspace_path=cast(Any, rel_path),
+        workspace_path=agent_file_alias.file_paths.WorkspacePath(
+            agent_file_alias.file_paths.PathString(rel_path)
+        ),
         owning_node=cast(Any, None),
     )
 
@@ -54,7 +56,9 @@ def _make_read_only_file(rel_path: str) -> agent_file_alias.ReadOnlyFile:
 def _make_read_write_file(rel_path: str) -> agent_file_alias.ReadWriteFile:
     return agent_file_alias.ReadWriteFile(
         relative_path=agent_file_alias.RelativePath(rel_path),
-        workspace_path=cast(Any, rel_path),
+        workspace_path=agent_file_alias.file_paths.WorkspacePath(
+            agent_file_alias.file_paths.PathString(rel_path)
+        ),
         owning_node=cast(Any, None),
     )
 
@@ -131,8 +135,10 @@ class MockToolManager:
 class MockAliasManager:
     tier = agent_session
 
-    def __init__(self, workspace_root: Any) -> None:
-        self._workspace_root = workspace_root
+    def __init__(self, workspace_root: str) -> None:
+        self._workspace_root = agent_file_alias.file_paths.WorkspaceRoot(
+            agent_file_alias.file_paths.PathString(str(workspace_root))
+        )
 
     @property
     def workspace_root(self) -> Any:
@@ -329,13 +335,11 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.mock_src_metadata.modified = True
             self.assertTrue(edit_manager.has_modifications)
 
-    def test_has_modifications_with_dataclass_workspace_root(self) -> None:
-        """Postcondition: has_modifications handles dataclass workspace_root correctly."""
-        @dataclass(frozen=True)
-        class DummyWsRoot:
-            path: str
-
-        self.mock_alias_manager._workspace_root = DummyWsRoot(path=self.root)
+    def test_has_modifications_with_contracted_workspace_root(self) -> None:
+        """Postcondition: has_modifications evaluates with the contracted workspace root record."""
+        root = self.mock_alias_manager.workspace_root
+        self.assertIsInstance(root, agent_file_alias.file_paths.WorkspaceRoot)
+        self.assertEqual(root.path, self.root)
         with enter_phase(agent_session, registry=self.registry) as scope:
             edit_manager = scope.get_singleton(EditManager)
             self.assertFalse(edit_manager.has_modifications)
@@ -361,7 +365,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertFalse(resp_path.is_failed)
 
     def test_replace_success_writes_and_reminds(self) -> None:
-        """Postcondition: On success MUST write content, record writes, and remind to call check files."""
+        """Postcondition: On success MUST write content, record writes, and remind to verify syntax and types."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             edit_manager = scope.get_singleton(EditManager)
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
@@ -375,8 +379,14 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             self.assertGreater(edit_manager.file_update_revision, rev0)
             self.assertEqual(edit_manager.last_read_or_edited_file, self.read_write_file)
+            # Requirement: WHEN the replacement succeeds, MUST remind the agent to verify syntax and
+            # type correctness before making further writes.
             self.assertIsNotNone(resp.reminder)
-            self.assertIn("check", str(resp.reminder).lower())
+            reminder_text = str(resp.reminder).lower()
+            self.assertTrue(
+                "syntax" in reminder_text or "type" in reminder_text,
+                f"Expected a syntax and type verification reminder, got: {resp.reminder}",
+            )
 
     def test_replace_creates_missing_parent_directories(self) -> None:
         """Postcondition: On success MUST write updated content creating missing parent directories."""

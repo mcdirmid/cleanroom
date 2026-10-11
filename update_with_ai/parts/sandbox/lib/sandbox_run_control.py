@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:43:05Z
-# LAST_CHANGED: 2026-10-09T21:43:05Z
-# CHANGE: Add initialize method to RunController protocol
-# CODE_HASH: 155ed79c9e6e
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:58:58Z
+# CHANGE: Add the declared CheckFilesTool.name, AdvanceTool.name and RunController.blame_targets_by_node members with spec-exact signatures
+# CODE_HASH: 1ed5378cf8b2
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -49,12 +49,22 @@ class ResolveTool(tool_provider.Tool, Protocol):
 
 
 class CheckFilesTool(tool_provider.Tool, Protocol):
+    @property
+    def name(self) -> tool_provider.ToolName:
+        # TODO_name_body
+        ...
+
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
         # TODO_execute_tool_body
         ...
 
 
 class AdvanceTool(tool_provider.Tool, Protocol):
+    @property
+    def name(self) -> tool_provider.ToolName:
+        # TODO_name_body
+        ...
+
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
         # TODO_execute_tool_body
         ...
@@ -117,6 +127,11 @@ class RunController(Protocol):
     @property
     def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
         # TODO_verification_checks_body
+        ...
+
+    @property
+    def blame_targets_by_node(self) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
+        # TODO_blame_targets_by_node_body
         ...
 
     def update_verification(self) -> None:

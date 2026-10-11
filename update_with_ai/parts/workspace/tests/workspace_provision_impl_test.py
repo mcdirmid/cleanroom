@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-09T02:39:58Z
-# CHANGE: test contamination tripwire in generated AGENTS.md
-# CODE_HASH: c1c2e950c765
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:58:13Z
+# CHANGE: Replace the undeclared private workspace registry constructor with a test double implementing the declared WorkspaceRegistry interface
+# CODE_HASH: d0e8c2ba65d3
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_provision_impl."""
@@ -23,10 +23,93 @@ from update_with_ai.parts.workspace.lib import (
 )
 
 
+class FakeWorkspaceRegistry:
+    """Test double implementing the declared WorkspaceRegistry interface."""
+
+    tier = agent_session.agent_session
+
+    def __init__(self, roles) -> None:
+        self.roles = list(roles)
+        self.recorded: list[workspace_registry.WorkspaceDescriptor] = []
+
+    def discover_repository_root(self, start_dir=None) -> str:
+        return start_dir or os.getcwd()
+
+    def resolve_role_definition(
+        self, role_name_or_address, repo_root=None, dir_scope=None
+    ) -> workspace_registry.RoleDefinition:
+        name = str(role_name_or_address).split(":")[-1].split("#")[0].strip().lower()
+        for role in self.roles:
+            if role.role_name == name:
+                return role
+        if not name and len(self.roles) == 1:
+            return self.roles[0]
+        raise KeyError(f"Role not found: {role_name_or_address}")
+
+    def list_roles(self, repo_root=None, dir_scope=None):
+        return list(self.roles)
+
+    def compute_workspace_dir(
+        self, role_name, dir_scope, repo_root=None, custom_dest=None
+    ) -> str:
+        if custom_dest:
+            return custom_dest
+        folder = f"{role_name}_{str(dir_scope).replace('/', '_').replace(':', '_')}"
+        return os.path.join(repo_root or os.getcwd(), ".cleanroom_workspaces", folder)
+
+    def record_workspace(self, descriptor, repo_root=None) -> None:
+        self.recorded.append(descriptor)
+
+    def unregister_workspace(self, workspace_dir, repo_root=None) -> bool:
+        before = len(self.recorded)
+        self.recorded = [d for d in self.recorded if d.workspace_dir != workspace_dir]
+        return len(self.recorded) != before
+
+    def load_active_workspaces(self, repo_root=None):
+        return list(self.recorded)
+
+
+def _make_roles():
+    low_role = workspace_registry.RoleDefinition(
+        role_name="low",
+        guide_path="guides/low.md",
+        writable_file_patterns=["low/*.pyi", "**/low/*.pyi"],
+        readonly_file_patterns=[],
+        feedback_role_deps=[],
+        src_pattern="{unit_dir}/low/{unit_name}.pyi",
+    )
+    lib_role = workspace_registry.RoleDefinition(
+        role_name="lib",
+        guide_path="guides/lib.md",
+        writable_file_patterns=["lib/*.py", "**/lib/*.py"],
+        readonly_file_patterns=[
+            "low/*.pyi",
+            "**/low/*.pyi",
+            "*.toml",
+            "**/*.toml",
+        ],
+        feedback_role_deps=[],
+        role_deps=["low"],
+        star_role_deps=["low"],
+        src_pattern="{unit_dir}/lib/{unit_name}.py",
+    )
+    test_role = workspace_registry.RoleDefinition(
+        role_name="test",
+        guide_path="guides/test.md",
+        writable_file_patterns=["tests/*.py", "**/tests/*.py"],
+        readonly_file_patterns=["low/*.pyi", "**/low/*.pyi"],
+        feedback_role_deps=[],
+        role_deps=["low"],
+        stub_role_deps=["lib"],
+        src_pattern="{unit_dir}/tests/{unit_name}_test.py",
+    )
+    return [low_role, lib_role, test_role]
+
+
 class WorkspaceProvisionImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = get_default_registry()
-        self.ws_registry = workspace_registry._DefaultWorkspaceRegistry()
+        self.ws_registry = FakeWorkspaceRegistry(_make_roles())
         self.registry.register_instance(
             self.ws_registry,
             keys=[
@@ -71,7 +154,7 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
                     "[methodology]\nname = 'python'\n\n"
                     "[roles.low]\nname = 'low'\nsrc_pattern = '{unit_dir}/low/{unit_name}.pyi'\n\n"
                     "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
-                    "role_deps = ['low']\nstar_role_deps = ['low']\n"
+                    "star_role_deps = ['low']\n"
                 )
             with open(os.path.join(repo_root, "MODULE.bazel"), "w", encoding="utf-8") as f:
                 f.write("# legacy bazel module\n")

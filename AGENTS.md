@@ -7,10 +7,17 @@
   - `update_with_ai/`
   - `update_python_with_ai/`
 
+## Strict Prohibition on Hardcoding Specific Paths, Directory Names, and Role Names
+
+- **NO Hardcoded Directory Names or Paths**: Specific directory names, package scopes, or ephemeral workspace paths (such as `staging`, `update_with_ai`, `update_python_with_ai`, `role_workspaces`, or temporary directories) must NEVER be hardcoded into tools, linters, runners, verifiers, test assertions, or library implementations.
+- **NO Hardcoded Role Names**: Role names (such as `high`, `planning`, `low`, `spec_qa`, `lib`, `test`, `qa`, `coverage`, `scenario`, etc.) must NEVER be hardcoded into core tools, workspace provisioners, runners, orchestrators, or library logic. Roles must be discovered dynamically from the active methodology configuration (e.g., `cleanroom_roles.toml`, `cleanroom.toml`) and target definitions.
+- **Dynamic Scoping and Target Derivation**: Package scopes, workspace roots, role definitions, and directory paths must always be derived dynamically from the target address (e.g., `//<scope>/parts/...#<role>`), active configuration files (e.g., `cleanroom.toml`, `cleanroom_roles.toml`), environment variables (e.g., `BUILD_WORKSPACE_DIRECTORY`), or passed explicitly as arguments without hardcoded directory or role defaults.
+- **Agnostic Linters, Runners, and Verifiers**: Linters, runners, and verification tools must verify imports, package structures, and role execution relative to the active target's resolved package root, methodology manifest, and declared dependencies, rather than asserting against hardcoded directory strings or static role enumerations.
+
 ## Mandatory Specification-First (HLS-First) Rule
 
 - **ALWAYS start with HLS changes when changing code in a parts directory**: Never make stealth changes to library code (`lib/*.py`) or unit tests (`tests/*_test.py`) without first authoring and aligning the corresponding High-Level Specification (`high/*.md`).
-- **Automatic Downstream Alignment**: Whenever changes are made to HLS files (`high/*.md`), immediately and automatically cascade alignment across the entire downstream pipeline: `HLS` (`high/*.md`) $\to$ `Planning` (`planning/*.md`) $\to$ `Spec QA` $\to$ `Low` (`low/*.pyi`) $\to$ `Low QA` $\to$ `Library` (`lib/*.py`) $\to$ `Unit Tests` (`tests/*_test.py`). Do not stop after editing HLS files or wait for separate prompts to complete downstream alignment.
+- **Automatic Downstream Alignment**: Whenever changes are made to HLS files (`high/*.md`), immediately and automatically cascade alignment across the entire downstream pipeline: `HLS` (`high/*.md`) $\to$ `Planning` (`planning/*.md`) $\to$ `Low` (`low/*.pyi`) $\to$ `Spec QA` $\to$ `Library` (`lib/*.py`) $\to$ `Unit Tests` (`tests/*_test.py`). Do not stop after editing HLS files or wait for separate prompts to complete downstream alignment.
 
 ## Semantic Analysis Over Syntactic Checking (Anti-Mechanistic Rule)
 
@@ -27,9 +34,8 @@ Always read and maintain in context the relevant guide from `update_python_with_
 
 - **High-Level Specs (HLS)**: `update_python_with_ai/guides/high_level_spec.md`
 - **HLS to Planning Alignment**: `update_python_with_ai/guides/high_to_planning.md`
-- **Spec QA Arbiter**: `update_python_with_ai/guides/spec_qa.md`
 - **Planning to Low Alignment**: `update_python_with_ai/guides/planning_to_low.md`
-- **Low QA Arbiter**: `update_python_with_ai/guides/low_qa.md`
+- **Spec QA Arbiter**: `update_python_with_ai/guides/spec_qa.md`
 - **Low-Level Specification to Library Code Alignment**: `update_python_with_ai/guides/low_to_lib.md`
 - **Low-Level Specification to Unit Tests Alignment**: `update_python_with_ai/guides/low_to_test.md`
 - **QA Verification**: `update_python_with_ai/guides/qa.md`

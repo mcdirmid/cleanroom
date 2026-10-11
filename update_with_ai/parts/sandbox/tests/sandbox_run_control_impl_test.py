@@ -1,9 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:46:30Z
-# LAST_CHANGED: 2026-10-09T22:40:00Z
-# CHANGE: Allow clean submit of unmodified implementation nodes
-# CODE_HASH: e61b138311e9
-# QA_AUDIT: 2026-10-09T21:46:30Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T06:01:22Z
+# CHANGE: Resolve auditor status from the agent_node_config role configuration surface alongside the real auditor role address
+# CODE_HASH: 342a2ea2cab6
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_run_control_impl per its grounding specification."""
@@ -203,6 +204,8 @@ class MockEditManager:
 
 
 class MockRoleDef:
+    """Role configuration surface designating auditor roles."""
+
     def __init__(
         self,
         is_auditor: bool = False,
@@ -250,7 +253,7 @@ class MockNodeConfig:
         self.verification_success_message: Optional[agent_node_config.VerificationSuccessMessage] = None
         self.feedback: Sequence[agent_node_config.NodeFeedback] = []
         self.per_node_info_by_node: Mapping[dag_storage.DagNode, agent_node_config.PerNodeInfo] = {}
-        self.role_definitions: Dict[str, Any] = {}
+        self.role_definitions: Dict[str, MockRoleDef] = {}
 
 
 
@@ -1010,11 +1013,16 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_submit_tool_fails_auditor_with_summary(self) -> None:
         """Postcondition: WHEN target is an auditor node and change summary is provided, MUST fail reminding agent that change summary is prohibited for audit nodes."""
-        node = _make_node("unit1", role="auditor")
+        # The auditor status is resolved from the agent_node_config configuration surface for
+        # the submitted target's role address.
+        node = _make_node("unit1", role="qa")
         self.mock_storage.mark_node_dirty(node)
         self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
         self.mock_session_coordinator.verification_result = True
-        self.mock_role_config.role = agent_node_config.RoleName("auditor")
+        self.mock_role_config.role = agent_node_config.RoleName("qa")
+        self.mock_node_config.role_definitions["qa"] = MockRoleDef(
+            is_auditor=True, audit_tag="QA_AUDIT"
+        )
         self.mock_sandbox.has_modifications = True
         self.mock_edit_manager.has_modifications = True
         self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
@@ -1182,20 +1190,20 @@ class SandboxRunControlImplTest(unittest.TestCase):
             resp_fb = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_fb.py")}))
             self.assertTrue(resp_fb.is_failed)
 
-            # 4. Audit notification variant: MUST succeed when unmodified without change summary
-            node_audit = _make_node("unit_audit", role="auditor")
-            self.mock_storage.mark_node_dirty(node_audit)
-            self.mock_session_coordinator.register_node(node_audit, "pkg/unit_audit.py")
-            self.mock_role_config.role = agent_node_config.RoleName("auditor")
+            # 4. Unmodified target while session feedback remains present: MUST fail
+            # Requirement: WHEN session feedback is present and no files were modified, MUST fail.
+            node_fb_active = _make_node("unit_fb_active")
+            self.mock_storage.mark_node_dirty(node_fb_active)
+            self.mock_session_coordinator.register_node(node_fb_active, "pkg/unit_fb_active.py")
             self.mock_storage.add_message(
                 dag_storage.ChangeMessage(
-                    content=dag_storage.MessageContent("Audit notification: verify implementation")
+                    content=dag_storage.MessageContent("Upstream dependency changed")
                 ),
-                to=node_audit,
+                to=node_fb_active,
             )
-            resp_audit = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_audit.py")}))
-            self.assertFalse(resp_audit.is_failed)
-            self.assertIn(node_audit, self.mock_storage.clean_nodes)
+            resp_fb_active = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_fb_active.py")}))
+            self.assertTrue(resp_fb_active.is_failed)
+            self.assertNotIn(node_fb_active, self.mock_storage.clean_nodes)
 
             # 5. Upstream dependency change variant: MUST succeed when unmodified without change summary
             self.mock_role_config.role = agent_node_config.RoleName("developer")
@@ -1359,8 +1367,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp2.is_failed)
             self.assertTrue(resp2.is_terminated)
 
-    def test_submit_tool_validating_role_definitions_designating_auditor_nodes_across_auditor_flags_tags_or_restricted_writable_file_patterns(self) -> None:
-        """Postcondition: SubmitTool validating role definitions designating auditor nodes across auditor flags, tags, or restricted writable file patterns against supplied change summaries."""
+    def test_submit_tool_validating_auditor_nodes_designated_by_role_address_against_change_summaries(self) -> None:
+        """Postcondition: SubmitTool validating auditor nodes designated by their dag node role address against supplied change summaries."""
         self.mock_session_coordinator.verification_result = True
         self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
         self.mock_sandbox.has_modifications = True
@@ -1369,120 +1377,48 @@ class SandboxRunControlImplTest(unittest.TestCase):
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             tool = scope.get_singleton(SubmitTool)
 
-            # 1. Auditor node designated via auditor flag (is_auditor=True or RoleName("auditor"))
-            node_flag = _make_node("unit_flag", role="auditor_flag_role")
-            self.mock_storage.mark_node_dirty(node_flag)
-            self.mock_session_coordinator.register_node(node_flag, "pkg/unit_flag.py")
-            self.mock_role_config.role = agent_node_config.RoleName("auditor_flag_role")
-            self.mock_node_config.role_definitions["auditor_flag_role"] = MockRoleDef(
-                is_auditor=True, audit_tag=None, src_pattern="{unit_dir}/lib/{unit_name}.py"
+            # 1. Auditor node designated through the agent_node_config configuration surface for
+            # its role address: supplying a change summary MUST fail with a reminder that change
+            # summaries are prohibited for audit nodes.
+            # Requirement: WHEN target is an auditor node and change summary is provided, MUST fail
+            # reminding agent that change summary is prohibited for audit nodes.
+            node_audit = _make_node("unit_audit", role="qa")
+            self.mock_storage.mark_node_dirty(node_audit)
+            self.mock_session_coordinator.register_node(node_audit, "pkg/unit_audit.py")
+            self.mock_role_config.role = agent_node_config.RoleName("qa")
+            self.mock_node_config.role_definitions["qa"] = MockRoleDef(
+                is_auditor=True, audit_tag="QA_AUDIT"
             )
-            # Supplying change summary MUST fail with reminder that summary is prohibited for audit nodes
-            resp_flag_with_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_flag.py"),
+            resp_audit_with_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_audit.py"),
                 tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Audit review summary"),
             }))
-            self.assertTrue(resp_flag_with_sum.is_failed)
-            self.assertIsNotNone(resp_flag_with_sum.reminder)
-            assert resp_flag_with_sum.reminder is not None
+            self.assertTrue(resp_audit_with_sum.is_failed)
+            self.assertIsNotNone(resp_audit_with_sum.reminder)
+            assert resp_audit_with_sum.reminder is not None
             self.assertTrue(
-                "prohibited" in resp_flag_with_sum.reminder.lower()
-                or "audit" in resp_flag_with_sum.reminder.lower()
+                "prohibited" in resp_audit_with_sum.reminder.lower()
+                or "audit" in resp_audit_with_sum.reminder.lower()
             )
-            # Omitting change summary MUST succeed
-            resp_flag_no_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_flag.py"),
-            }))
-            self.assertFalse(resp_flag_no_sum.is_failed)
-            self.assertIn(node_flag, self.mock_storage.clean_nodes)
+            self.assertNotIn(node_audit, self.mock_storage.clean_nodes)
 
-            # Also verify standard auditor role name flag
-            node_auditor_name = _make_node("unit_auditor_name", role="auditor")
-            self.mock_storage.mark_node_dirty(node_auditor_name)
-            self.mock_session_coordinator.register_node(node_auditor_name, "pkg/unit_auditor_name.py")
-            self.mock_role_config.role = agent_node_config.RoleName("auditor")
-            resp_name_with_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_auditor_name.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Summary"),
+            # 2. Non-auditor node with modified workspace files: omitting the change summary MUST
+            # fail and supplying it MUST succeed.
+            # Requirement: WHEN files were modified and change summary is omitted, MUST fail.
+            node_producer = _make_node("unit_producer", role="lib")
+            self.mock_storage.mark_node_dirty(node_producer)
+            self.mock_session_coordinator.register_node(node_producer, "pkg/unit_producer.py")
+            self.mock_role_config.role = agent_node_config.RoleName("lib")
+            resp_producer_no_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_producer.py"),
             }))
-            self.assertTrue(resp_name_with_sum.is_failed)
-            self.assertIsNotNone(resp_name_with_sum.reminder)
-            assert resp_name_with_sum.reminder is not None
-            resp_name_no_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_auditor_name.py"),
-            }))
-            self.assertFalse(resp_name_no_sum.is_failed)
-            self.assertIn(node_auditor_name, self.mock_storage.clean_nodes)
-
-            # 2. Auditor node designated via audit tag (audit_tag="QA_AUDIT" or role address with audit tag)
-            node_tag = _make_node("unit_tag", role="qa_audit")
-            self.mock_storage.mark_node_dirty(node_tag)
-            self.mock_session_coordinator.register_node(node_tag, "pkg/unit_tag.py")
-            self.mock_role_config.role = agent_node_config.RoleName("qa_audit")
-            self.mock_node_config.role_definitions["qa_audit"] = MockRoleDef(
-                is_auditor=False, audit_tag="QA_AUDIT", src_pattern="{unit_dir}/lib/{unit_name}.py"
-            )
-            resp_tag_with_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_tag.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("QA Audit notes"),
-            }))
-            self.assertTrue(resp_tag_with_sum.is_failed)
-            self.assertIsNotNone(resp_tag_with_sum.reminder)
-            assert resp_tag_with_sum.reminder is not None
-            self.assertTrue(
-                "prohibited" in resp_tag_with_sum.reminder.lower()
-                or "audit" in resp_tag_with_sum.reminder.lower()
-            )
-            resp_tag_no_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_tag.py"),
-            }))
-            self.assertFalse(resp_tag_no_sum.is_failed)
-            self.assertIn(node_tag, self.mock_storage.clean_nodes)
-
-            # 3. Auditor node designated via restricted writable file patterns (src_pattern="" or empty read_write_files)
-            node_restricted = _make_node("unit_restricted", role="reviewer")
-            self.mock_storage.mark_node_dirty(node_restricted)
-            self.mock_session_coordinator.register_node(node_restricted, "pkg/unit_restricted.py")
-            self.mock_role_config.role = agent_node_config.RoleName("reviewer")
-            self.mock_node_config.role_definitions["reviewer"] = MockRoleDef(
-                is_auditor=False, audit_tag=None, src_pattern=""
-            )
-            self.mock_node_config.read_write_files = set()
-            resp_restr_with_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_restricted.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Reviewer summary"),
-            }))
-            self.assertTrue(resp_restr_with_sum.is_failed)
-            self.assertIsNotNone(resp_restr_with_sum.reminder)
-            resp_restr_no_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_restricted.py"),
-            }))
-            self.assertFalse(resp_restr_no_sum.is_failed)
-            self.assertIn(node_restricted, self.mock_storage.clean_nodes)
-
-            # 4. Non-auditor role with normal writable file pattern requires change summary when files modified
-            node_dev = _make_node("unit_dev", role="developer")
-            self.mock_storage.mark_node_dirty(node_dev)
-            self.mock_session_coordinator.register_node(node_dev, "pkg/unit_dev.py")
-            self.mock_role_config.role = agent_node_config.RoleName("developer")
-            self.mock_node_config.role_definitions["developer"] = MockRoleDef(
-                is_auditor=False, audit_tag=None, src_pattern="{unit_dir}/lib/{unit_name}.py"
-            )
-            self.mock_node_config.read_write_files = {
-                _make_read_write_file("pkg/unit_dev.py")
-            }
-            # Omission fails
-            resp_dev_no_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_dev.py"),
-            }))
-            self.assertTrue(resp_dev_no_sum.is_failed)
-            # Providing summary succeeds
-            resp_dev_with_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_dev.py"),
+            self.assertTrue(resp_producer_no_sum.is_failed)
+            resp_producer_with_sum = tool.execute_tool(_bindings({
+                tool.target_parameter: _make_file_alias("pkg/unit_producer.py"),
                 tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Feature changes"),
             }))
-            self.assertFalse(resp_dev_with_sum.is_failed)
-            self.assertIn(node_dev, self.mock_storage.clean_nodes)
+            self.assertFalse(resp_producer_with_sum.is_failed)
+            self.assertIn(node_producer, self.mock_storage.clean_nodes)
 
     def test_submit_tool_attaching_change_summary_reminders_when_submission_outcomes_fail_due_to_change_summary_requirements(self) -> None:
         """Postcondition: SubmitTool attaching change summary reminders when submission outcomes fail due to change summary requirements."""
@@ -1532,12 +1468,18 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
 
             # 3. Auditor node + change summary provided: MUST fail reminding agent that change summary is prohibited for audit nodes
-            node_audit = _make_node("unit_audit_node", role="auditor")
+            # The auditor status is resolved from the agent_node_config configuration surface for the
+            # target role address; modified files are set so that the audit prohibition is the
+            # applicable change summary constraint.
+            node_audit = _make_node("unit_audit_node", role="qa")
             self.mock_storage.mark_node_dirty(node_audit)
             self.mock_session_coordinator.register_node(node_audit, "pkg/unit_audit_node.py")
-            self.mock_role_config.role = agent_node_config.RoleName("auditor")
-            self.mock_sandbox.has_modifications = False
-            self.mock_edit_manager.has_modifications = False
+            self.mock_role_config.role = agent_node_config.RoleName("qa")
+            self.mock_node_config.role_definitions["qa"] = MockRoleDef(
+                is_auditor=True, audit_tag="QA_AUDIT"
+            )
+            self.mock_sandbox.has_modifications = True
+            self.mock_edit_manager.has_modifications = True
             resp_audit_with_sum = tool.execute_tool(_bindings({
                 tool.target_parameter: _make_file_alias("pkg/unit_audit_node.py"),
                 tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Audit change summary"),
@@ -1603,10 +1545,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertNotIn(node, self.mock_storage.clean_nodes)
 
             # 3. Dispatched submission on auditor target without change summary: Coordinator rejects reporting change summary requirements
-            node_audit = _make_node("unit_audit_node", role="auditor")
+            node_audit = _make_node("unit_audit_node", role="qa")
             self.mock_storage.mark_node_dirty(node_audit)
             self.mock_session_coordinator.register_node(node_audit, "pkg/unit_audit_node.py")
-            self.mock_role_config.role = agent_node_config.RoleName("auditor")
+            self.mock_role_config.role = agent_node_config.RoleName("qa")
             self.mock_session_coordinator.dispatched_submit = None
             self.mock_session_coordinator.submit_outcome = control_coordinate.ControlDispatchOutcome(
                 success=False,

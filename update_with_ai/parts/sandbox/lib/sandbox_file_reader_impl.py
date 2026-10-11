@@ -1,14 +1,14 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-09T18:47:55Z
-# CHANGE: Convert template parameters to TemplateKey keys for TemplateFormatter
-# CODE_HASH: bf1c14e88f6a
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:03:50Z
+# CHANGE: Resolve and match both declared path members through the file path manager before reporting access, and use pathlib filesystem operations
+# CODE_HASH: 0662c26aebde
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
-import os
 import re
+from pathlib import Path
 from typing import Any, List, Mapping, Optional, Set, Type, Union, cast
 from support.lib.lifecycle import InTier, LifecycleRegistry, Singleton, get_default_registry, get_singleton
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier, agent_session
@@ -42,12 +42,22 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
         rel_path = str(path.relative_path) if isinstance(path, agent_file_alias.FileAlias) else str(path)
         all_declared = self.read_only_files | self.read_write_files
         avail_paths = sorted(str(f.relative_path) for f in all_declared)
-        if any(str(f.relative_path) == rel_path for f in all_declared):
-            return tool_provider.ToolResponse(
-                is_failed=False,
-                is_terminated=False,
-                content=tool_provider.ToolResponseContent(f"Access permitted for '{rel_path}'."),
-            )
+        fp_mgr = get_singleton(file_paths.FilePathManager)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        for declared in all_declared:
+            if (
+                str(declared.relative_path) == rel_path
+                or str(declared.workspace_path.path) == rel_path
+            ):
+                workspace_path = fp_mgr.create_workspace_path(
+                    file_paths.PathString(str(declared.workspace_path.path))
+                )
+                fp_mgr.resolve_path(alias_mgr.workspace_root, workspace_path)
+                return tool_provider.ToolResponse(
+                    is_failed=False,
+                    is_terminated=False,
+                    content=tool_provider.ToolResponseContent(f"Access permitted for '{rel_path}'."),
+                )
         avail_str = ", ".join(f"'{p}'" for p in avail_paths)
         return tool_provider.ToolResponse(
             is_failed=True,
@@ -119,9 +129,9 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
         ws_root = alias_mgr.workspace_root
         ws_path = fp_mgr.create_workspace_path(file_paths.PathString(str(target.relative_path)))
         abs_path = fp_mgr.resolve_path(ws_root, ws_path)
-        disk_path = abs_path.path
+        disk_path = Path(abs_path.path)
 
-        if is_ro and not os.path.isfile(disk_path):
+        if is_ro and not disk_path.is_file():
             return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
@@ -131,11 +141,10 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
                 reminder=tool_provider.ToolReminder("Only declared files can be inspected."),
             )
 
-        if is_rw and not os.path.isfile(disk_path):
+        if is_rw and not disk_path.is_file():
             raw_content = ""
         else:
-            with open(disk_path, "r", encoding="utf-8") as f:
-                raw_content = f.read()
+            raw_content = disk_path.read_text(encoding="utf-8")
 
         if str(target.relative_path).endswith(".md"):
             paras = raw_content.split("\n\n")
@@ -259,9 +268,9 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
         for ro_file in sorted(read_mgr.read_only_files, key=lambda f: str(f.relative_path)):
             ws_path = fp_mgr.create_workspace_path(file_paths.PathString(str(ro_file.relative_path)))
             abs_path = fp_mgr.resolve_path(ws_root, ws_path)
-            if os.path.isfile(abs_path.path):
-                with open(abs_path.path, "r", encoding="utf-8") as f:
-                    content = f.read()
+            ro_path = Path(abs_path.path)
+            if ro_path.is_file():
+                content = ro_path.read_text(encoding="utf-8")
                 file_matches: List[str] = []
                 for idx, line in enumerate(content.splitlines(), start=1):
                     if regex.search(line):
@@ -274,9 +283,9 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
         for rw_file in sorted(read_mgr.read_write_files, key=lambda f: str(f.relative_path)):
             ws_path = fp_mgr.create_workspace_path(file_paths.PathString(str(rw_file.relative_path)))
             abs_path = fp_mgr.resolve_path(ws_root, ws_path)
-            if os.path.isfile(abs_path.path):
-                with open(abs_path.path, "r", encoding="utf-8") as f:
-                    content = f.read()
+            rw_path = Path(abs_path.path)
+            if rw_path.is_file():
+                content = rw_path.read_text(encoding="utf-8")
                 if regex.search(content):
                     results.append(f"{rw_file.relative_path}: matches found (details hidden to prevent unanchored edits)")
 
@@ -288,7 +297,9 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
         )
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         ReadManager,
@@ -311,4 +322,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier=agent_session,
     )
 
+
 _initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

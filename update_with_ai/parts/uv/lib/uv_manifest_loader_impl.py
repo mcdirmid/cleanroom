@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: ff46268f118e
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:42:33Z
+# CHANGE: Keep declared direct dependencies propagating when their manifest cannot be discovered, synthesizing only the fallback definition and reserving non-propagation for declared silent and promptless pass-through dependencies
+# CODE_HASH: a8ea782fbeb8
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 import os
@@ -20,6 +20,7 @@ from . import uv_manifest_loader
 from . import uv_target
 from support.lib.lifecycle import (
     LifecycleRegistry,
+    LifecycleResolutionError,
     Singleton,
     get_default_registry,
     get_singleton,
@@ -40,7 +41,7 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
             fp_mgr: Any = get_singleton(file_paths.FilePathManager)
             if fp_mgr and hasattr(fp_mgr, "get_workspace_root"):
                 return str(fp_mgr.get_workspace_root().path)
-        except Exception:
+        except (LifecycleResolutionError, KeyError, LookupError, RuntimeError):
             pass
         return os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
 
@@ -56,13 +57,15 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
                     meth = data.get("methodology")
                     if meth and isinstance(meth, str):
                         return meth.strip()
-                except Exception:
+                except (OSError, tomllib.TOMLDecodeError):
                     pass
             curr_parent = os.path.dirname(curr)
             if curr == root_abs or curr == curr_parent or not curr.startswith(root_abs):
                 break
             curr = curr_parent
-        return "//update_python_with_ai"
+        raise FileNotFoundError(
+            f"No 'cleanroom.toml' methodology binding found upwards from '{os.path.join(root, pkg_dir)}' to workspace root '{root_abs}'"
+        )
 
     def _get_methodology_roles(
         self, root: str, pkg_dir: str
@@ -92,22 +95,54 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
                 import importlib.resources
                 files = importlib.resources.files(pkg_name)
                 toml_path = str(files.joinpath("cleanroom_roles.toml"))
-            except Exception:
+            except (ImportError, AttributeError, TypeError, ValueError, OSError):
                 toml_path = os.path.join(root, meth, "cleanroom_roles.toml")
 
         roles: Dict[str, Dict[str, Any]] = {}
-        if os.path.isfile(toml_path):
-            try:
-                with open(toml_path, "rb") as f:
-                    data = tomllib.load(f)
-                r_dict = data.get("roles")
-                roles = r_dict if isinstance(r_dict, dict) else {}
-            except Exception:
-                roles = {}
+        if not os.path.isfile(toml_path):
+            raise FileNotFoundError(
+                f"Methodology role definition file not found for '{meth}' at '{toml_path}'"
+            )
+        try:
+            with open(toml_path, "rb") as f:
+                data = tomllib.load(f)
+            r_dict = data.get("roles")
+            roles = r_dict if isinstance(r_dict, dict) else {}
+        except (OSError, tomllib.TOMLDecodeError) as e:
+            raise ValueError(f"Failed to parse role definitions from '{toml_path}': {e}") from e
+        if not roles:
+            raise ValueError(f"Methodology at '{toml_path}' declares no roles in '[roles]'")
 
         result = (canon_meth, roles)
         self._methodology_roles[meth] = result
         return result
+
+    def _parts_roots(self, root: str) -> List[str]:
+        """Discovers parts workspace roots under the workspace root.
+
+        Parts packages live under a scope directory that contains a `parts` child
+        (e.g. `update_python_with_ai/parts` in the canonical repository and
+        `staging/parts` in a role workspace), so the scope directories present on
+        the host are derived first; the conventional layouts remain as fallbacks.
+        """
+        roots: List[str] = []
+        try:
+            entries = sorted(os.listdir(root))
+        except OSError:
+            entries = []
+        for entry in entries:
+            if entry.startswith(".") or entry.startswith("bazel-"):
+                continue
+            if os.path.isdir(os.path.join(root, entry, "parts")):
+                roots.append(f"{entry}/parts")
+        for fallback in (
+            "parts",
+            "staging/parts",
+            "update_python_with_ai/parts",
+            "update_with_ai/parts",
+        ):
+            roots.append(fallback)
+        return list(dict.fromkeys(roots))
 
     def _find_parts_root(self, root: str, pkg_dir: str) -> Optional[str]:
         norm_pkg = pkg_dir.replace("\\", "/").strip("/")
@@ -117,27 +152,63 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
             return "parts"
         elif norm_pkg.endswith("/parts"):
             return norm_pkg
-        for cand in ("staging/parts", "update_with_ai/parts", "parts"):
+        for cand in self._parts_roots(root):
             if os.path.isdir(os.path.join(root, cand)):
                 return cand
         return None
 
     def _get_unit_to_pkg_map(self, root: str, parts_prefix: str) -> Dict[str, str]:
+        """Maps unit names to their containing parts packages.
+
+        A unit is evidenced by its declaration directories (`high`, `planning`,
+        `low`, `lib`), so the mapping remains derivable when a role workspace
+        only projects a subset of the package layout.
+        """
         if parts_prefix in self._unit_locations:
             return self._unit_locations[parts_prefix]
         unit_map: Dict[str, str] = {}
         parts_abs = os.path.join(root, parts_prefix)
         if os.path.isdir(parts_abs):
-            for sub in sorted(os.listdir(parts_abs)):
+            try:
+                subpackages = sorted(os.listdir(parts_abs))
+            except OSError:
+                subpackages = []
+            layouts: List[Tuple[str, str]] = []
+            _, roles_dict = self._get_methodology_roles(root, parts_prefix)
+            for r_cfg in roles_dict.values():
+                src_pat = r_cfg.get("src_pattern", "")
+                if "{unit_name}" in src_pat:
+                    clean_pat = src_pat.replace("{unit_dir}/", "").replace("{unit_dir}\\", "")
+                    if "/" in clean_pat:
+                        layout_d, file_pat = clean_pat.split("/", 1)
+                        if "{unit_name}" in file_pat:
+                            sfx = file_pat.split("{unit_name}", 1)[1]
+                            layouts.append((layout_d, sfx))
+            if not layouts:
+                raise ValueError(
+                    f"No layout patterns with {{unit_name}} found in methodology for '{parts_prefix}'"
+                )
+
+            for sub in subpackages:
                 sub_dir = os.path.join(parts_abs, sub)
                 if not os.path.isdir(sub_dir) or sub.startswith("."):
                     continue
-                high_dir = os.path.join(sub_dir, "high")
-                if os.path.isdir(high_dir):
-                    for h_file in os.listdir(high_dir):
-                        if h_file.endswith(".md") and not h_file.startswith("."):
-                            u_name = h_file[:-3]
-                            unit_map[u_name] = f"//{parts_prefix}/{sub}"
+
+                for layout_dir, suffix in layouts:
+                    layout_abs = os.path.join(sub_dir, layout_dir)
+                    if not os.path.isdir(layout_abs):
+                        continue
+                    try:
+                        entries = sorted(os.listdir(layout_abs))
+                    except OSError:
+                        continue
+                    for entry in entries:
+                        if entry.startswith(".") or not entry.endswith(suffix):
+                            continue
+                        unit_name = entry[: -len(suffix)]
+                        if not unit_name or unit_name.startswith("_"):
+                            continue
+                        unit_map.setdefault(unit_name, f"//{parts_prefix}/{sub}")
         self._unit_locations[parts_prefix] = unit_map
         return unit_map
 
@@ -151,14 +222,11 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
         if os.path.isfile(os.path.join(root, pkg_dir, "high", f"{clean_name}.md")):
             return f"//{pkg_dir}:{clean_name}"
 
-        parts_prefix = self._find_parts_root(root, pkg_dir)
-        if parts_prefix:
+        own_prefix = self._find_parts_root(root, pkg_dir)
+        scopes = [own_prefix] if own_prefix else []
+        scopes.extend(scope for scope in self._parts_roots(root) if scope != own_prefix)
+        for parts_prefix in scopes:
             u_map = self._get_unit_to_pkg_map(root, parts_prefix)
-            if clean_name in u_map:
-                return f"{u_map[clean_name]}:{clean_name}"
-
-        for cand_scope in ("staging/parts", "update_with_ai/parts", "parts"):
-            u_map = self._get_unit_to_pkg_map(root, cand_scope)
             if clean_name in u_map:
                 return f"{u_map[clean_name]}:{clean_name}"
 
@@ -193,7 +261,7 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
                     info["assembles"] = [x.strip() for x in raw.split(",") if x.strip()]
                 elif s.startswith("## "):
                     break
-        except Exception:
+        except OSError:
             pass
         return info
 
@@ -354,6 +422,33 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
         self._manifests[node] = manifest
         return manifest
 
+    def _resolve_dependency_node(self, label: str) -> dag_storage.DagNode:
+        """Resolves a declared dependency target label into its graph node."""
+        try:
+            target_service = get_singleton(uv_target.UvTarget)
+        except (LifecycleResolutionError, KeyError, LookupError, RuntimeError):
+            target_service = None
+        if target_service is not None:
+            return target_service.normalize_target(uv_target.TargetIdentifier(label))
+        unit_address, _, role_address = label.partition("#")
+        return dag_storage.DagNode(
+            unit_address=dag_storage.UnitAddress(unit_address),
+            role_address=dag_storage.RoleAddress(role_address),
+        )
+
+    def _synthesize_dependency_definition(
+        self, storage: Any, node: dag_storage.DagNode
+    ) -> None:
+        """Synthesizes a promptless node definition for a dependency without a manifest."""
+        store_definition = getattr(storage, "store_node_definition", None)
+        if callable(store_definition):
+            store_definition(
+                node,
+                agent_storage.NodeDefinition(
+                    task_prompt=agent_storage.TaskPrompt(""),
+                ),
+            )
+
     def load_manifest(self, node: dag_storage.DagNode) -> None:
         manifest = self.retrieve_manifest(node)
         if not manifest:
@@ -361,7 +456,7 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
 
         try:
             storage = get_singleton(agent_storage.AgentStorage)
-        except Exception:
+        except (LifecycleResolutionError, KeyError, LookupError, RuntimeError):
             storage = None
 
         if storage is not None:
@@ -376,24 +471,29 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
             if manifest.source_file is not None and hasattr(storage_any, "record_source_file"):
                 storage_any.record_source_file(node, str(manifest.source_file))
 
+            if manifest.silent_source_files and hasattr(
+                storage_any, "store_silent_source_files"
+            ):
+                storage_any.store_silent_source_files(
+                    node,
+                    tuple(str(path) for path in manifest.silent_source_files),
+                )
+
             if hasattr(storage_any, "store_dependencies"):
                 dag_deps: Set[dag_storage.DagDependency] = set()
-                target_service = None
-                try:
-                    target_service = get_singleton(uv_target.UvTarget)
-                except Exception:
-                    pass
-
                 for d_label in manifest.dependencies:
-                    dep_node = (
-                        target_service.normalize_target(uv_target.TargetIdentifier(d_label))
-                        if target_service
-                        else dag_storage.DagNode(
-                            unit_address=dag_storage.UnitAddress(d_label.split("#")[0]),
-                            role_address=dag_storage.RoleAddress(d_label.split("#")[1] if "#" in d_label else ""),
-                        )
-                    )
+                    dep_node = self._resolve_dependency_node(str(d_label))
                     is_silent = d_label in manifest.silent_dependencies
+                    if not is_silent:
+                        dep_manifest = self.retrieve_manifest(dep_node)
+                        if dep_manifest is None:
+                            # A referenced target without a manifest still receives a fallback
+                            # definition, but the declared direct dependency must propagate.
+                            self._synthesize_dependency_definition(storage_any, dep_node)
+                        elif dep_manifest.task_prompt is None:
+                            # Promptless pass-through synthesized because the unit component type
+                            # is not active for its role: non-propagating per the contract.
+                            is_silent = True
                     dag_deps.add(
                         dag_storage.DagDependency(
                             node=dep_node,
@@ -401,14 +501,9 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
                         )
                     )
                 for d_label in manifest.silent_dependencies:
-                    dep_node = (
-                        target_service.normalize_target(uv_target.TargetIdentifier(d_label))
-                        if target_service
-                        else dag_storage.DagNode(
-                            unit_address=dag_storage.UnitAddress(d_label.split("#")[0]),
-                            role_address=dag_storage.RoleAddress(d_label.split("#")[1] if "#" in d_label else ""),
-                        )
-                    )
+                    dep_node = self._resolve_dependency_node(str(d_label))
+                    if self.retrieve_manifest(dep_node) is None:
+                        self._synthesize_dependency_definition(storage_any, dep_node)
                     dag_deps.add(
                         dag_storage.DagDependency(
                             node=dep_node,
@@ -418,31 +513,23 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
                 storage_any.store_dependencies(node, dag_deps)
 
             if hasattr(storage_any, "store_feedback_dependencies"):
-                fb_nodes: Set[dag_storage.DagNode] = set()
-                if manifest.feedback_dependencies:
-                    target_service = None
-                    try:
-                        target_service = get_singleton(uv_target.UvTarget)
-                    except Exception:
-                        pass
-                    for fb_label in manifest.feedback_dependencies:
-                        fb_node = (
-                            target_service.normalize_target(uv_target.TargetIdentifier(fb_label))
-                            if target_service
-                            else dag_storage.DagNode(
-                                unit_address=dag_storage.UnitAddress(fb_label.split("#")[0]),
-                                role_address=dag_storage.RoleAddress(fb_label.split("#")[1] if "#" in fb_label else ""),
-                            )
-                        )
-                        fb_nodes.add(fb_node)
+                fb_nodes: Set[dag_storage.DagNode] = {
+                    self._resolve_dependency_node(str(fb_label))
+                    for fb_label in manifest.feedback_dependencies
+                }
                 storage_any.store_feedback_dependencies(node, fb_nodes)
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
-    keys = [UvManifestLoader, uv_manifest_loader.UvManifestLoader]
     reg.register_singleton(
         UvManifestLoader,
-        keys=keys,
+        keys=[UvManifestLoader, uv_manifest_loader.UvManifestLoader],
         tier=system,
     )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

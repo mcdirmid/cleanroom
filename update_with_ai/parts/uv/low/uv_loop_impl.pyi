@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: b7ec4cfd3def
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:48:44Z
+# CHANGE: Correct stale mark-dirty collaborator citation to the real graph storage member
+# CODE_HASH: 04573dbcb959
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom loop implementation low-level specification."""
@@ -11,9 +11,8 @@
 from typing import Optional
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier, SystemTier
-from update_with_ai.parts.dag.lib import dag_storage
-from update_with_ai.parts.loop.lib import loop
 import dag_storage
+import loop
 import loop_cleaner
 import loop_node_cleaner
 import runner_logger
@@ -89,7 +88,7 @@ class Loop(loop.Loop, InTier[SystemTier]):
         - MUST delete the last cleaned timestamp from the target node source file metadata header.
 
         GROUNDING:
-        - Delegates last cleaned timestamp removal to dag_storage.delete_last_cleaned.
+        - Delegates last cleaned timestamp removal to dag_storage.mark_node_dirty.
         """
         ...
 
@@ -106,23 +105,12 @@ class Loop(loop.Loop, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST inject caller-supplied feedback into the target node source file metadata in graph storage.
+        - MUST append the feedback entry to the `.cleanroom.log` file in the directory containing the parts.
         - MUST identify the blamed dependency node in injected feedback.
         - MUST identify the diagnostic reason in injected feedback.
 
         GROUNDING:
         - Records feedback message on target node in dag_storage, updating in-band source headers with blamed dependency and diagnostic reasoning.
-        """
-        ...
-
-    @operation
-    @override
-    def broadcast_change(
-        self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
-    ) -> None:
-        """Broadcasts a change message across forward dependencies.
-
-        GROUNDING:
-        - Records change messages across forward dependencies in dag_storage.
         """
         ...
 
@@ -139,6 +127,7 @@ class Loop(loop.Loop, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST record a caller-supplied change message against a target node in graph storage.
+        - MUST append the change message to the `.cleanroom.log` file in the directory containing the parts.
         - MUST clear the last cleaned timestamp of the target node in graph storage.
         - MUST update the change description of the target node in graph storage to dynamically invalidate downstream dependencies.
 

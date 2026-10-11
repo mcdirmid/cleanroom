@@ -63,7 +63,7 @@ Metadata is embedded using native comment syntax tailored to each file format in
 | :--- | :--- | :--- | :--- |
 | **Specifications & Canvases** | `.md` | HTML comments | `<!-- CLEANROOM METADATA ... -->` |
 | **Python Specs, Stubs & Implementations** | `.py`, `.pyi` | Line comments (`#`) | `# --- CLEANROOM METADATA --- ... # --- END CLEANROOM METADATA ---` |
-| **Bazel & Starlark Rules** | `BUILD`, `BUILD.bazel`, `.bzl` | Line comments (`#`) | `# --- CLEANROOM METADATA --- ... # --- END CLEANROOM METADATA ---` |
+| **Configuration & Manifests** | `.toml` | Line comments (`#`) | `# --- CLEANROOM METADATA --- ... # --- END CLEANROOM METADATA ---` |
 | **Shell & Automation Scripts** | `.sh` | Line comments (`#`) | `# --- CLEANROOM METADATA --- ... # --- END CLEANROOM METADATA ---` |
 
 ### 2.2 Header Placement Rules
@@ -196,33 +196,31 @@ flowchart TD
     CheckDeps -- No --> Clean["CLEAN: Node is up-to-date"]
 ```
 
-### 4.2 Explicit CLI Operations & State Transitions
+#### 4.2 Explicit CLI Operations & State Transitions
 
-Cleanroom provides dedicated CLI targets per node for manual lifecycle management:
+Cleanroom provides dedicated CLI commands via `bin/cleanroom` for manual lifecycle management and testing:
 
-1. **`_dirty` (`bazel run //pkg:target_dirty`)**:
-   - Deletes the `LAST_CLEANED` field from the node's source file header in-place.
-   - Retains `LAST_CHANGED` and `CHANGE:` descriptions without modification.
-   - Because `LAST_CLEANED` is absent, the node immediately evaluates as **dirty** on the next check.
+1. **`dirty` (`bin/cleanroom dirty [dir_scope]`)**:
+   - Inspects the global dependency graph and reports dirty nodes with exact timestamp/feedback causes.
+   - Deleting the `LAST_CLEANED` field from a node's source file header immediately marks it dirty.
 
-2. **`_mark_clean` (`bazel run //pkg:target_mark_clean`)**:
-   - Traverses the entire acyclic subgraph rooted at `target`.
+2. **`clean` (`bin/cleanroom clean [target] [dir_scope]`)**:
+   - Traverses the acyclic subgraph rooted at `target`.
    - For every node in the subgraph:
-     - **Template Materialization**: If the declared source file does not exist on disk, it is materialized from its declared template (or created as an empty file if no template is declared).
+     - **Template Materialization**: If the declared source file does not exist on disk, it is materialized from its declared template.
      - **Header Stamping**: Sets `LAST_CLEANED = T_now`. If `LAST_CHANGED` is missing, sets `LAST_CHANGED = T_now`. If `CHANGE:` is missing, sets `CHANGE: new file`.
      - **Feedback Clearance**: Strips any unacted `FEEDBACK:` section.
-     - **In-Memory Clearance**: Clears pending in-memory messages for the node.
    - Used to prime existing codebases into a clean baseline state and reset subgraphs.
 
-3. **`_change` (`bazel run //pkg:target_change -- "<change description>"`)**:
-   - Updates **only the target node** (does not modify the rest of the subgraph):
+3. **`submit` (`bin/cleanroom submit <target> "[change description]"`)**:
+   - Updates the target node's in-band header:
      - Sets `LAST_CLEANED = T_now`.
      - Sets `LAST_CHANGED = T_now`.
      - Sets `CHANGE: <change description>`.
      - Strips any unacted `FEEDBACK:` section.
    - **Dynamic Downstream Invalidation**: All non-silent downstream dependents automatically evaluate as dirty dynamically on subsequent checks because their `LAST_CLEANED` is older than this node's new `LAST_CHANGED`.
 
-4. **`_feedback` (`bazel run //pkg:target_feedback -- "<explanation>"`)**:
+4. **`blame` (`bin/cleanroom blame <target> "<explanation>"`)**:
    - Appends an unacted feedback record to the target node's header:
      `- [<UTC timestamp> from user]: <explanation>`
    - The target node immediately evaluates as dirty because `has_feedback(N) == True`.
@@ -312,9 +310,7 @@ The following components are retired and removed:
 1. `update_with_ai/parts/core/high/update_with_ai_proto_ext.md`: Decommissioned.
 2. `update_with_ai/parts/core/grounding/update_with_ai_proto_ext.py`: Decommissioned.
 3. `update_with_ai/parts/core/low/update_with_ai_proto_ext.pyi`: Decommissioned.
-4. `update_with_ai/support/lib/update_with_ai.bzl`:
-   - Remove `batch_mark_clean` rule logic that scans for `.update_with_ai.textproto`.
-   - Remove `.update_with_ai.textproto` from Bazel package glob patterns and `.gitignore`.
+4. `update_with_ai/support/lib/update_with_ai.bzl`: Permanently retired; package manifest loading transitioned to pure-Python `cleanroom.toml` configuration and `parts/uv`.
 
 ### 6.2 The File Metadata Engine: `src_metadata_ext`
 A centralized, hermetic Python utility handles parsing, serialization, and header manipulation across all file types:
@@ -346,12 +342,12 @@ class FileMetadataService:
         ...
 ```
 
-### 6.3 Updating `bazel_storage_impl` (`update_with_ai/parts/bazel`)
-The `AgentStorage` and `DagStorage` implementations in [`bazel_storage_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/bazel/lib/bazel_storage_impl.py) are radically simplified:
+### 6.3 Dynamic Dirty Checking in `parts/workspace` (`workspace_work_impl.py`)
+The DAG evaluation engine in [`workspace_work_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/lib/workspace_work_impl.py) uses in-band metadata to evaluate dirty state dynamically:
 
 1. **Elimination of Package File I/O**:
-   - Remove `_load_package_data()` and `_save_package_data()`.
-   - Remove `.update_with_ai.textproto` path resolution.
+   - Out-of-band `.update_with_ai.textproto` files and sidecars are completely removed.
+   - All state is derived directly from in-band comment headers via `parts/control/lib/src_metadata.py`.
 2. **Dynamic `is_dirty(node)`**:
    ```python
    def is_dirty(self, node: DagNode) -> bool:
@@ -375,8 +371,8 @@ The `AgentStorage` and `DagStorage` implementations in [`bazel_storage_impl.py`]
                    return True
        return False
    ```
-3. **No-Op Reverse Dependency Methods**:
-   - `register_dependent(node)` and `clear_dependents(node)` become in-memory queries against the Bazel DAG manifest or are retired entirely, since the storage layer no longer writes reverse dependencies to disk.
+3. **No-Op Reverse Dependency Sweeps**:
+   - Reverse dependency sweeps on disk are eliminated; dirty tracking is purely forward-evaluating.
 
 ### 6.4 Subagentless Cleanroom Workspaces (`Option 3`) Integration
 
@@ -398,21 +394,21 @@ Role workspaces contain only the files relevant to their specific role tier (`sr
   ```
 - **In-Band Consistency**: When the role workspace is provisioned or refreshed, the target file is copied from the canonical repo into the workspace with its embedded in-band metadata block (including any `FEEDBACK:` entries). The role agent sees the exact same context both in `WORK_ORDER.md` and when calling `view_file` on the source file itself.
 
-#### 2. Direct-to-Main Submissions via Bazel Targets
+#### 2. Direct-to-Main Submissions via `parts/control` (`bin/submit`)
 Cleanroom does **not** use an intermediate submission mailbox or manual harvest sweeps. Instead:
 - **Direct Workspace Submissions**: When a role engineer finishes authoring and verifying a target, they execute `bin/submit <file> "<summary>"`.
-- **Bazel-Backed Macro Invocations**:
+- **Direct Python CLI Invocations**:
   - The modified writable target is copied directly to the canonical main workspace.
-  - `bin/submit` delegates directly to `bazel run //pkg:unit_role_submit -- "[summary]"`.
-  - Bazel validates the change summary, updates `LAST_CLEANED = T_now`, sets `LAST_CHANGED = T_now` (if code changed), updates `CODE_HASH`, and clears resolved `FEEDBACK:` and `DIRTY:` markers.
-- For auditor roles, `bin/submit <file>` delegates to `bazel run //pkg:unit_qa_submit`, stamping `<ROLE>_AUDIT: T_now` into the target file header in main.
+  - `bin/submit` delegates directly to `control_submit_impl.py` in `update_with_ai/parts/control`.
+  - The control engine validates the change summary, updates `LAST_CLEANED = T_now`, sets `LAST_CHANGED = T_now` (if code changed), updates `CODE_HASH`, and clears resolved `FEEDBACK:` and `DIRTY:` markers in 10–30ms without compilation overhead.
+- For auditor roles, `bin/submit <file>` delegates to the control coordinator, stamping `<ROLE>_AUDIT: T_now` into the target file header in main.
 
-#### 3. Direct Upstream Blame via Bazel Targets
+#### 3. Direct Upstream Blame via `parts/control` (`bin/blame`)
 Because upstream specifications and implementations are mounted read-only (`chmod 444` or interface stubs) inside a role workspace, an agent cannot edit an upstream file directly:
 - When an agent discovers an upstream specification defect, it executes:
   `bin/blame <culprit-file> "<actionable critique>"`
-- `bin/blame` delegates directly to `bazel run //pkg:culprit_blame -- "<critique>"`.
-- The Bazel target injects the critique directly into the culprit's in-band `FEEDBACK:` section in canonical main and advances its `LAST_CLEANED = T_now`.
+- `bin/blame` delegates directly to `control_attribution_impl.py` in `update_with_ai/parts/control`.
+- The attribution engine injects the critique directly into the culprit's in-band `FEEDBACK:` section in canonical main and advances its `LAST_CLEANED = T_now`.
 - This immediately marks the culprit unit dirty across the repository without needing intermediate local JSON buffers.
 
 #### 4. Automatic Inbound Synchronization via `bin/get_work`
@@ -427,12 +423,12 @@ sequenceDiagram
     autonumber
     participant TestWS as Role Workspace: Test (chmod 444 on lib)
     participant CanonRepo as Canonical Repository (Main WS)
-    participant Bazel as Bazel Build Graph
+    participant Control as Control Engine (parts/control)
     participant LibWS as Role Workspace: Lib
 
     Note over TestWS: Test agent detects bug in lib/agent_config.py
-    TestWS->>Bazel: bin/blame test.py lib/agent_config.py "Contract violation"
-    Bazel->>CanonRepo: Inject FEEDBACK: & advance LAST_CLEANED = T_now
+    TestWS->>Control: bin/blame test.py lib/agent_config.py "Contract violation"
+    Control->>CanonRepo: Inject FEEDBACK: & advance LAST_CLEANED = T_now
     Note over CanonRepo: lib/agent_config.py is now dynamically DIRTY in main
 
     Note over LibWS: Lib agent starts turn
@@ -442,10 +438,10 @@ sequenceDiagram
 ```
 
 ### 6.5 Transparent Linter & AST Compatibility
-Because metadata is embedded strictly using standard comment syntax (`#` in Python, Python stubs, and Starlark; `<!-- -->` in Markdown), linters, verifiers, and compilers naturally ignore it:
+Because metadata is embedded strictly using standard comment syntax (`#` in Python, Python stubs, and configuration files; `<!-- -->` in Markdown), linters, verifiers, and compilers naturally ignore it:
 - **Zero Linter Changes Required**: Linters perform AST analysis (via Python `ast`, Pyright, etc.). Standard language comments are treated purely as comments and do not appear in AST nodes or interfere with syntax verification.
 - **AST Integrity**: Type checkers (Pyright) and structural linters (`high_lint.py`, `low_lint.py`, `lib_lint.py`, `test_lint.py`, `grounding_lint.py`) see comments as non-semantic trivia, preserving symbol positions, function signatures, and docstring contracts.
-- **Coverage Arbiter (`evaluate_coverage.py`)**: Comment lines are never executable statements, so statement coverage calculations and line-level audits are completely unaffected.
+- **Coverage Arbiter (`tool_coverage.py`)**: Evaluated via [`update_with_ai/parts/tools/lib/tool_coverage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage.py). Comment lines are never executable statements, so statement coverage calculations and line-level audits are completely unaffected.
 
 ---
 
@@ -464,12 +460,10 @@ Under In-Band Comments:
 - If two branches edit different parts of the codebase, their metadata comments do not collide.
 - If two branches modify the same file, Git's 3-way merge highlights the conflict in the header alongside the code, allowing immediate resolution.
 
-### 7.3 Virtual or Aggregate Nodes (No Source Files)
-Certain nodes in a Bazel DAG represent virtual aggregates (e.g. a test suite bundling multiple tests or a package-level target without a single `.py` file):
-- For targets with no 1:1 source file mapping, `is_dirty` defaults to checking the dirty states of all member dependencies.
-- Alternatively, package-level aggregate targets can use their package's `BUILD.bazel` metadata header as their state record.
-
----
+### 7.3 Auditor & Virtual Aggregate Nodes (No Dedicated Source Files)
+Auditor roles (`spec_qa`, `qa`, `coverage`) do not own a primary output source file (`src_pattern = ""`):
+- Audit passes are recorded directly inside the in-band metadata headers of the target files being verified using flat audit tags (`<ROLE>_AUDIT: <timestamp>`).
+- Dirty checking evaluates forward timestamp compliance against the target files and upstream contract dependencies.
 
 ---
 
@@ -487,35 +481,35 @@ flowchart LR
     end
 
     subgraph Implemented["Production Architecture (Active)"]
-        S1["src_metadata_ext (high/low/grounding)"]
-        S2["support/lib/src_metadata.py (Parser/Serializer)"]
-        S3["agent_storage & bazel_storage_impl"]
-        S4["build_lint_common.py & src_metadata_test"]
+        S1["parts/control/src_metadata (high/low/lib)"]
+        S2["parts/control/lib/src_metadata.py (Parser/Serializer)"]
+        S3["parts/workspace/workspace_work_impl.py (DAG Engine)"]
+        S4["parts/control/tests/src_metadata_impl_test.py"]
     end
 
     Decommissioned -. replaced by .-> Implemented
 ```
 
 ### 8.1 Production Components Implemented
-1. **External Boundary Specification (`src_metadata_ext`)**:
-   - [`src_metadata_ext.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/agent/high/src_metadata_ext.md): High-Level External Boundary component defining parser invariants.
-   - [`src_metadata_ext.pyi`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/agent/low/src_metadata_ext.pyi): Low-Level specification defining `FileMetadata` data type and `SourceMetadataService` interface.
-   - [`src_metadata_ext.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/agent/grounding/src_metadata_ext.py): Grounding specification module proving static reachability.
+1. **Control Specifications (`parts/control`)**:
+   - [`src_metadata.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/high/src_metadata.md): High-Level specification defining parser invariants and data types.
+   - [`src_metadata.pyi`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/low/src_metadata.pyi): Low-Level specification defining `FileMetadata` data type and functions.
+   - [`src_metadata_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/lib/src_metadata_impl.py): Canonical 4-stage Cleanroom component implementation.
 
-2. **Parser & Serializer Engine (`support/lib/src_metadata.py`)**:
+2. **Parser & Serializer Engine (`update_with_ai/parts/control/lib/src_metadata.py`)**:
    - Implemented regex-based extraction and formatting supporting:
      - HTML comments (`<!-- CLEANROOM METADATA ... -->`) for Markdown specifications and canvases (`.md`).
-     - Line comments (`# --- CLEANROOM METADATA --- ... # --- END CLEANROOM METADATA ---`) for Python (`.py`, `.pyi`), Starlark (`BUILD`, `.bzl`), and shell scripts (`.sh`).
-   - Handles `LAST_CLEANED`, `LAST_CHANGED`, single-line `CHANGE:`, and multi-entry `FEEDBACK:` lists.
+     - Line comments (`# --- CLEANROOM METADATA --- ... # --- END CLEANROOM METADATA ---`) for Python (`.py`, `.pyi`), configuration (`.toml`), and shell scripts (`.sh`).
+   - Handles `LAST_CLEANED`, `LAST_CHANGED`, single-line `CHANGE:`, flat `<ROLE>_AUDIT:`, and multi-entry `FEEDBACK:` lists.
    - Automatically preserves shebangs (`#!/usr/bin/env ...`) and file encoding headers.
 
-3. **Storage Engine Integration**:
-   - [`agent_storage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/agent/lib/agent_storage.py): Updated interfaces to query and stamp in-band metadata.
-   - [`bazel_storage_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/bazel/lib/bazel_storage_impl.py): Evaluates `is_dirty(node)` dynamically using pure forward dependency checks (`node.last_cleaned < dep.last_changed` or `has_feedback(node)`).
-   - [`dag_storage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/dag/lib/dag_storage.py): Decoupled from disk-persisted reverse dependencies.
-   - [`loop_node_cleaner_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/loop/lib/loop_node_cleaner_impl.py): Stamping clean timestamps and clearing unacted feedback directly upon node completion.
+3. **Workspace & Control Engine Integration**:
+   - [`src_metadata.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/lib/src_metadata.py): Canonical metadata parser, serializer, and stamper.
+   - [`control_submit_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/lib/control_submit_impl.py): Validates change summaries, executes submissions, and stamps metadata in canonical files.
+   - [`control_attribution_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/lib/control_attribution_impl.py): Injects blame critiques and advances timestamps directly.
+   - [`workspace_work_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/lib/workspace_work_impl.py): Evaluates `is_dirty(node)` dynamically using pure forward dependency checks.
 
 4. **Linter & Verification Suite**:
    - [`build_lint_common.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/support/lib/build_lint_common.py): Integrated in-band metadata parsing into dependency and manifest validation passes.
-   - [`src_metadata_test.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/support/tests/src_metadata_test.py): Hermetic unit test suite covering round-trip parsing, stamping, feedback insertion, and shebang preservation across all file extensions.
-   - Hermetic validation: All 194 Bazel tests pass cleanly with zero `.update_with_ai.textproto` references remaining in the workspace.
+   - [`src_metadata_impl_test.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/tests/src_metadata_impl_test.py): Hermetic unit test suite covering round-trip parsing, stamping, feedback insertion, and shebang preservation across all file extensions.
+   - Hermetic validation: Verified with 0 Pyright errors and 100% pytest test pass rate (`uv run pytest`) across all packages.

@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: cf282bfc364a
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 9b444d467c88
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_work_scheduler interface component
-
-imports: agent_session, dag_storage, dag_subgraph, agent_node_config
 
 ## Intent
 

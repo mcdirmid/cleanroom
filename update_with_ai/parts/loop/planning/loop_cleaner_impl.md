@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 129386e17927
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:07:01Z
+CHANGE: State the completion condition through dag subgraph completeness
+CODE_HASH: fc0800cb9530
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_cleaner_impl implementation component
-
-imports: dag_storage, dag_subgraph, loop_node_cleaner
-implements: loop_cleaner
 
 ## Intent
 
@@ -25,7 +22,7 @@ By delegating active subgraph scoping, ready batch selection, and node visit enf
 - Cleaning processes ready batches of dirty nodes in topological order. [process_ready_batches]
 - Cleaning records node visits for each cleaned batch. [record_node_visits_for_cleaned_batch]
 - Cleaning halts immediately if the node cleaner communicates that processing cannot continue. [halt_immediately_when_cleaner_signals_halt]
-- Cleaning concludes when the dag subgraph is complete. [conclude_when_subgraph_complete]
+- Cleaning concludes when the dag subgraph reports that the target subgraph is complete, meaning every reachable node in the target subgraph is clean in dag storage. [conclude_when_subgraph_complete]
 
 ### Woven Contracts
 

@@ -1,9 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:47:23Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
 # LAST_CHANGED: 2026-10-09T21:45:06Z
 # CHANGE: Verify active nodes sequence synchronization on role config during get work dispatch
 # CODE_HASH: 40904e8266ae
-# QA_AUDIT: 2026-10-09T21:47:23Z
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for control_coordinate_impl."""

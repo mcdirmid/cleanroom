@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: d8ec2627d72b
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T03:10:58Z
+CHANGE: Contract guide acquisition on session init and passing verification as the advancement prerequisite
+CODE_HASH: b489197d39a1
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # sandbox_guide_delivery_impl implementation component
-
-imports: tool_provider, agent_file_alias, agent_node_config
-implements: sandbox_guide_delivery
 
 ## Intent
 
@@ -21,6 +18,7 @@ By isolating milestone sections, maintaining current step offsets, and synthesiz
 
 ### Contracts
 
+- When initialized for an agent session, the guide delivery obtains its guide parsed from configured guide file content. [obtain_guide_on_session_init]
 - Parsing extracts the guide summary from content preceding the first section heading. [extract_summary_preceding_first_heading]
 - Parsing extracts the guide summary from content under any heading titled "Summary". [extract_summary_under_summary_heading]
 - Parsing captures verification failure instructions when a section heading begins with "Verification failure". [capture_verification_failure_instructions]
@@ -28,10 +26,11 @@ By isolating milestone sections, maintaining current step offsets, and synthesiz
 - Parsing excludes sections whose title begins with "Summary" from step sections. [exclude_summary_sections_from_steps]
 - Parsing excludes sections whose title begins with "Lint checks" from step sections. [exclude_lint_check_sections_from_steps]
 - Parsing excludes sections whose title begins with "Verification failure" from step sections. [exclude_verification_failure_sections_from_steps]
+- Passing verification satisfies the prerequisite milestone criteria for step advancement. [passing_verification_satisfies_advancement]
 - When verification passes and further step sections remain, advancing emits a response presenting the next step section introduced by "Now check carefully:". [emit_next_step_on_pass]
 - When verification passes and further step sections remain, advancing instructs the agent to check carefully. [instruct_check_carefully_on_pass]
 - When verification passes and further step sections remain, advancing instructs the agent to make edits if the source file does not conform to any checklist item. [instruct_make_edits_on_nonconformance]
-- When verification passes and further step sections remain, advancing instructs the agent to call advance() only when conforming. [instruct_call_advance_when_conforming]
+- When verification passes and further step sections remain, advancing instructs the agent to request step advancement only once the source file conforms. [instruct_call_advance_when_conforming]
 - When verification passes and further step sections remain, advancing transitions to the next step section. [transition_to_next_step_on_pass]
 - When verification fails and no step section is active, advancing emits a response combining the initial primer content, verification failure instructions, and failure diagnostics. [emit_primer_failure_response_when_inactive]
 - When verification fails, no step section is active, and the initial primer is omitted, advancing substitutes the guide summary for the initial primer. [substitute_summary_when_primer_omitted]

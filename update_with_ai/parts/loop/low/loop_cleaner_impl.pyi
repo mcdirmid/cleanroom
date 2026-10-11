@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-06T12:45:00Z
-# CHANGE: add grounding sections
-# CODE_HASH: 9649bf88e81a
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:21:22Z
+# CHANGE: State the completion condition through dag subgraph completeness and ground traversal collaborators
+# CODE_HASH: 34dd08a7b251
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Loop cleaner implementation low-level specification."""
@@ -21,8 +21,22 @@ class LoopCleaner(loop_cleaner.LoopCleaner, InTier[SystemTier]):
     """Realizes dependency-first topological cleaning and visit recording using dag subgraph.
 
     GROUNDING:
-    - Traverses active execution subgraphs by setting target nodes on DagSubgraph,
-      processing topological ready batches through NodeCleaner, and enforcing visit bounds.
+    - Delegates subgraph scoping to the DagSubgraph collaborator, whose set_target computes
+      the dependency-first topological order of reachable dependency nodes while holding the
+      target node in its own internal backing state.
+    - Drives cleaning by repeatedly requesting the next ready batch of dirty nodes from
+      DagSubgraph.next_ready_batch, which consults DagStorage.is_dirty over the stored reachable
+      nodes and returns candidates sharing a role address.
+    - Retrieves target node addresses, role addresses, and dirty status through the DagStorage
+      collaborator, reading the node graph structure and clean status stored for each node.
+    - Submits each dirty batch to NodeCleaner.clean, whose outcome is interpreted as the
+      collaborator's communication of whether processing can continue.
+    - Records the submitted batch for each cleaned batch through DagSubgraph.record_visit, which
+      maintains visit counts in its internal backing state and enforces execution iteration
+      limits across those counts.
+    - Determines conclusion only from DagSubgraph.is_complete, which reports the target subgraph
+      complete exactly when the DagStorage clean status of every reachable node in the target
+      subgraph is clean, rather than from batch selection alone.
     """
 
     @operation
@@ -40,14 +54,26 @@ class LoopCleaner(loop_cleaner.LoopCleaner, InTier[SystemTier]):
             True if all nodes in the target subgraph are clean, or False if processing halted.
 
         GROUNDING:
-        - Grounded via DagSubgraph to compute topological ordering and deliver ready batches,
-          delegating batch workloads to NodeCleaner.clean, recording visits, and halting
-          on cleaner failure or concluding upon subgraph completion.
+        - Scopes the run by handing target to DagSubgraph.set_target, which collects the reachable
+          dependency nodes and fixes the dependency-first topological order before any batch is
+          requested.
+        - Pulls the next dirty batch by calling DagSubgraph.next_ready_batch in a loop that
+          proceeds in the topological order fixed by set_target rather than rescanning storage.
+        - Hands each returned dirty batch to node_cleaner.clean, letting NodeCleaner.clean perform
+          the single-node workloads that clear the DagStorage dirty status of those nodes.
+        - Records each submitted batch with DagSubgraph.record_visit before advancing, so visit
+          counts stored by the DagSubgraph collaborator bound repeated cleaning of the same nodes.
+        - Stops the loop as soon as node_cleaner.clean signals that processing cannot continue, and
+          otherwise stops when DagSubgraph.is_complete reports the target subgraph complete.
+        - Reports true only for a run concluded through the DagSubgraph.is_complete report that
+          every reachable node in the target subgraph is clean in dag storage.
 
         POSTCONDITIONS:
-        - MUST set target node on dag subgraph to determine dependency-first topological order.
-        - MUST process ready batches of dirty nodes in topological order, recording visits for each cleaned batch.
+        - MUST set the target node on dag subgraph to determine dependency-first topological order.
+        - MUST process ready batches of dirty nodes in topological order.
+        - MUST record node visits for each cleaned batch.
         - WHEN node cleaner communicates that processing cannot continue, MUST halt immediately.
-        - WHEN dag subgraph is complete, MUST return true.
+        - WHEN the dag subgraph reports that the target subgraph is complete, MUST return true,
+          meaning every reachable node in the target subgraph is clean in dag storage.
         """
         ...

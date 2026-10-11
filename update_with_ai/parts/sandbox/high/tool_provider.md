@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-04T23:01:55Z
 CHANGE: new file
-CODE_HASH: 97d58adb4d94
+CODE_HASH: a3258b57ac7c
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # tool_provider interface component
@@ -25,11 +26,11 @@ An agent session's *tool manager* installs tools for an agent session depending 
 
 Each tool parameter has a name and description so the agent can satisfy them. A parameter can be required, meaning the agent must provide a binding for it in a tool call, while an unrequired parameter can specify a *default value* used if omitted. A required parameter can also specify a *missing note* based on present parameters to inform the agent how to correct parameter omissions.
 
-Each tool parameter has a *parameter type* describing the parameter's *python type* and *wire type*. A parameter type converts wire type values to python type values and provides feedback on failure. Wire types are limited to wire strings, wire integers, wire booleans, wire floats, wire lists, and wire mappings.
+Each tool parameter has a *parameter type* describing the parameter's *actual type* and *wire type*. A parameter type converts a wire value into the actual value a tool expects, and provides feedback when conversion fails. Wire values are limited to wire strings, wire integers, wire booleans, wire floats, wire lists, and wire mappings.
 
-An *identity parameter type* has identical python and wire types with trivial conversion that cannot fail. A *list parameter type* converts lists using an element parameter type, while a *mapping parameter type* converts mappings using key and value parameter types. A composite parameter type formed from other parameter types propagates all failures from constituent parameter types.
+An *identity parameter type* has identical actual and wire types with trivial conversion that cannot fail. A *list parameter type* converts lists using an element parameter type, while a *mapping parameter type* converts mappings using key and value parameter types. A composite parameter type formed from other parameter types propagates every failure from its constituent parameter types.
 
-Via the tool manager, an agent can execute a tool by name with *wired parameter bindings*, which map parameter names to wire type values. For each call, the tool manager finds the tool by name from installed tools, resolves parameter specifications, converts arguments from wire type values to python type values, applies default values, and checks requirements. The tool manager calls the tool with *action parameter bindings* mapping tool parameters to converted actual values, failing if the tool is not called properly.
+Via the tool manager, an agent can execute a tool by name with *wired parameter bindings*, which map parameter names to wire values. The tool manager finds the tool by name from installed tools, resolves parameter specifications, converts arguments into actual values, applies default values, and checks requirements. The tool manager then calls the tool with *action parameter bindings* mapping tool parameters to converted actual values, and fails when the tool is not called properly, providing diagnostic feedback for the agent to correct the call.
 
 A tool call produces a *tool response* providing tool output and communicating whether execution failed with diagnostic feedback or whether the conversation terminates. To manage conversation clutter across turns, a tool response can provide a *suppression key* that supersedes and hides prior conversation responses with the same key.
 

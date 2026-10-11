@@ -1,13 +1,14 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: fc1e1e63497b
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:57:55Z
+# CHANGE: Align mark_dirty with the declared ChangeMessage parameter and prune the uncontracted broadcast_change member
+# CODE_HASH: b0ee25671e8a
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in loop.pyi
+from __future__ import annotations
 from dataclasses import dataclass
-from typing import NewType, Optional, Protocol
+from typing import NewType, Protocol
 from update_with_ai.parts.dag.lib import dag_storage
 
 BuildSummary = NewType("BuildSummary", str)
@@ -25,17 +26,11 @@ class Loop(Protocol):
     def mark_subgraph_clean(self, target: dag_storage.DagNode) -> None: ...
 
     def mark_dirty(
-        self,
-        target: dag_storage.DagNode,
-        message: Optional[dag_storage.ChangeMessage] = None,
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None: ...
 
     def inject_feedback(
         self, target: dag_storage.DagNode, message: dag_storage.FeedbackMessage
-    ) -> None: ...
-
-    def broadcast_change(
-        self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None: ...
 
     def record_change(

@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: 45ed0915ee80
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 60f1a46602fd
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_model_config_impl implementation component
-
-imports: filesystem_ext
-implements: agent_config, dag_config, openai_config
 
 ## Intent
 

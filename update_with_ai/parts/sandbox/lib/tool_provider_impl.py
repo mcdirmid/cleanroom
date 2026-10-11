@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-09T02:22:49Z
-# CHANGE: Implement ToolManager in tool_provider_impl.py
-# CODE_HASH: cb1750fb6400
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:03:46Z
+# CHANGE: Name the installed tool registry per the grounding, copy it for the installed-tools view, list installed tools in stable sorted order, and report conversion diagnostics from the declared message member
+# CODE_HASH: d4feb578eb7c
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -19,22 +19,22 @@ class ToolManager(tool_provider.ToolManager, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
-        self._tools: Dict[tool_provider.ToolName, tool_provider.Tool] = {}
+        self._installed_tools: Dict[tool_provider.ToolName, tool_provider.Tool] = {}
 
     @property
     def installed_tools(self) -> Mapping[tool_provider.ToolName, tool_provider.Tool]:
-        return dict(self._tools)
+        return dict(self._installed_tools)
 
     def install_tool(self, tool: tool_provider.Tool) -> None:
-        self._tools[tool.name] = tool
+        self._installed_tools[tool.name] = tool
 
     def execute_tool(
         self,
         name: tool_provider.ToolName,
         wire_parameter_bindings: Mapping[tool_provider.ParameterName, tool_provider.WireType],
     ) -> tool_provider.ToolResponse:
-        if name not in self._tools:
-            installed = ", ".join(sorted(self._tools.keys()))
+        if name not in self._installed_tools:
+            installed = ", ".join(sorted(str(installed_name) for installed_name in self._installed_tools))
             return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
@@ -43,7 +43,7 @@ class ToolManager(tool_provider.ToolManager, Singleton):
                 ),
             )
 
-        tool = self._tools[name]
+        tool = self._installed_tools[name]
         valid_parameters = ", ".join(sorted(tool.parameters.keys()))
 
         for param_name in wire_parameter_bindings:
@@ -87,7 +87,7 @@ class ToolManager(tool_provider.ToolManager, Singleton):
                 try:
                     actual_val = param.parameter_type.convert(cast(Any, wire_val))
                 except tool_provider.ParameterConversionError as e:
-                    error_msg = e.message if hasattr(e, "message") else str(e)
+                    error_msg = str(e.message)
                     return tool_provider.ToolResponse(
                         is_failed=True,
                         is_terminated=False,
@@ -103,7 +103,9 @@ class ToolManager(tool_provider.ToolManager, Singleton):
         return tool.execute_tool(actual_bindings)
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         ToolManager,
@@ -111,4 +113,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier=agent_session,
     )
 
+
 _initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

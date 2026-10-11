@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-09T02:24:25Z
-# CHANGE: Implement GuideDelivery in sandbox_guide_delivery_impl.py
-# CODE_HASH: b2fe8dd869eb
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:03:51Z
+# CHANGE: Add the declared initialize operation and rewrite step advancement into explicit pass, exhausted-steps and verification-failure branches that re-present the active milestone
+# CODE_HASH: d71c880efd6a
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 from typing import List, Optional
@@ -77,6 +77,11 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, InTier[AgentSessionTie
         self._current_step: int = 0
         self._primer: Optional[sandbox_guide_delivery.InitialPrimer] = None
 
+    def initialize(self) -> None:
+        node_cfg = get_singleton(agent_node_config.NodeConfig)
+        self._guide = node_cfg.guide
+        self._current_step = 0
+
     @property
     def guide(self) -> Optional[agent_node_config.NodeGuide]:
         return self._guide
@@ -102,42 +107,49 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, InTier[AgentSessionTie
         failure_diagnostics: agent_node_config.VerificationDiagnostic,
     ) -> Optional[tool_provider.ToolResponse]:
         if verification_passed:
-            if self._guide is not None and self._current_step < len(self._guide.sections):
-                sec = self._guide.sections[self._current_step]
-                self._current_step += 1
-                content = f"## {sec.title}\n\n{sec.content}"
-                return tool_provider.ToolResponse(
-                    is_failed=False,
-                    is_terminated=False,
-                    content=tool_provider.ToolResponseContent(content),
-                )
+            if self._guide is None or self._current_step >= len(self._guide.sections):
+                return None
+            section = self._guide.sections[self._current_step]
+            self._current_step += 1
             return tool_provider.ToolResponse(
                 is_failed=False,
                 is_terminated=False,
-                content=tool_provider.ToolResponseContent("All milestone steps completed."),
+                content=tool_provider.ToolResponseContent(
+                    f"Now check carefully:\n\n## {section.title}\n\n{section.content}\n\n"
+                    "Make edits if the source file does not conform to any checklist item. "
+                    "Request step advancement only once the source file conforms."
+                ),
             )
+
+        if self._guide is None:
+            return None
+
+        parts: List[str] = []
+        if 0 < self._current_step <= len(self._guide.sections):
+            section = self._guide.sections[self._current_step - 1]
+            parts.append(f"Now check carefully:\n\n## {section.title}\n\n{section.content}")
         else:
-            parts: List[str] = []
-            if self._current_step == 0:
-                if self._primer:
-                    parts.append(str(self._primer))
-                if self._guide and self._guide.summary:
-                    parts.append(str(self._guide.summary))
-            vf_inst = str(self._guide.verification_failure) if self._guide and self._guide.verification_failure else ""
-            if vf_inst:
-                parts.append(vf_inst)
-            diag = str(failure_diagnostics).strip()
-            if diag:
-                parts.append(diag)
-            msg = "\n\n".join(parts) if parts else "Verification failed."
-            return tool_provider.ToolResponse(
-                is_failed=True,
-                is_terminated=False,
-                content=tool_provider.ToolResponseContent(msg),
+            primer = (
+                str(self._primer) if self._primer else str(self._guide.summary)
             )
+            parts.append(primer)
+        if self._guide.verification_failure:
+            parts.append(str(self._guide.verification_failure))
+        diagnostics = str(failure_diagnostics).strip()
+        if diagnostics:
+            parts.append(diagnostics)
+        return tool_provider.ToolResponse(
+            is_failed=True,
+            is_terminated=False,
+            content=tool_provider.ToolResponseContent(
+                "\n\n".join(part for part in parts if part)
+            ),
+        )
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         GuideDelivery,
@@ -145,4 +157,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier=agent_session,
     )
 
+
 _initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

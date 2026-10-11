@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: 58ed0df6ed15
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: c3292ead3796
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # openai_conversation_impl implementation component
-
-imports: agent_config, json_ext, openai_ext, tool_provider
-implements: loop_conversation
 
 ## Intent
 

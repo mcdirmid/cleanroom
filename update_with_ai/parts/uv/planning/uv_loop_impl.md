@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: 2bd7d34b5f32
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: d532701a9a97
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_loop_impl implementation component
-
-imports: dag_storage, loop_cleaner, loop_node_cleaner, runner_logger, uv_manifest_loader
-implements: loop
 
 ## Intent
 
@@ -49,10 +46,10 @@ By resolving targets from workspace directories, halting execution immediately u
 - Targets are resolved from workspace directories to initialize graph storage before topological cleaning starts. [resolve_targets_from_workspace_directories, uv_manifest_loader: [retrieve_manifest_for_node, populate_agent_storage], dag_storage: [access_dag_dependencies]]
 - If node cleaning fails, reachable nodes remain dirty, or unexpected errors occur, cleaning halts immediately and emits a failed build result with summary diagnostics. [halt_and_fail_when_node_cleaning_fails, halt_and_fail_when_node_remains_dirty, halt_and_fail_on_unexpected_failure, capture_failure_reason_in_summary, loop: [produce_build_result]]
 - Execution events, duration, and final results stream continuously to stdout and transcript files through the runner logger. [stream_telemetry_events_to_stdout, stream_telemetry_events_to_transcript, stream_pass_duration_telemetry, stream_build_outcome_telemetry, runner_logger: [consume_log_events]]
-- Marking an acyclic subgraph clean materializes missing source files from declared templates, stamps clean timestamps, and clears feedback across all reachable nodes. [materialize_subgraph_templates_on_mark_clean, stamp_last_cleaned_on_mark_clean, initialize_missing_metadata_on_mark_clean, clear_feedback_on_mark_clean, uv_manifest_loader: [retrieve_manifest_for_node], dag_storage: [access_dag_dependencies, clear_node_messages], loop: [mark_subgraph_clean]]
+- Marking an acyclic subgraph clean materializes missing source files from declared templates, stamps clean timestamps, and clears feedback across all reachable nodes. [materialize_subgraph_templates_on_mark_clean, stamp_last_cleaned_on_mark_clean, initialize_missing_metadata_on_mark_clean, clear_feedback_on_mark_clean, uv_manifest_loader: [retrieve_manifest_for_node], dag_storage: [access_dag_dependencies, mark_node_clean_in_storage], loop: [mark_subgraph_clean]]
 - Marking a target node dirty removes its last cleaned timestamp from in-band source metadata. [delete_last_cleaned_marks_target_dirty, dag_storage: [mark_node_dirty], loop: [mark_node_dirty]]
-- Recording feedback injects caller-supplied feedback into target node source file metadata identifying the blamed dependency node and diagnostic reason, and appends to the cleanroom log. [inject_caller_feedback_on_record_feedback, injected_feedback_identifies_blamed_dependency, injected_feedback_identifies_diagnostic_reason, append_feedback_to_cleanroom_log, loop: [inject_feedback_message], dag_storage: [record_feedback_messages]]
-- Recording changes writes a change message against a target node in graph storage, clearing its clean timestamp, invalidating downstream dependencies, and appending to the cleanroom log. [record_change_message_against_target, record_changes_clears_last_cleaned, record_changes_updates_change_description, append_change_to_cleanroom_log, loop: [record_node_change_message], dag_storage: [record_change_messages, mark_dirty_on_change_message]]
+- Recording feedback injects caller-supplied feedback into target node source file metadata identifying the blamed dependency node and diagnostic reason, and appends to the cleanroom log. [inject_caller_feedback_on_record_feedback, injected_feedback_identifies_blamed_dependency, injected_feedback_identifies_diagnostic_reason, append_feedback_to_cleanroom_log, loop: [inject_feedback_message], dag_storage: [add_feedback_messages, record_feedback_in_metadata]]
+- Recording changes writes a change message against a target node in graph storage, clearing its clean timestamp, invalidating downstream dependencies, and appending to the cleanroom log. [record_change_message_against_target, record_changes_clears_last_cleaned, record_changes_updates_change_description, append_change_to_cleanroom_log, loop: [record_node_change_message], dag_storage: [mark_node_clean_in_storage, mark_clean_records_change_summary]]
 
 ## Grounding
 

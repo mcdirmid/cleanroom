@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-09T22:40:00Z
-# CHANGE: Remove initial implementation modification constraint on submission
-# CODE_HASH: 5d45e5406ad0
-# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:04:00Z
+# CHANGE: Resolve auditor classification locally through the declared source metadata dependency, honour the declared directory scope default, and resolve unspecified submission targets through the alias manager and bound workspace paths
+# CODE_HASH: fc4f67329e8f
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -14,10 +14,40 @@ import shutil
 import stat
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-from support.lib.lifecycle import Singleton, get_singleton
-from update_with_ai.parts.agent.lib import agent_node_config, agent_session
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    LifecycleResolutionError,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+from update_with_ai.parts.agent.lib import agent_file_alias, agent_node_config, agent_session
 from update_with_ai.parts.dag.lib import dag_storage
 from . import control_submit, control_verification, src_metadata
+
+
+def _alias_manager_workspace_root() -> Optional[str]:
+    """Resolves the session workspace root declared by the alias manager."""
+    try:
+        workspace_root = get_singleton(agent_file_alias.AliasManager).workspace_root
+    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+        return None
+    if workspace_root is None:
+        return None
+    return str(getattr(workspace_root, "path", workspace_root)) or None
+
+
+def _alias_manager_bound_path(target: str) -> Optional[str]:
+    """Resolves a target string to a declared session bound file workspace path."""
+    try:
+        alias = get_singleton(agent_file_alias.AliasManager).convert(target)
+    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+        return None
+    if isinstance(alias, agent_file_alias.BoundFile):
+        workspace_path = getattr(alias, "workspace_path", None)
+        if workspace_path is not None:
+            return str(getattr(workspace_path, "path", workspace_path))
+    return None
 
 
 def _is_test_file(target: str) -> bool:
@@ -218,8 +248,10 @@ def _resolve_submit_target(
     return None, None
 
 
-_is_auditor_node = control_submit.is_auditor_node
-
+def _is_auditor_node(node: dag_storage.DagNode) -> bool:
+    """Checks whether the node's role is classified as an auditor role."""
+    role_clean = node.role_address.split(":")[-1].strip().lower()
+    return src_metadata.is_auditor_role(role_clean)
 
 
 class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
@@ -235,7 +267,7 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
         target: str,
         repo_root: str,
         role_name: str,
-        dir_scope: str = "",
+        dir_scope: str = "staging",
     ) -> tuple[str | None, str | None]:
         return _resolve_submit_target(target, repo_root, role_name, dir_scope)
 
@@ -243,8 +275,6 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
         self, file_path: str, repo_root: str
     ) -> tuple[str, str, str]:
         return _parse_unit_from_file_path(file_path, repo_root)
-
-
 
     def submit_target(
         self,
@@ -322,7 +352,9 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
         role_name: Optional[str] = None,
     ) -> control_submit.SubmissionOutcome:
         """Submits a file target after validating gating rules and updating metadata."""
-        ws_root = os.path.realpath(workspace_root or os.getcwd())
+        ws_root = os.path.realpath(
+            workspace_root or _alias_manager_workspace_root() or os.getcwd()
+        )
         meta: Optional[Dict[str, Any]] = None
         meta_p = os.path.join(ws_root, ".cleanroom_role.json")
         if os.path.isfile(meta_p):
@@ -370,6 +402,17 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
         target_path, unit_name = _resolve_submit_target(target, ws_root, clean_role, d_scope)
         if not target_path or not os.path.isfile(target_path):
             target_path, unit_name = _resolve_submit_target(target, main_root, clean_role, d_scope)
+
+        if not target_path or not os.path.isfile(target_path):
+            bound_path = _alias_manager_bound_path(target)
+            if bound_path and os.path.isfile(bound_path):
+                target_path = bound_path
+                try:
+                    _, unit_name, _ = _parse_unit_from_file_path(
+                        bound_path, main_root if bound_path.startswith(main_root) else ws_root
+                    )
+                except (KeyError, ValueError, OSError):
+                    pass
 
         if not target_path or not os.path.isfile(target_path):
             return control_submit.SubmissionOutcome(
@@ -496,3 +539,18 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
         if ws_root != main_root and os.path.isfile(main_file):
             _copy_file_with_perms(main_file, target_path, readonly=False)
         return control_submit.SubmissionOutcome(accepted=True, message=msg)
+
+
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        SubmissionCoordinator,
+        keys=[SubmissionCoordinator, control_submit.SubmissionCoordinator],
+        tier=SubmissionCoordinator.tier,
+    )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

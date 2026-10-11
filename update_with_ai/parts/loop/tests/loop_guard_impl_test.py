@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 143c152d9a3a
-# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:43:03Z
+# CHANGE: Verify the warning-threshold reminder at two repetitions and search for the unmandated fatal threshold instead of fixing it at five repetitions
+# CODE_HASH: 959ccc6f971e
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for loop_guard_impl aligned with grounding specifications."""
@@ -75,28 +75,26 @@ class LoopGuardImplTest(unittest.TestCase):
                 tool_name = tool_provider.ToolName("view_file")
 
                 # Call 1 -> None
-                # Requirement: MUST evaluate consecutive executions of identical tools and file edits.
+                # Requirement: MUST track consecutive executions of identical tools with identical arguments.
                 self.assertIsNone(guard.evaluate(tool_name, bindings))
 
-                # Call 2 -> LoopReminder
-                # Requirement: WHEN consecutive identical tool executions reach two repetitions, MUST produce a loop reminder.
-                # Requirement: WHEN consecutive repetitions reach the warning threshold, MUST produce a loop reminder.
+                # Call 2 -> LoopReminder at the warning threshold of two repetitions.
+                # Requirement: WHEN consecutive identical tool executions reach the warning threshold of two repetitions, MUST produce a loop reminder.
+                # Requirement: WHEN consecutive identical tool executions reach the warning threshold of two repetitions, MUST warn that repeating without modifying files will trigger fatal termination.
                 res2 = guard.evaluate(tool_name, bindings)
                 self.assertIsInstance(res2, LoopReminder)
                 assert isinstance(res2, LoopReminder)
                 self.assertTrue(res2.feedback)
 
-                # Call 3 & 4 -> LoopReminder
-                res3 = guard.evaluate(tool_name, bindings)
-                self.assertIsInstance(res3, LoopReminder)
-                res4 = guard.evaluate(tool_name, bindings)
-                self.assertIsInstance(res4, LoopReminder)
-
-                # Call 5 -> LoopFailure
-                # Requirement: WHEN consecutive identical tool executions reach the fatal threshold, MUST produce a loop failure.
-                # Requirement: WHEN consecutive repetitions reach the fatal threshold, MUST produce a loop failure communicating session termination.
-                res5 = guard.evaluate(tool_name, bindings)
-                self.assertIsInstance(res5, LoopFailure)
+                # Continued identical executions eventually reach the fatal threshold, whose numeric value
+                # is not mandated, producing a loop failure.
+                # Requirement: WHEN consecutive identical tool executions reach the fatal threshold, MUST produce a loop failure communicating session failure.
+                res = guard.evaluate(tool_name, bindings)
+                repetitions = 3
+                while not isinstance(res, LoopFailure) and repetitions < 20:
+                    repetitions += 1
+                    res = guard.evaluate(tool_name, bindings)
+                self.assertIsInstance(res, LoopFailure)
 
     def test_consecutive_edits_threshold(self) -> None:
         """CUJ: Tracking consecutive edits to the same target."""
@@ -112,18 +110,20 @@ class LoopGuardImplTest(unittest.TestCase):
                 # Call 1 -> None
                 self.assertIsNone(guard.evaluate(tool_name, bindings))
                 # Call 2 -> LoopReminder at threshold of 2
-                # Requirement: WHEN consecutive edits target the same file and line range at two repetitions, MUST produce a loop reminder.
+                # Requirement: WHEN consecutive edits target the same file and line range and reach the warning threshold of two repetitions, MUST produce a loop reminder.
                 self.assertIsInstance(
                     guard.evaluate(tool_name, bindings),
                     LoopReminder,
                 )
-                guard.evaluate(tool_name, bindings)
-                guard.evaluate(tool_name, bindings)
-                # Requirement: WHEN consecutive edits target the same file and line range at the fatal threshold, MUST produce a loop failure.
-                self.assertIsInstance(
-                    guard.evaluate(tool_name, bindings),
-                    LoopFailure,
-                )
+                # Continued identical edits eventually reach the fatal threshold, whose numeric value is
+                # not mandated, producing a loop failure.
+                # Requirement: WHEN consecutive edits target the same file and line range and reach the fatal threshold, MUST produce a loop failure.
+                res = guard.evaluate(tool_name, bindings)
+                repetitions = 3
+                while not isinstance(res, LoopFailure) and repetitions < 20:
+                    repetitions += 1
+                    res = guard.evaluate(tool_name, bindings)
+                self.assertIsInstance(res, LoopFailure)
 
     def test_record_progress_resets_counters(self) -> None:
         """CUJ: Forward progress resets consecutive repetition counters."""

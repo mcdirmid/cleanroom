@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:39:12Z
-# LAST_CHANGED: 2026-10-09T21:39:12Z
-# CHANGE: Synchronize active nodes sequence on role config during get work dispatch
-# CODE_HASH: 159d93725e07
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T04:40:32Z
+# CHANGE: Record the failing target's own FAILED state when dispatching fail
+# CODE_HASH: 4d3a0fb59605
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_coordinate_impl."""
@@ -11,6 +12,8 @@ from typing import Any, Optional, Sequence
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import agent_file_alias
+import agent_node_config
 import control_attribution
 import control_coordinate
 import control_submit
@@ -18,8 +21,6 @@ import control_verification
 import control_work_scheduler
 import dag_storage
 import dag_subgraph
-import agent_file_alias
-import agent_node_config
 
 
 @singleton_type("agent_session")
@@ -30,9 +31,18 @@ class SessionCoordinator(
     """Implementation of session coordinator facade.
 
     GROUNDING:
-    - Central session coordination facade managing session node states and dispatching
-      to WorkScheduler, VerificationEvaluator, SubmissionCoordinator, and AttributionCoordinator
-      within the agent session tier.
+    - Realizes control_coordinate.SessionCoordinator within the agent session tier by holding the
+      mutable internal session dictionaries that map dag_storage.DagNode values to
+      control_coordinate.TargetState values and alias strings to registered dag_storage.DagNode
+      values, normalizing alias strings through agent_file_alias.AliasManager.convert, and
+      synchronizing the active session nodes through agent_node_config.RoleConfig.set_nodes.
+    - Dispatches work discovery to control_work_scheduler.WorkScheduler, verification evaluation
+      to control_verification.VerificationEvaluator, submission gating to
+      control_submit.SubmissionCoordinator, and blame or failure recording to
+      control_attribution.AttributionCoordinator.
+    - Aggregates each dispatched control action into a
+      control_coordinate.ControlDispatchOutcome whose remaining open targets are read back from
+      the internal session node state dictionary.
     """
 
     @property
@@ -41,7 +51,20 @@ class SessionCoordinator(
         """Retrieves nodes currently in OPEN state.
 
         GROUNDING:
-        - Grounded via in-memory dictionary filtering nodes whose tracked state is OPEN.
+        - Grounded via the internal session node state dictionary, filtering for the
+          dag_storage.DagNode entries whose tracked control_coordinate.TargetState is OPEN.
+        """
+        ...
+
+    @operation
+    @override
+    def reset_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
+        """Resets session node tracking to the specified nodes.
+
+        GROUNDING:
+        - Replaces the internal session node state dictionary entries with the supplied
+          dag_storage.DagNode sequence, tracking each supplied node as a new open target so that
+          open_targets reports exactly the reset nodes.
         """
         ...
 
@@ -56,8 +79,12 @@ class SessionCoordinator(
         """Registers a target node with an alias and initial state.
 
         GROUNDING:
-        - Grounded via internal session dictionaries recording DagNode references,
-          alias strings, and target states.
+        - Mutates the internal session node state dictionary by inserting the supplied
+          dag_storage.DagNode against the supplied control_coordinate.TargetState.
+        - Normalizes the supplied alias string through agent_file_alias.AliasManager.convert,
+          indexing the resulting agent_file_alias.FileAlias.relative_path text against the
+          registered dag_storage.DagNode in the internal alias lookup and reverse alias lookup
+          indices.
         """
         ...
 
@@ -69,8 +96,11 @@ class SessionCoordinator(
         """Resolves the default target node when omitted from command invocation.
 
         GROUNDING:
-        - Grounded via single open target check or inspecting file modification
-          timestamps from the filesystem for registered target files.
+        - Grounded via the internal session node state dictionary to select the sole
+          dag_storage.DagNode tracked as control_coordinate.TargetState.OPEN when a single open
+          target remains, and via filesystem modification timestamps of the registered
+          agent_file_alias.BoundFile.workspace_path files when multiple open targets remain,
+          honoring the caller-supplied last accessed file when provided.
         """
         ...
 
@@ -80,7 +110,9 @@ class SessionCoordinator(
         """Resolves a DagNode instance from a string alias.
 
         GROUNDING:
-        - Grounded via alias lookup dictionary mapping string names to registered DagNode instances.
+        - Resolves the alias string through agent_file_alias.AliasManager.convert and looks the
+          resulting agent_file_alias.FileAlias.relative_path text up in the internal alias lookup
+          index recording the registered dag_storage.DagNode values.
         """
         ...
 
@@ -90,7 +122,9 @@ class SessionCoordinator(
         """Resolves the alias string corresponding to a DagNode.
 
         GROUNDING:
-        - Grounded via reverse alias dictionary mapping DagNode instances to canonical alias strings.
+        - Grounded via the internal reverse alias index, returning the
+          agent_file_alias.FileAlias.relative_path text recorded for the supplied
+          dag_storage.DagNode at registration time.
         """
         ...
 
@@ -105,10 +139,13 @@ class SessionCoordinator(
         """Dispatches work discovery to the work scheduler.
 
         GROUNDING:
-        - Grounded via WorkScheduler.schedule_work from control_work_scheduler,
-          materializing starter templates via DagStorage.materialize_template,
-          populating newly discovered tasks as OPEN nodes in the session registry,
-          and updating the sequence of active nodes on RoleConfig via RoleConfig.set_nodes.
+        - Grounded via control_work_scheduler.WorkScheduler.schedule_work with the supplied
+          dag_subgraph.DagSubgraph, directory scope, and maximum batch size, returning the
+          discovered control_work_scheduler.WorkSchedule.
+        - Populates the internal session node state dictionary by registering each scheduled
+          control_work_scheduler.ScheduledTask.node as control_coordinate.TargetState.OPEN.
+        - Synchronizes the active session nodes by passing the resulting open target sequence to
+          agent_node_config.RoleConfig.set_nodes.
         """
         ...
 
@@ -120,8 +157,12 @@ class SessionCoordinator(
         """Dispatches verification evaluation for a target or all open targets.
 
         GROUNDING:
-        - Grounded via default target resolution and VerificationEvaluator.evaluate_verification
-          from control_verification across the specified target or all open targets.
+        - Grounded via default target resolution to obtain the target dag_storage.DagNode, then
+          evaluating each requested target through
+          control_verification.VerificationEvaluator.evaluate_verification and combining the
+          per-target control_verification.VerificationResult values into the returned result.
+        - Grounded via the internal session node state dictionary to evaluate every
+          control_coordinate.TargetState.OPEN target when the target alias is omitted.
         """
         ...
 
@@ -136,8 +177,11 @@ class SessionCoordinator(
         """Dispatches submission gating for a target.
 
         GROUNDING:
-        - Grounded via default target resolution, SubmissionCoordinator.submit_target
-          from control_submit, and updating node state to CLEAN upon successful submission.
+        - Grounded via default target resolution and
+          control_submit.SubmissionCoordinator.submit_target for the resolved
+          dag_storage.DagNode with the supplied change summary and modification flag, updating the
+          internal session node state entry to control_coordinate.TargetState.CLEAN when the
+          submission is accepted.
         """
         ...
 
@@ -152,9 +196,12 @@ class SessionCoordinator(
         """Dispatches upstream defect attribution.
 
         GROUNDING:
-        - Grounded via default target resolution, AttributionCoordinator.blame_target
-          from control_attribution, updating source node to ATTRIBUTED, and marking
-          dependent nodes FAILED.
+        - Grounded via default target resolution and
+          control_attribution.AttributionCoordinator.blame_target for the resolved source and
+          blame target dag_storage.DagNode values with the supplied explanation, updating the
+          internal session node state entries to record the source node as
+          control_coordinate.TargetState.ATTRIBUTED and the affected dependent nodes as
+          control_coordinate.TargetState.FAILED.
         """
         ...
 
@@ -168,7 +215,11 @@ class SessionCoordinator(
         """Dispatches failure recording for a target.
 
         GROUNDING:
-        - Grounded via default target resolution, AttributionCoordinator.fail_target
-          from control_attribution, and marking dependent nodes FAILED.
+        - Grounded via default target resolution and
+          control_attribution.AttributionCoordinator.fail_target for the resolved
+          dag_storage.DagNode with the supplied explanation, updating the internal session node
+          state entries to record the failing target node itself as
+          control_coordinate.TargetState.FAILED and the affected dependent nodes as
+          control_coordinate.TargetState.FAILED.
         """
         ...

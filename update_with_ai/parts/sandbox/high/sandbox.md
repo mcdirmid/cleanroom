@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 86187ee83c1b
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Replace the single-item bullet list with declarative prose and name the modification state
+CODE_HASH: 8a7f8982f2fd
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # sandbox interface component
@@ -17,10 +18,4 @@ Agent sessions operate across heterogeneous tools spanning file inspection, edit
 
 ## Types and Behavior
 
-An agent session's *sandbox* coordinates file modification tracking for the session.
-
-The sandbox provides workspace coordination for the active session.
-
-The sandbox:
-
-- Exposes whether workspace file *modifications* occurred during the session.
+An agent session's *sandbox* coordinates state for an agent session and exposes whether workspace file *modifications* occurred during the session, so that outcome controls can require documentation of changed files before a session concludes.

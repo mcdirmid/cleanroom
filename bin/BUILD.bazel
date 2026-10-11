@@ -1,9 +1,0 @@
-# bin/BUILD.bazel
-
-exports_files([
-    "check_types.sh",
-    "format_workspace.sh",
-    "sync_partsdir.sh",
-    "sync_staging.sh",
-    "sync_update_with_ai.sh",
-])

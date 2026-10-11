@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: c0bc0558ef66
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Simplify agent definition and tighten tier scope statement
+CODE_HASH: 7b8c0761c821
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # agent_session interface component
@@ -17,6 +18,6 @@ Autonomous multi-turn agent runs require isolated operational scopes beneath the
 
 ## Types and Behavior
 
-An *agent* is an autonomous entity that cleans and reads workspace nodes by observing context and issuing tool calls.
+An *agent* is an autonomous entity that cleans and reads workspace nodes by issuing tool calls.
 
-The *agent session* is a lifecycle tier defined under the system lifecycle tier that bounds the execution, conversation, and ephemeral state of an agent.
+The *agent session* is a lifecycle tier of the system lifecycle tier that bounds the execution, conversation, and ephemeral state of an agent.

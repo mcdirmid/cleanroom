@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: 69199601d4ed
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 5e2ffa37d57f
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_asm assembly component
-
-imports: loop_cleaner_impl, loop_guard_impl, loop_node_cleaner_impl, openai_conversation_impl, openai_driver_impl
 
 ## Intent
 

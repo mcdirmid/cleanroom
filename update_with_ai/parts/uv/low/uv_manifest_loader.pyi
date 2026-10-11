@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: ab2bcf4c1bb5
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:48:25Z
+# CHANGE: Register synthesized pass-through definitions as non-propagating graph dependencies
+# CODE_HASH: d383f1f2a4e5
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom manifest loader low-level interface specification."""
@@ -86,5 +86,6 @@ class UvManifestLoader(InTier[SystemTier], Protocol):
         - MUST resolve declared silent dependencies as non-propagating dependencies in agent storage.
         - MUST synthesize definitions for declared dependencies lacking explicit manifests.
         - MUST synthesize promptless pass-through node definitions when a unit component type is not active for a role.
+        - WHEN synthesizing promptless pass-through node definitions because a unit component type is not active for a role, MUST register the synthesized definitions as graph dependencies that do not propagate changes.
         """
         ...

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-06T12:45:00Z
-# CHANGE: add grounding sections
-# CODE_HASH: 99a0435dd51c
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:49:07Z
+# CHANGE: Preserve responses with unmatched suppression keys intact
+# CODE_HASH: 7e85f9f60f4f
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """OpenAI conversation implementation low-level specification."""
@@ -85,6 +85,7 @@ class Conversation(
         - MUST preserve file path parameters and non-string arguments in superseded tool calls.
         - MUST replace other string arguments with a stub marker in superseded tool calls.
         - MUST retain reminders on stubs and inherit them when omitted.
+        - MUST preserve responses with unmatched suppression keys intact.
         """
         ...
 

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 269b1a2d24d1
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:56:35Z
+# CHANGE: Prune the uncontracted public 'messages' property so the implementation exposes only the conversation operations declared by the grounding specification
+# CODE_HASH: 43acfa91915e
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in openai_conversation_impl.pyi
@@ -51,10 +51,6 @@ class Conversation(loop_conversation.Conversation, Singleton):
     def __init__(self) -> None:
         self._messages: List[loop_conversation.ConversationMessage] = []
         self._suppression_keys: List[Optional[tool_provider.SuppressionKey]] = []
-
-    @property
-    def messages(self) -> List[loop_conversation.ConversationMessage]:
-        return list(self._messages)
 
     def initialize(
         self, initial_messages: Sequence[loop_conversation.ConversationMessage] = ()
@@ -260,10 +256,16 @@ class Conversation(loop_conversation.Conversation, Singleton):
         return loop_conversation.ModelRequest(messages=formatted)
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         Conversation,
         keys=[Conversation, loop_conversation.Conversation],
         tier=agent_session,
     )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

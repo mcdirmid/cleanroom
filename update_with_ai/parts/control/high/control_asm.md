@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: 7594b8477adf
+CODE_HASH: 7559d57062f1
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_asm assembly component
@@ -17,7 +18,7 @@ The control_asm assembly component aggregates session coordination, verification
 
 Complex multi-stage workflows require an integrated runtime environment where verification checkers, work schedulers, submit gates, and attribution handlers operate in seamless concert under a unified session coordinator. The control_asm assembly component binds these constituent implementations together, satisfying all public control interfaces and establishing the foundational execution control plane for Cleanroom.
 
-**Out of scope:** The control_asm assembly component contains no operational logic or branching code; these are handled by other components.
+**Out of scope:** The control_asm assembly component does not implement coordination logic, execute verification checks, or modify graph storage; these are handled by other components.
 
 ## Types and Behavior
 

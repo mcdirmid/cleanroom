@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-06T22:55:00Z
-CHANGE: new file
-CODE_HASH: d6ac41e913b0
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-10T19:45:00Z
+CHANGE: specify methodology-bound and qualified role resolution
+CODE_HASH: afb28350e6de
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # workspace_registry interface component
@@ -17,26 +18,22 @@ Managing multiple directory-scoped and role-specific workspaces requires consist
 
 **Out of scope:** The workspace_registry interface component does not copy workspace source files, execute test suites, or schedule graph tasks; these are handled by other components.
 
+**Delegated:** Session lifecycle scoping is delegated to agent_session.
+
 ## Types and Behavior
 
-A *role definition* record encapsulates configuration for an autonomous development role: a *role name*, an optional *role address*, a *guide path*, an optional *template*, an optional *template command*, a *source pattern*, a sequence of *writable file patterns*, a sequence of *read-only file patterns*, a sequence of *role dependencies*, a sequence of *star role dependencies*, a sequence of *silent role dependencies*, a sequence of *stub role dependencies*, a sequence of *silent cross-role dependencies*, a sequence of *feedback role dependencies*, a sequence of *active component types*, a *verification template*, a *verification success message*, a *persona*, a sequence of *workspace files*, a sequence of *tools*, an optional *audit tag*, and an optional *task prompt*.
+A *role definition* record encapsulates configuration for an autonomous development role: a *role name*, a *role address* when explicitly targeted, a *guide path*, a starter *template* path when defined, a *template command* when dynamic scaffolding applies, a *source pattern*, *writable file patterns*, *read-only file patterns*, *role dependencies*, *star role dependencies*, *silent role dependencies*, *stub role dependencies*, *silent cross-role dependencies*, *feedback role dependencies*, *active component types*, a *verification template*, a *verification success message*, a *persona*, *workspace files*, *tools*, an *audit tag* when the role performs auditing, and a *task prompt* when custom instructions apply.
 
-A *workspace descriptor* record encapsulates metadata identifying an active role workspace: a *workspace directory*, a *main repository root*, a *directory scope*, a *role definition*, and an optional *last sync timestamp*.
+A *workspace descriptor* record encapsulates metadata identifying an active role workspace: a *workspace directory*, a *main repository root*, a *directory scope*, a *role definition*, and a *last sync timestamp* recording recent synchronization.
 
-A session's *workspace registry* resolves role specifications and tracks commissioned role workspaces.
+An agent session's *workspace registry* resolves role specifications and tracks commissioned role workspaces.
 
-The workspace registry:
+Role definitions obey three declaration constraints. Feedback role dependencies and star role dependencies are implicitly role dependencies, so neither is declared again under role dependencies, and a dependency is never declared as both a role dependency and a silent role dependency. An auditor role is declared only as a silent role dependency, never as a role dependency, a star role dependency, or a feedback role dependency.
 
-- Resolves the canonical repository root from the filesystem environment or current working directory.
+The workspace registry resolves the canonical repository root from the filesystem environment or the current working directory.
 
-- Resolves role definitions dynamically from declarative role configuration files (such as cleanroom_python_roles.toml) or repository build files, raising an explicit failure if a queried role is undeclared.
+The workspace registry resolves a role definition and lists every declared role definition from declarative role configuration files or repository build files, raising an explicit failure when a queried role is undeclared or when a role definition violates a declaration constraint. When resolving an unqualified role definition within a directory scope, the registry discovers the methodology configuration bound to that directory scope or its package hierarchy and loads the role definitions declared by that methodology. When resolving a qualified role address, the registry loads role definitions declared by the addressed package.
 
-- Lists all declared role definitions from repository role configuration files or build files.
+The workspace registry computes a deterministic sanitized role workspace directory path from repository roots, role names, and directory scopes, records newly commissioned role workspaces into the persistent workspaces registry, and unregisters decommissioned role workspaces from that registry.
 
-- Computes deterministic, sanitized role workspace directory paths from repository roots, role names, and directory scopes.
-
-- Records newly commissioned role workspaces into the persistent workspaces registry.
-
-- Unregisters decommissioned role workspaces from the persistent workspaces registry.
-
-- Queries and loads all currently active workspace descriptors from the persistent workspaces registry.
+The workspace registry queries and loads every currently active workspace descriptor from the persistent workspaces registry.

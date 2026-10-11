@@ -16,18 +16,17 @@ In the Cleanroom engineering pipeline, the **Planning Canvas** (`planning/<name>
 │                                  ▼                                               │
 │   2. Planning Canvas (planning/*.md)                                             │
 │      Intent prose, Factored Contracts with slugs, Epistemic Grounding DAG        │
-│                                  │                                               │
-│                                  ├── Gate 1: SPEC_QA Arbiter (spec_qa)           │
-│                                  ▼  planning_to_low.md                           │
+│                                  │  planning_to_low.md                           │
+│                                  ▼                                               │
 │   3. Low-Level Spec (low/*.pyi)                                                  │
 │      Typed Python stubs, DbC docstrings, Natural Language GROUNDING: arguments   │
 │                                  │                                               │
-│                                  ├── Gate 2: LOW_QA Arbiter (low_qa)             │
+│                                  ├── Gate 1: SPEC_QA Arbiter (spec_qa)           │
 │                                  ▼  low_to_lib.md / low_to_test.md               │
 │   4. Library & Tests (lib/*.py & tests/*_test.py)                                │
 │      Double-blind implementation and contract tests                              │
 │                                  │                                               │
-│                                  └── Gate 3: QA & Coverage Arbiters              │
+│                                  └── Gate 2: QA & Coverage Arbiters              │
 │                                                                                  │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -51,9 +50,6 @@ Every planning specification conforms to canonical markdown sections. Cleanroom 
 ```markdown
 # <name> <component_type> component
 
-imports: <imported_modules>
-implements: <interface>  # (implementation components only)
-
 ## Intent
 [Continuous prose paragraphs explaining architectural rationale, UX motivations, and trade-offs]
 
@@ -76,7 +72,7 @@ implements: <interface>  # (implementation components only)
 
 ### 2.2 External Boundary Specification Structure (`_ext.md`)
 
-External specifications (`planning/<name>_ext.md`) model third-party libraries, host operating system facilities, foreign serialization protocols, and runtime environment boundaries (e.g. `filesystem_ext`, `openai_ext`, `bazel_manifest_ext`). 
+External specifications (`planning/<name>_ext.md`) model third-party libraries, host operating system facilities, foreign serialization protocols, and runtime environment boundaries (e.g. `filesystem_ext`, `openai_ext`, `json_manifest_ext`). 
 
 Because external boundaries exist **solely to ground other Cleanroom components** rather than implement internal behavioral contracts, their structure is streamlined:
 
@@ -171,7 +167,7 @@ Historically, Cleanroom attempted to verify grounding through two paradigms:
 1. **Relational Groundtalk (`.gt`)**: Custom Datalog Horn-clause reachability solvers (struggled with complex expressions, nested collections, and custom toolchain friction).
 2. **Static Python Grounding (`grounding/*.py`)**: Straight-line typed Python feasibility proofs checked via Pyright. While this resolved toolchain friction, it introduced **Mechanistic Hallucination of Success**: because Pyright only verifies syntactic type assignability, LLMs routinely pacified the type checker by fabricating phantom literals, accessing arbitrary dictionary keys, or copying contract docstrings into hollow functions terminating in `raise NotImplementedError`.
 
-Cleanroom solves this through **Pure Epistemic Grounding via Slugs in Planning Specifications**, verified by `spec_qa`, translated into Natural Language Grounding Arguments (`GROUNDING:`) in Low-Level Specifications, and verified by `low_qa`.
+Cleanroom solves this through **Pure Epistemic Grounding via Slugs in Planning Specifications**, translated into Natural Language Grounding Arguments (`GROUNDING:`) in Low-Level Specifications, and verified by `spec_qa`.
 
 ### 6.1 Slug Asymmetry: Why Provisions Have Slugs and Requirements Do Not
 
@@ -224,6 +220,12 @@ Because grounding allows internal composition (a requirement grounded by local p
 2. **No Cycles**: Provision $[A]$ cannot ground a requirement that enables $[B]$ which grounds a requirement that enables $[A]$.
 3. **Well-Founded Base**: Every grounding path must terminate in external imports (`component: [slug]`) or caller input parameters (`caller input`). The directed graph over provisions must be an acyclic DAG.
 
+### 6.7 Upstream Defect Attribution (Blaming High for Missing Imports)
+When a High-Level Specification (`high/<name>.md`) omits an imported component required to constructively ground a contract, or contains contracts that cannot be grounded using declared imports and local provisions:
+1. **No Phantom Imports**: Planning specifications must never declare front-matter `imports:` or invent uncontracted dependencies.
+2. **Defect Blame Delivery**: The planning agent attributes blame to `high/<name>.md` via `blame(target="planning/<name>.md", blame_target="high/<name>.md", explanation="...")` (or `blame(explanation="...")`).
+3. **Single-Paragraph Diagnostic Critique**: The blame explanation is formatted strictly as a single paragraph without newline characters, diagnosing the exact ungroundable contract or the missing imported collaborator needed to satisfy grounding.
+
 ---
 
 ## 7. Downstream Translation to Low-Level Specifications (`low/`)
@@ -268,7 +270,7 @@ class Sandbox(sandbox.Sandbox, InTier[AgentSessionTier]):
 
 ---
 
-## 8. Verification Architecture: The Auditor Roles (`spec_qa` & `low_qa`)
+## 8. Verification Architecture: The Auditor Roles (`spec_qa`, `qa`, `coverage`)
 
 Cleanroom coordinates verification through dedicated, independent **Auditor Roles**. To keep authoring agents in deep semantic reasoning mode and prevent mechanistic constraint-satisfaction gaming, Cleanroom enforces the foundational principle:
 
@@ -277,14 +279,13 @@ Cleanroom coordinates verification through dedicated, independent **Auditor Role
 Authoring models (`high`, `planning`, `low`, `lib`, `test`) are deliberately insulated from interactive linters and type checkers. When an authoring agent is given direct access to a linter, it inevitably degenerates into mechanistic gaming—tinkering with ASTs, regexes, and syntax to pacify tools rather than reasoning deeply about domain semantics and contract fidelity.
 
 Instead:
-- **Linters and verifiers are owned by Arbiters**: `spec_lint.py` is owned by `spec_qa`; `low_lint.py` and Pyright are owned by `low_qa`.
-- **Arbiters execute verification suites internally**: `spec_qa` and `low_qa` run linters and static analyzers as fast pre-flight sanity checks, translating any mechanical defects into actionable, non-prescriptive blame feedback for the author.
+- **Linters and verifiers are owned by Arbiters**: `high_lint.py`, `spec_lint.py`, `low_lint.py`, and Pyright are owned by `spec_qa`.
+- **Arbiters execute verification suites internally**: `spec_qa` runs linters and static analyzers as fast pre-flight sanity checks, translating any mechanical defects into actionable, non-prescriptive blame feedback for the author.
 
-### 8.1 The Three-Gate Cleanroom Pipeline
+### 8.1 The Two-Gate Cleanroom Pipeline
 
-1. **Gate 1 (`spec_qa`)**: Certifies conceptual specification integrity, Zero-Conjunction factorization, provision DAG acyclicity, and epistemic reachability between `high/*.md` and `planning/*.md`. Stamps `SPEC_QA_AUDIT: <timestamp>`.
-2. **Gate 2 (`low_qa`)**: Certifies static type soundness, structural stubs, and concrete collaborator grounding blueprints in `low/*.pyi` and `low/*_impl.pyi`. Stamps `LOW_QA_AUDIT: <timestamp>`.
-3. **Gate 3 (`qa` & `coverage`)**: Certifies double-blind runtime implementation correctness and 100% statement test coverage in `lib/*.py` and `tests/*_test.py`. Stamps `QA_AUDIT: <timestamp>` and `COVERAGE_AUDIT: <timestamp>`.
+1. **Gate 1 (`spec_qa`)**: Certifies conceptual specification integrity, Zero-Conjunction factorization, provision DAG acyclicity, epistemic reachability, static type soundness, structural stubs, and concrete collaborator grounding blueprints across `high/*.md`, `planning/*.md`, and `low/*.pyi`. Stamps `SPEC_QA_AUDIT: <timestamp>`.
+2. **Gate 2 (`qa` & `coverage`)**: Certifies double-blind runtime implementation correctness and 100% statement test coverage in `lib/*.py` and `tests/*_test.py`. Stamps `QA_AUDIT: <timestamp>` and `COVERAGE_AUDIT: <timestamp>`.
 
 ---
 
@@ -300,7 +301,9 @@ Instead:
 - [ ] **Open deferrals in implementations**: Leaving `  - Deferred:` sub-bullets in `planning/<name>_impl.md`.
 - [ ] **Paraphrasing inherited deferrals**: Altering the wording of deferred interface requirements under `### Inherited Deferred Requirements` instead of repeating them verbatim.
 - [ ] **Circular grounding**: Grounding a provision using itself or creating cyclic dependencies among local provisions.
-- [ ] **Phantom imports**: Citing `component: [slug]` in grounding or woven contracts without declaring `component` in front-matter `imports:`.
+- [ ] **Phantom imports**: Citing `component: [slug]` in grounding or woven contracts without declaring `component` under `imports:` or `implements:` in `high/<name>.md`.
+- [ ] **Front-matter in planning**: Declaring `imports:`, `implements:`, or `types from` in planning specifications instead of relying on `high/<name>.md`.
+- [ ] **Inventing dependencies**: Fabricating provisions or assuming undeclared collaborators instead of blaming `high/<name>.md` for missing imports.
 - [ ] **Markdown tables**: Using tabular grids anywhere in the document instead of flat bullet lists.
 - [ ] **Missing period**: Terminating a factored contract, woven contract, provision, or requirement sentence without a period.
 - [ ] **Sub-headers under Intent or Woven Contracts**: Introducing unauthorized `###` sub-headers.

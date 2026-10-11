@@ -2,7 +2,7 @@
 # LAST_CLEANED: 2026-10-07T05:04:27Z
 # LAST_CHANGED: 2026-10-04T02:03:40Z
 # CHANGE: new file
-# CODE_HASH: 3e6d52e0bd7e
+# CODE_HASH: ea6ea48ecb54
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom Specification Framework Stubs: Structural markers for pure .pyi specifications.
@@ -22,7 +22,7 @@ lifecycle scoping:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, Optional, TypeVar, Union, overload, override
+from typing import Any, Callable, Literal, Optional, TypeVar, Union, overload
 
 __all__ = [
     "LifecycleScope",

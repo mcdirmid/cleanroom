@@ -1,24 +1,24 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 59b68182b916
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:48:24Z
+# CHANGE: Import file_paths and cite its real path resolution members in read realizations
+# CODE_HASH: 3dc6e437ac6d
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file reader implementation low-level specification."""
 
-from typing import Any, Mapping, Optional, Set, Type, Union
+from typing import Any, Mapping, Set, Type, Union
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import agent_file_alias
 import agent_node_config
+import file_paths
 import sandbox_file_editor
 import sandbox_file_reader
 import template_format
 import tool_provider
-import file_paths
 
 
 @singleton_type("agent_session")
@@ -26,8 +26,15 @@ class ReadManager(sandbox_file_reader.ReadManager):
     """Regulates file reading across session files.
 
     GROUNDING:
-    - Queries declared read-only and read-write session files from NodeConfig
-      and validates workspace paths within the agent session tier.
+    - Reads the declared files from agent_node_config.NodeConfig.read_only_files and
+      agent_node_config.NodeConfig.read_write_files, matching a supplied path against the
+      agent_file_alias.BoundFile.relative_path and workspace_path members of the collected
+      agent_file_alias.ReadOnlyFile and agent_file_alias.ReadWriteFile records.
+    - Reports the available file aliases by projecting relative_path from those collected records
+      within the agent session tier.
+    - Validates and resolves the workspace path recorded on each matched
+      agent_file_alias.BoundFile through the file_paths.FilePathManager.create_workspace_path and
+      file_paths.FilePathManager.resolve_path operations before reporting read access.
     """
 
     @property
@@ -36,7 +43,8 @@ class ReadManager(sandbox_file_reader.ReadManager):
         """Exposes session read-only files.
 
         GROUNDING:
-        - Exposes declared read-only files resolved from NodeConfig.
+        - Exposes the agent_file_alias.ReadOnlyFile records held by
+          agent_node_config.NodeConfig.read_only_files without mutating the declared collection.
         """
         ...
 
@@ -46,7 +54,8 @@ class ReadManager(sandbox_file_reader.ReadManager):
         """Exposes session read-write files.
 
         GROUNDING:
-        - Exposes declared read-write files resolved from NodeConfig.
+        - Exposes the agent_file_alias.ReadWriteFile records held by
+          agent_node_config.NodeConfig.read_write_files without mutating the declared collection.
         """
         ...
 
@@ -68,7 +77,10 @@ class ReadManager(sandbox_file_reader.ReadManager):
         - WHEN path matches a declared file workspace path, MUST produce a successful ToolResponse indicating access is permitted with content "Access permitted for '{path}'.".
 
         GROUNDING:
-        - Checks whether target path matches any declared ReadOnlyFile or ReadWriteFile from NodeConfig.
+        - Matches path against the agent_file_alias.BoundFile.relative_path and workspace_path members
+          of the agent_file_alias.ReadOnlyFile and agent_file_alias.ReadWriteFile records exposed by
+          agent_node_config.NodeConfig, lists the projected relative paths as available files when
+          no declared file matches, and returns the resulting tool_provider.ToolResponse.
         """
         ...
 
@@ -78,20 +90,31 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool):
     """Executes file read across declared session files.
 
     GROUNDING:
-    - Reads file content from filesystem, applies line numbering, filters metadata,
-      substitutes template parameters, and records reads in EditManager.
+    - Resolves host file content through the pathlib filesystem operations declared by the
+      filesystem_ext external boundary, reads the workspace path recorded on the resolved
+      agent_file_alias.BoundFile of the agent_file_alias.ReadOnlyFile or
+      agent_file_alias.ReadWriteFile, and realizes read-only formatting with
+      template_format.TemplateFormatter.format_template projected over
+      agent_node_config.NodeConfig.template_parameters.
+    - Resolves the workspace path recorded on the bound file against the agent_file_alias.AliasManager
+      workspace root through the file_paths.FilePathManager.resolve_path operation to obtain the
+      host path read for the tool response.
+    - Applies the agent_file_alias.AliasManager.sanitize_text masking of host paths for read-only
+      responses, carries the alias relative path as the tool_provider.SuppressionKey value for
+      read-write responses, and records successful reads by mutating session edit state through
+      sandbox_file_editor.EditManager.record_file_read.
     """
 
     @operation
     def initialize(self) -> None:
-        """Installs the view file tool into the session environment and omits search tool.
+        """Installs the view file tool into the session environment.
 
         POSTCONDITIONS:
         - MUST install the view file tool for the agent session.
-        - MUST omit the search tool.
 
         GROUNDING:
-        - Registers view_file into ToolManager and omits search_files.
+        - Registers this view file tool instance through tool_provider.ToolManager.install_tool so
+          the agent session can execute it by tool_provider.ToolName.
         """
         ...
 
@@ -141,9 +164,17 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool):
         - WHEN reading a file succeeds, MUST record the read file to establish the session's last read or written file.
 
         GROUNDING:
-        - Reads file from filesystem, formats right-aligned line numbering, strips META paragraphs,
-          evaluates template parameters, sanitizes paths, sets suppression keys for read-write files,
-          and records read in EditManager.
+        - Resolves the bound target file through agent_file_alias.AliasManager.convert, reads host
+          content with the pathlib filesystem operations declared by the filesystem_ext external
+          boundary for the workspace path recorded on the bound file, and enumerates the content
+          one-indexed with right-aligned numbering.
+        - Passes read-only markdown content through
+          template_format.TemplateFormatter.format_template with the bindings of
+          agent_node_config.NodeConfig.template_parameters, drops '> META:' paragraphs, masks host
+          paths through agent_file_alias.AliasManager.sanitize_text, sets the suppressed
+          tool_provider.ToolResponse.suppression_key from the alias relative path for read-write
+          files, and mutates session edit state through
+          sandbox_file_editor.EditManager.record_file_read on success.
         """
         ...
 
@@ -156,7 +187,11 @@ class RegexPatternParameterType(
     """Converts wire type string into regex pattern.
 
     GROUNDING:
-    - Compiles wire string into RegexPattern, catching re.error and raising ParameterConversionError.
+    - Compiles the wire string with re.compile, catching re.error and raising
+      tool_provider.ParameterConversionError for the tool_provider.ParameterType.convert contract.
+    - Applies the converted agent_file_alias.RegexPattern to the workspace paths resolved by
+      file_paths.FilePathManager.resolve_path when the regex pattern parameter type is used by the
+      search tool.
     """
 
     @property
@@ -185,7 +220,9 @@ class RegexPatternParameterType(
         - WHEN wire_value is a valid regular expression pattern, MUST return the constructed RegexPattern.
 
         GROUNDING:
-        - Uses re.compile to parse pattern, returning RegexPattern or raising ParameterConversionError on syntax error.
+        - Uses re.compile to parse the pattern, returning the constructed
+          agent_file_alias.RegexPattern wire text or raising
+          tool_provider.ParameterConversionError on regex syntax error.
         """
         ...
 
@@ -195,7 +232,19 @@ class SearchTool(sandbox_file_reader.SearchTool):
     """Searches regex patterns across workspace files.
 
     GROUNDING:
-    - Iterates over declared read-only and read-write files, scanning for regex matches and withholding read-write line contents.
+    - Iterates the agent_file_alias.ReadOnlyFile and agent_file_alias.ReadWriteFile records exposed
+      by agent_node_config.NodeConfig.read_only_files and
+      agent_node_config.NodeConfig.read_write_files, scanning host content read for the recorded
+      workspace path through the pathlib filesystem operations declared by the filesystem_ext
+      external boundary.
+    - Matches lines with the compiled agent_file_alias.RegexPattern parameter, reports the sanitized
+      one-indexed line numbers and line contents produced by
+      agent_file_alias.AliasManager.sanitize_text for read-only files, and withholds line contents
+      for read-write files within the agent session tier.
+    - Resolves each declared file workspace path recorded on the iterated
+      agent_file_alias.ReadOnlyFile and agent_file_alias.ReadWriteFile records into a host path
+      through the file_paths.FilePathManager.resolve_path operation before scanning the file
+      content.
     """
 
     @property
@@ -238,6 +287,10 @@ class SearchTool(sandbox_file_reader.SearchTool):
         - WHEN matches are found for read-write files, MUST state that matches were found with "{relative_path}: matches found (details hidden to prevent unanchored edits)".
 
         GROUNDING:
-        - Reads declared session files from NodeConfig, applies regex search, sanitizes paths for read-only matches, and withholds read-write line details.
+        - Resolves the compiled agent_file_alias.RegexPattern from the invocation bindings, scans the
+          host content of the declared read-only and read-write files for the recorded workspace
+          path, sanitizes read-only matched lines through
+          agent_file_alias.AliasManager.sanitize_text, and withholds read-write line contents while
+          reporting the agent_file_alias.FileAlias.relative_path of each matching file.
         """
         ...

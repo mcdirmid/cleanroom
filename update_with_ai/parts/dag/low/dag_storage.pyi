@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-08T00:31:35Z
-# CHANGE: Update DagStorage low-level operations: add_feedback_message, mark_node_dirty, mark_subgraph_clean
-# CODE_HASH: 373a52388f6c
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:44:39Z
+# CHANGE: Scope clean-status postcondition to nodes with a source file, resolving the missing-artifact contradiction
+# CODE_HASH: 147dca269d16
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Dag storage low-level interface specification."""
@@ -79,7 +79,7 @@ class FeedbackMessage(DagMessage):
 
 @singleton_type("system")
 class DagStorage(InTier[SystemTier], Protocol):
-    """Stores graph structure, node status, and message propagation across nodes.
+    """Stores node graph structure, node status, and messages for dag nodes.
 
     INVARIANTS:
     - Direct upstream dependencies of a dag node form a directed acyclic graph.
@@ -94,9 +94,6 @@ class DagStorage(InTier[SystemTier], Protocol):
 
         Returns:
             The set of upstream dependencies for the node.
-
-        POSTCONDITIONS:
-        - MUST return the set of upstream dependencies for the node.
         """
         ...
 
@@ -109,9 +106,6 @@ class DagStorage(InTier[SystemTier], Protocol):
 
         Returns:
             The set of messages explaining why the node requires cleaning.
-
-        POSTCONDITIONS:
-        - MUST return the set of messages recorded for the node.
         """
         ...
 
@@ -126,7 +120,6 @@ class DagStorage(InTier[SystemTier], Protocol):
             True if the node needs to be cleaned.
 
         POSTCONDITIONS:
-        - MUST return whether the node needs to be cleaned.
         - WHEN the declared source file is missing from disk, MUST return true.
         - WHEN in-band metadata is missing or invalid, MUST return true.
         - WHEN in-band metadata is uncleaned with a change description, MUST return true.
@@ -164,7 +157,7 @@ class DagStorage(InTier[SystemTier], Protocol):
 
     @operation
     def mark_node_dirty(self, node: DagNode, reason: Optional[str] = ...) -> None:
-        """Marks a node dirty by clearing its clean status in in-band metadata.
+        """Marks a node dirty by clearing its clean status and recording a provided reason in in-band metadata.
 
         Args:
             node: The node to mark dirty.
@@ -173,6 +166,7 @@ class DagStorage(InTier[SystemTier], Protocol):
         POSTCONDITIONS:
         - MUST mark the node dirty so that is_dirty returns true.
         - MUST clear the last cleaned status in the node's in-band metadata.
+        - WHEN a dirty reason is provided, MUST record the dirty reason in the node's in-band metadata.
         """
         ...
 
@@ -217,7 +211,7 @@ class DagStorage(InTier[SystemTier], Protocol):
         - WHEN node has a source file and change description is omitted, MUST update last cleaned timestamp and clear unacted feedback and dirty tags, preserving existing last changed timestamp.
         - WHEN node is an auditor role, MUST stamp audit metadata on all feedback dependencies.
         - MUST clear messages for node.
-        - MUST mark node clean so that node is no longer dirty.
+        - WHEN node has a source file, MUST mark node clean so that node is no longer dirty.
         """
         ...
 

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-09T02:39:58Z
-# CHANGE: add contamination tripwire section to regenerated AGENTS.md
-# CODE_HASH: 57f68ee8eebd
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:04:12Z
+# CHANGE: Validate canonical main baselines against workspace hashes before committing harvested targets, delete the consumed blame buffer, and resolve the canonical repository root and role context through the workspace descriptor
+# CODE_HASH: 809bda2be575
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_sync_impl."""
@@ -51,6 +51,20 @@ def write_file_with_perms(
         pass
 
 
+def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
+    """Decomposes a source path pattern into its directory, stem suffix, and extension."""
+    if not pat:
+        return "", "", ""
+    parts = pat.split("/")
+    d = parts[1] if len(parts) > 1 else ""
+    f = parts[-1]
+    stem, ext = os.path.splitext(f)
+    suffix = ""
+    if "_" in stem and not stem.startswith("{"):
+        suffix = stem.replace("{unit_name}", "")
+    return d, suffix, ext
+
+
 def _is_stub_dep_file(
     rel_path: str,
     role_def: workspace_registry.RoleDefinition,
@@ -80,7 +94,8 @@ def _is_stub_dep_file(
                 ):
                     return True
         if stub_def.src_pattern:
-            if "{unit_dir}/lib/" in stub_def.src_pattern and parent == "lib" and fname.endswith(".py"):
+            d, _, ext = _parse_pat_to_glob(stub_def.src_pattern)
+            if d and (parent == d or f"/{d}/" in rel_path.replace("\\", "/")) and (not ext or fname.endswith(ext)):
                 return True
     return False
 
@@ -136,13 +151,19 @@ def _find_spec_pyi(
             return candidate
     if main_root:
         part_name = os.path.basename(part_path)
-        for base in ("update_with_ai", "update_python_with_ai"):
-            for spec_dir in ("low", "grounding"):
-                candidate = os.path.join(
-                    main_root, base, "parts", part_name, spec_dir, f"{stem}.pyi"
-                )
-                if os.path.isfile(candidate):
-                    return candidate
+        try:
+            for entry in os.listdir(main_root):
+                base_dir = os.path.join(main_root, entry)
+                if not os.path.isdir(base_dir) or entry.startswith((".", "bazel-", "venv")):
+                    continue
+                for spec_dir in ("low", "grounding"):
+                    candidate = os.path.join(
+                        base_dir, "parts", part_name, spec_dir, f"{stem}.pyi"
+                    )
+                    if os.path.isfile(candidate):
+                        return candidate
+        except OSError:
+            pass
     return None
 
 
@@ -644,6 +665,9 @@ class WorkspaceSynchronizer(
 
     tier = agent_session.agent_session
 
+    def __init__(self) -> None:
+        pass
+
     def pull(
         self,
         workspace_dir: str,
@@ -803,11 +827,29 @@ class WorkspaceSynchronizer(
         registry = get_singleton(
             workspace_registry.WorkspaceRegistry
         )
-        role_def = registry.resolve_role_definition(role_name, main_root)
+        # Resolve the canonical repository root and the role context of the
+        # synchronized workspace before recopying system files from that root.
+        canonical_root = registry.discover_repository_root(main_root)
+        if not os.path.isdir(canonical_root):
+            canonical_root = main_root
+        descriptor: Optional[workspace_registry.WorkspaceDescriptor] = None
+        target_ws = os.path.realpath(workspace_dir)
+        for active in registry.load_active_workspaces(repo_root=canonical_root):
+            if os.path.realpath(active.workspace_dir) == target_ws:
+                descriptor = active
+                break
+        if descriptor is not None:
+            role_name = descriptor.role_definition.role_name
+            dir_scope = descriptor.directory_scope
+            role_def = descriptor.role_definition
+        else:
+            role_def = registry.resolve_role_definition(role_name, canonical_root)
+        main_root = canonical_root
         refreshed_count = 0
 
         for cfg_name in (
             "pyproject.toml",
+            "cleanroom.toml",
             "cleanroom_roles.toml",
             "cleanroom_python_roles.toml",
             "model_configs.toml",
@@ -854,12 +896,13 @@ class WorkspaceSynchronizer(
                     pkg_dir = os.path.join(main_root, entry)
                     if not os.path.isdir(pkg_dir) or entry.startswith((".", "bazel-", "venv")):
                         continue
-                    for rname in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
-                        r_src = os.path.join(pkg_dir, rname)
-                        if os.path.isfile(r_src):
-                            r_dst = os.path.join(workspace_dir, entry, rname)
-                            copy_file_with_perms(r_src, r_dst, readonly=True)
-                            refreshed_count += 1
+                    for rname in os.listdir(pkg_dir):
+                        if rname.endswith((".toml", ".json")):
+                            r_src = os.path.join(pkg_dir, rname)
+                            if os.path.isfile(r_src):
+                                r_dst = os.path.join(workspace_dir, entry, rname)
+                                copy_file_with_perms(r_src, r_dst, readonly=True)
+                                refreshed_count += 1
                     s_lib = os.path.join(pkg_dir, "support", "lib")
                     if os.path.isdir(s_lib):
                         d_lib = os.path.join(workspace_dir, entry, "support", "lib")
@@ -959,9 +1002,7 @@ class WorkspaceSynchronizer(
                 flushed.append(target)
 
         try:
-            with open(blame_path, "w", encoding="utf-8") as f:
-                json.dump([], f)
-                f.write("\n")
+            os.remove(blame_path)
         except OSError:
             pass
 
@@ -1026,6 +1067,17 @@ class WorkspaceSynchronizer(
                         is_modified = True
 
                 if is_modified:
+                    ws_meta = src_metadata.extract_metadata(ws_f)
+                    baseline_hash = ws_meta.code_hash if ws_meta else None
+                    main_hash = (
+                        src_metadata.compute_file_code_hash(main_f)
+                        if os.path.isfile(main_f)
+                        else None
+                    )
+                    if baseline_hash and main_hash and baseline_hash != main_hash:
+                        raise RuntimeError(
+                            f"Conflict detected during harvest: canonical '{rel}' was modified concurrently with local uncommitted edits."
+                        )
                     copy_file_with_perms(ws_f, main_f, readonly=False)
                     meta = src_metadata.extract_metadata(ws_f)
                     change = meta.change_summary if meta else "harvested changes"
@@ -1042,3 +1094,18 @@ class WorkspaceSynchronizer(
             stamped_audits=stamped_audits,
             flushed_blames=flushed_blames,
         )
+
+
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        WorkspaceSynchronizer,
+        keys=[workspace_sync.WorkspaceSynchronizer, WorkspaceSynchronizer],
+        tier=agent_session.agent_session,
+    )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-05T04:57:08Z
-CHANGE: Standardize on canonical mapping parameter type over dictionary parameter type
-CODE_HASH: 2b6d8d81fbe3
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Canonicalize the missing note term and state wire value conversion declaratively
+CODE_HASH: 73c193090cd4
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # tool_provider_impl implementation component
@@ -19,24 +20,24 @@ Autonomous agent workflows require executing tools with wire-type arguments supp
 
 ## Types and Behavior
 
-The tool manager maintains tools installed during an agent session, and exposes installed tools to inform the agent of what tools it can execute.
+The tool manager maintains the tools installed during an agent session, and exposes installed tools so the agent knows which tools it can execute.
 
-Executing a tool by name with wire parameter bindings converts wire arguments into actual parameter bindings and executes the matching tool. When an argument is omitted for a parameter that is not required and has a default value, the tool manager binds the default value as the actual parameter value.
+Executing a tool by name with wire parameter bindings converts wire arguments into actual parameter bindings and executes the matching tool. The tool manager binds the default value of a parameter that is not required when an argument for that parameter is omitted and a default value is configured.
 
 Execution fails if:
 
 - No installed tool matches the requested name.
 
-- A name is supplied in parameter bindings that does not match known parameters of the tool, and reminds the agent that only declared parameters of the tool can be provided.
+- A name is supplied in parameter bindings that does not match a known parameter of the tool, and reminds the agent that only declared parameters of the tool can be provided.
 
-- An argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminding the agent that required parameters of the tool must be supplied.
+- An argument is not supplied for a required parameter of the tool, incorporating the missing note of that parameter evaluated against the supplied parameter names when configured, and reminding the agent that required parameters of the tool must be supplied.
 
 On successful argument resolution, the tool manager executes the tool with the resolved actual parameter bindings and returns the response produced by the tool.
 
 Executing a tool with argument mappings executes the tool by name with wire parameter bindings.
 
-The identity parameter type converts wire type values to produce identical actual values for its target type.
+The identity parameter type converts wire values into identical actual values for its target type.
 
-The list parameter type converts wire type lists to actual type lists by converting each element with its item parameter type.
+The list parameter type converts wire type lists into actual type lists by converting each element with its item parameter type.
 
-The mapping parameter type converts wire type mappings to actual type mappings by converting each key with its key parameter type and each value with its value parameter type.
+The mapping parameter type converts wire type mappings into actual type mappings by converting each key with its key parameter type and each value with its value parameter type.

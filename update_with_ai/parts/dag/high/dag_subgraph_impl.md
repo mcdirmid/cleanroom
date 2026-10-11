@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-05T04:52:52Z
-CHANGE: Add delegated collaborator statement for dag_storage and dag_config
-CODE_HASH: 63a9228db8f7
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Remove interface-restated catalogs and retain only implementation-specific ordering and batching mechanics
+CODE_HASH: 67d2e86d33fa
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # dag_subgraph_impl implementation component
@@ -14,20 +15,18 @@ implements: dag_subgraph
 
 The dag_subgraph_impl implementation component realizes active subgraph scoping, dependency-first topological ordering, ready node batching, and visit limit tracking.
 
-Traversing multi-stage build workflows requires isolating reachable subgraphs, evaluating topological order deterministically, and tracking node visitation bounds to prevent infinite re-cleaning cycles. Hardcoding graph traversal algorithms into execution runners complicates scheduling logic and duplicates dependency validation. The dag_subgraph_impl implementation component provides an in-memory graph index over dag storage that maintains topological ordering, groups ready dirty nodes by role address up to configured batch limits, and enforces visit limits across cleaning iterations.
+Traversing multi-stage build workflows requires isolating reachable subgraphs, evaluating topological order deterministically, and tracking node visitation bounds to prevent infinite re-cleaning cycles. Hardcoding graph traversal algorithms into execution runners complicates scheduling logic and duplicates dependency validation. The dag_subgraph_impl implementation component provides an in-memory graph index over dag storage that orders reachable nodes deterministically and bounds cleaning iterations without re-reading graph structure on every query.
 
 **Out of scope:** The dag_subgraph_impl implementation component does not execute node cleaning workloads, format file aliases, or manage persistent storage; these are handled by other components.
 
-**Delegated:** Graph persistence and node state queries are delegated to dag_storage; traversal limit configuration is delegated to dag_config.
+**Delegated:** Graph persistence and node state queries are delegated to dag_storage; batch size and node visit limits are delegated to dag_config.
 
 ## Types and Behavior
 
-The dag subgraph service coordinates topological subgraph queries and visit bounds across dag storage.
+Setting a target node indexes every node reachable from the target node in dag storage, and orders those nodes in dependency-first topological order. Ordering emits a node only after its dependencies in the target subgraph, and breaks each remaining tie by role tier depth first, by unit address second, and by role address third.
 
-Setting a target node scopes the target subgraph to all reachable dependency nodes rooted at the target node in dag storage, arranged in dependency-first topological order, breaking ties by role tier depth first, then by unit address.
+The target subgraph is complete if, but only if, every indexed node is clean in dag storage.
 
-The target subgraph is complete if, but only if, all reachable nodes in the target subgraph are clean in dag storage.
+The next ready batch draws from the indexed topological order, beginning at the earliest dirty node whose dependencies in the target subgraph are clean in dag storage, and extends over the contiguous nodes that share the first node's role address. A node whose dependencies in the target subgraph are neither clean nor already collected into the same batch leaves the batch before that node. The batch never exceeds the batch size of a system's dag config, and is an empty sequence when no dirty node in the target subgraph has all of its dependencies in the target subgraph clean in dag storage.
 
-The next ready batch consists of contiguous dirty nodes in topological order that share the same role address, prioritized by dynamic role tier precedence (upstream roles before downstream roles determined dynamically from role dependency depth in the graph) and having all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node in topological order and bounded by the batch size obtained from dag config. If no dirty node in the target subgraph has all its dependencies in the target subgraph clean in dag storage, the next ready batch is an empty sequence.
-
-Recording a visit for a batch of nodes advances the visit count for each node in the batch, raising an unexpected failure if any node exceeds the node visit limit obtained from dag config.
+Recording a visit for a batch advances the visit count of each node in the batch, failing when any node exceeds the node visit limit of a system's dag config.

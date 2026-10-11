@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 21f33ce30957
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:06:13Z
+# CHANGE: Clarify host path typing and contract direct host path creation fallback; make failure branches atomic
+# CODE_HASH: 4b2f7c6bfd80
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """File paths low-level interface specification."""
@@ -20,13 +20,13 @@ ValidationMessage = NewType("ValidationMessage", str)
 @dataclass(frozen=True)
 @data_type
 class HostPath:
-    """A value record representing a filesystem path on the host operating system.
+    """A host path record encapsulating a path string naming a file or directory on the host filesystem without guaranteeing whether the path string is absolute or relative.
 
     Args:
-        path: The string representing the filesystem path.
+        path: The path string naming a file or directory on the host filesystem.
 
     INVARIANTS:
-    - The path string is non-empty.
+    - MUST encapsulate a non-empty path string.
     """
     path: PathString
 
@@ -34,10 +34,10 @@ class HostPath:
 @dataclass(frozen=True)
 @data_type
 class AbsolutePath(HostPath):
-    """An absolute filesystem path on the host operating system.
+    """A host path whose path string names a location from the filesystem root.
 
     INVARIANTS:
-    - The path is an absolute filesystem path.
+    - MUST encapsulate a path string naming a location from the filesystem root.
     """
     ...
 
@@ -45,10 +45,10 @@ class AbsolutePath(HostPath):
 @dataclass(frozen=True)
 @data_type
 class WorkspacePath(HostPath):
-    """A relative filesystem path anchored to the root of a workspace without leading path separators.
+    """A host path whose path string names a location relative to the root of a workspace without a leading path separator.
 
     INVARIANTS:
-    - The path is a relative filesystem path anchored to a workspace root without leading path separators.
+    - MUST encapsulate a path string naming a location relative to the root of a workspace without a leading path separator.
     """
     ...
 
@@ -56,10 +56,10 @@ class WorkspacePath(HostPath):
 @dataclass(frozen=True)
 @data_type
 class WorkspaceRoot(AbsolutePath):
-    """An absolute filesystem path representing the root directory of a workspace.
+    """An absolute path representing the root directory of a workspace.
 
     INVARIANTS:
-    - The path represents the root directory of a workspace.
+    - MUST represent the root directory of a workspace.
     """
     ...
 
@@ -67,7 +67,7 @@ class WorkspaceRoot(AbsolutePath):
 @dataclass(frozen=True)
 @data_type
 class PathValidationError(ValueError):
-    """Raised when path validation fails.
+    """Indicates that a path string is invalid for the target path type.
 
     Args:
         message: Diagnostic feedback describing the path validation failure.
@@ -84,7 +84,7 @@ class FilePathManager(InTier[SystemTier], Protocol):
         """Creates a host path from a path string.
 
         Args:
-            path: The string representing the filesystem path.
+            path: The path string naming a file or directory on the host filesystem.
 
         Returns:
             A host path encapsulating the path string.
@@ -93,7 +93,8 @@ class FilePathManager(InTier[SystemTier], Protocol):
         - A caller supplies a non-empty path string.
 
         POSTCONDITIONS:
-        - MUST return a host path encapsulating the path string.
+        - MUST encapsulate the supplied path string in the produced host path.
+        - WHEN the supplied path string names neither an absolute nor a workspace location, MUST create the host path directly.
         """
         ...
 
@@ -111,8 +112,8 @@ class FilePathManager(InTier[SystemTier], Protocol):
         - A caller supplies a non-empty path string.
 
         POSTCONDITIONS:
-        - MUST validate that the path is absolute and return an absolute path encapsulating the path string.
-        - WHEN the path is not absolute, MUST raise PathValidationError with diagnostic feedback formatted as "Path is not absolute: {path}".
+        - MUST validate that the supplied path string is an absolute path string.
+        - WHEN the supplied path string is not absolute, MUST raise PathValidationError with diagnostic feedback formatted as "Path is not absolute: {path}".
         """
         ...
 
@@ -130,8 +131,9 @@ class FilePathManager(InTier[SystemTier], Protocol):
         - A caller supplies a non-empty path string.
 
         POSTCONDITIONS:
-        - MUST validate that the path is relative without leading path separators and return a workspace path encapsulating the path string.
-        - WHEN the path is absolute or has leading path separators, MUST raise PathValidationError with diagnostic feedback formatted as "Workspace path must be relative, got absolute: {path}".
+        - MUST validate that the supplied path string is relative without leading path separators.
+        - WHEN the supplied path string is an absolute path string, MUST raise PathValidationError with diagnostic feedback formatted as "Workspace path must be relative, got absolute: {path}".
+        - WHEN the supplied path string has leading path separators, MUST raise PathValidationError with diagnostic feedback formatted as "Workspace path must be relative, got absolute: {path}".
         """
         ...
 
@@ -153,6 +155,6 @@ class FilePathManager(InTier[SystemTier], Protocol):
         - A caller supplies a workspace root absolute path.
 
         POSTCONDITIONS:
-        - MUST produce the combined absolute path formed by joining the workspace root and the relative workspace path.
+        - MUST produce the combined absolute path formed by joining the workspace root absolute path with the workspace path.
         """
         ...

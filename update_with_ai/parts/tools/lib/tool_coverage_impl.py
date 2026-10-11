@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-06T15:00:00Z
-# CHANGE: new file
-# CODE_HASH: ee8c7b7bb5d8
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:55:44Z
+# CHANGE: Register the coverage evaluator on the system tier as the spec declares, add __initialize__ registering both the impl and interface protocol keys, discover implementation/test pairs across all repository part packages instead of a hardcoded package name, and include the compact missing ranges alongside the spans in the deficit report
+# CODE_HASH: 6567b26d0b71
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -20,15 +20,19 @@ import types
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 import unittest
 
-from support.lib.lifecycle import Singleton
-from update_with_ai.parts.agent.lib import agent_session
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    system,
+)
 from . import tool_coverage
 
 
 class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
-    """Implementation of coverage evaluator providing AST analysis, test tracing, and report generation."""
+    """Realizes the system coverage evaluator as a system service providing AST analysis, traced unit test execution, and coverage report generation."""
 
-    tier = agent_session.agent_session
+    tier = system
 
     def __init__(self) -> None:
         pass
@@ -144,6 +148,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
             f"Test Suite:      {cov.test_name}\n"
             f"Implementation:  {cov.module_name}\n"
             f"Statements:      {cov.total_executable} executable, {cov.covered} covered, {cov.missed} missed\n"
+            f"Missing Lines:   {cov.missing_ranges}\n"
             f"Total Spans:     {len(cov.missing_spans)} non-continuous span{'s' if len(cov.missing_spans) > 1 else ''}\n"
             f"--------------------------------------------------------------------------------\n"
             f"{spans_detail}\n"
@@ -162,11 +167,14 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
     def get_available_targets(
         self, repo_root: Path | str
     ) -> Dict[str, Tuple[Path, Path]]:
-        """Scans repository for implementation files and companion test suites."""
+        """Scans repository part packages for implementation files and companion test suites."""
         root = Path(repo_root)
         mapping: Dict[str, Tuple[Path, Path]] = {}
-        parts_dir = root / "update_with_ai" / "parts"
-        if parts_dir.is_dir():
+        parts_dirs = [root / "parts"]
+        parts_dirs.extend(sorted(root.glob("*/parts")))
+        for parts_dir in parts_dirs:
+            if not parts_dir.is_dir():
+                continue
             for impl_path in sorted(parts_dir.glob("*/lib/*_impl.py")):
                 domain = impl_path.parent.parent.name
                 test_file = parts_dir / domain / "tests" / f"{impl_path.stem}_test.py"
@@ -428,3 +436,18 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
                     f.write(report)
 
         return cov
+
+
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        CoverageEvaluator,
+        keys=[CoverageEvaluator, tool_coverage.CoverageEvaluator],
+        tier=system,
+    )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

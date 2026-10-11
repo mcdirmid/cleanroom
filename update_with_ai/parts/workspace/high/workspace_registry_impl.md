@@ -1,13 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-06T22:55:00Z
 CHANGE: new file
-CODE_HASH: 5fa7db538162
+CODE_HASH: b8bb4b70a88f
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # workspace_registry_impl implementation component
 
-imports: agent_session, bazel_manifest_ext
+imports: agent_session, cleanroom_files_ext
 implements: workspace_registry
 
 ## Purpose
@@ -20,10 +21,10 @@ Reliable multi-role orchestration depends on atomic registry file updates and de
 
 ## Types and Behavior
 
-The workspace registry discovers the canonical repository root by ascending the directory tree until locating git metadata directories or canonical Bazel workspace indicators (ignoring projected role workspace directories containing `.cleanroom_role.json`), inspecting role metadata descriptors or matching sibling workspace conventions when called from within an isolated role workspace, and falling back to ambient process working directories when indicators are absent.
+The workspace registry discovers the canonical repository root by ascending the directory tree until it locates git metadata directories or canonical Bazel workspace indicators, ignoring the projected role workspace directories that carry a role descriptor. From within an isolated role workspace, the registry inspects role metadata descriptors or matches sibling workspace conventions, and it falls back to the ambient process working directory when no indicator is present.
 
-The workspace registry resolves role definitions by loading role definitions from declarative role configuration files (such as `cleanroom_python_roles.toml` in the repository root or methodology directory) using TOML parsing, or falling back to parsing define_role declarations from the repository's build file using AST evaluation when role configuration files are absent. It extracts all declared role attributes, derives writable file patterns from source patterns, derives read-only file patterns from role dependencies and star role dependencies, and computes audit tags for auditor roles without primary source artifacts. If a requested role is unknown or undeclared, role resolution fails fast and raises an explicit error without synthetic fallbacks.
+The workspace registry resolves a role definition by loading the declarative role configuration files of the repository root or methodology directory, falling back to parsing the role declarations of the repository build file by abstract syntax tree evaluation when no role configuration file exists. Resolution extracts every declared role attribute, derives writable file patterns from source patterns, derives read-only file patterns from role dependencies and star role dependencies, and computes audit tags for auditor roles that carry no primary source artifact. Resolution of an unknown or undeclared role fails fast by raising an explicit error without a synthetic fallback.
 
-The workspace registry computes role workspace directory paths by combining the repository root parent directory with the role name and directory scope, sanitizing directory delimiters into underscores to produce collision-free sibling workspaces.
+The workspace registry computes a role workspace directory path by combining the parent directory of the repository root with the role name and the directory scope, sanitizing directory delimiters into underscores to produce a collision-free sibling workspace.
 
-The workspace registry reads and writes active workspace descriptors in the `.cleanroom_workspaces.json` registry file, performing atomic disk writes via temporary staging files to avoid concurrent read corruption. Registering a workspace appends or updates the descriptor in the registry, and unregistering removes matching workspace directories.
+The workspace registry reads and writes the active workspace descriptors in its registry file, writing through a temporary staging file so that a concurrent read never observes a partial record. Registering a workspace appends or updates the descriptor in the registry, and unregistering removes the matching workspace directories.

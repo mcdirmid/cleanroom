@@ -85,9 +85,12 @@ for _r in _get_roots():
 
 if workspace_tool_impl is None:
     try:
-        from parts.workspace.lib import workspace_tool_impl
+        from update_with_ai.parts.workspace.lib import workspace_tool_impl
     except ImportError:
-        pass
+        try:
+            workspace_tool_impl = importlib.import_module("parts.workspace.lib.workspace_tool_impl")
+        except ImportError:
+            pass
 
 if workspace_tool_impl is None:
     raise ImportError("Failed to locate workspace_tool_impl module across discovered Cleanroom roots")
@@ -112,7 +115,6 @@ append_cleanroom_log = workspace_tool_impl.append_cleanroom_log
 
 def main(argv: list[str] | None = None) -> int:
     asm_modules = (
-        "parts.systems.lib.cleanroom_asm",
         "parts.systems.lib.uv_cleanroom_asm",
         "parts.core.lib.file_paths_impl",
         "parts.control.lib.control_asm",
@@ -138,7 +140,6 @@ def main(argv: list[str] | None = None) -> int:
                 if not _entry.startswith((".", "bazel-", "venv")):
                     if os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
                         for sub in (
-                            "systems.lib.cleanroom_asm",
                             "systems.lib.uv_cleanroom_asm",
                             "core.lib.file_paths_impl",
                             "control.lib.control_asm",

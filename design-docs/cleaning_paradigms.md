@@ -51,12 +51,12 @@ Option 1 is Cleanroom's canonical headless runtime, designed for unattended batc
   - `OpenAIConversation` (`openai_conversation_impl.py`): Tracks message histories across system, user, assistant, and tool turns.
   - `OpenAIConfig` (`openai_config.py`): Supplies model parameters (`model_name`, temperature, token ceilings).
 - **System Assemblies (`update_with_ai/parts/systems`)**:
-  - `bazel_openai_loop_asm`: Assembles the complete headless pipeline with `bazel_asm`, `dag_asm`, `sandbox_asm`, `parts/loop`, and `parts/openai`.
+  - `uv_openai_loop_asm`: Assembles the complete headless pipeline with `uv_asm`, `dag_asm`, `parts/loop`, and `parts/openai`.
 
 ### 2.2 Operational Characteristics
-- **Execution**: Run directly via Bazel:
+- **Execution**: Run directly via `bin/cleanroom_loop`:
   ```bash
-  bazel run //update_with_ai/parts/systems:sandbox_asm_openai_loop -- //staging/parts/sandbox:sandbox_asm_qa
+  bin/cleanroom_loop --target //staging/parts/sandbox:sandbox_asm_qa
   ```
 - **Confinement**: In-process sandbox gating (`ReadManager.can_read`, `EditManager.can_write`). The agent cannot break out because it only has access to the tool functions passed to the OpenAI API socket.
 - **Billing**: Billed directly per token via OpenAI API keys.
@@ -144,14 +144,14 @@ Interactive Chat: Lib                               Interactive Chat: Test
 2. **Four-Tier Confinement Defense**:
    - *Tier 1 (Structural Oblivion)*: Unreferenced roles are not copied; real `lib` code never enters `test`, and `test` code never enters `lib`.
    - *Tier 2 (Antigravity Policy)*: `fileAccessPolicy: AGENT_SETTING_POLICY_DENY` blocks tool calls targeting paths outside the workspace.
-   - *Tier 3 (OS Kernel Hardening)*: Specifications (`grounding/*.pyi`, `grounding/*.gt`), configs, and build files are set to `chmod 444`. Edits fail at the OS level.
+   - *Tier 3 (OS Kernel Hardening)*: Specifications (`grounding/*.pyi`, `low/*.pyi`), configs, and guides are set to `chmod 444`. Edits fail at the OS level.
    - *Tier 4 (AGENTS.md Invariants)*: Strict instructions forbid `chmod`, `git`, or parent directory traversal. Mandatory execution of `bin/get_work` ensures fresh contracts.
 3. **Read-Only Interface Stubs for Double-Blind Testing**:
-   To allow the Test role to compile and type-check tests (`bazel test ..._test_type_check`) without seeing the real implementation, the workspace generator derives pure interface stubs from `.pyi` grounding specifications (`raise NotImplementedError`). Symbols match exactly, but real code is completely absent.
+   To allow the Test role to compile and type-check tests (`uv run pyright`) without seeing the real implementation, the workspace generator derives pure interface stubs from `.pyi` specifications (`raise NotImplementedError`). Symbols match exactly, but real code is completely absent.
 4. **Stage 0 Hermetic Tool Bundles**:
-   Meta-tools like `bin/grounding_tool` are packaged as frozen standalone zipapp bundles, decoupling verifier execution from mutable local workspace files.
-5. **Zero-Sync Direct Bazel Mutations & Inbound Pull**:
-   Operates via in-band comment headers (`LAST_CLEANED`, `LAST_CHANGED`, `<ROLE>_AUDIT`), direct-to-main Bazel submissions (`_submit`), and immediate blame injection (`_blame`), eliminating manual synchronization sweeps and intermediate buffer files. Managed via `bin/cleanroom`.
+   Meta-tools like `bin/check_files` are packaged as frozen standalone zipapp bundles, decoupling verifier execution from mutable local workspace files.
+5. **Zero-Sync Direct Python Mutations & Inbound Pull**:
+   Operates via in-band comment headers (`LAST_CLEANED`, `LAST_CHANGED`, `<ROLE>_AUDIT`), direct-to-main Python CLI submissions (`bin/submit`), and immediate blame injection (`bin/blame`), eliminating manual synchronization sweeps and intermediate buffer files. Managed via `bin/cleanroom`.
 
 ### 4.3 Why Option 3 is Dramatically More Cost-Efficient
 
@@ -210,14 +210,14 @@ flowchart TD
     LibAgent -->|"Edit & bin/submit"| LibWS
     TestAgent -->|"Edit & bin/submit"| TestWS
 
-    LibWS ==>|"5. Direct Bazel mutation"| MainWorkspace
-    TestWS ==>|"5. Direct Bazel mutation"| MainWorkspace
+    LibWS ==>|"5. Direct Python mutation (bin/submit)"| MainWorkspace
+    TestWS ==>|"5. Direct Python mutation (bin/submit)"| MainWorkspace
 ```
 
 #### Why This Architecture is Superior:
 1. **Natural OS Confinement**: The subagent runs inside `../role_workspaces/<workspace-name>_<role>_<dir>/`. The operating system and directory structure enforce Cleanroom blindness natively. No hook interceptors or daemon sentinels are required.
 2. **Simplified Agent Tooling**: The subagent does not need special MCP tools or shell CLI wrappers. It uses standard native file tools (`view_file`, `replace_file_content`), inspects tasks with `bin/get_work`, and simply calls `bin/submit` when finished.
-3. **No In-Tree Contamination**: The main repository remains completely untouched until verified changes are directly submitted via Bazel targets.
+3. **No In-Tree Contamination**: The main repository remains completely untouched until verified changes are directly submitted via `bin/submit`.
 4. **Pluggable Low-Cost Models**: Enables headless, high-speed execution using **DeepSeek-V4 Flash** (`deepseek-flash` / V4.1-Flash) at ~\$0.18–\$0.45 per 5-node pass, slashing costs by ~98% compared to Option 2.
 5. **Cross-Harness Flexibility**: Operates identically on **Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose**.
 
@@ -227,17 +227,17 @@ flowchart TD
 
 | Architectural Dimension | Option 1: Headless Loop | Option 2: Antigravity Subagents (FAILED) | Option 3: Subagentless Workspaces | Option 4: Subagent-Driven Workspaces |
 | :--- | :--- | :--- | :--- | :--- |
-| **Execution Environment** | Headless CLI / CI (Bazel) | Antigravity Desktop App / IDE | Antigravity Desktop App / IDE | **Antigravity, DeepSeek Harness (`dsh`), Goose** |
+| **Execution Environment** | Headless CLI / CI (`uv run`) | Antigravity Desktop App / IDE | Antigravity Desktop App / IDE | **Antigravity, DeepSeek Harness (`dsh`), Goose** |
 | **Model Driver** | Direct OpenAI API (`openai.OpenAI`) | Antigravity Gemini via Subagents | Antigravity Gemini via Interactive Chat | **DeepSeek-V4 Flash & Gemini Pro/Flash** |
-| **Confinement Mechanism** | In-process Python sandbox (`sandbox_asm`) | In-tree Hooks + Daemon Sentinel (`.mcp.active`) | 4-Tier: Directory, Policy, `chmod 444`, `AGENTS.md` | **Native Directory & OS `chmod 444` in Sibling WS** |
+| **Confinement Mechanism** | In-process Python sandbox (`parts/loop`) | In-tree Hooks + Daemon Sentinel (`.mcp.active`) | 4-Tier: Directory, Policy, `chmod 444`, `AGENTS.md` | **Native Directory & OS `chmod 444` in Sibling WS** |
 | **Tool Interface for Agent** | OpenAI Function Tool Calling | Shell `run_command` calling Python CLI scripts | Native Antigravity tools + `bin/submit` helper | **Native host tools + `bin/submit` helper (No MCP)** |
 | **Blindness Guarantee** | In-process file aliasing | Server access gate checks | Physical omission + Read-Only Interface Stubs | **Physical omission + Read-Only Interface Stubs** |
 | **Token Cost Profile** | Pay-per-token (API rates) | **Extremely High** (Subagent tax, prompt repeats) | **Lowest / Most Efficient** (High KV cache hit rates) | **Ultra-Low on DeepSeek (\$0.18–\$0.45/run); High Cache** |
 | **Quota Sustainability** | Depends on API credit balance | **Poor** (Bursts exhaust 5h Ultra quota in minutes) | **Excellent** (Runs comfortably within standard quota) | **Excellent (Uncapped via API or persistent sessions)** |
-| **Verification Gate** | In-process Bazel check before submit | Python client calls server `check-files` | Local Bazel/linter check before `bin/submit` | **Local Bazel/linter check before `bin/submit`** |
-| **Synchronization** | Direct in-band metadata updates | Server mutates memory (Decommissioned) | Zero-sync direct Bazel mutations & `bin/get_work` pull | **Zero-sync direct Bazel mutations & `bin/get_work` pull** |
+| **Verification Gate** | In-process test check before submit | Python client calls server `check-files` | Local linter/test check before `bin/submit` | **Local linter/test check before `bin/submit`** |
+| **Synchronization** | Direct in-band metadata updates | Server mutates memory (Decommissioned) | Zero-sync direct Python mutations & `bin/get_work` pull | **Zero-sync direct Python mutations & `bin/get_work` pull** |
 | **Human Steerability** | None (Headless batch runner) | Low (Autonomous subagent tree) | **High** (Interactive conversational pair-programming) | **Full Autonomy with Zero-Exec Coordinator** |
-| **Code Locations** | `parts/loop/`, `parts/openai/` | `parts/antigravity/`, `parts/mcp/` | `bin/cleanroom`, `src_metadata.py` | **`bin/cleanroom`, `cleanroom_workspace_tool.py`** |
+| **Code Locations** | `parts/loop/`, `parts/openai/`, `parts/systems/uv_cleanroom_asm` | `parts/antigravity/`, `parts/mcp/` | `bin/cleanroom`, `parts/workspace`, `parts/control` | **`bin/cleanroom`, `parts/workspace`, `parts/control`** |
 | **Current Status** | **Production (Headless)** | **Failed & Turned Down** | **Primary (Interactive)** | **Authoritative Subagent Design** |
 
 ---

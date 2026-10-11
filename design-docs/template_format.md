@@ -82,15 +82,15 @@ In standard Markdown viewers, the `<!-- for: ... -->` comment is invisible in re
 The template system integrates across four core subsystems in Cleanroom:
 
 ```
-[update_with_ai.bzl]
-  Emits: template_parameters in manifest JSON
+[cleanroom.toml / cleanroom_roles.toml]
+  Emits: template_parameters in project configuration
          |
          v
-[bazel_manifest_loader / json_manifest_ext]
+[uv_manifest_loader_impl / json_manifest_ext]
   Deserializes manifest dictionary
          |
          v
-[node_config (bazel_node_config_impl)]
+[node_config (uv_node_config_impl)]
   Exposes: node_config.template_parameters
          |
          +---------------------------------------+
@@ -102,15 +102,15 @@ The template system integrates across four core subsystems in Cleanroom:
   read-write starter files                read-only markdown files
 ```
 
-### 3.1 Starlark Build System (`update_with_ai.bzl`)
-The `update_with_ai` rule and macro accept a `template_parameters` dictionary (mapping string keys to strings, booleans, lists, or nested mappings).
-- The macro encodes `template_parameters` into the node's build action.
-- The rule implementation writes `"template_parameters"` into the emitted target manifest JSON file.
-- Manifest schema validation in `json_manifest_ext` is updated to define `template_parameters` as an optional dictionary.
+### 3.1 Project Configuration (`cleanroom.toml` / `cleanroom_roles.toml`)
+Cleanroom targets accept a `template_parameters` dictionary (mapping string keys to strings, booleans, lists, or nested mappings).
+- Project target definitions encode `template_parameters` into the node's target specification.
+- `uv_manifest_loader_impl` parses `template_parameters` into the target manifest dictionary.
+- Manifest schema validation in `json_manifest_ext` defines `template_parameters` as an optional dictionary.
 
 ### 3.2 Session Configuration (`node_config`)
 - The `node_config.NodeConfig` interface introduces a `template_parameters` property returning `Mapping[str, Any]`.
-- `bazel_node_config_impl.py` extracts `template_parameters` from the manifest loaded by `BazelManifestLoader` and exposes it as an agent session property.
+- `uv_node_config_impl.py` in `update_with_ai/parts/uv` extracts `template_parameters` from the manifest loaded by `UvManifestLoader` and exposes it as an agent session property.
 
 ### 3.3 Startup Template Materialization (`sandbox_file_editor_impl`)
 Template materialization occurs when an agent session initializes missing declared read-write files:

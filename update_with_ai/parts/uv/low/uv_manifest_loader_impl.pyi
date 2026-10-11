@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: 32415bc10054
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# CODE_HASH: 802a7109641d
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom manifest loader implementation low-level specification."""
@@ -14,6 +14,7 @@ from support.lib.lifecycle import InTier, SystemTier
 from update_with_ai.parts.dag.lib import dag_storage
 from . import uv_manifest_loader
 import agent_storage
+import cleanroom_files_ext
 import dag_storage
 import file_paths
 import uv_target
@@ -26,7 +27,7 @@ class UvManifestLoader(
     """Realizes role manifest loading, node resolution, and graph construction.
 
     GROUNDING:
-    - Realizes uv_manifest_loader interface contracts by discovering role definitions and package structures across workspace directories, decoding schemas via uv_manifest_ext, and populating agent_storage and dag_storage.
+    - Realizes uv_manifest_loader interface contracts by discovering role definitions and package structures across workspace directories, decoding schemas via uv_manifest_ext and cleanroom_files_ext, and populating agent_storage and dag_storage.
     """
 
     @operation
@@ -57,7 +58,7 @@ class UvManifestLoader(
         - MUST synthesize promptless pass-through node definitions when a unit component type is not active for a role.
 
         GROUNDING:
-        - Discovers unit specifications and role definitions across workspace directories using file_paths, decodes them via uv_manifest_ext, evaluates path patterns and prompt templates, and synthesizes TargetManifest records.
+        - Discovers unit specifications and role definitions across workspace directories using file_paths and cleanroom_files_ext, decodes them via uv_manifest_ext, evaluates path patterns and prompt templates, and synthesizes TargetManifest records.
         """
         ...
 

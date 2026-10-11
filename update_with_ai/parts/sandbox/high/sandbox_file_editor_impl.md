@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:29:17Z
-LAST_CHANGED: 2026-10-09T21:29:17Z
-CHANGE: Contract replace file content tool installation for agent session
-CODE_HASH: b387c8c2a0b3
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Remove the interface-restated edit manager catalog, canonicalize the missing note, and split run-on paragraphs
+CODE_HASH: 7d8c07152f45
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # sandbox_file_editor_impl implementation component
@@ -22,9 +23,9 @@ Unchecked writes to source code can introduce partial edits, exceed LLM window c
 
 ## Types and Behavior
 
-The replace file content tool is installed for the agent session to enable targeted text replacement in declared read-write files. The edit manager provides a can write operation validating write access for a read-write file.
+The replace file content tool is installed for the agent session to enable targeted text replacement in declared read-write files.
 
-The edit manager exposes whether workspace file writes occurred during the session by comparing current workspace file content against their in-band code hash, tracks a file update revision that increments whenever workspace files are updated, and computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of the content. The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
+The edit manager determines workspace file writes by comparing current workspace file content against its in-band code hash, increments a file update revision whenever workspace files are updated, and computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of that content. The edit manager records the last file read from the file reader or edited by an editing tool as the session's last read or edited file alias.
 
 Editing tools write to read-write files in the workspace.
 
@@ -32,27 +33,23 @@ Editing tool execution fails if:
 
 - The file alias is not a read-write file, reminding the agent that only declared read-write files can be written.
 
-- The edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
+- The edit produces no change to file content, reminding the agent that the edit had no effect.
 
-On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file writes occurred, and reminds the agent to call the check files tool to verify syntax and type correctness before making further writes. When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content. Editing tool responses share a constant suppression key replace_file_content.
+An editing tool that changes file content writes the updated content to the filesystem, records that workspace file writes occurred, and reminds the agent to verify syntax and type correctness before making further writes. Successful editing tool execution includes a diff delta representation in the response content when delta output is configured. Editing tool responses share the constant suppression key `replace_file_content`.
 
 The replace file content tool is named `replace_file_content`, accepting in sequence a file alias *path* parameter, an integer *start_line* parameter defining the starting line of the search window, an integer *end_line* parameter defining the ending line of the search window, a boolean *allow_multiple* parameter, a text *target_content* parameter specifying the exact text to replace within the search window, and a text *replacement_content* parameter.
 
-The target content parameter specifies a missing message function that produces diagnostic feedback based on supplied parameter names.
+The target content parameter configures a *missing note* that produces diagnostic feedback from the supplied parameter names.
 
-Evaluating the missing message function:
-
-- Explains that start line and end line only restrict the search window when line range arguments are supplied.
-
-- Explains that target content must match existing text to append or insert content when line range arguments are omitted.
+The missing note for target content explains that start line and end line only restrict the search window when line range arguments are supplied, and that target content must match existing text to append or insert content when line range arguments are omitted.
 
 Tool execution applies text replacements to designated read-write file content.
 
 Tool execution:
 
-- Implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file, when the path parameter is omitted.
+- Implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informing the agent with a warning that the path was implicitly bound while allowing the tool execution to proceed, and fails if no file has been read or edited or if the last read or edited file is not a read-write file, when the path parameter is omitted.
 
-- Reads the file content from the filesystem, treating missing files as empty.
+- Reads the file content from the filesystem, treating a missing file as empty.
 
 - Fails if the start line is less than one or exceeds the total line count plus one, when a start line is provided.
 
@@ -60,17 +57,17 @@ Tool execution:
 
 - Fails if the start line exceeds the end line, when both start line and end line are provided.
 
-- Matches target content using exact matching, or falls back to line-by-line whitespace-stripped matching across the search window when exact matching finds zero occurrences and allow multiple is false or not set, succeeding if and only if exactly one unique line window matches after stripping leading and trailing whitespace from each line; fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
+- Matches target content by exact matching, falling back to line-by-line whitespace-stripped matching across the search window when exact matching finds no occurrence and multiple replacements are not permitted. The fallback succeeds if and only if exactly one unique line window matches, replacing the single matching occurrence and failing when target content is not found within the designated line range or matches multiple locations within that range.
 
-- Fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range, when allow multiple is true.
+- Fails if the target content is not found within the designated line range, and replaces every occurrence of the target content within the designated line range, when multiple replacements are permitted.
 
-- Provides failure feedback indicating the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line, when target content matches multiple locations in the file and allow multiple is false.
+- Provides failure feedback indicating the first two matching line numbers to assist in narrowing the replacement region and directs the agent to include more surrounding lines in target content or to specify start line and end line, when target content matches multiple locations in the file and multiple replacements are not permitted.
 
 - Provides failure feedback indicating the line numbers where the target content was located, when target content is not found within the designated line range but exists elsewhere in the file.
 
-- Writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file writes occurred on success.
+- Writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file writes occurred.
 
-The edit manager executes can write to validate file write access.
+Executing can write validates file write access.
 
 Executing can write:
 

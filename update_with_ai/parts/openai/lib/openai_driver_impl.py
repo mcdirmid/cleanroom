@@ -1,15 +1,14 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-06T12:00:00Z
-# CHANGE: refactor openai_driver_impl under 500 lines
-# CODE_HASH: 7bb8e4617cdf
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:42:32Z
+# CHANGE: Append a length-truncated model response to the conversation even when it carries no tool calls, so the continuation turn follows the response it continues
+# CODE_HASH: 7645fbcc65af
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 import json
 import time
-import traceback
 from typing import Any, Mapping, Optional, Sequence, Tuple
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib.agent_session import agent_session
@@ -19,14 +18,63 @@ from update_with_ai.parts.core.lib import runner_logger
 from update_with_ai.parts.sandbox.lib import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 
-try:  # pragma: no cover
+try:  # pragma: no cover (assumption: the openai dependency is installed in the runtime image)
     import importlib
     _openai: Any = importlib.import_module("openai")
     OpenAI, OpenAIError = _openai.OpenAI, _openai.OpenAIError
-except (ImportError, AttributeError):  # pragma: no cover
+except (ImportError, AttributeError):  # pragma: no cover (assumption: the openai dependency is installed in the runtime image)
     OpenAI = None
     class _OpenAIError(Exception): pass
     OpenAIError: Any = _OpenAIError
+
+
+# Trailing partial generations tolerated before the driver halts the session.
+_CONSECUTIVE_TRUNCATION_LIMIT = 3
+
+# Preview width used by compact runner log summaries; never dumps file content.
+_LOG_PREVIEW_LIMIT = 60
+
+# Tools that modify workspace files.
+_EDITING_TOOL_NAMES = frozenset({"replace_file_content", "replace", "update_lines", "edit_file", "edit"})
+
+# Tools that advance the progressive guide step.
+_ADVANCING_TOOL_NAMES = frozenset({"advance"})
+
+# Suppression keys already claimed by dedicated tool responses.
+_DEDICATED_SUPPRESSION_KEYS = frozenset(
+    {"replace_file_content", "advance", "submit", "check_files", "blame", "get_work", "fail"}
+)
+
+_MISSING_TOOL_REMINDER = (
+    "No tools were executed. A tool (e.g. view_file, replace_file_content, advance, fail, blame) "
+    "must be called to make progress or conclude the session."
+)
+
+_TRUNCATION_REMINDER = (
+    "Whole-file, multi-class, or monolithic replacements that exceed output token limits are "
+    "prohibited. Make strictly small edits containing at most a single test method or fixture "
+    "(at most 30-50 lines of code) using replace_file_content."
+)
+
+_INCOMPLETE_TOOL_CALL_ASSISTANT_NOTE = (
+    "I attempted to execute a tool call, but the output exceeded the server's token limit and was "
+    "rejected by the server."
+)
+
+_INCOMPLETE_TOOL_CALL_RECOVERY = (
+    "ERROR: Tool call generation exceeded the output token limit (max_tokens). The server rejected "
+    "the incomplete tool invocation. Do NOT attempt to rewrite or replace an entire large file in a "
+    "single tool call. Make strictly smaller edits: use `replace_file_content` to change small, "
+    "targeted line ranges (at most 30-50 lines per call) and then continue."
+)
+
+
+class _RepeatedTruncationError(RuntimeError):
+    """Signals that consecutive generations were rejected as incomplete tool calls."""
+
+
+class _NoCompletionChoicesError(RuntimeError):
+    """Signals that a completion response carried no choices."""
 
 
 def _repair_json(raw: str) -> str:
@@ -48,6 +96,7 @@ def _repair_json(raw: str) -> str:
             if not in_str:
                 if ch in "{[": stack.append("}" if ch == "{" else "]")
                 elif ch in "}]" and stack and stack[-1] == ch: stack.pop()
+        if esc: cand = cand[:-1]
         if in_str: cand += '"'
         trimmed = cand.rstrip()
         while trimmed.endswith(","): trimmed = trimmed[:-1].rstrip()
@@ -66,40 +115,72 @@ def _repair_json(raw: str) -> str:
     return "{}"
 
 
-def _format_token_usage(prompt_tokens: Optional[int], cached_tokens: Optional[int]) -> Tuple[str, str]:
-    if prompt_tokens is None: return "initial request", "Conversation tokens: initial request"
+def _truncate_text(text: str, limit: int = _LOG_PREVIEW_LIMIT) -> str:
+    collapsed = " ".join(text.split())
+    return collapsed if len(collapsed) <= limit else collapsed[: limit - 3] + "..."
+
+
+def _token_usage_summary(prompt_tokens: Optional[int], cached_tokens: Optional[int]) -> Tuple[str, str]:
+    if prompt_tokens is None:
+        return "initial request", "Conversation tokens: initial request (0% cached)"
     size_str = f"{int(round(prompt_tokens / 1000.0))}K tokens"
     pct = int(round((cached_tokens / prompt_tokens) * 100.0)) if cached_tokens and prompt_tokens > 0 else 0
     return f"{size_str}, {pct}% cached", f"Conversation tokens: {size_str} ({pct}% cached on last turn)"
 
 
-def _format_tool_log(fn_name: str, args_dict: dict[str, Any], resp: tool_provider.ToolResponse, turns: int, is_followup: bool = False) -> Tuple[str, str]:
-    prefix = f"[Turn {turns}] Follow-up Tool" if is_followup else f"[Turn {turns}] Tool"
-    current_time = time.strftime("%H:%M:%S")
-    file_path = args_dict.get("path") or args_dict.get("target_file") or args_dict.get("file") or args_dict.get("file_alias") if isinstance(args_dict, dict) else None
-    is_read = fn_name == "view_file"
-    is_write = fn_name in ("replace", "update_lines", "replace_file_content")
-    if not resp.is_failed and (is_read or is_write) and file_path:
-        action = "read" if is_read else "wrote"
-        transcript = f"{'Read' if is_read else 'Wrote'} {file_path} at {current_time}"
-        if resp.reminder: transcript += f"\n\nReminder: {resp.reminder}"
-        return f"{prefix} {fn_name}: {action} {file_path} at {current_time}", transcript
-
-    snippet = (resp.content or "").strip().splitlines()[0] if resp.content else ""
-    if len(snippet) > 80: snippet = snippet[:77] + "..."
-    status = f"FAILED -> {snippet}" if resp.is_failed else (f"COMPLETED -> {snippet}" if resp.is_terminated else f"OK -> {snippet}")
-    transcript = f"{resp.content}\n\nReminder: {resp.reminder}" if resp.reminder else (resp.content or "")
-    return f"{prefix} {fn_name}: {status}", transcript
+def _format_tool_call(fn_name: str, raw_arguments: str) -> Tuple[str, str]:
+    try:
+        parsed = json.loads(raw_arguments, strict=False) if raw_arguments else {}
+    except (json.JSONDecodeError, ValueError):
+        parsed = None
+    if isinstance(parsed, dict):
+        arguments_log = ", ".join(f"{k}={_truncate_text(repr(v), 40)}" for k, v in parsed.items()) or "no arguments"
+    else:
+        arguments_log = _truncate_text(raw_arguments or "") or "no arguments"
+    return f"{fn_name}({arguments_log})", arguments_log
 
 
-def _find_tool(tool_mgr: Any, fn_name: str) -> Any:
-    tools = getattr(tool_mgr, "installed_tools", {})
-    if isinstance(tools, dict): return tools.get(fn_name)
-    if hasattr(tools, "get") and callable(tools.get): return tools.get(fn_name)
-    return next((t for t in tools if getattr(t, "name", None) == fn_name), None)
+def _tool_result_summary(
+    fn_name: str,
+    arguments_log: str,
+    tool_response: tool_provider.ToolResponse,
+    turns: int,
+    is_followup: bool = False,
+) -> Tuple[str, str]:
+    kind = "Follow-up Tool" if is_followup else "Tool"
+    if tool_response.is_failed:
+        status = "FAILED"
+    elif tool_response.is_terminated:
+        status = "TERMINATED"
+    else:
+        status = "COMPLETED"
+    summary = f"[Turn {turns}] {kind} {fn_name}: {status} ({arguments_log})"
+    transcript = (
+        f"=== {kind} Result (turn {turns}) ===\n"
+        f"Tool: {fn_name}\n"
+        f"Status: {status}\n"
+        f"Arguments: {arguments_log}\n"
+        f"Result: {_truncate_text(str(tool_response.content or ''))}"
+    )
+    if tool_response.reminder:
+        transcript += f"\n\nReminder: {tool_response.reminder}"
+    return summary, transcript
 
 
-def _call_append_tool_response(history: Any, tool_response: tool_provider.ToolResponse, tool_call_id: str, tool_name: str, tool_arguments: str, wire_parameter_bindings: Optional[Mapping[tool_provider.ParameterName, tool_provider.WireType]] = None) -> None:
+def _find_tool(tool_mgr: Any, fn_name: str) -> Optional[tool_provider.Tool]:
+    tools: Mapping[str, tool_provider.Tool] = getattr(tool_mgr, "installed_tools", {})
+    found: Optional[tool_provider.Tool] = tools.get(fn_name)
+    if found is not None: return found
+    return next((t for t in tools.values() if str(t.name) == fn_name), None)
+
+
+def _call_append_tool_response(
+    history: Any,
+    tool_response: tool_provider.ToolResponse,
+    tool_call_id: str,
+    tool_name: str,
+    tool_arguments: str,
+) -> None:
     history.append_tool_response(
         tool_response=tool_response,
         tool_call_id=loop_conversation.ToolCallId(tool_call_id),
@@ -136,7 +217,7 @@ def _make_tool_response(is_failed: bool, is_terminated: bool, content: str, remi
     )
 
 
-def _build_actual_bindings(tool: Optional[tool_provider.Tool], args_dict: dict[str, Any]) -> Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]:
+def _build_actual_bindings(tool: Optional[tool_provider.Tool], args_dict: Mapping[str, Any]) -> Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]:
     res: dict[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType] = {}
     if tool is not None:
         tool_params = getattr(tool, "parameters", {})
@@ -152,18 +233,34 @@ def _build_actual_bindings(tool: Optional[tool_provider.Tool], args_dict: dict[s
     return res
 
 
+def _tool_parameters_schema(tool: tool_provider.Tool) -> dict[str, Any]:
+    """Serializes tool parameters into a JSON schema preserving their declared sequence."""
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    for parameter in tool.parameters.values():
+        properties[str(parameter.name)] = {
+            "type": "string",
+            "description": str(parameter.description),
+        }
+        if parameter.is_required:
+            required.append(str(parameter.name))
+    return {"type": "object", "properties": properties, "required": required}
+
+
 def _build_tools_payload(tool_mgr: Any) -> list[dict[str, Any]]:
-    raw_tools = tool_mgr.installed_tools
-    sorted_tools = sorted([(str(k), v) for k, v in raw_tools.items()], key=lambda x: x[0])
-    payload = []
-    for _, t in sorted_tools:
-        props = {p.name: {"type": "string", "description": str(p.description)} for p in t.parameters.values()}
-        reqs = [p.name for p in t.parameters.values() if p.is_required]
+    """Builds the wire tools payload ordering tools deterministically by tool name."""
+    installed = list(tool_mgr.installed_tools.values())
+    payload: list[dict[str, Any]] = []
+    for tool in sorted(installed, key=lambda candidate: str(candidate.name)):
         payload.append({
             "type": "function",
-            "function": {"name": t.name, "description": t.description, "parameters": {"type": "object", "properties": props, "required": reqs}},
+            "function": {
+                "name": str(tool.name),
+                "description": str(tool.description),
+                "parameters": _tool_parameters_schema(tool),
+            },
         })
-    return json.loads(json.dumps(payload)) if payload else []
+    return payload
 
 
 def _build_messages_payload(history: Any) -> list[dict[str, Any]]:
@@ -177,67 +274,99 @@ def _build_messages_payload(history: Any) -> list[dict[str, Any]]:
             payload.append({"role": "tool", "content": m.content, "tool_call_id": m.tool_call_id or ""})
         else:
             payload.append({"role": m.role, "content": m.content})
-    return json.loads(json.dumps(payload))
+    return payload
+
+
+def _truncated_suppression_key(fn_name: str, args_dict: Optional[Mapping[str, Any]]) -> str:
+    if fn_name in _DEDICATED_SUPPRESSION_KEYS:
+        return fn_name
+    if args_dict:
+        target_file = args_dict.get("path") or args_dict.get("target_file")
+        if target_file:
+            return str(target_file).split("/")[-1]
+    return fn_name
 
 
 class LoopDriver(loop_driver.LoopDriver, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
-        self._truncation_counter: int = 0
+        self._truncation_identifier: int = 0
+        self._turn_count: int = 0
 
     def _handle_length_truncation(self, tool_calls: Sequence[Any], turns: int, history: Any, logger: Any, guard: Any, tool_mgr: Any) -> None:
+        """Recovers a generation truncated at the token limit and resumes with a continuation turn."""
         if not tool_calls:
-            history.append_message(_conv_msg("user", "Generation limit reached: response was truncated due to length. Whole-file, multi-class, or monolithic replacements that exceed output token limits are prohibited. Make strictly small edits containing at most a single test method or fixture (at most 30–50 lines of code) using replace_file_content."))
+            history.append_message(_conv_msg("user", "Generation limit reached: response was truncated due to length. " + _TRUNCATION_REMINDER))
             return
 
         for tc in tool_calls:
             if not tc or not getattr(tc, "function", None): continue
             fn_name = tc.function.name or ""
-            repaired_raw = _repair_json(tc.function.arguments or "")
+            raw_arguments = tc.function.arguments or ""
+            repaired_raw = _repair_json(raw_arguments)
             try: salvaged = json.loads(repaired_raw, strict=False)
             except (json.JSONDecodeError, ValueError): salvaged = {}
-            salvaged_args = salvaged if isinstance(salvaged, dict) else None
+            salvaged_args = salvaged if isinstance(salvaged, dict) else {}
+            target_file = salvaged_args.get("target_file") or salvaged_args.get("path")
+            tool_call_id = tc.id or f"truncated_{turns}"
+            failure_diagnostic = ""
 
-            target_file = salvaged_args.get("target_file") or salvaged_args.get("path") if salvaged_args else None
-            if fn_name == "replace_file_content" and salvaged_args and "replacement_content" in salvaged_args and target_file and "target_content" in salvaged_args:
-                self._truncation_counter += 1
-                sentinel = f'raise NotImplementedError("TRUNCATED_{self._truncation_counter}_")'
-                raw_repl = str(salvaged_args["replacement_content"])
-                if raw_repl.endswith("\n"):
-                    lines = [l for l in raw_repl.splitlines() if l.strip()]
+            if fn_name == "replace_file_content" and target_file and "target_content" in salvaged_args and "replacement_content" in salvaged_args:
+                self._truncation_identifier += 1
+                sentinel = f'raise NotImplementedError("TRUNCATED_{self._truncation_identifier}_")'
+                partial_content = str(salvaged_args["replacement_content"])
+                if partial_content.endswith("\n"):
+                    lines = partial_content.splitlines()
                     last = lines[-1] if lines else ""
                     indent = len(last) - len(last.lstrip())
-                    salvaged_repl = raw_repl + f"{' ' * indent}{sentinel}\n"
+                    repaired_content = partial_content + f"{' ' * indent}{sentinel}\n"
                 else:
-                    lines = raw_repl.splitlines(keepends=True)
+                    lines = partial_content.splitlines(keepends=True)
                     if lines:
-                        last = lines[-1]; indent = len(last) - len(last.lstrip())
+                        last = lines[-1]
+                        indent = len(last) - len(last.lstrip())
                         lines[-1] = f"{' ' * indent}{sentinel}\n"
-                        salvaged_repl = "".join(lines)
+                        repaired_content = "".join(lines)
                     else:
-                        salvaged_repl = f"{sentinel}\n"
+                        repaired_content = f"{sentinel}\n"
+                salvaged_args["replacement_content"] = repaired_content
+                salvaged_args["target_file"] = target_file
 
-                salvaged_args["replacement_content"] = salvaged_repl
-                salvaged_args["target_file"] = salvaged_args["path"] = target_file
                 tool = _find_tool(tool_mgr, fn_name)
                 if tool is not None:
-                    tool_resp = tool.execute_tool(_build_actual_bindings(tool, salvaged_args))
-                    if not tool_resp.is_failed:
+                    tool_response = tool.execute_tool(_build_actual_bindings(tool, salvaged_args))
+                    if not tool_response.is_failed:
                         guard.reset()
-                        notice = f"Notice: Tool execution for '{fn_name}' was truncated at the generation limit. Partial content was written to '{target_file}', and incomplete code was replaced with '{sentinel}'. Use replace_file_content targeting '{sentinel}' to continue implementation."
-                        _call_append_tool_response(history, _make_tool_response(False, False, notice, reminder=f"Use replace_file_content targeting '{sentinel}' to resume.", suppression_key="replace_file_content"), tc.id or f"truncated_{turns}", fn_name, repaired_raw)
-                        s_sum, t_rep = _format_tool_log(fn_name, salvaged_args, _make_tool_response(False, False, notice, reminder=f"Use replace_file_content targeting '{sentinel}' to resume."), turns)
-                        logger.consume(_log_event("tool_execution", s_sum, t_rep))
+                        notice = (
+                            f"Notice: the generation for '{fn_name}' was truncated at the token limit. "
+                            f"The partial modification was persisted to '{target_file}' and the incomplete "
+                            f"code was replaced with '{sentinel}'. Resume implementation by calling "
+                            f"replace_file_content with target_content '{sentinel}'."
+                        )
+                        notice_response = _make_tool_response(
+                            False,
+                            False,
+                            notice,
+                            reminder=f"Resume implementation by targeting '{sentinel}' with replace_file_content.",
+                            suppression_key="replace_file_content",
+                        )
+                        _call_append_tool_response(history, notice_response, tool_call_id, fn_name, repaired_raw)
+                        logger.consume(_log_event("tool_execution", f"[Turn {turns}] Tool {fn_name}: RECOVERED (truncated partial persisted to {target_file})", f"=== Tool Result (turn {turns}) ===\nTool: {fn_name}\nStatus: RECOVERED\nTarget file: {target_file}\nSentinel: {sentinel}\nResult: {_truncate_text(notice)}"))
                         continue
+                    failure_diagnostic = f" The repaired partial modification was rejected: {_truncate_text(str(tool_response.content))}"
 
-            if fn_name == "replace_file_content" or fn_name in ("advance", "submit", "check_file", "run_tests"):
-                supp_key = fn_name
-            elif salvaged_args and ("path" in salvaged_args or "target_file" in salvaged_args):
-                supp_key = str(salvaged_args.get("path") or salvaged_args.get("target_file")).split("/")[-1]
-            else:
-                supp_key = fn_name
-            _call_append_tool_response(history, _make_tool_response(True, False, f"Tool execution for '{fn_name}' was truncated at the generation limit before completion. The tool was not executed.", reminder="Whole-file, multi-class, or monolithic replacements that exceed output token limits are prohibited. Make strictly small edits containing at most a single test method or fixture (at most 30–50 lines of code) using replace_file_content.", suppression_key=supp_key), tc.id or f"truncated_{turns}", fn_name, repaired_raw)
+            failure_response = _make_tool_response(
+                True,
+                False,
+                f"Tool execution for '{fn_name}' was truncated at the generation limit before completion. The tool was not executed.{failure_diagnostic}",
+                reminder=_TRUNCATION_REMINDER,
+                suppression_key=_truncated_suppression_key(fn_name, salvaged_args),
+            )
+            _call_append_tool_response(history, failure_response, tool_call_id, fn_name, repaired_raw)
+            arguments_log = _format_tool_call(fn_name, repaired_raw)[1]
+            summary, transcript = _tool_result_summary(fn_name, arguments_log, failure_response, turns)
+            logger.consume(_log_event("tool_execution", summary, transcript))
 
     def run(self) -> loop_driver.LoopOutcome:
         openai_cfg = get_singleton(openai_config.OpenAIConfig)
@@ -250,16 +379,20 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
         client: Any = OpenAI(api_key=openai_cfg.api_key or "none", base_url=openai_cfg.base_url, timeout=float(openai_cfg.timeout)) if OpenAI is not None else None
         tools_payload = _build_tools_payload(tool_mgr)
 
-        limit, turns, consecutive_truncations = agent_cfg.conversation_limit, 0, 0
-        last_turn_prompt_tokens, last_turn_cached_tokens = None, None
+        limit = agent_cfg.conversation_limit
+        self._turn_count = 0
+        consecutive_truncations = 0
+        last_turn_prompt_tokens: Optional[int] = None
+        last_turn_cached_tokens: Optional[int] = None
 
-        while turns < limit:
-            turns += 1
+        while self._turn_count < limit:
+            self._turn_count += 1
+            turns = self._turn_count
             messages_payload = _build_messages_payload(history)
-            tok_sum, tok_trans = _format_token_usage(last_turn_prompt_tokens, last_turn_cached_tokens)
-            logger.consume(_log_event("model_request", f"[Turn {turns}] {tok_sum}", f"=== Turn {turns} ===\nMessages: {len(messages_payload)}\n{tok_trans}"))
+            token_summary, token_transcript = _token_usage_summary(last_turn_prompt_tokens, last_turn_cached_tokens)
+            logger.consume(_log_event("model_request", f"[Turn {turns}] Model request: {token_summary}", f"=== Turn {turns} Request ===\nMessages: {len(messages_payload)}\nTools: {len(tools_payload)}\n{token_transcript}"))
 
-            if client is None:  # pragma: no cover
+            if client is None:  # pragma: no cover (assumption: the openai dependency is installed in the runtime image)
                 raise RuntimeError("OpenAI client could not be initialized. Please ensure 'openai' is installed and credentials are configured.")
 
             try:
@@ -269,30 +402,36 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
 
                 err_payload = getattr(completion, "error", None)
                 if not getattr(completion, "choices", None):
-                    is_inc, err_msg = False, ""
+                    is_incomplete, err_msg = False, ""
                     if isinstance(err_payload, dict):
                         code = err_payload.get("code")
                         msg = str(err_payload.get("message", ""))
                         if code == "incomplete_tool_call" or "unrecoverable tool call" in msg.lower():
-                            is_inc, err_msg = True, msg or str(code)
-                    if is_inc:
+                            is_incomplete, err_msg = True, msg or str(code)
+                    if is_incomplete:
                         consecutive_truncations += 1
-                        if consecutive_truncations > 3: raise RuntimeError(f"Model repeatedly failed with incomplete tool call: {err_msg}")
-                        logger.consume(_log_event("model_completion", f"[Turn {turns}] Truncation error: incomplete tool call (limit exceeded)", f"=== Assistant Response (turn {turns}) ===\nServer error: incomplete tool call (output exceeded max tokens)\n{err_msg}"))
-                        history.append_message(_conv_msg("assistant", "I attempted to execute a tool call, but the output exceeded the server's token limit and was rejected by the server."))
-                        history.append_message(_conv_msg("user", "ERROR: Tool call generation exceeded output token limit (max_tokens). The server rejected the incomplete tool invocation. Do NOT attempt to rewrite or replace an entire large file in a single tool call. Instead, use `replace_file_content` to make smaller, targeted chunk edits on specific line ranges."))
+                        if consecutive_truncations > _CONSECUTIVE_TRUNCATION_LIMIT:
+                            raise _RepeatedTruncationError(f"Model repeatedly failed with incomplete tool calls: {err_msg}")
+                        logger.consume(_log_event("model_completion", f"[Turn {turns}] Truncation error: incomplete tool call (limit exceeded)", f"=== Assistant Response (turn {turns}) ===\nServer error: incomplete tool call (output exceeded max tokens)\n{_truncate_text(err_msg)}"))
+                        history.append_message(_conv_msg("assistant", _INCOMPLETE_TOOL_CALL_ASSISTANT_NOTE))
+                        history.append_message(_conv_msg("user", _INCOMPLETE_TOOL_CALL_RECOVERY))
                         continue
-                    raise RuntimeError("Model returned no choices in completion response")
+                    raise _NoCompletionChoicesError("Model returned no choices in completion response")
+            except _RepeatedTruncationError as truncation_error:
+                raise RuntimeError(str(truncation_error)) from truncation_error
+            except _NoCompletionChoicesError as no_choices_error:
+                raise RuntimeError(str(no_choices_error)) from no_choices_error
             except (OpenAIError, OSError, RuntimeError, ValueError) as e:
                 err_str = str(e).lower()
                 if isinstance(e, OpenAIError) and ("incomplete_tool_call" in err_str or "unrecoverable tool call" in err_str):
                     consecutive_truncations += 1
-                    if consecutive_truncations > 3: raise RuntimeError(f"Model repeatedly failed with incomplete tool call: {e}") from e
-                    logger.consume(_log_event("model_completion", f"[Turn {turns}] Truncation error: incomplete tool call (limit exceeded)", f"=== Assistant Response (turn {turns}) ===\nServer error: incomplete tool call (output exceeded max tokens)\n{e}"))
-                    history.append_message(_conv_msg("assistant", "I attempted to execute a tool call, but the output exceeded the server's token limit and was rejected by the server."))
-                    history.append_message(_conv_msg("user", "ERROR: Tool call generation exceeded output token limit (max_tokens). The server rejected the incomplete tool invocation. Do NOT attempt to rewrite or replace an entire large file in a single tool call. Instead, use `replace_file_content` to make smaller, targeted chunk edits on specific line ranges."))
+                    if consecutive_truncations > _CONSECUTIVE_TRUNCATION_LIMIT:
+                        raise RuntimeError(f"Model repeatedly failed with incomplete tool calls: {e}") from e
+                    logger.consume(_log_event("model_completion", f"[Turn {turns}] Truncation error: incomplete tool call (limit exceeded)", f"=== Assistant Response (turn {turns}) ===\nServer error: incomplete tool call (output exceeded max tokens)\n{_truncate_text(str(e))}"))
+                    history.append_message(_conv_msg("assistant", _INCOMPLETE_TOOL_CALL_ASSISTANT_NOTE))
+                    history.append_message(_conv_msg("user", _INCOMPLETE_TOOL_CALL_RECOVERY))
                     continue
-                logger.consume(_log_event("model_error", f"[Turn {turns}] Model error: {e}", f"=== Turn {turns} Model Error ===\n{traceback.format_exc().strip()}"))
+                logger.consume(_log_event("model_error", f"[Turn {turns}] Model error: {_truncate_text(str(e))}", f"=== Turn {turns} Model Error ===\n{type(e).__name__}: {_truncate_text(str(e))}"))
                 raise RuntimeError(f"Model error: {e}") from e
 
             consecutive_truncations = 0
@@ -303,101 +442,138 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     last_turn_cached_tokens = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
                 else:
                     last_turn_prompt_tokens = getattr(usage, "prompt_tokens", None)
-                    det = getattr(usage, "prompt_tokens_details", None)
-                    last_turn_cached_tokens = getattr(det, "cached_tokens", 0) if det is not None else 0
+                    details = getattr(usage, "prompt_tokens_details", None)
+                    last_turn_cached_tokens = getattr(details, "cached_tokens", 0) if details is not None else 0
 
             choice = completion.choices[0]
             finish_reason = choice.finish_reason
             assistant_msg = choice.message
             tool_calls = assistant_msg.tool_calls or []
+            truncated = finish_reason == "length"
 
-            if tool_calls:
+            if truncated:
                 for tc in tool_calls:
                     tc_func = getattr(tc, "function", None)
                     raw_args = getattr(tc_func, "arguments", "") or "{}" if tc_func else "{}"
-                    if finish_reason == "length":
-                        raw_args = _repair_json(raw_args)
-                        if tc_func is not None:
-                            try: tc_func.arguments = raw_args
-                            except (AttributeError, TypeError): pass
+                    raw_args = _repair_json(raw_args)
+                    if tc_func is not None:
+                        try: tc_func.arguments = raw_args
+                        except (AttributeError, TypeError): pass
                     history.append_message(_conv_msg("assistant", assistant_msg.content or "", getattr(tc, "id", None), getattr(tc_func, "name", "") if tc_func else "", raw_args))
-                call_strs = []
+                if not tool_calls:
+                    # A length-truncated generation must still be appended as a model response
+                    # so that the continuation turn follows the response it continues.
+                    history.append_message(_conv_msg("assistant", assistant_msg.content or ""))
+            elif tool_calls:
                 for tc in tool_calls:
-                    fn = getattr(tc.function, "name", "")
-                    r_args = getattr(tc.function, "arguments", "")
-                    if finish_reason == "length": r_args = _repair_json(r_args)
-                    try:
-                        d = json.loads(r_args, strict=False) if r_args else {}
-                        f_args = ", ".join(f"{k}={repr(v)}" for k, v in d.items()) if isinstance(d, dict) else str(d)
-                    except (json.JSONDecodeError, ValueError): f_args = r_args
-                    call_strs.append(f"{fn}({f_args[:57] + '...' if len(f_args) > 60 else f_args})")
-                comp_summary = f"[Turn {turns}] Assistant: {', '.join(call_strs)}"
+                    tc_func = getattr(tc, "function", None)
+                    history.append_message(_conv_msg("assistant", assistant_msg.content or "", getattr(tc, "id", None), getattr(tc_func, "name", "") if tc_func else "", getattr(tc_func, "arguments", "") or "{}" if tc_func else "{}"))
             else:
                 history.append_message(_conv_msg("assistant", assistant_msg.content or ""))
-                preview = (assistant_msg.content or "").strip().replace("\n", " ")
-                comp_summary = f"[Turn {turns}] Assistant (text): {json.dumps(preview[:77] + '...' if len(preview) > 80 else preview)}"
 
-            logger.consume(_log_event("model_completion", comp_summary, f"=== Assistant Response (turn {turns}) ===\nFinish: {finish_reason}\nContent: {assistant_msg.content}\nTool calls: {[tc.function.name for tc in tool_calls]}"))
+            call_logs = [
+                _format_tool_call(getattr(getattr(tc, "function", None), "name", "") or "", getattr(getattr(tc, "function", None), "arguments", "") or "")
+                for tc in tool_calls
+            ]
+            if tool_calls:
+                completion_summary = f"[Turn {turns}] Assistant: {', '.join(log[0] for log in call_logs)}"
+                completion_transcript = f"=== Assistant Response (turn {turns}) ===\nFinish: {finish_reason}\nTool calls:\n" + "\n".join(f"  {log[0]}" for log in call_logs)
+            else:
+                content_preview = _truncate_text(assistant_msg.content or "")
+                completion_summary = f"[Turn {turns}] Assistant (text): {json.dumps(content_preview)}"
+                completion_transcript = f"=== Assistant Response (turn {turns}) ===\nFinish: {finish_reason}\nContent: {content_preview}"
+            logger.consume(_log_event("model_completion", completion_summary, completion_transcript))
 
-            if finish_reason == "length":
+            if truncated:
                 self._handle_length_truncation(tool_calls, turns, history, logger, guard, tool_mgr)
                 continue
 
             if not tool_calls:
-                history.append_message(_conv_msg("user", "No tools were executed. A tool (e.g. view_file, replace, advance, fail, blame) must be called to make progress or conclude the session."))
+                history.append_message(_conv_msg("user", _MISSING_TOOL_REMINDER))
+                logger.consume(_log_event("tool_reminder", f"[Turn {turns}] No tools executed; reminding the model that progress requires tool calls", _MISSING_TOOL_REMINDER))
                 continue
 
             for tc in tool_calls:
                 if not tc or not getattr(tc, "function", None): continue
-                fn_name, fn_args_str = tc.function.name or "", tc.function.arguments
+                fn_name = tc.function.name or ""
+                fn_args_str = tc.function.arguments or ""
                 try: args_dict = json.loads(fn_args_str, strict=False) if fn_args_str else {}
                 except (json.JSONDecodeError, ValueError): args_dict = {}
                 if not isinstance(args_dict, dict): args_dict = {}
                 wire_bindings: Mapping[tool_provider.ParameterName, tool_provider.WireType] = {tool_provider.ParameterName(k): v for k, v in args_dict.items()}
+                arguments_log = _format_tool_call(fn_name, fn_args_str)[1]
+                tool_call_id = tc.id or ""
 
                 tool = _find_tool(tool_mgr, fn_name)
                 guard_outcome = guard.evaluate(tool_provider.ToolName(fn_name), _build_actual_bindings(tool, args_dict))
                 if isinstance(guard_outcome, loop_guard.LoopFailure):
-                    logger.consume(_log_event("loop_failure", f"[Turn {turns}] Loop failure: {guard_outcome.explanation}", guard_outcome.explanation))
-                    raise RuntimeError(f"Loop failure: {guard_outcome.explanation}")
+                    logger.consume(_log_event("loop_failure", f"[Turn {turns}] Loop failure: {_truncate_text(str(guard_outcome.explanation))}", f"=== Loop Failure (turn {turns}) ===\n{guard_outcome.explanation}"))
+                    raise RuntimeError(f"Unexpected loop failure: {guard_outcome.explanation}")
 
                 resp = tool_mgr.execute_tool(tool_provider.ToolName(fn_name), wire_bindings)
-                status_sum, t_rep = _format_tool_log(fn_name, args_dict, resp, turns)
-                logger.consume(_log_event("tool_execution", status_sum, t_rep))
-                _call_append_tool_response(history, resp, tc.id or "", fn_name, tc.function.arguments or "", wire_bindings)
+                summary, transcript = _tool_result_summary(fn_name, arguments_log, resp, turns)
+                logger.consume(_log_event("tool_execution", summary, transcript))
+                _call_append_tool_response(history, resp, tool_call_id, fn_name, fn_args_str)
 
                 if isinstance(guard_outcome, loop_guard.LoopReminder):
-                    logger.consume(_log_event("loop_reminder", f"[Turn {turns}] Loop reminder: {guard_outcome.feedback}", guard_outcome.feedback))
+                    logger.consume(_log_event("loop_reminder", f"[Turn {turns}] Loop reminder: {_truncate_text(str(guard_outcome.feedback))}", f"=== Loop Reminder (turn {turns}) ===\n{guard_outcome.feedback}"))
                     history.append_message(_conv_msg("user", guard_outcome.feedback))
 
-                if not resp.is_failed and fn_name in ("replace", "update_lines", "replace_file_content", "advance"):
-                    guard.reset()
+                self._clear_repetition(guard, resp, fn_name)
 
-                curr_resp, curr_id, f_count = resp, tc.id or "", 0
-                while agent_cfg.inject_followups and curr_resp.follow_up_tool_call and not curr_resp.is_terminated:
-                    followup = curr_resp.follow_up_tool_call
-                    f_count += 1
-                    s_id = f"{curr_id}_followup_{f_count}"
-                    f_args = {str(k): v for k, v in followup.wire_parameter_bindings.items()}
-                    history.append_message(_conv_msg("assistant", followup.reasoning_text or "", s_id, followup.tool_name, json.dumps(f_args)))
-                    f_resp = tool_mgr.execute_tool(followup.tool_name, followup.wire_parameter_bindings)
-                    f_sum, f_rep = _format_tool_log(followup.tool_name, f_args, f_resp, turns, is_followup=True)
-                    logger.consume(_log_event("tool_execution", f_sum, f_rep))
-                    _call_append_tool_response(history, f_resp, s_id, followup.tool_name, json.dumps(f_args), followup.wire_parameter_bindings)
-                    if not f_resp.is_failed and followup.tool_name in ("replace", "update_lines", "replace_file_content", "advance"):
-                        guard.reset()
-                    curr_resp = f_resp
-                    if curr_resp.is_terminated:
-                        if curr_resp.is_failed: raise RuntimeError(f"Agent failed: {curr_resp.content}")
-                        return loop_driver.LoopOutcome(response=curr_resp, conversation=history.get_model_request())
+                current_response = resp
+                current_call_id = tool_call_id
+                followup_count = 0
+                while agent_cfg.inject_followups and current_response.follow_up_tool_call is not None and not current_response.is_terminated:
+                    followup_count += 1
+                    followup = current_response.follow_up_tool_call
+                    followup_call_id = f"{current_call_id}_followup_{followup_count}"
+                    followup_args = {str(k): v for k, v in followup.wire_parameter_bindings.items()}
+                    followup_args_json = json.dumps(followup_args)
+                    history.append_message(_conv_msg("assistant", followup.reasoning_text or "", followup_call_id, followup.tool_name, followup_args_json))
+                    followup_response = tool_mgr.execute_tool(followup.tool_name, followup.wire_parameter_bindings)
+                    followup_summary, followup_transcript = _tool_result_summary(
+                        str(followup.tool_name),
+                        _format_tool_call(str(followup.tool_name), followup_args_json)[1],
+                        followup_response,
+                        turns,
+                        is_followup=True,
+                    )
+                    logger.consume(_log_event("tool_execution", followup_summary, followup_transcript))
+                    _call_append_tool_response(history, followup_response, followup_call_id, str(followup.tool_name), followup_args_json)
+                    self._clear_repetition(guard, followup_response, str(followup.tool_name))
+                    current_response = followup_response
+                    current_call_id = followup_call_id
+                    if current_response.is_terminated:
+                        if current_response.is_failed:
+                            raise RuntimeError(f"Unexpected tool failure: {current_response.content}")
+                        return loop_driver.LoopOutcome(response=current_response, conversation=history.get_model_request())
 
                 if resp.is_terminated:
-                    if resp.is_failed: raise RuntimeError(f"Agent failed: {resp.content}")
+                    if resp.is_failed:
+                        raise RuntimeError(f"Unexpected tool failure: {resp.content}")
                     return loop_driver.LoopOutcome(response=resp, conversation=history.get_model_request())
 
-        raise RuntimeError(f"Conversation limit reached ({limit} turns)")
+        raise RuntimeError(f"Unexpected failure: conversation limit reached ({limit} turns)")
+
+    def _clear_repetition(self, guard: Any, tool_response: tool_provider.ToolResponse, tool_name: str) -> None:
+        """Clears repetition tracking when an execution modified workspace files or advanced the guide step."""
+        if tool_response.is_failed:
+            return
+        if tool_name in _EDITING_TOOL_NAMES or tool_name in _ADVANCING_TOOL_NAMES:
+            guard.reset()
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(LoopDriver, keys=[LoopDriver, loop_driver.LoopDriver], tier=agent_session)
+    reg.register_singleton(
+        LoopDriver,
+        keys=[LoopDriver, loop_driver.LoopDriver],
+        tier=agent_session,
+    )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

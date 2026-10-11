@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: 96b957ff9704
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# CODE_HASH: 80e79d13806b
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for uv_target_impl aligned with low-level specifications."""
@@ -89,6 +89,11 @@ class TestUvTargetImpl(unittest.TestCase):
             self.assertEqual(
                 utils.normalize_target(TargetIdentifier("update_with_ai/parts/uv/high/uv_target.md")),
                 _make_dag_node("//update_with_ai/parts/uv:uv_target", "high"),
+            )
+            # Scenario spec path
+            self.assertEqual(
+                utils.normalize_target(TargetIdentifier("update_with_ai/parts/uv/scenarios/uv_target.md")),
+                _make_dag_node("//update_with_ai/parts/uv:uv_target", "scenario"),
             )
             # Planning spec path
             self.assertEqual(

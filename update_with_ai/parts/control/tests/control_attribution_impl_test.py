@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: 9941de6fd8a5
-# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:42:12Z
+# CHANGE: Provide dag_storage.DagStorage.add_feedback_message in MockDagStorage and assert FeedbackMessage content/target recording for blame_target and fail_target
+# CODE_HASH: 0bd63efbefd5
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for control_attribution_impl."""
@@ -22,8 +22,10 @@ class MockDagStorage:
 
     def __init__(self):
         self._dirty_nodes = set()
+        self.dirty_reasons = {}
         self.dependencies = {}
         self.messages = {}
+        self.feedback_messages = {}
 
     def is_dirty(self, node):
         return node in self._dirty_nodes
@@ -31,18 +33,25 @@ class MockDagStorage:
     def mark_node_clean(self, node, change_description=None):
         self._dirty_nodes.discard(node)
 
-    def mark_node_dirty(self, node):
+    def mark_node_dirty(self, node, reason=None):
         self._dirty_nodes.add(node)
+        if reason is not None:
+            self.dirty_reasons[node] = reason
 
     def get_dependencies(self, node):
         return self.dependencies.get(node, set())
+
+    def add_feedback_message(self, node, message):
+        if node not in self.feedback_messages:
+            self.feedback_messages[node] = []
+        self.feedback_messages[node].append(message)
+        # Recording feedback marks the target node dirty per dag_storage.DagStorage.is_dirty
+        self._dirty_nodes.add(node)
 
     def add_message(self, message, to):
         if to not in self.messages:
             self.messages[to] = []
         self.messages[to].append(message)
-        # Adding feedback marks the node dirty per contract
-        self._dirty_nodes.add(to)
 
 
 class MockRoleDef:
@@ -56,7 +65,7 @@ class MockNodeConfig:
     def __init__(self):
         self.role_definitions = {
             "lib": MockRoleDef(feedback_role_deps=[]),
-            "low_qa": MockRoleDef(feedback_role_deps=["low"]),
+            "spec_qa": MockRoleDef(feedback_role_deps=["planning", "low"]),
             "qa": MockRoleDef(feedback_role_deps=["lib", "test"]),
         }
         self.blame_targets_by_node = {}
@@ -87,7 +96,7 @@ class ControlAttributionImplTest(unittest.TestCase):
     def test_blame_requires_upstream_dependency(self) -> None:
         source = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("foo"),
-            role_address=dag_storage.RoleAddress("low_qa"),
+            role_address=dag_storage.RoleAddress("spec_qa"),
         )
         unrelated = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("bar"),
@@ -121,7 +130,7 @@ class ControlAttributionImplTest(unittest.TestCase):
     def test_blame_requires_single_paragraph(self) -> None:
         source = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("foo"),
-            role_address=dag_storage.RoleAddress("low_qa"),
+            role_address=dag_storage.RoleAddress("spec_qa"),
         )
         upstream = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("foo"),
@@ -141,7 +150,7 @@ class ControlAttributionImplTest(unittest.TestCase):
     def test_blame_success_and_cascade(self) -> None:
         source = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("foo"),
-            role_address=dag_storage.RoleAddress("low_qa"),
+            role_address=dag_storage.RoleAddress("spec_qa"),
         )
         upstream = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("foo"),
@@ -167,7 +176,12 @@ class ControlAttributionImplTest(unittest.TestCase):
             self.assertTrue(self.storage.is_dirty(upstream))
             self.assertIn(source, outcome.affected_nodes)
             self.assertIn(dependent, outcome.affected_nodes)
-            self.assertEqual(len(self.storage.messages[upstream]), 1)
+            feedback = self.storage.feedback_messages[upstream]
+            self.assertEqual(1, len(feedback))
+            self.assertEqual(
+                "Type signature missing return annotation.", feedback[0].content
+            )
+            self.assertEqual(upstream, feedback[0].target)
 
     def test_fail_target(self) -> None:
         target = dag_storage.DagNode(
@@ -178,6 +192,14 @@ class ControlAttributionImplTest(unittest.TestCase):
             outcome = self.coordinator.fail_target(target, "Cannot satisfy constraints.")
             self.assertTrue(outcome.accepted)
             self.assertIn(target, outcome.affected_nodes)
+            feedback = self.storage.feedback_messages[target]
+            self.assertEqual(1, len(feedback))
+            self.assertIsInstance(feedback[0], dag_storage.FeedbackMessage)
+            self.assertEqual("Cannot satisfy constraints.", feedback[0].content)
+            self.assertEqual(
+                "Cannot satisfy constraints.", self.storage.dirty_reasons[target]
+            )
+            self.assertTrue(self.storage.is_dirty(target))
 
 
 if __name__ == "__main__":

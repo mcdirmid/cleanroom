@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 1b813ffb0c67
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:06:37Z
+CHANGE: Declare the loop cleaner as a topological cleaning service over dag storage
+CODE_HASH: d868997bbdac
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_cleaner interface component
-
-imports: dag_storage, loop_node_cleaner
 
 ## Intent
 
@@ -17,6 +15,10 @@ Executing interconnected tasks in an arbitrary or concurrent sequence risks race
 By guaranteeing dependency-first evaluation order and halting promptly on unrecoverable node cleaner failures, the loop cleaner maintains graph consistency throughout execution passes.
 
 ## Factored Contracts
+
+### Typing
+
+- A system's loop cleaner coordinates topological graph cleaning across a dag storage.
 
 ### Contracts
 

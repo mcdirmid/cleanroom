@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: 88d6314e0b59
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T02:45:00Z
+CHANGE: Restate the root assembly structurally and remove the constituent enumeration from prose
+CODE_HASH: 633ff2830381
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_openai_loop_asm assembly component
@@ -21,20 +22,6 @@ Building an autonomous multi-agent development environment requires integrating 
 
 ## Types and Behavior
 
-The *uv openai loop assembly* unites the sub-assemblies and standalone implementations into a complete system that is ready to execute. The uv openai loop assembly initializes its constituent assemblies and implementations recursively, registering all singleton services with the system lifecycle prototype to achieve complete interface closure.
+The uv_openai_loop_asm assembly component aggregates the implementations of every interface component in the application, uniting the constituent sub-assemblies and standalone implementations into a complete root system that is ready to execute.
 
-The uv openai loop assembly aggregates the following constituents:
-
-- The uv assembly from uv_asm, closing the agent file alias, agent node config, agent storage, dag storage, file paths, uv manifest loader, and uv target interfaces.
-
-- The uv loop implementation from uv_loop_impl, closing the loop interface to coordinate build graph execution and change propagation across workspace targets.
-
-- The uv model config implementation from uv_model_config_impl, closing the agent config, dag config, and openai config interfaces to load language model parameters, execution limits, and authentication credentials.
-
-- The dag assembly from dag_asm, closing the dag subgraph interface.
-
-- The loop assembly from loop_asm, closing the loop cleaner, loop conversation, loop driver, loop guard, and loop node cleaner interfaces.
-
-- The runner logger implementation from runner_logger_impl, closing the runner logger interface to stream terminal progress summaries and unbuffered transcript logs.
-
-- The sandbox assembly from sandbox_asm, closing the sandbox, sandbox file editor, sandbox file reader, sandbox guide delivery, sandbox run control, template format, and tool provider interfaces.
+The uv openai loop assembly initializes its constituent assemblies and implementations recursively, registering every singleton service across the system and session lifecycle tiers to achieve complete interface closure.

@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 6ddbcd011772
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Make step advancement declarative and split the parsing paragraph
+CODE_HASH: f272c5e064d6
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # sandbox_guide_delivery_impl implementation component
@@ -20,20 +21,24 @@ Agent guidance documents contain disparate front-matter, structural summaries, a
 
 ## Types and Behavior
 
-When initialized for an agent session, the guide delivery obtains its guide parsed from configured guide file content. Parsing extracts the guide summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
+When initialized for an agent session, the guide delivery obtains its guide parsed from configured guide file content. Parsing extracts the guide summary from content preceding the first section heading and under any heading titled `Summary`, and captures verification failure instructions when a section heading begins with `Verification failure`.
 
-Passing verification satisfies prerequisite milestone criteria for step advancement.
+Parsing creates sequential step sections for subsequent level-two headings, excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
+
+Passing verification satisfies the prerequisite milestone criteria for step advancement.
 
 Advancing a step when verification passes:
 
-- Emits a response presenting the next step section content introduced by `Now check carefully:` alongside instructions to check carefully, make edits if the source file does not conform to any checklist item, and call advance() only when conforming, transitioning to that step section when further step sections remain.
+- Emits a response presenting the content of the next step section introduced by `Now check carefully:` alongside instructions to check carefully, to make edits when the source file does not conform to a checklist item, and to request step advancement only once the source file conforms.
+
+- Transitions to that step section when further step sections remain.
 
 Failing verification preserves the current delivery position while communicating diagnostic feedback.
 
 Advancing a step when verification fails:
 
-- Emits a response combining the initial primer content (or guide summary when an initial primer is omitted), any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
+- Emits a response combining the initial primer content, or the guide summary when an initial primer is omitted, with any configured verification failure instructions and the failure diagnostics, without activating a step section when no step section has been delivered.
 
-- Emits a response combining the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and failure diagnostics without advancing to subsequent sections when a step section is currently active.
+- Emits a response combining the current step section content introduced by `Now check carefully:` with any configured verification failure instructions and the failure diagnostics, without advancing to subsequent sections when a step section is currently active.
 
 When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.

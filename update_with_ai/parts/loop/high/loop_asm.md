@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: f5710afa7820
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Reduce the assembly narrative to a single structural sentence and remove constituent naming from prose
+CODE_HASH: 9bac1278e045
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_asm assembly component
@@ -21,16 +22,4 @@ Autonomous problem solving requires binding language model completion pipelines,
 
 ## Types and Behavior
 
-The *loop assembly* unites the concrete implementation components that realize language model turn coordination, conversation history management, repetition detection, subgraph cleaning iteration, and node clean execution. The assembly initializes its constituent implementation components and registers their singleton services with the system lifecycle prototype.
-
-The loop assembly aggregates the following implementation components:
-
-- The loop cleaner implementation from loop_cleaner_impl, closing the loop cleaner interface to coordinate dependency-first topological cleaning across dag storage using a node cleaner.
-
-- The loop driver implementation from openai_driver_impl, closing the loop driver interface to execute turn loops, dispatch tool calls, and evaluate termination outcomes.
-
-- The conversation implementation from openai_conversation_impl, closing the loop conversation interface to format provider role structures and seed startup tool interactions.
-
-- The loop guard implementation from loop_guard_impl, closing the loop guard interface to detect repetitive tool invocations and file edit oscillations.
-
-- The node cleaner implementation from loop_node_cleaner_impl, closing the loop node cleaner interface to clean dirty nodes within session phases and dispatch propagating graph messages.
+The loop_asm assembly component aggregates the implementations of the loop cleaner, loop conversation, loop driver, loop guard, and loop node cleaner interfaces, providing a unified assembly for language model turn coordination, conversation history management, repetition detection, subgraph cleaning iteration, and node clean execution.

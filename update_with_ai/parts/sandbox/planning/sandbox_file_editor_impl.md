@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:40:39Z
-LAST_CHANGED: 2026-10-09T21:35:59Z
-CHANGE: Contract replace file content tool installation for agent session
-CODE_HASH: d6b242201016
-SPEC_QA_AUDIT: 2026-10-09T21:40:39Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T04:08:18Z
+CHANGE: Extend multiple-match failure feedback with surrounding-line and line-range guidance
+CODE_HASH: 73f154f9c734
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # sandbox_file_editor_impl implementation component
-
-imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config, src_metadata
-implements: sandbox_file_editor
 
 ## Intent
 
@@ -25,16 +22,18 @@ Furthermore, the implementation tracks revision counters and emits structured di
 - The edit manager compares current workspace file content against their in-band code hash. [compare_current_against_code_hash]
 - The edit manager increments the file update revision whenever workspace files are updated. [increment_revision_on_file_update]
 - The edit manager computes the file hash by returning an MD5 hexadecimal digest of content read from the filesystem. [compute_md5_file_hash]
+- The edit manager records the last file read from the file reader or edited by an editing tool as the session's last read or edited file alias. [record_last_read_or_edited_alias]
 - Editing tool execution fails when the target file is not a read-write file. [fail_when_target_not_read_write]
 - Editing tool execution reminds the agent that only declared read-write files can be written when the target file is not a read-write file. [remind_only_read_write_writable]
 - Editing tool execution fails when the edit produces no change to file content. [fail_when_edit_produces_no_change]
-- Editing tool execution reminds the agent that no-op edits will fail when the edit produces no change. [remind_no_op_edits_fail]
+- Editing tool execution reminds the agent that the edit had no effect when the edit produces no change. [remind_no_op_edits_fail]
 - Successful editing tool execution writes updated file content to the filesystem. [write_updated_content_on_success]
 - Successful editing tool execution creates missing parent directories. [create_missing_parent_dirs_on_success]
 - Successful editing tool execution records that workspace file writes occurred. [record_writes_occurred_on_success]
-- Successful editing tool execution reminds the agent to call check files to verify syntax and types. [remind_call_check_files]
+- Successful editing tool execution reminds the agent to verify syntax and type correctness before making further writes. [remind_call_check_files]
 - Successful editing tool execution includes a diff delta representation in the response content when configured to produce delta output. [include_diff_delta_when_configured]
 - Editing tool responses share the constant suppression key "replace_file_content". [share_replace_file_content_suppression_key]
+- The target content parameter configures a missing note producing diagnostic feedback from the supplied parameter names. [target_content_missing_note]
 - The missing message function explains that start line and end line only restrict the search window when line range arguments are supplied. [explain_line_range_restrictions]
 - The missing message function explains that target content must match existing text to append or insert content when line range arguments are omitted. [explain_append_insert_matching]
 - When the path parameter is omitted and the last read or edited file is a read-write file, tool execution binds the target file to the last read or edited file. [implicitly_bind_last_read_or_edited_file]
@@ -55,7 +54,7 @@ Furthermore, the implementation tracks revision counters and emits structured di
 - When allow multiple is false, tool execution replaces the single matching occurrence on success. [replace_single_match_on_success]
 - When allow multiple is true, tool execution fails if target content is not found within the search window. [fail_when_not_found_multiple]
 - When allow multiple is true, tool execution replaces all occurrences of target content within the search window. [replace_all_matches_when_allow_multiple]
-- When target content matches multiple locations and allow multiple is false, failure feedback indicates the first two matching line numbers. [feedback_first_two_matching_lines]
+- When target content matches multiple locations and allow multiple is false, failure feedback indicates the first two matching line numbers to assist in narrowing the replacement region and directs the agent to include more surrounding lines in target content or to specify start line and end line. [feedback_first_two_matching_lines]
 - When target content is not found in the search window but exists elsewhere in the file, failure feedback indicates the line numbers where target content was located. [feedback_relocated_lines_when_outside_range]
 - The can write operation fails when the target path is not a declared read-write file. [can_write_fails_when_not_read_write]
 - When a declared read-write file is supplied, the can write operation records the file edit. [can_write_records_file_edit]

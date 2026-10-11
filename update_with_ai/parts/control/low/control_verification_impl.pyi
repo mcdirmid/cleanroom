@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: 1a3ee7acd691
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:36:59Z
+# CHANGE: Ground verification caching by file hash and check execution in named collaborators
+# CODE_HASH: 4d9d85b6c414
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_verification_impl."""
@@ -12,10 +12,10 @@ from typing import Optional
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
-import control_verification
-import dag_storage
 import agent_file_alias
 import agent_node_config
+import control_verification
+import dag_storage
 
 
 @singleton_type("agent_session")
@@ -26,9 +26,12 @@ class VerificationEvaluator(
     """Implementation of verification evaluator.
 
     GROUNDING:
-    - Realizes verification check execution and diagnostic noise scrubbing by inspecting
-      target check commands from NodeConfig, computing SHA-256 hashes of target files,
-      executing check subprocesses, and caching verification outcomes.
+    - Realizes control_verification.VerificationEvaluator within the agent session tier by
+      resolving per-node verification checks through
+      agent_node_config.NodeConfig.verification_checks_by_node, running each resolved check
+      as a subprocess, hashing the agent_file_alias.ReadWriteFile.workspace_path files of
+      the target, scrubbing build noise with internal compiled regex patterns, and memoizing
+      outcomes in an in-memory dictionary keyed by the computed SHA-256 digests.
     """
 
     @operation
@@ -39,9 +42,16 @@ class VerificationEvaluator(
         """Evaluates verification checks for a target or all open targets.
 
         GROUNDING:
-        - Grounded via NodeConfig from agent_node_config to resolve verification commands
-          for the target DagNode, file hashing to detect changes against cached results,
-          and executing checks sequentially until failure or success.
+        - Grounded via agent_node_config.NodeConfig.verification_checks_by_node to resolve
+          the configured checks of a target dag_storage.DagNode or, when the target is
+          omitted, of the active session nodes exposed by agent_node_config.RoleConfig.nodes,
+          subprocess execution of each resolved check command whose pass flag and diagnostic
+          text come from agent_node_config.VerificationCheck.verify and which halts at the
+          first non-zero check exit, SHA-256 digest computation over the
+          agent_file_alias.ReadWriteFile.workspace_path files of the target compared against
+          the in-memory hash dictionary to skip execution for unchanged targets, and writing
+          the failing or passing control_verification.VerificationResult with its digest
+          entry back into that dictionary.
         """
         ...
 
@@ -51,7 +61,9 @@ class VerificationEvaluator(
         """Strips build system progress indicators and compilation banners from output text.
 
         GROUNDING:
-        - Grounded via regex patterns stripping Bazel progress lines, loading banners,
-          and elapsed timing statistics from diagnostic output.
+        - Grounded via internal compiled regex patterns matching build system progress
+          counters, target loading banners, and elapsed timing statistics, applied line by
+          line across stdout and stderr text before the surviving lines are rejoined into
+          the returned diagnostic string.
         """
         ...

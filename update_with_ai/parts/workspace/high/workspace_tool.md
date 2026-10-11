@@ -1,13 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-08T15:45:00Z
-CHANGE: clarify starter template regeneration before verification for regenerable roles
-CODE_HASH: bd4625026b54
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T16:00:00Z
+CHANGE: gate submission on verification checks and support verification bypass
+CODE_HASH: f70dd9810b7a
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # workspace_tool interface component
 
-imports: agent_session, workspace_work
+imports: agent_session
 
 ## Purpose
 
@@ -17,26 +18,22 @@ Autonomous subagents executing inside isolated Cleanroom role workspaces rely on
 
 **Out of scope:** The workspace_tool interface component does not directly implement filesystem mutation or Bazel build graph evaluation; these are handled by other components.
 
-**Delegated:** Execution phase context boundaries are delegated to agent_session; work queue computation, pending buffer management, and dirtiness evaluation are delegated to workspace_work.
+**Delegated:** Execution phase context boundaries are delegated to agent_session.
 
 ## Types and Behavior
 
-A session's *workspace tool runner* provides command dispatch and execution for cleanroom role workspaces.
+An agent session's *workspace tool runner* provides command dispatch and execution for cleanroom role workspaces.
 
-The workspace tool runner:
+The workspace tool runner dispatches and executes role commands matching an argument sequence, returning an integer exit code.
 
-- Dispatches and executes role commands matching an argument sequence, returning an integer exit code.
+The workspace tool runner evaluates ready tasks for the active role scope through the work manager, formatting structured console reports carrying target paths, the companion specification contracts to read, and actionable next steps.
 
-- Evaluates ready tasks for the active role scope via the work manager, formatting structured console reports with target paths, companion specification contracts to read, and actionable next steps.
+The workspace tool runner submits target files, evaluating verification checks and rejecting failing targets prior to submission unless bypassed, enforcing producer change summaries, attesting auditor stamps, appending submission records to the cleanroom log, and clearing the pending target buffers on success.
 
-- Submits target files, enforcing producer change summaries, attesting auditor stamps, appending submission records to the cleanroom log, and clearing pending target buffers upon success.
+The workspace tool runner attributes defect blame or failure diagnostics to culprit targets, propagating feedback, appending feedback records to the cleanroom log, and clearing the pending target buffers on success.
 
-- Attributes defect blame or failure diagnostics to culprit targets, propagating feedback, appending feedback records to the cleanroom log, and clearing pending target buffers upon success.
+The workspace tool runner evaluates statement test coverage across implementation and test pairs against target thresholds.
 
-- Evaluates statement test coverage across implementation and test pairs against target thresholds.
+The workspace tool runner evaluates static verification checks, linters, and type checking for specified or pending target files, regenerating a missing target file from its starter template before verification for roles that declare source patterns and upstream dependencies.
 
-- Evaluates static verification checks, linters, and type checking for specified or pending target files, ensuring missing target files for roles with declared source patterns and upstream dependencies are regenerated from starter templates prior to verification.
-
-- Commissions isolated role workspaces for specified roles and directory scopes.
-
-- Refreshes system configuration files, bin utilities, and companion guides across active role workspaces.
+The workspace tool runner commissions isolated role workspaces for specified roles and directory scopes, and refreshes system configuration files, bin utilities, and companion guides across the active role workspaces.

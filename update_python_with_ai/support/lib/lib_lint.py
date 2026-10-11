@@ -28,6 +28,8 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from build_lint_common import (
+    AUTO_INIT_END,
+    AUTO_INIT_START,
     build_module_resolution_map,
     compute_allowed_spec_deps,
     compute_lib_derived_info,
@@ -39,6 +41,7 @@ from build_lint_common import (
     check_framework_imports,
     check_impl_imports,
     check_lib_structure,
+    check_public_functions,
     check_public_types,
     check_sibling_imports,
     check_cross_part_imports,
@@ -55,6 +58,7 @@ from build_lint_common import (
     find_spec_pyi,
     load_line,
     local_imports,
+    maintain_impl_lifecycle,
     module_file,
     module_stem,
     package_of,
@@ -276,9 +280,9 @@ def generate_lib_skeleton(
                 p_dir = os.path.join(parts_base_dir, p)
                 if not os.path.isdir(p_dir) or p.startswith("."):
                     continue
-                for sub in ("lib", "low", "high"):
+                for sub in os.listdir(p_dir):
                     s_dir = os.path.join(p_dir, sub)
-                    if os.path.isdir(s_dir):
+                    if os.path.isdir(s_dir) and not sub.startswith("."):
                         try:
                             for f in os.listdir(s_dir):
                                 if f.endswith(".py") or f.endswith(".pyi"):
@@ -691,8 +695,12 @@ def generate_lib_skeleton(
                 lines.append("")
 
     if is_impl and singleton_classes:
+        lines.append(AUTO_INIT_START)
         lines.append(
             "def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:"
+        )
+        lines.append(
+            '    """Registers constituent singletons into the lifecycle registry."""'
         )
         lines.append(
             "    reg = get_default_registry() if registry is None else registry"
@@ -706,7 +714,9 @@ def generate_lib_skeleton(
             lines.append(f"        tier={tier_val},")
             lines.append("    )")
         lines.append("")
+        lines.append("")
         lines.append("_initialize_ = __initialize__")
+        lines.append(AUTO_INIT_END)
         lines.append("")
 
     return "\n".join(lines).strip() + "\n"
@@ -842,6 +852,8 @@ def main() -> int:
             and not stem.endswith("_asm")
         ):
             strip_do_not_edit_markers(args.module_path)
+        if os.path.exists(args.module_path) and not stem.endswith("_asm"):
+            maintain_impl_lifecycle(args.module_path, spec_file=args.pyi or spec_file)
 
         syntax_errors = check_syntax(args.module_path)
         if syntax_errors:
@@ -861,6 +873,12 @@ def main() -> int:
         stub_errors = check_no_stubs(args.module_path)
         type_ignore_errors = check_type_ignore(args.module_path)
         type_errors = check_public_types(
+            args.module_path,
+            pyi_path=spec_file,
+            pyi_deps=pyi_paths,
+            build_path=None,
+        )
+        func_errors = check_public_functions(
             args.module_path,
             pyi_path=spec_file,
             pyi_deps=pyi_paths,
@@ -891,6 +909,7 @@ def main() -> int:
             + stub_errors
             + type_ignore_errors
             + type_errors
+            + func_errors
             + sig_errors
             + dead_code_errors
             + undeclared_errors
@@ -938,6 +957,7 @@ def main() -> int:
         if os.path.exists(args.module_path) and not stem.endswith("_asm"):
             rewrite_lib_imports(args.module_path, dir_name, import_map, sibling_stems)
             strip_do_not_edit_markers(args.module_path)
+            maintain_impl_lifecycle(args.module_path, spec_file=args.pyi or spec_file)
 
         syntax_errors = check_syntax(args.module_path)
         if syntax_errors:
@@ -1039,6 +1059,8 @@ def main() -> int:
             and not stem.endswith("_asm")
         ):
             strip_do_not_edit_markers(args.module_path)
+        if os.path.exists(args.module_path) and not stem.endswith("_asm"):
+            maintain_impl_lifecycle(args.module_path, spec_file=args.pyi or spec_file)
 
         syntax_errors = check_syntax(args.module_path)
         if syntax_errors:
@@ -1163,6 +1185,12 @@ def main() -> int:
         pyi_deps=pyi_paths,
         build_path=args.build_path,
     )
+    func_errors = check_public_functions(
+        args.module_path,
+        pyi_path=args.pyi or None,
+        pyi_deps=pyi_paths,
+        build_path=args.build_path,
+    )
     sig_errors = check_signature_alignment(
         args.module_path,
         pyi_path=args.pyi or None,
@@ -1187,6 +1215,7 @@ def main() -> int:
         + stub_errors
         + type_ignore_errors
         + type_errors
+        + func_errors
         + sig_errors
         + dead_code_errors
         + undeclared_errors

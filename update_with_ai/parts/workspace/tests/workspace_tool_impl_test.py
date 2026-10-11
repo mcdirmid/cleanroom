@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
 # LAST_CHANGED: 2026-10-08T12:55:00Z
 # CHANGE: remove uncontracted dependencies and use collaborator doubles
-# CODE_HASH: c1c91a039dac
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# CODE_HASH: 981475ad044d
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_tool_impl."""
@@ -181,6 +181,21 @@ class FakeSubmissionCoordinator:
             return cand, os.path.splitext(os.path.basename(cand))[0]
         return None, None
 
+    def parse_unit_from_file_path(
+        self, file_path: str, repo_root: str
+    ) -> Tuple[str, str, str]:
+        rel = (
+            os.path.relpath(file_path, repo_root).replace("\\", "/")
+            if file_path.startswith(repo_root)
+            else file_path.replace("\\", "/")
+        )
+        fname = os.path.basename(rel)
+        stem = os.path.splitext(fname)[0]
+        if stem.endswith("_test"):
+            stem = stem[:-5]
+        part_dir = os.path.dirname(os.path.dirname(rel))
+        return part_dir, stem, ""
+
 
 class FakeAttributionCoordinator:
     tier = "agent_session"
@@ -233,12 +248,12 @@ class WorkspaceToolImplTest(unittest.TestCase):
                 src_pattern="lib/{unit_name}.py",
             ),
             workspace_registry.RoleDefinition(
-                role_name="low_qa",
-                guide_path="guides/low_qa.md",
+                role_name="spec_qa",
+                guide_path="guides/spec_qa.md",
                 writable_file_patterns=["low/*.pyi"],
                 readonly_file_patterns=["high/*.md"],
                 feedback_role_deps=["high"],
-                audit_tag="LOW_QA_AUDIT",
+                audit_tag="SPEC_QA_AUDIT",
                 src_pattern="low/{unit_name}.pyi",
             ),
             workspace_registry.RoleDefinition(
@@ -325,7 +340,7 @@ class WorkspaceToolImplTest(unittest.TestCase):
 
     def test_runner_submit_and_blame_workflows(self) -> None:
         prov = get_singleton(workspace_provision.WorkspaceProvisioner)
-        desc = prov.commission("low_qa", "staging", repo_root=self.fake_repo)
+        desc = prov.commission("spec_qa", "staging", repo_root=self.fake_repo)
         os.chdir(desc.workspace_dir)
 
         runner = workspace_tool_impl.WorkspaceToolRunner()
@@ -390,6 +405,11 @@ class WorkspaceToolImplTest(unittest.TestCase):
         desc = prov.commission("lib", "staging", repo_root=self.fake_repo)
         os.chdir(desc.workspace_dir)
 
+        target = os.path.join(desc.workspace_dir, "staging/parts/agent/lib/config.py")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("# config\n")
+
         runner = workspace_tool_impl.WorkspaceToolRunner()
         ret = runner.execute_command(
             ["submit", "staging/parts/agent/lib/config.py", "Updated config"]
@@ -401,6 +421,40 @@ class WorkspaceToolImplTest(unittest.TestCase):
         with open(main_log, "r", encoding="utf-8") as f:
             log_content = f.read()
         self.assertIn("[CHANGE] staging/parts/agent/lib/config.py: Updated config", log_content)
+
+    def test_runner_submit_verification_gating(self) -> None:
+        self.fake_reg.roles.append(
+            workspace_registry.RoleDefinition(
+                role_name="strict",
+                guide_path="guides/strict.md",
+                writable_file_patterns=["strict/*.py"],
+                readonly_file_patterns=[],
+                feedback_role_deps=[],
+                src_pattern="strict/{unit_name}.py",
+                verify_template="exit 1",
+            )
+        )
+        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
+        desc = prov.commission("strict", "staging", repo_root=self.fake_repo)
+        os.chdir(desc.workspace_dir)
+
+        target = os.path.join(desc.workspace_dir, "staging/parts/agent/strict/config.py")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("# config\n")
+
+        runner = workspace_tool_impl.WorkspaceToolRunner()
+        # 1. Verification fails -> submit rejected (ret=1)
+        ret_fail = runner.execute_command(
+            ["submit", "staging/parts/agent/strict/config.py", "Updated config"]
+        )
+        self.assertEqual(ret_fail, 1)
+
+        # 2. Verification bypassed with --no-verify -> submit accepted (ret=0)
+        ret_pass = runner.execute_command(
+            ["submit", "--no-verify", "staging/parts/agent/strict/config.py", "Updated config"]
+        )
+        self.assertEqual(ret_pass, 0)
 
     def test_cleanroom_log_resolution_and_append(self) -> None:
         p1 = workspace_tool_impl.resolve_cleanroom_log_path(

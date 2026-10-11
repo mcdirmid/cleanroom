@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: e428e3f951f8
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:44:40Z
+# CHANGE: Make follow-up tool call reasoning text a required member rather than optional
+# CODE_HASH: 61d8664abed8
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Tool provider low-level interface specification."""
@@ -268,11 +268,11 @@ class FollowUpToolCall:
     Args:
         tool_name: Tool name to call.
         wire_parameter_bindings: Wire parameter bindings.
-        reasoning_text: Model reasoning text.
+        reasoning_text: Reasoning text articulating from the agent's perspective why the next tool is called.
     """
     tool_name: ToolName
     wire_parameter_bindings: Mapping[ParameterName, WireType]
-    reasoning_text: Optional[ReasoningText] = ...
+    reasoning_text: ReasoningText
 
 
 @dataclass(frozen=True)

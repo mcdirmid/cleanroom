@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 6ae3327d7f19
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:59:32Z
+# CHANGE: Return the contracted clean outcome from the LoopCleaner doubles
+# CODE_HASH: 3b1e776beee5
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for uv_loop_impl aligned with low-level specifications."""
@@ -59,6 +59,7 @@ class MockManifestLoader:
 class MockDagStorage:
     def __init__(self) -> None:
         self.dirty_nodes: Set[dag_storage.DagNode] = set()
+        self.dirty_reasons: dict[dag_storage.DagNode, Optional[str]] = {}
         self.messages: dict[dag_storage.DagNode, list[dag_storage.DagMessage]] = {}
         self.dependencies_map: dict[
             dag_storage.DagNode, Set[dag_storage.DagDependency]
@@ -86,12 +87,25 @@ class MockDagStorage:
         self.messages.setdefault(to, []).append(message)
         self.dirty_nodes.add(to)
 
+    def add_feedback_message(
+        self, node: dag_storage.DagNode, message: dag_storage.FeedbackMessage
+    ) -> None:
+        self.messages.setdefault(node, []).append(message)
+        self.dirty_nodes.add(node)
+
     def clear_messages(self, node: dag_storage.DagNode) -> None:
         self.messages.pop(node, None)
         self.dirty_nodes.discard(node)
 
     def delete_last_cleaned(self, node: dag_storage.DagNode) -> None:
         self.dirty_nodes.add(node)
+
+    def mark_node_dirty(
+        self, node: dag_storage.DagNode, reason: Optional[str] = None
+    ) -> None:
+        self.dirty_nodes.add(node)
+        if reason is not None:
+            self.dirty_reasons[node] = str(reason)
 
     def mark_node_clean(
         self,
@@ -114,12 +128,13 @@ class MockLoopCleaner:
 
     def clean(
         self, node: dag_storage.DagNode, cleaner: loop_node_cleaner.NodeCleaner
-    ) -> None:
+    ) -> bool:
         if self.should_fail:
             raise RuntimeError("Simulated cleaner failure")
         self.cleaned_nodes.append(node)
         cleaner.clean([node])
         self.storage.dirty_nodes.clear()
+        return True
 
 
 class MockNodeCleaner:
@@ -203,8 +218,10 @@ class TestUvLoopImpl(unittest.TestCase):
         class PersistentDirtyCleaner:
             def clean(
                 self, node: dag_storage.DagNode, cleaner: loop_node_cleaner.NodeCleaner
-            ) -> None:
-                pass
+            ) -> bool:
+                # Claims the pass finished while deliberately leaving nodes dirty so the
+                # post-cleaning dirtiness check reports the remaining nodes.
+                return True
 
         self.storage.dirty_nodes.add(root)
         self.registry.register_instance(
@@ -241,15 +258,19 @@ class TestUvLoopImpl(unittest.TestCase):
             self.assertIn(dep, self.storage.materialized_nodes)
 
     def test_mark_dirty(self) -> None:
-        """CUJ: Marking node dirty deletes last cleaned and records optional change message."""
+        """CUJ: Marking node dirty deletes last cleaned and records the optional change reason."""
         node = _make_dag_node("//pkg:unit", "lib")
         with enter_phase("system", registry=self.registry) as scope:
             loop_service = scope.get_singleton(loop.Loop)
             msg = dag_storage.ChangeMessage(content=dag_storage.MessageContent("touched"))
             loop_service.mark_dirty(node, msg)
 
+            # Requirement: MUST mark the target node dirty by removing its last cleaned timestamp
+            # from in-band source metadata.
             self.assertTrue(self.storage.is_dirty(node))
-            self.assertIn(msg, self.storage.get_messages(node))
+            reason = self.storage.dirty_reasons.get(node)
+            self.assertIsNotNone(reason)
+            self.assertIn("touched", str(reason))
 
     def test_record_change(self) -> None:
         """CUJ: Recording change marks node clean with change description and clears last cleaned."""

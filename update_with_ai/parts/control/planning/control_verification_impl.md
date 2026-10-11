@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: 1e90a2591fbc
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: ba53f3cafcb9
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_verification_impl implementation component
-
-imports: agent_session, agent_node_config, dag_storage, agent_file_alias
-implements: control_verification
 
 ## Intent
 

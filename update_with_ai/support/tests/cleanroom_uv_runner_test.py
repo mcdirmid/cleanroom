@@ -50,7 +50,9 @@ class CleanroomUvRunnerTest(unittest.TestCase):
         )
         self.assertIsNotNone(nodes)
         assert nodes is not None
-        self.assertEqual(len(nodes), 111)
+        self.assertEqual(len(nodes), 110)
+        roles = {n.role_address for n in nodes}
+        self.assertIn("scenario", roles)
         for n in nodes:
             self.assertTrue(n.unit_address.startswith("//staging/parts/sandbox:"))
 
@@ -86,6 +88,19 @@ class CleanroomUvRunnerTest(unittest.TestCase):
             self.loader,
         )
         self.assertIsNone(nodes)
+
+    def test_resolve_scope_part_explicit_role(self) -> None:
+        nodes = cleanroom_uv_runner.resolve_scope_nodes(
+            "//staging/parts/sandbox#spec_qa",
+            self.repo_root,
+            self.loader,
+        )
+        self.assertIsNotNone(nodes)
+        assert nodes is not None
+        self.assertEqual(len(nodes), 15)
+        for n in nodes:
+            self.assertTrue(n.unit_address.startswith("//staging/parts/sandbox:"))
+            self.assertEqual(n.role_address, "spec_qa")
 
     def test_run_cleanroom_target_mark_clean_scope(self) -> None:
         ret = cleanroom_uv_runner.run_cleanroom_target(

@@ -1,63 +1,154 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-09T02:18:03Z
-# CHANGE: Align with file_paths.pyi specification
-# CODE_HASH: b71ef9f4ff41
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:58:25Z
+# CHANGE: Remove generated scaffold markers and document the declared path data types and manager operations from the grounding specification
+# CODE_HASH: 53ff9bd18d18
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
-from typing import NewType, Protocol
 from dataclasses import dataclass
+from typing import NewType, Protocol
 
 # Requirements specified in file_paths.pyi
 
-PathString = NewType('PathString', str)
+PathString = NewType("PathString", str)
 
-ValidationMessage = NewType('ValidationMessage', str)
+ValidationMessage = NewType("ValidationMessage", str)
+
 
 @dataclass(frozen=True)
 class HostPath:
-    # TODO_HostPath_body
+    """A host path record encapsulating a path string naming a file or directory on the host filesystem without guaranteeing whether the path string is absolute or relative.
+
+    Args:
+        path: The path string naming a file or directory on the host filesystem.
+
+    INVARIANTS:
+    - MUST encapsulate a non-empty path string.
+    """
+
     path: PathString
 
 
 @dataclass(frozen=True)
 class AbsolutePath(HostPath):
-    # TODO_AbsolutePath_body
+    """A host path whose path string names a location from the filesystem root.
+
+    INVARIANTS:
+    - MUST encapsulate a path string naming a location from the filesystem root.
+    """
+
     pass
 
 
 @dataclass(frozen=True)
 class WorkspacePath(HostPath):
-    # TODO_WorkspacePath_body
+    """A host path whose path string names a location relative to the root of a workspace without a leading path separator.
+
+    INVARIANTS:
+    - MUST encapsulate a path string naming a location relative to the root of a workspace without a leading path separator.
+    """
+
     pass
 
 
 @dataclass(frozen=True)
 class WorkspaceRoot(AbsolutePath):
-    # TODO_WorkspaceRoot_body
+    """An absolute path representing the root directory of a workspace.
+
+    INVARIANTS:
+    - MUST represent the root directory of a workspace.
+    """
+
     pass
 
 
 @dataclass(frozen=True)
 class PathValidationError(ValueError):
-    # TODO_PathValidationError_body
+    """Indicates that a path string is invalid for the target path type.
+
+    Args:
+        message: Diagnostic feedback describing the path validation failure.
+    """
+
     message: ValidationMessage
 
 
 class FilePathManager(Protocol):
+    """Validates and resolves path representations."""
+
     def create_host_path(self, path: PathString) -> HostPath:
-        # TODO_create_host_path_body
+        """Creates a host path from a path string.
+
+        Args:
+            path: The path string naming a file or directory on the host filesystem.
+
+        Returns:
+            A host path encapsulating the path string.
+
+        PRECONDITIONS:
+        - A caller supplies a non-empty path string.
+
+        POSTCONDITIONS:
+        - MUST encapsulate the supplied path string in the produced host path.
+        - WHEN the supplied path string names neither an absolute nor a workspace location, MUST create the host path directly.
+        """
         ...
 
     def create_absolute_path(self, path: PathString) -> AbsolutePath:
-        # TODO_create_absolute_path_body
+        """Creates an absolute path from a path string.
+
+        Args:
+            path: The string representing an absolute filesystem path.
+
+        Returns:
+            An absolute path encapsulating the path string.
+
+        PRECONDITIONS:
+        - A caller supplies a non-empty path string.
+
+        POSTCONDITIONS:
+        - MUST validate that the supplied path string is an absolute path string.
+        - WHEN the supplied path string is not absolute, MUST raise PathValidationError with diagnostic feedback formatted as "Path is not absolute: {path}".
+        """
         ...
 
     def create_workspace_path(self, path: PathString) -> WorkspacePath:
-        # TODO_create_workspace_path_body
+        """Creates a workspace path from a path string.
+
+        Args:
+            path: The string representing a relative filesystem path.
+
+        Returns:
+            A workspace path encapsulating the path string.
+
+        PRECONDITIONS:
+        - A caller supplies a non-empty path string.
+
+        POSTCONDITIONS:
+        - MUST validate that the supplied path string is relative without leading path separators.
+        - WHEN the supplied path string is an absolute path string, MUST raise PathValidationError with diagnostic feedback formatted as "Workspace path must be relative, got absolute: {path}".
+        - WHEN the supplied path string has leading path separators, MUST raise PathValidationError with diagnostic feedback formatted as "Workspace path must be relative, got absolute: {path}".
+        """
         ...
 
-    def resolve_path(self, root: AbsolutePath, relative: WorkspacePath) -> AbsolutePath:
-        # TODO_resolve_path_body
+    def resolve_path(
+        self, root: AbsolutePath, relative: WorkspacePath
+    ) -> AbsolutePath:
+        """Resolves a workspace path into an absolute path given the absolute path of a workspace root.
+
+        Args:
+            root: The absolute path of the workspace root.
+            relative: The relative workspace path.
+
+        Returns:
+            An absolute path formed by joining the workspace root and the relative workspace path.
+
+        PRECONDITIONS:
+        - A caller supplies a workspace path.
+        - A caller supplies a workspace root absolute path.
+
+        POSTCONDITIONS:
+        - MUST produce the combined absolute path formed by joining the workspace root absolute path with the workspace path.
+        """
         ...

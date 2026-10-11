@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-06T22:55:00Z
 CHANGE: restore core constituents
-CODE_HASH: ece4e8c7ecce
+CODE_HASH: a30166e44db2
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # workspace_asm assembly component
@@ -21,14 +22,6 @@ Decentralized multi-role Cleanroom operations require coordinated wiring of regi
 
 ## Types and Behavior
 
-The workspace assembly provides complete realization of workspace services across the agent session tier.
+The workspace_asm assembly component aggregates the implementations of the workspace registry, workspace provision, workspace sync, and workspace work interfaces, providing a unified assembly for role workspace provisioning, synchronization, and work discovery.
 
-Constituent implementations assembled include:
-
-- The workspace registry implementation, resolving role definitions, computing sanitized directory paths, and persisting active workspace descriptors.
-
-- The workspace provisioner implementation, commissioning isolated directory trees, applying read-only attributes to upstream contracts, deploying zipapp runner tools in `bin/`, and decommissioning clean workspaces.
-
-- The workspace synchronizer implementation, pulling updated contracts from canonical repositories, harvesting verified changes with in-band hash checks, refreshing system files, and flushing buffered blame feedback.
-
-- The workspace work manager implementation, discovering ready and blocked tasks using dynamic role precedence across directory scopes and tracking pending targets.
+The workspace assembly initializes its constituent implementations recursively and registers every singleton service with the agent session lifecycle tier.

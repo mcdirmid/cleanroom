@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-09T22:20:00Z
 CHANGE: Record change summary during clean status transition without appending dirty change message
-CODE_HASH: afa1e06559da
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 15b5444ed474
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_submit_impl implementation component
-
-imports: agent_session, dag_storage, agent_node_config, control_verification, agent_file_alias, src_metadata
-implements: control_submit
 
 ## Intent
 

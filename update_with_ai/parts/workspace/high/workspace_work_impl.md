@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-09T04:30:00Z
-CHANGE: specify auditor dirtiness across all feedback targets and strict pending target removal
-CODE_HASH: e85c46af29c4
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-10T19:00:00Z
+CHANGE: evaluate producer dirtiness across implicit role deps and star role changes
+CODE_HASH: 3a5b4a5ff60b
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # workspace_work_impl implementation component
@@ -12,7 +13,7 @@ implements: workspace_work
 
 ## Purpose
 
-The workspace_work_impl implementation component realizes work queue discovery across directory scopes using dynamic role precedence, pending work tracking, and actionable diagnostic generation.
+The workspace_work_impl implementation component realizes work queue discovery across directory scopes by role tier depth, pending work tracking, and actionable diagnostic generation.
 
 Guiding autonomous agents through multi-step pipeline tasks requires distinguishing ready targets from targets blocked on upstream artifacts while enforcing completion of pending work before starting new tasks. Without strict queue tracking, agents jump between disconnected files or exit before completing verification. The workspace_work_impl implementation component invokes directory-scoped work scheduling, filters candidates by active role, evaluates pending target dirtiness against local and main workspaces, persists pending target state in `.cleanroom_pending_work.json`, and generates structured task outputs with actionable guidance.
 
@@ -30,19 +31,21 @@ When managing pending target state:
 
 - The work manager removes a resolved target path from `.cleanroom_pending_work.json` when submitted or blamed, matching target paths and unit stems strictly without clearing unmatched targets.
 
-- The work manager evaluates whether a pending target remains dirty by checking in-band source metadata across local and canonical repositories, verifying all configured feedback role targets for auditor roles against required role audit timestamps and forward contracts, and materializing starter templates via graph storage for missing targets of roles with declared source patterns and upstream dependencies.
+- The work manager evaluates whether a pending target remains dirty by checking in-band source metadata across local and canonical repositories, treating feedback role dependencies and star role dependencies as implicit role dependencies and evaluating targets as dirty when any star role dependency changes across same-unit, interface, or cross-unit dependencies, verifying all configured feedback role targets for auditor roles against required role audit timestamps and forward contracts, and materializing starter templates via graph storage for missing targets of roles with declared source patterns and upstream dependencies.
 
 When evaluating work in a role workspace:
 
-- When evaluating whether an auditor role unit is dirty, the work manager inspects in-band metadata across all feedback role targets configured for the active auditor role, evaluating the unit as dirty when any feedback target is missing, unparseable, lacks the required role audit attribute, or has been modified more recently than its audit timestamp, or when any non-silent upstream contract dependency has been modified after the feedback target's audit timestamp.
+- The work manager inspects the in-band metadata across every feedback role target configured for the active auditor role when evaluating whether an auditor role unit is dirty, evaluating the unit as dirty when a feedback target is missing, is unparseable, lacks the required role audit attribute, or has been modified more recently than its audit timestamp, and when a non-silent upstream contract dependency has been modified after the audit timestamp of the feedback target.
 
-- The work manager checks whether a pending work buffer file exists at `.cleanroom_pending_work.json`. If pending targets exist, the manager re-evaluates each target's dirty status using in-band metadata. If any target remains dirty and force is false, work discovery aborts, returning an error directing the agent to complete or blame the pending target.
+- The work manager treats feedback role dependencies and star role dependencies as implicit role dependencies when evaluating whether a producer unit is dirty, evaluating the target as dirty when an upstream dependency or a star role dependency has been modified more recently than the last cleaned timestamp of the target.
 
-- If all previously pending targets are clean, the manager clears the pending work buffer file.
+- The work manager establishes whether the pending work buffer file exists, re-evaluates the dirty status of each pending target from in-band metadata when pending targets exist, and aborts work discovery with an error directing the agent to complete or blame the pending target when a target remains dirty and the request is not forced.
 
-- The work manager schedules work for the directory scope using the work scheduler without providing a subgraph, scanning units in scope, checking dependency dirtiness, and sorting candidate tasks by dynamic role precedence.
+- The work manager clears the pending work buffer file when every previously pending target is clean.
 
-- When discovering units and dependencies in a part directory, the work manager inspects build definitions when present, High-Level Specifications extracting imported, implemented, and assembled dependencies, or filesystem component stems.
+- The work manager schedules work for the directory scope through the work scheduler without providing a subgraph, scanning the units in scope, checking dependency dirtiness, and sorting candidate tasks by role tier depth.
+
+- The work manager inspects the build definitions when present, extracting the imported, implemented, and assembled dependencies from the High-Level Specifications of the unit, or derives dependencies from the filesystem component stems when discovering units and dependencies in a part directory.
 
 - The work manager partitions candidate tasks into ready items whose forward dependencies are clean, and blocked items whose prerequisites remain dirty.
 

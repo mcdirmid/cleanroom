@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:40:35Z
-LAST_CHANGED: 2026-10-09T22:20:00Z
-CHANGE: Present dirty node role on role config without pre-priming nodes during session setup
-CODE_HASH: d6d6104490b7
-SPEC_QA_AUDIT: 2026-10-09T21:40:35Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:07:15Z
+CHANGE: Canonicalize change timestamps and state the feedback routing invariant
+CODE_HASH: d5da14cd15f0
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_node_cleaner_impl implementation component
-
-imports: agent_node_config, agent_storage, dag_storage, loop_conversation, loop_driver, runner_logger, sandbox
-implements: loop_node_cleaner
 
 ## Intent
 
@@ -29,9 +26,9 @@ By retrying transient session failures once before propagation, isolating prompt
 - The conversation is initialized with instructions directing the agent to call the get work tool. [initialize_conversation_with_get_work]
 - Cleaning resolves dirty nodes by evaluating the loop driver outcome. [resolve_nodes_evaluating_loop_outcome]
 - Resolving dirty nodes marks the nodes clean in graph storage with the change summary when the outcome signals successful advancement with workspace file modifications. [mark_nodes_clean_with_summary_on_advancement_with_mods]
-- Resolving dirty nodes marks the nodes clean in graph storage without advancing last changed timestamps when no workspace files were modified. [mark_nodes_clean_without_change_when_unmodified]
+- Resolving dirty nodes marks the nodes clean in graph storage without advancing change timestamps when no workspace files were modified. [mark_nodes_clean_without_change_when_unmodified]
 - Resolving dirty nodes produces feedback messages addressed strictly to the declared feedback dependency node owning the blamed file when the outcome signals blame attributed to a configured blame target. [produce_feedback_messages_on_blame]
-- Resolving dirty nodes produces no propagating messages when the blamed file fails to match a configured blame target. [omit_feedback_messages_on_unconfigured_blame]
+- Resolving dirty nodes produces no feedback message and leaves the nodes dirty when the blamed file does not match a configured blame target. [omit_feedback_messages_on_unconfigured_blame]
 - Resolving dirty nodes produces no propagating messages when the outcome signals run failure. [omit_messages_on_run_failure]
 - Resolving dirty nodes leaves nodes dirty when the outcome signals run failure. [leave_nodes_dirty_on_run_failure]
 - Resolving dirty nodes communicates that processing cannot continue when the outcome signals run failure. [signal_cannot_continue_on_run_failure]
@@ -45,7 +42,7 @@ By retrying transient session failures once before propagation, isolating prompt
 ### Woven Contracts
 
 - The node cleaner establishes session roles, seeds get work instructions, drives agent turns, and retries once on unexpected failures before aborting. [clean_within_agent_session_phase, role_config_presents_node_role, initialize_conversation_with_get_work, log_unexpected_failures_to_logger, retry_session_phase_once_on_failure, propagate_failure_after_retry, agent_node_config: [role_config_set_role], loop_conversation: [initialize_with_initial_messages], loop_driver: [drive_turns_executing_tools]]
-- Evaluating loop driver outcomes updates graph storage, marking nodes clean when files are modified, routing blame feedback, or halting on failure. [resolve_nodes_evaluating_loop_outcome, mark_nodes_clean_with_summary_on_advancement_with_mods, mark_nodes_clean_without_change_when_unmodified, produce_feedback_messages_on_blame, omit_feedback_messages_on_unconfigured_blame, omit_messages_on_run_failure, leave_nodes_dirty_on_run_failure, signal_cannot_continue_on_run_failure, mark_cleaned_nodes_clean_in_storage, deliver_feedback_messages_to_target, omit_feedback_delivery_to_non_feedback_dependencies, loop_node_cleaner: [communicate_processing_continuation, cannot_continue_on_unhandleable_failure], dag_storage: [record_feedback_messages, access_node_messages]]
+- Evaluating loop driver outcomes updates graph storage, marking nodes clean when files are modified, routing blame feedback, or halting on failure. [resolve_nodes_evaluating_loop_outcome, mark_nodes_clean_with_summary_on_advancement_with_mods, mark_nodes_clean_without_change_when_unmodified, produce_feedback_messages_on_blame, omit_feedback_messages_on_unconfigured_blame, omit_messages_on_run_failure, leave_nodes_dirty_on_run_failure, signal_cannot_continue_on_run_failure, mark_cleaned_nodes_clean_in_storage, deliver_feedback_messages_to_target, omit_feedback_delivery_to_non_feedback_dependencies, loop_node_cleaner: [communicate_processing_continuation, cannot_continue_on_unhandleable_failure], dag_storage: [add_feedback_messages, record_feedback_in_metadata, access_node_messages]]
 - Nodes lacking task prompts resolve pass-through changes directly without agent sessions, marking nodes clean based on incoming update presence. [resolve_promptless_nodes_without_session, mark_promptless_clean_with_summary_when_incoming_changes, mark_promptless_clean_without_changes_when_no_incoming_changes, agent_storage: [query_node_def_supplied, provide_node_definitions]]
 
 ## Grounding

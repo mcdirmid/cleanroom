@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: ddadca2dbf4a
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:19:49Z
+# CHANGE: Align loop cleaning pass, feedback injection, and change recording contracts
+# CODE_HASH: 28bc762fdc1a
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Loop low-level interface specification."""
@@ -36,7 +36,7 @@ class Loop(InTier[SystemTier], Protocol):
 
     @operation
     def clean_subgraph(self, target: dag_storage.DagNode) -> BuildResult:
-        """Executes a cleaning pass over the acyclic subgraph rooted at a target node.
+        """Executes a cleaning pass over the acyclic subgraph rooted at a target node in graph storage.
 
         Args:
             target: The root target node in graph storage.
@@ -91,22 +91,7 @@ class Loop(InTier[SystemTier], Protocol):
             message: The feedback message explaining defects detected.
 
         POSTCONDITIONS:
-        - MUST inject the feedback message into the target node.
-        """
-        ...
-
-    @operation
-    def broadcast_change(
-        self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
-    ) -> None:
-        """Records a change message on a target node in graph storage, dynamically invalidating downstream dependencies.
-
-        Args:
-            source: The modified node.
-            message: The change message informing of changes made.
-
-        POSTCONDITIONS:
-        - MUST mark the target node clean in graph storage with the change description from the change message.
+        - MUST record the feedback message as a diagnostic update in the target node's messages.
         """
         ...
 
@@ -121,6 +106,8 @@ class Loop(InTier[SystemTier], Protocol):
             message: The change message informing of changes made.
 
         POSTCONDITIONS:
-        - MUST mark the target node clean in graph storage with the change description from the change message.
+        - MUST record the change message on the target node in graph storage.
+        - MUST update the target node's in-band source metadata with the change message.
+        - MUST dynamically invalidate downstream dependencies of the target node.
         """
         ...

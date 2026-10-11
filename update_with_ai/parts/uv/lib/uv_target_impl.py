@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: 1c0ec6f122ff
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# CODE_HASH: 2771081c3327
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 import os
@@ -57,19 +57,68 @@ class UvTarget(uv_target.UvTarget, Singleton):
         # Check for path-based target e.g. path/to/high/unit.md
         norm_path = os.path.normpath(ident_str).replace("\\", "/")
         path_parts = norm_path.split("/")
-        if len(path_parts) >= 2 and path_parts[-2] in ("high", "planning", "low", "lib", "tests"):
+        if len(path_parts) >= 2 and "." in path_parts[-1]:
             folder = path_parts[-2]
             filename = path_parts[-1]
             unit_name = filename.rsplit(".", 1)[0]
-            if folder == "tests" and unit_name.endswith("_test"):
-                unit_name = unit_name[:-5]
-            pkg_dir = "/".join(path_parts[:-2])
-            inferred_role = folder
-            if folder == "tests":
-                inferred_role = "test"
-            if not role_part:
-                role_part = inferred_role
-            ident_str = f"//{pkg_dir}:{unit_name}"
+            inferred_role = None
+
+            import tomllib
+            bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()
+            cur = bwd
+            toml_paths = []
+            while cur and cur != os.path.dirname(cur):
+                toml_paths.append(os.path.join(cur, "cleanroom_roles.toml"))
+                cur = os.path.dirname(cur)
+            for entry in ("update_python_with_ai", "update_with_ai"):
+                toml_paths.append(os.path.join(bwd, entry, "cleanroom_roles.toml"))
+
+            for t_path in toml_paths:
+                if os.path.isfile(t_path):
+                    try:
+                        with open(t_path, "rb") as f:
+                            data = tomllib.load(f)
+                        roles = data.get("roles", {})
+                        for r_name, r_cfg in roles.items():
+                            pat = r_cfg.get("src_pattern", "")
+                            if pat:
+                                parts = pat.replace("\\", "/").split("/")
+                                d = parts[1] if len(parts) > 1 else ""
+                                f_pat = parts[-1]
+                                if d == folder:
+                                    inferred_role = r_name
+                                    if "{unit_name}" in f_pat:
+                                        _, sfx = f_pat.split("{unit_name}", 1)
+                                        sfx_stem = os.path.splitext(sfx)[0]
+                                        if sfx_stem and unit_name.endswith(sfx_stem):
+                                            unit_name = unit_name[:-len(sfx_stem)]
+                                    break
+                        if inferred_role:
+                            break
+                    except (tomllib.TOMLDecodeError, OSError):
+                        pass
+
+            if not inferred_role:
+                folder_role_map = {
+                    "high": "high",
+                    "planning": "planning",
+                    "scenarios": "scenario",
+                    "scenario": "scenario",
+                    "low": "low",
+                    "lib": "lib",
+                    "tests": "test",
+                    "test": "test",
+                }
+                if folder in folder_role_map:
+                    inferred_role = folder_role_map[folder]
+                    if folder in ("tests", "test") and unit_name.endswith("_test"):
+                        unit_name = unit_name[:-5]
+
+            if inferred_role:
+                pkg_dir = "/".join(path_parts[:-2])
+                if not role_part:
+                    role_part = inferred_role
+                ident_str = f"//{pkg_dir}:{unit_name}"
 
         norm_unit = dag_storage.UnitAddress(self._normalize_label(ident_str))
         norm_role = dag_storage.RoleAddress(
@@ -85,11 +134,16 @@ class UvTarget(uv_target.UvTarget, Singleton):
         return uv_target.NodeDirectory(path=file_paths.PathString(package_part))
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
-    keys = [UvTarget, uv_target.UvTarget]
     reg.register_singleton(
         UvTarget,
-        keys=keys,
+        keys=[UvTarget, uv_target.UvTarget],
         tier=system,
     )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

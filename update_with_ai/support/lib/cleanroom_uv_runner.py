@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from update_with_ai.parts.uv.lib.uv_manifest_loader import UvManifestLoader
@@ -56,40 +56,60 @@ for entry in os.listdir(_repo):
                 pass
 if uv_cleanroom_asm is None:
     try:
-        from parts.systems.lib import uv_cleanroom_asm
-        from parts.uv.lib import uv_target, uv_manifest_loader
-        from parts.dag.lib import dag_storage
-        from parts.loop.lib import loop
-        from parts.openai.lib.openai_config import OpenAIConfig
+        from update_with_ai.parts.systems.lib import uv_cleanroom_asm
+        from update_with_ai.parts.uv.lib import uv_target, uv_manifest_loader
+        from update_with_ai.parts.dag.lib import dag_storage
+        from update_with_ai.parts.loop.lib import loop
+        from update_with_ai.parts.openai.lib.openai_config import OpenAIConfig
     except ImportError:
-        raise ImportError("Failed to locate uv_cleanroom_asm across discovered Cleanroom roots")
+        try:
+            uv_cleanroom_asm = importlib.import_module("parts.systems.lib.uv_cleanroom_asm")
+            uv_target = importlib.import_module("parts.uv.lib.uv_target")
+            uv_manifest_loader = importlib.import_module("parts.uv.lib.uv_manifest_loader")
+            dag_storage = importlib.import_module("parts.dag.lib.dag_storage")
+            loop = importlib.import_module("parts.loop.lib.loop")
+            _openai_cfg_mod = importlib.import_module("parts.openai.lib.openai_config")
+            OpenAIConfig = _openai_cfg_mod.OpenAIConfig
+        except ImportError:
+            raise ImportError("Failed to locate uv_cleanroom_asm across discovered Cleanroom roots")
 
-ORDERED_ROLES = [
-    "high",
-    "planning",
-    "spec_qa",
-    "low",
-    "low_qa",
-    "lib",
-    "test",
-    "qa",
-    "coverage",
-]
+def _compute_role_depths(roles_map: Dict[str, Dict[str, Any]]) -> Dict[str, int]:
+    """Ranks roles by dependency depth so that upstream roles precede downstream roles."""
+    depths: Dict[str, int] = {}
+    resolving: Set[str] = set()
 
-TIER_DIR_TO_ROLE = {
-    "high": "high",
-    "planning": "planning",
-    "low": "low",
-    "lib": "lib",
-    "tests": "test",
-    "test": "test",
-}
+    def _depth(role: str) -> int:
+        if role in depths:
+            return depths[role]
+        if role in resolving:
+            return 0
+        resolving.add(role)
+        rcfg = roles_map.get(role, {})
+        upstream: Set[str] = set()
+        for k in (
+            "role_deps",
+            "star_role_deps",
+            "feedback_role_deps",
+            "silent_role_deps",
+            "silent_cross_role_deps",
+            "stub_role_deps",
+        ):
+            for d in rcfg.get(k) or []:
+                upstream.add(d.split(":")[-1].strip().lower())
+        val = 1 + max((_depth(u) for u in upstream if u in roles_map), default=-1) if upstream else 0
+        resolving.discard(role)
+        depths[role] = val
+        return val
+
+    for r in roles_map:
+        _depth(r)
+    return depths
 
 
 def resolve_scope_nodes(
     target_str: str,
     root_dir: str,
-    loader: UvManifestLoader,
+    loader: Any,
 ) -> Optional[List[DagNode]]:
     """Resolves a filesystem path or scope string to an ordered list of DagNodes.
 
@@ -108,7 +128,14 @@ def resolve_scope_nodes(
     if not os.path.exists(abs_cand):
         abs_cand = os.path.abspath(clean_path)
         if not os.path.exists(abs_cand):
-            return None
+            for entry in sorted(os.listdir(root_dir)):
+                if not entry.startswith((".", "bazel-", "venv")):
+                    cand_pkg = os.path.join(root_dir, entry, clean_path)
+                    if os.path.exists(cand_pkg):
+                        abs_cand = os.path.abspath(cand_pkg)
+                        break
+            if not os.path.exists(abs_cand):
+                return None
 
     try:
         norm_rel = os.path.relpath(abs_cand, root_dir).replace("\\", "/")
@@ -129,18 +156,6 @@ def resolve_scope_nodes(
         dir_scope = "/".join(segs[:p_idx]) if p_idx > 0 else ""
         if len(segs) > p_idx + 1:
             part_filter = segs[p_idx + 1]
-        if len(segs) > p_idx + 2:
-            tier_or_file = segs[p_idx + 2]
-            if tier_or_file in TIER_DIR_TO_ROLE:
-                if not role_filter:
-                    role_filter = TIER_DIR_TO_ROLE[tier_or_file]
-                if len(segs) > p_idx + 3:
-                    f_name = segs[p_idx + 3]
-                    stem = os.path.splitext(f_name)[0]
-                    if stem.endswith("_test"):
-                        unit_filter = stem[:-5]
-                    else:
-                        unit_filter = stem
     else:
         dir_scope = segs[0]
 
@@ -156,23 +171,59 @@ def resolve_scope_nodes(
                     dir_scope = entry
                     break
 
-    if os.path.isdir(parts_base):
-        if part_filter:
-            parts_to_scan = [part_filter]
-        else:
-            parts_to_scan = sorted(
-                [
-                    d
-                    for d in os.listdir(parts_base)
-                    if os.path.isdir(os.path.join(parts_base, d))
-                    and not d.startswith(".")
-                ]
-            )
-    else:
+    if not os.path.isdir(parts_base):
         return None
 
+    scope_prefix = f"{dir_scope}/parts" if dir_scope else "parts"
+    canon_meth, roles_dict = loader._get_methodology_roles(root_dir, scope_prefix)
+    if not roles_dict:
+        raise ValueError(f"No roles declared in methodology '{canon_meth}' for scope '{target_str}'")
+
+    dir_to_role: Dict[str, str] = {}
+    for rname, rcfg in roles_dict.items():
+        src_pat = rcfg.get("src_pattern", "")
+        if src_pat:
+            clean_pat = src_pat.replace("{unit_dir}/", "").replace("{unit_dir}\\", "")
+            if "/" in clean_pat:
+                layout_d = clean_pat.split("/", 1)[0]
+                dir_to_role[layout_d] = rname
+                if layout_d.endswith("s"):
+                    dir_to_role[layout_d[:-1]] = rname
+                else:
+                    dir_to_role[layout_d + "s"] = rname
+
+    if "parts" in segs:
+        p_idx = segs.index("parts")
+        if len(segs) > p_idx + 2:
+            tier_or_file = segs[p_idx + 2]
+            if tier_or_file in dir_to_role:
+                if not role_filter:
+                    role_filter = dir_to_role[tier_or_file]
+                if len(segs) > p_idx + 3:
+                    f_name = segs[p_idx + 3]
+                    stem = os.path.splitext(f_name)[0]
+                    if stem.endswith("_test"):
+                        unit_filter = stem[:-5]
+                    else:
+                        unit_filter = stem
+
+    if part_filter:
+        parts_to_scan = [part_filter]
+    else:
+        parts_to_scan = sorted(
+            [
+                d
+                for d in os.listdir(parts_base)
+                if os.path.isdir(os.path.join(parts_base, d))
+                and not d.startswith(".")
+            ]
+        )
+
+    depths = _compute_role_depths(roles_dict)
+    ordered_roles = sorted(roles_dict.keys(), key=lambda r: (depths.get(r, 0), r))
+    roles_to_scan = [role_filter] if role_filter else ordered_roles
+
     nodes: List[DagNode] = []
-    roles_to_scan = [role_filter] if role_filter else ORDERED_ROLES
 
     for role_name in roles_to_scan:
         for p_name in parts_to_scan:

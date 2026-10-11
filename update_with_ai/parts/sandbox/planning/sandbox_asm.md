@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-06T12:35:00Z
 CHANGE: update to planning grounding format
-CODE_HASH: 002f10b8584c
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 7dc8a94e5402
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # sandbox_asm assembly component
-
-imports: sandbox_file_editor_impl, sandbox_file_reader_impl, sandbox_guide_delivery_impl, sandbox_impl, sandbox_run_control_impl, template_format_impl, tool_provider_impl
 
 ## Intent
 

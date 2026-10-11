@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: 28fe90a2aa16
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:14:13Z
+# CHANGE: Remove the dead PENDING_WORK_FILE pseudo-constant flagged as a type alias
+# CODE_HASH: 89997108af4c
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_work."""
@@ -13,8 +13,6 @@ from typing import Optional, Protocol, Sequence
 from framework import data_type, operation, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
-
-PENDING_WORK_FILE: str = ...
 
 @data_type
 @dataclass(frozen=True)
@@ -110,6 +108,8 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST check in-band metadata dirty status across local workspace and main repository.
+        - MUST evaluate feedback role dependencies and star role dependencies as implicit role dependencies.
+        - WHEN any star role dependency is modified, MUST return true.
         - MUST return true if target is missing, marked dirty, or has unacted feedback.
         """
         ...
@@ -125,6 +125,8 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST scan part directories in scope for dirty units.
+        - MUST evaluate feedback role dependencies and star role dependencies as implicit role dependencies.
+        - WHEN any star role dependency is modified, MUST mark target dirty.
         - MUST check intra-unit upstream roles, auditor feedback deps, and inter-unit module deps.
         - MUST return tuple of (ready_items, blocked_items) sorted topologically.
         """
@@ -158,7 +160,13 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
         """Resolves companion specification contracts and interface definitions for target.
 
         POSTCONDITIONS:
-        - MUST discover low-level spec contracts, interface protocols, and definitions for target.
+        - MUST resolve the target role from the supplied role name or the target path.
+        - WHEN the target role is undeclared, MUST raise KeyError without substituting a fallback role.
+        - WHEN the target path matches no configured file pattern of the target role, MUST raise ValueError.
+        - MUST discover low-level spec contracts, interface protocols, and definitions for target unit.
+        - MUST filter cross-unit dependencies of the target against configured star role dependencies and silent cross-role dependencies.
+        - WHEN a cross-unit dependency is declared as a star role dependency, MUST expand that dependency's specification contracts into the resolved contract files.
+        - WHEN a cross-unit dependency is declared as a silent cross-role dependency, MUST suppress the peer implementation files matching that dependency from the resolved contract files.
         - MUST return existing readable contract paths relative to workspace root.
         """
         ...

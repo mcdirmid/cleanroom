@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-08T00:46:00Z
-CHANGE: Define src_storage_impl planning specification
-CODE_HASH: 4aa416a20035
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T04:07:59Z
+CHANGE: Add the missing inherited deferred requirement for target manifest discovery and in-band metadata parsing
+CODE_HASH: 578503f4b274
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # src_storage_impl implementation component
-
-imports: file_paths, src_metadata
-implements: agent_storage, dag_storage
 
 ## Intent
 
@@ -89,6 +86,8 @@ By storing clean status, change summaries, and feedback directly within source f
 
 ### Inherited Deferred Requirements
 
+- Target manifest discovery and in-band source file metadata parsing.
+  - Grounded: [agent_storage: [agent_storage_service], src_metadata: [source_metadata_service]]
 - Source artifact inspection and in-band header parsing on the underlying filesystem.
   - Grounded: [src_metadata: [source_metadata_service], file_paths: [path_resolution_service]]
 - Stamping clean metadata, clearing messages, and template materialization on disk.

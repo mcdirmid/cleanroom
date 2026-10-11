@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 10045d15ff23
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:00:57Z
+CHANGE: Ground log mechanics with local provisions instead of an undeclared filesystem import and drop planning front-matter
+CODE_HASH: a4650f18d9f8
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # runner_logger_impl implementation component
-
-imports: filesystem_ext
-implements: runner_logger
 
 ## Intent
 
@@ -40,16 +37,17 @@ By clearing prior run logs at startup and resolving output destinations from env
 
 ### Knowledge Provisions
 
-- Execution event logging with live stdout summaries and transcript file recording. [runner_logging_service]
+- Timestamped single-line summary formatting and unbuffered terminal emission. [stdout_log_emission]
+- Transcript log file writing with resolved destinations and startup truncation. [transcript_log_writing]
 
 ### Inherited Deferred Requirements
 
 - Formatting and terminal emission of event summaries.
-  - Grounded: [runner_logging_service]
+  - Grounded: [stdout_log_emission, runner_logger: [runner_logging_service]]
 - Persistent file recording of verbose event transcripts with immediate flush.
-  - Grounded: [filesystem_ext: [filesystem_operations]]
+  - Grounded: [transcript_log_writing]
 
 ### Knowledge Requirements
 
 - Log destination resolution from environment variables and startup file truncation.
-  - Grounded: [filesystem_ext: [filesystem_operations]]
+  - Grounded: [transcript_log_writing]

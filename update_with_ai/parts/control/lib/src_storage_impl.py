@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T18:18:00Z
-# CHANGE: support label resolution and role template fallbacks in materialize_template
-# CODE_HASH: 5d0a7834f272
-# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:04:03Z
+# CHANGE: Name the private backing mappings per the grounding, make the audit helpers private, and synthesize the change and feedback diagnostics that mark a node dirty
+# CODE_HASH: 9d7c29b7eebc
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 import os
@@ -27,17 +27,8 @@ from support.lib.lifecycle import (
     system,
 )
 
-AUDITOR_ROLE_TAGS: Mapping[str, str] = {
-    "spec_qa": "SPEC_QA_AUDIT",
-    "low_qa": "LOW_QA_AUDIT",
-    "qa": "QA_AUDIT",
-    "coverage": "COVERAGE_AUDIT",
-    "grounding_qa": "GROUNDING_QA_AUDIT",
-}
-
-
-def is_auditor_role(role_name: str) -> bool:
-    return role_name in AUDITOR_ROLE_TAGS
+_get_audit_tag = src_metadata.get_audit_tag
+_is_auditor_role = src_metadata.is_auditor_role
 
 
 class _RoleDefFallback:
@@ -56,14 +47,14 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
     tier = system
 
     def __init__(self) -> None:
-        self._definitions: Dict[dag_storage.DagNode, agent_storage.NodeDefinition] = {}
+        self._node_definitions: Dict[dag_storage.DagNode, agent_storage.NodeDefinition] = {}
         self._dependencies: Dict[
             dag_storage.DagNode, Set[dag_storage.DagDependency]
         ] = {}
         self._feedback_dependencies: Dict[
             dag_storage.DagNode, Set[dag_storage.DagNode]
         ] = {}
-        self._source_files: Dict[dag_storage.DagNode, str] = {}
+        self._source_paths: Dict[dag_storage.DagNode, str] = {}
         self._silent_source_files: Dict[dag_storage.DagNode, Tuple[str, ...]] = {}
         self._messages: Dict[dag_storage.DagNode, Set[dag_storage.DagMessage]] = {}
 
@@ -81,7 +72,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         return None
 
     def _ensure_manifest_loaded(self, node: dag_storage.DagNode) -> None:
-        if node in self._source_files:
+        if node in self._source_paths:
             return
         manifest_loader = self._get_manifest_loader()
         if manifest_loader is not None:
@@ -92,7 +83,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
 
     def _resolve_source_path(self, node: dag_storage.DagNode) -> Optional[Path]:
         self._ensure_manifest_loaded(node)
-        rel_path = self._source_files.get(node)
+        rel_path = self._source_paths.get(node)
         if rel_path is None:
             addr = str(node.unit_address).strip().lstrip("/")
             if "/" in addr and ("." in addr.split("/")[-1]):
@@ -114,8 +105,8 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         self, node: dag_storage.DagNode
     ) -> agent_storage.NodeDefinition:
         self._ensure_manifest_loaded(node)
-        if node in self._definitions:
-            return self._definitions[node]
+        if node in self._node_definitions:
+            return self._node_definitions[node]
         return agent_storage.NodeDefinition(
             task_prompt=agent_storage.TaskPrompt("")
         )
@@ -123,7 +114,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
     def store_node_definition(
         self, node: dag_storage.DagNode, definition: agent_storage.NodeDefinition
     ) -> None:
-        self._definitions[node] = definition
+        self._node_definitions[node] = definition
 
     def get_task_prompt(
         self, node: dag_storage.DagNode
@@ -132,7 +123,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
 
     def record_source_file(self, node: dag_storage.DagNode, path: str) -> None:
         norm_path = path.lstrip("/")
-        self._source_files[node] = norm_path
+        self._source_paths[node] = norm_path
 
     def store_dependencies(
         self, node: dag_storage.DagNode, dependencies: Set[dag_storage.DagDependency]
@@ -162,7 +153,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         if node in self._feedback_dependencies:
             return set(self._feedback_dependencies[node])
         role_name = node.role_address.split(":")[-1]
-        if is_auditor_role(role_name):
+        if _is_auditor_role(role_name):
             raise KeyError(
                 f"No feedback dependencies configured for auditor node '{node}'"
             )
@@ -171,7 +162,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
     def get_messages(self, node: dag_storage.DagNode) -> Set[dag_storage.DagMessage]:
         messages: Set[dag_storage.DagMessage] = set(self._messages.get(node, set()))
         role_name = node.role_address.split(":")[-1]
-        if is_auditor_role(role_name):
+        if _is_auditor_role(role_name):
             if self.is_dirty(node) and not messages:
                 messages.add(
                     dag_storage.ChangeMessage(
@@ -185,7 +176,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         src_path = self._resolve_source_path(node)
         if src_path is not None:
             if not src_path.is_file():
-                src_rel = self._source_files.get(node, node.unit_address)
+                src_rel = self._source_paths.get(node, node.unit_address)
                 messages.add(
                     dag_storage.ChangeMessage(
                         content=dag_storage.MessageContent(f"implement {src_rel}")
@@ -229,10 +220,10 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
 
     def is_dirty(self, node: dag_storage.DagNode) -> bool:
         role_name = node.role_address.split(":")[-1]
-        if is_auditor_role(role_name):
+        if _is_auditor_role(role_name):
             if len(self._messages.get(node, set())) > 0:
                 return True
-            audit_tag = AUDITOR_ROLE_TAGS[role_name]
+            audit_tag = _get_audit_tag(role_name)
             feedback_deps = self.get_feedback_dependencies(node)
             if not feedback_deps:
                 deps = self.get_dependencies(node)
@@ -285,7 +276,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             return len(self.get_messages(node)) > 0
 
         if not src_path.is_file():
-            src_rel = self._source_files.get(node, node.unit_address)
+            src_rel = self._source_paths.get(node, node.unit_address)
             content = f"implement {src_rel}"
             msgs = self._messages.get(node, set())
             if not any(
@@ -305,8 +296,21 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         if meta is None or not meta.last_cleaned:
             return True
         if meta.dirty:
+            self._record_message(
+                node,
+                dag_storage.ChangeMessage(
+                    content=dag_storage.MessageContent(meta.dirty)
+                ),
+            )
             return True
         if meta.feedback:
+            for entry in meta.feedback:
+                self._record_message(
+                    node,
+                    dag_storage.FeedbackMessage(
+                        content=dag_storage.MessageContent(entry)
+                    ),
+                )
             return True
         for dep in self.get_dependencies(node):
             if not dep.is_silent:
@@ -318,8 +322,23 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                         and dep_meta.last_changed
                         and meta.last_cleaned < dep_meta.last_changed
                     ):
+                        description = dep_meta.change_summary or "updated"
+                        self._record_message(
+                            node,
+                            dag_storage.ChangeMessage(
+                                content=dag_storage.MessageContent(
+                                    f"dependency {dep.node.unit_address} changed: {description}"
+                                )
+                            ),
+                        )
                         return True
         return len(self._messages.get(node, set())) > 0
+
+    def _record_message(
+        self, node: dag_storage.DagNode, message: dag_storage.DagMessage
+    ) -> None:
+        """Records a synthesized diagnostic message for a node."""
+        self._messages.setdefault(node, set()).add(message)
 
     def add_feedback_message(
         self, node: dag_storage.DagNode, message: dag_storage.FeedbackMessage
@@ -355,8 +374,8 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         self, node: dag_storage.DagNode, reason: Optional[str] = None
     ) -> None:
         role_name = node.role_address.split(":")[-1]
-        if is_auditor_role(role_name):
-            audit_tag = AUDITOR_ROLE_TAGS[role_name]
+        if _is_auditor_role(role_name):
+            audit_tag = _get_audit_tag(role_name)
             for fb_dep in self.get_feedback_dependencies(node):
                 fb_src = self._resolve_source_path(fb_dep)
                 if fb_src is not None and fb_src.is_file():
@@ -400,7 +419,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             for dep in self.get_dependencies(n):
                 dfs(dep.node)
             role_name = n.role_address.split(":")[-1]
-            if is_auditor_role(role_name):
+            if _is_auditor_role(role_name):
                 for fb_dep in self.get_feedback_dependencies(n):
                     dfs(fb_dep)
             order.append(n)
@@ -421,7 +440,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
     ) -> None:
         self.clear_messages(node)
         role_name = node.role_address.split(":")[-1]
-        if is_auditor_role(role_name):
+        if _is_auditor_role(role_name):
             for fb_dep in self.get_feedback_dependencies(node):
                 fb_src = self._resolve_source_path(fb_dep)
                 if fb_src is not None and fb_src.is_file():
@@ -453,26 +472,54 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
 
         import tomllib
 
-        for root in search_roots:
-            for fname in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
-                t_path = os.path.join(root, fname)
-                if os.path.isfile(t_path):
+        candidate_toml_paths: List[str] = []
+        if node.role_address.startswith("//"):
+            pkg = node.role_address.split(":")[0].lstrip("/")
+            candidate_toml_paths.append(os.path.join(bwd, pkg, "cleanroom_roles.toml"))
+
+        if src_path is not None:
+            curr_p = src_path.parent
+            while curr_p and str(curr_p) != os.path.dirname(str(curr_p)):
+                meth_cand = curr_p / "cleanroom.toml"
+                if meth_cand.is_file():
                     try:
-                        with open(t_path, "rb") as f:
-                            data = tomllib.load(f)
-                        r_info = data.get("roles", {}).get(clean_role, {})
-                        if r_info:
-                            role_def = _RoleDefFallback(
-                                template=r_info.get("template", ""),
-                                template_command=r_info.get("template_command", ""),
-                                src_pattern=r_info.get("src_pattern", ""),
-                            )
-                            main_repo = root
+                        with open(meth_cand, "rb") as f:
+                            c_data = tomllib.load(f)
+                        m_val = c_data.get("methodology")
+                        if m_val and isinstance(m_val, str):
+                            m_pkg = m_val.lstrip("/").split(":")[0]
+                            candidate_toml_paths.append(os.path.join(bwd, m_pkg, "cleanroom_roles.toml"))
                             break
                     except (tomllib.TOMLDecodeError, OSError):
                         pass
-            if role_def is not None:
-                break
+                curr_p = curr_p.parent
+
+        for root in search_roots:
+            candidate_toml_paths.append(os.path.join(root, "cleanroom_roles.toml"))
+            try:
+                for entry in os.listdir(root):
+                    sub = os.path.join(root, entry)
+                    if os.path.isdir(sub) and not entry.startswith((".", "bazel-", "venv")):
+                        candidate_toml_paths.append(os.path.join(sub, "cleanroom_roles.toml"))
+            except OSError:
+                pass
+
+        for t_path in candidate_toml_paths:
+            if os.path.isfile(t_path):
+                try:
+                    with open(t_path, "rb") as f:
+                        data = tomllib.load(f)
+                    r_info = data.get("roles", {}).get(clean_role, {})
+                    if r_info:
+                        role_def = _RoleDefFallback(
+                            template=r_info.get("template", ""),
+                            template_command=r_info.get("template_command", ""),
+                            src_pattern=r_info.get("src_pattern", ""),
+                        )
+                        main_repo = os.path.dirname(t_path)
+                        break
+                except (tomllib.TOMLDecodeError, OSError):
+                    pass
 
         if role_def and getattr(role_def, "template_command", ""):
             unit_str = str(node.unit_address).strip()
@@ -487,10 +534,17 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                 if rel_p.startswith(bwd_str):
                     rel_p = os.path.relpath(rel_p, bwd_str)
                 p_dir = os.path.dirname(rel_p)
-                for sfx in ("/lib", "/tests", "/low", "/high", "/planning"):
+                sub_dir = ""
+                if role_def and getattr(role_def, "src_pattern", ""):
+                    clean = role_def.src_pattern.replace("{unit_dir}/", "").replace("{unit_dir}\\", "")
+                    if "/" in clean:
+                        sub_dir = clean.split("/", 1)[0]
+                if sub_dir:
+                    sfx = "/" + sub_dir
                     if p_dir.endswith(sfx):
                         p_dir = p_dir[:-len(sfx)]
-                        break
+                    elif p_dir == sub_dir:
+                        p_dir = ""
                 unit_dir = p_dir
 
             target_rel = (
@@ -565,21 +619,26 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                             os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), pkg_sub
                         )
                     )
-                    tmpl_name = None
-                    if "templates:hls" in tmpl_str:
-                        tmpl_name = "hls_template.md"
-                    elif "templates:lib" in tmpl_str:
-                        tmpl_name = "lib_template.py"
-                    elif "templates:test" in tmpl_str:
-                        tmpl_name = "test_template.py"
-                    if tmpl_name:
-                        bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()
-                        tmpl_candidates.append(os.path.join(bwd, "templates", tmpl_name))
+                    bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()
+                    t_label = tmpl_str.split(":")[-1] if ":" in tmpl_str else ""
+                    names = []
+                    if t_label:
+                        names.extend([
+                            f"{t_label}_template.md",
+                            f"{t_label}_template.py",
+                            f"{t_label}.md",
+                            f"{t_label}.py",
+                        ])
+                        if t_label.endswith("_template"):
+                            names.append(f"{t_label}.md")
+                            names.append(f"{t_label}.py")
+                    for t_name in names:
+                        tmpl_candidates.append(os.path.join(bwd, "templates", t_name))
                         try:
                             for entry in os.listdir(bwd):
                                 pkg_dir = os.path.join(bwd, entry)
                                 if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
-                                    tmpl_candidates.append(os.path.join(pkg_dir, "templates", tmpl_name))
+                                    tmpl_candidates.append(os.path.join(pkg_dir, "templates", t_name))
                         except OSError:
                             pass
                 for cand in tmpl_candidates:
@@ -605,24 +664,15 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                     cands.append(os.path.join(r, t_spec))
                 cands.append(t_spec)
 
-            role_to_filename = {
-                "high": "hls_template.md",
-                "planning": "planning_template.md",
-                "low": "low_template.pyi",
-                "lib": "lib_template.py",
-                "test": "test_template.py",
-            }
-            if clean_role in role_to_filename:
-                tname = role_to_filename[clean_role]
-                for r in roots:
-                    cands.append(os.path.join(r, "templates", tname))
-                    try:
-                        for entry in os.listdir(r):
-                            pkg_dir = os.path.join(r, entry)
-                            if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
-                                cands.append(os.path.join(pkg_dir, "templates", tname))
-                    except OSError:
-                        pass
+            for r in roots:
+                for tdir in [os.path.join(r, "templates")]:
+                    if os.path.isdir(tdir):
+                        try:
+                            for f in os.listdir(tdir):
+                                if clean_role in f:
+                                    cands.append(os.path.join(tdir, f))
+                        except OSError:
+                            pass
             for c in cands:
                 if os.path.isfile(c):
                     try:
@@ -667,10 +717,16 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         self.mark_node_dirty(node)
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         AgentStorage,
         keys=[AgentStorage, agent_storage.AgentStorage, dag_storage.DagStorage],
         tier=system,
     )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

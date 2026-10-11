@@ -1,16 +1,23 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T18:18:00Z
-# CHANGE: add fallback role precedence ranks when role_definitions unpopulated
-# CODE_HASH: d5678f0c0bd2
-# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:04:02Z
+# CHANGE: Schedule directory-scoped dirty nodes from the role configuration node set when storage exposes no enumeration, and tolerate lifecycle resolution failures in role precedence
+# CODE_HASH: d25daba1f784
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
 import os
+import tomllib
 from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple
-from support.lib.lifecycle import Singleton, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    LifecycleResolutionError,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
 from update_with_ai.parts.agent.lib import agent_config, agent_node_config, agent_session
 from update_with_ai.parts.dag.lib import dag_storage, dag_subgraph
 from . import control_work_scheduler
@@ -72,33 +79,67 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
     def _get_role_precedence_rank(self, role_address: str) -> int:
         """Determines precedence rank for a role address dynamically."""
         clean = role_address.split(":")[-1].strip().lower()
-        default_ranks = {
-            "high": 1,
-            "planning": 2,
-            "spec_qa": 3,
-            "low": 4,
-            "low_qa": 5,
-            "lib": 6,
-            "tests": 7,
-            "test": 7,
-            "qa": 8,
-            "coverage": 9,
-        }
-        cfg = None
+        role_deps: Dict[str, Sequence[str]] = {}
         try:
             cfg = get_singleton(agent_node_config.NodeConfig)
-        except Exception:
+            if cfg is not None:
+                for r_name, r_cfg in getattr(cfg, "role_definitions", {}).items():
+                    rd = list(getattr(r_cfg, "role_deps", ()))
+                    rd += list(getattr(r_cfg, "feedback_role_deps", ()))
+                    rd += list(getattr(r_cfg, "silent_role_deps", ()))
+                    rd += [s for s in getattr(r_cfg, "star_role_deps", ()) if s.split(":")[-1] != r_name]
+                    role_deps[r_name] = rd
+        except (LifecycleResolutionError, KeyError, AttributeError, RuntimeError):
             pass
-        role_deps: Dict[str, Sequence[str]] = {}
-        if cfg is not None:
-            for r_name, r_cfg in getattr(cfg, "role_definitions", {}).items():
-                role_deps[r_name] = getattr(r_cfg, "role_deps", ())
         if not role_deps:
-            return default_ranks.get(clean, 999)
+            try:
+                for cand in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
+                    if os.path.isfile(cand):
+                        with open(cand, "rb") as f:
+                            data = tomllib.load(f)
+                            for r_name, r_cfg in data.get("roles", {}).items():
+                                rd = list(r_cfg.get("role_deps", ()))
+                                rd += list(r_cfg.get("feedback_role_deps", ()))
+                                rd += list(r_cfg.get("silent_role_deps", ()))
+                                rd += [s for s in r_cfg.get("star_role_deps", ()) if s.split(":")[-1] != r_name]
+                                role_deps[r_name] = rd
+            except (OSError, tomllib.TOMLDecodeError):
+                pass
+        if not role_deps:
+            return 999
         ranks = self.compute_role_precedence(role_deps)
-        if clean not in ranks:
-            return default_ranks.get(clean, 999)
-        return ranks[clean]
+        return ranks.get(clean, 999)
+
+    def _scan_dir_scope(
+        self, storage: dag_storage.DagStorage, dir_scope: str
+    ) -> List[dag_storage.DagNode]:
+        """Scans the directory scope for dirty nodes whose upstream dependencies are clean."""
+        norm_scope = dir_scope.strip().strip("/")
+        known_nodes: Set[dag_storage.DagNode] = set(
+            getattr(storage, "all_nodes", set()) or set()
+        )
+        try:
+            known_nodes.update(get_singleton(agent_node_config.RoleConfig).nodes)
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            pass
+
+        candidates: List[dag_storage.DagNode] = []
+        for node in sorted(
+            known_nodes, key=lambda n: (str(n.unit_address), str(n.role_address))
+        ):
+            unit_str = str(node.unit_address).strip().strip("/")
+            if norm_scope and not unit_str.startswith(norm_scope):
+                continue
+            if not storage.is_dirty(node):
+                continue
+            deps_clean = True
+            for dep in storage.get_dependencies(node):
+                if not dep.is_silent and storage.is_dirty(dep.node):
+                    deps_clean = False
+                    break
+            if deps_clean:
+                candidates.append(node)
+        return candidates
 
     def schedule_work(
         self,
@@ -113,21 +154,7 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
         if subgraph is not None:
             candidate_nodes = list(subgraph.next_ready_batch())
         elif dir_scope is not None:
-            norm_scope = dir_scope.strip().strip("/")
-            all_nodes: Set[dag_storage.DagNode] = getattr(storage, "all_nodes", set())
-            for n in all_nodes:
-                unit_str = str(n.unit_address).strip().strip("/")
-                if unit_str.startswith(norm_scope) or not norm_scope:
-                    if storage.is_dirty(n):
-                        deps = storage.get_dependencies(n)
-                        all_deps_clean = True
-                        for dep in deps:
-                            if not dep.is_silent:
-                                if storage.is_dirty(dep.node):
-                                    all_deps_clean = False
-                                    break
-                        if all_deps_clean:
-                            candidate_nodes.append(n)
+            candidate_nodes = self._scan_dir_scope(storage, dir_scope)
 
         # Sort candidate nodes by dynamic role precedence rank, then unit address
         candidate_nodes.sort(
@@ -194,27 +221,32 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
             return res
 
         if "tests/" in source_alias or source_alias.endswith("_test.py") or source_alias.endswith("_coverage.py"):
-            base = source_alias.replace("tests/", "grounding/")
+            base = source_alias.replace("tests/", "low/")
             for sfx in ("_test.py", "_coverage.py", ".py"):
                 if base.endswith(sfx):
                     base = base.removesuffix(sfx)
                     break
             return base + ".pyi"
 
-        if role_clean in ("qa", "coverage", "grounding_qa") or unit_name.endswith("_qa") or unit_name.endswith("_coverage"):
+        is_auditor = bool(
+            getattr(n_cfg, "audit_tag", None)
+            or not getattr(n_cfg, "source_pattern", None)
+            or not source_alias
+        )
+        if is_auditor:
             for ro in n_cfg.read_only_files:
                 ro_path = getattr(ro, "relative_path", str(ro))
                 if ro_path.endswith(".pyi") and not ro_path.endswith("guide.pyi"):
                     return ro_path
-            return f"grounding/{unit_name}.pyi"
+            return f"low/{unit_name}.pyi"
 
         if source_alias.endswith(".py"):
             parent_dir = os.path.dirname(source_alias)
             base_parent = os.path.dirname(parent_dir) if parent_dir else ""
             return (
-                os.path.join(base_parent, "grounding", f"{unit_name}.pyi")
+                os.path.join(base_parent, "low", f"{unit_name}.pyi")
                 if base_parent
-                else f"grounding/{unit_name}.pyi"
+                else f"low/{unit_name}.pyi"
             )
 
         if source_alias.endswith(".pyi"):
@@ -354,3 +386,18 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
             )
 
         return "\n\n".join(p for p in parts if p).strip()
+
+
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        WorkScheduler,
+        keys=[WorkScheduler, control_work_scheduler.WorkScheduler],
+        tier=WorkScheduler.tier,
+    )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

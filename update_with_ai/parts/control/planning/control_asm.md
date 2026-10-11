@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: 75270be71a06
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 6f9c8a3581a3
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_asm assembly component
-
-imports: control_coordinate_impl, control_verification_impl, control_work_scheduler_impl, control_submit_impl, control_attribution_impl, src_metadata_impl
 
 ## Intent
 

@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-08T18:30:00Z
 CHANGE: document stub role dependencies synthesis in commissioning contract
-CODE_HASH: 29781301e33e
+CODE_HASH: bfbef995bc8b
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # workspace_provision interface component
@@ -21,16 +22,16 @@ Uncontrolled read-write access across an entire codebase leads to accidental cro
 
 ## Types and Behavior
 
-A session's *workspace provisioner* creates and configures directory-scoped role workspaces.
+An agent session's *workspace provisioner* creates and configures directory-scoped role workspaces.
 
 The workspace provisioner:
 
 - Commissions an isolated role workspace for a specified role and directory scope, creating the workspace directory structure, configuring role metadata, and registering the workspace in the persistent registry.
 
-- Copies declared writable files for the role with read-write permissions, and copies upstream contract dependencies with read-only permissions (`chmod 444`), preventing in-place clobbering of upstream specifications.
+- Copies the declared writable files of the role with read-write permissions, and copies upstream contract dependencies with read-only permissions, preventing in-place clobbering of upstream specifications.
 
-- For roles declaring stub dependencies, synthesizes read-only test stubs with `NotImplementedError` derived from companion specifications into the workspace rather than copying real implementations, preventing implementation leakage.
+- Synthesizes read-only test stubs that raise `NotImplementedError` from companion specifications into the workspace for roles declaring stub dependencies, rather than copying real implementations, preventing implementation leakage.
 
-- Deploys executable runner tools into the workspace `bin/` directory, packaging `get_work`, `submit`, `blame`, `fail`, and `coverage` as executable scripts with execution permissions.
+- Deploys executable runner tools into the `bin/` directory of the workspace, packaging the work, submit, blame, fail, and coverage runners as executable scripts with execution permissions.
 
-- Writes workspace role configuration into a hidden `.cleanroom_role.json` descriptor and synthesizes a role-tailored `AGENTS.md` guide file establishing agent constraints and tool invocation workflows.
+- Writes workspace role configuration into a hidden role descriptor file and synthesizes a role-tailored `AGENTS.md` guide file establishing agent constraints and tool invocation workflows.

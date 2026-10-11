@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-06T12:35:00Z
-# CHANGE: add grounding sections
-# CODE_HASH: 8abaf24d3995
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:26:02Z
+# CHANGE: State modification reporting as delegation to the edit manager
+# CODE_HASH: 863c55d9447e
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox implementation low-level specification."""
@@ -20,7 +20,8 @@ class Sandbox(sandbox.Sandbox, InTier[AgentSessionTier]):
     """Realizes session file modification tracking.
 
     GROUNDING:
-    - Coordinates change tracking by querying file diffs from EditManager within the agent session tier.
+    - Reports workspace file modification status for the session by delegating all modification
+      state determination to EditManager, holding no modification state of its own.
     """
 
     @property
@@ -29,7 +30,7 @@ class Sandbox(sandbox.Sandbox, InTier[AgentSessionTier]):
         """Exposes whether workspace file modifications occurred during the session.
 
         GROUNDING:
-        - Grounded via EditManager.has_modifications from sandbox_file_editor,
-          querying whether diff-based file mutations were recorded.
+        - Delegates to EditManager.has_modifications from sandbox_file_editor, which reports
+          whether workspace file contents differ from their in-band code hashes.
         """
         ...

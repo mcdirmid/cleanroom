@@ -1,21 +1,24 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: 1ab4b48f3086
+CODE_HASH: eef26cd62e8b
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_work_scheduler interface component
 
-imports: agent_session, dag_storage, dag_subgraph, agent_node_config
+imports: agent_session, dag_storage, dag_subgraph
 
 ## Purpose
 
-The control_work_scheduler interface component defines dual-mode work discovery, dynamic role precedence scheduling, and task prompt synthesis for dirty targets.
+The control_work_scheduler interface component defines work discovery over subgraphs and directory scopes, role tier depth scheduling, and task prompt synthesis for dirty targets.
 
 Engineering workflows require discovering work across both focused execution subgraphs and broad directory scopes without hardcoding role lifecycle phases. When role ordering is hardcoded, new lifecycle phases are skipped or scheduled out of sequence, causing downstream steps to run before upstream contracts are established. The control_work_scheduler interface component schedules ready dirty nodes using dynamic topological role precedence derived from declared role dependencies, and synthesizes task prompts incorporating upstream feedback.
 
 **Out of scope:** The control_work_scheduler interface component does not execute compilers, modify source code, or submit nodes; these are handled by other components.
+
+**Delegated:** Graph storage access is delegated to dag_storage; execution subgraph structures are delegated to dag_subgraph; session lifecycle scoping is delegated to agent_session.
 
 ## Types and Behavior
 
@@ -23,14 +26,12 @@ A *scheduled task* identifies a ready target node, supplying its *task prompt*, 
 
 A *work schedule* contains an ordered sequence of scheduled tasks ready for processing.
 
-A session's *work scheduler* determines ready tasks and synthesizes work instructions.
+An agent session's *work scheduler* determines ready tasks and synthesizes work instructions.
 
-The work scheduler:
+The work scheduler discovers ready dirty nodes within a specified target subgraph or across a specified directory scope.
 
-- Discovers ready dirty nodes within a specified target subgraph or across a specified directory scope.
+The work scheduler orders candidate nodes by role tier depth, so that upstream roles are scheduled before downstream roles without naming any role.
 
-- Orders candidate nodes by dynamic role precedence, ranking roles according to the topological depth of declared role dependencies so that upstream roles are scheduled before downstream roles without hardcoded role identifiers.
+The work scheduler evaluates the readiness of a candidate node by checking that every direct non-silent upstream dependency in graph storage is clean.
 
-- Evaluates readiness of candidate nodes by checking that all direct non-silent upstream dependencies in graph storage are clean.
-
-- Synthesizes scheduled tasks by loading role guides, formatting task instructions, listing declared dependency paths, and appending unaddressed feedback messages recorded on the target node.
+The work scheduler synthesizes scheduled tasks by loading role guides, formatting task instructions, listing declared dependency paths, and appending the unaddressed feedback messages recorded on the target node.

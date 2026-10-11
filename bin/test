@@ -5,17 +5,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-# Explicit Bazel flag for legacy execution during turn-down transition
-if [ "${1:-}" = "--bazel" ] || [ "${1:-}" = "bazel" ]; then
-    shift
-    exec bazel test //update_with_ai/... \
-        --test_output=errors \
-        --test_timeout=100 \
-        --noshow_progress \
-        --noshow_loading_progress \
-        "$@"
-fi
-
 TARGET="${1:-}"
 
 # Dynamically build PYTHONPATH from repository packages and target

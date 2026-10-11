@@ -1,28 +1,23 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-09T21:19:01Z
-# CHANGE: new file
-# CODE_HASH: 86db72bd90ad
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:55:45Z
+# CHANGE: Delegate assembly initialization to CONSTITUENTS on the system tier instead of registering the constituent singleton directly
+# CODE_HASH: b3a749ad8487
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry, get_default_registry
-from . import (
-    tool_coverage,
-    tool_coverage_impl,
-)
+from . import tool_coverage_impl
 
 CONSTITUENTS = (
     tool_coverage_impl,
 )
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Initializes the tools assembly component and registers its singletons."""
+    """Initializes the tools assembly component on the system lifecycle tier by delegating to its constituents."""
     reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        tool_coverage_impl.CoverageEvaluator,
-        keys=[tool_coverage.CoverageEvaluator, tool_coverage_impl.CoverageEvaluator],
-    )
+    for constituent in CONSTITUENTS:
+        constituent.__initialize__(reg)
 
 _initialize_ = __initialize__

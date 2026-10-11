@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-09T04:30:00Z
-# CHANGE: factor auditor unit dirtiness across all feedback targets and strict pending target removal
-# CODE_HASH: e10735abf975
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:14:51Z
+# CHANGE: Filter silent cross-role dependencies, expand star-role contracts, and fail loud on unknown roles
+# CODE_HASH: ff4c4d707a26
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_work_impl."""
@@ -28,10 +28,23 @@ class WorkspaceWorkManager(
 
     GROUNDING:
     - Realizes work discovery by delegating directory-scoped scheduling to
-      control_work_scheduler.WorkScheduler, materializing starter templates via
-      dag_storage.DagStorage.materialize_template, checking target metadata via src_metadata,
-      evaluating auditor unit dirtiness across all feedback targets,
-      and managing pending work state in .cleanroom_pending_work.json.
+      control_work_scheduler.WorkScheduler.schedule_work and ordering candidates through
+      control_work_scheduler.WorkScheduler.compute_role_precedence, materializing starter
+      templates via dag_storage.DagStorage.materialize_template, checking target metadata via
+      src_metadata.SourceMetadataCoordinator.extract_metadata, evaluating auditor unit
+      dirtiness across all feedback targets, evaluating producer unit dirtiness across implicit
+      and star role dependencies, and managing pending work state in
+      .cleanroom_pending_work.json.
+    - Grounds companion contract resolution and cross-unit dependency filtering on
+      workspace_registry.WorkspaceRegistry.resolve_role_definition and
+      workspace_registry.WorkspaceRegistry.list_roles, reading
+      workspace_registry.RoleDefinition.writable_file_patterns,
+      workspace_registry.RoleDefinition.star_role_deps, and
+      workspace_registry.RoleDefinition.silent_cross_role_deps to expand dynamically defined
+      star-role specification contracts for the active role and to filter out silent cross-role
+      dependencies from resolved contract files, and letting an undeclared role or unmatched
+      target path raise an explicit exception through the registry lookup without synthesizing a
+      substitute role or path.
     """
 
     @operation
@@ -86,8 +99,10 @@ class WorkspaceWorkManager(
         """Checks whether a pending target file is still dirty across local and main workspaces.
 
         GROUNDING:
-        - Checks target metadata via src_metadata across local workspace and main repository,
-          evaluating auditor role targets across all configured feedback role targets.
+        - Checks target metadata via src_metadata.SourceMetadataCoordinator.extract_metadata across
+          local workspace and main repository, evaluating auditor role targets across all
+          configured feedback role targets, and evaluating producer targets across implicit role
+          dependencies and star role dependencies.
         """
         ...
 
@@ -103,6 +118,7 @@ class WorkspaceWorkManager(
 
         GROUNDING:
         - Scans part directories in scope, evaluates auditor units across all feedback role dependencies,
+          evaluates producer units across implicit role dependencies and star role dependencies,
           checks dependencies, sorts ready tasks topologically, and materializes starter templates via
           dag_storage.DagStorage.materialize_template for missing ready files.
         """
@@ -119,10 +135,18 @@ class WorkspaceWorkManager(
     ) -> workspace_work.WorkQueueSummary:
         """Evaluates dirty units in scope and returns work queue summary.
 
+        POSTCONDITIONS:
+        - WHEN the supplied role is undeclared, MUST raise an explicit exception without substituting a fallback role.
+        - WHEN a target path matches no configured file pattern of the supplied role, MUST raise an explicit exception without synthesizing a substitute path.
+
         GROUNDING:
         - Checks pending target dirtiness via src_metadata, schedules tasks via
-          control_work_scheduler.WorkScheduler with dir_scope, records ready targets,
+          control_work_scheduler.WorkScheduler.schedule_work with dir_scope, records ready targets,
           and formats the WorkQueueSummary.
+        - Resolves the active workspace_registry.RoleDefinition through
+          workspace_registry.WorkspaceRegistry.resolve_role_definition and lets an undeclared role or
+          an unmatched target path raise an explicit exception instead of falling back to a
+          substitute role or path.
         """
         ...
 
@@ -136,8 +160,27 @@ class WorkspaceWorkManager(
     ) -> Sequence[str]:
         """Resolves companion specification contracts and interface definitions for target.
 
+        POSTCONDITIONS:
+        - MUST resolve the target role from the supplied role name or the target path.
+        - WHEN the target role is undeclared, MUST raise KeyError without substituting a fallback role.
+        - WHEN the target path matches no configured file pattern of the target role, MUST raise ValueError.
+        - WHEN a cross-unit dependency is declared as a silent cross-role dependency, MUST filter that dependency out of the resolved contract files.
+        - WHEN a cross-unit dependency is declared as a star role dependency, MUST expand the specification contracts of that dependency into the resolved contract files.
+        - MUST discover low-level spec contracts, interface protocols, and definitions for the target unit.
+
         GROUNDING:
-        - Discovers companion specification contracts, interface protocols, and definitions
-          for target unit using role definitions from workspace_registry.WorkspaceRegistry.
+        - Looks up the active workspace_registry.RoleDefinition through
+          workspace_registry.WorkspaceRegistry.resolve_role_definition, raising the registry
+          lookup exception for an undeclared role, and matches target_path against
+          workspace_registry.RoleDefinition.writable_file_patterns, raising an unmatched-path
+          exception when no configured pattern accepts the path.
+        - Filters cross-unit dependencies against
+          workspace_registry.RoleDefinition.silent_cross_role_deps so that a silent cross-role
+          dependency contributes no contract files to the resolved sequence, and expands the
+          low-level specification contracts of each
+          workspace_registry.RoleDefinition.star_role_deps entry into the resolved sequence,
+          discovering the dynamically defined star-role contracts through
+          workspace_registry.WorkspaceRegistry.list_roles for the active role.
+        - Resolves both cases without any synthetic fallback role, path, or contract entry.
         """
         ...

@@ -1,18 +1,16 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:40:37Z
-LAST_CHANGED: 2026-10-09T21:35:44Z
-CHANGE: Specify that the replace file content tool is installed for the agent session
-CODE_HASH: 2284e431a8f8
-SPEC_QA_AUDIT: 2026-10-09T21:40:37Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:10:52Z
+CHANGE: Remove stale template initialization lead-in and the unsupported edit manager write statement
+CODE_HASH: 33ead2a8ff31
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # sandbox_file_editor interface component
 
-imports: agent_session, agent_file_alias, tool_provider
-
 ## Intent
 
-Autonomous agents require structured mechanisms to update code and configurations, but unrestrained whole-file overwrites risk destroying context, introducing syntax corruption, and bypassing file access permissions. Furthermore, multi-stage workflows frequently initialize new tasks with boilerplate starter templates that must not clobber existing implementations. The sandbox_file_editor interface component establishes an isolated editing layer restricted strictly to declared writable files, offering precise replacement and line-bounded writes alongside non-destructive template initialization.
+Autonomous agents require structured mechanisms to update code and configurations, but unrestrained whole-file overwrites risk destroying context, introducing syntax corruption, and bypassing file access permissions. The sandbox_file_editor interface component establishes an isolated editing layer restricted strictly to declared writable files, offering precise replacement and line-bounded writes.
 
 By tracking file modifications, revision numbers, and the most recently accessed files, the edit manager enables downstream verification services to determine whether meaningful work was accomplished during an agent turn.
 
@@ -31,7 +29,6 @@ By tracking file modifications, revision numbers, and the most recently accessed
 - A caller supplies a read-write file when validating write access. [validate_write_access_supplied]
 - A caller supplies a file alias when recording file reads. [record_read_supplied]
 - A caller supplies a file alias when recording file edits. [record_edit_supplied]
-- The edit manager writes to workspace files for an agent session. [edit_mgr_writes_workspace]
 - The edit manager tracks session edits across an agent session. [edit_mgr_tracks_session_edits]
 - The edit manager exposes whether workspace file writes occurred during the session. [expose_workspace_writes_occurred]
 - The edit manager computes a file hash for a read-write file from its content. [compute_file_hash]

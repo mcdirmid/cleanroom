@@ -1,15 +1,17 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:46:23Z
-# LAST_CHANGED: 2026-10-09T22:20:00Z
-# CHANGE: Resolve string workspace root path from WorkspaceRoot dataclass
-# CODE_HASH: 7a4c810bf7e5
-# QA_AUDIT: 2026-10-09T21:46:23Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:03:48Z
+# CHANGE: Realize the missing target-content note branches, the whitespace-stripped line-window fallback, the replace-file-content suppression key, the edit delta output branch, the end-line bound, the split omitted-path failure branches with carried warnings, the writes-occurred flag, and pathlib filesystem operations resolved through file path manager workspace roots and bound workspace paths
+# CODE_HASH: 6e367bb9d634
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
+import difflib
 import hashlib
-import os
 from dataclasses import dataclass
-from typing import Any, List, Mapping, Optional, Set, Union, cast
+from pathlib import Path
+from typing import Any, List, Mapping, Optional, Sequence, Set, Union, cast
 from support.lib.lifecycle import InTier, LifecycleRegistry, Singleton, get_default_registry, get_singleton
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier, agent_session
 import update_with_ai.parts.agent.lib.agent_config as agent_config
@@ -21,21 +23,83 @@ from . import tool_provider
 
 # Requirements specified in sandbox_file_editor_impl.pyi
 
+_REPLACE_FILE_CONTENT_SUPPRESSION_KEY = tool_provider.SuppressionKey("replace_file_content")
+
+
+def _failure_response(
+    content: str,
+    reminder: Optional[str] = None,
+    suppression_key: Optional[tool_provider.SuppressionKey] = None,
+) -> tool_provider.ToolResponse:
+    return tool_provider.ToolResponse(
+        is_failed=True,
+        is_terminated=False,
+        content=tool_provider.ToolResponseContent(content),
+        reminder=tool_provider.ToolReminder(reminder) if reminder is not None else None,
+        suppression_key=suppression_key,
+    )
+
+
+def _target_content_missing_message(
+    parameter_names: Set[tool_provider.ParameterName],
+) -> tool_provider.MissingMessage:
+    line_range_supplied = (
+        tool_provider.ParameterName("start_line") in parameter_names
+        or tool_provider.ParameterName("end_line") in parameter_names
+    )
+    if line_range_supplied:
+        return tool_provider.MissingMessage(
+            "start_line and end_line only restrict the search window; they do not identify the text to replace. "
+            "target_content must match existing text in the file."
+        )
+    return tool_provider.MissingMessage(
+        "target_content must match existing text in the file so content can be appended or inserted."
+    )
+
+
+def _stripped_match_offsets(
+    window_lines: Sequence[str], target_lines: Sequence[str]
+) -> List[int]:
+    if not target_lines or len(target_lines) > len(window_lines):
+        return []
+    stripped_target = [line.strip() for line in target_lines]
+    offsets: List[int] = []
+    for offset in range(0, len(window_lines) - len(target_lines) + 1):
+        candidate = [line.strip() for line in window_lines[offset : offset + len(target_lines)]]
+        if candidate == stripped_target:
+            offsets.append(offset)
+    return offsets
+
+
+def _diff_delta(original: str, updated: str) -> str:
+    delta = list(
+        difflib.unified_diff(
+            original.splitlines(),
+            updated.splitlines(),
+            fromfile="before",
+            tofile="after",
+            lineterm="",
+        )
+    )
+    return "\n".join(delta)
+
+
 class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier], Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
         self._file_update_revision = sandbox_file_editor.FileUpdateRevision(0)
         self._last_read_or_edited_file: Optional[agent_file_alias.FileAlias] = None
+        self._writes_occurred = False
 
     @property
     def has_modifications(self) -> bool:
         meta_mgr = get_singleton(src_metadata.SourceMetadataCoordinator)
         node_cfg = get_singleton(agent_node_config.NodeConfig)
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        ws_root = str(getattr(alias_mgr.workspace_root, "path", alias_mgr.workspace_root))
+        ws_root = str(alias_mgr.workspace_root.path)
         for rw_file in node_cfg.read_write_files:
-            disk_path = os.path.join(ws_root, str(rw_file.relative_path))
+            disk_path = str(Path(ws_root) / str(rw_file.workspace_path.path))
             if meta_mgr.is_code_modified(disk_path):
                 return True
         return False
@@ -53,38 +117,52 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier], Sin
 
     def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None:
         self._last_read_or_edited_file = file
-        self._file_update_revision = sandbox_file_editor.FileUpdateRevision(int(self._file_update_revision) + 1)
+        self._writes_occurred = True
+        self._file_update_revision = sandbox_file_editor.FileUpdateRevision(
+            int(self._file_update_revision) + 1
+        )
 
     def file_hash(self, file: agent_file_alias.FileAlias) -> sandbox_file_editor.FileHash:
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        ws_root = str(getattr(alias_mgr.workspace_root, "path", alias_mgr.workspace_root))
-        disk_path = os.path.join(ws_root, str(file.relative_path))
-        if os.path.isfile(disk_path):
-            with open(disk_path, "rb") as f:
-                content = f.read()
-        else:
-            content = b""
-        h = hashlib.md5(content).hexdigest()
-        return sandbox_file_editor.FileHash(h)
+        ws_root = str(alias_mgr.workspace_root.path)
+        relative = (
+            str(file.workspace_path.path)
+            if isinstance(file, agent_file_alias.BoundFile)
+            else str(file.relative_path)
+        )
+        disk_path = Path(ws_root) / relative
+        content = disk_path.read_text(encoding="utf-8") if disk_path.is_file() else ""
+        return sandbox_file_editor.FileHash(hashlib.md5(content.encode("utf-8")).hexdigest())
 
-    def can_write(self, path: Union[agent_file_alias.RelativePath, agent_file_alias.FileAlias]) -> tool_provider.ToolResponse:
+    def can_write(
+        self, path: Union[agent_file_alias.RelativePath, agent_file_alias.FileAlias]
+    ) -> tool_provider.ToolResponse:
         node_cfg = get_singleton(agent_node_config.NodeConfig)
-        rel_path = str(path.relative_path) if isinstance(path, agent_file_alias.FileAlias) else str(path)
-        matching_rw = [f for f in node_cfg.read_write_files if str(f.relative_path) == rel_path]
-        if not matching_rw:
-            return tool_provider.ToolResponse(
-                is_failed=True,
-                is_terminated=False,
-                content=tool_provider.ToolResponseContent(
-                    f"Error: File '{rel_path}' is not a declared read-write file."
-                ),
-                reminder=tool_provider.ToolReminder("Only declared read-write files can be written."),
+        relative = (
+            str(path.relative_path)
+            if isinstance(path, agent_file_alias.FileAlias)
+            else str(path)
+        )
+        matching_rw: Optional[agent_file_alias.ReadWriteFile] = None
+        for rw_file in node_cfg.read_write_files:
+            if (
+                str(rw_file.relative_path) == relative
+                or str(rw_file.workspace_path.path) == relative
+            ):
+                matching_rw = rw_file
+                break
+        if matching_rw is None:
+            return _failure_response(
+                f"Error: File '{relative}' is not a declared read-write file.",
+                "Only declared read-write files can be written.",
             )
-        self.record_file_edit(matching_rw[0])
+        self.record_file_edit(matching_rw)
         return tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
-            content=tool_provider.ToolResponseContent(f"Write access confirmed for '{rel_path}'."),
+            content=tool_provider.ToolResponseContent(
+                f"Write access confirmed for '{relative}'."
+            ),
         )
 
 
@@ -173,6 +251,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             parameter_type=_TargetContentParamType(),
             is_required=True,
             default_value=None,
+            missing_message=_target_content_missing_message,
         )
 
     @property
@@ -241,42 +320,49 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         node_cfg = get_singleton(agent_node_config.NodeConfig)
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        ws_root = str(getattr(alias_mgr.workspace_root, "path", alias_mgr.workspace_root))
+        ws_root = str(alias_mgr.workspace_root.path)
 
-        target_file = cast(Any, actual_parameter_bindings.get(self.path_parameter))
         warning = ""
+        target_file = cast(Any, actual_parameter_bindings.get(self.path_parameter))
+
+        def fail(message: str, reminder: Optional[str] = None) -> tool_provider.ToolResponse:
+            return _failure_response(
+                f"{warning}{message}",
+                reminder,
+                _REPLACE_FILE_CONTENT_SUPPRESSION_KEY,
+            )
 
         if target_file is None:
             last = edit_mgr.last_read_or_edited_file
-            if last is None or not any(f.relative_path == last.relative_path for f in node_cfg.read_write_files):
-                return tool_provider.ToolResponse(
-                    is_failed=True,
-                    is_terminated=False,
-                    content=tool_provider.ToolResponseContent(
-                        "Error: Path parameter omitted and no previous read-write file in session history."
-                    ),
+            if last is None:
+                return fail(
+                    "Error: Path parameter omitted and no file has been read or edited in this session."
+                )
+            declared_rw = [
+                f for f in node_cfg.read_write_files if f.relative_path == last.relative_path
+            ]
+            if not declared_rw:
+                return fail(
+                    f"Error: Path parameter omitted and last read or edited file "
+                    f"'{last.relative_path}' is not a declared read-write file."
                 )
             target_file = last
-            warning = f"Warning: Path omitted, defaulted to last read/edited file '{target_file.relative_path}'.\n"
+            warning = (
+                f"Warning: Path omitted, defaulted to last read or edited file "
+                f"'{target_file.relative_path}'.\n"
+            )
 
-        matching_rw_files = [f for f in node_cfg.read_write_files if f.relative_path == target_file.relative_path]
+        matching_rw_files = [
+            f for f in node_cfg.read_write_files if f.relative_path == target_file.relative_path
+        ]
         if not matching_rw_files:
-            return tool_provider.ToolResponse(
-                is_failed=True,
-                is_terminated=False,
-                content=tool_provider.ToolResponseContent(
-                    f"Error: File '{target_file.relative_path}' is not a declared read-write file."
-                ),
+            return fail(
+                f"Error: File '{target_file.relative_path}' is not a declared read-write file."
             )
         target_rw_file = matching_rw_files[0]
 
-        disk_path = os.path.join(ws_root, str(target_file.relative_path))
-
-        if os.path.isfile(disk_path):
-            with open(disk_path, "r", encoding="utf-8") as f:
-                content = f.read()
-        else:
-            content = ""
+        disk_path = Path(ws_root) / str(target_file.relative_path)
+        content = disk_path.read_text(encoding="utf-8") if disk_path.is_file() else ""
 
         lines = content.splitlines(keepends=True)
         total_lines = len(lines)
@@ -286,34 +372,32 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
 
         if start_line is not None:
             s_line = int(cast(Any, start_line))
-            if s_line < 1 or s_line > total_lines + 1:
-                return tool_provider.ToolResponse(
-                    is_failed=True,
-                    is_terminated=False,
-                    content=tool_provider.ToolResponseContent(
-                        f"Error: start_line {s_line} is out of bounds (1..{total_lines + 1})."
-                    ),
+            if s_line < 1:
+                return fail(
+                    f"Error: start_line {s_line} is out of bounds; it must not be less than one."
+                )
+            if s_line > total_lines + 1:
+                return fail(
+                    f"Error: start_line {s_line} exceeds the total line count plus one "
+                    f"({total_lines + 1})."
                 )
 
         if end_line is not None:
             e_line = int(cast(Any, end_line))
-            if e_line < 1 or e_line > max(1, total_lines):
-                return tool_provider.ToolResponse(
-                    is_failed=True,
-                    is_terminated=False,
-                    content=tool_provider.ToolResponseContent(
-                        f"Error: end_line {e_line} is out of bounds (1..{total_lines})."
-                    ),
+            if e_line < 1:
+                return fail(
+                    f"Error: end_line {e_line} is out of bounds; it must not be less than one."
+                )
+            if e_line > total_lines:
+                return fail(
+                    f"Error: end_line {e_line} exceeds the total line count ({total_lines})."
                 )
 
         if start_line is not None and end_line is not None:
             if int(cast(Any, start_line)) > int(cast(Any, end_line)):
-                return tool_provider.ToolResponse(
-                    is_failed=True,
-                    is_terminated=False,
-                    content=tool_provider.ToolResponseContent(
-                        f"Error: start_line {start_line} exceeds end_line {end_line}."
-                    ),
+                return fail(
+                    f"Error: start_line {int(cast(Any, start_line))} exceeds end_line "
+                    f"{int(cast(Any, end_line))}."
                 )
 
         target_content = str(actual_parameter_bindings.get(self.target_content_parameter))
@@ -325,84 +409,100 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
 
         window_lines = lines[s_idx:e_idx]
         window_text = "".join(window_lines)
+        target_lines = target_content.splitlines()
 
         exact_count = window_text.count(target_content)
-
-        if exact_count == 0:
-            global_text = "".join(lines)
-            if target_content in global_text:
-                locs: List[int] = []
-                pos = 0
-                while True:
-                    pos = global_text.find(target_content, pos)
-                    if pos == -1:
-                        break
-                    line_num = global_text[:pos].count("\n") + 1
-                    locs.append(line_num)
-                    pos += len(target_content)
-                locs_str = ", ".join(str(l) for l in locs)
-                return tool_provider.ToolResponse(
-                    is_failed=True,
-                    is_terminated=False,
-                    content=tool_provider.ToolResponseContent(
-                        f"Error: Target content not found in line range [{s_idx + 1}..{e_idx}], but found at line(s): {locs_str}."
-                    ),
+        stripped_offsets: List[int] = []
+        if exact_count == 0 and not allow_multiple:
+            stripped_offsets = _stripped_match_offsets(window_lines, target_lines)
+            if len(stripped_offsets) > 1:
+                return fail(
+                    f"Error: Target content matches multiple locations "
+                    f"(lines {s_idx + stripped_offsets[0] + 1} and "
+                    f"{s_idx + stripped_offsets[1] + 1}). Include more surrounding lines in the "
+                    f"target content to identify a unique location, or specify start_line and "
+                    f"end_line to narrow the replacement region."
                 )
 
-            return tool_provider.ToolResponse(
-                is_failed=True,
-                is_terminated=False,
-                content=tool_provider.ToolResponseContent(
-                    "Error: Target content not found in specified range."
-                ),
+        if exact_count == 0 and not stripped_offsets:
+            global_text = "".join(lines)
+            if target_content in global_text:
+                locations: List[int] = []
+                pos = global_text.find(target_content)
+                while pos != -1:
+                    locations.append(global_text[:pos].count("\n") + 1)
+                    pos = global_text.find(target_content, pos + len(target_content))
+                located = ", ".join(str(line_number) for line_number in locations)
+                return fail(
+                    f"Error: Target content was not found within the search window "
+                    f"(lines {s_idx + 1}-{e_idx}) but was located at line(s): {located}."
+                )
+            return fail(
+                f"Error: Target content was not found within the search window "
+                f"(lines {s_idx + 1}-{e_idx})."
             )
 
-        if not allow_multiple and exact_count > 1:
-            pos1 = window_text.find(target_content)
-            line1 = s_idx + 1 + window_text[:pos1].count("\n")
-            pos2 = window_text.find(target_content, pos1 + len(target_content))
-            line2 = s_idx + 1 + window_text[:pos2].count("\n")
-            return tool_provider.ToolResponse(
-                is_failed=True,
-                is_terminated=False,
-                content=tool_provider.ToolResponseContent(
-                    f"Error: Target content matches multiple locations (lines {line1}, {line2}). Set allow_multiple=True or narrow start_line/end_line."
-                ),
+        if exact_count > 1 and not allow_multiple:
+            first_pos = window_text.find(target_content)
+            second_pos = window_text.find(target_content, first_pos + len(target_content))
+            first_line = s_idx + 1 + window_text[:first_pos].count("\n")
+            second_line = s_idx + 1 + window_text[:second_pos].count("\n")
+            return fail(
+                f"Error: Target content matches multiple locations "
+                f"(lines {first_line} and {second_line}). Include more surrounding "
+                f"lines in the target content to identify a unique location, or specify start_line "
+                f"and end_line to narrow the replacement region."
             )
 
-        if allow_multiple:
+        if stripped_offsets:
+            offset = stripped_offsets[0]
+            matched_count = len(target_lines)
+            replacement_lines = replacement_content.splitlines(keepends=True)
+            if (
+                replacement_lines
+                and window_lines[offset + matched_count - 1].endswith("\n")
+                and not replacement_lines[-1].endswith("\n")
+            ):
+                replacement_lines[-1] = f"{replacement_lines[-1]}\n"
+            new_window_text = "".join(
+                window_lines[:offset]
+                + replacement_lines
+                + window_lines[offset + matched_count :]
+            )
+        elif allow_multiple:
             new_window_text = window_text.replace(target_content, replacement_content)
         else:
             new_window_text = window_text.replace(target_content, replacement_content, 1)
 
-        new_lines = lines[:s_idx] + [new_window_text] + lines[e_idx:]
-        new_content = "".join(new_lines)
-
+        new_content = "".join(lines[:s_idx]) + new_window_text + "".join(lines[e_idx:])
         if new_content == content:
-            return tool_provider.ToolResponse(
-                is_failed=True,
-                is_terminated=False,
-                content=tool_provider.ToolResponseContent(
-                    "Error: No-op edit; target content and replacement content produce identical file."
-                ),
-                reminder=tool_provider.ToolReminder("No-op edits will fail."),
+            return fail(
+                "Error: No-op edit; the replacement produces no change to the file content.",
+                "The edit had no effect.",
             )
 
-        os.makedirs(os.path.dirname(disk_path), exist_ok=True)
-        with open(disk_path, "w", encoding="utf-8") as f:
-            f.write(new_content)
+        disk_path.parent.mkdir(parents=True, exist_ok=True)
+        disk_path.write_text(new_content, encoding="utf-8")
 
         edit_mgr.record_file_edit(target_rw_file)
+
+        body = f"Successfully updated {target_file.relative_path}."
+        if get_singleton(agent_config.AgentConfig).edit_delta_output:
+            body = f"{body}\n\n{_diff_delta(content, new_content)}"
         return tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
-            content=tool_provider.ToolResponseContent(f"{warning}Successfully updated {target_file.relative_path}."),
-            reminder=tool_provider.ToolReminder("Call check files to verify syntax and types."),
-            suppression_key=tool_provider.SuppressionKey(str(target_file.relative_path)),
+            content=tool_provider.ToolResponseContent(f"{warning}{body}"),
+            reminder=tool_provider.ToolReminder(
+                "Verify syntax and type correctness before making further writes."
+            ),
+            suppression_key=_REPLACE_FILE_CONTENT_SUPPRESSION_KEY,
         )
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         EditManager,
@@ -415,4 +515,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier=agent_session,
     )
 
+
 _initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

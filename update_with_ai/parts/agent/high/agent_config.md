@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-05T04:50:29Z
-CHANGE: Symmetrically introduce conversation limit in italics and refine operational policies lead-in
-CODE_HASH: 0c9b7c71ffad
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Replace the fragment policy lead-in with declarative policy properties and canonicalize policy terminology
+CODE_HASH: 247b6a2a335e
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # agent_config interface component
@@ -19,14 +20,16 @@ Autonomous agent workflows require explicit bounds on conversational depth, auto
 
 A system's *agent config* provides execution parameters for agent sessions.
 
-The agent config provides a *conversation limit* bounding the maximum number of model interaction turns permitted in an agent run, and a *supersede arg keep* limit bounding trailing characters of string arguments preserved when tool responses are superseded.
+A *conversation limit* bounds the number of model interaction turns permitted in an agent run. A *supersede arg keep* limit bounds the number of trailing characters of a superseded string argument retained as a recognizable hint, resolving from agent session configuration.
 
-The agent config provides operational policies governing whether the agent:
+An agent config also provides operational policies governing how the agent behaves during an agent run.
 
-- Injects followups to execute follow-up tool calls specified by tool responses.
+The policies of an agent config are:
 
-- Can use step mode to communicate a guide to the agent progressively.
+- A *follow-up injection* policy directing the agent to execute the follow-up tool calls that tool responses specify.
 
-- Performs startup reads to read declared files at session start.
+- A *step mode* policy permitting the agent to receive a guide progressively.
 
-- Expects editing tools to produce delta output.
+- A *startup read* policy directing the agent to inspect declared files at session start.
+
+- A *delta output* policy directing editing tools to report the changes they make rather than complete file content.

@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:40:42Z
-LAST_CHANGED: 2026-10-09T21:36:15Z
-CHANGE: Contract run controller session tool initialization on agent session entry
-CODE_HASH: a3f778ca5d5a
-SPEC_QA_AUDIT: 2026-10-09T21:40:42Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T03:10:59Z
+CHANGE: Declare polymorphic resolve tool and run controller tier typing
+CODE_HASH: bda0be13040a
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # sandbox_run_control interface component
-
-imports: tool_provider, agent_file_alias, dag_storage, agent_node_config, dag_config
 
 ## Intent
 
@@ -20,7 +18,8 @@ By providing dedicated tools for verification inspection, milestone advancement,
 
 ### Typing
 
-- A resolve tool is a tool defining a resolve target parameter identifying the active node being resolved.
+- A polymorphic resolve tool defines a file alias resolve target parameter identifying the active node being resolved.
+- An agent session's run controller is configured with per-node blame targets and node config verification checks, initializes session tools upon agent session entry, and provides tools for terminating agent sessions and attributing outcomes.
 - The check files tool is an argument-free tool named check_files.
 - The advance tool is an argument-free tool named advance.
 - The submit tool is a resolve tool specifying a change summary parameter.
@@ -59,9 +58,9 @@ By providing dedicated tools for verification inspection, milestone advancement,
 - Session outcome tools are initialized upon session entry, unconditionally installing termination and verification tools while gating the advance tool behind step mode. [initialize_session_tools_on_entry, unconditionally_install_session_tools, install_advance_tool_when_step_mode, tool_provider: [install_tools]]
 - The check files tool evaluates session verification checks, caching results against file hashes and reporting outcomes or failures. [expose_verification_checks, cache_verification_results, reuse_cached_verification_outcome, check_files_updates_outdated_results, check_files_evaluates_checks, check_files_presents_outcomes, check_files_tracks_tested_hashes, check_files_fails_on_verification_failure, agent_node_config: [session_config_verification_checks]]
 - In guide step mode, the advance tool coordinates progressive milestone advancement through guide delivery upon passing verification. [install_advance_tool_when_step_mode, advance_tool_coordinates_step_progression]
-- Concluding tasks via the submit tool validates passing verification, documents modifications, and marks resolved targets clean in the graph. [submit_concludes_nodes_on_pass, submit_marks_target_clean, submit_enforces_change_documentation, dag_storage: [clear_node_messages]]
+- Concluding tasks via the submit tool validates passing verification, documents modifications, and marks resolved targets clean in the graph. [submit_concludes_nodes_on_pass, submit_marks_target_clean, submit_enforces_change_documentation, dag_storage: [mark_node_clean_in_storage]]
 - Resolving active targets terminates the session when all active nodes are resolved, or produces a non-terminating response listing remaining targets when other nodes remain open. [resolve_tool_terminates_when_all_resolved, resolve_tool_lists_remaining_nodes]
-- Attributing task failure via the blame tool records diagnostic explanations blaming upstream dependency nodes. [blame_attributes_upstream_failure, dag_storage: [add_node_messages]]
+- Attributing task failure via the blame tool records diagnostic explanations blaming upstream dependency nodes. [blame_attributes_upstream_failure, dag_storage: [add_feedback_messages, record_feedback_in_metadata]]
 - The get work tool retrieves ready dirty nodes, materializes starter templates, delivers session prompts, and initiates step guidance when configured. [get_work_retrieves_dirty_nodes, get_work_materializes_templates, get_work_delivers_task_prompt, get_work_specifies_advance_followup_in_step_mode, tool_provider: [call_by_name]]
 
 ## Grounding

@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: 61a3f04b613e
+CODE_HASH: 1e687a2fcc63
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_model_config_impl implementation component
@@ -26,7 +27,7 @@ The openai config, agent config, and dag config resolve the active model configu
 
 The openai config, agent config, and dag config load execution parameters and authentication credentials for language model agent runs from a declarative TOML configuration file in the repository root (such as `model_configs.toml`) or user configuration directory.
 
-The openai config provides model execution settings including target model name, base url, timeout duration, sampling temperature, and optional token generation limits. Authentication credentials are bound from designated environment variables specified in the configuration, defaulting to ambient process environment variables.
+The openai config provides model execution settings including target model name, base url, timeout duration, sampling temperature, and token generation limits when constrained. Authentication credentials are bound from designated environment variables specified in the configuration, defaulting to ambient process environment variables.
 
 The agent config provides conversational turn limits and operational policies for agent execution.
 

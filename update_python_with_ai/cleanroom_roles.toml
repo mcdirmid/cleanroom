@@ -23,6 +23,23 @@ tools = [
 active_component_types = ["implementation", "assembly", "interface", "external"]
 verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md"
 
+[roles.scenario]
+name = "scenario"
+persona = "Scenario Author"
+src_pattern = "{unit_dir}/scenarios/{unit_name}.md"
+guide = "update_python_with_ai/guides/high_to_scenario.md"
+template = "update_python_with_ai/templates/scenario_template.md"
+prompt_template = "Files are aligned according to the guide."
+allows_step_mode = true
+role_deps = []
+star_role_deps = ["scenario", "high"]
+feedback_role_deps = ["high"]
+tools = [
+    "update_with_ai.support.lib.build_lint_common",
+]
+active_component_types = ["interface", "implementation"]
+verify_template = "# Scenario files verified against high_to_scenario.md"
+
 [roles.planning]
 name = "planning"
 persona = "Planning Engineer"
@@ -31,7 +48,7 @@ guide = "update_python_with_ai/guides/high_to_planning.md"
 template = "update_python_with_ai/templates/planning_template.md"
 prompt_template = "Files are aligned according to the guide."
 allows_step_mode = true
-role_deps = ["high"]
+role_deps = []
 star_role_deps = ["planning"]
 feedback_role_deps = ["high"]
 tools = [
@@ -39,25 +56,6 @@ tools = [
 ]
 active_component_types = ["implementation", "assembly", "interface"]
 verify_template = "# Planning canvas verified against high_to_planning.md"
-
-[roles.spec_qa]
-name = "spec_qa"
-persona = "Specification QA Arbiter"
-src_pattern = ""
-guide = "update_python_with_ai/guides/spec_qa.md"
-prompt_template = "Files are aligned according to the guide."
-allows_step_mode = false
-role_deps = ["planning"]
-star_role_deps = ["high", "planning"]
-feedback_role_deps = ["planning"]
-tools = [
-    "update_python_with_ai.support.lib.high_lint",
-    "update_python_with_ai.support.lib.spec_lint",
-    "update_python_with_ai.support.lib.build_lint_common",
-]
-active_component_types = ["implementation", "assembly", "interface"]
-verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md && uv run python -m update_python_with_ai.support.lib.spec_lint {unit_dir}/planning/{unit_name}.md"
-verification_success_message = "Specification and planning verified for {unit_name}."
 
 [roles.low]
 name = "low"
@@ -67,33 +65,34 @@ guide = "update_python_with_ai/guides/planning_to_low.md"
 template = "update_python_with_ai/templates/low_template.pyi"
 prompt_template = "Files are aligned according to the guide."
 allows_step_mode = true
-role_deps = ["planning"]
+role_deps = []
 star_role_deps = ["low"]
-silent_role_deps = ["spec_qa"]
 feedback_role_deps = ["planning"]
 tools = [
     "update_with_ai.support.lib.build_lint_common",
 ]
 active_component_types = ["implementation", "assembly", "interface", "external"]
-verify_template = "uv run pyright {unit_dir}/low/{unit_name}.pyi"
+verify_template = "uv run pyright --project update_python_with_ai/pyright_spec.json {unit_dir}/low/{unit_name}.pyi"
 
-[roles.low_qa]
-name = "low_qa"
-persona = "Low-Level QA Arbiter"
+[roles.spec_qa]
+name = "spec_qa"
+persona = "Specification QA Arbiter"
 src_pattern = ""
-guide = "update_python_with_ai/guides/low_qa.md"
+guide = "update_python_with_ai/guides/spec_qa.md"
 prompt_template = "Files are aligned according to the guide."
 allows_step_mode = false
-role_deps = ["low"]
-star_role_deps = ["planning", "low"]
-feedback_role_deps = ["low"]
+role_deps = ["scenario"]
+star_role_deps = ["high", "planning", "low"]
+feedback_role_deps = ["high", "planning", "low"]
 tools = [
+    "update_python_with_ai.support.lib.high_lint",
+    "update_python_with_ai.support.lib.spec_lint",
     "update_python_with_ai.support.lib.low_lint",
     "update_python_with_ai.support.lib.build_lint_common",
 ]
-active_component_types = ["implementation", "assembly", "interface", "external"]
-verify_template = "uv run python -m update_python_with_ai.support.lib.low_lint {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/low/{unit_name}.pyi"
-verification_success_message = "Low-level specification verified for {unit_name}."
+active_component_types = ["implementation", "assembly", "interface"]
+verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md && (! test -f {unit_dir}/planning/{unit_name}.md || uv run python -m update_python_with_ai.support.lib.spec_lint {unit_dir}/planning/{unit_name}.md) && uv run python -m update_python_with_ai.support.lib.low_lint {unit_dir}/low/{unit_name}.pyi && uv run pyright --project update_python_with_ai/pyright_spec.json {unit_dir}/low/{unit_name}.pyi"
+verification_success_message = "Specification, planning, and low-level specification verified for {unit_name}."
 
 [roles.lib]
 name = "lib"
@@ -104,9 +103,9 @@ template = "update_python_with_ai/templates/lib_template.py"
 template_command = "uv run python -m update_python_with_ai.support.lib.lib_lint --scaffold {unit_dir}/lib/{unit_name}.py --pyi {unit_dir}/low/{unit_name}.pyi"
 prompt_template = "Files are aligned according to the guide."
 allows_step_mode = true
-role_deps = ["low"]
+role_deps = []
 star_role_deps = ["low"]
-silent_role_deps = ["low_qa"]
+silent_role_deps = ["spec_qa"]
 silent_cross_role_deps = ["lib"]
 tools = [
     "update_python_with_ai.support.lib.lib_lint",
@@ -125,9 +124,9 @@ template = "update_python_with_ai/templates/test_template.py"
 template_command = "uv run python -m update_python_with_ai.support.lib.test_lint --scaffold {unit_dir}/tests/{unit_name}_test.py --pyi {unit_dir}/low/{unit_name}.pyi"
 prompt_template = "Files are aligned according to the guide."
 allows_step_mode = true
-role_deps = ["low"]
+role_deps = []
 star_role_deps = ["low"]
-silent_role_deps = ["lib", "low_qa"]
+silent_role_deps = ["lib", "spec_qa"]
 stub_role_deps = ["lib"]
 silent_cross_role_deps = ["lib"]
 tools = [
@@ -146,7 +145,7 @@ src_pattern = ""
 guide = "update_python_with_ai/guides/qa.md"
 prompt_template = "Files are aligned according to the guide."
 allows_step_mode = false
-role_deps = ["lib", "test"]
+role_deps = []
 star_role_deps = ["low"]
 feedback_role_deps = ["lib", "test"]
 tools = []
@@ -161,7 +160,7 @@ src_pattern = ""
 guide = "update_python_with_ai/guides/coverage.md"
 prompt_template = "Files are aligned according to the guide."
 allows_step_mode = false
-role_deps = ["qa"]
+role_deps = []
 silent_role_deps = ["qa"]
 star_role_deps = ["low"]
 feedback_role_deps = ["lib", "test"]

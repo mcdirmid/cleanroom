@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-05T05:06:15Z
-CHANGE: Add delegated collaborator statement for loop_node_cleaner and dag_subgraph
-CODE_HASH: f81435cd0992
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Name the lifecycles between the loop cleaner and its collaborators and state scoping declaratively
+CODE_HASH: b56263845f3f
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_cleaner_impl implementation component
@@ -22,12 +23,8 @@ Executing complex multi-node workflows requires scheduling tasks in dependency o
 
 ## Types and Behavior
 
-The loop cleaner coordinates dependency-first topological cleaning across a dag storage.
+Cleaning a target node through the loop cleaner scopes an active subgraph by setting the target node on the dag subgraph, which determines the dependency-first topological order of the reachable nodes.
 
-When cleaning a target node:
+Cleaning then processes ready batches of dirty nodes in topological order, records node visits for each cleaned batch, and halts immediately when the node cleaner communicates that processing cannot continue.
 
-- Target node scoping sets the target node on the dag subgraph to determine dependency-first topological order.
-
-- Cleaning processes ready batches of dirty nodes in topological order, recording node visits for each cleaned batch, and halts immediately if the node cleaner communicates that processing cannot continue.
-
-- Cleaning concludes when the dag subgraph is complete, indicating all reachable nodes in the target subgraph are clean.
+Cleaning concludes when the dag subgraph reports that the target subgraph is complete, meaning every reachable node in the target subgraph is clean in dag storage.

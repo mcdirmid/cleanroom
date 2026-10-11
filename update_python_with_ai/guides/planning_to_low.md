@@ -1,24 +1,26 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-07T05:04:27Z
-LAST_CHANGED: 2026-10-06T12:35:00Z
-CHANGE: add GROUNDING: section to implementation stubs and update collaborator mentioning rules
-CODE_HASH: 47ac02f98743
+LAST_CHANGED: 2026-10-10T21:52:00Z
+CHANGE: remove ASSUMPTIONS, add member parity, authority hierarchy, file grounding rule, grounding validation, and asm rules
+CODE_HASH: 7bf214d4ec11
 -->
 
 # Guide: Planning to Low-Level Specification Alignment
 
 ## Summary
 
-The artifact is a Low-Level Python stub specification (`low/<name>.pyi` or `low/<name>_impl.pyi`) that structurally formalizes `planning/<name>.md`, submitted via `submit(target="<target_file>", change_summary="...")`. In multi-node sessions, multiple low-level specs are processed together by package-relative alias path. External specifications (`low/<name>_ext.pyi`) formalize foreign API documentation, usage snippets, and mechanics from `high/<name>_ext.md` into module docstrings without AST code. Assembly specifications (`high/<name>_asm.md`) formalize to stubs (`low/<name>_asm.pyi`) defining `__initialize__()` with `CONSTITUENTS:`. Specifications declare structural stubs with static type annotations, ontological classification decorators from `framework` (`framework.pyi`), and lifecycle tier declarations from `support.lib.lifecycle` (`support/lib/lifecycle.pyi`).
+The artifact is a Low-Level Python stub specification (`low/<name>.pyi` or `low/<name>_impl.pyi`) that structurally formalizes `planning/<name>.md`, submitted via `submit(target="<target_file>", change_summary="...")`. In multi-node sessions, multiple low-level specs are processed together by package-relative alias path. Authority hierarchy: when planning or high-level specifications and a low-level file disagree, the low-level file is wrong and must align with upstream specifications. External specifications (`low/<name>_ext.pyi`) formalize foreign API documentation, usage snippets, and mechanics from `high/<name>_ext.md` into module docstrings without AST code. Assembly specifications (`low/<name>_asm.pyi`) directly mirror assembly instructions from `high/<name>_asm.md` without standalone planning canvases, defining `__initialize__()` with `CONSTITUENTS:` guaranteeing that every constituent implementation is registered into the lifecycle.
 
-Classes, type parameters, properties, operations, and tier memberships materialize in the AST. Types, records, and variants use domain-qualified compound names (e.g. `CommandResult`, `QueryFilter`, `WidgetPayload`) reflecting domain roles; bare, context-free generic names (such as `Response`, `Parameter`, `Config`, `Data`, `Result`) and standard collection collisions (`List`, `Dictionary`, `Set`) are prohibited. Planning contract requirements are assigned to type invariants (`INVARIANTS:`), caller assumptions (`ASSUMPTIONS:`), operation preconditions (`PRECONDITIONS:`), and operation postconditions (`POSTCONDITIONS:`). Interface stubs (`low/<name>.pyi`) define abstract protocols without collaborator names. Implementation stubs (`low/<name>_impl.pyi`) synthesize planning grounding into literate natural language arguments under `GROUNDING:`, explicitly naming collaborator classes, methods, and private backing fields to serve as an executable blueprint for `lib/`. Invariants of a type hold across all operations of that type and are never repeated as preconditions. Unbound contracts live under `POSTCONDITIONS:` in top-level `__orphan__()`. Verification is conducted by the `low_qa` auditor role.
+Classes, type parameters, properties, operations, and tier memberships materialize in the AST. Types, records, and variants use domain-qualified compound names (e.g. `CommandResult`, `QueryFilter`, `WidgetPayload`). Planning contract requirements are assigned to type invariants (`INVARIANTS:`), caller prerequisites (`PRECONDITIONS:`), and operation outcomes (`POSTCONDITIONS:`). Interface stubs (`low/<name>.pyi`) define abstract protocols without collaborator names. Implementation stubs (`low/<name>_impl.pyi`) maintain 1:1 class parity and full member-level parity with their interfaces, and synthesize planning grounding into natural language arguments under `GROUNDING:` citing valid collaborator classes and methods. A specification may name a concrete file literal only if that file is its own artifact, named in its own planning; knowledge of external file formats, host markers, or shared state files must go through an imported `_ext` external specification. Verification is conducted by the `spec_qa` auditor role.
 
 > META: "Low-level specifications translate Planning Canvas specifications into formal Python interface stubs, type-level tier hierarchies, atomic contracts, and implementation grounding arguments under GROUNDING: without relational Datalog syntax."
 
 ## Lint checks
 
 - [ ] Top-level statements consist strictly of imports, classes, type aliases, at most one `def __orphan__() -> None:` (non-assembly specs), at most one `def __initialize__() -> None:` (assembly specs `<name>_asm.pyi`), and optional module docstrings
-- [ ] In implementation specifications (`<name>_impl.pyi`), top-level imports declare all non-external modules specified in front-matter `imports:` of the planning specification (`planning/<name>_impl.md`)
+- [ ] In implementation specifications (`<name>_impl.pyi`), top-level imports declare all non-external modules specified in front-matter `imports:` of the high-level specification (`high/<name>_impl.md`)
+- [ ] In implementation specifications (`<name>_impl.pyi`), every imported module must be used in the AST or cited in at least one `GROUNDING:` docstring
+- [ ] Implementation stubs maintain 1:1 member parity with their implemented interface: every `@property` and `@operation` declared on an interface class must have an `@override` member on the implementing class
 - [ ] External specification stubs (`<name>_ext.pyi`) contain strictly a module docstring with `## External Mechanics & API Documentation`, `## Build Dependencies`, and `## Usage Snippets` sections without Python AST code
 - [ ] Top-level `__orphan__()` and `__initialize__()` take no parameters, return `None`, have no decorators, and contain strictly a docstring followed by `...`
 - [ ] Top-level `__orphan__()` docstrings contain strictly a summary and `POSTCONDITIONS:`; `__initialize__()` docstrings contain strictly a summary and `CONSTITUENTS:`
@@ -26,40 +28,30 @@ Classes, type parameters, properties, operations, and tier memberships materiali
 - [ ] `@singleton_type` classes designate active services or tier definitions, expressing subordinate tier membership through `InTier[TierType]`
 - [ ] `@poly_type`, `@data_type`, and `@variant` decorators take no arguments
 - [ ] Subordinate lifecycle tiers inherit from `ChildTierOf[ParentTier]` where `ParentTier` is a declared `LifecycleTier` type
-- [ ] `@variant` classes inherit from a `@data_type` or another `@variant`, never from an active service
-- [ ] `@singleton_type` and `@poly_type` classes inherit from polymorphic interfaces, abstract services, or `InTier[TierType]`, never from data types
-- [ ] `@data_type` classes never inherit from active services; a `@data_type` may extend a `@poly_type` only if the polytype has no stateful requirements and the data type satisfies all polytype requirements
-- [ ] Every `@data_type` declares at least one property or base type, or serves as a variant sum-type root in the module
 - [ ] In `@singleton_type` and `@poly_type` classes, every member is decorated with either `@property` or `@operation`, never both or neither
-- [ ] Overriding members are decorated with `@override` alongside `@property` or `@operation`; operations may specialize their return type to a covariant subtype when the override guarantees a restricted outcome
+- [ ] Overriding members are decorated with `@override` alongside `@property` or `@operation`
 - [ ] Every class member takes `self` as its first parameter; `@property` methods take only `self`
 - [ ] All positional parameters after `self` and all method return types declare explicit type annotations
-- [ ] Every class and member body consists strictly of an optional docstring followed by `...`; executable statements, assignments, expressions, loops, conditionals, and `pass` are prohibited
-- [ ] Every class and member docstring begins with a concise summary description without an artificial header
-- [ ] Docstring section headers are closed strictly to `Args:`, `Returns:`, `CONSTITUENTS:`, `INVARIANTS:`, `ASSUMPTIONS:`, `PRECONDITIONS:`, `POSTCONDITIONS:`, and `GROUNDING:` (in `_impl.pyi`)
+- [ ] Member bodies consist strictly of an optional docstring followed by `...`; executable statements, assignments, loops, conditionals, and `pass` are prohibited
+- [ ] Docstring section headers are closed strictly to `Args:`, `Returns:`, `CONSTITUENTS:`, `INVARIANTS:`, `PRECONDITIONS:`, `POSTCONDITIONS:`, `GROUNDING:` (in `_impl.pyi`), `Raises:`, and `Yields:`
+- [ ] The `ASSUMPTIONS:` docstring section is strictly prohibited; caller prerequisites belong under `PRECONDITIONS:`
 - [ ] Relational predicate headers (`NEW_PREDICATES:`, `RULES:`, `GROUNDING_*`) are strictly prohibited
-- [ ] Entries under `CONSTITUENTS:`, `INVARIANTS:`, `ASSUMPTIONS:`, `PRECONDITIONS:`, `POSTCONDITIONS:`, and `GROUNDING:` start with `- `
-- [ ] Sentences under `INVARIANTS:`, `ASSUMPTIONS:`, `PRECONDITIONS:`, `POSTCONDITIONS:`, and `GROUNDING:` end with a period (`.`)
-- [ ] Requirements covered by static types (return types, non-null fields, parameter types) are prohibited; contracts contain strictly dynamic behaviors, branches, failure dispatch, and state transitions
-- [ ] Preconditions under `PRECONDITIONS:` state caller obligations and operation invocation requirements
-- [ ] Invariants of a type are declared strictly under `INVARIANTS:` on the enclosing type and are never repeated as preconditions on operations of that type
-- [ ] Types, records, and variants avoid bare generic names (such as `Response`, `Parameter`, `Config`, `Data`, `Result`) and primitive collisions (`List`, `Dictionary`, `Set`), using domain-qualified names instead (e.g. `CommandResult`, `QueryFilter`, `WidgetPayload`, `ElementSequence`)
+- [ ] Entries under `CONSTITUENTS:`, `INVARIANTS:`, `PRECONDITIONS:`, `POSTCONDITIONS:`, and `GROUNDING:` start with `- `
+- [ ] Sentences under `INVARIANTS:`, `PRECONDITIONS:`, `POSTCONDITIONS:`, and `GROUNDING:` end with a period (`.`)
 
 ## Document layout and imports
 
-- [ ] Specifications import structural decorators (`singleton_type`, `poly_type`, `data_type`, `variant`, `operation`, `override`) from `framework` (`framework.pyi`)
-- [ ] Specifications import lifecycle tier primitives (`ChildTierOf`, `RootTier`, `SystemTier`, `InTier`, `get_tier`) from `support.lib.lifecycle` (`support/lib/lifecycle.pyi`)
-- [ ] Standard collection and meta-type primitives are imported from `typing`
-- [ ] Imported types from sibling or external specifications use direct symbol imports (`from <module> import <Type>`) or module imports (`import <module>`)
-- [ ] Implementation specifications (`<name>_impl.pyi`) import implemented interface modules directly (`import <module>`) and preserve 1:1 class name parity
+- [ ] Specifications import structural decorators (`singleton_type`, `poly_type`, `data_type`, `variant`, `operation`, `override`) from `framework`
+- [ ] Specifications import lifecycle tier primitives (`ChildTierOf`, `RootTier`, `SystemTier`, `InTier`, `get_tier`) from `support.lib.lifecycle`
+- [ ] Imported types from sibling or external specifications use direct symbol imports or module imports
+- [ ] Implementation specifications (`<name>_impl.pyi`) import implemented interface modules directly (`import <module>`) and preserve 1:1 class name and member parity
 - [ ] Implementation specifications import collaborator modules providing capabilities cited under `GROUNDING:`
-- [ ] Assembly specifications (`<name>_asm.pyi`) define strictly `def __initialize__() -> None:` with a summary description and `CONSTITUENTS:` docstring section listing constituent modules
+- [ ] Assembly specifications (`<name>_asm.pyi`) define strictly `def __initialize__() -> None:` with a summary and `CONSTITUENTS:` docstring section listing constituent modules mirroring HLS `assembles:`
 - [ ] Free-floating `#` comments are prohibited; all narrative justifications and contracts live exclusively inside triple-quoted docstrings
-- [ ] Classes are separated by two blank lines, and class members are separated by one blank line
+- [ ] Dead imports are prohibited; every imported module must be used in type signatures, inheritance, or cited in `GROUNDING:`
 
 ## Ontological classification and lifecycle tiers
 
-- [ ] Ontological classification and lifecycle semantics conform to `framework.pyi` and `support/lib/lifecycle.pyi` definitions
 - [ ] Stateful coordinators or singletons map to `@singleton_type` classes inheriting `InTier[TierType]`
 - [ ] Root lifecycle tiers subclass `RootTier`; subordinate lifecycle tiers subclass `ChildTierOf[ParentTier]` decorated with `@singleton_type("system")`
 - [ ] Members of a lifecycle tier express tier membership by inheriting `InTier[TierType]` on their class definition
@@ -67,79 +59,56 @@ Classes, type parameters, properties, operations, and tier memberships materiali
 - [ ] Open multiton capabilities or polymorphic actions map to `@poly_type` without lifecycle arguments
 - [ ] Passive entities, value objects, structural records, and messages map to `@data_type`
 - [ ] Discriminated sub-classifications and closed sum-type branches map to `@variant` subclassing their base data type
-- [ ] Base data types with variants and sum-type roots declare `@dataclass(frozen=True, init=False)` with body `...`
-- [ ] Leaf `@data_type` and `@variant` classes declare `@dataclass(frozen=True)` and define state directly as typed dataclass fields (`field_name: Type = ...`), automatically synthesizing constructor parameters and immutable properties
-- [ ] Dataclass fields on `@data_type` and `@variant` classes are documented under `Args:` in the class docstring; explicit `def __init__` methods or `@property` getters on dataclasses are prohibited
-- [ ] Singletons never declare containment hierarchies; services in the same tier access each other as flat peer collaborators
-- [ ] Data types never inherit from active singleton services; a data type may extend a stateless `@poly_type` protocol provided all polytype requirements are satisfied
+- [ ] Leaf `@data_type` and `@variant` classes declare `@dataclass(frozen=True)` and define state directly as typed dataclass fields documented under `Args:`
+- [ ] Data types never inherit from active singleton services; a data type may extend a stateless `@poly_type` protocol provided all requirements are satisfied
 
 ## Members and signatures
 
-- [ ] Attributes, exposed states, and entity references in active services and polymorphic interfaces (`@singleton_type`, `@poly_type`) map to `@property` methods, whereas state fields in `@data_type` and `@variant` classes map directly to typed dataclass fields
-- [ ] Actions, capabilities, and callable behaviors introduced as operations in `planning/<name>.md` map to `@operation` methods
-- [ ] When a relationship is established dynamically at runtime, an initialization method (`@operation def initialize(self) -> None:`) is anchored directly to the registering entity
-- [ ] Argument concepts introduced in operation descriptions map to typed positional arguments
+- [ ] Attributes and exposed states in active services map to `@property` methods, whereas state fields in `@data_type` classes map to typed dataclass fields
+- [ ] Actions and callable behaviors map to `@operation` methods
 - [ ] Domain string concepts representing names, descriptions, or identifiers declare specialized `NewType` definitions rather than bare `str` primitives
-- [ ] Untyped or heterogeneous values requiring existential or dependent type constraints at verification time declare a specialized `NewType` on `object`; declaring `NewType` on `Any` is prohibited
-- [ ] Wire-format representations declare explicit type aliases using Python 3.12 type syntax rather than `NewType`
-- [ ] Custom collection wrappers and bespoke named set classes are prohibited; associative collections map strictly to standard Python `Mapping[KT, VT]`
-- [ ] Operations accepting arbitrary key-value inputs map parameters to `Mapping[str, Any]`, while operations accepting structured domain inputs map parameters to typed parameter models or domain data types
-- [ ] Entities parameterized by actual, wire, element, or key and value types map to generic classes declared with Python 3.12 type parameter syntax
-- [ ] Parameterized operations and properties use declared type parameters directly in parameter and return type annotations
-- [ ] References to parameterized types declare explicit type arguments when known, reserving bare generic references or explicit `Any` type arguments strictly for heterogeneous collections
+- [ ] Associative collections map strictly to standard Python `Mapping[KT, VT]`; custom collection classes are prohibited
+- [ ] Operations accepting arbitrary key-value inputs map parameters to `Mapping[str, Any]`
+- [ ] Generic classes and parameterized operations declare Python 3.12 type parameter syntax
 - [ ] Return types map deterministically to standard Python types: `str`, `int`, `bool`, `None`, and tuples for paired compound outcomes
 
-## Invariants, Assumptions, Preconditions, and Postconditions
+## Invariants, Preconditions, and Postconditions
 
-- [ ] Planning contracts are assigned deterministically to the owning structural entity: type-level guarantees and state consistency rules map to `INVARIANTS:`, caller/environment guarantees map to `ASSUMPTIONS:`, invocation prerequisites map to `PRECONDITIONS:`, and operational outcomes map to `POSTCONDITIONS:`
-- [ ] Caller assumptions under `ASSUMPTIONS:` define caller-established domain facts and environmental guarantees that the callee accepts axiomatically; callee stubs and implementations never specify defensive checks, branch logic, or error outcomes for items under `ASSUMPTIONS:`
-- [ ] Type invariants under `INVARIANTS:` define invariants preserved across instances of the class (such as name uniqueness within a collection)
-- [ ] Subtypes inherit all `INVARIANTS:` and `ASSUMPTIONS:` from base types transitively; invariants and assumptions are conjoined and must never be duplicated or copied down into subtype docstrings
-- [ ] Caller preconditions under `PRECONDITIONS:` state obligations that callers must establish at invocation time; overriding operations must not strengthen or add caller preconditions
-- [ ] Invariants declared on a type hold across all operations of that type and are never repeated as preconditions on operations of that type
-- [ ] Postconditions under `POSTCONDITIONS:` define observable outcomes, state updates, produced responses, and failure dispatch resulting from execution
-- [ ] Overriding operations inherit supertype `POSTCONDITIONS:` and may only strengthen them with subtype-specific outcomes; derived components must not copy-paste unwoven base requirements
-- [ ] Conditional requirements and failure branches are formulated as atomic normative clauses using exact syntax: `- WHEN <condition>, MUST <outcome>.`
-- [ ] Unconditional postconditions, state updates, and invariants are formulated as normative assertions using exact syntax: `- MUST <outcome>.`
-- [ ] When an operation returns a response record or produces diagnostic feedback on failure, postconditions specify the exact error string template or diagnostic phrase in double quotes so tests can assert exact content
-- [ ] When an operation signature returns a pure value rather than a response record, failure branches map to declared domain exceptions raised with diagnostic feedback formatted as specified in quotes
-- [ ] Unexpected system crashes, memory exhaustion, and uncontracted runtime exceptions are non-concerns excluded from specifications
-- [ ] One-way conditional preservation — when source planning specifies "A when B", postconditions preserve it strictly as a one-way guarantee (`- WHEN B, MUST A.`); translating "when" into a biconditional or synthesizing the uncontracted converse is strictly prohibited unless explicitly contracted
-- [ ] Constant properties from planning declare explicit postconditions on the property method when first specialized in an interface: `- MUST return '<exact_name>'.`
-- [ ] No verbatim copy-down to refinements/subtypes — postconditions do not need to be copied down to overrides or implementation stubs verbatim; if an override has nothing to add beyond its supertype contract, do not add anything (leave member body as `...`)
-- [ ] Mentioning collaborators in interface stubs is strictly prohibited — interface stubs (`low/<name>.pyi`) must never name specific collaborator services, classes, or managers in docstrings, preconditions, or postconditions; state requirements state sources generically (e.g. `- MUST expose declared read-only files from other objects.`)
-- [ ] Data provenance in postconditions — operations and properties producing composite records or transformed data specify explicit derivation rules for constituent fields, avoiding floating output records with ungrounded fields
-- [ ] Sections without entries are omitted rather than left with empty headers
+- [ ] Planning contracts are assigned deterministically: state consistency rules map to `INVARIANTS:`, invocation prerequisites map to `PRECONDITIONS:`, and operational outcomes map to `POSTCONDITIONS:`
+- [ ] Caller preconditions under `PRECONDITIONS:` state obligations callers must satisfy; callee stubs never specify defensive checks or branches for uncontracted caller errors
+- [ ] Type invariants under `INVARIANTS:` define guarantees preserved across instances and are never repeated as preconditions on operations of that type
+- [ ] Subtypes inherit all `INVARIANTS:` from base types transitively; invariants must never be duplicated into subtype docstrings
+- [ ] Overriding operations inherit supertype `POSTCONDITIONS:` and must not copy-paste base requirements verbatim
+- [ ] Redundancy decision procedure: if a method signature mechanically guarantees a requirement (such as returning a collection), delete the postcondition bullet; if the signature does not encode the property's semantic meaning (e.g. `-> bool` does not guarantee 'reflects current session state'), the postcondition bullet is legitimate and must be retained
+- [ ] Conditional requirements and failure branches use exact normative syntax: `- WHEN <condition>, MUST <outcome>.`
+- [ ] Unconditional postconditions and state updates use exact normative syntax: `- MUST <outcome>.`
+- [ ] When an operation returns a response record or produces diagnostic feedback on failure, postconditions specify the exact error string template in double quotes
+- [ ] One-way conditional preservation: when source planning specifies "A when B", postconditions preserve it strictly as `- WHEN B, MUST A.`; synthesizing the uncontracted converse is prohibited
+- [ ] Mentioning collaborators in interface stubs is strictly prohibited; interface stubs (`low/<name>.pyi`) must never name specific collaborator services or classes
+- [ ] A specification may name a concrete file literal only if that file is its own artifact, named in its own planning; shared file formats, markers, or conventions must be imported from an `_ext` external specification
 
 ## Grounding arguments in implementation specifications
 
-- [ ] Implementation stubs (`low/<name>_impl.pyi`) synthesize the grounded knowledge requirements from `planning/<name>_impl.md` into natural language arguments under `GROUNDING:` in class and member docstrings
+- [ ] Implementation stubs (`low/<name>_impl.pyi`) synthesize grounded knowledge requirements into natural language arguments under `GROUNDING:` in class and member docstrings
 - [ ] `GROUNDING:` sections appear strictly in implementation stubs (`low/<name>_impl.pyi`) and are strictly prohibited in interface stubs (`low/<name>.pyi`)
-- [ ] `GROUNDING:` arguments explicitly name imported components, collaborator classes (e.g. `NodeConfig`, `DagStorage`, `EditManager`), and collaborator methods/properties (e.g. `DagStorage.materialize_template`, `EditManager.has_modifications`)
+- [ ] `GROUNDING:` arguments explicitly name imported components, collaborator classes, and collaborator methods/properties
+- [ ] Grounding citations must cite valid `Class.member` or `module.member` tokens that genuinely exist on the referenced component specification
 - [ ] `GROUNDING:` arguments describe how internal backing collections and state fields are accessed or mutated to satisfy inherited deferred requirements
-- [ ] `GROUNDING:` arguments provide a clear, unambiguous architectural blueprint for library implementers (`lib/<name>_impl.py`) without requiring pseudo-code stubs
+- [ ] Distinguishing copy-down from grounding: inherited postconditions must not be repeated, but `GROUNDING:` must explicitly name the collaborator member providing the capability
 
 ## Common pitfalls
 
-- [ ] Collaborator leakage in interfaces — naming specific collaborator classes or managers in interface stubs (`low/<name>.pyi`) instead of keeping them abstract
-- [ ] Missing GROUNDING: in implementations — omitting the `GROUNDING:` section on implementation classes or operations in `low/<name>_impl.pyi`
+- [ ] Using prohibited ASSUMPTIONS section — declaring `ASSUMPTIONS:` in docstrings instead of mapping caller prerequisites to `PRECONDITIONS:`
+- [ ] Missing member parity — failing to implement all interface-declared operations and properties in `low/<name>_impl.pyi`
+- [ ] Floating file names — hardcoding file names or format conventions without importing the defining `_ext` component
+- [ ] Fabricated grounding citations — citing non-existent collaborator methods or classes in `GROUNDING:`
+- [ ] Collaborator leakage in interfaces — naming specific collaborator classes or managers in interface stubs (`low/<name>.pyi`)
+- [ ] Missing GROUNDING in implementations — omitting `GROUNDING:` sections on implementation classes or operations in `low/<name>_impl.pyi`
 - [ ] Relational logic leakage — including `NEW_PREDICATES:`, `RULES:`, or `GROUNDING_*` clauses in low-level specifications
-- [ ] Using passive descriptive prose instead of normative `WHEN <condition>, MUST <outcome>.` clauses
-- [ ] Conflating multiple failure modes into a single compound requirement bullet instead of writing atomic bullets
-- [ ] Repeating structural AST facts (properties, base classes, return types, or required response record fields) as requirement bullets under `POSTCONDITIONS:`
-- [ ] Redundant type requirements — writing requirement bullets that merely restate guarantees already enforced by static types
+- [ ] Redundant type requirements — writing requirement bullets that merely restate guarantees already mechanically enforced by static types
 - [ ] Redundant precondition repetition — repeating an invariant of a type as a precondition on an operation within that type
-- [ ] Copy-down requirement duplication — copying down unwoven base protocol requirements into subtype specifications instead of leveraging transitive contract inheritance
-- [ ] Clobbering generic type parameters or variant hierarchies during alignment reconciliation
-- [ ] Using string literals or runtime values for lifecycle tiers instead of `ChildTierOf[ParentTier]` and `InTier[TierType]`
-- [ ] Vague failure outcomes — writing failure postconditions with paraphrased descriptions instead of exact quoted error templates or phrases
-- [ ] Free-floating `#` comments outside triple-quoted docstrings
+- [ ] Copy-down requirement duplication — copying down unwoven base protocol postconditions into subtype specifications
+- [ ] Dead imports — declaring module imports in stubs that are never used in AST types or cited in `GROUNDING:`
 - [ ] Missing `@operation` decorator on non-property methods
 - [ ] Missing type annotations on operation parameters or return types
 - [ ] Using `pass` or executable logic in member bodies instead of `...`
-- [ ] Attributing service operations or failure rules to passive `@data_type` records instead of active services or top-level `__orphan__()`
-- [ ] Defining redundant `__init__` or `@property` getters on dataclasses instead of declaring fields documented under `Args:` in class docstring
-- [ ] Generic type names and collisions — naming domain types or variants with bare generic words instead of domain-qualified names
-- [ ] Translating if to if and only if — expanding a one-way conditional (`- WHEN B, MUST A.`) into a biconditional with an invented converse
-- [ ] Declaring NewType on Any or union types — using `NewType("...", Any)` instead of `NewType("...", object)`, or attempting to use `NewType` for union types instead of Python 3.12 type aliases
-- [ ] Origin amnesia — specifying that an operation or property produces a composite record without defining derivation rules for its constituent fields

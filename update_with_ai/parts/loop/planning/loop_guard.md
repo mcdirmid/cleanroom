@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: ce82718e95a0
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:06:38Z
+CHANGE: Declare loop guard tracking and same-location edit detection per the high-level contract
+CODE_HASH: be0772062935
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_guard interface component
-
-imports: tool_provider
 
 ## Intent
 
@@ -23,11 +21,12 @@ By distinguishing repetitive oscillations from productive tool invocations, the 
 - A loop reminder provides diagnostic feedback warning an agent of detected repetition.
 - A loop failure signals that an agent session has failed due to unresolvable repetition.
 - A loop failure carries an explanation.
+- An agent session's loop guard tracks repetitive execution patterns across turns.
 
 ### Contracts
 
 - The loop guard evaluates consecutive executions of identical tools. [evaluate_consecutive_tools]
-- The loop guard evaluates consecutive executions of identical file edits. [evaluate_consecutive_edits]
+- The loop guard evaluates consecutive edits to the same file location. [evaluate_consecutive_edits]
 - The loop guard produces a loop reminder when consecutive repetitions reach a warning threshold. [produce_loop_reminder_at_warning]
 - The loop guard produces a loop failure communicating session termination when consecutive repetitions reach a fatal threshold. [produce_loop_failure_at_fatal]
 - The loop guard clears repetition tracking when a tool execution demonstrates forward progress. [clear_repetition_on_progress]

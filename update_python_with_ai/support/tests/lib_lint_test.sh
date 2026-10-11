@@ -1017,6 +1017,222 @@ else
     fail=1
 fi
 
+# Case 37: interface module public functions must align with grounding specification
+mkdir -p "$tmp/c37/lib" "$tmp/c37/low"
+
+# 37a: uncontracted public function in interface module -> rejected
+cat > "$tmp/c37/low/calc.pyi" <<'EOF'
+from typing import Protocol
+from framework import poly_type
+
+@poly_type
+class Calculator(Protocol):
+    def add(self, a: int, b: int) -> int:
+        ...
+EOF
+
+cat > "$tmp/c37/lib/calc.py" <<'EOF'
+from typing import Protocol
+
+class Calculator(Protocol):
+    def add(self, a: int, b: int) -> int:
+        ...
+
+def compute_sum(a: int, b: int) -> int:
+    return a + b
+EOF
+
+if ( cd "$tmp/c37" && python3 "$bin/lib_lint.py" lib/calc.py --pyi low/calc.pyi 2>"$tmp/c37/err_37a.log" ); then
+    echo "FAIL: c37a expected rejection of uncontracted public function in interface module" >&2
+    fail=1
+else
+    echo "PASS: c37a rejected uncontracted public function in interface module"
+fi
+check "c37a uncontracted function diagnostic" "$tmp/c37/err_37a.log" "public function 'compute_sum' is defined in interface module but is not declared in grounding specification 'calc.pyi'; interface modules must not contain uncontracted runtime functions"
+
+# 37b: contracted public function declared in .pyi -> accepted
+cat > "$tmp/c37/low/calc_with_func.pyi" <<'EOF'
+def compute_sum(a: int, b: int) -> int:
+    ...
+EOF
+
+cat > "$tmp/c37/lib/calc_with_func.py" <<'EOF'
+def compute_sum(a: int, b: int) -> int:
+    return a + b
+EOF
+
+if ( cd "$tmp/c37" && python3 "$bin/lib_lint.py" lib/calc_with_func.py --pyi low/calc_with_func.pyi ); then
+    echo "PASS: c37b accepted contracted public function in interface module"
+else
+    echo "FAIL: c37b expected success for contracted public function in interface module" >&2
+    fail=1
+fi
+
+# 37c: spec declares public function missing in interface module -> rejected
+cat > "$tmp/c37/lib/calc_missing.py" <<'EOF'
+class Other:
+    pass
+EOF
+
+cat > "$tmp/c37/low/calc_missing.pyi" <<'EOF'
+class Other:
+    ...
+
+def required_func() -> None:
+    ...
+EOF
+
+if ( cd "$tmp/c37" && python3 "$bin/lib_lint.py" lib/calc_missing.py --pyi low/calc_missing.pyi 2>"$tmp/c37/err_37c.log" ); then
+    echo "FAIL: c37c expected failure when function declared in spec is missing" >&2
+    fail=1
+else
+    echo "PASS: c37c rejected interface module missing declared spec function"
+fi
+check "c37c missing function diagnostic" "$tmp/c37/err_37c.log" "function 'required_func' declared in grounding specification 'calc_missing.pyi' is not defined in library code"
+
+# 37d: signature mismatch in top-level function -> rejected
+cat > "$tmp/c37/low/calc_sig.pyi" <<'EOF'
+def compute_value(x: int) -> int:
+    ...
+EOF
+
+cat > "$tmp/c37/lib/calc_sig.py" <<'EOF'
+def compute_value(x: str) -> int:
+    return 0
+EOF
+
+if ( cd "$tmp/c37" && python3 "$bin/lib_lint.py" lib/calc_sig.py --pyi low/calc_sig.pyi 2>"$tmp/c37/err_37d.log" ); then
+    echo "FAIL: c37d expected rejection of top-level function parameter type mismatch" >&2
+    fail=1
+else
+    echo "PASS: c37d rejected top-level function parameter type mismatch"
+fi
+check "c37d sig mismatch diagnostic" "$tmp/c37/err_37d.log" "parameter 'x' type mismatch in 'compute_value': specification 'calc_sig.pyi' declares 'int', implementation defines 'str'"
+
+# 37e: implementation module with top-level helper -> not rejected by check_public_functions
+cat > "$tmp/c37/low/worker_impl.pyi" <<'EOF'
+from support.lib.lifecycle import system
+from framework import singleton_type
+
+@singleton_type("system")
+class Worker:
+    def run(self) -> None:
+        ...
+EOF
+
+cat > "$tmp/c37/lib/worker_impl.py" <<'EOF'
+from support.lib.lifecycle import Singleton, LifecycleRegistry, get_default_registry, system
+from typing import Optional
+
+class Worker(Singleton):
+    tier = system
+    def run(self) -> None:
+        pass
+
+def helper_util(x: int) -> int:
+    return x + 1
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(Worker, keys=[Worker], tier=system)
+
+_initialize_ = __initialize__
+EOF
+
+if ( cd "$tmp/c37" && python3 "$bin/lib_lint.py" lib/worker_impl.py --pyi low/worker_impl.pyi 2>"$tmp/c37/err_37e.log" ); then
+    echo "PASS: c37e implementation module with top-level helper accepted"
+else
+    echo "FAIL: c37e failed unexpectedly on implementation module helper" >&2
+    cat "$tmp/c37/err_37e.log" >&2
+    fail=1
+fi
+
+# Case 38: implementation module lifecycle maintenance (auto-generation and migration)
+mkdir -p "$tmp/c38/lib" "$tmp/c38/low"
+cat > "$tmp/c38/low/service_impl.pyi" <<'EOF'
+from support.lib.lifecycle import system
+from framework import singleton_type
+
+@singleton_type("system")
+class Service:
+    def run(self) -> None:
+        ...
+EOF
+
+# 38a: missing __initialize__ is auto-generated
+cat > "$tmp/c38/lib/service_impl.py" <<'EOF'
+from support.lib.lifecycle import Singleton, system
+
+class Service(Singleton):
+    tier = system
+    def run(self) -> None:
+        pass
+EOF
+
+if ( cd "$tmp/c38" && python3 "$bin/lib_lint.py" lib/service_impl.py --pyi low/service_impl.pyi 2>"$tmp/c38/err_38a.log" ); then
+    echo "PASS: c38a missing __initialize__ auto-generated"
+else
+    echo "FAIL: c38a failed on missing __initialize__ auto-generation" >&2
+    cat "$tmp/c38/err_38a.log" >&2
+    fail=1
+fi
+check "c38a auto-gen marker start" "$tmp/c38/lib/service_impl.py" "# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---"
+check "c38a auto-gen marker end" "$tmp/c38/lib/service_impl.py" "# --- END CLEANROOM AUTO-GENERATED ---"
+check "c38a initialize func" "$tmp/c38/lib/service_impl.py" "def __initialize__"
+check "c38a register singleton" "$tmp/c38/lib/service_impl.py" "reg\.register_singleton("
+check "c38a initialize alias" "$tmp/c38/lib/service_impl.py" "_initialize_ = __initialize__"
+
+# 38b: legacy un-delimited block is migrated and deduplicated
+cat > "$tmp/c38/lib/service_impl.py" <<'EOF'
+from support.lib.lifecycle import Singleton, LifecycleRegistry, get_default_registry, system
+from typing import Optional
+
+class Service(Singleton):
+    tier = system
+    def run(self) -> None:
+        pass
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(Service, keys=[Service], tier=system)
+
+_initialize_ = __initialize__
+EOF
+
+if ( cd "$tmp/c38" && python3 "$bin/lib_lint.py" lib/service_impl.py --pyi low/service_impl.pyi 2>"$tmp/c38/err_38b.log" ); then
+    echo "PASS: c38b legacy __initialize__ migrated"
+else
+    echo "FAIL: c38b failed on legacy __initialize__ migration" >&2
+    cat "$tmp/c38/err_38b.log" >&2
+    fail=1
+fi
+
+init_count=$(grep -c "def __initialize__" "$tmp/c38/lib/service_impl.py" || true)
+alias_count=$(grep -c "_initialize_ = __initialize__" "$tmp/c38/lib/service_impl.py" || true)
+if [ "$init_count" -eq 1 ] && [ "$alias_count" -eq 1 ]; then
+    echo "PASS: c38b no duplicate __initialize__ or alias"
+else
+    echo "FAIL: c38b found duplicate __initialize__ (count: $init_count) or alias (count: $alias_count)" >&2
+    fail=1
+fi
+
+# 38c: idempotent re-run leaves exactly one delimited block
+if ( cd "$tmp/c38" && python3 "$bin/lib_lint.py" lib/service_impl.py --pyi low/service_impl.pyi 2>"$tmp/c38/err_38c.log" ); then
+    echo "PASS: c38c idempotent re-run succeeded"
+else
+    echo "FAIL: c38c failed on idempotent re-run" >&2
+    cat "$tmp/c38/err_38c.log" >&2
+    fail=1
+fi
+
+init_count=$(grep -c "def __initialize__" "$tmp/c38/lib/service_impl.py" || true)
+if [ "$init_count" -eq 1 ]; then
+    echo "PASS: c38c exactly one __initialize__ after re-run"
+else
+    echo "FAIL: c38c found $init_count __initialize__ after re-run" >&2
+    fail=1
+fi
+
 exit "$fail"
 
 

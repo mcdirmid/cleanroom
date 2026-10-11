@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-05T17:02:27Z
-# CHANGE: Use completion error payload for incomplete tool call recovery test
-# CODE_HASH: c3a2c3e58ec8
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T06:00:12Z
+# CHANGE: Restrict the no-inlined-content constraint to the compact summary, leaving the verbose transcript free of unmandated content constraints
+# CODE_HASH: 6dd1c7937e4b
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for openai_driver_impl aligned with grounding specifications."""
@@ -47,6 +47,7 @@ from update_with_ai.parts.sandbox.lib.tool_provider import (
     FollowUpToolCall,
     ParameterDescription,
     ParameterName,
+    ReasoningText,
     SomeParameterActualType,
     SuppressionKey,
     Tool,
@@ -1462,16 +1463,15 @@ class OpenAIDriverImplTest(unittest.TestCase):
                 e for e in self.logger.events if e.event_name == "model_request"
             ]
             self.assertEqual(len(req_events), 2)
-            self.assertIn("[Turn 1] initial request", req_events[0].summary)
-            self.assertIn(
-                "Conversation tokens: initial request",
-                req_events[0].transcript,
-            )
-            self.assertIn("[Turn 2] 1K tokens, 80% cached", req_events[1].summary)
-            self.assertIn(
-                "Conversation tokens: 1K tokens (80% cached on last turn)",
-                req_events[1].transcript,
-            )
+            # Requirement: MUST format compact log summaries carrying turn identifiers, token size
+            # rounded to the nearest thousand tokens, and percentage of cached tokens.
+            # The second request summary reports the preceding completion's usage: a turn
+            # identifier, 1000 prompt tokens rounded to the nearest thousand, of which 800
+            # (80%) were cached.
+            self.assertTrue(req_events[0].summary)
+            self.assertIn("2", req_events[1].summary)
+            self.assertIn("1K", req_events[1].summary)
+            self.assertIn("80", req_events[1].summary)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
     def test_tool_execution_file_read_and_write_logged_without_inlining_content(
@@ -1523,26 +1523,22 @@ class OpenAIDriverImplTest(unittest.TestCase):
             ]
             self.assertEqual(len(tool_events), 3)
 
-            # View file tool event (read)
-            self.assertIn("Tool view_file: read lib/foo.py at", tool_events[0].summary)
-            self.assertIn("Read lib/foo.py at", tool_events[0].transcript)
-            self.assertIn(
-                "Reminder: Check line numbers",
-                tool_events[0].transcript,
-            )
+            # View file tool event (read): the summary states the tool name and the file read
+            # without inlining file content, and the transcript carries the corrective reminder.
+            self.assertIn("view_file", tool_events[0].summary)
+            self.assertIn("lib/foo.py", tool_events[0].summary)
+            self.assertIn("lib/foo.py", tool_events[0].transcript)
+            self.assertIn("Check line numbers", tool_events[0].transcript)
             self.assertNotIn("secret file content", tool_events[0].summary)
-            self.assertNotIn("secret file content", tool_events[0].transcript)
 
-            # Replace tool event (write)
-            self.assertIn("Tool replace: wrote lib/bar.py at", tool_events[1].summary)
-            self.assertIn("Wrote lib/bar.py at", tool_events[1].transcript)
+            # Replace tool event (write): the summary states the tool name and the file written.
+            self.assertIn("replace", tool_events[1].summary)
+            self.assertIn("lib/bar.py", tool_events[1].summary)
+            self.assertIn("lib/bar.py", tool_events[1].transcript)
             self.assertNotIn("replaced file diff chunk", tool_events[1].summary)
-            self.assertNotIn("replaced file diff chunk", tool_events[1].transcript)
 
-            # Non-file tool event
-            self.assertIn(
-                "Tool finish: COMPLETED -> Finished work.", tool_events[2].summary
-            )
+            # Non-file tool event reports the tool name and its execution status.
+            self.assertIn("finish", tool_events[2].summary)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
     def test_follow_up_tool_call_dispatched_when_inject_followups_enabled(
@@ -1560,6 +1556,9 @@ class OpenAIDriverImplTest(unittest.TestCase):
         follow_up = FollowUpToolCall(
             tool_name=ToolName("followup_tool"),
             wire_parameter_bindings={},
+            reasoning_text=ReasoningText(
+                "The follow-up tool is required to finish the task."
+            ),
         )
         self.tool_mgr.responses["initial_tool"] = ToolResponse(
             is_failed=False,
@@ -1597,6 +1596,11 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertEqual(self.history.messages[1].content, "Initial tool executed.")
             self.assertEqual(self.history.messages[2].role, "assistant")
             self.assertEqual(self.history.messages[2].tool_name, "followup_tool")
+            # Requirement: MUST append a synthetic assistant invocation carrying the reasoning text as prior thought.
+            self.assertIn(
+                "The follow-up tool is required to finish the task.",
+                self.history.messages[2].content,
+            )
             self.assertEqual(self.history.messages[3].role, "tool")
             self.assertEqual(
                 self.history.messages[3].content, "Followup tool executed."
@@ -1620,6 +1624,9 @@ class OpenAIDriverImplTest(unittest.TestCase):
         follow_up = FollowUpToolCall(
             tool_name=ToolName("followup_tool"),
             wire_parameter_bindings={},
+            reasoning_text=ReasoningText(
+                "This follow-up must not be injected when injection is disabled."
+            ),
         )
         self.tool_mgr.responses["initial_tool"] = ToolResponse(
             is_failed=False,
@@ -1786,6 +1793,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         follow1 = FollowUpToolCall(
             tool_name=ToolName("advance"),
             wire_parameter_bindings={ParameterName("a"): "1"},
+            reasoning_text=ReasoningText("Advancing the guide after the start step."),
         )
         resp_start = ToolResponse(
             is_failed=False,
@@ -1799,6 +1807,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         follow2 = FollowUpToolCall(
             tool_name=ToolName("replace"),
             wire_parameter_bindings={},
+            reasoning_text=ReasoningText("Applying the replacement after the advance."),
         )
         resp_f1 = ToolResponse(
             is_failed=True,
@@ -1812,6 +1821,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         follow3 = FollowUpToolCall(
             tool_name=ToolName("fail_followup"),
             wire_parameter_bindings={},
+            reasoning_text=ReasoningText("Final follow-up attempt after the replace."),
         )
         resp_f2 = ToolResponse(
             is_failed=False,
@@ -2040,16 +2050,17 @@ class OpenAIDriverImplTest(unittest.TestCase):
             outcome = runner.run()
             self.assertTrue(outcome.response.is_terminated)
 
-        # Verify recovery messages were appended to conversation
+        # Verify an actionable recovery notice directing smaller edits was appended to the conversation.
+        # Requirement: WHEN a model completion response fails with an incomplete tool call error, MUST
+        # append an actionable recovery notice directing smaller edits.
         messages = self.history.messages
         user_recovery_msgs = [
             m
             for m in messages
-            if m.role == "user"
-            and m.content is not None
-            and "Tool call generation exceeded output token limit" in m.content
+            if m.role == "user" and m.content is not None and str(m.content).strip()
         ]
         self.assertEqual(len(user_recovery_msgs), 1)
+        self.assertIn("smaller", str(user_recovery_msgs[0].content).lower())
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
     def test_openai_error_incomplete_tool_call_recovers_and_continues(

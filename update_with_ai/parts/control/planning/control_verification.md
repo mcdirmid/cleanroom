@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 795226783262
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T04:12:04Z
+CHANGE: Retarget the deferred verification check resolution away from the removed agent_node_config delegation
+CODE_HASH: 052cee403fc1
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_verification interface component
-
-imports: agent_session, agent_node_config, dag_storage
 
 ## Intent
 
@@ -20,8 +18,8 @@ In iterative agent coding workflows, build and test executions produce verbose o
 
 ### Typing
 
-- A verification result records a passed status, diagnostic output, and a cached evaluation indicator.
-- A verification evaluator operates within the agent session lifecycle tier.
+- A verification result reports whether verification checks succeeded or failed, carrying a passed status, sanitized diagnostic output, and a reuse status indicating whether evaluation was reused from cache.
+- An agent session's verification evaluator coordinates verification execution for active targets.
 
 ### Contracts
 
@@ -48,7 +46,7 @@ In iterative agent coding workflows, build and test executions produce verbose o
 ### Knowledge Requirements
 
 - Resolution of configured verification check commands for target nodes.
-  - Deferred: Resolved from agent_node_config in implementation.
+  - Deferred: Grounded in the low-level specification in implementation.
 - Computation of cryptographic hashes of target read-write files.
   - Deferred: Computed via SHA-256 in implementation.
 - Subprocess execution of verification commands.

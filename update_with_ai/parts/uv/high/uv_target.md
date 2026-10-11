@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: 70797961975b
+CODE_HASH: d57bf0dea237
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_target interface component
@@ -21,4 +22,4 @@ Multi-step workflows require deterministic node addressing and durable state sto
 
 A *node directory* is a workspace path addressing the workspace package directory of a node.
 
-A system's *uv target* can *normalize* an arbitrary target identifier string into a canonical node and *extract* a node directory from a node.
+A system's *uv target* normalizes an arbitrary target identifier string into a canonical node, and extracts the node directory of a node.

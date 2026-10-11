@@ -52,6 +52,11 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.test_dir = tempfile.mkdtemp()
         self.fake_repo = os.path.join(self.test_dir, "fake_repo")
         os.makedirs(self.fake_repo, exist_ok=True)
+        with open(os.path.join(self.fake_repo, "cleanroom.toml"), "w", encoding="utf-8") as f:
+            f.write('methodology = "//update_python_with_ai"\n')
+        roles_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../update_python_with_ai/cleanroom_roles.toml"))
+        if os.path.isfile(roles_src):
+            shutil.copyfile(roles_src, os.path.join(self.fake_repo, "cleanroom_roles.toml"))
         self.orig_cwd = os.getcwd()
 
     def tearDown(self) -> None:
@@ -104,7 +109,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             last_cleaned="2026-10-04T12:05:00Z",
             last_changed="2026-10-04T12:05:00Z",
         )
-        cleanroom_role_tool.main(["submit", ws_lib, "Initial implementation"])
+        cleanroom_role_tool.main(["submit", "--no-verify", ws_lib, "Initial implementation"])
         ret_clean = cleanroom_role_tool.main(["get_work"])
         self.assertEqual(ret_clean, 0)
 
@@ -187,7 +192,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             target, "# verified\n", readonly=True
         )
 
-        ret = cleanroom_role_tool.main(["submit", target, "QA verified clean"])
+        ret = cleanroom_role_tool.main(["submit", "--no-verify", target, "QA verified clean"])
         self.assertEqual(ret, 0)
 
         # In zero-sync architecture, buffer file is retired
@@ -240,11 +245,11 @@ class CleanroomRoleToolTest(unittest.TestCase):
         )
         self.assertEqual(ret_unauth, 1)
 
-        # Arbiter role 'low_qa' can blame upstream 'low'
-        low_qa_ws = commission_workspace(
-            "low_qa", dir_scope="staging", repo_root=self.fake_repo
+        # Arbiter role 'spec_qa' can blame upstream 'low'
+        spec_qa_ws = commission_workspace(
+            "spec_qa", dir_scope="staging", repo_root=self.fake_repo
         )
-        os.chdir(low_qa_ws)
+        os.chdir(spec_qa_ws)
 
         ret = cleanroom_role_tool.main(
             [
@@ -256,7 +261,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.assertEqual(ret, 0)
 
         # No buffer written
-        buf_path = os.path.join(low_qa_ws, ".cleanroom_blame_buffer.json")
+        buf_path = os.path.join(spec_qa_ws, ".cleanroom_blame_buffer.json")
         self.assertFalse(os.path.isfile(buf_path))
 
         # Directly mutated in main
@@ -357,7 +362,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         os.chdir(qa_ws)
 
         lib_target = os.path.join(qa_ws, "staging/parts/agent/lib/config.py")
-        ret = cleanroom_role_tool.main(["submit", lib_target])
+        ret = cleanroom_role_tool.main(["submit", "--no-verify", lib_target])
         self.assertEqual(ret, 0)
 
         buf_path = os.path.join(qa_ws, cleanroom_role_tool.AUDIT_BUFFER_FILE)
@@ -395,12 +400,12 @@ class CleanroomRoleToolTest(unittest.TestCase):
         )
 
         # 1. Bare unit name
-        ret_bare = cleanroom_role_tool.main(["submit", "config"])
+        ret_bare = cleanroom_role_tool.main(["submit", "--no-verify", "config"])
         self.assertEqual(ret_bare, 0)
 
         # 2. Virtual role path
         ret_virtual = cleanroom_role_tool.main(
-            ["submit", "staging/parts/agent/qa/config"]
+            ["submit", "--no-verify", "staging/parts/agent/qa/config"]
         )
         self.assertEqual(ret_virtual, 0)
 
@@ -630,6 +635,46 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.assertEqual(ret, 0)
         ret_err = cleanroom_role_tool.main(["check_files", "nonexistent"])
         self.assertEqual(ret_err, 1)
+
+    def test_submit_command_verification_gating(self) -> None:
+        """Verifies that submit rejects targets when verification checks fail, and succeeds when they pass or --no-verify is used."""
+        part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
+        os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+        os.makedirs(os.path.join(part_dir, "tests"), exist_ok=True)
+        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+            f.write('update_python_with_ai(name = "config")\n')
+
+        main_lib = os.path.join(self.fake_repo, "staging/parts/agent/lib/config.py")
+        write_file_with_perms(main_lib, "# lib in main\n", readonly=False)
+
+        qa_ws = commission_workspace("qa", dir_scope="staging", repo_root=self.fake_repo)
+        os.chdir(qa_ws)
+
+        lib_target = os.path.join(qa_ws, "staging/parts/agent/lib/config.py")
+        write_file_with_perms(lib_target, "# lib\n", readonly=True)
+
+        # 1. Verification fails (test file missing) -> submit rejected (ret=1)
+        ret_fail = cleanroom_role_tool.main(["submit", lib_target])
+        self.assertEqual(ret_fail, 1)
+
+        main_meta = src_metadata.extract_metadata(main_lib)
+        self.assertTrue(main_meta is None or "QA_AUDIT" not in getattr(main_meta, "audits", []))
+
+        # 2. Verification bypassed via --no-verify -> submit accepted (ret=0)
+        ret_bypass = cleanroom_role_tool.main(["submit", "--no-verify", lib_target])
+        self.assertEqual(ret_bypass, 0)
+
+        main_meta_bypassed = src_metadata.extract_metadata(main_lib)
+        self.assertIsNotNone(main_meta_bypassed)
+        assert main_meta_bypassed is not None
+        self.assertIn("QA_AUDIT", main_meta_bypassed.audits)
+
+        # 3. Add passing test file -> verification passes -> submit accepted (ret=0)
+        test_file = os.path.join(qa_ws, "staging/parts/agent/tests/config_test.py")
+        write_file_with_perms(test_file, "def test_ok(): pass\n", readonly=False)
+
+        ret_pass = cleanroom_role_tool.main(["submit", lib_target])
+        self.assertEqual(ret_pass, 0)
 
 
 if __name__ == "__main__":

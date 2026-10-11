@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 6773da74fc0b
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:19:49Z
+# CHANGE: Align conversation stubbing and model request contracts
+# CODE_HASH: 3a1d3e61f85d
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Loop conversation low-level interface specification."""
@@ -91,7 +91,7 @@ class Conversation(InTier[AgentSessionTier], Protocol):
         tool_name: tool_provider.ToolName,
         tool_arguments: SerializedArguments,
     ) -> None:
-        """Appends a tool execution response and stubs previous suppressed entries.
+        """Appends a tool execution response to the conversation.
 
         Args:
             tool_response: Response produced by tool execution.
@@ -101,18 +101,19 @@ class Conversation(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST append the tool response to the conversation.
-        - MUST stub previous responses and correlating arguments matching suppression keys.
+        - WHEN the tool response carries a suppression key matching previous tool outputs, MUST replace those previous responses with stubs in place.
+        - WHEN the tool response carries a suppression key matching previous tool outputs, MUST replace correlating tool arguments of superseded messages with stubs in place.
         """
         ...
 
     @operation
     def get_model_request(self) -> ModelRequest:
-        """Constructs a formatted model request for transmission.
+        """Provides a formatted model request for transmission to a language model.
 
         Returns:
             The formatted model request record.
 
         POSTCONDITIONS:
-        - MUST return a formatted model request for language model transmission.
+        - MUST export the formatted conversation history as a model request for provider transmission.
         """
         ...

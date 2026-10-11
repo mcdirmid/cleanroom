@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 0e403017b909
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Complete the conversation capability statements and name the stubbing operation consistently
+CODE_HASH: 16660b052eb5
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_conversation interface component
@@ -23,14 +24,8 @@ A *conversation message* is an entry in an agent conversation, having a *role*, 
 
 A *model request* is a formatted sequence of messages prepared for transmission to a language model.
 
-An agent session's *conversation* maintains chronological messages for an agent run.
+An agent session's *conversation* maintains the chronological messages of an agent run.
 
-The conversation:
+The conversation can be initialized with initial messages that include task instructions, and can *append* the messages and tool responses that tool execution produces.
 
-- Can be initialized with initial messages, including task instructions.
-
-- Can *append* messages and tool responses produced by tool execution.
-
-- Stubs previous responses and correlating tool arguments identified by a suppression key.
-
-- Provides a model request for transmission to a language model.
+The conversation *stubs* prior responses and their correlating tool arguments when a suppression key identifies them as superseded, and provides a model request for transmission to a language model.

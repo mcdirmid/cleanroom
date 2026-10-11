@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: 4f2ef0bb98d2
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T04:05:49Z
+# CHANGE: Align implementation with every interface operation: file target submission and resolution
+# CODE_HASH: 314c12ce99cd
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_work_scheduler_impl."""
@@ -58,5 +58,16 @@ class WorkScheduler(
         GROUNDING:
         - Grounded via DAG longest-path calculation over declared role dependencies
           to assign dynamic execution depths without hardcoded orderings.
+        """
+        ...
+
+    @operation
+    @override
+    def format_task_prompt(self, nodes: Sequence[dag_storage.DagNode]) -> str:
+        """Formats a synthesized task prompt for the supplied candidate nodes.
+
+        GROUNDING:
+        - Formats the aggregated prompt lines for the supplied dag_storage.DagNode sequence,
+          composing each candidate node's prompt text into a single returned string.
         """
         ...

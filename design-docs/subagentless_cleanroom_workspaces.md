@@ -1,15 +1,15 @@
 # Subagentless Cleanroom: Convention-Driven Zero-Sync Isolated Role Workspaces Architecture
 
-This document specifies the permanent, production architecture for executing Cleanroom software construction workflows in Google Antigravity **without subagents**, utilizing convention-driven isolated role workspaces, conversational chat sessions, direct Bazel-backed mutations, in-band source metadata, and deterministic filesystem gating.
+This document specifies the permanent, production architecture for executing Cleanroom software construction workflows in Google Antigravity **without subagents**, utilizing convention-driven isolated role workspaces, conversational chat sessions, direct Python CLI mutations, in-band source metadata, and deterministic filesystem gating.
 
 > [!NOTE]
 > **Cleanroom Cleaning Paradigms — Option 3 (Primary Antigravity Architecture)**:
 > This document specifies **Subagentless Cleanroom Workspaces**, representing **Option 3** of Cleanroom's three cleaning paradigms (see [Cleanroom Cleaning Paradigms](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleaning_paradigms.md)).
 > 
 > - **Comparison to Other Paradigms**:
->   - **Option 1 (Headless Loop)**: Autonomous in-process runner using the OpenAI API for unattended CI/batch execution (`parts/loop`, `parts/openai`).
+>   - **Option 1 (Headless Loop)**: Autonomous in-process runner using model APIs for unattended CI/batch execution (`parts/loop`, `parts/openai`, `parts/systems/uv_cleanroom_asm`).
 >   - **Option 2 (Antigravity Subagents via Server + Exec)**: Historical in-tree subagent hierarchy where subagents executed Python CLI commands into a local HTTP server. Decommissioned due to extreme token costs and quota exhaustion under Google One Ultra (see [Antigravity Integration Post-Mortem](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)).
->   - **Option 3 (This Architecture)**: Isolated sibling workspaces (`../role_workspaces/<workspace-name>_<role>_<sanitized-dir>`) with separate conversational chats in the Antigravity IDE. It is the **primary production architecture** for interactive Cleanroom development, achieving maximum prompt-cache efficiency, direct Bazel mutations, and zero subagent tax.
+>   - **Option 3 (This Architecture)**: Isolated sibling workspaces (`../role_workspaces/<workspace-name>_<role>_<sanitized-dir>`) with separate conversational chats in the Antigravity IDE. It is the **primary production architecture** for interactive Cleanroom development, achieving maximum prompt-cache efficiency, direct Python CLI mutations, and zero subagent tax.
 
 ---
 
@@ -30,7 +30,7 @@ While functional, that intermediate architecture introduced coordination lag, ho
 
 The **Convention-Driven Zero-Sync Architecture** permanently replaces external synchronization sweeps and local buffers with:
 1. **Pathless Role Descriptors & Relative Convention Discovery**: No host paths are stored in role workspaces. The main workspace is resolved strictly via convention (`../../<workspace_name>`).
-2. **Bazel-Backed Direct Mutations (`submit`, `blame`, `fail`)**: Role tool commands immediately mutate the canonical repository via Bazel macro targets (`*_submit`, `*_blame`, `*_fail`), returning instantaneous console feedback directly to the role agent.
+2. **Direct Python CLI Mutations (`submit`, `blame`, `fail`)**: Role tool commands immediately mutate the canonical repository via direct Python CLI actions (`bin/submit`, `bin/blame`, `bin/fail`) executing via `parts/control` and `parts/workspace`, returning instantaneous console feedback in 10–30ms directly to the role agent.
 3. **Self-Synchronizing `bin/get_work`**: Role agents run `bin/get_work` at the start of each turn, which silently pulls updated role files from `main`, refreshes system files, and evaluates the global DAG work queue from the main build graph.
 4. **Multi-Unit Processing Loop**: Role agents work through and submit all ready units sequentially within their turn until all units in scope are clean.
 5. **Unified Main Workspace Lifecycle CLI (`bin/cleanroom`)**: `cleanroom-sync` is permanently retired in favor of `bin/cleanroom` (`commission`, `decommission`, `refresh`, `refresh-sys`, `dirty`, `clean`, `work-queue`).
@@ -106,7 +106,7 @@ flowchart TD
 - Antigravity's tool dispatcher intercepts any call to `view_file`, `write_to_file`, or `replace_file_content` targeting paths outside the role workspace and rejects them immediately.
 
 #### Tier 3: OS-Level Filesystem Hardening
-- All contract files (`grounding/*.pyi`, `low/*.pyi`), guides (`low_to_lib.md`), and build manifests (`BUILD.bazel`) are set to read-only mode (`chmod 444`).
+- All contract files (`grounding/*.pyi`, `low/*.pyi`) and guides (`low_to_lib.md`) are set to read-only mode (`chmod 444`).
 - Any attempt by `replace_file_content`, `write_to_file`, or shell redirection (`>`) to alter these files triggers an OS-level `Permission denied` error.
 
 #### Tier 4: Workspace Invariants (`AGENTS.md`)
@@ -187,9 +187,9 @@ def resolve_main_workspace_from_convention(cwd: Optional[str] = None) -> Tuple[s
 
 ---
 
-## 4. Bazel-Backed Direct Mutations
+## 4. Direct Python CLI Mutations (`submit`, `blame`, `fail`)
 
-In the zero-sync architecture, role workspaces do not buffer modifications or blame records. All state mutations execute directly against the canonical main workspace via hermetic Bazel targets.
+In the zero-sync architecture, role workspaces do not buffer modifications or blame records. All state mutations execute directly against the canonical main workspace via Python CLI actions implemented in `parts/control` and `parts/workspace`.
 
 ```mermaid
 sequenceDiagram
@@ -197,14 +197,14 @@ sequenceDiagram
     actor Agent as Role Agent (Lib/Test/QA)
     participant RoleWS as Role Workspace
     participant MainWS as Canonical Main Workspace
-    participant Bazel as Bazel Build Graph
+    participant Control as Control Engine (parts/control)
 
     Note over RoleWS: Agent authors/verifies target unit
     Agent->>RoleWS: bin/submit staging/parts/sandbox/lib/foo.py "Implement Foo"
     RoleWS->>MainWS: Copy modified file to main (read-write target only)
-    RoleWS->>Bazel: bazel run //staging/parts/sandbox:foo_lib_submit -- "Implement Foo"
-    Note over Bazel: Validates change summary, updates LAST_CLEANED, LAST_CHANGED, CHANGE, clears FEEDBACK
-    Bazel-->>RoleWS: 0 (Success + summary output)
+    RoleWS->>Control: Submit via control_submit_impl.py -- "Implement Foo"
+    Note over Control: Validates change summary, updates LAST_CLEANED, LAST_CHANGED, CHANGE, clears FEEDBACK
+    Control-->>RoleWS: 0 (Success + summary output)
     RoleWS-->>Agent: ✔ Submitted staging/parts/sandbox/lib/foo.py
 ```
 
@@ -215,24 +215,24 @@ For producer roles (`high`, `planning`, `low`, `grounding`, `lib`, `test`):
    - If code was modified: **requires** a non-empty change summary (rejects empty summary).
    - If code was not modified: **rejects** an unprompted change summary (verifies file is already clean).
 2. **Atomic Main Copy**: Copies the modified file to the canonical path in main.
-3. **Bazel Target Execution**: Delegates to `bazel run //pkg:unit_role_submit -- "[summary]"`.
-4. **Header Stamping**: Advances `LAST_CLEANED` and `LAST_CHANGED` to UTC now, records `CHANGE:`, updates `CODE_HASH:`, and clears resolved `FEEDBACK:` and `DIRTY:` markers.
+3. **Control Engine Execution**: Executes `control_submit_impl.py` directly in Python.
+4. **Header Stamping**: Advances `LAST_CLEANED` and `LAST_CHANGED` to UTC now, records `CHANGE:`, updates `CODE_HASH:`, and clears resolved `FEEDBACK:` and `DIRTY:` markers in 10–30ms without subprocess compilation overhead.
 
 ### 4.2 Auditor Submissions (`bin/submit <target_file>`)
-For auditor roles (`spec_qa`, `low_qa`, `qa`, `coverage`):
+For auditor roles (`spec_qa`, `qa`, `coverage`):
 1. Verifies verification pass criteria via `bin/check_files` (which executes role linters, tests, or statement coverage).
 2. Delegates to submission coordinator to stamp `<ROLE>_AUDIT: <timestamp>` into the target file header in canonical main without altering `LAST_CHANGED` or code contents.
 
 ### 4.3 Direct Upstream Blame (`bin/blame <culprit-file> "<critique>"`)
 When a defect in an upstream contract or dependency is discovered:
 1. Resolves the culprit unit and role.
-2. Directly executes `bazel run //pkg:culprit_blame -- "<critique>"`.
+2. Directly executes `control_attribution_impl.py`.
 3. Injects the critique into the culprit's in-band `FEEDBACK:` section in canonical main and advances its `LAST_CLEANED` timestamp, immediately making the culprit unit dirty across the repository.
 4. Requires zero local buffer files (`.cleanroom_blame_buffer.json` is completely eliminated).
 
 ### 4.4 Failure Diagnostics (`bin/fail <target_file> "<reason>"`)
 When local verification cannot pass due to an unresolvable failure:
-1. Executes `bazel run //pkg:unit_fail -- "<reason>"`.
+1. Executes `fail` action in `control_submit_impl.py`.
 2. Clears `LAST_CLEANED` from the target header in canonical main and stamps failure diagnostics, maintaining persistent dirty status until resolved.
 
 ---
@@ -264,7 +264,7 @@ flowchart TD
 ### 5.2 Dependency-Aware Queue Rules
 - **Cross-Role Dependency Blocking**: A unit is blocked if any of its upstream role dependencies (`role_deps`, `star_role_deps`, `feedback_role_deps`) are dirty.
 - **Intra-Role Dependency Allowing**: A unit is eligible for work if its only dirty dependencies belong to the **same** role.
-- **Auditor Feedback Blocking**: An auditor role (`spec_qa`, `low_qa`, `qa`, `coverage`) is blocked if any of its feedback targets are dirty or have unacted `FEEDBACK:`.
+- **Auditor Feedback Blocking**: An auditor role (`spec_qa`, `qa`, `coverage`) is blocked if any of its feedback targets are dirty or have unacted `FEEDBACK:`.
 - **Topological Sorting**: Multiple ready units within the same role are returned in topological dependency order ($dependency \to dependent$).
 
 ### 5.3 Multi-Unit Processing Loop
@@ -364,19 +364,19 @@ When working directly in the main repository (e.g., editing files in `update_wit
 1. **Metadata Integrity & Header Stamping**: In-band comment headers remain synchronized, valid, and monotonically increasing during direct edits.
 2. **Preservation of Non-Code Directives**: Executable scripts containing a shebang (`#!/usr/bin/env python3`) or encoding comment retain them on line 1. The Cleanroom metadata block immediately follows.
 3. **Deterministic Metadata Parsing**: `src_metadata.py` extracts existing blocks with complete fidelity, ensuring comments, imports, and docstrings outside the metadata delimiters are untouched.
-4. **Direct Canonical Resolution via Bazel**: Submissions, critiques, and failures execute directly against canonical files using Bazel macro targets with identical semantics to role workspace binaries:
+4. **Direct Canonical Resolution**: Submissions, critiques, and failures execute directly against canonical files using `bin/cleanroom` CLI commands with identical semantics to role workspace binaries:
    ```bash
    # Producer roles: stamps LAST_CLEANED, LAST_CHANGED, updates CHANGE, clears FEEDBACK
-   bazel run //staging/parts/sandbox:sandbox_file_editor_impl_lib_submit -- "Implement EditManager"
+   bin/cleanroom submit staging/parts/sandbox/lib/sandbox_file_editor_impl.py "Implement EditManager"
 
    # Auditor roles: stamps QA_AUDIT or COVERAGE_AUDIT tag
-   bazel run //staging/parts/sandbox:sandbox_file_editor_impl_qa_submit
+   bin/cleanroom submit staging/parts/sandbox/lib/sandbox_file_editor_impl.py
 
    # Blame upstream contract: injects FEEDBACK into upstream contract and advances its LAST_CLEANED
-   bazel run //staging/parts/sandbox:sandbox_file_editor_impl_blame -- "Contract missing parameter 'tier'"
+   bin/cleanroom blame staging/parts/sandbox/low/sandbox_file_editor_impl.pyi "Contract missing parameter 'tier'"
 
    # Record verification failure: clears LAST_CLEANED to keep node persistently dirty
-   bazel run //staging/parts/sandbox:sandbox_file_editor_impl_fail -- "Type check failed on abstract method resolution"
+   bin/cleanroom fail staging/parts/sandbox/lib/sandbox_file_editor_impl.py "Type check failed on abstract method resolution"
    ```
 
 ### 7.2 Main-to-Role Workspace State Flow
@@ -392,7 +392,7 @@ sequenceDiagram
 
     Note over Main: Direct edit in Main Workspace
     Dev->>Main: Edit staging/parts/agent/low/agent_config.pyi
-    Dev->>Main: bazel run //staging/parts/agent:agent_config_low_submit -- "Add timeout"
+    Dev->>Main: bin/cleanroom submit staging/parts/agent/low/agent_config.pyi "Add timeout"
     Note over Main: agent_config.pyi stamped with T_now
 
     Note over RoleWS: Role agent initiates turn
@@ -404,12 +404,12 @@ sequenceDiagram
 ```
 
 1. **Propagation of Main Workspace Edits**:
-   - A developer edits `low/agent_config.pyi` directly in main and submits it via Bazel.
+   - A developer edits `low/agent_config.pyi` directly in main and submits it via `bin/cleanroom submit`.
    - When role agents execute `bin/get_work`, updated contracts and synthesized stubs are pulled silently into the role workspace.
    - `bin/get_work` detects that `low/agent_config.pyi` was modified after `lib/agent_config.py` was cleaned, returning `lib/agent_config.py` as a ready task.
 2. **Propagation of Main Workspace Critique & Feedback**:
-   - A developer blames a node in main: `bazel run //pkg:unit_blame -- "Missing error handling"`.
-   - The Bazel target injects the critique into `FEEDBACK:` and advances `LAST_CLEANED = T_now`.
+   - A developer blames a node in main: `bin/cleanroom blame staging/parts/agent/low/agent_config.pyi "Missing error handling"`.
+   - The blame command injects the critique into `FEEDBACK:` and advances `LAST_CLEANED = T_now`.
    - The next time the culprit role runs `bin/get_work`, the updated file with its embedded feedback is pulled in and flagged as ready. No manual synchronization commands are needed.
 
 ### 7.3 Symmetrical Architecture: Main Canonical Workspace vs. Confined Role Workspaces
@@ -418,9 +418,9 @@ sequenceDiagram
 | :--- | :--- | :--- |
 | **Workspace Scope** | Single role, single directory (`cleanroom_lib_staging`) | Full repository / multi-directory |
 | **Inspection Tool** | `bin/get_work` (self-syncing, global DAG evaluation) | `bin/cleanroom dirty [dir]` / `bin/cleanroom work-queue <role>` |
-| **Submission Tool** | `bin/submit <file> "[summary]"` | `bazel run //pkg:unit_role_submit -- "[summary]"` |
-| **Blame Tool** | `bin/blame <culprit-file> "<critique>"` | `bazel run //pkg:unit_blame -- "<critique>"` |
-| **Failure Tool** | `bin/fail <file> "<reason>"` | `bazel run //pkg:unit_fail -- "<reason>"` |
+| **Submission Tool** | `bin/submit <file> "[summary]"` | `bin/cleanroom submit <file> "[summary]"` |
+| **Blame Tool** | `bin/blame <culprit-file> "<critique>"` | `bin/cleanroom blame <culprit-file> "<critique>"` |
+| **Failure Tool** | `bin/fail <file> "<reason>"` | `bin/cleanroom fail <file> "<reason>"` |
 | **State Source of Truth** | In-band source metadata headers | In-band source metadata headers |
 | **Lifecycle Coordination** | Silent inbound pull on `bin/get_work` | `bin/cleanroom` CLI (`commission`, `decommission`, `refresh-sys`) |
 
@@ -446,7 +446,7 @@ When commissioning or synchronizing a **Test Role Workspace**:
    - Is written to `{unit_dir}/lib/{unit_name}.py` with **`chmod 444`**.
 4. **Outcome**:
    - `pyright` passes type checking because all symbols and type annotations exist.
-   - Bazel target `:{unit_name}_test_type_check` succeeds.
+   - Type verification succeeds across tests and stubs.
    - The test authoring agent **cannot see a single line of real implementation code**, eliminating test-to-implementation overfitting.
 
 ### 8.2 Lib Verification Without Unit Tests
@@ -463,7 +463,7 @@ In Cleanroom, the implementer writes code against the **formal specification**, 
 | :--- | :--- | :--- |
 | **Reading Tests from Lib** | Agent attempts `view_file` on `tests/*_test.py` | `tests/` does not exist in the Lib workspace. Antigravity policy blocks access to paths outside workspace. |
 | **Writing to Spec to Pass Tests** | Agent attempts to relax low `.pyi` or grounding `.py` contract | File is `chmod 444`. OS returns `PermissionError`. `AGENTS.md` forbids `chmod`. |
-| **Stealth Modifying BUILD** | Agent attempts to delete test targets from `BUILD.bazel` | `BUILD.bazel` is `chmod 444`. |
+| **Stealth Modifying Specs/Tools** | Agent attempts to alter read-only contracts or tools | All contracts and tools are `chmod 444`. Host verifies baseline SHA-256 hashes on inbound pull. |
 | **Tampering via chmod** | Agent runs `chmod +w` via `run_command` | Host checks baseline SHA-256 hashes on inbound pull; aborts with error if read-only files were modified. |
 | **Git Sniffing** | Agent runs `git log` or `git show` to read counterpart code | Role workspace has no `.git` directory; git commands fail with "fatal: not a git repository". |
 | **Path Traversal via Configs** | Agent reads `.cleanroom_role.json` to find host paths | Descriptor is pathless; contains only `role_address`, `role_name`, `parts_dir`. |
@@ -479,6 +479,6 @@ All zero-sync Cleanroom workspace components are implemented, hermetically verif
 3. `update_with_ai/parts/tools/`: Deterministic statement test coverage evaluation (`tool_coverage.py`, `tool_coverage_impl.py`).
 4. `update_with_ai/support/lib/cleanroom_role_tool.py`: Ultra-slim entrypoint shim ($\le 50$ lines, exactly 45 lines) executing role workspace binaries (`get_work`, `check_files`, `submit`, `blame`, `fail`) within the `agent_session` tier.
 5. `bin/cleanroom`: Primary lifecycle CLI in the canonical main workspace.
-6. `update_with_ai/parts/workspace/tests/`: Comprehensive test suites verifying provisioning, synchronizing, registry parsing, work queue computation, and tool execution (`bazel test //update_with_ai/parts/workspace/tests:all`).
-7. `update_with_ai/parts/tools/tests/`: Unit test suite verifying AST statement filtering, trace instrumentation, span grouping, and coverage evaluation (`bazel test //update_with_ai/parts/tools/tests:all`).
-8. `update_with_ai/parts/control/tests/`: Unit test suite verifying in-band metadata parsing, dirty evaluation, submission gating, and blame attribution (`bazel test //update_with_ai/parts/control/tests:all`).
+6. `update_with_ai/parts/workspace/tests/`: Comprehensive test suites verifying provisioning, synchronizing, registry parsing, work queue computation, and tool execution (`uv run pytest update_with_ai/parts/workspace/tests`).
+7. `update_with_ai/parts/tools/tests/`: Unit test suite verifying AST statement filtering, trace instrumentation, span grouping, and coverage evaluation (`uv run pytest update_with_ai/parts/tools/tests`).
+8. `update_with_ai/parts/control/tests/`: Unit test suite verifying in-band metadata parsing, dirty evaluation, submission gating, and blame attribution (`uv run pytest update_with_ai/parts/control/tests`).

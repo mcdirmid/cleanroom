@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:29:23Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-09T21:29:23Z
 CHANGE: Synchronize active nodes sequence on role config during get work dispatch
-CODE_HASH: 0c5768f0bf06
+CODE_HASH: bf3a1567dea3
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_coordinate_impl implementation component
@@ -22,18 +23,20 @@ Orchestrating multi-node workflows requires maintaining accurate node lifecycle 
 
 ## Types and Behavior
 
-The session coordinator implements session coordination for the session.
+The session coordinator implements session coordination for an agent session.
 
-When coordinating active work:
+The session coordinator maintains registered session nodes, mapping each node to its file alias and current target state.
 
-- The session coordinator maintains registered session nodes, mapping each node to its file alias and current target state.
+The session coordinator coordinates active work.
 
-- When resolving a default target, the session coordinator selects the sole open target if exactly one remains, or selects the target corresponding to the most recently modified open file when multiple targets are open.
+The session coordinator:
 
-- When dispatching get work, the session coordinator invokes the work scheduler using either the provided subgraph or directory scope, registers newly scheduled nodes as open targets, updates the sequence of active nodes on role config, and returns the synthesized work schedule.
+- Resolves a default target by selecting the sole open target when exactly one remains, or by selecting the target corresponding to the most recently modified open file when multiple targets are open.
 
-- When dispatching check files, the session coordinator evaluates verification for the specified target file if provided, or evaluates verification across all open session targets if no target is specified, returning sanitized diagnostic results and indicating whether cached results were reused.
+- Dispatches get work by invoking the work scheduler with either the provided subgraph or directory scope, registering newly scheduled nodes as open targets, updating the sequence of active nodes on role config, and returning the synthesized work schedule.
 
-- When dispatching submit, the session coordinator delegates validation and resolution to the submission coordinator, updating the target state to clean upon success.
+- Dispatches check files by evaluating verification for the specified target file when provided, or for all open session targets when no target is specified, returning sanitized diagnostic results and indicating whether cached results were reused.
 
-- When dispatching blame or fail, the session coordinator delegates defect attribution or failure logging to the attribution coordinator, updating the target state to attributed or failed and marking any in-batch dependents as failed.
+- Dispatches submit by delegating validation and resolution to the submission coordinator, updating the target state to clean upon success.
+
+- Dispatches blame or fail by delegating defect attribution or failure logging to the attribution coordinator, updating the target state to attributed or failed and marking any in-batch dependents as failed.

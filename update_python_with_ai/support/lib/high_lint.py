@@ -17,6 +17,7 @@ Checks:
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 import sys
@@ -80,6 +81,7 @@ def lint_high_file(file_path: Path) -> list[str]:
         idx += 1
 
     imports_list: list[str] = []
+    imports_l_num: int = 1
     types_from_map: dict[str, list[str]] = {}
     implements_type: str | None = None
     assembles_type: str | None = None
@@ -100,6 +102,7 @@ def lint_high_file(file_path: Path) -> list[str]:
                     f"{fname}:{l_num}: error: 'imports:' must come before 'types from' and 'implements:'"
                 )
             last_kind = 1
+            imports_l_num = l_num
             raw_deps = line_s[len("imports:") :].strip()
             imports_list = [d.strip() for d in raw_deps.split(",") if d.strip()]
 
@@ -164,6 +167,39 @@ def lint_high_file(file_path: Path) -> list[str]:
         errors.append(
             f"{fname}:1: error: assembly specification must declare 'implements: <components>' in front-matter"
         )
+
+    # Check 5b: Interface specifications must not declare imports unused by low-level specification
+    if not is_impl and not is_asm and not is_ext and imports_list:
+        low_path = file_path.parent.parent / "low" / f"{stem}.pyi"
+        if not low_path.exists() and PARTS_DIR.exists():
+            candidates = list(PARTS_DIR.glob(f"*/low/{stem}.pyi"))
+            if candidates:
+                low_path = candidates[0]
+
+        if low_path.exists():
+            try:
+                low_tree = ast.parse(low_path.read_text(encoding="utf-8"))
+                low_imports: set[str] = set()
+                for stmt in low_tree.body:
+                    if isinstance(stmt, ast.Import):
+                        for a in stmt.names:
+                            low_imports.add(a.name)
+                            low_imports.add(a.name.split(".")[-1])
+                    elif isinstance(stmt, ast.ImportFrom):
+                        if stmt.module:
+                            low_imports.add(stmt.module)
+                            low_imports.add(stmt.module.split(".")[-1])
+                        for a in stmt.names:
+                            low_imports.add(a.name)
+                            low_imports.add(a.name.split(".")[-1])
+
+                for dep in imports_list:
+                    if dep not in low_imports:
+                        errors.append(
+                            f"{fname}:{imports_l_num}: error: interface specification imports '{dep}', but low-level specification '{low_path.name}' does not use it (unnecessary interface import)"
+                        )
+            except (SyntaxError, OSError):
+                pass
 
     # Check 6: Section Headers and Behavior Structure
     if is_ext:

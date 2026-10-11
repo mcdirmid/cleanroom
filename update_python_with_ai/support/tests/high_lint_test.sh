@@ -138,4 +138,32 @@ else
     check "c6 unknown section" "$tmp/c6/err.log" "unknown section '## InvalidSection'"
 fi
 
+# Case 7: Interface declaring unused import in low-level spec
+mkdir -p "$tmp/c7/high" "$tmp/c7/low"
+cat > "$tmp/c7/high/service.md" <<'EOF'
+# service
+imports: unused_dep
+
+## Purpose
+A service.
+
+## Types and Behavior
+Defines types.
+EOF
+cat > "$tmp/c7/low/service.pyi" <<'EOF'
+from typing import Protocol
+from framework import singleton_type
+
+@singleton_type
+class Service(Protocol):
+    ...
+EOF
+if python3 "$bin/high_lint.py" "$tmp/c7/high/service.md" 2>"$tmp/c7/err.log"; then
+    echo "FAIL: c7 interface with unused import should fail" >&2
+    fail=1
+else
+    check "c7 interface unused import" "$tmp/c7/err.log" "interface specification imports 'unused_dep', but low-level specification 'service.pyi' does not use it (unnecessary interface import)"
+fi
+
 exit "$fail"
+

@@ -1,0 +1,4 @@
+# cleanroom.toml
+# Methodology binding for update_with_ai package
+
+methodology = "//update_python_with_ai"

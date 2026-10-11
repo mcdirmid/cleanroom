@@ -1,13 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-06T14:35:00Z
 CHANGE: new file
-CODE_HASH: 829cb477c297
+CODE_HASH: 393fd04c7151
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # src_metadata interface component
 
-imports: agent_session, src_metadata_ext
+imports: agent_session
 
 ## Purpose
 
@@ -17,24 +18,18 @@ Storing dirty tracking status, code hashes, audit timestamps, and diagnostic fee
 
 **Out of scope:** The src_metadata interface component does not schedule task queues, execute language model reasoning loops, or resolve build graph dependencies; these are handled by other components.
 
-**Delegated:** File format comment delimiters, header placement rules, and metadata grammar syntax are delegated to src_metadata_ext.
+**Delegated:** Session lifecycle scoping is delegated to agent_session.
 
 ## Types and Behavior
 
-A *file metadata* record encapsulates in-band metadata attributes: an optional *last cleaned timestamp*, an optional *last changed timestamp*, a *change summary*, a *feedback list*, an *audits mapping*, an optional *dirty reason*, and an optional *code hash*.
+A *file metadata* record encapsulates in-band metadata attributes: a *last cleaned timestamp* when clean, a *last changed timestamp* when modified, a *change summary*, unacted *feedback items*, role *audit timestamps*, a *dirty reason* when dirtiness is attributed, and a *code hash* when computed.
 
-A session's *source metadata coordinator* parses, computes, and mutates in-band file metadata.
+An agent session's *source metadata coordinator* parses, computes, and mutates in-band file metadata.
 
-The source metadata coordinator:
+The source metadata coordinator extracts file metadata from source content strings and workspace files, and extracts the *code body* of a source file by isolating the file content outside its metadata comment headers.
 
-- Extracts file metadata from source content strings and workspace files.
+The source metadata coordinator computes a deterministic code hash over the code body, and evaluates whether a file has code modifications by comparing its on-disk code hash with its recorded in-band code hash.
 
-- Extracts a source file's *code body* by isolating file content outside metadata comment headers.
+The source metadata coordinator rewrites metadata comment headers in content strings and updates files on disk in place.
 
-- Computes a deterministic code hash over the code body.
-
-- Evaluates whether a file has code modifications by comparing its on-disk code hash with its recorded in-band code hash.
-
-- Rewrites metadata comment headers in content strings and updates files on disk in-place.
-
-- Updates lifecycle status by marking files clean, marking files dirty, recording change descriptions, appending unacted feedback items, stamping role audits, clearing role audits, and deleting last cleaned timestamps.
+The source metadata coordinator updates lifecycle status by marking files clean, marking files dirty, recording change summaries, appending unacted feedback items, stamping role audits, clearing role audits, and deleting last cleaned timestamps.

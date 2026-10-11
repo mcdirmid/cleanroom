@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: 2a58d83f8f89
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:36:57Z
+# CHANGE: Add source attribution marking and file-level blame contracts; drop return-type restatements
+# CODE_HASH: 263ee70a3e6f
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_attribution."""
@@ -51,13 +51,14 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
         """Attributes defect to an upstream dependency node.
 
         POSTCONDITIONS:
-        - When blame target is not an upstream dependency, MUST reject blame.
-        - When source node role is not configured to deliver feedback to blame target role, MUST reject blame.
-        - When explanation contains newline characters, MUST reject blame.
-        - When in-batch dependency is not clean, MUST reject blame.
-        - When accepted, MUST record feedback message on culprit node in graph storage.
-        - When accepted, MUST mark culprit node dirty in graph storage.
-        - When accepted, MUST mark in-batch dependent nodes as failed.
+        - WHEN the blame target is not a declared upstream dependency, MUST reject blame.
+        - WHEN the source node role is not configured to deliver feedback to the blame target role, MUST reject blame.
+        - WHEN the explanation contains newline characters, MUST reject blame.
+        - WHEN an in-batch dependency of the source node is not clean, MUST reject blame.
+        - WHEN blame is accepted, MUST record the feedback message on the culprit node in graph storage.
+        - WHEN blame is accepted, MUST mark the culprit node dirty in graph storage.
+        - WHEN blame is accepted, MUST mark the source target node as attributed.
+        - WHEN blame is accepted, MUST mark in-batch dependent nodes as failed.
         """
         ...
 
@@ -71,8 +72,8 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
         """Records task failure for a target node.
 
         POSTCONDITIONS:
-        - MUST preserve dirty status on target node in graph storage.
-        - MUST record failure message on target node.
+        - MUST preserve dirty status on the target node in graph storage.
+        - MUST record the failure diagnostic on the target node in graph storage.
         - MUST mark in-batch dependent nodes as failed.
         """
         ...
@@ -89,11 +90,10 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
         """Attributes defect blame to an upstream culprit file.
 
         POSTCONDITIONS:
-        - When critique contains newline characters, MUST reject blame.
-        - When culprit file cannot be resolved, MUST reject blame.
-        - When caller role is not configured to deliver feedback to culprit role, MUST reject blame.
-        - When accepted, MUST record in-band feedback and dirty status via direct metadata mutation in canonical repository.
-        - MUST return AttributionOutcome indicating acceptance status and message.
+        - WHEN the critique contains newline characters, MUST reject blame.
+        - WHEN the culprit file cannot be resolved, MUST reject blame.
+        - WHEN the caller role is not configured to deliver feedback to the culprit role, MUST reject blame.
+        - WHEN blame is accepted, MUST execute build blame targets or mutate in-band metadata to record feedback and dirty status, and MUST synchronize the affected files.
         """
         ...
 
@@ -108,9 +108,9 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
         """Records task failure for a target file.
 
         POSTCONDITIONS:
-        - When target file cannot be resolved, MUST reject failure recording.
-        - When accepted, MUST mark target file dirty and record failure diagnostics in canonical repository.
-        - MUST return AttributionOutcome indicating acceptance status and message.
+        - WHEN the target file cannot be resolved, MUST reject failure recording.
+        - WHEN failure recording is accepted, MUST append the failure diagnostic and mark dirty status on the target file.
+        - WHEN failure recording is accepted, MUST synchronize the affected files.
         """
         ...
 

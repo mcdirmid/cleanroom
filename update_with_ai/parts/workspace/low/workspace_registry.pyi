@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: b2fc56f8182a
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:37:00Z
+# CHANGE: Align repository discovery, role resolution, and registry wording with revised contracts
+# CODE_HASH: 494394a90327
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_registry."""
@@ -93,42 +93,59 @@ class WorkspaceDescriptor:
 
 @singleton_type("agent_session")
 class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
-    """Registry resolving role definitions and tracking active workspaces."""
+    """Registry resolving role specifications and tracking commissioned workspaces."""
 
     @operation
     def discover_repository_root(
         self, start_dir: Optional[str] = None
     ) -> str:
-        """Discovers the canonical repository root by ascending directory trees.
+        """Discovers the canonical repository root from the filesystem environment or the current working directory.
 
         POSTCONDITIONS:
-        - MUST locate ancestor containing MODULE.bazel or .git marker.
-        - MUST return absolute path to canonical repository root.
+        - MUST resolve the canonical repository root from the filesystem environment.
+        - WHEN no repository root is discoverable in the filesystem environment, MUST resolve the canonical repository root from the current working directory.
+        - MUST return an absolute path to the canonical repository root.
         """
         ...
 
     @operation
     def resolve_role_definition(
-        self, role_name_or_address: str, repo_root: Optional[str] = None
+        self,
+        role_name_or_address: str,
+        repo_root: Optional[str] = None,
+        dir_scope: Optional[str] = None,
     ) -> RoleDefinition:
-        """Resolves role definition from role name or target address.
+        """Resolves a role definition from a role name or qualified role address.
 
         POSTCONDITIONS:
-        - MUST resolve role definition declarations from role configuration file or build file.
-        - MUST raise KeyError when role is not declared.
-        - MUST return RoleDefinition with configured file patterns and guide.
+        - MUST resolve role definitions from repository role configuration files or build files.
+        - WHEN role_name_or_address is unqualified and dir_scope is specified, MUST resolve the role definition from the methodology configuration bound to that directory scope or its package hierarchy.
+        - WHEN role_name_or_address is package-qualified, MUST resolve the role definition from the role definitions declared by the addressed package.
+        - WHEN the queried role is undeclared, MUST raise KeyError.
+        - WHEN feedback role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
+        - WHEN star role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
+        - WHEN a dependency is declared as both a role dependency and a silent role dependency, MUST raise ValueError.
+        - WHEN an auditor role is declared as a role dependency, a star role dependency, or a feedback role dependency, MUST raise ValueError.
+        - MUST return a role definition populated from the resolved declaration with its configured guide path, source pattern, and file patterns.
         """
         ...
 
     @operation
     def list_roles(
-        self, repo_root: Optional[str] = None
+        self,
+        repo_root: Optional[str] = None,
+        dir_scope: Optional[str] = None,
     ) -> Sequence[RoleDefinition]:
-        """Loads and resolves all role definitions declared in repository.
+        """Loads and resolves all role definitions declared in the repository or bound methodology configuration.
 
         POSTCONDITIONS:
-        - MUST parse role definition declarations from role configuration file or build file.
-        - MUST return RoleDefinition objects for all declared roles.
+        - MUST parse role definition declarations from repository role configuration files or build files.
+        - WHEN dir_scope is specified, MUST resolve role definitions from the methodology configuration bound to that directory scope or its package hierarchy.
+        - WHEN feedback role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
+        - WHEN star role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
+        - WHEN a dependency is declared as both a role dependency and a silent role dependency, MUST raise ValueError.
+        - WHEN an auditor role is declared as a role dependency, a star role dependency, or a feedback role dependency, MUST raise ValueError.
+        - MUST return a role definition for every declared role.
         """
         ...
 
@@ -140,12 +157,12 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
     ) -> str:
-        """Computes deterministic sanitized path for a role workspace directory.
+        """Computes a sanitized role workspace directory path from a role name and directory scope.
 
         POSTCONDITIONS:
-        - When custom_dest is provided, MUST return custom_dest directly.
-        - MUST sanitize directory delimiters to underscores in workspace folder name.
-        - MUST return absolute path to role workspace directory.
+        - WHEN custom_dest is provided, MUST return the supplied destination directory.
+        - MUST sanitize directory delimiter characters into underscores within the workspace folder name.
+        - MUST return an absolute path to the role workspace directory.
         """
         ...
 
@@ -153,10 +170,10 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
     def record_workspace(
         self, descriptor: WorkspaceDescriptor, repo_root: Optional[str] = None
     ) -> None:
-        """Records active workspace descriptor into persistent registry file.
+        """Records an active workspace descriptor into the persistent workspaces registry file.
 
         POSTCONDITIONS:
-        - MUST append or update workspace descriptor in .cleanroom_workspaces.json.
+        - MUST append or update the workspace descriptor in the persistent workspaces registry file.
         """
         ...
 
@@ -164,11 +181,11 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
     def unregister_workspace(
         self, workspace_dir: str, repo_root: Optional[str] = None
     ) -> bool:
-        """Removes workspace descriptor from persistent registry file.
+        """Removes a workspace descriptor from the persistent workspaces registry file.
 
         POSTCONDITIONS:
-        - MUST remove matching workspace directory from .cleanroom_workspaces.json.
-        - MUST return true when an existing workspace was removed.
+        - MUST remove the matching workspace directory entry from the persistent workspaces registry file.
+        - WHEN a matching workspace directory entry is removed, MUST return true.
         """
         ...
 
@@ -176,10 +193,10 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
     def load_active_workspaces(
         self, repo_root: Optional[str] = None
     ) -> Sequence[WorkspaceDescriptor]:
-        """Loads all active workspace descriptors from persistent registry file.
+        """Loads all active workspace descriptors from the persistent workspaces registry file.
 
         POSTCONDITIONS:
-        - MUST deserialize descriptors from .cleanroom_workspaces.json.
-        - When registry file is missing, MUST return an empty sequence.
+        - MUST deserialize active workspace descriptors from the persistent workspaces registry file.
+        - WHEN the persistent workspaces registry file is absent, MUST return an empty sequence.
         """
         ...

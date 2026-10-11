@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 1ee6d2f3018a
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:58:44Z
+CHANGE: Clarify host path typing and direct host path creation fallback
+CODE_HASH: b2708bd651bf
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # file_paths interface component
@@ -18,9 +18,9 @@ By encapsulating string representations within dedicated path types and centrali
 
 ### Typing
 
-- A host path encapsulates a path string on the host filesystem.
-- An absolute path is a host path representing an absolute filesystem path.
-- A workspace path is a host path representing a relative filesystem path anchored to a workspace root without leading path separators.
+- A host path encapsulates a path string naming a file or directory on the host operating system filesystem, without guaranteeing whether the path string is absolute or relative.
+- An absolute path is a host path whose path string names a location from the filesystem root.
+- A workspace path is a host path whose path string names a location relative to the root of a workspace without a leading path separator.
 - A workspace root is an absolute path representing the root directory of a workspace.
 - A path validation error indicates that a path string is invalid for the target path type.
 
@@ -30,6 +30,7 @@ By encapsulating string representations within dedicated path types and centrali
 - A caller supplies a workspace path when requesting path resolution. [resolve_ws_path_supplied]
 - A caller supplies a workspace root absolute path when requesting path resolution. [resolve_root_supplied]
 - A system's file path manager creates host paths from path strings. [create_host_path]
+- A system's file path manager creates a host path directly for a path string naming neither an absolute nor a workspace location. [create_host_path_fallback]
 - A system's file path manager creates workspace paths from path strings. [create_ws_path]
 - A system's file path manager creates absolute paths from path strings. [create_abs_path]
 - A system's file path manager validates path strings based on target path type. [validate_path_strings]
@@ -43,6 +44,7 @@ By encapsulating string representations within dedicated path types and centrali
 ### Woven Contracts
 
 - Under non-empty input strings, a file path manager creates valid host paths, workspace paths, and absolute paths. [create_path_input_supplied, create_host_path, create_ws_path, create_abs_path, validate_path_strings]
+- When a supplied path string names neither an absolute nor a workspace location, the file path manager creates a host path directly. [create_path_input_supplied, create_host_path, create_host_path_fallback]
 - When creating a workspace path from a path string with leading separators, path validation fails raising a path validation error. [create_path_input_supplied, validate_path_strings, reject_leading_separators, raise_validation_error]
 - When creating a workspace path from an absolute path string, path validation fails raising a path validation error. [create_path_input_supplied, validate_path_strings, reject_absolute_workspace, raise_validation_error]
 - When creating an absolute path from a relative path string, path validation fails raising a path validation error. [create_path_input_supplied, validate_path_strings, reject_relative_absolute, raise_validation_error]

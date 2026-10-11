@@ -8,7 +8,7 @@ Usage:
 
 Checks:
   1. Header matches pattern: '# <unit_name> <component_type> component'.
-  2. Front-matter ordering (imports, implements, types from).
+  2. Front-matter prohibited: planning specifications must not declare 'imports:', 'implements:', or 'types from' front-matter.
   3. Closed ## section inventory in strict order:
      - '## Intent'
      - '## Factored Contracts'
@@ -30,7 +30,7 @@ Checks:
  16. Grounding citations cite valid knowledge provisions (under '### Knowledge Provisions'), not factored contracts.
  17. Prohibited content: markdown tables ('|') and Python AST code expressions.
  18. Grounding DAG acyclicity: internal grounding dependencies between local provisions must form a strict DAG.
- 19. In non-assembly specifications, front-matter 'imports:' contains all imported modules declared in the corresponding high-level specification (high/<name>.md).
+ 19. Imported components cited in planning grounding or woven contracts must be declared in high-level specification (high/<name>.md).
 """
 
 from __future__ import annotations
@@ -227,6 +227,8 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
         start_idx += 1
 
     if start_idx >= len(lines):
+        if is_asm:
+            return []
         return [f"{fname}:1: error: specification has no content after metadata"]
 
     if is_ext:
@@ -243,11 +245,8 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
             f"{fname}:{start_idx + 1}: error: header mismatch: expected '{expected_header}', got '{header_line}'"
         )
 
-    # 2. Front-matter Parsing
+    # 2. Front-matter Audit: planning specifications must not declare front-matter
     idx = start_idx + 1
-    declared_imports: list[str] = []
-    implements_target: str | None = None
-
     while idx < len(lines):
         line = lines[idx].strip()
         if not line:
@@ -257,49 +256,47 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
             break
 
         if line.startswith("imports:"):
-            raw_imps = line[len("imports:") :].strip()
-            if raw_imps:
-                declared_imports = [imp.strip() for imp in raw_imps.split(",") if imp.strip()]
+            errors.append(
+                f"{fname}:{idx + 1}: error: planning specification must not declare 'imports:' front-matter; imports are specified exclusively in high-level and low-level specifications"
+            )
         elif line.startswith("implements:"):
-            implements_target = line[len("implements:") :].strip()
+            errors.append(
+                f"{fname}:{idx + 1}: error: planning specification must not declare 'implements:' front-matter; implemented interface is specified in high-level specification"
+            )
         elif line.startswith("types from "):
-            pass
+            errors.append(f"{fname}:{idx + 1}: error: planning specification must not declare 'types from'")
         else:
             errors.append(f"{fname}:{idx + 1}: error: unrecognized front-matter line: '{line}'")
         idx += 1
 
-    if is_impl and not implements_target:
-        # Default target is stem without _impl
-        implements_target = stem[:-5]
+    # 2b. Extract declared_imports and implements_targets from corresponding High-Level Specification
+    declared_imports: list[str] = []
+    implements_targets: list[str] = []
 
-    # 2b. High-Level Specification Import Parity Audit (for non-assembly specifications)
-    if not is_asm:
-        high_path = file_path.parent.parent / "high" / f"{stem}.md"
-        if not high_path.exists():
-            candidates = list(PARTS_DIR.glob(f"*/high/{stem}.md"))
-            if candidates:
-                high_path = candidates[0]
-            elif not candidates:
-                ws_high = list(Path(file_path.anchor).glob(f"**/parts/*/high/{stem}.md"))
-                if ws_high:
-                    high_path = ws_high[0]
+    high_path = file_path.parent.parent / "high" / f"{stem}.md"
+    if not high_path.exists() and PARTS_DIR.exists():
+        candidates = list(PARTS_DIR.glob(f"*/high/{stem}.md"))
+        if candidates:
+            high_path = candidates[0]
 
-        if high_path.exists():
-            try:
-                high_content = high_path.read_text(encoding="utf-8")
-                for h_line in high_content.splitlines():
-                    h_stripped = h_line.strip()
-                    if h_stripped.startswith("imports:"):
-                        h_raw = h_stripped[len("imports:") :].strip()
-                        if h_raw:
-                            for h_imp in [i.strip() for i in h_raw.split(",") if i.strip()]:
-                                if h_imp not in declared_imports:
-                                    errors.append(
-                                        f"{fname}:{start_idx + 1}: error: planning canvas 'imports:' missing '{h_imp}' declared in '{high_path.name}'"
-                                    )
-                        break
-            except OSError:
-                pass
+    if high_path.exists():
+        try:
+            high_content = high_path.read_text(encoding="utf-8")
+            for h_line in high_content.splitlines():
+                h_stripped = h_line.strip()
+                if h_stripped.startswith("imports:"):
+                    h_raw = h_stripped[len("imports:") :].strip()
+                    if h_raw:
+                        declared_imports.extend(i.strip() for i in h_raw.split(",") if i.strip())
+                elif h_stripped.startswith("implements:"):
+                    h_raw = h_stripped[len("implements:") :].strip()
+                    if h_raw:
+                        implements_targets.extend(i.strip() for i in h_raw.split(",") if i.strip())
+        except OSError:
+            pass
+
+    if is_impl and not implements_targets:
+        implements_targets = [stem[:-5]]
 
     # 3. Structural Sections and Headings
     section_order: list[tuple[str, int]] = []
@@ -437,6 +434,10 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                     woven_citations = parse_grounding_citations(m.group(1))
                     for comp, slug in woven_citations:
                         if comp:
+                            if comp not in declared_imports and comp not in implements_targets and comp != stem:
+                                errors.append(
+                                    f"{fname}:{l_num}: error: woven contract citation references undeclared component '{comp}'"
+                                )
                             if comp.endswith("_ext"):
                                 errors.append(
                                     f"{fname}:{l_num}: error: external component '{comp}' cannot be cited in woven contracts. External components provide knowledge provisions for grounding, not behavioral contracts for weaving."
@@ -445,10 +446,18 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                                 errors.append(
                                     f"{fname}:{l_num}: error: woven contract citation '[{slug}]' in '{comp}' is a knowledge provision slug, NOT a factored contract slug. Woven contracts must cite factored contracts (under '### Contracts')."
                                 )
+                            elif slug not in index.comp_contracts.get(comp, set()):
+                                errors.append(
+                                    f"{fname}:{l_num}: error: unknown factored contract slug '[{slug}]' in component '{comp}'"
+                                )
                         else:
                             if slug in provision_slugs and slug not in contract_slugs:
                                 errors.append(
                                     f"{fname}:{l_num}: error: woven contract citation '[{slug}]' is a local knowledge provision slug, NOT a factored contract slug. Woven contracts must cite factored contracts (under '### Contracts')."
+                                )
+                            elif slug not in contract_slugs:
+                                errors.append(
+                                    f"{fname}:{l_num}: error: unknown local factored contract slug '[{slug}]'"
                                 )
 
         # Grounding -> Knowledge Provisions
@@ -525,25 +534,28 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
         errors.append(f"{fname}:{last_req_lineno}: error: requirement missing indented sub-bullet (- Grounded: or - Deferred:)")
 
     # 5. Interface Deferral Parity Audit (for _impl.md)
-    if is_impl and implements_target:
-        interface_planning_path = file_path.parent / f"{implements_target}.md"
-        if not interface_planning_path.exists():
-            candidates = list(PARTS_DIR.glob(f"*/planning/{implements_target}.md"))
-            if candidates:
-                interface_planning_path = candidates[0]
+    if is_impl and implements_targets:
+        all_expected_deferred: list[str] = []
+        for implements_target in implements_targets:
+            interface_planning_path = file_path.parent / f"{implements_target}.md"
+            if not interface_planning_path.exists() and PARTS_DIR.exists():
+                candidates = list(PARTS_DIR.glob(f"*/planning/{implements_target}.md"))
+                if candidates:
+                    interface_planning_path = candidates[0]
 
-        if interface_planning_path.exists():
-            expected_deferred = find_interface_deferred_requirements(interface_planning_path)
-            for exp in expected_deferred:
-                if exp not in inherited_deferred:
-                    errors.append(
-                        f"{fname}:1: error: missing inherited deferred requirement from '{interface_planning_path.name}': '{exp}'"
-                    )
-            for actual in inherited_deferred:
-                if actual not in expected_deferred:
-                    errors.append(
-                        f"{fname}:1: error: spurious inherited requirement not deferred in '{interface_planning_path.name}': '{actual}'"
-                    )
+            if interface_planning_path.exists():
+                all_expected_deferred.extend(find_interface_deferred_requirements(interface_planning_path))
+
+        for exp in all_expected_deferred:
+            if exp not in inherited_deferred:
+                errors.append(
+                    f"{fname}:1: error: missing inherited deferred requirement: '{exp}'"
+                )
+        for actual in inherited_deferred:
+            if actual not in all_expected_deferred:
+                errors.append(
+                    f"{fname}:1: error: spurious inherited requirement not deferred in implemented interfaces: '{actual}'"
+                )
 
     # 6. Inherited Deferred Requirements Grounding Audit:
     # Must use at least one imported or local knowledge provision.
@@ -584,7 +596,7 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                     continue
 
                 if comp is not None:
-                    if comp not in declared_imports and comp != implements_target and comp != stem:
+                    if comp not in declared_imports and comp not in implements_targets and comp != stem:
                         errors.append(
                             f"{fname}:{l_num}: error: grounding citation references undeclared component '{comp}'"
                         )

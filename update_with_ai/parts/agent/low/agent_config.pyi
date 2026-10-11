@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: e42f92c52cd3
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:06:34Z
+# CHANGE: Align agent config typing with canonical policy properties and supersede arg keep resolution
+# CODE_HASH: c3e2e7ea39f7
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Agent config interface component."""
@@ -18,34 +18,34 @@ SupersedeArgKeepLimit = NewType("SupersedeArgKeepLimit", int)
 
 @singleton_type("system")
 class AgentConfig(InTier[SystemTier], Protocol):
-    """Provides execution parameters for agent sessions."""
+    """Provides system-level execution parameters for agent sessions governing conversation depth and tool behaviors."""
 
     @property
     def conversation_limit(self) -> ConversationLimit:
-        """Bound on the maximum number of model interaction turns."""
+        """Bound on the model interaction turns permitted in an agent run."""
         ...
 
     @property
     def inject_followups(self) -> bool:
-        """Indicates whether the agent should inject followups to execute follow-up tool calls."""
+        """Whether the agent executes the follow-up tool calls that tool responses specify."""
         ...
 
     @property
     def is_step_mode(self) -> bool:
-        """Indicates whether the agent should use step mode to communicate a guide progressively."""
+        """Whether the agent receives a guide progressively in step mode."""
         ...
 
     @property
     def is_startup_reads(self) -> bool:
-        """Indicates whether the agent should perform startup reads to read declared files."""
+        """Whether the agent inspects declared files at session start."""
         ...
 
     @property
     def edit_delta_output(self) -> bool:
-        """Indicates whether editing tools should produce delta output."""
+        """Whether editing tools report the changes they make rather than complete file content."""
         ...
 
     @property
     def supersede_arg_keep(self) -> SupersedeArgKeepLimit:
-        """Trailing character retention limit for string arguments on superseded tool calls."""
+        """Bound on the trailing characters of a superseded string argument retained as a recognizable hint, resolved from the agent session configuration."""
         ...

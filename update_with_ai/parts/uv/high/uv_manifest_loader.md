@@ -1,13 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: 60dc8099eb2c
+CODE_HASH: 8f4587055edf
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_manifest_loader interface component
 
-imports: agent_storage, dag_storage, uv_target, agent_file_alias
+imports: agent_storage, dag_storage, agent_file_alias
 
 ## Purpose
 
@@ -17,22 +18,18 @@ Target execution requires resolving methodology configurations and package layou
 
 **Out of scope:** The uv_manifest_loader interface component does not orchestrate agent turns, resolve session file aliases, or configure session read-write file sets; these are handled by other components.
 
+**Delegated:** Target prompt and node storage is delegated to agent_storage; graph node definitions and DAG relations are delegated to dag_storage; file alias types are delegated to agent_file_alias.
+
 ## Types and Behavior
 
 A *target manifest* is a build artifact carrying node reference fields and file path fields for a workspace target, including target node label, task prompt, declared source file, silent source files, template, direct dependencies, silent dependencies, star dependencies, feedback dependencies, guide target, and verification check.
 
 A system's *uv manifest loader* resolves manifests into graph structures and node definitions.
 
-The uv manifest loader:
+The uv manifest loader retrieves the manifest of a node.
 
-- Retrieves the manifest for a node.
+The uv manifest loader resolves manifests into target nodes, node definitions, and task prompts, and resolves the declared direct dependencies into dependency graph edges in node storage.
 
-- Resolves manifests into target nodes, node definitions, and task prompts, populating node storage.
+The uv manifest loader resolves declared silent dependencies as non-propagating dependencies in node storage, and synthesizes definitions for declared dependencies that lack an explicit manifest.
 
-- Resolves declared direct dependencies into dependency graph edges in node storage.
-
-- Resolves declared silent dependencies as non-propagating dependencies in node storage.
-
-- Synthesizes definitions for declared dependencies lacking explicit manifests.
-
-- Synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when a unit's component type is not active for a role.
+The uv manifest loader synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when the component type of a unit is not active for a role.

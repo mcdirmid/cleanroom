@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: eb6416b40da2
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: d5bc2f2feadd
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_manifest_loader_impl implementation component
-
-imports: agent_storage, dag_storage, file_paths, uv_manifest_ext, uv_target
-implements: uv_manifest_loader
 
 ## Intent
 
@@ -43,7 +40,7 @@ By resolving package directories against the workspace root, parsing role config
 ### Inherited Deferred Requirements
 
 - Role definition discovery and package specification reading.
-  - Grounded: [uv_manifest_ext: [package_directory_conventions], file_paths: [path_resolution_service]]
+  - Grounded: [uv_manifest_ext: [package_directory_conventions], cleanroom_files_ext: [cleanroom_configuration_schema], file_paths: [path_resolution_service]]
 - Parsing role definition TOML schemas and component classifications.
   - Grounded: [uv_manifest_ext: [role_manifest_parsing, component_type_classification]]
 - Evaluation of role path patterns and prompt templates against unit attributes.

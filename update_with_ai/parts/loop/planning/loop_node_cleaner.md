@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 8198b5344edc
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:05:56Z
+CHANGE: State the continuation invariant in terms of nodes no other node cleaning can address
+CODE_HASH: 789181d8cbb1
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_node_cleaner interface component
-
-imports: dag_storage
 
 ## Intent
 
@@ -18,13 +16,17 @@ By isolating role execution and failure reporting into a polymorphic cleaner int
 
 ## Factored Contracts
 
+### Typing
+
+- A node cleaner is a polymorphic abstraction that cleans the dirty nodes sharing a role.
+
 ### Contracts
 
 - A caller supplies dirty nodes when cleaning nodes. [clean_nodes_supplied]
 - A node cleaner cleans dirty nodes sharing a role. [clean_dirty_nodes]
 - The node cleaner communicates whether processing should continue. [communicate_processing_continuation]
-- Processing cannot continue only if an unhandleable failure occurs while cleaning the nodes. [cannot_continue_on_unhandleable_failure]
-- Processing continues when cleaning completes without unhandleable failure. [continue_when_cleaning_handled]
+- Processing cannot continue only when cleaning fails for nodes that no other node cleaning can address. [cannot_continue_on_unhandleable_failure]
+- Processing continues when cleaning does not fail for nodes that no other node cleaning can address. [continue_when_cleaning_handled]
 
 ### Woven Contracts
 

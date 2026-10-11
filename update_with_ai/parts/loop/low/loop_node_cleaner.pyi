@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 74a13fa61eea
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:19:47Z
+# CHANGE: Align node cleaner continuation and unaddressable failure contracts
+# CODE_HASH: 06bdccaa38dd
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Loop node cleaner low-level interface specification."""
@@ -25,12 +25,15 @@ class NodeCleaner(Protocol):
             nodes: The sequence of dirty nodes sharing a role to clean.
 
         Returns:
-            True if processing can continue, or False if an unhandleable failure occurred.
+            True if processing can continue, or False when cleaning fails for nodes that no other node cleaning can address.
+
+        PRECONDITIONS:
+        - A caller supplies dirty nodes when cleaning nodes.
 
         POSTCONDITIONS:
         - MUST clean dirty nodes sharing a role.
         - MUST communicate whether processing should continue.
-        - WHEN an unhandleable failure occurs while cleaning, MUST return false.
-        - WHEN cleaning completes without unhandleable failure, MUST return true.
+        - WHEN cleaning fails for nodes that no other node cleaning can address, MUST return false.
+        - WHEN cleaning does not fail for nodes that no other node cleaning can address, MUST return true.
         """
         ...

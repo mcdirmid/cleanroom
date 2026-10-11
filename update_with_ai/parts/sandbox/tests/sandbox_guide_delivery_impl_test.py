@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-09T04:10:39Z
-# CHANGE: Verify advance_step progressing past all guide milestones and reporting recorded initial primer alongside verification diagnostics upon failure at initial step
-# CODE_HASH: 1c8cdbf6f4aa
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:49:12Z
+# CHANGE: Register the NodeConfig collaborator exposing the configured guide and verify initialize obtains it
+# CODE_HASH: 63718cfe092a
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_guide_delivery_impl per its grounding specification."""
@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import unittest
-from typing import List
+from typing import List, Optional
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib.agent_session import agent_session
@@ -64,10 +64,22 @@ def _make_diagnostic(text: str) -> agent_node_config.VerificationDiagnostic:
     return agent_node_config.VerificationDiagnostic(text)
 
 
+class MockNodeConfig:
+    tier = agent_session
+
+    def __init__(self, guide: Optional[agent_node_config.NodeGuide] = None) -> None:
+        self.guide = guide
+
+
 class SandboxGuideDeliveryImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
+        self.registry.register_instance(
+            MockNodeConfig(),
+            keys=[agent_node_config.NodeConfig],
+            tier=agent_session,
+        )
 
     def test_initialization(self) -> None:
         """CUJ: Singleton resolves under both impl and interface keys; unconfigured guide is None."""
@@ -77,6 +89,30 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertIs(scope.get_singleton(sandbox_guide_delivery.GuideDelivery), delivery)
             self.assertIsNone(delivery.guide)
             self.assertFalse(delivery.has_steps_remaining)
+
+    def test_initialize_obtains_configured_guide(self) -> None:
+        """Postcondition: MUST obtain the guide parsed from the configured guide file content."""
+        configured = agent_node_config.NodeGuide(
+            summary=agent_node_config.GuideSummary("Configured summary text."),
+            sections=[
+                agent_node_config.StepSection(
+                    index=agent_node_config.StepIndex(1),
+                    title=agent_node_config.StepTitle("Configured Step"),
+                    content=agent_node_config.StepContent("Configured milestone task."),
+                )
+            ],
+        )
+        registry = LifecycleRegistry()
+        __initialize__(registry)
+        registry.register_instance(
+            MockNodeConfig(guide=configured),
+            keys=[agent_node_config.NodeConfig],
+            tier=agent_session,
+        )
+        with enter_phase(agent_session, registry=registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            self.assertEqual(delivery.guide, configured)
+            self.assertTrue(delivery.has_steps_remaining)
 
     def test_parse_guide_extracts_summary(self) -> None:
         """Postcondition: Summary is extracted from preamble content and 'Summary' headings."""

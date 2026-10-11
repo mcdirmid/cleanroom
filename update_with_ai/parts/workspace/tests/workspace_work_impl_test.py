@@ -1,18 +1,20 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-09T04:30:00Z
-# CHANGE: test auditor dirtiness across all feedback targets and strict pending target removal
-# CODE_HASH: 7bfb7d5a7e52
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:58:06Z
+# CHANGE: Replace the undeclared private registry and source metadata constructors with test doubles implementing the declared WorkspaceRegistry and SourceMetadataCoordinator interfaces
+# CODE_HASH: 938963b396c3
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_work_impl."""
 
+import hashlib
 import json
 import os
 import tempfile
 import unittest
+from typing import Dict, List, Optional
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
 from update_with_ai.parts.agent.lib import agent_session
 from update_with_ai.parts.control.lib import (
@@ -25,6 +27,236 @@ from update_with_ai.parts.workspace.lib import (
     workspace_work,
     workspace_work_impl,
 )
+
+
+def _parse_metadata_text(content: str) -> Optional[src_metadata.FileMetadata]:
+    """Parses an in-band cleanroom metadata header from text."""
+    in_header = False
+    found = False
+    values: Dict[str, str] = {}
+    for raw in content.splitlines():
+        stripped = raw.strip()
+        if stripped.startswith("# --- CLEANROOM METADATA ---") or stripped.startswith(
+            "<!-- CLEANROOM METADATA"
+        ):
+            in_header = True
+            found = True
+            continue
+        if stripped.startswith("# --- END CLEANROOM METADATA ---") or stripped == "-->":
+            break
+        if not in_header:
+            continue
+        cleaned = stripped.lstrip("#").strip()
+        if ":" in cleaned:
+            key, _, value = cleaned.partition(":")
+            values[key.strip().upper()] = value.strip()
+    if not found:
+        return None
+    audits: Dict[str, str] = {}
+    for key, value in values.items():
+        if key.endswith("_AUDIT"):
+            audits[key] = value
+            audits[key[: -len("_AUDIT")].lower()] = value
+    return src_metadata.FileMetadata(
+        last_cleaned=values.get("LAST_CLEANED"),
+        last_changed=values.get("LAST_CHANGED"),
+        change_summary=values.get("CHANGE", ""),
+        feedback=[values["FEEDBACK"]] if "FEEDBACK" in values else [],
+        audits=audits,
+        dirty=values.get("DIRTY"),
+        code_hash=values.get("CODE_HASH"),
+    )
+
+
+class FakeSourceMetadataCoordinator:
+    """Test double implementing the declared SourceMetadataCoordinator interface."""
+
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.metadata: Dict[str, src_metadata.FileMetadata] = {}
+
+    def extract_metadata(self, file_path) -> Optional[src_metadata.FileMetadata]:
+        key = str(file_path)
+        if key in self.metadata:
+            return self.metadata[key]
+        try:
+            with open(key, "r", encoding="utf-8") as fh:
+                return _parse_metadata_text(fh.read())
+        except OSError:
+            return None
+
+    def extract_metadata_from_text(
+        self, content: str, filename_or_ext: str
+    ) -> Optional[src_metadata.FileMetadata]:
+        return _parse_metadata_text(content)
+
+    def extract_code_body(self, content: str, filename_or_ext: str) -> str:
+        return content
+
+    def compute_code_hash(self, content: str, filename_or_ext: str) -> str:
+        return hashlib.md5(content.encode("utf-8")).hexdigest()[:12]
+
+    def compute_file_code_hash(self, file_path) -> Optional[str]:
+        try:
+            with open(str(file_path), "r", encoding="utf-8") as fh:
+                return self.compute_code_hash(fh.read(), str(file_path))
+        except OSError:
+            return None
+
+    def is_code_modified(self, file_path) -> bool:
+        return False
+
+    def update_metadata(self, file_path, **kwargs) -> None:
+        return None
+
+    def delete_last_cleaned(self, file_path) -> None:
+        return None
+
+    def mark_dirty(self, file_path, reason: str = "manual dirty") -> None:
+        return None
+
+    def mark_clean(self, file_path, default_change: str = "new file") -> None:
+        return None
+
+    def record_change(
+        self, file_path, change_description: str, code_hash: Optional[str] = None
+    ) -> None:
+        return None
+
+    def append_feedback(
+        self, file_path, explanation: str, sender: str = "user"
+    ) -> None:
+        return None
+
+    def stamp_audit(self, file_path, role_name: str) -> None:
+        return None
+
+    def clear_audits(self, file_path) -> None:
+        return None
+
+
+class FakeWorkspaceRegistry:
+    """Test double implementing the declared WorkspaceRegistry interface."""
+
+    tier = agent_session.agent_session
+
+    def __init__(self, roles) -> None:
+        self.roles = list(roles)
+        self.descriptors: List[workspace_registry.WorkspaceDescriptor] = []
+
+    def discover_repository_root(self, start_dir=None) -> str:
+        return start_dir or os.getcwd()
+
+    def resolve_role_definition(
+        self, role_name_or_address, repo_root=None, dir_scope=None
+    ) -> workspace_registry.RoleDefinition:
+        name = str(role_name_or_address).split(":")[-1].split("#")[0].strip().lower()
+        for role in self.roles:
+            if role.role_name == name:
+                return role
+        raise KeyError(f"Role not found: {role_name_or_address}")
+
+    def list_roles(self, repo_root=None, dir_scope=None):
+        return list(self.roles)
+
+    def compute_workspace_dir(
+        self, role_name, dir_scope, repo_root=None, custom_dest=None
+    ) -> str:
+        if custom_dest:
+            return custom_dest
+        folder = f"{role_name}_{str(dir_scope).replace('/', '_')}"
+        return os.path.join(repo_root or os.getcwd(), folder)
+
+    def record_workspace(self, descriptor, repo_root=None) -> None:
+        self.descriptors.append(descriptor)
+
+    def unregister_workspace(self, workspace_dir, repo_root=None) -> bool:
+        before = len(self.descriptors)
+        self.descriptors = [
+            d for d in self.descriptors if d.workspace_dir != workspace_dir
+        ]
+        return len(self.descriptors) != before
+
+    def load_active_workspaces(self, repo_root=None):
+        return list(self.descriptors)
+
+
+def _role(
+    name: str,
+    src_pattern: str,
+    writable: List[str],
+    readonly: Optional[List[str]] = None,
+    role_deps: Optional[List[str]] = None,
+    star_role_deps: Optional[List[str]] = None,
+    feedback_role_deps: Optional[List[str]] = None,
+    stub_role_deps: Optional[List[str]] = None,
+    audit_tag: Optional[str] = None,
+) -> workspace_registry.RoleDefinition:
+    return workspace_registry.RoleDefinition(
+        role_name=name,
+        guide_path=f"guides/{name}.md",
+        writable_file_patterns=writable,
+        readonly_file_patterns=readonly or [],
+        feedback_role_deps=feedback_role_deps or [],
+        src_pattern=src_pattern,
+        role_deps=role_deps or [],
+        star_role_deps=star_role_deps or [],
+        stub_role_deps=stub_role_deps or [],
+        audit_tag=audit_tag,
+    )
+
+
+def _make_roles():
+    return [
+        _role(
+            "high",
+            "{unit_dir}/high/{unit_name}.md",
+            ["high/*.md", "**/high/*.md"],
+        ),
+        _role(
+            "planning",
+            "{unit_dir}/planning/{unit_name}.md",
+            ["planning/*.md", "**/planning/*.md"],
+        ),
+        _role(
+            "low",
+            "{unit_dir}/low/{unit_name}.pyi",
+            ["low/*.pyi", "**/low/*.pyi"],
+            readonly=["high/*.md", "**/high/*.md"],
+        ),
+        _role(
+            "lib",
+            "{unit_dir}/lib/{unit_name}.py",
+            ["lib/*.py", "**/lib/*.py"],
+            readonly=["low/*.pyi", "**/low/*.pyi"],
+            role_deps=["low"],
+            star_role_deps=["low"],
+        ),
+        _role(
+            "test",
+            "{unit_dir}/tests/{unit_name}_test.py",
+            ["tests/*.py", "**/tests/*.py"],
+            readonly=["low/*.pyi", "**/low/*.pyi"],
+            role_deps=["low"],
+            stub_role_deps=["lib"],
+        ),
+        _role(
+            "qa",
+            "{unit_dir}/lib/{unit_name}.py",
+            ["lib/*.py", "**/lib/*.py"],
+            readonly=["low/*.pyi", "**/low/*.pyi", "tests/*.py", "**/tests/*.py"],
+            feedback_role_deps=["lib", "test"],
+            star_role_deps=["low", "test"],
+            audit_tag="QA_AUDIT",
+        ),
+        _role(
+            "scenario",
+            "{unit_dir}/scenarios/{unit_name}.md",
+            ["scenarios/*.md", "**/scenarios/*.md"],
+            star_role_deps=["scenario"],
+        ),
+    ]
 
 
 class MockWorkScheduler:
@@ -56,7 +288,7 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             keys=[dag_storage.DagStorage],
             tier=agent_session.agent_session,
         )
-        self.ws_registry = workspace_registry._DefaultWorkspaceRegistry()
+        self.ws_registry = FakeWorkspaceRegistry(_make_roles())
         self.registry.register_instance(
             self.ws_registry,
             keys=[
@@ -64,7 +296,7 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             ],
             tier=agent_session.agent_session,
         )
-        self.src_meta = src_metadata._DefaultSourceMetadataCoordinator()
+        self.src_meta = FakeSourceMetadataCoordinator()
         self.registry.register_instance(
             self.src_meta,
             keys=[
@@ -468,6 +700,56 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                     role_name="qa",
                 )
             )
+
+    def test_producer_dirty_when_star_role_dependency_modified_on_interface(self) -> None:
+        with tempfile.TemporaryDirectory() as repo_root:
+            part_dir = os.path.join(repo_root, "staging/parts/sample")
+            os.makedirs(os.path.join(part_dir, "scenarios"), exist_ok=True)
+            with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
+                f.write('update_python_with_ai(name="sample_impl")\n')
+            # Interface scenario modified at 02:00:00Z
+            with open(os.path.join(part_dir, "scenarios/sample.md"), "w", encoding="utf-8") as f:
+                f.write(
+                    "<!-- CLEANROOM METADATA\n"
+                    "LAST_CLEANED: 2026-10-08T02:00:00Z\n"
+                    "LAST_CHANGED: 2026-10-08T02:00:00Z\n"
+                    "-->\n"
+                    "# sample scenario\n"
+                )
+            # Implementation scenario cleaned at 01:00:00Z (before interface change)
+            with open(os.path.join(part_dir, "scenarios/sample_impl.md"), "w", encoding="utf-8") as f:
+                f.write(
+                    "<!-- CLEANROOM METADATA\n"
+                    "LAST_CLEANED: 2026-10-08T01:00:00Z\n"
+                    "LAST_CHANGED: 2026-10-08T01:00:00Z\n"
+                    "-->\n"
+                    "# sample_impl scenario\n"
+                )
+
+            # Implementation must evaluate dirty because star dependency (interface scenario) changed
+            self.assertTrue(
+                self.work_mgr.is_pending_target_dirty(
+                    "staging/parts/sample/scenarios/sample_impl.md",
+                    repo_root,
+                    role_name="scenario",
+                )
+            )
+
+    def test_resolve_contract_files_includes_interface_stem_for_star_roles(self) -> None:
+        with tempfile.TemporaryDirectory() as repo_root:
+            part_dir = os.path.join(repo_root, "staging/parts/sample")
+            os.makedirs(os.path.join(part_dir, "scenarios"), exist_ok=True)
+            with open(os.path.join(part_dir, "scenarios/sample.md"), "w", encoding="utf-8") as f:
+                f.write("# sample scenario\n")
+            with open(os.path.join(part_dir, "scenarios/sample_impl.md"), "w", encoding="utf-8") as f:
+                f.write("# sample_impl scenario\n")
+
+            contracts = self.work_mgr.resolve_contract_files(
+                target_path="staging/parts/sample/scenarios/sample_impl.md",
+                workspace_dir=repo_root,
+                role_name="scenario",
+            )
+            self.assertIn("staging/parts/sample/scenarios/sample.md", contracts)
 
 
 if __name__ == "__main__":

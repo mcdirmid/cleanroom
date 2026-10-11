@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-06T14:35:00Z
 CHANGE: new file
-CODE_HASH: 1ddabf45adbe
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 2d1371cac60e
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # src_metadata interface component
-
-imports: agent_session, src_metadata_ext
 
 ## Intent
 
@@ -20,7 +18,7 @@ Decentralized dirty tracking and feedback distribution require uniform metadata 
 
 ### Typing
 
-- A file metadata record encapsulates an optional last cleaned timestamp, an optional last changed timestamp, a change summary, a feedback list, an audits mapping, an optional dirty reason, and an optional code hash.
+- A file metadata record encapsulates a last cleaned timestamp when clean, a last changed timestamp when modified, a change summary, unacted feedback items, role audit timestamps, a dirty reason when dirtiness is attributed, and a code hash when computed.
 - A source metadata coordinator operates within the agent session lifecycle tier.
 
 ### Contracts

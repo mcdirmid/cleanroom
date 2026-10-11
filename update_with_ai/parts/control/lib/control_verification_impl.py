@@ -1,43 +1,62 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-06T10:45:00Z
-# CHANGE: new file
-# CODE_HASH: 0858d0ae11c7
-# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:04:01Z
+# CHANGE: Narrow the broad exception handlers to the failures that can occur, resolve verification checks per node and by role nodes, hash bound workspace paths, and filter compiler diagnostics with compiled patterns including elapsed timing
+# CODE_HASH: 7d67f9e1c851
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
 import hashlib
 import os
+import re
 import subprocess
 from typing import Dict, List, Optional, Sequence, Tuple
-from support.lib.lifecycle import Singleton, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
 from update_with_ai.parts.agent.lib import agent_file_alias, agent_node_config, agent_session
 from update_with_ai.parts.dag.lib import dag_storage
 from . import control_verification
 
-NOISE_PREFIXES: Tuple[str, ...] = (
-    "INFO: Analyzed target",
-    "INFO: Found 1 test target",
-    "Loading:",
-    "Analyzing:",
-    "Target //",
-    "bazel-bin/",
-    "Executed 0 out of",
-    "Executed 1 out of 1 test: 1 test passes",
+_NOISE_PATTERNS: Tuple[re.Pattern[str], ...] = (
+    re.compile(r"^INFO: Analyzed target"),
+    re.compile(r"^INFO: Found \d+ test target"),
+    re.compile(r"^INFO: Elapsed time"),
+    re.compile(r"^INFO: Total time"),
+    re.compile(r"^INFO: Build (completed|time)"),
+    re.compile(r"^INFO: \d+ processes"),
+    re.compile(r"^Elapsed time"),
+    re.compile(r"^\[\d+ / \d+\]"),
+    re.compile(r"^Loading:"),
+    re.compile(r"^Analyzing:"),
+    re.compile(r"^Target //"),
+    re.compile(r"^bazel-bin/"),
+    re.compile(r"^Executed \d+ out of"),
 )
 
 
 def _compute_path_hash(path: str) -> str:
-    """Computes SHA-256 hash of a file on disk."""
-    if not os.path.exists(path):
+    """Computes the SHA-256 digest of a file on disk."""
+    if not path or not os.path.isfile(path):
         return ""
     try:
         with open(path, "rb") as f:
             return hashlib.sha256(f.read()).hexdigest()
-    except Exception:
+    except OSError:
         return ""
+
+
+def _bound_file_path(bound_file: agent_file_alias.BoundFile) -> str:
+    """Resolves the host path text of a declared session bound file."""
+    ws_path = getattr(bound_file, "workspace_path", None)
+    if ws_path is not None:
+        return str(getattr(ws_path, "path", ws_path))
+    return str(getattr(bound_file, "relative_path", bound_file))
 
 
 class VerificationEvaluator(control_verification.VerificationEvaluator, Singleton):
@@ -47,9 +66,13 @@ class VerificationEvaluator(control_verification.VerificationEvaluator, Singleto
 
     def __init__(self) -> None:
         self._cached_node_hash: Dict[dag_storage.DagNode, str] = {}
-        self._cached_node_result: Dict[dag_storage.DagNode, control_verification.VerificationResult] = {}
+        self._cached_node_result: Dict[
+            dag_storage.DagNode, control_verification.VerificationResult
+        ] = {}
         self._cached_global_hash: Optional[str] = None
-        self._cached_global_result: Optional[control_verification.VerificationResult] = None
+        self._cached_global_result: Optional[
+            control_verification.VerificationResult
+        ] = None
 
     def clean_diagnostic_noise(self, text: str) -> str:
         """Strips build system noise lines from diagnostic text."""
@@ -57,55 +80,53 @@ class VerificationEvaluator(control_verification.VerificationEvaluator, Singleto
         filtered = [
             line
             for line in lines
-            if not any(line.strip().startswith(prefix) for prefix in NOISE_PREFIXES)
+            if not any(pattern.search(line.strip()) for pattern in _NOISE_PATTERNS)
         ]
         return "\n".join(filtered).strip()
 
-    def _compute_target_hash(self, target: Optional[dag_storage.DagNode]) -> str:
-        """Computes composite hash for a target node's primary files."""
+    def _compute_nodes_hash(self, nodes: Sequence[dag_storage.DagNode]) -> str:
+        """Computes the composite SHA-256 digest of the session files of the nodes."""
         cfg = get_singleton(agent_node_config.NodeConfig)
-        if target is not None:
-            target_files = [
-                f for f in cfg.read_write_files
-                if getattr(f, "owning_node", None) == target
-            ]
-            if target_files:
-                hashes = []
-                for f in target_files:
-                    path = getattr(f, "relative_path", str(f))
-                    hashes.append(_compute_path_hash(path))
-                return ":".join(hashes)
-            return target.unit_address + ":" + target.role_address
-
-        if not cfg.read_write_files:
-            return ""
-        sorted_files = sorted(
-            cfg.read_write_files,
-            key=lambda x: getattr(x, "relative_path", getattr(x, "short_name", "")),
-        )
-        return ":".join(
-            _compute_path_hash(getattr(f, "relative_path", str(f)))
-            for f in sorted_files
-        )
+        digests: List[str] = []
+        for node in nodes:
+            digests.append(f"{node.unit_address}:{node.role_address}")
+            files = sorted(
+                (
+                    f
+                    for f in cfg.read_write_files
+                    if getattr(f, "owning_node", None) == node
+                ),
+                key=_bound_file_path,
+            )
+            digests.extend(_compute_path_hash(_bound_file_path(f)) for f in files)
+        return ":".join(digests)
 
     def evaluate_verification(
         self, target: Optional[dag_storage.DagNode] = None
     ) -> control_verification.VerificationResult:
-        """Evaluates verification checks for a specific target node or across the session."""
+        """Evaluates verification checks for a target or all open session targets."""
         cfg = get_singleton(agent_node_config.NodeConfig)
-        current_hash = self._compute_target_hash(target)
 
-        # Cache check for single node
         if target is not None:
+            current_hash = self._compute_nodes_hash((target,))
             cached_hash = self._cached_node_hash.get(target)
-            cached_res = self._cached_node_result.get(target)
-            if cached_hash is not None and cached_hash == current_hash and cached_res is not None:
+            cached_result = self._cached_node_result.get(target)
+            if (
+                cached_hash is not None
+                and cached_hash == current_hash
+                and cached_result is not None
+            ):
                 return control_verification.VerificationResult(
-                    passed=cached_res.passed,
-                    diagnostic_output=cached_res.diagnostic_output,
+                    passed=cached_result.passed,
+                    diagnostic_output=cached_result.diagnostic_output,
                     is_cached=True,
                 )
+            checks: Sequence[agent_node_config.VerificationCheck] = tuple(
+                cfg.verification_checks_by_node.get(target, ())
+            )
         else:
+            session_nodes = tuple(get_singleton(agent_node_config.RoleConfig).nodes)
+            current_hash = self._compute_nodes_hash(session_nodes)
             if (
                 self._cached_global_hash is not None
                 and self._cached_global_hash == current_hash
@@ -116,60 +137,51 @@ class VerificationEvaluator(control_verification.VerificationEvaluator, Singleto
                     diagnostic_output=self._cached_global_result.diagnostic_output,
                     is_cached=True,
                 )
-
-        checks: Sequence[agent_node_config.VerificationCheck] = cfg.verification_checks
-        if not checks:
-            result = control_verification.VerificationResult(
-                passed=True,
-                diagnostic_output="All verification checks passed.",
-                is_cached=False,
+            checks = tuple(
+                check
+                for node in session_nodes
+                for check in cfg.verification_checks_by_node.get(node, ())
             )
-            if target is not None:
-                self._cached_node_hash[target] = current_hash
-                self._cached_node_result[target] = result
-            else:
-                self._cached_global_hash = current_hash
-                self._cached_global_result = result
-            return result
 
         all_passed = True
         outputs: List[str] = []
 
         for check in checks:
             if hasattr(check, "verify"):
-                check_passed, diag = check.verify()
-                diag_str = str(diag).strip()
+                check_passed, diagnostic = check.verify()
+                diagnostic_str = str(diagnostic).strip()
                 if not check_passed:
                     all_passed = False
-                    outputs.append(self.clean_diagnostic_noise(diag_str))
+                    outputs.append(self.clean_diagnostic_noise(diagnostic_str))
                     break
-                elif diag_str:
-                    outputs.append(self.clean_diagnostic_noise(diag_str))
+                elif diagnostic_str:
+                    outputs.append(self.clean_diagnostic_noise(diagnostic_str))
             else:
-                # Fallback for simple subprocess command objects
-                cmd = getattr(check, "command", None)
-                if cmd:
+                command = getattr(check, "command", None)
+                if command:
                     try:
                         proc = subprocess.run(
-                            cmd,
+                            command,
                             shell=True,
                             capture_output=True,
                             text=True,
                             timeout=120,
                         )
-                        cleaned_out = self.clean_diagnostic_noise(proc.stdout + "\n" + proc.stderr)
+                        cleaned_out = self.clean_diagnostic_noise(
+                            proc.stdout + "\n" + proc.stderr
+                        )
                         if proc.returncode != 0:
                             all_passed = False
                             outputs.append(cleaned_out)
                             break
                         elif cleaned_out:
                             outputs.append(cleaned_out)
-                    except Exception as e:
+                    except (OSError, subprocess.SubprocessError) as e:
                         all_passed = False
                         outputs.append(f"Verification execution error: {e}")
                         break
 
-        combined_output = "\n".join(outputs).strip()
+        combined_output = "\n".join(out for out in outputs if out).strip()
         if all_passed and not combined_output:
             combined_output = "All verification checks passed."
 
@@ -187,3 +199,18 @@ class VerificationEvaluator(control_verification.VerificationEvaluator, Singleto
             self._cached_global_result = result
 
         return result
+
+
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        VerificationEvaluator,
+        keys=[VerificationEvaluator, control_verification.VerificationEvaluator],
+        tier=VerificationEvaluator.tier,
+    )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

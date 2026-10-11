@@ -1,16 +1,15 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-06T23:30:00Z
-# CHANGE: define workspace tool runner interface
-# CODE_HASH: 8a4aafcea74a
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:25:18Z
+# CHANGE: Prune the uncontracted get_workspace_tool_runner module function and its lifecycle import so the interface holds only the declared runner protocol, restore the declared directory scope default, and carry the grounding specification's postconditions into the protocol docstrings
+# CODE_HASH: 8c13a22f8101
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_tool."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
-from support.lib.lifecycle import get_singleton
+from typing import Optional, Protocol, Sequence
 
 
 class WorkspaceToolRunner(Protocol):
@@ -34,7 +33,12 @@ class WorkspaceToolRunner(Protocol):
         target: Optional[str] = None,
         repo_root: Optional[str] = None,
     ) -> int:
-        """Executes role-specific verification checks, linters, and type checking for targets."""
+        """Executes role-specific verification checks, linters, and type checking for targets.
+
+        POSTCONDITIONS:
+        - When a target file for a regenerable role is missing or deleted, MUST regenerate it from starter template.
+        - MUST execute verification checks and return exit code.
+        """
         ...
 
     def run_submit(
@@ -42,8 +46,15 @@ class WorkspaceToolRunner(Protocol):
         target: str,
         summary: Optional[str] = None,
         repo_root: Optional[str] = None,
+        no_verify: bool = False,
     ) -> int:
-        """Verifies and submits target to canonical main repository."""
+        """Verifies and submits target to canonical main repository.
+
+        POSTCONDITIONS:
+        - WHEN verification checks fail and no_verify is False, MUST reject submission and return non-zero exit code.
+        - WHEN submission is accepted, MUST append submission message to .cleanroom.log in directory containing parts.
+        - WHEN submission is accepted, MUST clear target from pending work.
+        """
         ...
 
     def run_blame(
@@ -52,7 +63,12 @@ class WorkspaceToolRunner(Protocol):
         critique: str,
         repo_root: Optional[str] = None,
     ) -> int:
-        """Attributes defect critique to culprit target in main repository."""
+        """Attributes defect critique to culprit target in main repository.
+
+        POSTCONDITIONS:
+        - WHEN critique is accepted, MUST append blame message to .cleanroom.log in directory containing parts.
+        - WHEN critique is accepted, MUST clear target from pending work.
+        """
         ...
 
     def run_fail(
@@ -81,7 +97,7 @@ class WorkspaceToolRunner(Protocol):
     def run_commission(
         self,
         role_name: str,
-        dir_scope: str = "",
+        dir_scope: str = "staging",
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
     ) -> int:
@@ -96,8 +112,3 @@ class WorkspaceToolRunner(Protocol):
     ) -> int:
         """Refreshes system files, bin tools, configs, and guides across role workspaces."""
         ...
-
-
-def get_workspace_tool_runner() -> WorkspaceToolRunner:
-    """Returns singleton WorkspaceToolRunner instance."""
-    return get_singleton(WorkspaceToolRunner)

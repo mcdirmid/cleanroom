@@ -1,19 +1,21 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-09T02:39:58Z
-# CHANGE: test contamination tripwire in refreshed AGENTS.md
-# CODE_HASH: 75f1a65b33e5
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:57:40Z
+# CHANGE: Replace the undeclared private registry and source metadata constructors with test doubles implementing the declared WorkspaceRegistry and SourceMetadataCoordinator interfaces
+# CODE_HASH: 7513bfe25626
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_sync_impl."""
 
+import hashlib
 import json
 import os
 import stat
 import tempfile
 import unittest
+from typing import Dict, List, Optional
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
 from update_with_ai.parts.agent.lib import agent_session
 from update_with_ai.parts.control.lib import src_metadata
@@ -24,10 +26,209 @@ from update_with_ai.parts.workspace.lib import (
 )
 
 
+def _parse_metadata_text(content: str) -> Optional[src_metadata.FileMetadata]:
+    """Parses an in-band cleanroom metadata header from text."""
+    lines = content.splitlines()
+    in_header = False
+    found = False
+    values: Dict[str, str] = {}
+    for raw in lines:
+        stripped = raw.strip()
+        if stripped.startswith("# --- CLEANROOM METADATA ---") or stripped.startswith(
+            "<!-- CLEANROOM METADATA"
+        ):
+            in_header = True
+            found = True
+            continue
+        if stripped.startswith("# --- END CLEANROOM METADATA ---") or stripped == "-->":
+            break
+        if not in_header:
+            continue
+        cleaned = stripped.lstrip("#").strip()
+        if ":" in cleaned:
+            key, _, value = cleaned.partition(":")
+            values[key.strip().upper()] = value.strip()
+    if not found:
+        return None
+    audits: Dict[str, str] = {}
+    for key, value in values.items():
+        if key.endswith("_AUDIT"):
+            audits[key] = value
+            audits[key[: -len("_AUDIT")].lower()] = value
+    return src_metadata.FileMetadata(
+        last_cleaned=values.get("LAST_CLEANED"),
+        last_changed=values.get("LAST_CHANGED"),
+        change_summary=values.get("CHANGE", ""),
+        feedback=[values["FEEDBACK"]] if "FEEDBACK" in values else [],
+        audits=audits,
+        dirty=values.get("DIRTY"),
+        code_hash=values.get("CODE_HASH"),
+    )
+
+
+class FakeSourceMetadataCoordinator:
+    """Test double implementing the declared SourceMetadataCoordinator interface."""
+
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.updated: List[tuple] = []
+        self.stamped: List[tuple] = []
+        self.appended: List[tuple] = []
+        self.metadata: Dict[str, src_metadata.FileMetadata] = {}
+
+    def extract_metadata_from_text(
+        self, content: str, filename_or_ext: str
+    ) -> Optional[src_metadata.FileMetadata]:
+        return _parse_metadata_text(content)
+
+    def extract_metadata(
+        self, file_path
+    ) -> Optional[src_metadata.FileMetadata]:
+        key = str(file_path)
+        if key in self.metadata:
+            return self.metadata[key]
+        try:
+            with open(key, "r", encoding="utf-8") as fh:
+                return _parse_metadata_text(fh.read())
+        except OSError:
+            return None
+
+    def extract_code_body(self, content: str, filename_or_ext: str) -> str:
+        return content
+
+    def compute_code_hash(self, content: str, filename_or_ext: str) -> str:
+        return hashlib.md5(content.encode("utf-8")).hexdigest()[:12]
+
+    def compute_file_code_hash(self, file_path) -> Optional[str]:
+        try:
+            with open(str(file_path), "r", encoding="utf-8") as fh:
+                return self.compute_code_hash(fh.read(), str(file_path))
+        except OSError:
+            return None
+
+    def is_code_modified(self, file_path) -> bool:
+        return False
+
+    def rewrite_metadata_in_text(
+        self, content: str, filename_or_ext: str, **kwargs
+    ) -> str:
+        return content
+
+    def update_metadata(self, file_path, **kwargs) -> None:
+        self.updated.append((str(file_path), kwargs))
+
+    def delete_last_cleaned(self, file_path) -> None:
+        self.updated.append((str(file_path), {"clear_last_cleaned": True}))
+
+    def mark_dirty(self, file_path, reason: str = "manual dirty") -> None:
+        self.updated.append((str(file_path), {"dirty": reason}))
+
+    def mark_clean(self, file_path, default_change: str = "new file") -> None:
+        self.updated.append((str(file_path), {"last_cleaned": "now"}))
+
+    def record_change(
+        self, file_path, change_description: str, code_hash: Optional[str] = None
+    ) -> None:
+        self.updated.append(
+            (str(file_path), {"change_summary": change_description})
+        )
+
+    def append_feedback(
+        self, file_path, explanation: str, sender: str = "user"
+    ) -> None:
+        self.appended.append((str(file_path), explanation, sender))
+
+    def stamp_audit(self, file_path, role_name: str) -> None:
+        self.stamped.append((str(file_path), role_name))
+
+    def clear_audits(self, file_path) -> None:
+        self.updated.append((str(file_path), {"clear_audits": True}))
+
+
+class FakeWorkspaceRegistry:
+    """Test double implementing the declared WorkspaceRegistry interface."""
+
+    tier = agent_session.agent_session
+
+    def __init__(self, roles) -> None:
+        self.roles = list(roles)
+        self.default_root = os.getcwd()
+        self.descriptors: List[workspace_registry.WorkspaceDescriptor] = []
+
+    def discover_repository_root(self, start_dir=None) -> str:
+        return self.default_root
+
+    def resolve_role_definition(
+        self, role_name_or_address, repo_root=None, dir_scope=None
+    ) -> workspace_registry.RoleDefinition:
+        name = str(role_name_or_address).split(":")[-1].split("#")[0].strip().lower()
+        for role in self.roles:
+            if role.role_name == name:
+                return role
+        raise KeyError(f"Role not found: {role_name_or_address}")
+
+    def list_roles(self, repo_root=None, dir_scope=None):
+        return list(self.roles)
+
+    def compute_workspace_dir(
+        self, role_name, dir_scope, repo_root=None, custom_dest=None
+    ) -> str:
+        if custom_dest:
+            return custom_dest
+        folder = f"{role_name}_{str(dir_scope).replace('/', '_')}"
+        return os.path.join(repo_root or self.default_root, folder)
+
+    def record_workspace(self, descriptor, repo_root=None) -> None:
+        self.descriptors.append(descriptor)
+
+    def unregister_workspace(self, workspace_dir, repo_root=None) -> bool:
+        before = len(self.descriptors)
+        self.descriptors = [
+            d for d in self.descriptors if d.workspace_dir != workspace_dir
+        ]
+        return len(self.descriptors) != before
+
+    def load_active_workspaces(self, repo_root=None):
+        return list(self.descriptors)
+
+
+def _make_roles():
+    low_role = workspace_registry.RoleDefinition(
+        role_name="low",
+        guide_path="guides/low.md",
+        writable_file_patterns=["low/*.pyi", "**/low/*.pyi"],
+        readonly_file_patterns=[],
+        feedback_role_deps=[],
+        src_pattern="{unit_dir}/low/{unit_name}.pyi",
+    )
+    lib_role = workspace_registry.RoleDefinition(
+        role_name="lib",
+        guide_path="guides/lib.md",
+        writable_file_patterns=["lib/*.py", "**/lib/*.py"],
+        readonly_file_patterns=["low/*.pyi", "**/low/*.pyi"],
+        feedback_role_deps=[],
+        role_deps=["low"],
+        star_role_deps=["low"],
+        src_pattern="{unit_dir}/lib/{unit_name}.py",
+    )
+    test_role = workspace_registry.RoleDefinition(
+        role_name="test",
+        guide_path="guides/test.md",
+        writable_file_patterns=["tests/*.py", "**/tests/*.py"],
+        readonly_file_patterns=["low/*.pyi", "**/low/*.pyi"],
+        feedback_role_deps=[],
+        role_deps=["low"],
+        stub_role_deps=["lib"],
+        src_pattern="{unit_dir}/tests/{unit_name}_test.py",
+    )
+    return [low_role, lib_role, test_role]
+
+
 class WorkspaceSyncImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = get_default_registry()
-        self.ws_registry = workspace_registry._DefaultWorkspaceRegistry()
+        self.ws_registry = FakeWorkspaceRegistry(_make_roles())
         self.registry.register_instance(
             self.ws_registry,
             keys=[
@@ -35,7 +236,7 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             ],
             tier=agent_session.agent_session,
         )
-        self.src_meta = src_metadata._DefaultSourceMetadataCoordinator()
+        self.src_meta = FakeSourceMetadataCoordinator()
         self.registry.register_instance(
             self.src_meta,
             keys=[
@@ -118,11 +319,17 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             flushed = self.synchronizer.flush_blame_buffer(ws_dir, main_root)
             self.assertEqual(len(flushed), 1)
 
-            meta = src_metadata.extract_metadata(culprit_file)
-            self.assertIsNotNone(meta)
-            assert meta is not None
-            self.assertIsNotNone(meta.dirty)
-            self.assertTrue(any("Type mismatch" in fb for fb in meta.feedback))
+            # Requirement: MUST append unacted feedback to culprit files in the canonical repository.
+            self.assertTrue(
+                any(
+                    path.endswith(os.path.join("scope", "low", "sample.pyi"))
+                    and "Type mismatch" in explanation
+                    for path, explanation, _sender in self.src_meta.appended
+                ),
+                f"Expected blame feedback appended to the culprit file: {self.src_meta.appended}",
+            )
+            # The consumed blame buffer is deleted after every entry is applied.
+            self.assertFalse(os.path.exists(blame_buf))
 
     def test_refresh_system_files_decoupled_from_bazel(self) -> None:
         with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
@@ -133,7 +340,7 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                 f.write(
                     "[methodology]\nname = 'python'\n\n"
                     "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
-                    "role_deps = ['low']\nstar_role_deps = ['low']\n"
+                    "star_role_deps = ['low']\n"
                 )
             with open(os.path.join(main_root, "MODULE.bazel"), "w", encoding="utf-8") as f:
                 f.write("# legacy bazel module\n")
@@ -141,6 +348,7 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                 f.write("{}\n")
 
             os.makedirs(os.path.join(ws_dir, "bin"), exist_ok=True)
+            self.ws_registry.default_root = main_root
             refreshed = self.synchronizer.refresh_system_files(
                 workspace_dir=ws_dir,
                 main_root=main_root,
@@ -178,7 +386,7 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                 "# --- END CLEANROOM METADATA ---\n"
                 "x = 1\n"
             )
-            code_hash = src_metadata.compute_code_hash(content_clean, "unit.py")
+            code_hash = self.src_meta.compute_code_hash(content_clean, "unit.py")
             content_clean = content_clean.replace("123456789abc", code_hash)
             with open(main_target, "w", encoding="utf-8") as f:
                 f.write(content_clean)
@@ -187,7 +395,12 @@ class WorkspaceSyncImplTest(unittest.TestCase):
 
             os.chmod(ws_target, 0o444)
 
-            src_metadata.mark_dirty(main_target, reason="Test failure")
+            # The canonical file carries an unacted dirty tag that pull must propagate.
+            content_dirty = content_clean.replace(
+                "# CODE_HASH:", "# DIRTY: Test failure\n# CODE_HASH:"
+            )
+            with open(main_target, "w", encoding="utf-8") as f:
+                f.write(content_dirty)
 
             pulled = self.synchronizer.pull(
                 workspace_dir=ws_dir,
@@ -197,10 +410,9 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             )
             self.assertEqual(pulled, 1)
 
-            ws_meta = src_metadata.extract_metadata(ws_target)
-            self.assertIsNotNone(ws_meta)
-            assert ws_meta is not None
-            self.assertEqual(ws_meta.dirty, "Test failure")
+            with open(ws_target, "r", encoding="utf-8") as f:
+                ws_content = f.read()
+            self.assertIn("Test failure", ws_content)
 
             st = os.stat(ws_target)
             self.assertTrue(bool(st.st_mode & stat.S_IWUSR))

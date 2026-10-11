@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-05T05:43:34Z
-# CHANGE: Add caller acyclic subgraph assumption contract
-# CODE_HASH: 8747b0adf920
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:19:47Z
+# CHANGE: Align loop cleaner acyclic caller guarantee, halt, and conclusion contracts
+# CODE_HASH: c7bc8c8c4d92
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Loop cleaner low-level interface specification."""
@@ -30,7 +30,7 @@ class LoopCleaner(InTier[SystemTier], Protocol):
             node_cleaner: The node cleaner service executing single-node workloads.
 
         Returns:
-            True if all nodes in the target subgraph are clean, or False if processing halted.
+            True if all nodes in the subgraph rooted at the target node are clean, or False if processing halted.
 
         PRECONDITIONS:
         - A caller guarantees that the target node roots an acyclic subgraph.
@@ -38,7 +38,7 @@ class LoopCleaner(InTier[SystemTier], Protocol):
         POSTCONDITIONS:
         - MUST clean dirty nodes in dependency-first topological order.
         - MUST ensure all dependencies of a node are clean before that node is cleaned.
-        - WHEN the node cleaner communicates that processing cannot continue, MUST halt.
-        - WHEN all nodes in the target subgraph are clean, MUST return true.
+        - WHEN the supplied node cleaner communicates that processing cannot continue, MUST halt.
+        - WHEN all nodes in the subgraph rooted at the target node are clean, MUST return true.
         """
         ...

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: f7072819beb7
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:58:43Z
+CHANGE: Align agent session typing with the simplified agent definition and system tier relationship
+CODE_HASH: 47ed11ea0242
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # agent_session interface component
@@ -18,7 +18,8 @@ The component anchors all session-scoped collaborators to a clean lifecycle tier
 
 ### Typing
 
-- An agent is an autonomous entity that issues tool calls.
+- An agent is an autonomous entity that cleans and reads workspace nodes by issuing tool calls.
+- An agent session is a lifecycle tier of the system lifecycle tier.
 - An agent session bounds the execution of an agent.
 - An agent session bounds the conversation of an agent.
 - An agent session bounds the ephemeral state of an agent.

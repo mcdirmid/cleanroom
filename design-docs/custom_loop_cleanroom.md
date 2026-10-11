@@ -2,17 +2,17 @@
 
 ## 1. Executive Summary & System Context
 
-**Custom Loop Cleanroom** (Option 1) is Cleanroom's headless, in-process autonomous agent execution engine. Powered directly by the native OpenAI API and coordinated through topological build graphs in Bazel, it provides a hermetic, fully automated environment for multi-node DAG cleaning passes without requiring interactive IDE sessions or complex subagent orchestrators.
+**Custom Loop Cleanroom** (Option 1) is Cleanroom's headless, in-process autonomous agent execution engine. Powered directly by the native OpenAI API and coordinated through topological project graphs in `uv`, it provides a hermetic, fully automated environment for multi-node DAG cleaning passes without requiring interactive IDE sessions or complex subagent orchestrators.
 
 ```
                      ┌──────────────────────────────────────────────┐
-                     │            Bazel Invocation Target           │
-                     │  bazel run //...:<target>_clean              │
+                     │            CLI Invocation Target             │
+                     │  bin/cleanroom_loop --target <target>        │
                      └──────────────────────┬───────────────────────┘
                                             │
                                             ▼
                      ┌──────────────────────────────────────────────┐
-                     │     bazel_openai_loop_asm (Root Assembly)    │
+                     │      uv_openai_loop_asm (Root Assembly)      │
                      │  - Closes all domain & lifecycle interfaces  │
                      │  - Loads manifest, models, & credentials     │
                      └──────────────────────┬───────────────────────┘
@@ -53,14 +53,12 @@
 
 The Custom Loop Cleanroom is partitioned across modular Cleanroom packages under [`update_with_ai/parts/`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts):
 
-### 2.1 The Root System Assembly: `bazel_openai_loop_asm`
-Located in [`update_with_ai/parts/systems/lib/bazel_openai_loop_asm.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/systems/lib/bazel_openai_loop_asm.py), this root assembly closes all internal subsystem interfaces into an executable runtime graph:
-- **`bazel_asm`**: Closes build graph loading, target parsing, file path resolution, and graph persistence.
-- **`bazel_loop_impl`**: Implements the outer [`loop`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/loop/high/loop.md) interface, driving cleaning passes across target subgraphs.
-- **`bazel_openai_config_impl`**: Resolves model credentials, temperature, context limits, and timeout configurations.
+### 2.1 The Root System Assembly: `uv_openai_loop_asm`
+Located in [`update_with_ai/parts/systems/lib/uv_openai_loop_asm.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/systems/lib/uv_openai_loop_asm.py), this root assembly closes all internal subsystem interfaces into an executable runtime graph:
+- **`uv_asm`**: Closes project configuration loading, target parsing, file path resolution, and graph persistence via `parts/uv`.
 - **`dag_asm`**: Provides the foundational acyclic graph model, dirty-state tracking, and message delivery.
 - **`loop_asm`**: Implements turn execution, conversation buffers, repetition guards, and node cleaning.
-- **`sandbox_asm`**: Implements file reading, file editing, guide delivery, run control, and tool provider registries.
+- **`openai`**: Resolves model credentials, temperature, context limits, and timeout configurations via `parts/openai`.
 - **`runner_logger_impl`**: Streams unbuffered transcripts, turn counters, and diagnostic traces to stdout and logfiles.
 
 ### 2.2 Topological Execution: `LoopCleaner` & `LoopNodeCleaner`
@@ -96,28 +94,25 @@ The node cleaner injects role-specific guides and mounts only authorized tools:
   - Tools: View File (read-only specs), Edit Implementation (`lib/*.py`), Run Linters.
   - Blind to: Test source code (`tests/*_test.py`).
 - **Test Role (Unit Tests)**:
-  - Tools: View File (read-only specs), Edit Tests (`tests/*_test.py`), Run Bazel Tests (`bazel test`).
+  - Tools: View File (read-only specs), Edit Tests (`tests/*_test.py`), Run Unit Tests (`uv run pytest`).
   - Blind to: Implementation source code (`lib/*.py`). Must write tests derived strictly from specification contracts.
 
-### 3.2 Bazel Test Execution Flags
-When the test role runs unit tests, test commands are executed with Cleanroom's mandatory flags:
+### 3.2 Unit Test Execution
+When the test role runs unit tests, test commands are executed with pytest:
 ```bash
-bazel test <target> --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress
+uv run pytest <target_test.py>
 ```
-This guarantees hermetic evaluation, fast failure reporting, and clean transcript capture.
+This guarantees fast failure reporting and clean transcript capture.
 
 ---
 
 ## 4. Invocation & Workflow
 
-### 4.1 Bazel Target Execution
-Custom loop runs are executed directly through Bazel:
+### 4.1 CLI Execution (`bin/cleanroom_loop`)
+Custom loop runs are executed directly through the loop CLI:
 ```bash
 # Clean dirty dependencies and the target node
-bazel run //update_with_ai/parts/systems/bazel_openai_loop_asm:<target>_clean
-
-# Propose an intentional change and propagate it
-bazel run //update_with_ai/parts/systems/bazel_openai_loop_asm:<target>_change
+bin/cleanroom_loop --target <target>
 ```
 
 ### 4.2 Comparison with Subagentless Workspaces (Option 3)

@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-06T22:55:00Z
-# CHANGE: new file
-# CODE_HASH: d6660cb7a240
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:42:34Z
+# CHANGE: Drop the uncontracted pending work file constant that the grounding specification no longer declares
+# CODE_HASH: a2cafac18fb3
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_work."""
@@ -11,8 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
-
-PENDING_WORK_FILE: str = ".cleanroom_pending_work.json"
 
 
 @dataclass(frozen=True)

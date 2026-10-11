@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-06T00:52:38Z
 CHANGE: import commonmark_ext and weave token contracts
-CODE_HASH: 3fb60791ce2d
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: f5fee945aa90
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # template_format interface component
-
-imports: agent_session, commonmark_ext
 
 ## Intent
 

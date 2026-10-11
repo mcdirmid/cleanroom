@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-09T02:18:23Z
-# CHANGE: Fix bare import of cross-part module dag_storage
-# CODE_HASH: 6050dbfd2763
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:59:28Z
+# CHANGE: Add the declared is_dirty narrowing member and remove the generated scaffold markers
+# CODE_HASH: 104647daf01b
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -16,15 +16,15 @@ TaskPrompt = NewType('TaskPrompt', str)
 
 @dataclass(frozen=True)
 class NodeDefinition:
-    # TODO_NodeDefinition_body
     task_prompt: TaskPrompt
 
 
 class AgentStorage(dag_storage.DagStorage, Protocol):
     def get_node_definition(self, node: dag_storage.DagNode) -> NodeDefinition:
-        # TODO_get_node_definition_body
         ...
 
     def get_task_prompt(self, node: dag_storage.DagNode) -> TaskPrompt:
-        # TODO_get_task_prompt_body
+        ...
+
+    def is_dirty(self, node: dag_storage.DagNode) -> bool:
         ...

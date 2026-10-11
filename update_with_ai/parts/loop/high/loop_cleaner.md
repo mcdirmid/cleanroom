@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-05T05:11:04Z
-CHANGE: Clarify that acyclic subgraph structure is an assumption because cycle checking is out of scope
-CODE_HASH: ddd26427e161
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Consolidate the acyclicity assumption and state halting and completion as declarative invariants
+CODE_HASH: c6d224f360b8
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # loop_cleaner interface component
@@ -21,10 +22,8 @@ Executing interconnected tasks in an arbitrary or concurrent sequence risks race
 
 A system's *loop cleaner* coordinates topological graph cleaning across a dag storage.
 
-A loop cleaner can clean a target node using a supplied node cleaner. Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.
+A loop cleaner can clean a target node using a supplied node cleaner, cleaning dirty nodes in dependency-first topological order so that every dependency of a node is clean before the node is cleaned.
 
-The target node must root an acyclic subgraph. Because checking that a subgraph is acyclic is out of scope, the loop cleaner assumes that the target node roots an acyclic subgraph.
+A caller guarantees that the target node roots an acyclic subgraph, because checking whether a subgraph is acyclic is out of scope.
 
-Cleaning dirty nodes halts if the node cleaner communicates that processing cannot continue.
-
-Cleaning concludes when all nodes in the subgraph rooted at the node are clean.
+Cleaning dirty nodes halts when the node cleaner communicates that processing cannot continue, and concludes once every node in the subgraph rooted at the target node is clean.

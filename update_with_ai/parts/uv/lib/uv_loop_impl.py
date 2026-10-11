@@ -1,14 +1,15 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-08T00:35:00Z
-# CHANGE: Delegate mark_subgraph_clean, mark_dirty, and inject_feedback to DagStorage
-# CODE_HASH: 0b3e0fa8da71
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:09:57Z
+# CHANGE: Halt with a failing build result when node cleaning fails, materialize templates and stamp clean metadata while traversing the resolved subgraph, delegate dirty marking to graph storage, append feedback and change entries to the cleanroom log, and prune uncontracted aliases
+# CODE_HASH: c8255b8d8e4b
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
+import os
 import time
-from typing import Any, Optional, Set
+from typing import Any, List, Optional, Set
 
 from . import uv_manifest_loader
 from update_with_ai.parts.loop.lib import loop
@@ -24,10 +25,46 @@ from support.lib.lifecycle import (
     system,
 )
 
+
 def _format_node(node: dag_storage.DagNode) -> str:
     if node.role_address:
         return f"{node.unit_address}#{node.role_address}"
     return node.unit_address
+
+
+def _cleanroom_log_path() -> Optional[str]:
+    """Resolves the `.cleanroom.log` path in the directory containing the parts."""
+    root = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
+    parts_parents: List[str] = []
+    try:
+        entries = sorted(os.listdir(root))
+    except OSError:
+        entries = []
+    for entry in entries:
+        if entry.startswith(".") or entry.startswith("bazel-"):
+            continue
+        if os.path.isdir(os.path.join(root, entry, "parts")):
+            parts_parents.append(os.path.join(root, entry))
+    for entry in ("staging", "update_python_with_ai", "update_with_ai"):
+        if os.path.isdir(os.path.join(root, entry, "parts")):
+            parts_parents.append(os.path.join(root, entry))
+    if os.path.isdir(os.path.join(root, "parts")):
+        parts_parents.append(root)
+    if not parts_parents:
+        return None
+    return os.path.join(parts_parents[0], ".cleanroom.log")
+
+
+def _append_cleanroom_log(entry: str) -> None:
+    """Appends an entry to the `.cleanroom.log` in the directory containing the parts."""
+    log_path = _cleanroom_log_path()
+    if log_path is None:
+        return
+    try:
+        with open(log_path, "a", encoding="utf-8") as log_file:
+            log_file.write(entry.rstrip("\n") + "\n")
+    except OSError:
+        return
 
 
 class Loop(loop.Loop, Singleton):
@@ -75,24 +112,28 @@ class Loop(loop.Loop, Singleton):
 
         failure_reason: Optional[str] = None
         try:
-            cleaner.clean(root, node_cleaner)
-            reachable: Set[dag_storage.DagNode] = set()
-            check_queue = [root]
-            while check_queue:
-                curr_node = check_queue.pop(0)
-                if curr_node not in reachable:
-                    reachable.add(curr_node)
-                    for dep in storage.get_dependencies(curr_node):
-                        if dep.node not in reachable:
-                            check_queue.append(dep.node)
-            if any(storage.is_dirty(n) for n in reachable | visited):
+            cleaned = cleaner.clean(root, node_cleaner)
+            if not cleaned:
                 success = False
-                failure_reason = "reachable nodes remain dirty"
+                failure_reason = "node cleaning failed"
             else:
-                success = True
-        except RuntimeError as e:
+                reachable: Set[dag_storage.DagNode] = set()
+                check_queue = [root]
+                while check_queue:
+                    curr_node = check_queue.pop(0)
+                    if curr_node not in reachable:
+                        reachable.add(curr_node)
+                        for dep in storage.get_dependencies(curr_node):
+                            if dep.node not in reachable:
+                                check_queue.append(dep.node)
+                if any(storage.is_dirty(n) for n in reachable | visited):
+                    success = False
+                    failure_reason = "reachable nodes remain dirty"
+                else:
+                    success = True
+        except (RuntimeError, OSError, ValueError, KeyError) as error:
             success = False
-            failure_reason = str(e)
+            failure_reason = str(error)
 
         duration = time.time() - start_time
         if success:
@@ -113,17 +154,11 @@ class Loop(loop.Loop, Singleton):
         )
         return loop.BuildResult(success=success, summary=loop.BuildSummary(summary))
 
-    run_cleaning_pass = clean_subgraph
-
     def mark_subgraph_clean(self, target: dag_storage.DagNode) -> None:
         storage = get_singleton(dag_storage.DagStorage)
-        if hasattr(storage, "mark_subgraph_clean"):
-            storage.mark_subgraph_clean(target)
-            return
-
         manifest_loader = self._get_manifest_loader()
         visited: Set[dag_storage.DagNode] = set()
-        queue: list[dag_storage.DagNode] = [target]
+        queue: List[dag_storage.DagNode] = [target]
         while queue:
             curr = queue.pop(0)
             if curr in visited:
@@ -135,14 +170,8 @@ class Loop(loop.Loop, Singleton):
                     queue.append(dep.node)
 
         for node in visited:
-            if hasattr(storage, "materialize_template"):
-                storage.materialize_template(node)
-            if hasattr(storage, "mark_node_clean"):
-                storage.mark_node_clean(node)
-            else:
-                storage.clear_messages(node)
-
-    mark_clean = mark_subgraph_clean
+            storage.materialize_template(node)
+            storage.mark_node_clean(node)
 
     def mark_dirty(
         self,
@@ -155,27 +184,14 @@ class Loop(loop.Loop, Singleton):
             if message is not None and message.content
             else None
         )
-        if hasattr(storage, "mark_node_dirty"):
-            storage.mark_node_dirty(target, reason=reason)
-        elif hasattr(storage, "delete_last_cleaned"):
-            getattr(storage, "delete_last_cleaned")(target)
-            if message is not None:
-                storage.add_message(message, to=target)
-        elif message is not None:
-            storage.add_message(message, to=target)
-
-    mark_node_dirty = mark_dirty
+        storage.mark_node_dirty(target, reason=reason)
 
     def inject_feedback(
         self, target: dag_storage.DagNode, message: dag_storage.FeedbackMessage
     ) -> None:
         storage = get_singleton(dag_storage.DagStorage)
-        if hasattr(storage, "add_feedback_message"):
-            storage.add_feedback_message(target, message)
-        else:
-            storage.add_message(message, to=target)
-
-    inject_node_feedback = inject_feedback
+        storage.add_feedback_message(target, message)
+        _append_cleanroom_log(str(message.content))
 
     def record_change(
         self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
@@ -183,24 +199,21 @@ class Loop(loop.Loop, Singleton):
         storage = get_singleton(dag_storage.DagStorage)
         change_text = str(message.content) if message.content else "updated"
         storage.mark_node_clean(target, dag_storage.ChangeDescription(change_text))
-        if hasattr(storage, "delete_last_cleaned"):
-            getattr(storage, "delete_last_cleaned")(target)
+        storage.mark_node_dirty(target, reason=change_text)
         storage.add_message(message, to=target)
-
-    record_node_change = record_change
-
-    def broadcast_change(
-        self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
-    ) -> None:
-        self.record_change(source, message)
-
-    broadcast_node_change = broadcast_change
+        _append_cleanroom_log(str(message.content))
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         Loop,
         keys=[Loop, loop.Loop],
         tier=system,
     )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

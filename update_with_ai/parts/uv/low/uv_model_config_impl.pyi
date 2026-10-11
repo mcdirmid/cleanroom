@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 9065a2fe2d2f
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:55:25Z
+# CHANGE: Resolve the active model configuration from argument, environment variables, and file default in precedence order
+# CODE_HASH: 5da3ffccf434
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom UV model and runtime configuration implementation low-level specification."""
@@ -22,6 +22,7 @@ class AgentConfig(agent_config.AgentConfig, InTier[SystemTier]):
 
     GROUNDING:
     - Realizes agent_config by loading execution limits, step mode flags, and delta editing options via filesystem_ext.
+    - Resolves the active model configuration name in precedence order from the "--config" command-line argument, the CLEANROOM_MODEL environment variable, the MODEL_CONFIG_TARGET environment variable, and the default entry of the workspace configuration file, and selects the configuration entry named by that resolution as the source of every agent_config.AgentConfig property value realized here.
     """
 
     @property
@@ -91,6 +92,7 @@ class DagConfig(dag_config.DagConfig, InTier[SystemTier]):
 
     GROUNDING:
     - Realizes dag_config by loading traversal visit bounds and batch size caps via filesystem_ext.
+    - Selects the configuration entry named by the active model configuration name, resolved in precedence order from the "--config" command-line argument, the CLEANROOM_MODEL environment variable, the MODEL_CONFIG_TARGET environment variable, and the default entry of the workspace configuration file, as the source of every dag_config.DagConfig property value realized here.
     """
 
     @property
@@ -120,6 +122,7 @@ class OpenAIConfig(openai_config.OpenAIConfig, InTier[SystemTier]):
 
     GROUNDING:
     - Realizes openai_config by extracting API endpoint parameters, timeouts, and authentication keys via filesystem_ext.
+    - Resolves the active model configuration name in precedence order from the "--config" command-line argument, the CLEANROOM_MODEL environment variable, the MODEL_CONFIG_TARGET environment variable, and the default entry of the workspace configuration file, loading that entry from the declarative TOML configuration file on the host path read with the filesystem_ext Path.read_text operation, and exposes the resolved configuration through openai_config.OpenAIConfig.model_name and the remaining openai_config.OpenAIConfig properties.
     """
 
     @property
@@ -127,8 +130,15 @@ class OpenAIConfig(openai_config.OpenAIConfig, InTier[SystemTier]):
     def model_name(self) -> openai_config.ModelName:
         """Resolves model identifier string.
 
+        POSTCONDITIONS:
+        - WHEN the "--config" command-line argument supplies the active model configuration name, MUST resolve the active model configuration name from that argument.
+        - WHEN the CLEANROOM_MODEL environment variable supplies the active model configuration name, MUST resolve the active model configuration name from that environment variable.
+        - WHEN the MODEL_CONFIG_TARGET environment variable supplies the active model configuration name, MUST resolve the active model configuration name from that environment variable.
+        - WHEN the workspace configuration file declares the default entry of the active model configuration, MUST resolve the active model configuration name from that default entry.
+
         GROUNDING:
         - Resolves model identifier string from TOML configuration target or default fallback.
+        - Reads the command-line argument list for the "--config" flag first, then the CLEANROOM_MODEL environment variable, then the MODEL_CONFIG_TARGET environment variable, and finally the default entry declared in the workspace configuration file, and loads the named entry from that TOML configuration file through the filesystem_ext Path.exists and Path.read_text operations.
         """
         ...
 

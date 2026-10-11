@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-08T12:55:00Z
-# CHANGE: implement workspace tool runner
-# CODE_HASH: e1ba2d7726c6
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:42:36Z
+# CHANGE: Define the pending work buffer filename locally now that the workspace work interface no longer declares it
+# CODE_HASH: bc34549b819e
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_tool_impl."""
@@ -46,7 +46,7 @@ from . import workspace_tool
 
 AUDIT_BUFFER_FILE = ".cleanroom_audit_buffer.json"
 BLAME_BUFFER_FILE = ".cleanroom_blame_buffer.json"
-PENDING_WORK_FILE = workspace_work.PENDING_WORK_FILE
+PENDING_WORK_FILE = ".cleanroom_pending_work.json"
 
 
 
@@ -85,8 +85,22 @@ def copy_file_with_perms(
     readonly: bool = False,
     executable: bool = False,
 ) -> None:
-    """Copies file preserving permissions and content."""
-    workspace_sync.copy_file_with_perms(src, dst)
+    """Copies file content and applies exact read-only, writable, or executable permissions."""
+    os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
+    if os.path.exists(dst):
+        try:
+            os.chmod(dst, 0o644)
+        except OSError:
+            pass
+    shutil.copy2(src, dst)
+    if executable:
+        mode = 0o555 if readonly else 0o755
+    else:
+        mode = 0o444 if readonly else 0o644
+    try:
+        os.chmod(dst, mode)
+    except OSError:
+        pass
 
 
 def find_workspace_root() -> str:
@@ -326,6 +340,9 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
 
     tier = agent_session.agent_session
 
+    def __init__(self) -> None:
+        pass
+
     def run_get_work(
         self,
         dir_scope: Optional[str] = None,
@@ -528,14 +545,29 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
             return 0
 
         failed_count = 0
+        submit_coord = get_singleton(control_submit.SubmissionCoordinator)
         for cand in targets_to_check:
-            target_path, unit_name = control_submit.resolve_submit_target(
+            target_path, unit_name = submit_coord.resolve_submit_target(
                 cand, ws_root, role_name, d_scope
             )
             if not target_path or not os.path.isfile(target_path):
-                target_path, unit_name = control_submit.resolve_submit_target(
+                target_path, unit_name = submit_coord.resolve_submit_target(
                     cand, main_root, role_name, d_scope
                 )
+
+            if not target_path or not os.path.isfile(target_path):
+                # When a target file for a regenerable role is missing or deleted,
+                # regenerate it from its starter template.
+                regen_reg = get_singleton(workspace_registry.WorkspaceRegistry)
+                regen_def = regen_reg.resolve_role_definition(
+                    role_name, repo_root=main_root
+                )
+                if regen_def.template or regen_def.template_command:
+                    regen_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
+                    regen_mgr.compute_role_work_queue(role_name, d_scope, ws_root)
+                    target_path, unit_name = submit_coord.resolve_submit_target(
+                        cand, ws_root, role_name, d_scope
+                    )
 
             if not target_path or not os.path.isfile(target_path):
                 print(f"Error: Target '{cand}' not found on disk.")
@@ -550,7 +582,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 target_path = ws_file
 
             ref_root = ws_root if target_path.startswith(ws_root) else main_root
-            part_dir, u_name, _ = control_submit.parse_unit_from_file_path(
+            part_dir, u_name, _ = submit_coord.parse_unit_from_file_path(
                 target_path, ref_root
             )
 
@@ -630,6 +662,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         target: str,
         summary: Optional[str] = None,
         repo_root: Optional[str] = None,
+        no_verify: bool = False,
     ) -> int:
         """Verifies target and stamps in-band metadata or <ROLE>_AUDIT directly in main."""
         ws_root = os.path.realpath(find_workspace_root())
@@ -637,6 +670,12 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         role_name = str(meta.get("role_name") or meta.get("role") or "") if meta else ""
         main_root = _resolve_main_root(ws_root, meta, repo_root)
         _ensure_cli_node_config(main_root)
+
+        if not no_verify:
+            check_exit = self.run_check_files(target=target, repo_root=main_root)
+            if check_exit != 0:
+                print(f"[FAIL] Verification checks failed for '{target}'. Submission rejected.")
+                return 1
 
         sub_coord = get_singleton(control_submit.SubmissionCoordinator)
         outcome = sub_coord.submit_target_file(
@@ -749,7 +788,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         meta = get_current_role_metadata()
         main_root = _resolve_main_root(ws_root, meta, repo_root)
 
-        evaluator = tool_coverage.get_coverage_evaluator()
+        evaluator = get_singleton(tool_coverage.CoverageEvaluator)
 
         target_or_impl = impl or target
         if not target_or_impl:
@@ -790,7 +829,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
     def run_commission(
         self,
         role_name: str,
-        dir_scope: str = "",
+        dir_scope: str = "staging",
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
     ) -> int:
@@ -893,6 +932,16 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         )
         p_submit.add_argument("target", help="Target file path or unit name")
         p_submit.add_argument("summary", nargs="?", default=None, help="Change summary")
+        p_submit.add_argument(
+            "--no-verify",
+            action="store_true",
+            help="Bypass verification checks during submission",
+        )
+        p_submit.add_argument(
+            "--repo-root",
+            default=None,
+            help="Path to canonical repository root",
+        )
 
         # blame / feedback
         p_blame = subparsers.add_parser(
@@ -985,7 +1034,12 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         elif args.command in ("check_files", "check-files"):
             return self.run_check_files(target=args.target, repo_root=args.repo_root)
         elif args.command == "submit":
-            return self.run_submit(args.target, summary=args.summary)
+            return self.run_submit(
+                args.target,
+                summary=args.summary,
+                repo_root=args.repo_root,
+                no_verify=args.no_verify,
+            )
         elif args.command in ("blame", "feedback"):
             return self.run_blame(args.culprit_file, args.critique)
         elif args.command == "fail":
@@ -1037,18 +1091,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return runner.execute_command(raw_args)
 
 
-def get_workspace_tool_runner() -> workspace_tool.WorkspaceToolRunner:
-    """Returns singleton WorkspaceToolRunner instance."""
-    return get_singleton(workspace_tool.WorkspaceToolRunner)
-
-
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    reg = registry or get_default_registry()
+    """Registers constituent singletons into the lifecycle registry."""
+    reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         WorkspaceToolRunner,
-        keys=[
-            workspace_tool.WorkspaceToolRunner,
-            WorkspaceToolRunner,
-        ],
+        keys=[workspace_tool.WorkspaceToolRunner, WorkspaceToolRunner],
         tier=agent_session.agent_session,
     )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

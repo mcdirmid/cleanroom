@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-08T15:45:00Z
-CHANGE: update is_pending_target_dirty_disk contract for regenerable roles template materialization
-CODE_HASH: a3ad69a4c8ea
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-10T19:00:00Z
+CHANGE: factor implicit role dirtiness and star role dependency dirtiness contracts
+CODE_HASH: ce045be1a107
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # workspace_work interface component
-
-imports: agent_session, workspace_registry, control_work_scheduler, src_metadata, dag_storage
 
 ## Intent
 
@@ -18,8 +16,8 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 
 ### Typing
 
-- A work queue item record encapsulates a target file, a role name, a sequence of dirtiness reasons, a sequence of dependency files, a sequence of companion contract files, an optional blocked reason, and an is ready flag.
-- A work queue summary record encapsulates a sequence of ready items, a sequence of blocked items, and an is clean flag.
+- A work queue item record encapsulates a target file, a role name, dirtiness reasons, dependency files, companion contract files, blocked reasons, and an is ready status indicating whether prerequisites are satisfied.
+- A work queue summary record encapsulates ready items, blocked items, and an is clean status indicating whether all units in scope evaluate clean.
 - A workspace work manager operates within the agent session lifecycle tier.
 
 ### Contracts
@@ -36,13 +34,15 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 - The workspace work manager records assigned target paths into the pending work buffer file. [set_pending_work_targets]
 - The workspace work manager removes a resolved target path from the pending work buffer file. [remove_pending_target_path]
 - The workspace work manager evaluates whether a pending target remains dirty on disk, materializing starter templates via graph storage for missing targets of roles with source patterns and upstream dependencies. [is_pending_target_dirty_disk]
+- The workspace work manager evaluates target dirtiness using implicit role dependencies. [track_implicit_role_dirtiness]
+- The workspace work manager marks a target dirty upon any star role dependency modification. [flag_star_dependency_dirtiness]
 - The workspace work manager computes role work queues by discovering dirty units and sorting ready units topologically. [compute_role_work_queue_targets]
 
 ### Woven Contracts
 
-- When discovering work in a role workspace, the manager checks pending work status, discovers directory scope work if unblocked, resolves companion contracts, filters cross-unit dependencies according to star and silent role rules, materializes starter templates for missing ready files, records ready targets, and formats diagnostic outputs. [check_pending_work_status, discover_directory_scope_work, resolve_unit_contract_files, filter_role_dependencies, enforce_strict_role_resolution, materialize_ready_target_templates, record_ready_targets_buffer, format_work_queue_diagnostics, workspace_registry: [resolve_role_definition, list_roles], control_work_scheduler: [discover_directory_candidates, filter_ready_dependencies], src_metadata: [extract_metadata_disk], dag_storage: [materialize_node_template]]
+- When discovering work in a role workspace, the manager checks pending work status, discovers directory scope work if unblocked, resolves companion contracts, filters cross-unit dependencies according to star and silent role rules, tracks implicit role dirtiness, flags star dependency dirtiness, materializes starter templates for missing ready files, records ready targets, and formats diagnostic outputs. [check_pending_work_status, discover_directory_scope_work, resolve_unit_contract_files, filter_role_dependencies, track_implicit_role_dirtiness, flag_star_dependency_dirtiness, enforce_strict_role_resolution, materialize_ready_target_templates, record_ready_targets_buffer, format_work_queue_diagnostics]
 - When all targets in scope evaluate clean, the manager clears the pending work buffer and indicates clean status. [clear_pending_work_buffer, discover_directory_scope_work]
-- When a target is resolved, the work manager removes the target from the pending buffer and checks whether any pending work remains dirty. [remove_pending_target_path, is_pending_target_dirty_disk, src_metadata: [extract_metadata_disk]]
+- When a target is resolved, the work manager removes the target from the pending buffer, evaluates implicit role dirtiness, and checks whether any pending work remains dirty. [remove_pending_target_path, track_implicit_role_dirtiness, is_pending_target_dirty_disk]
 
 ## Grounding
 
@@ -54,11 +54,5 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 
 ### Knowledge Requirements
 
-- Topological scheduling and dirtiness evaluation across directory scopes.
-  - Grounded: [control_work_scheduler: [work_schedule_provision]]
-- Extraction and inspection of in-band source metadata headers.
-  - Grounded: [src_metadata: [source_metadata_service]]
-- Materialization of starter templates for missing target files.
-  - Grounded: [dag_storage: [materialize_node_template]]
 - Persistence and evaluation of pending target lists on disk.
   - Deferred: Provided by workspace work manager implementation.

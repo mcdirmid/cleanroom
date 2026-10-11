@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-05T04:50:34Z
-CHANGE: Broaden node definition to encapsulate build target attributes, role boundaries, and prompts
-CODE_HASH: bc3420fa6c49
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Align node definition with its task prompt and restructure the agent storage operation list
+CODE_HASH: 264960eede71
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # agent_storage interface component
@@ -13,22 +14,20 @@ imports: dag_storage
 
 The agent_storage interface component stores workspace target graph relationships, node definitions, and task prompts.
 
-Task execution across structured projects requires maintaining target dependency relationships alongside durable node state. The agent_storage interface component preserves propagating and non-propagating graph relationships, task prompts, and node definitions populated from workspace target manifests, while evaluating node dirty state and pending messages backed by in-band source file metadata.
+Task execution across structured projects requires maintaining target dependency relationships alongside durable node state. The agent_storage interface component preserves propagating and silent graph relationships, task prompts, and node definitions populated from workspace target manifests, while evaluating node dirty state and pending messages backed by in-band source file metadata.
 
 **Out of scope:** The agent_storage interface component does not orchestrate agent turns, parse JSON manifest syntax, or execute filesystem edits; these are handled by other components.
+
+**Delegated:** Graph structure, node status, and message propagation are delegated to dag_storage.
 
 ## Types and Behavior
 
 A *task prompt* is an instruction describing the work required to clean a node.
 
-A *node definition* encapsulates a declared target's execution configuration, role attributes, and task prompts.
+A *node definition* encapsulates the execution configuration and task prompt a declared target carries.
 
-A system's *agent storage* is a dag storage backed by workspace build target manifests. Target manifest metadata configures node execution and dependency structures.
+A system's *agent storage* is a dag storage backed by workspace build target manifests, where target manifest metadata configures node execution and dependency structure.
 
-The agent storage:
+The agent storage maintains the nodes and dependencies that workspace target manifests declare, and provides the task prompts and node definitions of declared nodes.
 
-- Maintains nodes and dependencies from workspace target manifests.
-
-- Provides task prompts and node definitions for declared nodes.
-
-- Evaluates node dirty status and derives pending messages from in-band source file metadata.
+The agent storage evaluates whether a node is dirty from the in-band source file metadata of the node and the change state of its non-silent dependencies.

@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-06T14:35:00Z
 CHANGE: new file
-CODE_HASH: 7f93c7502b08
+CODE_HASH: 388be24fc26a
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # src_metadata_impl implementation component
@@ -22,22 +23,16 @@ Direct filesystem mutations and regex parsing require concrete execution semanti
 
 ## Types and Behavior
 
-A session's *source metadata coordinator* realizes source file metadata operations as a session service.
+An agent session's *source metadata coordinator* realizes source file metadata operations as a session service.
 
-The source metadata coordinator:
+The source metadata coordinator locates comment block boundaries by detecting HTML comment markers in Markdown specifications or line hash comment markers in Python, Starlark, and shell files, and parses the in-band fields from a comment block slice into a file metadata record.
 
-- Locates comment block boundaries by detecting HTML comment markers in Markdown specifications or line hash comment markers in Python, Starlark, and shell files.
+The source metadata coordinator extracts the code body by concatenating the file lines preceding and following the metadata comment boundaries with whitespace stripped, and computes the deterministic code hash as the first twelve hexadecimal characters of the SHA-256 digest of that code body.
 
-- Parses in-band fields by extracting `LAST_CLEANED`, `LAST_CHANGED`, `CHANGE`, `CODE_HASH`, `DIRTY`, `<ROLE>_AUDIT`, and unacted `FEEDBACK` lines from comment block slices into file metadata records.
+The source metadata coordinator evaluates code modification status by establishing file existence on disk, extracting the in-band metadata, and comparing the current code hash against the recorded code hash.
 
-- Extracts code bodies by concatenating file lines preceding and following metadata comment boundaries, stripping whitespace.
+The source metadata coordinator rewrites metadata in a text string by replacing an existing comment block slice or inserting a new block below a shebang, an encoding directive, or a markdown frontmatter delimiter.
 
-- Computes deterministic code hashes by calculating the first twelve hexadecimal characters of the SHA-256 digest of the extracted code body.
+The source metadata coordinator mutates a source file in place by reading its content, computing the updated comment block, creating parent directories when absent, and writing UTF-8 encoded text.
 
-- Evaluates code modification status by checking file existence on disk, extracting in-band metadata, and comparing current code hash against recorded code hash values.
-
-- Rewrites metadata in text strings by replacing existing comment block slices or inserting new blocks below shebangs, encoding directives, or markdown frontmatter delimiters.
-
-- Mutates source files in-place by reading content, computing updated comment blocks, creating parent directories when absent, and writing UTF-8 encoded text.
-
-- Updates node lifecycle state by advancing `LAST_CLEANED` to current UTC timestamp on mutations, setting `LAST_CHANGED` on changes, appending feedback entries, stamping role audits, and clearing dirty flags.
+The source metadata coordinator updates node lifecycle state by advancing the last cleaned timestamp to the current UTC timestamp on mutation, setting the last changed timestamp on change, appending feedback entries, stamping role audits, and clearing the dirty reason.

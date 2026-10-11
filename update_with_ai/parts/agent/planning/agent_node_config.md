@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: a6e7ac4e908c
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:01:17Z
+CHANGE: Align role and session config typing and canonicalize bound file, blame target, and message terminology; drop planning front-matter
+CODE_HASH: 414587ff3962
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # agent_node_config interface component
-
-imports: agent_session, agent_file_alias, dag_storage
 
 ## Intent
 
@@ -20,15 +18,14 @@ By centralizing role execution versions and providing structured representations
 
 ### Typing
 
-- A step section has an index.
-- A step section has a title.
-- A step section has content.
-- A node guide provides a summary.
-- A node guide provides sequential step sections.
-- A node guide provides verification failure instructions.
-- The role config provides the role of the session.
-- The role config provides the sequence of nodes currently being cleaned.
-- The role config provides an execution version.
+- A step section is a milestone section within a guide having an index, a title, and content.
+- A node guide provides structured instructional text containing a summary, sequential step sections, and verification failure instructions.
+- A verification check evaluates session criteria.
+- A verification check communicates whether verification passed together with diagnostic feedback for a failed verification.
+- An agent session's role config maintains the active session role.
+- An agent session's role config maintains the sequence of nodes currently being cleaned.
+- An agent session's role config maintains an execution version that increments whenever the cleaned nodes change.
+- An agent session's session config provides the resolved configuration parameters of the active session.
 
 ### Contracts
 
@@ -37,15 +34,15 @@ By centralizing role execution versions and providing structured representations
 - The role config sets the role of the session. [role_config_set_role]
 - The role config sets the sequence of nodes currently being cleaned in the session. [role_config_set_nodes]
 - Setting nodes in the role config increments the execution version. [set_nodes_increments_version]
-- The session config provides the session read-only files. [session_config_read_only_files]
-- The session config provides the session read-write files representing cleaned nodes. [session_config_read_write_files]
+- The session config provides the session read-only files restricting bound files to read access. [session_config_read_only_files]
+- The session config provides the session read-write files permitting bound files for read and write access. [session_config_read_write_files]
 - The session config provides the session guide when step mode is active. [session_config_guide]
 - The session config provides session templates mapping read-write files to initial file content. [session_config_templates]
 - The session config provides session template parameters for template evaluation. [session_config_template_params]
 - The session config provides session verification checks evaluated during verification. [session_config_verification_checks]
 - The session config provides the session verification success message. [session_config_verification_success_msg]
-- The session config provides session blame targets mapping read-write files to blame target read-only files. [session_config_blame_targets]
-- The session config provides session messages mapping read-write files to incoming messages. [session_config_messages]
+- The session config provides session blame targets mapping each read-write file to the read-only files eligible for blame. [session_config_blame_targets]
+- The session config provides session messages mapping each read-write file to incoming messages explaining why the file requires cleaning. [session_config_messages]
 
 ### Woven Contracts
 

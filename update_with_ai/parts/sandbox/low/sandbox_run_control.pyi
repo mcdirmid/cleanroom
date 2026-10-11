@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:38:39Z
-# LAST_CHANGED: 2026-10-09T21:38:39Z
-# CHANGE: Contract run controller session tool initialization on agent session entry
-# CODE_HASH: 992d9b9a0230
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:26:02Z
+# CHANGE: Declare named tool identities, tested hash tracking, and per-node blame targets
+# CODE_HASH: e5d6ca5da80d
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox run control low-level interface specification."""
@@ -66,6 +67,16 @@ class ResolveTool(tool_provider.Tool, Protocol):
 class CheckFilesTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
     """Tool that inspects verification checks across active files."""
 
+    @property
+    @override
+    def name(self) -> tool_provider.ToolName:
+        """Name of the tool.
+
+        POSTCONDITIONS:
+        - MUST return 'check_files'.
+        """
+        ...
+
     @operation
     @override
     def execute_tool(
@@ -80,9 +91,10 @@ class CheckFilesTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
             Response containing verification outcomes.
 
         POSTCONDITIONS:
-        - MUST update verification results when results are outdated.
+        - WHEN verification results are outdated, MUST update verification results.
         - MUST evaluate verification checks across open targets and modified workspace files.
         - MUST present aggregated verification outcomes.
+        - MUST track last tested file hashes.
         - WHEN verification fails, MUST fail.
         """
         ...
@@ -91,6 +103,16 @@ class CheckFilesTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
 @singleton_type("agent_session")
 class AdvanceTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
     """Tool that advances progressive guide steps upon passing verification."""
+
+    @property
+    @override
+    def name(self) -> tool_provider.ToolName:
+        """Name of the tool.
+
+        POSTCONDITIONS:
+        - MUST return 'advance'.
+        """
+        ...
 
     @operation
     @override
@@ -106,7 +128,7 @@ class AdvanceTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
             Response delivering next milestone or failure feedback.
 
         POSTCONDITIONS:
-        - MUST coordinate step progression through guide delivery upon passing verification.
+        - WHEN verification passes, MUST coordinate step progression through guide delivery.
         """
         ...
 
@@ -138,9 +160,7 @@ class SubmitTool(ResolveTool, InTier[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - WHEN verification passes, MUST conclude active node.
         - MUST mark the resolve target clean in the current turn.
-        - MUST enforce change documentation when files were modified.
-        - WHEN all active nodes are resolved, MUST produce a terminating response.
-        - WHEN other active nodes remain, MUST produce a non-terminating response.
+        - WHEN workspace files were modified, MUST enforce change documentation.
         """
         ...
 
@@ -208,8 +228,6 @@ class BlameTool(ResolveTool, InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST attribute task failure to an upstream dependency node.
-        - WHEN all active nodes are resolved, MUST produce a terminating response.
-        - WHEN other active nodes remain, MUST produce a non-terminating response.
         """
         ...
 
@@ -268,6 +286,11 @@ class RunController(InTier[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - MUST return verification checks that validate session criteria.
         """
+        ...
+
+    @property
+    def blame_targets_by_node(self) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
+        """Exposes per-node blame targets eligible for defect attribution."""
         ...
 
     @operation

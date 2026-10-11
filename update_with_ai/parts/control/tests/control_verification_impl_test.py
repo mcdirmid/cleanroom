@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: d6995ec38e7e
-# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:42:42Z
+# CHANGE: Resolve per-node verification checks from NodeConfig.verification_checks_by_node and drop the undeclared MockCheck.command symbol
+# CODE_HASH: f17f4a53988e
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for control_verification_impl."""
@@ -22,16 +22,16 @@ from update_with_ai.parts.control.lib.control_verification_impl import (
 class MockNodeConfig:
     tier = agent_session.agent_session
 
-    def __init__(self, checks=None, read_write_files=None) -> None:
-        self.verification_checks = checks or []
-        self.read_write_files = read_write_files or []
+    def __init__(self, checks=None, checks_by_node=None, read_write_files=None) -> None:
+        self.verification_checks = list(checks or [])
+        self.verification_checks_by_node = dict(checks_by_node or {})
+        self.read_write_files = set(read_write_files or [])
 
 
 class MockCheck:
-    def __init__(self, is_passing=True, diagnostic="", command=None):
+    def __init__(self, is_passing=True, diagnostic=""):
         self.is_passing = is_passing
         self.diagnostic = diagnostic
-        self.command = command
 
     def verify(self):
         return self.is_passing, self.diagnostic
@@ -60,7 +60,15 @@ class ControlVerificationImplTest(unittest.TestCase):
         self.assertEqual(cleaned, "Error: name 'foo' is not defined")
 
     def test_evaluate_verification_passing_and_caching(self) -> None:
-        mock_cfg = MockNodeConfig(checks=[MockCheck(is_passing=True)])
+        target = dag_storage.DagNode(
+            unit_address=dag_storage.UnitAddress("sample_unit"),
+            role_address=dag_storage.RoleAddress("sample_role"),
+        )
+        passing_check = MockCheck(is_passing=True)
+        mock_cfg = MockNodeConfig(
+            checks=[passing_check],
+            checks_by_node={target: [passing_check]},
+        )
         self.registry.register_instance(
             mock_cfg,
             keys=[agent_node_config.NodeConfig],
@@ -68,10 +76,6 @@ class ControlVerificationImplTest(unittest.TestCase):
         )
 
         with enter_phase(agent_session.agent_session, registry=self.registry):
-            target = dag_storage.DagNode(
-                unit_address=dag_storage.UnitAddress("sample_unit"),
-                role_address=dag_storage.RoleAddress("sample_role"),
-            )
             res1 = self.evaluator.evaluate_verification(target=target)
             self.assertTrue(res1.passed)
             self.assertFalse(res1.is_cached)
@@ -82,8 +86,16 @@ class ControlVerificationImplTest(unittest.TestCase):
             self.assertTrue(res2.is_cached)
 
     def test_evaluate_verification_failing(self) -> None:
+        target = dag_storage.DagNode(
+            unit_address=dag_storage.UnitAddress("sample_unit_2"),
+            role_address=dag_storage.RoleAddress("sample_role"),
+        )
+        failing_check = MockCheck(
+            is_passing=False, diagnostic="SyntaxError: invalid syntax"
+        )
         mock_cfg = MockNodeConfig(
-            checks=[MockCheck(is_passing=False, diagnostic="SyntaxError: invalid syntax")]
+            checks=[failing_check],
+            checks_by_node={target: [failing_check]},
         )
         self.registry.register_instance(
             mock_cfg,
@@ -92,10 +104,6 @@ class ControlVerificationImplTest(unittest.TestCase):
         )
 
         with enter_phase(agent_session.agent_session, registry=self.registry):
-            target = dag_storage.DagNode(
-                unit_address=dag_storage.UnitAddress("sample_unit_2"),
-                role_address=dag_storage.RoleAddress("sample_role"),
-            )
             res = self.evaluator.evaluate_verification(target=target)
             self.assertFalse(res.passed)
             self.assertIn("SyntaxError: invalid syntax", res.diagnostic_output)

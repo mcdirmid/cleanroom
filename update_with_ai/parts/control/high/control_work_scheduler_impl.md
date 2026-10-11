@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: 63c891ab607b
+CODE_HASH: b50c4ff3475d
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_work_scheduler_impl implementation component
@@ -22,14 +23,14 @@ Autonomous execution requires precise dependency evaluation so that tasks whose 
 
 ## Types and Behavior
 
-The work scheduler implements work scheduling for the session.
+The work scheduler implements work scheduling for an agent session.
 
 When discovering ready tasks:
 
-- When an execution subgraph is provided, the work scheduler queries the subgraph for ready dirty candidates using the dynamic role order.
+- The work scheduler queries the subgraph for ready dirty candidates using the dynamic role order when an execution subgraph is provided.
 
-- When a directory scope is provided without a subgraph, the work scheduler scans nodes in storage matching the directory path, filtering for nodes whose status is dirty and whose direct upstream non-silent dependencies in graph storage are clean.
+- The work scheduler scans nodes in storage matching the directory path when a directory scope is provided without a subgraph, filtering for nodes whose status is dirty and whose direct non-silent upstream dependencies in graph storage are clean.
 
-- To compute role precedence dynamically, the work scheduler inspects declared role dependencies from role configuration, assigning each role a precedence rank equal to its maximum topological depth from root roles, guaranteeing that upstream phases always take precedence over downstream phases regardless of role naming.
+- The work scheduler computes role precedence dynamically by inspecting the declared role dependencies of the role configuration and assigning each role a precedence rank equal to its maximum topological depth from root roles, guaranteeing that upstream phases take precedence over downstream phases regardless of role naming.
 
-- For each ready node within the requested batch limit, the work scheduler formats a task prompt using the configured role prompt template, substitutes target unit paths and component names, and collects open feedback messages from graph storage into a clear feedback review section.
+- The work scheduler formats a task prompt for each ready node within the requested batch limit, using the configured role prompt template, substituting target unit paths and component names, and collecting the open feedback messages from graph storage into a feedback review section.

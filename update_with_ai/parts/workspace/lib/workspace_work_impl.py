@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-09T04:30:00Z
-# CHANGE: factor auditor unit dirtiness across all feedback targets and strict pending target removal
-# CODE_HASH: 756dccce122f
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:04:15Z
+# CHANGE: Expand star-role contracts for declared cross-unit dependencies, suppress silent cross-role peer implementation files, and filter cross-unit dependencies against silent cross-role declarations
+# CODE_HASH: 0092f116e9d6
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_work_impl."""
@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import ast
+import fnmatch
 import json
 import os
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -29,6 +30,7 @@ from update_with_ai.parts.dag.lib import dag_storage
 from . import workspace_registry, workspace_work
 
 PENDING_WORK_FILE = ".cleanroom_pending_work.json"
+_UNIT_PART_MAP_CACHE: Dict[str, Dict[str, str]] = {}
 
 
 def _classify_unit_type(unit_name: str) -> str:
@@ -186,6 +188,61 @@ def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
     return [dir_scope]
 
 
+def _matches_any_pattern(rel_path: str, patterns: Sequence[str]) -> bool:
+    """Reports whether a relative path matches any configured glob pattern."""
+    normalized = rel_path.replace("\\", "/")
+    fname = os.path.basename(normalized)
+    return any(
+        fnmatch.fnmatch(normalized, p)
+        or fnmatch.fnmatch(normalized, f"*/{p}")
+        or fnmatch.fnmatch(normalized, f"*{p}")
+        or fnmatch.fnmatch(fname, p)
+        for p in patterns
+    )
+
+
+def _unit_part_map(repo_root: str) -> Dict[str, str]:
+    """Maps declared unit names to their part directory across the repository."""
+    cached = _UNIT_PART_MAP_CACHE.get(repo_root)
+    if cached is not None:
+        return cached
+    mapping: Dict[str, str] = {}
+    if os.path.isdir(repo_root):
+        for pd in _find_part_dirs_in_scope(repo_root, ""):
+            for declared_unit in _get_part_units(repo_root, pd):
+                mapping.setdefault(declared_unit, pd)
+    _UNIT_PART_MAP_CACHE[repo_root] = mapping
+    return mapping
+
+
+def _cross_unit_dependencies(
+    repo_root: str, part_dir: str, unit_name: str
+) -> List[Tuple[str, str]]:
+    """Resolves the declared cross-unit dependencies of a unit to (part_dir, unit_name) pairs."""
+    raw_deps = _get_part_units(repo_root, part_dir).get(unit_name, [])
+    if not raw_deps:
+        return []
+
+    unit_parts: Dict[str, str] = {}
+    if any(not raw.startswith("//") for raw in raw_deps):
+        unit_parts = _unit_part_map(repo_root)
+
+    deps: List[Tuple[str, str]] = []
+    for raw in raw_deps:
+        if raw.startswith("//"):
+            label = raw.lstrip("/")
+            pkg, sep, dep_unit = label.partition(":")
+            dep_part = pkg
+            if not sep:
+                dep_unit = os.path.basename(pkg)
+        else:
+            dep_unit = raw.lstrip(":").strip()
+            dep_part = unit_parts.get(dep_unit, part_dir)
+        if dep_unit:
+            deps.append((dep_part, dep_unit))
+    return deps
+
+
 def _parse_pattern_info(src_pattern: str) -> Tuple[str, str, str]:
     if not src_pattern:
         return "", "", ""
@@ -271,9 +328,10 @@ def get_unit_contract_files(
     interface_stem = unit_name[:-5] if is_impl else unit_name
 
     dep_roles = [d.split(":")[-1] for d in role_def.role_deps]
-    if not role_def.src_pattern or role_def.audit_tag:
-        dep_roles.extend([d.split(":")[-1] for d in role_def.feedback_role_deps])
-        dep_roles.extend([d.split(":")[-1] for d in role_def.star_role_deps])
+    for d in list(role_def.feedback_role_deps) + list(role_def.star_role_deps):
+        clean_d = d.split(":")[-1]
+        if clean_d not in dep_roles:
+            dep_roles.append(clean_d)
 
     for up_r in dep_roles:
         up_def = reg.resolve_role_definition(up_r, repo_root=ws_root)
@@ -288,12 +346,42 @@ def get_unit_contract_files(
                 candidates.append(c2)
 
     if is_impl and role_def.src_pattern:
-        if clean_role == "low":
+        clean_star_deps = [d.split(":")[-1] for d in role_def.star_role_deps]
+        if clean_role in clean_star_deps:
             iface_c = role_def.src_pattern.format(
                 unit_dir=part_dir, unit_name=interface_stem
             )
             if iface_c not in candidates:
                 candidates.append(iface_c)
+
+    silent_cross_roles = [d.split(":")[-1] for d in role_def.silent_cross_role_deps]
+    for dep_part, dep_unit in _cross_unit_dependencies(m_root, part_dir, unit_name):
+        for star_r in (d.split(":")[-1] for d in role_def.star_role_deps):
+            if star_r in silent_cross_roles:
+                continue
+            star_def = reg.resolve_role_definition(star_r, repo_root=ws_root)
+            if not star_def.src_pattern:
+                continue
+            dep_cand = star_def.src_pattern.format(
+                unit_dir=dep_part, unit_name=dep_unit
+            )
+            if dep_cand not in candidates:
+                candidates.append(dep_cand)
+            if dep_unit.endswith("_impl"):
+                dep_iface = star_def.src_pattern.format(
+                    unit_dir=dep_part, unit_name=dep_unit[:-5]
+                )
+                if dep_iface not in candidates:
+                    candidates.append(dep_iface)
+
+    suppressed_patterns: List[str] = []
+    for silent_r in silent_cross_roles:
+        silent_def = reg.resolve_role_definition(silent_r, repo_root=ws_root)
+        suppressed_patterns.extend(silent_def.writable_file_patterns)
+    if suppressed_patterns:
+        candidates = [
+            c for c in candidates if not _matches_any_pattern(c, suppressed_patterns)
+        ]
 
     existing: List[str] = []
     norm_target = target_file.replace("\\", "/").lstrip("/")
@@ -455,9 +543,16 @@ def _eval_unit_dirty(
             reasons.append(f"Unacted feedback in {target_rel}: {fb}")
 
     ctype = _classify_unit_type(unit_name)
+    is_impl = unit_name.endswith("_impl")
+    interface_stem = unit_name[:-5] if is_impl else unit_name
 
     # Forward dependency timestamp comparison
     dep_role_labels = [d.split(":")[-1] for d in role_def.role_deps]
+    for d in list(role_def.feedback_role_deps) + list(role_def.star_role_deps):
+        clean_d = d.split(":")[-1]
+        if clean_d not in dep_role_labels:
+            dep_role_labels.append(clean_d)
+
     effective_dep_roles: List[str] = []
     for d_name in dep_role_labels:
         if d_name == clean_role:
@@ -482,6 +577,10 @@ def _eval_unit_dirty(
             continue
         d_rel = d_pat.format(unit_dir=part_dir, unit_name=unit_name)
         d_full = os.path.join(ws_root, d_rel)
+        if curr_ws and curr_role == clean_role:
+            local_d = os.path.join(curr_ws, d_rel)
+            if os.path.isfile(local_d):
+                d_full = local_d
         if not os.path.isfile(d_full) and main_root != ws_root:
             d_full = os.path.join(main_root, d_rel)
         if os.path.isfile(d_full):
@@ -494,6 +593,99 @@ def _eval_unit_dirty(
                 reasons.append(
                     f"Upstream contract {d_rel} modified ({d_meta.last_changed}) after local LAST_CLEANED ({meta.last_cleaned})"
                 )
+        if is_impl:
+            d_iface_rel = d_pat.format(unit_dir=part_dir, unit_name=interface_stem)
+            if d_iface_rel != d_rel:
+                d_iface_full = os.path.join(ws_root, d_iface_rel)
+                if curr_ws and curr_role == clean_role:
+                    local_iface = os.path.join(curr_ws, d_iface_rel)
+                    if os.path.isfile(local_iface):
+                        d_iface_full = local_iface
+                if not os.path.isfile(d_iface_full) and main_root != ws_root:
+                    d_iface_full = os.path.join(main_root, d_iface_rel)
+                if os.path.isfile(d_iface_full):
+                    d_iface_meta = src_metadata.extract_metadata(d_iface_full)
+                    if (
+                        d_iface_meta
+                        and d_iface_meta.last_changed
+                        and meta.last_cleaned < d_iface_meta.last_changed
+                    ):
+                        reasons.append(
+                            f"Upstream contract {d_iface_rel} modified ({d_iface_meta.last_changed}) after local LAST_CLEANED ({meta.last_cleaned})"
+                        )
+
+    # Star role dependency evaluation
+    # "If any of the star_role_deps changes, THE NODE IS DIRTY, PERIOD."
+    star_roles = [d.split(":")[-1] for d in role_def.star_role_deps]
+    if star_roles:
+        part_units = _get_part_units(main_root, part_dir)
+        unit_deps = list(part_units.get(unit_name, []))
+        if is_impl and interface_stem not in unit_deps and interface_stem != unit_name:
+            unit_deps.insert(0, interface_stem)
+
+        for star_r in star_roles:
+            star_def = reg.resolve_role_definition(star_r, repo_root=main_root)
+            star_pat = star_def.src_pattern
+            if not star_pat:
+                continue
+
+            # Check interface stem if is_impl
+            if is_impl:
+                s_iface_rel = star_pat.format(unit_dir=part_dir, unit_name=interface_stem)
+                if s_iface_rel != target_rel:
+                    s_iface_full = os.path.join(ws_root, s_iface_rel)
+                    if curr_ws and curr_role == clean_role:
+                        local_si = os.path.join(curr_ws, s_iface_rel)
+                        if os.path.isfile(local_si):
+                            s_iface_full = local_si
+                    if not os.path.isfile(s_iface_full) and main_root != ws_root:
+                        s_iface_full = os.path.join(main_root, s_iface_rel)
+                    if os.path.isfile(s_iface_full):
+                        s_meta = src_metadata.extract_metadata(s_iface_full)
+                        if (
+                            s_meta
+                            and s_meta.last_changed
+                            and meta.last_cleaned < s_meta.last_changed
+                        ):
+                            reason_msg = f"Star dependency {s_iface_rel} modified ({s_meta.last_changed}) after local LAST_CLEANED ({meta.last_cleaned})"
+                            if reason_msg not in reasons:
+                                reasons.append(reason_msg)
+
+            # Check module dependencies
+            for dep in unit_deps:
+                if dep.startswith("//"):
+                    dep_label = dep.lstrip("/")
+                    parts = dep_label.split(":")
+                    dep_pkg = parts[0]
+                    dep_u = parts[1] if len(parts) > 1 else os.path.basename(dep_pkg)
+                else:
+                    dep_u = dep.lstrip(":")
+                    dep_pkg = part_dir
+
+                for cand_u in [dep_u, dep_u[:-5] if dep_u.endswith("_impl") else None]:
+                    if not cand_u:
+                        continue
+                    s_dep_rel = star_pat.format(unit_dir=dep_pkg, unit_name=cand_u)
+                    if s_dep_rel == target_rel:
+                        continue
+                    s_dep_full = os.path.join(ws_root, s_dep_rel)
+                    if curr_ws and curr_role == clean_role:
+                        local_sd = os.path.join(curr_ws, s_dep_rel)
+                        if os.path.isfile(local_sd):
+                            s_dep_full = local_sd
+                    if not os.path.isfile(s_dep_full) and main_root != ws_root:
+                        s_dep_full = os.path.join(main_root, s_dep_rel)
+                    if os.path.isfile(s_dep_full):
+                        s_meta = src_metadata.extract_metadata(s_dep_full)
+                        if (
+                            s_meta
+                            and s_meta.last_changed
+                            and meta.last_cleaned < s_meta.last_changed
+                        ):
+                            reason_msg = f"Star dependency {s_dep_rel} modified ({s_meta.last_changed}) after local LAST_CLEANED ({meta.last_cleaned})"
+                            if reason_msg not in reasons:
+                                reasons.append(reason_msg)
+                            break
     return {"is_dirty": bool(reasons), "reasons": reasons}
 
 
@@ -596,7 +788,7 @@ def _get_role_upstream_chain(
 
     def dfs(r: str) -> None:
         r_def = reg.resolve_role_definition(r, repo_root=repo_root)
-        dep_labels = list(r_def.role_deps) + list(r_def.feedback_role_deps)
+        dep_labels = list(r_def.role_deps) + list(r_def.feedback_role_deps) + list(r_def.star_role_deps)
         for d in dep_labels:
             d_name = d.split(":")[-1]
             if d_name != r and d_name not in visited:
@@ -615,6 +807,9 @@ class WorkspaceWorkManager(
     """Realizes work discovery across directory scopes and pending buffer tracking."""
 
     tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        pass
 
     def get_pending_work(self, workspace_dir: str) -> Sequence[str]:
         p = os.path.join(workspace_dir, PENDING_WORK_FILE)
@@ -735,7 +930,19 @@ class WorkspaceWorkManager(
 
         if not _is_auditor_role(eval_role, repo_root=m_root):
             if not os.path.isfile(full_ws):
-                can_regenerate = bool(role_def and role_def.src_pattern and role_def.role_deps)
+                has_upstream_deps = bool(
+                    role_def
+                    and (
+                        role_def.role_deps
+                        or role_def.feedback_role_deps
+                        or any(s.split(":")[-1] != eval_role for s in role_def.star_role_deps)
+                    )
+                )
+                can_regenerate = bool(
+                    role_def
+                    and role_def.src_pattern
+                    and has_upstream_deps
+                )
                 if can_regenerate:
                     storage = None
                     try:
@@ -1109,3 +1316,18 @@ class WorkspaceWorkManager(
         return get_unit_contract_files(
             target_path, workspace_dir, role_name=role_name
         )
+
+
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        WorkspaceWorkManager,
+        keys=[workspace_work.WorkspaceWorkManager, WorkspaceWorkManager],
+        tier=agent_session.agent_session,
+    )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

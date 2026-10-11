@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: a80d52ee1919
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:16:14Z
+CHANGE: Name the session attribution coordinator typing
+CODE_HASH: 9867ad221591
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # control_attribution interface component
-
-imports: agent_session, dag_storage, agent_file_alias, agent_node_config, src_metadata
 
 ## Intent
 
@@ -21,7 +19,7 @@ Defect attribution allows agents encountering irrecoverable upstream flaws to se
 ### Typing
 
 - An attribution outcome reports an accepted status, outcome message, and affected nodes.
-- An attribution coordinator operates within the agent session lifecycle tier.
+- An agent session's attribution coordinator manages blame attribution and failure recording.
 
 ### Contracts
 
@@ -42,8 +40,8 @@ Defect attribution allows agents encountering irrecoverable upstream flaws to se
 
 - When blaming a valid upstream dependency with a single-paragraph critique, the coordinator records feedback, marks the culprit dirty, attributes the source, and fails in-batch dependents. [assert_blame_target_is_upstream, assert_blame_target_receives_feedback, assert_single_paragraph_critique, assert_source_dependencies_clean, record_blame_feedback, mark_culprit_dirty, mark_source_attributed, propagate_in_batch_failure]
 - When recording a task failure, the coordinator logs the failure diagnostic, preserves the target's dirty state, and fails dependent in-batch nodes. [record_failure_diagnostic, preserve_target_dirty, propagate_in_batch_failure]
-- When blaming a culprit file, the coordinator validates critique formatting, executes build blame targets or mutates in-band metadata, and synchronizes files. [assert_single_paragraph_critique, execute_file_blame_mutation, src_metadata: [source_metadata_service]]
-- When failing a file target, the coordinator appends failure diagnostics, marks dirty status, and synchronizes files. [execute_file_failure_mutation, src_metadata: [source_metadata_service]]
+- When blaming a culprit file, the coordinator validates critique formatting, executes build blame targets or mutates in-band metadata, and synchronizes files. [assert_single_paragraph_critique, execute_file_blame_mutation, src_metadata: [append_feedback_entry, update_metadata_disk]]
+- When failing a file target, the coordinator appends failure diagnostics, marks dirty status, and synchronizes files. [execute_file_failure_mutation, src_metadata: [append_feedback_entry, mark_dirty_status, update_metadata_disk]]
 
 ## Grounding
 

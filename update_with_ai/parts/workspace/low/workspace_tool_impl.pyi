@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-08T15:45:00Z
-# CHANGE: add template regeneration to run_check_files grounding
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T16:00:00Z
+# CHANGE: add verification check execution and no_verify parameter to run_submit grounding
 # CODE_HASH: 727fcdb047ed
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_tool_impl."""
@@ -90,11 +90,12 @@ class WorkspaceToolRunner(
         target: str,
         summary: Optional[str] = None,
         repo_root: Optional[str] = None,
+        no_verify: bool = False,
     ) -> int:
         """Verifies and submits target to canonical main repository.
 
         GROUNDING:
-        - Validates target, delegates submission to control_submit.SubmissionCoordinator,
+        - Validates target, executes role verification checks unless bypassed, delegates submission to control_submit.SubmissionCoordinator,
           appends submission message to .cleanroom.log in the directory containing parts,
           clears target via workspace_work.WorkspaceWorkManager, and updates local file.
         """

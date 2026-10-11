@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-06T00:52:47Z
-# CHANGE: bind placeholders to angle bracket syntax from commonmark_ext
-# CODE_HASH: 304d2a93ae1d
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T03:44:40Z
+# CHANGE: Contract repetition of line-suffix loops alongside loop blocks
+# CODE_HASH: 9b35c8ea1678
+# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Template format low-level interface specification."""
@@ -38,6 +38,6 @@ class TemplateFormatter(InTier[AgentSessionTier], Protocol):
         - MUST preserve parameter placeholders whose keys are absent from the supplied parameters as unrendered placeholders.
         - WHEN a condition key in parameters is truthy or absent, MUST include enclosed conditional content.
         - WHEN a condition key in parameters is falsy, MUST omit enclosed conditional content.
-        - WHEN a collection key in parameters resolves to a sequence, MUST repeat loop blocks binding loop item variables.
+        - WHEN a collection key in parameters resolves to a sequence, MUST repeat loop blocks and line-suffix loops binding loop item variables.
         """
         ...

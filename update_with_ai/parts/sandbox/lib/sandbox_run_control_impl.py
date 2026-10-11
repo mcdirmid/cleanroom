@@ -1,9 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:46:30Z
-# LAST_CHANGED: 2026-10-09T22:40:00Z
-# CHANGE: Remove initial implementation modification constraint on submission
-# CODE_HASH: a6af47232ea7
-# QA_AUDIT: 2026-10-09T21:46:30Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T04:58:59Z
+# CHANGE: Classify auditor roles from NodeConfig role definitions instead of the undeclared src_metadata dependency, supply the now-required reasoning_text on all FollowUpToolCall constructions, implement RunController.blame_targets_by_node and route BlameTool through it, resolve default submit targets from EditManager boundary state, render the get-work primer through TemplateFormatter with guide attribution, aggregate all verification diagnostics sequentially, and handle an absent guide in AdvanceTool
+# CODE_HASH: 3aae5c909281
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -223,21 +224,26 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, InTier[AgentSessionTier], Sin
         guide_deliv = get_singleton(sandbox_guide_delivery.GuideDelivery)
         if not getattr(run_ctrl, "_passed", True):
             raw_diag = getattr(run_ctrl, "_diagnostic_output", "")
-            resp = cast(
-                tool_provider.ToolResponse,
-                guide_deliv.advance_step(
-                    verification_passed=False,
-                    failure_diagnostics=agent_node_config.VerificationDiagnostic(raw_diag),
-                ),
+            resp = guide_deliv.advance_step(
+                verification_passed=False,
+                failure_diagnostics=agent_node_config.VerificationDiagnostic(raw_diag),
+            )
+            failure_content = (
+                resp.content
+                if resp is not None
+                else tool_provider.ToolResponseContent(str(raw_diag) or "Verification failed.")
             )
             return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
-                content=resp.content,
+                content=failure_content,
                 reminder=tool_provider.ToolReminder("Call check_files first to diagnose and resolve verification failures."),
                 follow_up_tool_call=tool_provider.FollowUpToolCall(
                     tool_name=tool_provider.ToolName("check_files"),
                     wire_parameter_bindings={},
+                    reasoning_text=tool_provider.ReasoningText(
+                        "Verification is failing, so I must call check_files to see the diagnostics before advancing."
+                    ),
                 ),
             )
 
@@ -270,43 +276,35 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, InTier[AgentSessionTier], Sin
             follow_up_tool_call=tool_provider.FollowUpToolCall(
                 tool_name=tool_provider.ToolName("submit"),
                 wire_parameter_bindings={},
+                reasoning_text=tool_provider.ReasoningText(
+                    "All guide steps are complete and no files were modified, so I will submit without a change summary."
+                ),
             ),
         )
 
 
 def _is_auditor_node(node: Optional[dag_storage.DagNode]) -> bool:
+    """Classifies whether a node is worked by an auditor role.
+
+    An auditor role is a role whose definition carries an audit tag or declares no source
+    pattern, matching the auditor classification used by the control submission gate.
+    """
     candidate_roles: list[str] = []
     if node is not None:
         candidate_roles.append(str(node.role_address).split(":")[-1].strip().lower())
     role_service = get_singleton(agent_node_config.RoleConfig)
-    if role_service and getattr(role_service, "role", None):
+    if getattr(role_service, "role", None):
         candidate_roles.append(str(role_service.role).split(":")[-1].strip().lower())
 
-    cfg = get_singleton(agent_node_config.NodeConfig)
-    role_defs = getattr(cfg, "role_definitions", {})
-    if isinstance(role_defs, dict):
-        for r in candidate_roles:
-            role_cfg = role_defs.get(r)
-            if role_cfg is not None:
-                if (
-                    getattr(role_cfg, "is_auditor", False)
-                    or getattr(role_cfg, "audit_tag", None)
-                    or not getattr(role_cfg, "src_pattern", "")
-                    or (hasattr(role_cfg, "writable_file_patterns") and not role_cfg.writable_file_patterns)
-                ):
-                    return True
-                return False
-
-    for r in candidate_roles:
-        if (
-            r.endswith(("_qa", "_audit", "_auditor", "_coverage"))
-            or r.startswith(("qa_", "audit_"))
-            or r in ("qa", "audit", "coverage")
-            or "qa" in r
-            or "audit" in r
-            or "coverage" in r
-        ):
-            return True
+    role_definitions = getattr(get_singleton(agent_node_config.NodeConfig), "role_definitions", {})
+    if isinstance(role_definitions, dict):
+        for role_name in candidate_roles:
+            role_definition = role_definitions.get(role_name)
+            if role_definition is not None:
+                return bool(
+                    getattr(role_definition, "audit_tag", None)
+                    or not getattr(role_definition, "src_pattern", "")
+                )
 
     return False
 
@@ -374,6 +372,9 @@ class SubmitTool(sandbox_run_control.SubmitTool, InTier[AgentSessionTier], Singl
                 follow_up_tool_call=tool_provider.FollowUpToolCall(
                     tool_name=tool_provider.ToolName("advance"),
                     wire_parameter_bindings={},
+                    reasoning_text=tool_provider.ReasoningText(
+                        "Guide steps remain, so I must advance through the remaining steps before submitting."
+                    ),
                 ),
             )
 
@@ -391,11 +392,15 @@ class SubmitTool(sandbox_run_control.SubmitTool, InTier[AgentSessionTier], Singl
                 follow_up_tool_call=tool_provider.FollowUpToolCall(
                     tool_name=tool_provider.ToolName("check_files"),
                     wire_parameter_bindings={},
+                    reasoning_text=tool_provider.ReasoningText(
+                        "Verification is failing, so I must call check_files to view the diagnostics before submitting."
+                    ),
                 ),
             )
 
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
-        has_mods = edit_mgr.has_modifications
+        sandbox_service = get_singleton(sandbox.Sandbox)
+        has_mods = sandbox_service.has_modifications
 
         raw_target = cast(Optional[agent_file_alias.FileAlias], actual_parameter_bindings.get(self.target_parameter))
         target_alias = str(raw_target.relative_path) if raw_target is not None else None
@@ -403,7 +408,11 @@ class SubmitTool(sandbox_run_control.SubmitTool, InTier[AgentSessionTier], Singl
         change_summary_str = str(raw_summary).strip() if (raw_summary is not None and str(raw_summary).strip()) else None
 
         coord = get_singleton(control_coordinate.SessionCoordinator)
-        target_node = coord.get_node_for_alias(target_alias) if target_alias else coord.resolve_default_target()
+        target_node = (
+            coord.get_node_for_alias(target_alias)
+            if target_alias
+            else coord.resolve_default_target(edit_mgr.last_read_or_edited_file)
+        )
 
         is_auditor = _is_auditor_node(target_node)
         if is_auditor and change_summary_str:
@@ -646,8 +655,8 @@ class BlameTool(sandbox_run_control.BlameTool, InTier[AgentSessionTier], Singlet
                 ),
             )
 
-        node_cfg = get_singleton(agent_node_config.NodeConfig)
-        configured_targets = node_cfg.blame_targets_by_node.get(active_node, set())
+        run_ctrl = get_singleton(sandbox_run_control.RunController)
+        configured_targets: Set[agent_file_alias.BoundFile] = run_ctrl.blame_targets_by_node.get(active_node, set())
         configured_aliases = [str(bt.relative_path) for bt in configured_targets]
 
         raw_blame = cast(Optional[agent_file_alias.FileAlias], actual_parameter_bindings.get(self.blame_target_parameter))
@@ -675,8 +684,8 @@ class BlameTool(sandbox_run_control.BlameTool, InTier[AgentSessionTier], Singlet
                     ),
                 )
 
-        if configured_aliases and blame_alias not in configured_aliases:
-            avail_str = ", ".join(f"`{a}`" for a in configured_aliases)
+        if blame_alias not in configured_aliases:
+            avail_str = ", ".join(f"`{a}`" for a in configured_aliases) if configured_aliases else "none"
             return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
@@ -685,12 +694,14 @@ class BlameTool(sandbox_run_control.BlameTool, InTier[AgentSessionTier], Singlet
                 ),
             )
 
-        # Ensure blame target node is registered in coordinator
-        matching_bts = [bt for bt in configured_targets if str(bt.relative_path) == blame_alias]
-        if matching_bts and hasattr(matching_bts[0], "owning_node"):
-            blame_node = matching_bts[0].owning_node
-            if coord.get_node_for_alias(blame_alias) is None:
-                coord.register_node(blame_node, alias=blame_alias, state=control_coordinate.TargetState.ATTRIBUTED)
+        # Register the blamed dependency node so the coordinator can resolve it for attribution.
+        matching_targets = [bt for bt in configured_targets if str(bt.relative_path) == blame_alias]
+        if matching_targets and coord.get_node_for_alias(blame_alias) is None:
+            coord.register_node(
+                matching_targets[0].owning_node,
+                alias=blame_alias,
+                state=control_coordinate.TargetState.ATTRIBUTED,
+            )
 
         outcome = coord.dispatch_blame(
             source_alias=coord.get_alias_for_node(active_node),
@@ -778,10 +789,32 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, InTier[AgentSessionTier], Sin
 
         node_cfg = get_singleton(agent_node_config.NodeConfig)
         guide_deliv = get_singleton(sandbox_guide_delivery.GuideDelivery)
+        formatter = get_singleton(template_format.TemplateFormatter)
+
+        template_parameters = {
+            template_format.TemplateKey(str(key)): value
+            for key, value in node_cfg.template_parameters.items()
+        }
+        primer_text = str(
+            formatter.format_template(
+                template_format.TemplateText(task_prompt), template_parameters
+            )
+        ).strip() or task_prompt
+
+        guide_file = node_cfg.guide_file
+        guide_alias = str(guide_file.relative_path) if guide_file is not None else ""
+        if not guide_alias:
+            for read_only_file in node_cfg.read_only_files:
+                candidate_alias = str(getattr(read_only_file, "relative_path", read_only_file))
+                if candidate_alias.endswith(".md"):
+                    guide_alias = candidate_alias
+                    break
+        if guide_alias and guide_alias not in primer_text:
+            primer_text = f"{primer_text}\n\nRead {guide_alias} for alignment guidance."
 
         if node_cfg.is_step_mode:
             advance_prompt = "Call advance to continue."
-            prompt_content = task_prompt
+            prompt_content = primer_text
             if "call advance" not in prompt_content.lower():
                 prompt_content = f"{prompt_content}\n\n{advance_prompt}"
             guide_deliv.record_initial_primer(sandbox_guide_delivery.InitialPrimer(prompt_content))
@@ -793,14 +826,17 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, InTier[AgentSessionTier], Sin
                 follow_up_tool_call=tool_provider.FollowUpToolCall(
                     tool_name=tool_provider.ToolName("advance"),
                     wire_parameter_bindings={},
+                    reasoning_text=tool_provider.ReasoningText(
+                        "Guide step mode is active, so I will advance to the next guide step once the primer work is done."
+                    ),
                 ),
             )
 
-        guide_deliv.record_initial_primer(sandbox_guide_delivery.InitialPrimer(task_prompt))
+        guide_deliv.record_initial_primer(sandbox_guide_delivery.InitialPrimer(primer_text))
         return tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
-            content=tool_provider.ToolResponseContent(task_prompt),
+            content=tool_provider.ToolResponseContent(primer_text),
         )
 
 
@@ -828,6 +864,14 @@ class RunController(sandbox_run_control.RunController, InTier[AgentSessionTier],
     def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
         cfg = get_singleton(agent_node_config.NodeConfig)
         return cfg.verification_checks
+
+    @property
+    def blame_targets_by_node(self) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
+        node_cfg = get_singleton(agent_node_config.NodeConfig)
+        return {
+            node: set(bound_files)
+            for node, bound_files in node_cfg.blame_targets_by_node.items()
+        }
 
     def update_verification(self) -> None:
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
@@ -871,18 +915,19 @@ class RunController(sandbox_run_control.RunController, InTier[AgentSessionTier],
         all_passed = True
         diag_parts: list[str] = []
         for check in self.verification_checks:
-            passed, diag = check.verify()
-            if not passed:
+            check_passed, check_diag = check.verify()
+            if not check_passed:
                 all_passed = False
-                if diag:
-                    diag_parts.append(str(diag))
-                break
+                if check_diag:
+                    diag_parts.append(str(check_diag))
 
         self._passed = all_passed
         self._diagnostic_output = "\n".join(diag_parts).strip()
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         CheckFilesTool,
@@ -920,4 +965,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier=agent_session,
     )
 
+
 _initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

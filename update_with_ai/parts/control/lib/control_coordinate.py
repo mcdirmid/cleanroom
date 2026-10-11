@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-06T10:45:00Z
-# CHANGE: new file
-# CODE_HASH: 6f13bea190bc
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:03:56Z
+# CHANGE: Remove a stray blank line from the coordinator protocol body
+# CODE_HASH: 52d01a6fc2ea
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -62,7 +62,6 @@ class SessionCoordinator(Protocol):
     ) -> Optional[dag_storage.DagNode]: ...
 
     def get_node_for_alias(self, alias: str) -> Optional[dag_storage.DagNode]: ...
-
 
     def get_alias_for_node(self, node: dag_storage.DagNode) -> str: ...
 

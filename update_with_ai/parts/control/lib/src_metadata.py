@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
 # LAST_CHANGED: 2026-10-06T14:35:00Z
 # CHANGE: new file
-# CODE_HASH: 755c378950e7
+# CODE_HASH: d993bdd13329
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -12,7 +12,78 @@ import hashlib
 import os
 from pathlib import Path
 import sys
-from typing import Dict, List, Optional, Protocol, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Tuple
+
+
+def get_audit_tag(role_name: str) -> str:
+    """Computes auditor tag dynamically: uppercase role name + _AUDIT."""
+    clean = role_name.split(":")[-1].strip().upper()
+    return clean if clean.endswith("_AUDIT") else f"{clean}_AUDIT"
+
+
+def _load_role_definitions_from_roles_toml() -> Dict[str, Any]:
+    bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()
+    search_roots = [bwd]
+    cur = bwd
+    while cur and cur != os.path.dirname(cur):
+        search_roots.append(cur)
+        cur = os.path.dirname(cur)
+    cur = os.path.abspath(os.path.dirname(__file__))
+    while cur and cur != os.path.dirname(cur):
+        search_roots.append(cur)
+        cur = os.path.dirname(cur)
+    import tomllib
+    for root in search_roots:
+        for fname in (
+            "cleanroom_roles.toml",
+            "cleanroom_python_roles.toml",
+            os.path.join("update_python_with_ai", "cleanroom_roles.toml"),
+        ):
+            cand = os.path.join(root, fname)
+            if os.path.isfile(cand):
+                try:
+                    with open(cand, "rb") as f:
+                        data = tomllib.load(f)
+                        roles = data.get("roles", {})
+                        if roles:
+                            return roles
+                except Exception:
+                    pass
+    return {}
+
+
+def is_auditor_role(role_name: str) -> bool:
+    """Checks whether a role is an auditor dynamically without hardcoded role names."""
+    clean = role_name.split(":")[-1].strip().lower()
+    try:
+        from support.lib.lifecycle import get_singleton
+        from update_with_ai.parts.agent.lib import agent_node_config
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        role_defs = getattr(cfg, "role_definitions", {})
+        if clean in role_defs:
+            r_def = role_defs[clean]
+            return bool(
+                getattr(r_def, "is_auditor", False)
+                or getattr(r_def, "audit_tag", None)
+                or not getattr(r_def, "src_pattern", "")
+            )
+    except Exception:
+        pass
+    try:
+        from support.lib.lifecycle import get_singleton
+        from update_with_ai.parts.workspace.lib import workspace_registry
+        reg = get_singleton(workspace_registry.WorkspaceRegistry)
+        r_def = reg.resolve_role_definition(clean)
+        return bool(r_def.audit_tag or not r_def.src_pattern)
+    except Exception:
+        pass
+    role_defs = _load_role_definitions_from_roles_toml()
+    if clean in role_defs:
+        r_def = role_defs[clean]
+        return bool(r_def.get("audit_tag") or not r_def.get("src_pattern"))
+    if clean in ("auditor", "audit") or clean.endswith(("_audit", "_auditor")):
+        return True
+    return False
 
 
 def _is_html_comment_format(path_or_ext: str) -> bool:

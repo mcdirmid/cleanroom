@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 867a9f399352
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Declare the openai config system lifecycle tier
+CODE_HASH: 9d43f0bc9e82
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # openai_config interface component
@@ -17,7 +18,7 @@ Interacting with remote language model endpoints requires explicit target model 
 
 ## Types and Behavior
 
-A system's *openai config* provides connection coordinates and model parameters for language model requests.
+A system's *openai config* provides the connection coordinates and model parameters of a system for language model requests.
 
 The openai config provides:
 

@@ -1,15 +1,15 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: bb099a7d2bf3
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:21:33Z
+# CHANGE: Drop stale operation content and redundant modification postcondition
+# CODE_HASH: 66282bd5d6ce
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox low-level interface specification."""
 
 from typing import Protocol
-from framework import operation, singleton_type
+from framework import singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 
@@ -20,9 +20,5 @@ class Sandbox(InTier[AgentSessionTier], Protocol):
 
     @property
     def has_modifications(self) -> bool:
-        """Exposes whether workspace file modifications occurred during the session.
-
-        POSTCONDITIONS:
-        - MUST return whether workspace file modifications occurred during the session.
-        """
+        """Exposes whether workspace file modifications occurred during the session."""
         ...

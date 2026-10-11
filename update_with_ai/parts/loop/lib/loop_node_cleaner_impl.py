@@ -1,9 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:46:18Z
-# LAST_CHANGED: 2026-10-09T22:20:00Z
-# CHANGE: Present dirty node role on role config without pre-priming nodes during session setup
-# CODE_HASH: fc48dae57bed
-# QA_AUDIT: 2026-10-09T21:46:18Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T06:10:36Z
+# CHANGE: Record the blame explanation as the feedback message content instead of the blamed target label, and present the session role through the contracted role config key so the services that read RoleConfig observe it
+# CODE_HASH: 24247e5ea5df
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 import os
@@ -27,6 +28,12 @@ from support.lib.lifecycle import (
     get_singleton,
     system,
 )
+
+# Number of session phase attempts: one initial attempt plus one retry.
+_SESSION_ATTEMPTS = 2
+
+# Tool instruction seeding the conversation history for the session phase.
+_GET_WORK_INSTRUCTION = "Call get_work to retrieve your work."
 
 
 class _RoleConfig(agent_node_config.RoleConfig):
@@ -213,185 +220,187 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
     tier = system
 
     def __init__(self) -> None:
-        self._last_outcome: Optional[loop_driver.LoopOutcome] = None
+        pass
 
-    def clean_nodes(
-        self, nodes: Sequence[dag_storage.DagNode]
-    ) -> Set[dag_storage.DagMessage]:
-        dirty_nodes = list(nodes)
-        storage = _get_storage()
-        defns: list[agent_storage.NodeDefinition] = []
-        try:
-            defns = [storage.get_node_definition(n) for n in dirty_nodes]
-        except (
-            AttributeError,
-            KeyError,
-            LookupError,
-        ):  # pragma: no cover (assumption: storage registered in SystemTier)
-            defns = []
+    def _resolve_blamed_target(
+        self,
+        node_config: agent_node_config.NodeConfig,
+        node: dag_storage.DagNode,
+        blame_target: str,
+    ) -> Optional[Any]:
+        configured: Set[Any] = set(node_config.blame_targets_by_node.get(node, set()))
+        if blame_target:
+            for bound_file in configured:
+                if _matches_blame_target(bound_file, blame_target):
+                    return bound_file
+            return None
+        if len(configured) == 1:
+            return next(iter(configured))
+        return None
 
-        if defns:
-            has_prompt = any(d is not None and bool(d.task_prompt) for d in defns)
-            if not has_prompt:
-                self._last_outcome = None
-                has_changes = any(
-                    any(
-                        isinstance(m, dag_storage.ChangeMessage)
-                        for m in storage.get_messages(n)
-                    )
-                    for n in dirty_nodes
+    def _run_session(self, session: LifecycleScope) -> loop_driver.LoopOutcome:
+        history = session.get_singleton(loop_conversation.Conversation)
+        history.initialize(
+            [
+                loop_conversation.ConversationMessage(
+                    role=loop_conversation.MessageRole("user"),
+                    content=loop_conversation.ConversationContent(
+                        _GET_WORK_INSTRUCTION
+                    ),
                 )
-                if has_changes:
-                    return {dag_storage.ChangeMessage()}
-                return set()
+            ]
+        )
+        driver = session.get_singleton(loop_driver.LoopDriver)
+        return driver.run()
 
-        def setup_session(session: LifecycleScope) -> None:
-            role_config = session.get_singleton(_RoleConfig)
-            if dirty_nodes:
-                role_config.set_role(
-                    agent_node_config.RoleName(str(dirty_nodes[0].role_address))
-                )
-
-        def _execute_session() -> Set[dag_storage.DagMessage]:
-            with enter_phase("agent_session", setup=setup_session) as session:
-                hist = session.get_singleton(loop_conversation.Conversation)
-                hist.initialize(
-                    [
-                        loop_conversation.ConversationMessage(
-                            role=loop_conversation.MessageRole("user"),
-                            content=loop_conversation.ConversationContent(
-                                "Call get_work to retrieve your work."
-                            ),
-                        )
-                    ]
-                )
-
-                runner = session.get_singleton(loop_driver.LoopDriver)
-                outcome = runner.run()
-                self._last_outcome = outcome
-
-                messages: Set[dag_storage.DagMessage] = set()
-                content = (
-                    str(outcome.response.content)
-                    if outcome.response is not None
-                    else ""
-                )
-                blame_info = _extract_blame(content)
-
-                if blame_info is not None:
-                    raw_target, raw_exp = blame_info
-                    blame_target_str: str = str(raw_target or "").strip()
-                    blame_exp: str = str(raw_exp or "").strip()
-                    if blame_target_str in ("...", "…"):
-                        blame_target_str = ""
-                    if not blame_exp:
-                        blame_exp = content
-
-                    blamed_node: Optional[dag_storage.DagNode] = None
-                    try:
-                        node_cfg = session.get_singleton(agent_node_config.NodeConfig)
-                        configured_targets: Set[Any] = set()
-                        for n in nodes:
-                            configured_targets.update(
-                                node_cfg.blame_targets_by_node.get(n, set())
-                            )
-                        if blame_target_str:
-                            for bf in configured_targets:
-                                if _matches_blame_target(bf, blame_target_str):
-                                    blamed_node = bf.owning_node
-                                    break
-                        elif len(configured_targets) == 1:
-                            blamed_node = next(iter(configured_targets)).owning_node
-                    except (
-                        LifecycleResolutionError,
-                        AttributeError,
-                        KeyError,
-                        LookupError,
-                    ):  # pragma: no cover (assumption: storage registered in SystemTier)
-                        pass
-
-                    if blamed_node is not None:
-                        messages.add(
-                            dag_storage.FeedbackMessage(
-                                content=dag_storage.MessageContent(blame_exp),
-                                target=blamed_node,
-                            )
-                        )
-                elif outcome.response is not None and not outcome.response.is_failed:
-                    sb = session.get_singleton(sandbox.Sandbox)
-                    if sb.has_modifications:
-                        messages.add(dag_storage.ChangeMessage())
-
-                return messages
-
+    def _run_with_retry(
+        self, nodes: Sequence[dag_storage.DagNode], session: LifecycleScope
+    ) -> loop_driver.LoopOutcome:
         logger = get_singleton(runner_logger.RunnerLogger)
-        for attempt in range(2):
+        for attempt in range(_SESSION_ATTEMPTS):
             try:
-                return _execute_session()
-            except Exception as e:
-                node_addrs = [n.unit_address for n in dirty_nodes]
+                return self._run_session(session)
+            except Exception as error:
+                node_addresses = [node.unit_address for node in nodes]
                 logger.consume(
                     runner_logger.RunnerLogEvent(
-                        event_name=runner_logger.EventName("session_execution_failure"),
+                        event_name=runner_logger.EventName(
+                            "session_execution_failure"
+                        ),
                         summary=runner_logger.EventSummary(
-                            f"Unexpected execution failure cleaning nodes {node_addrs} (attempt {attempt + 1}/2): {e}"
+                            f"Unexpected execution failure cleaning nodes "
+                            f"{node_addresses} (attempt {attempt + 1}/"
+                            f"{_SESSION_ATTEMPTS}): {error}"
                         ),
                         transcript=runner_logger.EventTranscript(
-                            f"=== Unexpected Execution Failure (attempt {attempt + 1}/2) ===\n{traceback.format_exc().strip()}"
+                            f"=== Unexpected Execution Failure "
+                            f"(attempt {attempt + 1}/{_SESSION_ATTEMPTS}) ===\n"
+                            f"{traceback.format_exc().strip()}"
                         ),
                     )
                 )
-                if attempt == 1:
+                if attempt == _SESSION_ATTEMPTS - 1:
                     raise
-        return set()
+        # Unreachable: the final attempt either returns or re-raises.
+        raise RuntimeError(
+            "session phase failed without an outcome"
+        )  # pragma: no cover
+
+    def _resolve_promptless(self, nodes: Sequence[dag_storage.DagNode]) -> None:
+        storage = _get_storage()
+        has_changes = any(
+            any(
+                isinstance(message, dag_storage.ChangeMessage)
+                for message in storage.get_messages(node)
+            )
+            for node in nodes
+        )
+        for node in nodes:
+            storage.clear_messages(node)
+            if has_changes:
+                storage.mark_node_clean(
+                    node,
+                    change_description=dag_storage.ChangeDescription(
+                        "upstream changes"
+                    ),
+                )
+            else:
+                storage.mark_node_clean(node)
 
     def clean(self, nodes: Sequence[dag_storage.DagNode]) -> bool:
         storage = _get_storage()
-        msgs = self.clean_nodes(nodes)
-        is_blame = any(isinstance(m, dag_storage.FeedbackMessage) for m in msgs)
-        outcome = self._last_outcome
-        if (
-            not is_blame
-            and outcome is not None
-            and (outcome.response is None or outcome.response.is_failed)
-        ):
-            for node in nodes:
-                if not storage.is_dirty(node):
-                    storage.add_message(dag_storage.FeedbackMessage(), to=node)
-            return False
 
-        outcome_content = (
-            str(outcome.response.content)
-            if outcome is not None and outcome.response is not None
-            else ""
-        )
-        is_outcome_blame = _extract_blame(outcome_content) is not None
-        if is_outcome_blame and not is_blame:
-            for node in nodes:
-                if not storage.is_dirty(node):
-                    storage.add_message(dag_storage.FeedbackMessage(), to=node)
+        first = nodes[0] if nodes else None
+        has_prompt = False
+        if first is not None:
+            has_prompt = bool(str(storage.get_task_prompt(first)))
+        if not has_prompt:
+            self._resolve_promptless(nodes)
             return True
 
+        def setup_session(session: LifecycleScope) -> None:
+            # Present the role through the contracted role config key so the services that
+            # read RoleConfig observe it (a private implementation key would not be the one
+            # session services resolve).
+            role_config = session.get_singleton(agent_node_config.RoleConfig)
+            if nodes:
+                role_config.set_role(
+                    agent_node_config.RoleName(str(nodes[0].role_address))
+                )
+
+        # The phase stays open for the session run and for evaluating its outcome:
+        # NodeConfig, Sandbox, Conversation, and LoopDriver are all contracted to the
+        # agent session tier and are only reachable while the phase is active.
+        with enter_phase("agent_session", setup=setup_session) as session:
+            outcome = self._run_with_retry(nodes, session)
+            return self._evaluate_outcome(storage, nodes, outcome, session)
+
+    def _evaluate_outcome(
+        self,
+        storage: agent_storage.AgentStorage,
+        nodes: Sequence[dag_storage.DagNode],
+        outcome: loop_driver.LoopOutcome,
+        session: LifecycleScope,
+    ) -> bool:
+        response = outcome.response
+        response_content = str(response.content) if response is not None else ""
+
+        blame_info = _extract_blame(response_content)
+        if blame_info is not None:
+            raw_target, raw_explanation = blame_info
+            blame_target = str(raw_target or "").strip()
+            if blame_target in ("...", "…"):
+                blame_target = ""
+            if blame_target:
+                node_config = session.get_singleton(agent_node_config.NodeConfig)
+                explanation = str(raw_explanation or "").strip()
+                for node in nodes:
+                    bound_file = self._resolve_blamed_target(
+                        node_config, node, blame_target
+                    )
+                    if bound_file is None:
+                        continue
+                    storage.add_feedback_message(
+                        bound_file.owning_node,
+                        dag_storage.FeedbackMessage(
+                            content=dag_storage.MessageContent(explanation),
+                            target=bound_file.owning_node,
+                        ),
+                    )
+            return True
+
+        if response is not None and response.is_failed:
+            for node in nodes:
+                storage.clear_messages(node)
+            return False
+
+        change_description: Optional[dag_storage.ChangeDescription] = None
+        sandbox_state = session.get_singleton(sandbox.Sandbox)
+        if sandbox_state.has_modifications:
+            change_description = dag_storage.ChangeDescription(
+                "workspace files modified"
+            )
         for node in nodes:
             storage.clear_messages(node)
-
-        for m in msgs:
-            if isinstance(m, dag_storage.FeedbackMessage):
-                if m.target is not None:
-                    storage.add_message(m, to=m.target)
-
+            storage.mark_node_clean(node, change_description=change_description)
         return True
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        _RoleConfig,
+        keys=[_RoleConfig, agent_node_config.RoleConfig],
+        tier='agent_session',
+    )
     reg.register_singleton(
         NodeCleaner,
         keys=[NodeCleaner, loop_node_cleaner.NodeCleaner],
         tier=system,
     )
-    reg.register_singleton(
-        _RoleConfig,
-        keys=[_RoleConfig, agent_node_config.RoleConfig],
-        tier="agent_session",
-    )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

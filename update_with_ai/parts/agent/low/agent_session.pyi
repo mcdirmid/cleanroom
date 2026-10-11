@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: a2f2b4bf21f6
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:06:35Z
+# CHANGE: Align agent session tier with the simplified agent definition and system tier relationship
+# CODE_HASH: f42f7c539a61
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Agent session lifecycle tier component."""
@@ -14,9 +14,5 @@ from support.lib.lifecycle import ChildTierOf, SystemTier
 
 @singleton_type("system")
 class AgentSessionTier(ChildTierOf[SystemTier]):
-    """Lifecycle tier governing per-session agent execution subordinate to the system tier.
-
-    INVARIANTS:
-    - The agent session lifecycle tier is defined under the system lifecycle tier.
-    """
+    """Lifecycle tier bounding the execution, conversation, and ephemeral state of an agent under the system lifecycle tier."""
     ...

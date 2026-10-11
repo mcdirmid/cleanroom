@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-08T00:45:00Z
 CHANGE: Define src_storage_impl high-level specification
-CODE_HASH: c8df449f0848
+CODE_HASH: 27f86d3143f6
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # src_storage_impl implementation component
@@ -24,7 +25,7 @@ Coordinating multi-node builds requires fast in-memory access to target metadata
 
 The agent storage records declared source file paths, forward dependencies, silent source file paths, and feedback dependencies mapped to nodes in dag storage, maintaining node definitions and task prompts.
 
-The agent storage resolves each node's declared source file against the workspace root, reading and writing in-band metadata comment blocks containing last cleaned timestamps, last changed timestamps, change descriptions, and unacted feedback entries.
+The agent storage resolves each node's declared source file against the workspace root, reading and writing the in-band metadata comment blocks that carry last cleaned timestamps, last changed timestamps, change summaries, and unacted feedback entries.
 
 Evaluating whether a node is dirty in dag storage inspects the node's source file and in-band metadata.
 
@@ -40,9 +41,9 @@ A node evaluates as dirty when:
 
 - Any non-silent forward dependency has a last changed timestamp strictly newer than the node's last cleaned timestamp, synthesizing a change message describing the dependency update.
 
-Marking a node clean clears messages for the node and updates in-band metadata with a clean timestamp. When a change description is provided for a node with a source artifact, marking the node clean updates its last changed timestamp and change description in its in-band metadata, and clears unacted feedback and dirty tags.
+Marking a node clean clears the messages of the node and updates its in-band metadata with a clean timestamp. When a change summary is provided for a node whose source artifact exists, marking the node clean updates its last changed timestamp and change summary in its in-band metadata, and clears unacted feedback and dirty tags.
 
-Evaluating whether an auditor node is dirty in dag storage inspects the in-band metadata of its verified feedback target files. Querying feedback dependencies or evaluating dirty status for an auditor node without configured feedback dependencies fails fast with an error. When an auditor node has no configured feedback targets but declares forward dependencies, evaluating whether it is dirty delegates to the dirty status of its non-silent forward dependencies.
+Evaluating whether an auditor node is dirty in dag storage inspects the in-band metadata of its verified feedback target files. Querying feedback dependencies or evaluating dirty status for an auditor node without configured feedback dependencies fails fast with an error, and an auditor node that declares forward dependencies but no configured feedback targets evaluates as dirty exactly when a non-silent forward dependency is dirty.
 
 An auditor node evaluates as dirty when:
 
@@ -56,12 +57,12 @@ An auditor node evaluates as dirty when:
 
 Marking an auditor node clean records the current timestamp as the audit timestamp on each verified feedback target file in-band metadata header without modifying the target file last changed timestamp.
 
-Marking a node dirty in dag storage clears the last cleaned timestamp from its declared source file in-band metadata header and sets its dirty tag, marking the node dirty without modifying its change description or last changed timestamp.
+Marking a node dirty in dag storage clears the last cleaned timestamp from its declared source file in-band metadata header and sets its dirty tag, marking the node dirty without modifying its change summary or last changed timestamp.
 
 Marking an auditor node dirty in dag storage removes the audit timestamp from each verified feedback target file in-band metadata header.
 
-Marking a subgraph clean in dag storage materializes missing templates and marks the target node and all reachable dependencies in its subgraph clean in graph storage.
+Marking a subgraph clean in dag storage materializes missing templates and marks the target node and every reachable dependency in its subgraph clean in graph storage.
 
-Materializing template for a node writes configured template content or executes its configured role template command to populate its declared source file if the file is missing from the workspace root without overwriting existing files.
+Materializing a template for a node writes configured template content or executes its configured role template command to populate its declared source file when that file is missing from the workspace root, without overwriting an existing file.
 
-Recording a feedback message against a dependency target node updates the target node's source file in-band metadata header in-place, appending an unacted feedback entry carrying the current timestamp, blaming node address, and feedback explanation.
+Recording a feedback message against a dependency target node updates the source file in-band metadata header of that target node in place, appending an unacted feedback entry carrying the current timestamp, the blaming node address, and the feedback explanation.

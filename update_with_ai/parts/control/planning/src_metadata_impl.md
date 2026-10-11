@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
 LAST_CHANGED: 2026-10-06T14:35:00Z
 CHANGE: new file
-CODE_HASH: fd8dd090f294
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 9323ea38ec30
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # src_metadata_impl implementation component
-
-imports: agent_session, src_metadata_ext
-implements: src_metadata
 
 ## Intent
 

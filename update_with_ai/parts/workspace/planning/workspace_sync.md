@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-06T22:55:00Z
-CHANGE: new file
-CODE_HASH: d59729e55f0f
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T03:16:09Z
+CHANGE: Declare synchronizer typing and enforce test stub integrity in refresh
+CODE_HASH: 111616c00d59
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # workspace_sync interface component
-
-imports: agent_session, workspace_registry, src_metadata
 
 ## Intent
 
@@ -19,13 +17,13 @@ Operating across isolated role workspaces requires atomic data movement to preve
 ### Typing
 
 - A sync result record encapsulates a count of pulled files, a count of harvested files, a sequence of stamped audits, and a sequence of flushed blames.
-- A workspace synchronizer operates within the agent session lifecycle tier.
+- An agent session's workspace synchronizer transfers files and in-band metadata between canonical repositories and role workspaces.
 
 ### Contracts
 
 - The workspace synchronizer pulls updated upstream contracts and source files from the canonical main repository into a role workspace. [pull_upstream_contracts]
 - The workspace synchronizer synchronizes read-only test stubs for stub role dependencies without copying implementation code. [sync_stub_dependencies]
-- The workspace synchronizer refreshes non-parts system files from the canonical main repository into a role workspace. [refresh_system_files_into_workspace]
+- The workspace synchronizer refreshes non-parts system files from the canonical main repository into a role workspace, enforcing test stub integrity. [refresh_system_files_into_workspace]
 - The workspace synchronizer scans writable target files in a role workspace to identify modified content. [scan_modified_targets]
 - The workspace synchronizer verifies that canonical main targets match workspace baseline hashes before committing harvested files. [validate_harvest_baselines]
 - The workspace synchronizer copies validated target files from a role workspace into the canonical main repository. [commit_harvested_files]
@@ -34,8 +32,8 @@ Operating across isolated role workspaces requires atomic data movement to preve
 
 ### Woven Contracts
 
-- When pulling updates from the canonical repository, the synchronizer copies newer upstream files into the role workspace, synchronizes stub dependencies, and enforces read-only permissions on contracts. [pull_upstream_contracts, sync_stub_dependencies, workspace_registry: [resolve_standard_role_definition]]
-- When harvesting changes, the synchronizer scans modified targets, validates baseline hashes against the main repository, commits validated files, stamps audits for auditor roles, and flushes buffered blame feedback. [scan_modified_targets, validate_harvest_baselines, commit_harvested_files, stamp_auditor_role_audits, flush_blame_buffer_entries, src_metadata: [extract_metadata_disk, update_metadata_disk, stamp_audit_entry, append_feedback_entry]]
+- When pulling updates from the canonical repository, the synchronizer copies newer upstream files into the role workspace, synchronizes stub dependencies, and enforces read-only permissions on contracts. [pull_upstream_contracts, sync_stub_dependencies]
+- When harvesting changes, the synchronizer scans modified targets, validates baseline hashes against the main repository, commits validated files, stamps audits for auditor roles, and flushes buffered blame feedback. [scan_modified_targets, validate_harvest_baselines, commit_harvested_files, stamp_auditor_role_audits, flush_blame_buffer_entries]
 
 ## Grounding
 
@@ -50,5 +48,3 @@ Operating across isolated role workspaces requires atomic data movement to preve
   - Deferred: Provided by workspace synchronizer implementation.
 - Two-phase conflict detection and atomic file replacement on disk.
   - Deferred: Provided by workspace synchronizer implementation.
-- In-band comment header manipulation and blame appending.
-  - Grounded: [src_metadata: [source_metadata_service]]

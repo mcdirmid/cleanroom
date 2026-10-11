@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 2e227bdb054e
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:08:12Z
+# CHANGE: Align alias manager parameter conversion typing and split text sanitization masking contracts
+# CODE_HASH: e491152975f5
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Agent file alias low-level interface specification."""
@@ -75,7 +75,11 @@ class AliasManager(tool_provider.ParameterType[FileAlias, str], InTier[AgentSess
 
     @property
     def workspace_root(self) -> file_paths.WorkspaceRoot:
-        """The workspace root directory for the agent session."""
+        """The workspace root directory for the agent session.
+
+        PRECONDITIONS:
+        - A caller configures the alias manager with the absolute path of a workspace root.
+        """
         ...
 
     @property
@@ -119,7 +123,8 @@ class AliasManager(tool_provider.ParameterType[FileAlias, str], InTier[AgentSess
             The sanitized text with workspace paths masked by relative alias paths.
 
         POSTCONDITIONS:
-        - MUST sanitize text by masking occurrences of relative workspace paths and preceding path prefixes with file alias relative paths.
+        - MUST sanitize text by masking occurrences of relative workspace paths with file alias relative paths.
+        - MUST sanitize text by masking preceding path prefixes with file alias relative paths.
         """
         ...
 

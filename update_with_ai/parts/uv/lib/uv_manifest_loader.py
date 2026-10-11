@@ -1,25 +1,18 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 2f5a426de50c
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:09:58Z
+# CHANGE: Use the real cross-part file alias module for the declared interface field types instead of a private fallback container
+# CODE_HASH: 17f30c9d6a4a
 # --- END CLEANROOM METADATA ---
 
 from dataclasses import dataclass
 from typing import NewType, Optional, Protocol, Sequence
+from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_storage
 from update_with_ai.parts.dag.lib import dag_storage
 
 TargetLabel = NewType("TargetLabel", str)
 VerificationCommand = NewType("VerificationCommand", str)
-
-
-class _Types:
-    RelativePath = NewType("RelativePath", str)
-    FileContent = NewType("FileContent", str)
-
-
-agent_file_alias = _Types
 
 
 @dataclass(frozen=True)

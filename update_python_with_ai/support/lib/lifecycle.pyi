@@ -2,7 +2,7 @@
 # LAST_CLEANED: 2026-10-07T05:04:27Z
 # LAST_CHANGED: 2026-10-04T02:03:40Z
 # CHANGE: new file
-# CODE_HASH: e52f38b058c1
+# CODE_HASH: adc1357923e2
 # --- END CLEANROOM METADATA ---
 
 '''
@@ -318,11 +318,22 @@ class LifecycleScope:
         setup: Optional[Callable[[LifecycleScope], None]] = None,
         defer_startup: bool = False,
     ) -> LifecycleScope: ...
+    def setup(self) -> ContextManager[LifecycleScope]: ...
     def __enter__(self) -> LifecycleScope: ...
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None: ...
 
 
+class LifecyclePrototype:
+    phase: str
+    tier: LifecycleTier
+    parent: Optional[LifecyclePrototype]
+    def __init__(
+        self, phase: LifecycleTier | str, parent: Optional[LifecyclePrototype] = None
+    ) -> None: ...
+
+
 class LifecycleRegistry:
+    def get_prototype(self, phase: LifecycleTier | str) -> LifecyclePrototype: ...
     def register(
         self,
         impl: type[Any],

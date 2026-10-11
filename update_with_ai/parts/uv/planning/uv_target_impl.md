@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: a66b4b9108b6
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+CODE_HASH: 7e1b2e547773
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_target_impl implementation component
-
-imports: dag_storage, file_paths, uv_target_labels_ext
-implements: uv_target
 
 ## Intent
 

@@ -1,15 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 6505ee57cb08
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T03:10:54Z
+CHANGE: Contract regular expression directive scanning against the external formatting boundary
+CODE_HASH: cff5df9acf0f
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # template_format_impl implementation component
-
-imports: commonmark_ext
-implements: template_format
 
 ## Intent
 
@@ -21,6 +18,7 @@ By evaluating dot-separated parameter lookups, handling line-suffix and block-le
 
 ### Contracts
 
+- The template formatter scans for directive syntax with regular expressions and parses directive comment and placeholder token structures defined by the external formatting boundary. [scan_directive_syntax]
 - The template formatter resolves dot-separated keys in parameter bindings. [resolve_dot_separated_keys]
 - The template formatter replaces parameter placeholder tokens matching dot-separated keys with string representations of their resolved values. [replace_matching_dot_separated_placeholders]
 - The template formatter retains parameter placeholder tokens whose keys do not resolve to values in parameters without modification. [retain_unresolved_placeholder_tokens]

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-06T11:45:00Z
-# CHANGE: add missing imports
-# CODE_HASH: 277563afe99b
-# COVERAGE_AUDIT: 2026-10-09T21:19:01Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:03:55Z
+# CHANGE: Record failure diagnostics and force dirty state through graph storage in fail_target, mark blamed culprits dirty in blame_target, resolve culprit files through the alias manager, and synchronize blamed source metadata headers
+# CODE_HASH: cab1f22dc870
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -15,7 +15,13 @@ import stat
 import sys
 import tomllib
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-from support.lib.lifecycle import Singleton, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    LifecycleResolutionError,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
 from update_with_ai.parts.agent.lib import agent_file_alias, agent_node_config, agent_session
 from update_with_ai.parts.dag.lib import dag_storage
 from . import control_attribution, src_metadata
@@ -115,6 +121,20 @@ def _parse_unit_from_file_path(file_path: str, repo_root: str) -> Tuple[str, str
     return part_dir, unit_name, role_name
 
 
+def _resolve_bound_file_path(blame_string: str) -> Optional[str]:
+    """Resolves a blame string to its workspace host path through the alias manager."""
+    try:
+        alias = get_singleton(agent_file_alias.AliasManager).convert(blame_string)
+    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+        return None
+    if isinstance(alias, agent_file_alias.BoundFile):
+        workspace_path = getattr(alias, "workspace_path", None)
+        if workspace_path is not None:
+            return str(getattr(workspace_path, "path", workspace_path))
+        return str(getattr(alias, "relative_path", "")) or None
+    return None
+
+
 class AttributionCoordinator(control_attribution.AttributionCoordinator, Singleton):
     """Coordinates upstream blame attribution, single-paragraph validation, and failure cascades."""
 
@@ -126,26 +146,33 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
         """Matches a blame target value against configured blame targets for a node."""
         cfg = get_singleton(agent_node_config.NodeConfig)
         targets = list(cfg.blame_targets_by_node.get(node, set()))
-        for bt in targets:
-            bt_name = getattr(bt, "relative_path", getattr(bt, "short_name", ""))
-            if val is not None and bt == val:
-                return bt
-            if val_str and bt_name == val_str:
-                return bt
+        try:
+            alias = get_singleton(agent_file_alias.AliasManager).convert(val_str)
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            alias = None
+        alias_path = str(getattr(alias, "relative_path", "")) if alias is not None else ""
+        for bound in targets:
+            bound_path = str(getattr(bound, "relative_path", ""))
+            if val is not None and bound == val:
+                return bound
+            if alias is not None and bound == alias:
+                return bound
+            if alias_path and bound_path == alias_path:
+                return bound
         if val_str:
             norm_v = val_str.lstrip("/")
             suffix_matches = [
-                bt
-                for bt in targets
-                if getattr(bt, "relative_path", "").endswith("/" + norm_v)
-                or norm_v.endswith("/" + getattr(bt, "relative_path", "").lstrip("/"))
+                bound
+                for bound in targets
+                if getattr(bound, "relative_path", "").endswith("/" + norm_v)
+                or norm_v.endswith("/" + getattr(bound, "relative_path", "").lstrip("/"))
             ]
             if len(suffix_matches) == 1:
                 return suffix_matches[0]
             base_matches = [
-                bt
-                for bt in targets
-                if os.path.basename(getattr(bt, "relative_path", ""))
+                bound
+                for bound in targets
+                if os.path.basename(getattr(bound, "relative_path", ""))
                 == os.path.basename(norm_v)
             ]
             if len(base_matches) == 1:
@@ -186,7 +213,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
         try:
             cfg = get_singleton(agent_node_config.NodeConfig)
             role_defs = getattr(cfg, "role_definitions", {})
-        except (KeyError, AttributeError, RuntimeError):
+        except (LifecycleResolutionError, KeyError, AttributeError, RuntimeError):
             role_defs = {}
         src_role = str(source_node.role_address).split(":")[-1].strip().lower()
         tgt_role = str(blame_target_node.role_address).split(":")[-1].strip().lower()
@@ -213,12 +240,13 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
                         affected_nodes=[],
                     )
 
-        # 4. Inject feedback into culprit node (which marks culprit dirty per contract)
+        # 4. Record the feedback on the culprit node and mark it dirty in graph storage
         feedback = dag_storage.FeedbackMessage(
             content=dag_storage.MessageContent(explanation.strip()),
             target=blame_target_node,
         )
-        storage.add_message(feedback, to=blame_target_node)
+        storage.add_feedback_message(blame_target_node, feedback)
+        storage.mark_node_dirty(blame_target_node, explanation.strip())
 
         # 5. Mark source and fail in-batch dependents
         affected: List[dag_storage.DagNode] = [source_node]
@@ -239,6 +267,17 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
         in_batch_dependents: Optional[Sequence[dag_storage.DagNode]] = None,
     ) -> control_attribution.AttributionOutcome:
         """Records task failure and preserves dirty state on target node."""
+        storage = get_singleton(dag_storage.DagStorage)
+        reason = explanation.strip()
+        storage.add_feedback_message(
+            target_node,
+            dag_storage.FeedbackMessage(
+                content=dag_storage.MessageContent(reason),
+                target=target_node,
+            ),
+        )
+        storage.mark_node_dirty(target_node, reason)
+
         affected: List[dag_storage.DagNode] = [target_node]
         if in_batch_dependents:
             for dep in in_batch_dependents:
@@ -246,7 +285,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
 
         return control_attribution.AttributionOutcome(
             accepted=True,
-            message=f"Target '{target_node.unit_address}:{target_node.role_address}' failed: {explanation.strip()}",
+            message=f"Target '{target_node.unit_address}:{target_node.role_address}' failed: {reason}",
             affected_nodes=affected,
         )
 
@@ -279,9 +318,13 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
         main_root = repo_root or (meta.get("main_workspace_root") or meta.get("repo_root") if meta else None) or ws_root
         main_root = os.path.realpath(main_root)
 
-        dep_path = _resolve_target_path(culprit_file, main_root)
-        if not os.path.exists(dep_path):
-            dep_path = _resolve_target_path(culprit_file, ws_root)
+        bound_path = _resolve_bound_file_path(culprit_file)
+        if bound_path and os.path.exists(bound_path):
+            dep_path = bound_path
+        else:
+            dep_path = _resolve_target_path(culprit_file, main_root)
+            if not os.path.exists(dep_path):
+                dep_path = _resolve_target_path(culprit_file, ws_root)
         if not os.path.exists(dep_path):
             return control_attribution.AttributionOutcome(
                 accepted=False,
@@ -299,7 +342,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
         try:
             cfg = get_singleton(agent_node_config.NodeConfig)
             role_defs = getattr(cfg, "role_definitions", {})
-        except (KeyError, AttributeError, RuntimeError):
+        except (LifecycleResolutionError, KeyError, AttributeError, RuntimeError):
             role_defs = {}
         if not role_defs:
             roles_toml = None
@@ -380,9 +423,13 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
         main_root = repo_root or (meta.get("main_workspace_root") or meta.get("repo_root") if meta else None) or ws_root
         main_root = os.path.realpath(main_root)
 
-        full_p = _resolve_target_path(target_file, main_root)
-        if not os.path.isfile(full_p):
-            full_p = _resolve_target_path(target_file, ws_root)
+        bound_path = _resolve_bound_file_path(target_file)
+        if bound_path and os.path.isfile(bound_path):
+            full_p = bound_path
+        else:
+            full_p = _resolve_target_path(target_file, main_root)
+            if not os.path.isfile(full_p):
+                full_p = _resolve_target_path(target_file, ws_root)
 
         failure_reason = reason or "Verification failed"
         if not os.path.isfile(full_p):
@@ -415,3 +462,18 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
             message=f"Marked failure on {target_to_mutate}: added DIRTY tag and updated LAST_CLEANED.",
             affected_nodes=[],
         )
+
+
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        AttributionCoordinator,
+        keys=[AttributionCoordinator, control_attribution.AttributionCoordinator],
+        tier=AttributionCoordinator.tier,
+    )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: 3ba4577df9cd
+CODE_HASH: 7a6428609392
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_node_config_impl implementation component
@@ -26,52 +27,34 @@ The session config and alias manager realize session configuration and file alia
 
 The session config provides configuration parameters for active nodes in the role config, resolving parameters from target node manifests.
 
-When resolving parameters for a node from its manifest:
+When resolving the parameters of a node from its manifest:
 
-- Declared source files and templates provide read-write files and templates, with declared template parameters providing template bindings.
+- The declared source files and templates of the node provide the read-write files and templates, and the declared template parameters provide the template bindings.
 
-- Direct dependencies and transitive star dependencies across dependency manifests provide read-only files, excluding declared silent dependencies and read-write files.
+- The direct dependencies and the transitive star dependencies across dependency manifests provide the read-only files, excluding declared silent dependencies and read-write files.
 
-- Declared feedback dependencies provide blame targets mapped to their owning dependency nodes, declared verification commands provide verification checks, and graph storage provides incoming feedback messages.
+- The declared feedback dependencies provide the blame targets mapped to their owning dependency nodes, the declared verification commands provide the verification checks, and graph storage provides the incoming feedback messages.
 
 When a node declares a guide target, the session config retrieves the guide target's manifest via the manifest loader. Guide markdown content is loaded by reading the guide file resolved across workspace trees using candidate relative paths derived from the guide target manifest's declared source file or the guide target label. An unbound guide file is provided using the relative filename derived from the guide target label.
 
 Parsing a node guide from guide markdown extracts the guide summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
 
-The session config dynamically aggregates session parameters across active nodes' per node info.
+The session config dynamically aggregates session parameters across the per node info of the active nodes.
 
-The session config dynamically provides:
+The session config aggregates the session read-only files across the active nodes, excluding every file that appears in the session read-write files, and aggregates the session read-write files and templates across the active nodes, mapping each read-write file to its initial file content.
 
-- The session read-only files aggregating read-only files across the active nodes, excluding files present in the session read-write files.
+The session config combines the template parameters of the active nodes, and provides step mode eligibility, which single-node sessions permit when the target node allows step mode. Step mode is active when agent configuration permits it, the session is eligible for step mode, and session feedback is absent.
 
-- The session read-write files and templates aggregating read-write files and templates across the active nodes, mapping read-write files to initial file content.
+The session config provides the session guide file and the task guide of the single active node when guide step mode is active, the session verification success message of the active node when the session contains exactly one node, and the feedback messages retrieved from graph storage across the active nodes.
 
-- The session template parameters combining template parameters across the active nodes.
+The session config maps each active node to its declared blame targets, to its verification checks, to the relative path of its declared source file alias, and to its per node info, and aggregates the session verification checks across the active nodes.
 
-- Step mode eligibility, permitted for single-node sessions when the target node allows step mode.
-
-- Step mode activation, active when permitted by agent configuration, the session is eligible for step mode, and session feedback is absent.
-
-- The session guide file and task guide from the single active node when guide step mode is active.
-
-- The session blame targets by node mapping each active node to its declared blame targets.
-
-- The session verification checks aggregating verification checks across the active nodes, and verification checks by node mapping each active node to its verification checks.
-
-- The session src file alias by node mapping each active node to the relative path of its declared source file alias.
-
-- The session verification success message from the active node when the session contains exactly one node.
-
-- The session feedback combining feedback messages retrieved from graph storage across the active nodes.
-
-- The session per node info by node mapping each active node to its per node info.
-
-The alias manager maintains virtual file addressing and path masking for accessible workspace files associated with the active nodes in the role config.
+The alias manager maintains virtual file addressing and path masking for the accessible workspace files associated with the active nodes in the role config.
 
 The alias manager:
 
-- Generates file aliases with relative paths for all accessible workspace files associated with the active nodes.
+- Generates a file alias with a relative path for every accessible workspace file associated with the active nodes.
 
-- Converts wire type strings to file aliases, matching relative paths to corresponding file aliases and producing unbound files when relative paths are unmapped.
+- Converts wire strings into file aliases by matching relative paths to the corresponding file aliases, producing an unbound file when a relative path is unmapped.
 
-- Sanitizes output text by masking occurrences of workspace root path prefixes and execution root path prefixes, replacing matching host paths with relative workspace paths.
+- Sanitizes output text by masking occurrences of workspace root path prefixes and execution root path prefixes, replacing each matching host path with a relative workspace path.

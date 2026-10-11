@@ -1,16 +1,16 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: ed8a6c44187a
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:45:09Z
+# CHANGE: Inspect chronological message order through the contracted get_model_request result instead of the undeclared messages attribute
+# CODE_HASH: 113caba3e589
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for openai_conversation_impl aligned with grounding specifications."""
 
 import json
-from typing import Any, cast, Optional
+from typing import Optional
 import unittest
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.loop.lib.loop_conversation import (
@@ -140,8 +140,6 @@ class OpenAIConversationImplTest(unittest.TestCase):
             self.assertEqual(msgs[0].role, "system")
             self.assertEqual(msgs[1].role, "user")
             self.assertEqual(msgs[2].role, "assistant")
-            # Verify conversation messages history accessor
-            self.assertEqual(len(cast(Any, history).messages), 3)
 
     def test_append_unprompted_tool_response_inserts_synthetic_assistant_call(
         self,

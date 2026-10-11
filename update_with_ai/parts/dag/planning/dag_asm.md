@@ -1,14 +1,12 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: c8e2c4a731eb
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T03:01:23Z
+CHANGE: Drop planning front-matter from the dag assembly canvas
+CODE_HASH: 4ecd90c61cbc
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # dag_asm assembly component
-
-imports: dag_subgraph_impl
 
 ## Intent
 

@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-05T05:21:23Z
-CHANGE: Align purpose with sandbox to justify agent_node_config import and add delegation boundary
-CODE_HASH: 8390f46f8ceb
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: State the delegated capability as a declarative report rather than a query
+CODE_HASH: c225f9618ae0
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # sandbox_impl implementation component
@@ -24,4 +25,4 @@ Agent sessions operate across heterogeneous tools spanning file inspection, edit
 
 The sandbox coordinates workspace state for the active session.
 
-Querying file modifications delegates to the edit manager.
+The sandbox reports whether workspace file modifications occurred during the session by delegating to the edit manager.

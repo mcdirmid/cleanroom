@@ -178,14 +178,14 @@ tools = [
     "update_with_ai.support.lib.cleanroom_role_tool",
 ]
 active_component_types = ["implementation"]
-verify_template = "uv run pytest {unit_dir}/tests/{unit_name}_test.py && uv run python -m update_with_ai.support.lib.cleanroom_role_tool coverage --impl {unit_dir}/lib/{unit_name}.py --test {unit_dir}/tests/{unit_name}_test.py --threshold 100.0"
+verify_template = "uv run pytest {unit_dir}/tests/{unit_name}_test.py && uv run python -m update_with_ai.parts.tools.lib.tool_coverage --impl {unit_dir}/lib/{unit_name}.py --test {unit_dir}/tests/{unit_name}_test.py --threshold 100.0"
 verification_success_message = "All unit tests passed and 100% statement coverage verified for {unit_name}."
 ```
 
 ### 3.2 Why `do_unit_tests && do_coverage` is the Optimal Architecture
 
 1. **Configurability**:
-   `cleanroom_roles.toml` defines the test runner and coverage tool declaratively. If a project switches from `pytest` to another runner, or modifies coverage thresholds, it updates the TOML string without modifying Python orchestrators or Bazel rules.
+   `cleanroom_roles.toml` defines the test runner and coverage tool declaratively. If a project switches from `pytest` to another runner, or modifies coverage thresholds, it updates the TOML string without modifying Python orchestrators or build rules.
 2. **Native Short-Circuiting**:
    The shell `&&` operator natively handles short-circuiting:
    - If `pytest` fails (exit code $\neq 0$), the subshell terminates immediately. Coverage instrumentation never runs, preventing broken test traces or misleading coverage reports.
@@ -397,7 +397,7 @@ The QA arbiter enforces independent per-target verification: if a target's unit 
 
 ## 6. DAG, Role Configuration & Build System Updates
 
-Consolidating `qa` and `coverage` simplifies the DAG engine across Bazel rules, TOML configurations, and workspace provisioning.
+Consolidating `qa` and `coverage` simplifies the DAG engine across TOML configurations, workspace provisioning, and test runners.
 
 ### 6.1 `cleanroom_roles.toml` Changes
 
@@ -423,17 +423,18 @@ Consolidating `qa` and `coverage` simplifies the DAG engine across Bazel rules, 
    verification_success_message = "All unit tests passed and 100% statement coverage verified for {unit_name}."
    ```
 
-### 6.2 Bazel & Runner Updates
+### 6.2 Role Configuration & Runner Updates
 
-1. **`update_python_with_ai/support/lib/update_python_with_ai.bzl`**:
-   Update `PYTHON_ROLES` to remove `coverage`:
-   ```python
-   PYTHON_ROLES = ["high", "planning", "spec_qa", "low", "low_qa", "lib", "test", "qa"]
-   ```
-2. **`update_with_ai/support/lib/update_with_ai.bzl`**:
+1. **`update_python_with_ai/cleanroom_roles.toml`**:
+   Update role definitions to consolidate `coverage` into `qa`:
+   - Remove `[roles.coverage]`.
+   - Update `[roles.qa]` with `verify_template = "uv run pytest {unit_dir}/tests/{unit_name}_test.py && uv run python -m update_with_ai.support.lib.cleanroom_role_tool coverage --impl {unit_dir}/lib/{unit_name}.py --test {unit_dir}/tests/{unit_name}_test.py --threshold 100.0"`.
+
+2. **`update_with_ai/parts/control/lib/src_metadata.py`**:
    - In `AUDITOR_TAGS`, remove `"coverage": "COVERAGE_AUDIT"`.
    - In `resolve_auditor_feedback_paths`, change `role in ("qa", "coverage")` to `role == "qa"`.
    - In `ORDERED_ROLES`, remove `"coverage"`.
+
 3. **`update_with_ai/support/lib/cleanroom_uv_runner.py`**:
    - Remove `"coverage"` from `ORDERED_ROLES`.
    - The final tier in the scope graph resolution becomes `"qa"`.
@@ -464,17 +465,14 @@ The following checklist specifies the engineering tasks required to execute this
 - [ ] Overwrite `update_python_with_ai/guides/qa.md` with the unified specification drafted in Section 5 of this document.
 - [ ] Verify that `update_python_with_ai/guides/qa.md` conforms to `update_with_ai/guides/meta_guide.md` (no 2nd-person pronouns, declarative impersonal tone, single-paragraph blame format, valid meta blockquote, package-relative file paths).
 - [ ] Deprecate and remove `update_python_with_ai/guides/coverage.md`.
-- [ ] Update `update_python_with_ai/guides/BUILD.bazel` to remove references to `coverage.md`.
 
 ### Phase 3: DAG Engine & Role Configuration Updates
 - [ ] Update `update_python_with_ai/cleanroom_roles.toml`:
   - Remove `[roles.coverage]`.
   - Update `[roles.qa]` with `verify_template` pointing to `do_unit_tests && do_coverage` and add `cleanroom_role_tool` to `tools`.
-- [ ] Update `update_python_with_ai/support/lib/update_python_with_ai.bzl`:
-  - Remove `"coverage"` from `PYTHON_ROLES`.
-- [ ] Update `update_with_ai/support/lib/update_with_ai.bzl`:
+- [ ] Update `update_with_ai/parts/control/lib/src_metadata.py`:
   - Remove `"coverage"` from `AUDITOR_TAGS`, `resolve_auditor_feedback_paths`, and `ORDERED_ROLES`.
-  - Update auditor submission logic in `_submit` targets to stamp only `QA_AUDIT`.
+  - Update auditor submission logic in `control_submit_impl.py` to stamp only `QA_AUDIT`.
 - [ ] Update `update_with_ai/support/lib/cleanroom_uv_runner.py`:
   - Remove `"coverage"` from `ORDERED_ROLES`.
 
@@ -492,6 +490,6 @@ The following checklist specifies the engineering tasks required to execute this
 - [ ] Verify that `src_metadata.py` and `src_storage_impl.py` correctly identify clean nodes without expecting `COVERAGE_AUDIT`.
 
 ### Phase 6: Test Suite & Documentation Verification
-- [ ] Run `bazel test //update_with_ai/support/tests:... --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress`.
-- [ ] Run `bazel test //update_with_ai/parts/... --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress`.
-- [ ] Update documentation references in `AGENTS.md`, `design-docs/README.md`, and `design-docs/auditor_roles_and_dirtiness_architecture.md` to reflect the consolidated 3-gate pipeline (`spec_qa`, `low_qa`, `qa`).
+- [ ] Run `uv run pytest update_with_ai/support/tests`.
+- [ ] Run `uv run pytest update_with_ai/parts`.
+- [ ] Update documentation references in `AGENTS.md`, `design-docs/README.md`, and `design-docs/auditor_roles_and_dirtiness_architecture.md` to reflect the consolidated 2-gate pipeline (`spec_qa`, `qa`).

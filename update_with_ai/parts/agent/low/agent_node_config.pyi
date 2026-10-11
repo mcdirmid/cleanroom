@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 002081f1371d
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:06:20Z
+# CHANGE: Canonicalize role, session config, bound file, blame target, and message typing and terminology
+# CODE_HASH: 48bbdd66dabb
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Agent node config low-level interface specification."""
@@ -72,7 +72,7 @@ class VerificationCheck(Protocol):
 
         POSTCONDITIONS:
         - MUST communicate whether verification passed.
-        - WHEN verification fails, MUST communicate diagnostic feedback.
+        - WHEN verification criteria fail, MUST communicate diagnostic feedback describing the failure.
         """
         ...
 
@@ -135,9 +135,6 @@ class RoleConfig(InTier[AgentSessionTier], Protocol):
 
         Args:
             role: The role of the agent session.
-
-        POSTCONDITIONS:
-        - MUST set the role of the session.
         """
         ...
 
@@ -149,7 +146,6 @@ class RoleConfig(InTier[AgentSessionTier], Protocol):
             nodes: The sequence of nodes to clean.
 
         POSTCONDITIONS:
-        - MUST set the sequence of nodes currently being cleaned in the session.
         - MUST increment the execution version.
         """
         ...
@@ -157,16 +153,16 @@ class RoleConfig(InTier[AgentSessionTier], Protocol):
 
 @singleton_type("agent_session")
 class NodeConfig(InTier[AgentSessionTier], Protocol):
-    """Provides resolved configuration parameters for the active session."""
+    """Provides the resolved configuration parameters of the active session."""
 
     @property
     def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
-        """The session read-only files, restricting bound files to read."""
+        """The session read-only files restricting bound files to read access."""
         ...
 
     @property
     def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
-        """The session read-write files representing the nodes in the session, permitting bound files for read and write."""
+        """The session read-write files permitting bound files for read and write access."""
         ...
 
     @property
@@ -186,27 +182,27 @@ class NodeConfig(InTier[AgentSessionTier], Protocol):
 
     @property
     def templates(self) -> Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent]:
-        """Templates mapping read-write files to initial file content."""
+        """Session templates mapping read-write files to initial file content."""
         ...
 
     @property
     def template_parameters(self) -> Mapping[TemplateParamKey, Any]:
-        """Parameter bindings for template evaluation."""
+        """Session template parameters for template evaluation."""
         ...
 
     @property
     def guide(self) -> Optional[NodeGuide]:
-        """Structured instructional text for guide step mode."""
+        """The session guide provided when step mode is active."""
         ...
 
     @property
     def blame_targets_by_node(self) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
-        """Bound files owned by upstream dependency nodes mapped by session node."""
+        """Session blame targets per session node, mapping read-write files to the read-only bound files eligible for blame."""
         ...
 
     @property
     def verification_checks(self) -> Sequence[VerificationCheck]:
-        """Session verification checks evaluated during session advancement."""
+        """Session verification checks evaluated during verification."""
         ...
 
     @property
@@ -221,12 +217,12 @@ class NodeConfig(InTier[AgentSessionTier], Protocol):
 
     @property
     def verification_success_message(self) -> Optional[VerificationSuccessMessage]:
-        """Informative verification feedback when configured."""
+        """The session verification success message when configured."""
         ...
 
     @property
     def feedback(self) -> Sequence[NodeFeedback]:
-        """Incoming feedback delivered to the node when present."""
+        """Incoming session messages explaining why a read-write file requires cleaning."""
         ...
 
     @property

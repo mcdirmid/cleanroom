@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 3f30c8e6a791
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:37:03Z
+# CHANGE: Add conditional endpoint, credential, and token bound contracts
+# CODE_HASH: fdd074302969
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """OpenAI configuration low-level interface specification."""
@@ -31,12 +31,20 @@ class OpenAIConfig(InTier[SystemTier], Protocol):
 
     @property
     def base_url(self) -> Optional[BaseUrl]:
-        """Designates the remote model API endpoint address when custom routing applies."""
+        """Designates the remote model API endpoint address when custom routing applies.
+
+        POSTCONDITIONS:
+        - WHEN custom endpoint routing applies, MUST provide the remote model endpoint address.
+        """
         ...
 
     @property
     def api_key(self) -> Optional[ApiKey]:
-        """Provides authentication credentials when designated environment secrets apply."""
+        """Provides authentication credentials when designated environment secrets apply.
+
+        POSTCONDITIONS:
+        - WHEN designated environment secrets apply, MUST provide the authentication credentials.
+        """
         ...
 
     @property
@@ -51,5 +59,9 @@ class OpenAIConfig(InTier[SystemTier], Protocol):
 
     @property
     def max_tokens(self) -> Optional[MaxTokens]:
-        """Upper bound specifying maximum response tokens permitted per request."""
+        """Upper bound specifying maximum response tokens permitted per request.
+
+        POSTCONDITIONS:
+        - WHEN token generation is constrained, MUST provide the max tokens upper bound.
+        """
         ...

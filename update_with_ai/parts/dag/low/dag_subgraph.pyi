@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 682315c696aa
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CHANGED: 2026-10-11T03:51:54Z
+# CHANGE: Contract the empty next ready batch when no dirty node has all target subgraph dependencies clean
+# CODE_HASH: 72477e259262
+# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 # --- END CLEANROOM METADATA ---
 
 """Dag subgraph low-level interface specification."""
@@ -11,7 +11,6 @@
 from typing import Protocol, Sequence
 from framework import operation, singleton_type
 from support.lib.lifecycle import InTier, SystemTier
-import dag_storage
 from dag_storage import DagNode
 
 
@@ -29,6 +28,8 @@ class DagSubgraph(InTier[SystemTier], Protocol):
         POSTCONDITIONS:
         - MUST collect reachable dependency nodes from the target node in graph storage.
         - MUST compute the dependency-first topological order of reachable dependency nodes.
+        - MUST order nodes that no dependency orders relative to one another by role tier depth first.
+        - MUST order nodes that no dependency orders relative to one another by unit address second.
         """
         ...
 
@@ -40,8 +41,7 @@ class DagSubgraph(InTier[SystemTier], Protocol):
             True if all reachable nodes in the target subgraph are clean.
 
         POSTCONDITIONS:
-        - MUST return whether the target subgraph is complete.
-        - MUST return true if, but only if, all reachable nodes in the target subgraph are clean.
+        - MUST return true if, but only if, all reachable nodes in the target subgraph are clean in graph storage.
         """
         ...
 
@@ -53,9 +53,9 @@ class DagSubgraph(InTier[SystemTier], Protocol):
             The sequence of dirty nodes ready to be cleaned.
 
         POSTCONDITIONS:
-        - MUST return the next ready batch of dirty nodes to clean.
         - MUST select uncleaned dirty nodes prioritized by role tier precedence.
         - MUST ensure dependencies in the target subgraph for each selected dirty node are clean or present in the same ready batch.
+        - WHEN no dirty node in the target subgraph has all of its dependencies in the target subgraph clean in graph storage, MUST return an empty sequence.
         - MUST ensure selected dirty nodes share the same role address.
         - MUST bound the batch size up to the maximum batch size.
         """

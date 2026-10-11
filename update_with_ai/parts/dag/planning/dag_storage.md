@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-08T00:31:17Z
-CHANGE: Update dag_storage factored contracts: mark_node_dirty, mark_subgraph_clean, add_feedback_message, and refined change message semantics
-CODE_HASH: 96322a7cfc2a
-SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T02:58:43Z
+CHANGE: Add dirty reason recording, graph state storage, and template preservation contracts
+CODE_HASH: 0e9ae5a083f4
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # dag_storage interface component
@@ -18,6 +18,8 @@ By managing direct dependencies, silent exclusion rules, diagnostic change messa
 
 ### Typing
 
+- A unit is an end-artifact being worked on.
+- A role describes a phase of work done to an artifact.
 - A dag node has a unit address.
 - A dag node has a role address.
 - A dag dependency refers to a direct upstream node.
@@ -37,12 +39,14 @@ By managing direct dependencies, silent exclusion rules, diagnostic change messa
 - A caller supplies a dag node when marking a subgraph clean. [mark_subgraph_clean_node_supplied]
 - A caller supplies a dag node when marking a node clean. [mark_clean_node_supplied]
 - Direct upstream dependencies of a dag node form a directed acyclic graph. [dependencies_form_dag]
+- A system's dag storage stores node graph structure, node status, and messages. [store_graph_state]
 - A system's dag storage provides access to a node's dag dependencies. [access_dag_dependencies]
 - A system's dag storage provides access to messages for a node. [access_node_messages]
 - A system's dag storage adds feedback messages blaming dependency target nodes. [add_feedback_messages]
 - Adding a feedback message blaming a dependency target node records unacted feedback in its in-band metadata. [record_feedback_in_metadata]
 - A system's dag storage marks a node dirty. [mark_node_dirty]
 - Marking a node dirty removes its clean status in in-band metadata. [mark_dirty_clears_clean_status]
+- Marking a node dirty records the reason the node was marked dirty in its in-band metadata when a reason is provided. [mark_dirty_records_reason]
 - A system's dag storage marks a subgraph clean. [mark_subgraph_clean]
 - Marking a subgraph clean marks the target node clean. [subgraph_clean_marks_target_clean]
 - Marking a subgraph clean marks all reachable dependencies clean. [subgraph_clean_marks_dependencies_clean]
@@ -55,6 +59,7 @@ By managing direct dependencies, silent exclusion rules, diagnostic change messa
 - A node is considered dirty when unacted feedback messages exist. [dirty_when_feedback_present]
 - Any non-silent dependency was changed after the node was last cleaned marks a node dirty. [dirty_when_dependency_newer]
 - A system's dag storage materializes initial templates on disk for a node when its source artifact is missing. [materialize_node_template]
+- Materializing a template preserves an existing source artifact without overwriting it. [materialize_preserves_existing_artifact]
 - A system's dag storage marks a node clean in graph storage, clearing messages and stamping clean metadata. [mark_node_clean_in_storage]
 - Marking a node clean with a change message updates its change timestamp in in-band metadata. [mark_clean_updates_change_timestamp]
 - Marking a node clean with a change message records the change message content in in-band metadata. [mark_clean_records_change_summary]
@@ -66,8 +71,8 @@ By managing direct dependencies, silent exclusion rules, diagnostic change messa
 
 - When querying whether a node is dirty, dirty status is true if the source file is missing, if metadata is missing, invalid, or uncleaned, if a dirty tag is present, if feedback is present, or if a non-silent dependency changed after the node was last cleaned. [query_dirty_node_supplied, expose_node_dirty, dirty_when_source_missing, dirty_when_metadata_missing, dirty_when_metadata_invalid, dirty_when_metadata_uncleaned, dirty_when_metadata_dirty, dirty_when_feedback_present, dirty_when_dependency_newer]
 - When adding a feedback message, the feedback explanation is recorded into in-band metadata for the blamed dependency target node. [add_feedback_node_supplied, add_feedback_msg_supplied, add_feedback_messages, record_feedback_in_metadata]
-- When marking a node dirty, its clean status is cleared in in-band metadata. [mark_dirty_node_supplied, mark_node_dirty, mark_dirty_clears_clean_status]
-- When marking a subgraph clean, missing templates are materialized and all reachable nodes in the subgraph are marked clean. [mark_subgraph_clean_node_supplied, mark_subgraph_clean, subgraph_clean_marks_target_clean, subgraph_clean_marks_dependencies_clean, materialize_node_template, mark_node_clean_in_storage]
+- When marking a node dirty, its clean status is cleared in in-band metadata and a provided dirty reason is recorded. [mark_dirty_node_supplied, mark_node_dirty, mark_dirty_clears_clean_status, mark_dirty_records_reason]
+- When marking a subgraph clean, missing templates are materialized and all reachable nodes in the subgraph are marked clean. [mark_subgraph_clean_node_supplied, mark_subgraph_clean, subgraph_clean_marks_target_clean, subgraph_clean_marks_dependencies_clean, materialize_node_template, materialize_preserves_existing_artifact, mark_node_clean_in_storage]
 - When marking a node clean with a change message, change metadata is updated and unacted feedback and dirty status are cleared. [mark_clean_node_supplied, mark_node_clean_in_storage, mark_clean_updates_change_timestamp, mark_clean_records_change_summary, mark_clean_clears_feedback, mark_clean_clears_dirty_tags]
 - When accessing messages for a node, diagnostic change and feedback explanations are returned. [query_messages_node_supplied, access_node_messages]
 

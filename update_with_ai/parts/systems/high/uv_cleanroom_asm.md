@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-08T12:55:00Z
-CHANGE: assemble workspace_tool_impl
-CODE_HASH: 825cec0dee76
+LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CHANGED: 2026-10-11T02:45:00Z
+CHANGE: Restate the root assembly structurally and remove the constituent enumeration from prose
+CODE_HASH: 689df5af468d
+SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
 -->
 
 # uv_cleanroom_asm assembly component
@@ -21,18 +22,6 @@ Operating an autonomous software development environment requires unifying speci
 
 ## Types and Behavior
 
-The *uv cleanroom assembly* unites all constituent subsystem assemblies and implementations into a unified system ready for end-to-end execution. The uv cleanroom assembly initializes its constituent assemblies and implementations recursively, registering all singleton services across system and session lifecycle tiers to achieve full architectural interface closure.
+The uv_cleanroom_asm assembly component aggregates the implementations of every interface component in the system, uniting the constituent subsystem assemblies and implementations into a unified root system that is ready for end-to-end execution.
 
-The uv cleanroom assembly aggregates the following constituents:
-
-- The uv openai loop assembly from uv_openai_loop_asm, closing the agent configuration, target management, DAG graph traversal, language model driving loop, runner logging, and sandbox tool provider interfaces.
-
-- The control assembly from control_asm, closing the session coordination, verification evaluation, work scheduling, submission handling, defect attribution, and in-band source metadata interfaces.
-
-- The file paths implementation from file_paths_impl, closing the file paths interface to validate and normalize workspace paths.
-
-- The tools assembly from tools_asm, closing the tool coverage interface to measure statement coverage and certify execution thresholds.
-
-- The workspace assembly from workspace_asm, closing the workspace provisioning, workspace registry, workspace synchronization, and work queue interfaces.
-
-- The workspace tool runner implementation from workspace_tool_impl, closing the workspace tool runner interface for role workspace CLI execution and argument parsing.
+The uv cleanroom assembly initializes its constituent assemblies and implementations recursively, registering every singleton service across the system and session lifecycle tiers to achieve full architectural interface closure.

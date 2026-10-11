@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:02Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 3a3d60b418d5
-# COVERAGE_AUDIT: 2026-10-09T21:19:02Z
-# QA_AUDIT: 2026-10-09T21:19:01Z
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:58:39Z
+# CHANGE: Assert the synthesized promptless pass-through definition is registered as a non-propagating edge where the dependent producer declares it
+# CODE_HASH: 119f04f0bc33
+# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
+# QA_AUDIT: 2026-10-11T22:09:03Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for uv_manifest_loader_impl aligned with low-level specifications."""
@@ -144,6 +144,10 @@ class TestUvManifestLoaderImpl(unittest.TestCase):
 
         # Setup mock cleanroom_python_roles.toml
         toml_content = """
+[roles.high]
+src_pattern = "{unit_dir}/high/{unit_name}.md"
+active_component_types = ["implementation", "assembly", "interface", "external"]
+
 [roles.lib]
 src_pattern = "{unit_dir}/lib/{unit_name}.py"
 prompt_template = "Implement {unit_name} as {component_type} in {unit_dir}/lib/{unit_name}.py"
@@ -170,6 +174,8 @@ allows_step_mode = false
 """
         with open(os.path.join(self.test_dir, "cleanroom_python_roles.toml"), "w", encoding="utf-8") as f:
             f.write(toml_content)
+        with open(os.path.join(self.test_dir, "cleanroom.toml"), "w", encoding="utf-8") as f:
+            f.write('methodology = "//"\n')
 
     def tearDown(self) -> None:
         os.chdir(self.old_cwd)
@@ -324,6 +330,16 @@ allows_step_mode = false
         hls_file = os.path.join(high_dir, "asm_unit.md")
         with open(hls_file, "w", encoding="utf-8") as f:
             f.write("# asm_unit assembly component\n\nassembles: part1\n")
+        # A dependent producer unit that declares the pass-through target as a dependency.
+        consumer = _make_dag_node("//pkg/sub:consumer", "lib")
+        with open(
+            os.path.join(high_dir, "consumer.md"), "w", encoding="utf-8"
+        ) as f:
+            f.write(
+                "# consumer implementation component\n"
+                "\n"
+                "imports: //pkg/sub:asm_unit\n"
+            )
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(UvManifestLoader)
@@ -333,6 +349,17 @@ allows_step_mode = false
             self.assertIsNotNone(node_def)
             assert node_def is not None
             self.assertEqual(node_def.task_prompt, "")
+
+            # Requirement: WHEN synthesizing promptless pass-through node definitions because a unit
+            # component type is not active for a role, MUST register the synthesized definitions as
+            # graph dependencies that do not propagate changes on the edges that reference them.
+            loader.load_manifest(consumer)
+            pass_through_edges = [
+                dep
+                for dep in self.storage.get_dependencies(consumer)
+                if dep.node == node and dep.is_silent
+            ]
+            self.assertEqual(len(pass_through_edges), 1)
 
     def test_retrieve_manifest_missing_hls(self) -> None:
         """CUJ: When HLS is missing, returns None."""
@@ -370,6 +397,15 @@ active_component_types = ["implementation"]
             self.assertIsNotNone(manifest)
             assert manifest is not None
             self.assertEqual(manifest.task_prompt, "CUSTOM PROMPT for custom_unit")
+
+    def test_retrieve_manifest_missing_methodology_binding_raises_error(self) -> None:
+        """Verifies that missing cleanroom.toml raises FileNotFoundError without synthetic fallback."""
+        os.remove(os.path.join(self.test_dir, "cleanroom.toml"))
+        node = _make_dag_node("//pkg/sub:custom_unit", "lib")
+        with enter_phase("system", registry=self.registry) as scope:
+            loader = scope.get_singleton(UvManifestLoader)
+            with self.assertRaises(FileNotFoundError):
+                loader.retrieve_manifest(node)
 
 
 if __name__ == "__main__":

@@ -24,12 +24,7 @@ dependencies = [
 [project.scripts]
 cleanroom = "update_with_ai.support.lib.cleanroom_role_tool:main"
 cleanroom-loop = "update_with_ai.support.lib.cleanroom_uv_runner:main"
-
-[tool.uv.workspace]
-members = [
-    "update_with_ai",
-    "staging",
-]
+cleanroom_loop = "update_with_ai.support.lib.cleanroom_uv_runner:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["update_with_ai", "update_python_with_ai"]
@@ -61,10 +56,12 @@ exclude = [
     "**/__pycache__",
     "**/*_pb2.py",
     ".venv",
+    "**/low",
+    "staging",
 ]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
-reportMissingImports = "none"
+reportMissingImports = "error"
 reportUnknownMemberType = false
 reportUnknownVariableType = false
 reportUnknownArgumentType = false

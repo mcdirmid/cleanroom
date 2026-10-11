@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-09T21:19:01Z
-# LAST_CHANGED: 2026-10-06T10:45:00Z
-# CHANGE: new file
-# CODE_HASH: ff654c8a9b2b
+# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CHANGED: 2026-10-11T05:20:44Z
+# CHANGE: Remove the undeclared module-level resolution wrappers so the interface holds only the declared outcome type and coordinator protocol; callers now resolve the coordinator singleton directly
+# CODE_HASH: 6fe1a425f019
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -55,29 +55,3 @@ class SubmissionCoordinator(Protocol):
     def parse_unit_from_file_path(
         self, file_path: str, repo_root: str
     ) -> Tuple[str, str, str]: ...
-
-
-def resolve_submit_target(
-    target: str,
-    repo_root: str,
-    role_name: str,
-    dir_scope: str = "staging",
-) -> Tuple[Optional[str], Optional[str]]:
-    from support.lib.lifecycle import get_singleton
-    coord = get_singleton(SubmissionCoordinator)
-    return coord.resolve_submit_target(target, repo_root, role_name, dir_scope)
-
-
-def parse_unit_from_file_path(
-    file_path: str, repo_root: str
-) -> Tuple[str, str, str]:
-    from support.lib.lifecycle import get_singleton
-    coord = get_singleton(SubmissionCoordinator)
-    return coord.parse_unit_from_file_path(file_path, repo_root)
-
-
-
-def is_auditor_node(node: dag_storage.DagNode) -> bool:
-    """Checks whether the node's role is classified as an auditor."""
-    role_clean = node.role_address.split(":")[-1].strip().lower()
-    return role_clean in ("grounding_qa", "qa", "coverage", "spec_qa", "low_qa")

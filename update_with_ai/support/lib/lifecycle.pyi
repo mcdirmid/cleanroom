@@ -1,0 +1,23 @@
+"""Type stubs forwarding lifecycle primitives from update_python_with_ai."""
+from update_python_with_ai.support.lib.lifecycle import (
+    ChildTierOf as ChildTierOf,
+    InTier as InTier,
+    Initializable as Initializable,
+    LifecycleError as LifecycleError,
+    LifecycleInitializationError as LifecycleInitializationError,
+    LifecycleIsolationError as LifecycleIsolationError,
+    LifecycleRegistry as LifecycleRegistry,
+    LifecycleResolutionError as LifecycleResolutionError,
+    LifecycleScope as LifecycleScope,
+    LifecycleTier as LifecycleTier,
+    Singleton as Singleton,
+    SystemTier as SystemTier,
+    begin_phase as begin_phase,
+    enter_phase as enter_phase,
+    get_active_scope as get_active_scope,
+    get_ambient_system_scope as get_ambient_system_scope,
+    get_default_registry as get_default_registry,
+    get_singleton as get_singleton,
+    singleton as singleton,
+    system as system,
+)

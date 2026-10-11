@@ -1,8 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-09T21:19:01Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: efa8afde43ab
+LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Reduce assembly narrative to a single structural sentence and remove constituent naming from prose
+CODE_HASH: abfd4d938099
+SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 -->
 
 # dag_asm assembly component
@@ -21,6 +22,4 @@ Coordinating multi-node task resolution requires traversing dependency relations
 
 ## Types and Behavior
 
-The *dag assembly* unites the concrete implementation components that realize dependency-first topological graph queries and execution iteration bounds. The assembly initializes its constituent implementation components and registers their singleton services with the system lifecycle prototype.
-
-The dag assembly aggregates the dag subgraph implementation from dag_subgraph_impl, closing the dag subgraph interface to query active subgraphs in dependency-first order, batch ready dirty nodes, and enforce execution iteration limits.
+The dag_asm assembly component aggregates the implementation of the dag subgraph interface, providing a unified assembly for dependency-first topological graph queries and execution iteration bounds.
