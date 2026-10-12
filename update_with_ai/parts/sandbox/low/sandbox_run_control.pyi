@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
-# LAST_CHANGED: 2026-10-11T03:26:02Z
-# CHANGE: Declare named tool identities, tested hash tracking, and per-node blame targets
+# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CHANGED: 2026-10-12T11:27:00Z
+# CHANGE: Remove max batch size parameter from get work tool
 # CODE_HASH: e5d6ca5da80d
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox run control low-level interface specification."""
@@ -14,7 +14,6 @@ from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import agent_file_alias
 import agent_node_config
-import dag_config
 import dag_storage
 import tool_provider
 
@@ -235,13 +234,6 @@ class BlameTool(ResolveTool, InTier[AgentSessionTier], Protocol):
 @singleton_type("agent_session")
 class GetWorkTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
     """Tool that retrieves active dirty nodes for processing."""
-
-    @property
-    def max_batch_size_parameter(
-        self,
-    ) -> tool_provider.ToolParameter[Optional[dag_config.BatchSize], int]:
-        """Parameter specifying the maximum number of nodes to acquire."""
-        ...
 
     @operation
     @override

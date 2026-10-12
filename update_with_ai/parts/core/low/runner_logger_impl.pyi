@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:02Z
-# LAST_CHANGED: 2026-10-11T03:08:11Z
-# CHANGE: Ground log mechanics in local provisions and replace ungrounded JSON serialization with transcript text
+# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CHANGED: 2026-10-12T12:35:00Z
+# CHANGE: Present single-line event summaries to standard output without timestamps or event names
 # CODE_HASH: 9a1df7a50285
-# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Runner logger implementation low-level specification."""
@@ -18,7 +18,7 @@ class RunnerLogger(runner_logger.RunnerLogger):
     """Realizes live terminal logging and unbuffered transcript file output.
 
     GROUNDING:
-    - Implements execution logging by formatting timestamped summaries to sys.stdout
+    - Implements execution logging by writing event summaries to sys.stdout
       and streaming unbuffered verbose transcript text to a transcript log file.
     """
 
@@ -31,12 +31,11 @@ class RunnerLogger(runner_logger.RunnerLogger):
             event: The execution event record to consume.
 
         GROUNDING:
-        - Formats timestamp and event name to sys.stdout and appends raw transcript
+        - Writes event summary text to sys.stdout and appends raw transcript
           text followed by immediate flush to ensure durability.
 
         POSTCONDITIONS:
-        - MUST format single-line summaries with timestamps on standard output lines.
-        - MUST include event names on standard output lines for live terminal visibility.
+        - MUST present single-line event summaries on standard output lines without timestamps or event names.
         - MUST append verbose records to transcript log entries.
         - MUST flush transcript log entries immediately after each write.
         - MUST guarantee unbuffered persistence across unexpected crashes through immediate flushing.

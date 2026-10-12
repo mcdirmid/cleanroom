@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:04:02Z
 # CHANGE: Schedule directory-scoped dirty nodes from the role configuration node set when storage exposes no enumeration, and tolerate lifecycle resolution failures in role precedence
 # CODE_HASH: d25daba1f784
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T03:48:24Z
 # CHANGE: Realize delegation of tools with argument mappings to by-name execution
 # CODE_HASH: 3bce1dd835fc
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Tool provider low-level implementation specification."""

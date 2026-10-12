@@ -82,9 +82,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
         os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
 
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
-
         lib_file = os.path.join(part_dir, "lib/config.py")
         low_file = os.path.join(part_dir, "low/config.pyi")
         src_metadata.update_metadata(
@@ -118,8 +115,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         """Verifies that submit enforces symmetric change summary rules based on code modification."""
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
 
         lib_ws = commission_workspace(
             "lib", dir_scope="staging", repo_root=self.fake_repo
@@ -174,8 +169,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         """Verifies that submit stamps <ROLE>_AUDIT directly in main without buffer."""
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
 
         main_lib = os.path.join(self.fake_repo, "staging/parts/agent/lib/config.py")
         write_file_with_perms(
@@ -209,8 +202,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         """Verifies blaming directly mutates upstream contract in main without buffer."""
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
 
         low_f = os.path.join(part_dir, "low/config.pyi")
         src_metadata.update_metadata(
@@ -290,8 +281,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         """Verifies that fail adds DIRTY tag, advances LAST_CLEANED, and appends diagnostics."""
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
 
         main_lib = os.path.join(self.fake_repo, "staging/parts/agent/lib/config.py")
         src_metadata.update_metadata(
@@ -321,8 +310,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         """Verifies that an auditor role cannot directly submit a feedback/test file."""
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "tests"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
 
         qa_ws = commission_workspace(
             "qa", dir_scope="staging", repo_root=self.fake_repo
@@ -342,8 +329,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
         os.makedirs(os.path.join(part_dir, "tests"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
 
         main_lib = os.path.join(self.fake_repo, "staging/parts/agent/lib/config.py")
         main_test = os.path.join(
@@ -381,8 +366,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         """Verifies that auditor submit resolves bare unit name and virtual role path."""
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
 
         main_lib = os.path.join(self.fake_repo, "staging/parts/agent/lib/config.py")
         write_file_with_perms(
@@ -414,8 +397,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
         os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
 
         lib_ws = commission_workspace(
             "lib", dir_scope="staging", repo_root=self.fake_repo
@@ -435,8 +416,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         """Verifies that running fail on a read-only target mutates main directly without buffering."""
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
 
         main_lib = os.path.join(self.fake_repo, "staging/parts/agent/lib/config.py")
         write_file_with_perms(
@@ -469,11 +448,17 @@ class CleanroomRoleToolTest(unittest.TestCase):
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
         os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "base")\n')
-            f.write(
-                'update_python_with_ai(name = "derived", module_deps = [":base"])\n'
-            )
+        clean_md = (
+            "<!-- CLEANROOM METADATA\n"
+            "LAST_CLEANED: 2026-10-04T12:00:00Z\n"
+            "LAST_CHANGED: 2026-10-04T12:00:00Z\n"
+            "-->\n"
+        )
+        os.makedirs(os.path.join(part_dir, "high"), exist_ok=True)
+        with open(os.path.join(part_dir, "high/base.md"), "w", encoding="utf-8") as f:
+            f.write(clean_md + "# base\n")
+        with open(os.path.join(part_dir, "high/derived.md"), "w", encoding="utf-8") as f:
+            f.write(clean_md + "imports: base\n\n# derived\n")
 
         low_base = os.path.join(part_dir, "low/base.pyi")
         low_derived = os.path.join(part_dir, "low/derived.pyi")
@@ -525,8 +510,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
         os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
         low_file = os.path.join(part_dir, "low/config.pyi")
         with open(low_file, "w", encoding="utf-8") as f:
             f.write("def get_config() -> str: ...\n")
@@ -641,8 +624,6 @@ class CleanroomRoleToolTest(unittest.TestCase):
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
         os.makedirs(os.path.join(part_dir, "tests"), exist_ok=True)
-        with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-            f.write('update_python_with_ai(name = "config")\n')
 
         main_lib = os.path.join(self.fake_repo, "staging/parts/agent/lib/config.py")
         write_file_with_perms(main_lib, "# lib in main\n", readonly=False)

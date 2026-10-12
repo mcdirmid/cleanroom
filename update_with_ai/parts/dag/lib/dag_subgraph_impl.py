@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T04:59:23Z
 # CHANGE: Order ready nodes by role tier depth then unit address then role address, end each ready batch before the first node with unsatisfied in-subgraph dependencies, and bound batches at exactly the configured batch size
 # CODE_HASH: a5f668e73384
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations

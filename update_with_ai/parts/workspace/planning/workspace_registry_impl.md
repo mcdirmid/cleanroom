@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T04:08:00Z
 CHANGE: Contract role metadata descriptor and sibling workspace root discovery
-CODE_HASH: e93acb1702b0
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: 7e91eb1dadfd
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_registry_impl implementation component
@@ -16,15 +16,15 @@ Reliable multi-role orchestration depends on atomic registry file updates and de
 
 ### Contracts
 
-- The workspace registry searches ancestor directories for MODULE.bazel or .git markers (distinguishing canonical repositories from projected role workspaces) to locate the canonical repository root. [search_ancestor_markers]
+- The workspace registry searches ancestor directories for Cleanroom configuration files or .git markers (distinguishing canonical repositories from projected role workspaces) to locate the canonical repository root. [search_ancestor_markers]
 - From within an isolated role workspace, the workspace registry inspects role metadata descriptors to resolve the canonical repository root. [inspect_role_metadata_descriptor]
 - From within an isolated role workspace, the workspace registry matches sibling workspace conventions to resolve the canonical repository root. [match_sibling_workspace_conventions]
 - The workspace registry falls back to the ambient process working directory when no repository indicator is present. [fallback_to_ambient_working_directory]
 - The workspace registry parses role configuration declarations from declarative role files or repository build files into role definitions with fail-fast exception signaling. [parse_role_definitions]
 - The workspace registry normalizes role address strings into canonical role names. [normalize_role_identifier]
 - The workspace registry replaces directory separator characters with underscores to construct workspace folder names. [sanitize_directory_folder_name]
-- The workspace registry writes JSON descriptors atomically to .cleanroom_workspaces.json using temporary sibling files. [write_json_registry_atomically]
-- The workspace registry deserializes JSON descriptors from .cleanroom_workspaces.json into workspace descriptors. [read_json_registry_descriptors]
+- The workspace registry writes JSON descriptors atomically to cleanroom_files_ext.WORKSPACES_REGISTRY_FILE using temporary sibling files. [write_json_registry_atomically]
+- The workspace registry deserializes JSON descriptors from cleanroom_files_ext.WORKSPACES_REGISTRY_FILE into workspace descriptors. [read_json_registry_descriptors]
 
 ### Woven Contracts
 

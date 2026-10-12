@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
-# LAST_CHANGED: 2026-10-11T04:58:59Z
-# CHANGE: Classify auditor roles from NodeConfig role definitions instead of the undeclared src_metadata dependency, supply the now-required reasoning_text on all FollowUpToolCall constructions, implement RunController.blame_targets_by_node and route BlameTool through it, resolve default submit targets from EditManager boundary state, render the get-work primer through TemplateFormatter with guide attribution, aggregate all verification diagnostics sequentially, and handle an absent guide in AdvanceTool
+# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CHANGED: 2026-10-12T11:59:00Z
+# CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
 # CODE_HASH: 3aae5c909281
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier, agent
 import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
 import update_with_ai.parts.agent.lib.agent_node_config as agent_node_config
 import update_with_ai.parts.control.lib.control_coordinate as control_coordinate
-import update_with_ai.parts.dag.lib.dag_config as dag_config
 import update_with_ai.parts.dag.lib.dag_storage as dag_storage
 import update_with_ai.parts.dag.lib.dag_subgraph as dag_subgraph
 from . import sandbox
@@ -97,28 +96,6 @@ class _BlameExplanationParamType(tool_provider.ParameterType[sandbox_run_control
                 )
             )
         return sandbox_run_control.BlameExplanation(wire_value)
-
-
-@dataclass(frozen=True)
-class _BatchSizeParamType(tool_provider.ParameterType[Optional[dag_config.BatchSize], int]):
-    @property
-    def actual_type(self) -> type[Optional[dag_config.BatchSize]]:
-        return cast(type[Optional[dag_config.BatchSize]], dag_config.BatchSize)
-
-    @property
-    def wire_type(self) -> type[int]:
-        return int
-
-    def convert(self, wire_value: int) -> Optional[dag_config.BatchSize]:
-        if wire_value is None:
-            return None
-        if isinstance(wire_value, bool) or not isinstance(wire_value, int):
-            raise tool_provider.ParameterConversionError(
-                message=tool_provider.ConversionErrorMessage(
-                    f"Expected int for max_batch_size, got {type(wire_value).__name__}"
-                )
-            )
-        return dag_config.BatchSize(wire_value)
 
 
 class CheckFilesTool(sandbox_run_control.CheckFilesTool, InTier[AgentSessionTier], Singleton):
@@ -729,16 +706,7 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, InTier[AgentSessionTier], Sin
     def __init__(self) -> None:
         self._name = tool_provider.ToolName("get_work")
         self._description = tool_provider.ToolDescription("Retrieves active dirty nodes for processing.")
-        self._max_batch_size_parameter = tool_provider.ToolParameter[Optional[dag_config.BatchSize], int](
-            name=tool_provider.ParameterName("max_batch_size"),
-            description=tool_provider.ParameterDescription("Maximum batch size of dirty nodes to acquire."),
-            parameter_type=_BatchSizeParamType(),
-            is_required=False,
-            default_value=None,
-        )
-        self._parameters: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {
-            self._max_batch_size_parameter.name: self._max_batch_size_parameter,
-        }
+        self._parameters: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {}
 
     @property
     def name(self) -> tool_provider.ToolName:
@@ -747,10 +715,6 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, InTier[AgentSessionTier], Sin
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
-
-    @property
-    def max_batch_size_parameter(self) -> tool_provider.ToolParameter[Optional[dag_config.BatchSize], int]:
-        return self._max_batch_size_parameter
 
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
@@ -772,10 +736,8 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, InTier[AgentSessionTier], Sin
                 reminder=tool_provider.ToolReminder("Resolve all open targets before calling get_work."),
             )
 
-        raw_batch = actual_parameter_bindings.get(self.max_batch_size_parameter)
-        batch_val = int(cast(Any, raw_batch)) if raw_batch is not None else None
         subgraph = get_singleton(dag_subgraph.DagSubgraph)
-        schedule = coord.dispatch_get_work(subgraph=subgraph, max_batch_size=batch_val)
+        schedule = coord.dispatch_get_work(subgraph=subgraph)
 
         if not schedule.tasks:
             return tool_provider.ToolResponse(
@@ -789,6 +751,9 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, InTier[AgentSessionTier], Sin
 
         node_cfg = get_singleton(agent_node_config.NodeConfig)
         guide_deliv = get_singleton(sandbox_guide_delivery.GuideDelivery)
+        init_guide = getattr(guide_deliv, "initialize", None)
+        if callable(init_guide):
+            init_guide()
         formatter = get_singleton(template_format.TemplateFormatter)
 
         template_parameters = {
@@ -813,6 +778,8 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, InTier[AgentSessionTier], Sin
             primer_text = f"{primer_text}\n\nRead {guide_alias} for alignment guidance."
 
         if node_cfg.is_step_mode:
+            tool_mgr = get_singleton(tool_provider.ToolManager)
+            tool_mgr.install_tool(get_singleton(sandbox_run_control.AdvanceTool))
             advance_prompt = "Call advance to continue."
             prompt_content = primer_text
             if "call advance" not in prompt_content.lower():

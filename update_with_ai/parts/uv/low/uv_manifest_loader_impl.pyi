@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: 802a7109641d
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: b6a3b3abdbfc
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom manifest loader implementation low-level specification."""
@@ -27,7 +27,7 @@ class UvManifestLoader(
     """Realizes role manifest loading, node resolution, and graph construction.
 
     GROUNDING:
-    - Realizes uv_manifest_loader interface contracts by discovering role definitions and package structures across workspace directories, decoding schemas via uv_manifest_ext and cleanroom_files_ext, and populating agent_storage and dag_storage.
+    - Realizes uv_manifest_loader interface contracts by discovering role definitions and package structures across workspace directories, resolving target labels and packages via uv_target, decoding schemas via uv_manifest_ext and cleanroom_files_ext, and populating agent_storage and dag_storage.
     """
 
     @operation

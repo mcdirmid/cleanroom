@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T03:06:35Z
 # CHANGE: Align agent session tier with the simplified agent definition and system tier relationship
 # CODE_HASH: f42f7c539a61
-# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Agent session lifecycle tier component."""

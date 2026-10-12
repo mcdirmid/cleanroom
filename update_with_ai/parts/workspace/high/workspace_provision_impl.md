@@ -1,25 +1,25 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-09T02:39:58Z
 CHANGE: add contamination tripwire to AGENTS.md synthesis specification
-CODE_HASH: bc354bb8891f
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: 65323664815d
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_provision_impl implementation component
 
-imports: agent_session, workspace_registry
+imports: agent_session, cleanroom_files_ext, workspace_registry
 implements: workspace_provision
 
 ## Purpose
 
 The workspace_provision_impl implementation component realizes role workspace filesystem initialization, permission-isolated copying, executable runner script deployment, and configuration synthesis.
 
-Provisioning isolated role workspaces requires precise file-level permission control to prevent agent hallucinations from overwriting immutable upstream contracts or deleting build rules. Incomplete workspace preparation or dangling file handles can cause agent sessions to fail on startup or corrupt subsequent runs. The workspace_provision_impl implementation component creates directory trees, selectively copies source files and build configurations, applies read-only attributes to upstream dependencies, embeds self-contained zipapp runner wrappers in `bin/`, and writes `.cleanroom_role.json`.
+Provisioning isolated role workspaces requires precise file-level permission control to prevent agent hallucinations from overwriting immutable upstream contracts or deleting build rules. Incomplete workspace preparation or dangling file handles can cause agent sessions to fail on startup or corrupt subsequent runs. The workspace_provision_impl implementation component creates directory trees, selectively copies source files and build configurations, applies read-only attributes to upstream dependencies, embeds self-contained zipapp runner wrappers in `bin/`, and writes the hidden role descriptor configuration file.
 
 **Out of scope:** The workspace_provision_impl implementation component does not parse git commits, evaluate forward dirty node propagation, or schedule multi-node builds; these are handled by other components.
 
-**Delegated:** Role definition resolution, target directory computation, and workspace registry persistence are delegated to workspace_registry.
+**Delegated:** Role definition resolution, target directory computation, and workspace registry persistence are delegated to workspace_registry. File naming conventions for the role descriptor configuration are delegated to cleanroom_files_ext.
 
 ## Types and Behavior
 

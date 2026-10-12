@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T02:58:45Z
 CHANGE: Declare runner log event as an observable execution event record
 CODE_HASH: 62ccbc07c12c
-SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # runner_logger interface component
@@ -43,6 +43,6 @@ By centralizing event consumption within a system-level logging service, the com
 ### Knowledge Requirements
 
 - Formatting and terminal emission of event summaries.
-  - Deferred: Formatted with timestamps and written to stdout in implementation.
+  - Deferred: Written to stdout in implementation.
 - Persistent file recording of verbose event transcripts with immediate flush.
   - Deferred: Appended to unbuffered file in implementation.

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:59:56Z
 # CHANGE: Model node dirtiness from in-band metadata state instead of message presence and keep clear_messages from altering dirtiness
 # CODE_HASH: 3a646427fde9
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for loop_node_cleaner_impl aligned with grounding specifications."""

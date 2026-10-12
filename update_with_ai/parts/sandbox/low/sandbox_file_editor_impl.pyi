@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T04:14:49Z
 # CHANGE: Extend multiple-match failure feedback with surrounding-line and line-range guidance
 # CODE_HASH: 43c41d3dd53f
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file editor implementation low-level specification."""

@@ -38,10 +38,31 @@ from __future__ import annotations
 import os
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
-PARTS_DIR = ROOT / "update_with_ai" / "parts"
+MY_METHODOLOGY = f"//{Path(__file__).resolve().parent.parent.parent.name}"
+
+
+def find_all_parts_dirs() -> list[Path]:
+    dirs: list[Path] = []
+    if not ROOT.exists():
+        return dirs
+    for entry in sorted(ROOT.iterdir()):
+        if entry.is_dir() and not entry.name.startswith(".") and entry.name != "staging":
+            p = entry / "parts"
+            if p.is_dir():
+                cfg = p / "cleanroom.toml"
+                if cfg.is_file():
+                    try:
+                        with open(cfg, "rb") as f:
+                            data = tomllib.load(f)
+                        if data.get("methodology") == MY_METHODOLOGY:
+                            dirs.append(p)
+                    except Exception:
+                        pass
+    return dirs
 
 CANONICAL_SECTIONS = [
     "## Intent",
@@ -201,7 +222,9 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
     is_ext = stem.endswith("_ext")
 
     if index is None:
-        all_planning = sorted(PARTS_DIR.glob("*/planning/*.md")) if PARTS_DIR.exists() else []
+        all_planning: list[Path] = []
+        for p in find_all_parts_dirs():
+            all_planning.extend(sorted(p.glob("*/planning/*.md")))
         index = ComponentIndex(all_planning)
 
     try:
@@ -274,10 +297,16 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
     implements_targets: list[str] = []
 
     high_path = file_path.parent.parent / "high" / f"{stem}.md"
-    if not high_path.exists() and PARTS_DIR.exists():
-        candidates = list(PARTS_DIR.glob(f"*/high/{stem}.md"))
-        if candidates:
-            high_path = candidates[0]
+    if not high_path.exists():
+        for p in find_all_parts_dirs():
+            cand = p / file_path.parent.parent.name / "high" / f"{stem}.md"
+            if cand.exists():
+                high_path = cand
+                break
+            candidates = list(p.glob(f"*/high/{stem}.md"))
+            if candidates:
+                high_path = candidates[0]
+                break
 
     if high_path.exists():
         try:
@@ -538,10 +567,12 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
         all_expected_deferred: list[str] = []
         for implements_target in implements_targets:
             interface_planning_path = file_path.parent / f"{implements_target}.md"
-            if not interface_planning_path.exists() and PARTS_DIR.exists():
-                candidates = list(PARTS_DIR.glob(f"*/planning/{implements_target}.md"))
-                if candidates:
-                    interface_planning_path = candidates[0]
+            if not interface_planning_path.exists():
+                for p in find_all_parts_dirs():
+                    candidates = list(p.glob(f"*/planning/{implements_target}.md"))
+                    if candidates:
+                        interface_planning_path = candidates[0]
+                        break
 
             if interface_planning_path.exists():
                 all_expected_deferred.extend(find_interface_deferred_requirements(interface_planning_path))
@@ -640,31 +671,47 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
 
 def main() -> int:
     args = sys.argv[1:]
+    deps: list[Path] = []
     targets: list[Path] = []
 
     if "--" in args:
         dash_idx = args.index("--")
+        pre_args = args[:dash_idx]
         post_args = args[dash_idx + 1 :]
+        if "--deps" in pre_args:
+            deps_idx = pre_args.index("--deps")
+            deps = [Path(p) for p in pre_args[deps_idx + 1 :]]
         targets = [Path(p) for p in post_args]
     elif "--deps" in args:
         deps_idx = args.index("--deps")
-        pass
+        deps = [Path(p) for p in args[deps_idx + 1 :]]
     else:
         targets = [Path(p) for p in args]
 
-    if not targets:
-        if PARTS_DIR.exists():
-            targets = sorted(PARTS_DIR.glob("*/planning/*.md"))
+    expanded_targets: list[Path] = []
+    for t in targets:
+        if t.is_dir():
+            if (t / "parts").is_dir():
+                expanded_targets.extend(sorted((t / "parts").glob("*/planning/*.md")))
+            elif (t / "planning").is_dir():
+                expanded_targets.extend(sorted((t / "planning").glob("*.md")))
+            else:
+                expanded_targets.extend(sorted(t.glob("*/planning/*.md")))
         else:
-            print("Error: parts directory does not exist", file=sys.stderr)
-            return 1
+            expanded_targets.append(t)
+
+    if not targets:
+        for p in find_all_parts_dirs():
+            expanded_targets.extend(sorted(p.glob("*/planning/*.md")))
 
     # Build global component index across all planning files
-    all_planning = sorted(PARTS_DIR.glob("*/planning/*.md")) if PARTS_DIR.exists() else []
+    all_planning: list[Path] = []
+    for p in find_all_parts_dirs():
+        all_planning.extend(sorted(p.glob("*/planning/*.md")))
     index = ComponentIndex(all_planning)
 
     all_errors: list[str] = []
-    for f in targets:
+    for f in expanded_targets:
         errs = lint_planning_file(f, index=index)
         all_errors.extend(errs)
 
@@ -677,7 +724,7 @@ def main() -> int:
         )
         return 1
 
-    print(f"[OK] {len(targets)} planning specifications passed structural & epistemic lint.")
+    print(f"[OK] {len(expanded_targets)} planning specifications passed structural & epistemic lint.")
     return 0
 
 

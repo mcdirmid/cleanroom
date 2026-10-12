@@ -7,31 +7,42 @@ cd "$REPO_ROOT"
 
 TARGET="${1:-}"
 
-# Dynamically build PYTHONPATH from repository packages and target
-PYPATHS=("$REPO_ROOT")
+# Dynamically discover packages and methodologies via parts/cleanroom.toml
+DISCOVERED_PATHS="$(python3 -c '
+import os, tomllib
+from pathlib import Path
 
-for sup in "$REPO_ROOT/update_python_with_ai" "$REPO_ROOT/update_python_with_ai/support/lib" "$REPO_ROOT/update_with_ai" "$REPO_ROOT/update_with_ai/support/lib"; do
-    if [ -d "$sup" ]; then
-        PYPATHS+=("$sup")
-    fi
-done
+repo_root = Path(".").resolve()
+pypaths = [str(repo_root)]
+seen_meth = set()
 
-for entry in "$REPO_ROOT"/*; do
-    if [ -d "$entry" ]; then
-        base="$(basename "$entry")"
-        case "$base" in
-            .*|bazel-*|venv*|node_modules|build|dist|*.bak|*.dead|update_python_with_ai|update_with_ai) ;;
-            *)
-                if [ -d "$entry/parts" ]; then
-                    PYPATHS+=("$entry")
-                fi
-                if [ -d "$entry/support/lib" ]; then
-                    PYPATHS+=("$entry" "$entry/support/lib")
-                fi
-                ;;
-        esac
-    fi
-done
+for entry in sorted(repo_root.iterdir()):
+    if entry.is_dir() and not entry.name.startswith((".", "bazel", "venv", "staging", "node_modules", "build", "dist")):
+        parts_cfg = entry / "parts" / "cleanroom.toml"
+        if parts_cfg.is_file():
+            pypaths.append(str(entry))
+            sup = entry / "support" / "lib"
+            if sup.is_dir():
+                pypaths.append(str(sup))
+            try:
+                data = tomllib.loads(parts_cfg.read_text(encoding="utf-8"))
+                meth = data.get("methodology", "").lstrip("./").lstrip("/")
+                if meth and meth not in seen_meth:
+                    seen_meth.add(meth)
+                    meth_dir = repo_root / meth
+                    if meth_dir.is_dir():
+                        pypaths.append(str(meth_dir))
+                        meth_sup = meth_dir / "support" / "lib"
+                        if meth_sup.is_dir():
+                            pypaths.append(str(meth_sup))
+            except Exception:
+                pass
+
+print(":".join(pypaths))
+')"
+
+PYPATHS=()
+IFS=: read -ra PYPATHS <<< "$DISCOVERED_PATHS"
 
 if [ -n "$TARGET" ] && [ -d "$REPO_ROOT/$TARGET" ]; then
     PYPATHS+=("$REPO_ROOT/$TARGET")
@@ -44,17 +55,110 @@ fi
 
 export PYTHONPATH="$(IFS=:; echo "${PYPATHS[*]}"):${PYTHONPATH:-}"
 
+# Execute specification linters dynamically based on parts/cleanroom.toml and cleanroom_roles.toml
+python3 -c '
+import os, sys, tomllib, subprocess
+from pathlib import Path
+
+repo_root = Path(".").resolve()
+target_arg = sys.argv[1] if len(sys.argv) > 1 else ""
+
+def find_parts_cleanroom_toml(p: Path) -> Path | None:
+    cand = p / "parts" / "cleanroom.toml"
+    if cand.is_file():
+        return cand
+    curr = p if p.is_dir() else p.parent
+    while curr != curr.parent and curr != repo_root.parent:
+        if curr.name == "parts":
+            cand = curr / "cleanroom.toml"
+            if cand.is_file():
+                return cand
+        cand = curr / "parts" / "cleanroom.toml"
+        if cand.is_file():
+            return cand
+        curr = curr.parent
+    return None
+
+def get_installed_roles(cfg_path: Path) -> tuple[str, dict]:
+    try:
+        data = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+        meth = data.get("methodology", "").lstrip("./").lstrip("/")
+        if not meth:
+            return "", {}
+        roles_cfg = repo_root / meth / "cleanroom_roles.toml"
+        if not roles_cfg.is_file():
+            return meth, {}
+        roles_data = tomllib.loads(roles_cfg.read_text(encoding="utf-8"))
+        return meth, roles_data.get("roles", {})
+    except Exception:
+        return "", {}
+
+def run_role_linters(target_path_str: str, parts_cfg: Path):
+    meth, roles = get_installed_roles(parts_cfg)
+    if "spec_qa" not in roles and "high" not in roles:
+        return
+    spec_qa_tools = roles.get("spec_qa", {}).get("tools", [])
+    high_tool = next((t for t in spec_qa_tools if t.endswith("high_lint")), None)
+    spec_tool = next((t for t in spec_qa_tools if t.endswith("spec_lint")), None)
+    low_tool = next((t for t in spec_qa_tools if t.endswith("low_lint")), None)
+
+    label = target_path_str if target_path_str else "repo-wide"
+    print(f"=== Specification Linters ({meth}): {label} ===")
+    if target_path_str.endswith(".md") and "/high/" in target_path_str:
+        if high_tool:
+            subprocess.run(["uv", "run", "python", "-m", high_tool, target_path_str], check=True)
+    elif target_path_str.endswith(".md") and "/planning/" in target_path_str:
+        if spec_tool:
+            subprocess.run(["uv", "run", "python", "-m", spec_tool, target_path_str], check=True)
+    elif target_path_str.endswith(".pyi") and "/low/" in target_path_str:
+        if low_tool:
+            subprocess.run(["uv", "run", "python", "-m", low_tool, target_path_str], check=True)
+    else:
+        cmd_arg = [target_path_str] if target_path_str else []
+        if high_tool:
+            subprocess.run(["uv", "run", "python", "-m", high_tool] + cmd_arg, check=True)
+        if spec_tool:
+            subprocess.run(["uv", "run", "python", "-m", spec_tool] + cmd_arg, check=True)
+        if low_tool:
+            subprocess.run(["uv", "run", "python", "-m", low_tool] + cmd_arg, check=True)
+    print("")
+
+if target_arg and not target_arg.startswith("-"):
+    t_path = (repo_root / target_arg).resolve()
+    cfg = find_parts_cleanroom_toml(t_path)
+    if cfg:
+        run_role_linters(target_arg, cfg)
+else:
+    for entry in sorted(repo_root.iterdir()):
+        if entry.is_dir() and not entry.name.startswith((".", "bazel", "venv", "staging")):
+            cfg = entry / "parts" / "cleanroom.toml"
+            if cfg.is_file():
+                run_role_linters(str(entry.relative_to(repo_root)), cfg)
+' "${TARGET:-}"
+
 if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
-    echo "=== Type Checking: $TARGET ==="
-    uv run pyright "$TARGET"
-    echo ""
-    echo "=== Tests & Linters: $TARGET ==="
-    shift || true
-    exec uv run pytest -q --tb=short "$TARGET" "$@"
+    case "$TARGET" in
+        *.md)
+            exit 0
+            ;;
+        *.pyi)
+            echo "=== Type Checking Specification Stub: $TARGET ==="
+            uv run pyright --project update_python_with_ai/pyright_spec.json "$TARGET"
+            exit 0
+            ;;
+        *)
+            echo "=== Type Checking: $TARGET ==="
+            uv run pyright "$TARGET"
+            echo ""
+            echo "=== Tests: $TARGET ==="
+            shift || true
+            exec uv run pytest -q --tb=short "$TARGET" "$@"
+            ;;
+    esac
 else
     echo "=== Type Checking (pyright) ==="
     uv run pyright
     echo ""
-    echo "=== Tests & Linters (pytest) ==="
+    echo "=== Tests (pytest) ==="
     exec uv run pytest -q --tb=short "$@"
 fi

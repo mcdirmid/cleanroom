@@ -294,15 +294,15 @@ def parse_spec_build_dependencies(spec_path: str) -> list[str]:
 
 
 def find_workspace_root(start_path: str = ".") -> str:
-    """Find the Bazel workspace root directory by looking for WORKSPACE or MODULE.bazel."""
+    """Find the workspace root directory by looking for configuration files or .git."""
     cur = os.path.abspath(start_path)
     if os.path.isfile(cur):
         cur = os.path.dirname(cur)
     while cur and cur != os.path.dirname(cur):
         if (
-            os.path.isfile(os.path.join(cur, "MODULE.bazel"))
-            or os.path.isfile(os.path.join(cur, "WORKSPACE"))
-            or os.path.isfile(os.path.join(cur, "WORKSPACE.bazel"))
+            os.path.isfile(os.path.join(cur, "cleanroom.toml"))
+            or os.path.isfile(os.path.join(cur, "pyproject.toml"))
+            or os.path.isfile(os.path.join(cur, "cleanroom_roles.toml"))
             or os.path.isdir(os.path.join(cur, ".git"))
         ):
             return cur
@@ -2286,7 +2286,7 @@ def build_module_resolution_map(
             while curr and curr != os.path.dirname(curr):
                 if any(
                     os.path.isfile(os.path.join(curr, marker))
-                    for marker in ("MODULE.bazel", "pyproject.toml", "cleanroom_roles.toml")
+                    for marker in ("cleanroom.toml", "pyproject.toml", "cleanroom_roles.toml")
                 ):
                     modules_dir = os.path.relpath(modules_dir, curr).replace("\\", "/")
                     break

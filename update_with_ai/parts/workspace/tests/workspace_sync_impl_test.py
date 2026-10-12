@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:57:40Z
 # CHANGE: Replace the undeclared private registry and source metadata constructors with test doubles implementing the declared WorkspaceRegistry and SourceMetadataCoordinator interfaces
-# CODE_HASH: 7513bfe25626
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: ee895710893e
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_sync_impl."""
@@ -331,7 +331,7 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             # The consumed blame buffer is deleted after every entry is applied.
             self.assertFalse(os.path.exists(blame_buf))
 
-    def test_refresh_system_files_decoupled_from_bazel(self) -> None:
+    def test_refresh_system_files_decoupled_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
             # Set up files in main
             with open(os.path.join(main_root, "pyproject.toml"), "w", encoding="utf-8") as f:
@@ -342,8 +342,8 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                     "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
                     "star_role_deps = ['low']\n"
                 )
-            with open(os.path.join(main_root, "MODULE.bazel"), "w", encoding="utf-8") as f:
-                f.write("# legacy bazel module\n")
+            with open(os.path.join(main_root, "notes.txt"), "w", encoding="utf-8") as f:
+                f.write("# notes\n")
             with open(os.path.join(main_root, "pyrightconfig.json"), "w", encoding="utf-8") as f:
                 f.write("{}\n")
 
@@ -358,7 +358,7 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertGreater(refreshed, 0)
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, "pyproject.toml")))
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, "cleanroom_python_roles.toml")))
-            self.assertFalse(os.path.exists(os.path.join(ws_dir, "MODULE.bazel")))
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "notes.txt")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "pyrightconfig.json")))
             agents_md = os.path.join(ws_dir, "AGENTS.md")
             self.assertTrue(os.path.isfile(agents_md))

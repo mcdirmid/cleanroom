@@ -50,7 +50,7 @@ class CleanroomUvRunnerTest(unittest.TestCase):
         )
         self.assertIsNotNone(nodes)
         assert nodes is not None
-        self.assertEqual(len(nodes), 110)
+        self.assertEqual(len(nodes), 109)
         roles = {n.role_address for n in nodes}
         self.assertIn("scenario", roles)
         for n in nodes:

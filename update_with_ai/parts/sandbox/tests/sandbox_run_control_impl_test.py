@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
-# LAST_CHANGED: 2026-10-11T06:01:22Z
-# CHANGE: Resolve auditor status from the agent_node_config role configuration surface alongside the real auditor role address
+# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CHANGED: 2026-10-12T11:59:00Z
+# CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
 # CODE_HASH: 342a2ea2cab6
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_run_control_impl per its grounding specification."""
@@ -22,7 +22,7 @@ from update_with_ai.parts.agent.lib import (
     agent_session,
 )
 from update_with_ai.parts.control.lib import control_coordinate
-from update_with_ai.parts.dag.lib import dag_config, dag_storage, dag_subgraph
+from update_with_ai.parts.dag.lib import dag_storage, dag_subgraph
 from update_with_ai.parts.sandbox.lib import (
     sandbox,
     sandbox_file_editor,
@@ -266,6 +266,9 @@ class MockGuideDelivery:
         self.advance_step_response: Optional[tool_provider.ToolResponse] = None
         self.advance_step_calls: List[Tuple[bool, agent_node_config.VerificationDiagnostic]] = []
         self.recorded_primers: List[sandbox_guide_delivery.InitialPrimer] = []
+
+    def initialize(self) -> None:
+        pass
 
     def parse_guide(self, content: agent_file_alias.FileContent) -> agent_node_config.NodeGuide:
         return agent_node_config.NodeGuide(
@@ -528,16 +531,6 @@ class MockDagSubgraph:
         self.visited_batches.append(batch)
 
 
-class MockDagConfig:
-    tier = system
-
-    @property
-    def node_visit_limit(self) -> dag_config.NodeVisitLimit:
-        return dag_config.NodeVisitLimit(10)
-
-    @property
-    def batch_size(self) -> dag_config.BatchSize:
-        return dag_config.BatchSize(2)
 
 
 class MockAliasManager:
@@ -600,12 +593,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.registry.register_instance(
             self.mock_subgraph,
             keys=[dag_subgraph.DagSubgraph],
-            tier=system,
-        )
-        self.mock_dag_config = MockDagConfig()
-        self.registry.register_instance(
-            self.mock_dag_config,
-            keys=[dag_config.DagConfig],
             tier=system,
         )
         self.mock_tool_manager = MockToolManager()
@@ -1867,7 +1854,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             tool = scope.get_singleton(GetWorkTool)
             self.assertEqual(tool.name, tool_provider.ToolName("get_work"))
             self.assertTrue(len(tool.description) > 0)
-            self.assertIn(tool.max_batch_size_parameter.name, tool.parameters)
+            self.assertEqual(len(tool.parameters), 0)
 
     def test_get_work_tool_fails_when_open_targets_remain(self) -> None:
         """Postcondition: WHEN open active nodes remain, MUST fail reminding to resolve open nodes."""
@@ -1899,6 +1886,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             tool = scope.get_singleton(GetWorkTool)
             response = tool.execute_tool({})
             self.assertFalse(response.is_failed)
+            self.assertNotIn(tool_provider.ToolName("advance"), self.mock_tool_manager.installed_tools)
 
     def test_get_work_tool_returns_primer_step_mode_active(self) -> None:
         """Postcondition: WHEN ready dirty nodes obtained and guide step active, MUST return primer prompting advance and specify follow-up execution of advance tool."""
@@ -1912,6 +1900,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             response = tool.execute_tool({})
             self.assertFalse(response.is_failed)
             self.assertIsNotNone(response.content)
+            self.assertIn(tool_provider.ToolName("advance"), self.mock_tool_manager.installed_tools)
             self.assertIsNotNone(response.follow_up_tool_call)
             assert response.follow_up_tool_call is not None
             self.assertEqual(
@@ -2192,15 +2181,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
             converted_explanation = explanation_param.parameter_type.convert("Defective contract specification")
             self.assertEqual(str(converted_explanation), "Defective contract specification")
 
-    def test_get_work_tool_wire_parameter_decoding(self) -> None:
-        """Postcondition: GetWorkTool parameter wire decoding converts max batch size wire value."""
+    def test_get_work_tool_is_argument_free(self) -> None:
+        """Postcondition: GetWorkTool is an argument-free tool."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             tool = scope.get_singleton(GetWorkTool)
-            batch_param = tool.max_batch_size_parameter
-            self.assertEqual(batch_param.parameter_type.wire_type, int)
-            converted_batch = batch_param.parameter_type.convert(5)
-            assert converted_batch is not None
-            self.assertEqual(int(converted_batch), 5)
+            self.assertEqual(len(tool.parameters), 0)
 
     def test_optional_change_summary_wire_conversion_returning_empty_bindings_for_blank_wire_inputs(self) -> None:
         """Postcondition: optional change summary wire conversion returning empty bindings for blank wire inputs."""
@@ -2226,10 +2211,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
     def test_tool_parameter_wire_decoding_conversion_error(self) -> None:
         """Postcondition: WHEN wire value cannot be converted, MUST handle ParameterConversionError."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(GetWorkTool)
-            batch_param = tool.max_batch_size_parameter
+            tool = scope.get_singleton(SubmitTool)
+            target_param = tool.target_parameter
             with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
-                batch_param.parameter_type.convert("not_an_int")  # type: ignore[arg-type]
+                target_param.parameter_type.convert(999)  # type: ignore[arg-type]
 
     def test_tool_parameter_actual_type_properties_and_optional_wire_value_conversion_across_run_control_tools(self) -> None:
         """Postcondition: Tool parameter actual type properties and optional wire value conversion across run control tools."""
@@ -2303,24 +2288,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
                 blame_tool.explanation_parameter.parameter_type.convert(999)  # type: ignore[arg-type]
 
-            # GetWorkTool: parameters actual_type properties + optional wire conversion
+            # GetWorkTool: parameterless tool schema checks
             gw_tool = scope.get_singleton(GetWorkTool)
-            self.assertIn(tool_provider.ParameterName("max_batch_size"), gw_tool.parameters)
-            self.assertEqual(gw_tool.max_batch_size_parameter.name, tool_provider.ParameterName("max_batch_size"))
-            self.assertTrue(len(str(gw_tool.max_batch_size_parameter.description)) > 0)
-            self.assertIsInstance(gw_tool.max_batch_size_parameter.is_required, bool)
-            self.assertEqual(gw_tool.max_batch_size_parameter.parameter_type.actual_type, dag_config.BatchSize)
-            self.assertEqual(gw_tool.max_batch_size_parameter.parameter_type.wire_type, int)
-            batch = gw_tool.max_batch_size_parameter.parameter_type.convert(4)
-            assert batch is not None
-            self.assertEqual(int(batch), 4)
-            try:
-                b_none = gw_tool.max_batch_size_parameter.parameter_type.convert(None)  # type: ignore[arg-type]
-                self.assertIsNone(b_none)
-            except (tool_provider.ParameterConversionError, ValueError, TypeError):
-                pass
-            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
-                gw_tool.max_batch_size_parameter.parameter_type.convert("not_an_int")  # type: ignore[arg-type]
+            self.assertEqual(len(gw_tool.parameters), 0)
 
             # CheckFilesTool and AdvanceTool parameter schema checks
             cf_tool = scope.get_singleton(CheckFilesTool)
@@ -2329,10 +2299,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsInstance(adv_tool.parameters, Mapping)
 
             # ToolManager execution with invalid parameter wire value fails gracefully
-            self.mock_tool_manager.install_tool(gw_tool)
+            submit_tool = scope.get_singleton(SubmitTool)
+            self.mock_tool_manager.install_tool(submit_tool)
             err_resp = self.mock_tool_manager.execute_tool(
-                tool_provider.ToolName("get_work"),
-                {tool_provider.ParameterName("max_batch_size"): "invalid_int"},
+                tool_provider.ToolName("submit"),
+                {tool_provider.ParameterName("target"): 12345},  # type: ignore[dict-item]
             )
             self.assertTrue(err_resp.is_failed)
             self.assertIn("Invalid argument", str(err_resp.content))
@@ -2397,7 +2368,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.mock_subgraph.ready_batch = []
             resp = self.mock_tool_manager.execute_tool(
                 tool_provider.ToolName("get_work"),
-                {tool_provider.ParameterName("max_batch_size"): 2},
+                {},
             )
             self.assertFalse(resp.is_failed)
 

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
-LAST_CHANGED: 2026-10-11T03:16:17Z
-CHANGE: Add interaction turn coordination typing and correct intent phrasing
-CODE_HASH: 6c9e84dec62e
-SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CHANGED: 2026-10-12T12:07:00Z
+CHANGE: Rebuild completion tools payload on each turn from currently installed tools
+CODE_HASH: d868874c8ba2
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # openai_driver_impl implementation component
@@ -21,7 +21,7 @@ By repairing incomplete code edits using indented sentinel exceptions, supportin
 - The loop driver coordinates interaction turns using the session conversation, installed tools, the loop guard, the openai config, the agent config, and the runner logger. [coordinate_interaction_turns]
 - The loop driver transmits a completion request following OpenAI chat completion conventions. [transmit_openai_completion_request]
 - The loop driver binds model parameters from openai config. [bind_model_parameters]
-- The loop driver orders tools deterministically by tool name. [order_tools_by_name]
+- On each interaction turn, the loop driver constructs the tools payload from currently installed tools, ordering tools deterministically by tool name. [order_tools_by_name]
 - The loop driver orders tool parameters deterministically by parameter sequence. [order_tool_parameters_by_sequence]
 - The loop driver correlates tool results with model invocations according to OpenAI tool calling conventions. [correlate_tool_results_with_invocations]
 - When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON. [recover_truncated_tool_invocations]
@@ -51,7 +51,7 @@ By repairing incomplete code edits using indented sentinel exceptions, supportin
 
 ### Woven Contracts
 
-- Driving turns constructs OpenAI completion payloads with sorted tools and parameters, transmitting over HTTPS and correlating call results. [transmit_openai_completion_request, bind_model_parameters, order_tools_by_name, order_tool_parameters_by_sequence, correlate_tool_results_with_invocations, openai_config: [provide_model_name, provide_timeout]]
+- Driving turns constructs OpenAI completion payloads from currently installed tools with sorted tools and parameters, transmitting over HTTPS and correlating call results. [transmit_openai_completion_request, bind_model_parameters, order_tools_by_name, order_tool_parameters_by_sequence, correlate_tool_results_with_invocations, openai_config: [provide_model_name, provide_timeout]]
 - Truncated generations are recovered by repairing partial replace file content payloads with indented sentinels raising non implemented errors or terminated with failure responses before continuation. [recover_truncated_tool_invocations, repair_replace_file_content_with_sentinel, append_sentinel_on_next_line, execute_repaired_tool_to_persist_mods, return_notice_targeting_sentinel, terminate_other_truncated_tool, resume_generation_with_continuation]
 - Incomplete tool call errors prompt actionable recovery guidance for smaller edits across continuation turns or halt upon repeated failures. [append_recovery_notice_on_incomplete_tool_call, continue_turn_on_incomplete_tool_call, halt_on_repeated_truncation_failures]
 - Execution events, token consumption metrics, and compact summaries stream to the runner logger. [log_turn_events_to_runner_logger, format_compact_log_summaries, include_corrective_reminders_in_transcript, runner_logger: [consume_log_events]]
@@ -69,7 +69,7 @@ By repairing incomplete code edits using indented sentinel exceptions, supportin
 
 - Model API completion calls and tool dispatch execution.
   - Grounded: [openai_ext: [openai_wire_operations], openai_config: [openai_model_configuration], tool_provider: [tool_execution_capability, installed_tools_collection], loop_conversation: [loop_conversation_service]]
-- Loop guard monitoring and runner logger event reporting.
+- Loop guard monitoring of repetitive tool executions.
   - Grounded: [loop_guard: [loop_guard_service], runner_logger: [runner_logging_service]]
 
 ### Knowledge Requirements

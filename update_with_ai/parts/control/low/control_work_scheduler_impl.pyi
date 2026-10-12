@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T04:05:49Z
 # CHANGE: Align implementation with every interface operation: file target submission and resolution
-# CODE_HASH: 314c12ce99cd
-# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+# CODE_HASH: cc18e4709354
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_work_scheduler_impl."""
@@ -28,8 +28,9 @@ class WorkScheduler(
 
     GROUNDING:
     - Realizes task discovery and batch scheduling by querying dirty nodes and edge
-      statuses in DagStorage, computing topological role precedence from role dependency
-      declarations, and formatting prompt templates with historical feedback.
+      statuses in dag_storage.DagStorage, resolving role configurations from agent_config.RoleConfig
+      and node configurations from agent_node_config.NodeConfig, computing topological role
+      precedence from role dependency declarations, and formatting prompt templates with historical feedback.
     """
 
     @operation

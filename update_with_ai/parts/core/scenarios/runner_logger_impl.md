@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
-LAST_CHANGED: 2026-10-11T03:09:10Z
-CHANGE: Author core runner_logger_impl concrete scenarios
+LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CHANGED: 2026-10-12T12:35:00Z
+CHANGE: Update scenarios to reflect standard output carrying event summary text without timestamps or event names
 CODE_HASH: e193dafe214d
 -->
 
@@ -23,12 +23,10 @@ log event named render_pass with the summary rendered widget in 12 milliseconds 
 representation four lines long.
 
 1. The caller consumes that event.
-   Observed: standard output gains one single-line summary naming the event render_pass and
-   carrying the text rendered widget in 12 milliseconds, and the transcript log gains a record
+   Observed: standard output gains one single-line summary carrying the text rendered widget in 12 milliseconds, and the transcript log gains a record
    whose text is the full four-line transcript representation of the event.
    Realized by: the component's own transcript log destination, opened before the first write;
-   its own formatting of the compact summary line from the event name, the summary text, and the
-   timestamp of the write; its own unbuffered write of the verbose transcript representation to
+   its own unbuffered write of the verbose transcript representation to
    the destination with an immediate flush after that write; and the component's own write of the
    summary line to standard output.
 
@@ -39,19 +37,16 @@ log events named evaluate with a summary of evaluated gadget and named evaluate 
 evaluated sprocket.
 
 1. The caller consumes the first event.
-   Observed: standard output gains one single-line summary naming the event evaluate and carrying
-   the text evaluated gadget, and the transcript log gains the transcript representation of the
+   Observed: standard output gains one single-line summary carrying the text evaluated gadget, and the transcript log gains the transcript representation of the
    first event.
-   Realized by: the component's own summary formatting and standard output write for the first
+   Realized by: the component's own standard output write of the summary text for the first
    event, and its own unbuffered write of that event's transcript representation to the
    destination with an immediate flush.
 
 2. The caller consumes the second event.
-   Observed: standard output gains one further single-line summary naming the event evaluate and
-   carrying the text evaluated sprocket, and the transcript log gains the transcript
+   Observed: standard output gains one further single-line summary carrying the text evaluated sprocket, and the transcript log gains the transcript
    representation of the second event as a record distinct from the record of step 1.
-   Realized by: the same destination held open by the component, its summary formatting and
-   standard output write for the second event, and its own unbuffered write with an immediate
+   Realized by: the same destination held open by the component, its standard output write of the summary text for the second event, and its own unbuffered write with an immediate
    flush that leaves the record of step 1 in place.
 
 ### Scenario 3 — A long run of events
@@ -64,8 +59,7 @@ representation.
    Observed: standard output carries 120 single-line summaries in the order the events were
    consumed, and the transcript log carries all 120 verbose records in that same order without
    loss.
-   Realized by: the component's own single destination held open across the session, its summary
-   formatting per event, and its own unbuffered write of each verbose record with an immediate
+   Realized by: the component's own single destination held open across the session, its standard output write of the summary text per event, and its own unbuffered write of each verbose record with an immediate
    flush after every write, so no record waits in a buffer.
 
 ### Scenario 4 — An event with no summary text
@@ -75,10 +69,9 @@ log event named start_up whose summary is absent and whose transcript representa
 long.
 
 1. The caller consumes that event.
-   Observed: standard output gains a summary line naming the event start_up, and the transcript
+   Observed: standard output gains an empty summary line, and the transcript
    log gains the full two-line transcript representation of the event.
-   Realized by: the component's own summary formatting, which builds the line from the event name
-   and the timestamp when no summary text is supplied, and its own unbuffered write of the
+   Realized by: the component's own write of the summary text to standard output, and its own unbuffered write of the
    verbose representation with an immediate flush.
 
 ### Scenario 5 — An event with an empty event name and an empty summary
@@ -101,8 +94,7 @@ log event named compile_pass whose summary is compiled widget in 8 seconds and w
 representation is 500 lines long.
 
 1. The caller consumes that event.
-   Observed: standard output gains exactly one single-line summary naming the event compile_pass
-   and carrying the text compiled widget in 8 seconds, and the transcript log gains one record
+   Observed: standard output gains exactly one single-line summary carrying the text compiled widget in 8 seconds, and the transcript log gains one record
    whose text is all 500 lines of the transcript representation.
    Realized by: the component's own summary formatting, which keeps the standard output line to
    one line whatever the transcript representation holds, and its own unbuffered write of all 500

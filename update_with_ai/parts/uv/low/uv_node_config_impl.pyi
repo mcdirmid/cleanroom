@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: d17290999896
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 565e14a8d37d
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom node config implementation low-level specification."""
@@ -263,7 +263,7 @@ class AliasManager(
     """Realizes minimal file alias resolution and safe path masking.
 
     GROUNDING:
-    - Realizes agent_file_alias by constructing relative file aliases anchored to the workspace root and masking host path occurrences.
+    - Realizes agent_file_alias and tool_provider parameter conversion contracts by constructing relative file aliases anchored to the workspace root and masking host path occurrences.
     """
 
     @property

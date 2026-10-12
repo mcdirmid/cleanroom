@@ -54,7 +54,7 @@ feedback_role_deps = ["high"]
 tools = [
     "update_with_ai.support.lib.build_lint_common",
 ]
-active_component_types = ["implementation", "assembly", "interface"]
+active_component_types = ["implementation", "interface"]
 verify_template = "# Planning canvas verified against high_to_planning.md"
 
 [roles.low]
@@ -72,7 +72,7 @@ tools = [
     "update_with_ai.support.lib.build_lint_common",
 ]
 active_component_types = ["implementation", "assembly", "interface", "external"]
-verify_template = "uv run pyright --project update_python_with_ai/pyright_spec.json {unit_dir}/low/{unit_name}.pyi"
+verify_template = "uv run python -m update_python_with_ai.support.lib.low_lint {unit_dir}/low/{unit_name}.pyi && uv run pyright --project update_python_with_ai/pyright_spec.json {unit_dir}/low/{unit_name}.pyi"
 
 [roles.spec_qa]
 name = "spec_qa"

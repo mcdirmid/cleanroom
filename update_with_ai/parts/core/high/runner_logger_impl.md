@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
-LAST_CHANGED: 2026-10-11T01:39:02Z
-CHANGE: Decompose log destination and flush mechanics into declarative statements
+LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CHANGED: 2026-10-12T12:35:00Z
+CHANGE: Present single-line event summaries to standard output without timestamps or event names
 CODE_HASH: 2e0ad35b5a16
-SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # runner_logger_impl implementation component
@@ -14,7 +14,7 @@ implements: runner_logger
 
 The runner_logger_impl implementation component realizes unbuffered file logging and live terminal output for execution events.
 
-Unbuffered write guarantees preserve diagnostic logs even when processes encounter abrupt crashes or interrupts. The runner_logger_impl implementation component initializes the transcript log destination, formats timestamped terminal summaries, and streams verbose payloads without buffering.
+Unbuffered write guarantees preserve diagnostic logs even when processes encounter abrupt crashes or interrupts. The runner_logger_impl implementation component initializes the transcript log destination, emits terminal summaries, and streams verbose payloads without buffering.
 
 **Out of scope:** The runner_logger_impl implementation component does not parse structured telemetry, filter event streams, or manage remote log aggregators; these are handled by other components.
 
@@ -22,4 +22,4 @@ Unbuffered write guarantees preserve diagnostic logs even when processes encount
 
 The transcript log destination resolves from a configured environment variable, defaulting to `agent_loop.log` when no destination is configured. The transcript log file is truncated at opening so that each execution session starts with a clean transcript log.
 
-Standard output lines present single-line summaries with timestamps and event names for live terminal visibility. Transcript log entries append verbose records with immediate flushing after each write, preserving unbuffered persistence across unexpected crashes.
+Standard output lines present single-line event summaries for live terminal visibility without timestamps or event names. Transcript log entries append verbose records with immediate flushing after each write, preserving unbuffered persistence across unexpected crashes.

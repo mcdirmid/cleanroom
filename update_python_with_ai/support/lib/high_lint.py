@@ -21,11 +21,31 @@ import ast
 import os
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
-SPECS_DIR = ROOT / "update_with_ai" / "specs" / "high"
-PARTS_DIR = ROOT / "update_with_ai" / "parts"
+MY_METHODOLOGY = f"//{Path(__file__).resolve().parent.parent.parent.name}"
+
+
+def find_all_parts_dirs() -> list[Path]:
+    dirs: list[Path] = []
+    if not ROOT.exists():
+        return dirs
+    for entry in sorted(ROOT.iterdir()):
+        if entry.is_dir() and not entry.name.startswith(".") and entry.name != "staging":
+            p = entry / "parts"
+            if p.is_dir():
+                cfg = p / "cleanroom.toml"
+                if cfg.is_file():
+                    try:
+                        with open(cfg, "rb") as f:
+                            data = tomllib.load(f)
+                        if data.get("methodology") == MY_METHODOLOGY:
+                            dirs.append(p)
+                    except Exception:
+                        pass
+    return dirs
 
 
 def lint_high_file(file_path: Path) -> list[str]:
@@ -168,17 +188,26 @@ def lint_high_file(file_path: Path) -> list[str]:
             f"{fname}:1: error: assembly specification must declare 'implements: <components>' in front-matter"
         )
 
-    # Check 5b: Interface specifications must not declare imports unused by low-level specification
-    if not is_impl and not is_asm and not is_ext and imports_list:
+    # Check 5b: Interface and implementation specifications import usage accountability
+    if not is_asm and not is_ext and imports_list:
         low_path = file_path.parent.parent / "low" / f"{stem}.pyi"
-        if not low_path.exists() and PARTS_DIR.exists():
-            candidates = list(PARTS_DIR.glob(f"*/low/{stem}.pyi"))
+        if not low_path.exists():
+            parts_cand = file_path.parent.parent.parent if file_path.parent.parent.parent.name == "parts" else None
+            candidates: list[Path] = []
+            if parts_cand and parts_cand.is_dir():
+                candidates = list(parts_cand.glob(f"*/low/{stem}.pyi"))
+            if not candidates:
+                for p in find_all_parts_dirs():
+                    candidates.extend(p.glob(f"*/low/{stem}.pyi"))
+                    if candidates:
+                        break
             if candidates:
                 low_path = candidates[0]
 
         if low_path.exists():
             try:
-                low_tree = ast.parse(low_path.read_text(encoding="utf-8"))
+                low_text = low_path.read_text(encoding="utf-8")
+                low_tree = ast.parse(low_text)
                 low_imports: set[str] = set()
                 for stmt in low_tree.body:
                     if isinstance(stmt, ast.Import):
@@ -193,11 +222,81 @@ def lint_high_file(file_path: Path) -> list[str]:
                             low_imports.add(a.name)
                             low_imports.add(a.name.split(".")[-1])
 
-                for dep in imports_list:
-                    if dep not in low_imports:
-                        errors.append(
-                            f"{fname}:{imports_l_num}: error: interface specification imports '{dep}', but low-level specification '{low_path.name}' does not use it (unnecessary interface import)"
+                if not is_impl:
+                    for dep in imports_list:
+                        if dep not in low_imports:
+                            errors.append(
+                                f"{fname}:{imports_l_num}: error: interface specification imports '{dep}', but low-level specification '{low_path.name}' does not use it (unnecessary interface import)"
+                            )
+                else:
+                    # Collect AST symbols (excluding import statements)
+                    ast_symbols: set[str] = set()
+                    for node in ast.walk(low_tree):
+                        if isinstance(node, (ast.Import, ast.ImportFrom)):
+                            continue
+                        if isinstance(node, ast.Name):
+                            ast_symbols.add(node.id)
+                        elif isinstance(node, ast.Attribute):
+                            ast_symbols.add(node.attr)
+                            val = node.value
+                            while isinstance(val, ast.Attribute):
+                                val = val.value
+                            if isinstance(val, ast.Name):
+                                ast_symbols.add(val.id)
+                        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                            ast_symbols.add(node.value)
+
+                    # Extract all text under GROUNDING: sections in docstrings
+                    grounding_text = ""
+                    for node in ast.walk(low_tree):
+                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)):
+                            doc = ast.get_docstring(node)
+                            if doc and "GROUNDING:" in doc:
+                                in_g = False
+                                for line in doc.splitlines():
+                                    s = line.strip()
+                                    if s == "GROUNDING:":
+                                        in_g = True
+                                    elif (s.endswith(":") and re.match(r"^[A-Z_]+:$", s)) or s in ("Args:", "Returns:", "Raises:", "Yields:"):
+                                        in_g = False
+                                    elif in_g:
+                                        grounding_text += " " + s
+
+                    def get_dep_exported_classes(dep_name: str) -> set[str]:
+                        classes: set[str] = set()
+                        candidates: list[Path] = []
+                        parts_cand = file_path.parent.parent.parent if file_path.parent.parent.parent.name == "parts" else None
+                        if parts_cand and parts_cand.is_dir():
+                            candidates = list(parts_cand.glob(f"*/low/{dep_name}.pyi"))
+                            if not candidates:
+                                candidates = list(parts_cand.glob(f"*/low/{dep_name}_ext.pyi"))
+                        if not candidates:
+                            for p in find_all_parts_dirs():
+                                candidates.extend(p.glob(f"*/low/{dep_name}.pyi"))
+                                if not candidates:
+                                    candidates.extend(p.glob(f"*/low/{dep_name}_ext.pyi"))
+                                if candidates:
+                                    break
+                        for cand in candidates:
+                            try:
+                                c_tree = ast.parse(cand.read_text(encoding="utf-8"))
+                                for s in c_tree.body:
+                                    if isinstance(s, ast.ClassDef):
+                                        classes.add(s.name)
+                            except (SyntaxError, OSError):
+                                pass
+                        return classes
+
+                    for dep in imports_list:
+                        dep_classes = get_dep_exported_classes(dep)
+                        in_ast = (dep in ast_symbols) or any(c in ast_symbols for c in dep_classes)
+                        in_grounding = bool(re.search(r"\b" + re.escape(dep) + r"\b", grounding_text)) or any(
+                            bool(re.search(r"\b" + re.escape(c) + r"\b", grounding_text)) for c in dep_classes
                         )
+                        if not in_ast and not in_grounding:
+                            errors.append(
+                                f"{fname}:{imports_l_num}: error: implementation specification imports '{dep}', but '{dep}' is neither utilized in low-level AST nor cited in any GROUNDING: argument in '{low_path.name}'"
+                            )
             except (SyntaxError, OSError):
                 pass
 
@@ -262,17 +361,24 @@ def main() -> int:
     else:
         targets = [Path(p) for p in args]
 
-    if not targets:
-        if PARTS_DIR.exists():
-            targets = sorted(PARTS_DIR.glob("*/high/*.md"))
-        elif SPECS_DIR.exists():
-            targets = sorted(SPECS_DIR.glob("*.md"))
+    expanded_targets: list[Path] = []
+    for t in targets:
+        if t.is_dir():
+            if (t / "parts").is_dir():
+                expanded_targets.extend(sorted((t / "parts").glob("*/high/*.md")))
+            elif (t / "high").is_dir():
+                expanded_targets.extend(sorted((t / "high").glob("*.md")))
+            else:
+                expanded_targets.extend(sorted(t.glob("*/high/*.md")))
         else:
-            print("Error: specs directory does not exist", file=sys.stderr)
-            return 1
+            expanded_targets.append(t)
+
+    if not targets:
+        for p in find_all_parts_dirs():
+            expanded_targets.extend(sorted(p.glob("*/high/*.md")))
 
     all_errors: list[str] = []
-    for f in targets:
+    for f in expanded_targets:
         errs = lint_high_file(f)
         all_errors.extend(errs)
 
@@ -284,7 +390,7 @@ def main() -> int:
         )
         return 1
 
-    print(f"[OK] {len(targets)} HLS specifications passed structural & boundary lint.")
+    print(f"[OK] {len(expanded_targets)} HLS specifications passed structural & boundary lint.")
     return 0
 
 

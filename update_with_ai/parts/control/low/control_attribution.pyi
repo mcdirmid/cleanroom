@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T03:36:57Z
 # CHANGE: Add source attribution marking and file-level blame contracts; drop return-type restatements
 # CODE_HASH: 263ee70a3e6f
-# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_attribution."""

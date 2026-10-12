@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T00:00:00Z
 CHANGE: new file
-CODE_HASH: 7fe87cd8ad60
+CODE_HASH: 2dc662b66a9b
 -->
 
 # cleanroom_files_ext external component
@@ -30,3 +30,7 @@ Grounding gaps covered include:
 - Workspaces registry schema: Defines `.cleanroom_workspaces.json`, tracking active provisioned workspace directories and metadata records with file locking.
 
 - Cleanroom event log schema: Defines `.cleanroom.log`, an append-only event log capturing recorded change descriptions and feedback messages within parts directories.
+
+- Pending work sequence schema: Defines `.cleanroom_pending_work.json`, tracking pending target strings queued for execution within a workspace session.
+
+- Blame buffer schema: Defines `.cleanroom_blame_buffer.json`, buffering unacted diagnostic feedback messages and critiques for synchronization across workspaces.

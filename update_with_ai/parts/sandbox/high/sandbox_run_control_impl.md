@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Remove the stray opening statement, drop the interface-restated caching paragraph, and split the get work primer paragraphs
+LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CHANGED: 2026-10-12T11:59:00Z
+CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
 CODE_HASH: c34cea1a7708
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # sandbox_run_control_impl implementation component
 
-imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config, template_format, dag_subgraph, sandbox, control_coordinate, dag_config
+imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config, template_format, dag_subgraph, sandbox, control_coordinate
 implements: sandbox_run_control
 
 ## Purpose
@@ -105,7 +105,7 @@ The blame tool:
 
 - Records defect feedback for the blamed target in graph storage, marks the blame target as attributed, and resolves the active node.
 
-The get work tool is named `get_work`, and accepts an integer max batch size parameter.
+The get work tool is named `get_work`.
 
 The get work tool:
 
@@ -117,4 +117,4 @@ The get work tool:
 
 The get work tool materializes startup templates through graph storage, initializes guide delivery, and returns the rendered task primer when ready dirty nodes are obtained and guide step mode is inactive. That task primer maps each node to its grounding file with guide file attribution, incoming messages, alignment instructions, and target resolution instructions, identifying each node by declared source file alias, by short unit name when unique among batch nodes, or by package-qualified unit name when ambiguous. Target resolution instructions specify target as a short unit name when unique or as a package-qualified unit name when ambiguous in multi-node batches, and indicate that target may be omitted when only one node is being processed.
 
-The get work tool materializes startup templates through graph storage, initializes guide delivery, records the task primer in guide delivery, and returns the task primer when ready dirty nodes are obtained and guide step mode is active. That task primer maps source files to grounding files, guide summary, incoming messages, and instructions to call the advance tool once edits are complete, without guide file citation and without specifying a follow-up execution of the advance tool.
+The get work tool materializes startup templates through graph storage, initializes guide delivery, installs the advance tool into the tool manager, records the task primer in guide delivery, and returns the task primer when ready dirty nodes are obtained and guide step mode is active. That task primer maps source files to grounding files, guide summary, incoming messages, and instructions to call the advance tool once edits are complete, without guide file citation and specifying a follow-up execution of the advance tool.

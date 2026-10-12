@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T04:15:46Z
 # CHANGE: State the coverage evaluator as a system service on the system tier
-# CODE_HASH: b8b157b97bf2
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 266ec49bb6f9
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for tool_coverage_impl."""
@@ -61,7 +61,7 @@ class CoverageEvaluator(
     @operation
     @override
     def normalize_target_query(self, raw_query: str) -> str:
-        """Normalizes a target query string by stripping Bazel target or path prefixes.
+        """Normalizes a target query string by stripping package target or path prefixes.
 
         GROUNDING:
         - Truncates leading '//' target prefixes, package specifiers, and '.py' file

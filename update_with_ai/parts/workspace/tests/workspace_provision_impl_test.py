@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:58:13Z
 # CHANGE: Replace the undeclared private workspace registry constructor with a test double implementing the declared WorkspaceRegistry interface
-# CODE_HASH: d0e8c2ba65d3
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: ecfb2f651ff3
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_provision_impl."""
@@ -156,8 +156,8 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
                     "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
                     "star_role_deps = ['low']\n"
                 )
-            with open(os.path.join(repo_root, "MODULE.bazel"), "w", encoding="utf-8") as f:
-                f.write("# legacy bazel module\n")
+            with open(os.path.join(repo_root, "notes.txt"), "w", encoding="utf-8") as f:
+                f.write("# notes\n")
             with open(os.path.join(repo_root, "pyrightconfig.json"), "w", encoding="utf-8") as f:
                 f.write("{}\n")
 
@@ -195,8 +195,8 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertTrue(os.path.isfile(ws_roles))
             self.assertEqual(stat.S_IMODE(os.stat(ws_roles).st_mode) & 0o444, 0o444)
 
-            # Bazel files must NOT be copied into role workspace
-            self.assertFalse(os.path.exists(os.path.join(ws_dir, "MODULE.bazel")))
+            # Non-system files must NOT be copied into role workspace
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "notes.txt")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "pyrightconfig.json")))
 
             ws_contract = os.path.join(ws_dir, "test_scope", "low", "sample.pyi")

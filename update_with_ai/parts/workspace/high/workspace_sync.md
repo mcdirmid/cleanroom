@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-08T18:30:00Z
 CHANGE: document stub role dependencies synchronization in pull and refresh contracts
-CODE_HASH: 162c0ca985ee
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: 7d89c190a155
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_sync interface component
 
-imports: agent_session
+imports: agent_session, cleanroom_files_ext
 
 ## Purpose
 
@@ -16,9 +16,9 @@ The workspace_sync interface component defines operational contracts for bi-dire
 
 Operating across isolated role workspaces requires atomic data movement to prevent partial updates, stale contract reads, and merge conflicts. Unsynchronized upstream changes leave agents writing against obsolete specifications, while uncoordinated writes to canonical repositories risk clobbering concurrent user edits. The workspace_sync interface component establishes contracts for pulling upstream changes and refreshed system files into role workspaces, harvesting modified targets and attested audit stamps back to the main repository via two-phase validation, and flushing buffered blame feedback into culprit files in-band.
 
-**Out of scope:** The workspace_sync interface component does not parse AST grammar, compute topological task schedules, or execute Bazel test rules; these are handled by other components.
+**Out of scope:** The workspace_sync interface component does not parse AST grammar, compute topological task schedules, or execute test runners; these are handled by other components.
 
-**Delegated:** Session lifecycle scoping is delegated to agent_session.
+**Delegated:** Session lifecycle scoping is delegated to agent_session; workspace file conventions are delegated to cleanroom_files_ext.
 
 ## Types and Behavior
 

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Split the repair and logging sentences and state guard and termination handling declaratively
+LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CHANGED: 2026-10-12T12:07:00Z
+CHANGE: Rebuild completion tools payload on each turn from currently installed tools
 CODE_HASH: a573ab813aad
-SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # openai_driver_impl implementation component
@@ -25,7 +25,7 @@ Executing robust model loops requires managing protocol-level token limits, hand
 
 The loop driver coordinates interaction turns using the session conversation, installed tools, the loop guard, the openai config, the agent config, and the runner logger.
 
-When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from the openai config. Tools are ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, correlating tool results with model invocations according to OpenAI tool calling conventions.
+When driving each turn, the loop driver constructs the tools payload from currently installed tools, ordering tools deterministically by tool name with parameters ordered deterministically by parameter sequence, and transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from the openai config. Tool results are correlated with model invocations according to OpenAI tool calling conventions.
 
 When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON.
 

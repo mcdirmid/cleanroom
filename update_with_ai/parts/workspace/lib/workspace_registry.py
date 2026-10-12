@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:04:08Z
 # CHANGE: Reduce the interface to the declared role definition, workspace descriptor and registry protocol types, relocating the runtime implementation to the implementation module
 # CODE_HASH: 7f17c633c98d

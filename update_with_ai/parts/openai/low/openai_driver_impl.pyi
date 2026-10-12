@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:02Z
-# LAST_CHANGED: 2026-10-11T03:37:04Z
-# CHANGE: Ground driver coordination and complete the run contract set
+# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CHANGED: 2026-10-12T12:07:00Z
+# CHANGE: Rebuild completion tools payload on each turn from currently installed tools
 # CODE_HASH: 645a45c2256f
-# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """OpenAI driver implementation low-level specification."""
@@ -93,7 +93,7 @@ class LoopDriver(
         POSTCONDITIONS:
         - MUST transmit a completion request following OpenAI chat completion conventions.
         - MUST bind model parameters from the OpenAI configuration into the transmitted request.
-        - MUST order tools deterministically by tool name.
+        - MUST order tools exposed by the tool manager on each interaction turn deterministically by tool name.
         - MUST order tool parameters deterministically by parameter sequence.
         - MUST correlate tool results with model invocations by their tool call identifiers.
         - WHEN a model response is truncated at the generation limit, MUST recover truncated tool

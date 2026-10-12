@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-05T04:26:30Z
 # CHANGE: new file
-# CODE_HASH: 9f87ae8e08eb
+# CODE_HASH: 18f6ddfab889
 # LOW_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
@@ -13,7 +13,7 @@ The `model_config_ext` external component specifies the JSON configuration forma
 
 **Model Configuration JSON Fields**
 
-- `label`: Canonical Bazel target label string.
+- `label`: Canonical target label string.
 - `name`: Target name string.
 - `model`: Model identifier string (e.g. `gpt-4o`, `gemini-1.5-pro`).
 - `base_url`: Optional API base URL endpoint string.

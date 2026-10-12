@@ -63,20 +63,22 @@ $$\texttt{<ROLE\_NAME\_IN\_CAPS>\_AUDIT: <UTC timestamp>}$$
 
 | Auditor Role | Verified Target Files | Pipeline Gate | Audit Metadata Tag | Example Header Line |
 | :--- | :--- | :--- | :--- | :--- |
-| **`spec_qa`** | `planning/<unit>.md`, `low/<unit>.pyi` | Gate 1 | `SPEC_QA_AUDIT` | `SPEC_QA_AUDIT: 2026-10-06T20:15:00Z` |
-| **`qa`** | `lib/<unit>.py`, `tests/<unit>_test.py` | Gate 2 | `QA_AUDIT` | `QA_AUDIT: 2026-10-06T20:18:00Z` |
-| **`coverage`** | `lib/<unit>.py`, `tests/<unit>_test.py` | Gate 2 | `COVERAGE_AUDIT` | `COVERAGE_AUDIT: 2026-10-06T20:20:00Z` |
+| **`spec_qa`** | `high/<unit>.md`, `scenarios/<unit>.md`, `planning/<unit>.md`, `low/<unit>.pyi` | Gate 1 | `SPEC_QA_AUDIT` | `SPEC_QA_AUDIT: 2026-10-11T20:15:00Z` |
+| **`qa`** | `lib/<unit>.py`, `tests/<unit>_test.py` | Gate 2 | `QA_AUDIT` | `QA_AUDIT: 2026-10-11T20:18:00Z` |
+| **`coverage`** | `lib/<unit>.py`, `tests/<unit>_test.py` | Gate 2 | `COVERAGE_AUDIT` | `COVERAGE_AUDIT: 2026-10-11T20:20:00Z` |
 
 ```
 THE CLEAN ZERO-LOG IN-BAND AUDIT ARCHITECTURE
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │  parts/agent/                                                                          │
-│  ├── planning/agent_config.md      ◄── SPEC_QA_AUDIT: 2026-10-06T20:15:00Z             │
-│  ├── low/agent_config.pyi          ◄── SPEC_QA_AUDIT: 2026-10-06T20:16:00Z             │
-│  ├── lib/agent_config.py           ◄── QA_AUDIT: 2026-10-06T20:18:00Z                  │
-│  │                                 ◄── COVERAGE_AUDIT: 2026-10-06T20:20:00Z            │
-│  └── tests/agent_config_test.py    ◄── QA_AUDIT: 2026-10-06T20:18:00Z                  │
-│                                    ◄── COVERAGE_AUDIT: 2026-10-06T20:20:00Z            │
+│  ├── high/agent_config.md          ◄── SPEC_QA_AUDIT: 2026-10-11T20:15:00Z             │
+│  ├── scenarios/agent_config.md     ◄── SPEC_QA_AUDIT: 2026-10-11T20:15:30Z             │
+│  ├── planning/agent_config.md      ◄── SPEC_QA_AUDIT: 2026-10-11T20:16:00Z             │
+│  ├── low/agent_config.pyi          ◄── SPEC_QA_AUDIT: 2026-10-11T20:16:30Z             │
+│  ├── lib/agent_config.py           ◄── QA_AUDIT: 2026-10-11T20:18:00Z                  │
+│  │                                 ◄── COVERAGE_AUDIT: 2026-10-11T20:20:00Z            │
+│  └── tests/agent_config_test.py    ◄── QA_AUDIT: 2026-10-11T20:18:00Z                  │
+│                                    ◄── COVERAGE_AUDIT: 2026-10-11T20:20:00Z            │
 └────────────────────────────────────────────────────────────────────────────────────────┘
   • Zero dummy log files on disk; package logs/ directories are permanently eliminated.
   • Audit tags are flat key-values, trivial to parse with simple line regex.
@@ -312,17 +314,17 @@ persona = "Specification QA Arbiter"
 src_pattern = ""
 guide = "update_python_with_ai/guides/spec_qa.md"
 allows_step_mode = false
-role_deps = ["low"]
+role_deps = ["scenario"]
 star_role_deps = ["high", "planning", "low"]
-feedback_role_deps = ["planning", "low"]
+feedback_role_deps = ["high", "planning", "low"]
 tools = [
     "update_python_with_ai.support.lib.high_lint",
     "update_python_with_ai.support.lib.spec_lint",
     "update_python_with_ai.support.lib.low_lint",
     "update_python_with_ai.support.lib.build_lint_common",
 ]
-active_component_types = ["implementation", "assembly", "interface", "external"]
-verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md && uv run python -c \"import os, sys, subprocess; sys.exit(subprocess.run(['uv', 'run', 'python', '-m', 'update_python_with_ai.support.lib.spec_lint', '{unit_dir}/planning/{unit_name}.md']).returncode if os.path.exists('{unit_dir}/planning/{unit_name}.md') else 0)\" && uv run python -m update_python_with_ai.support.lib.low_lint {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/low/{unit_name}.pyi"
+active_component_types = ["implementation", "assembly", "interface"]
+verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md && (! test -f {unit_dir}/planning/{unit_name}.md || uv run python -m update_python_with_ai.support.lib.spec_lint {unit_dir}/planning/{unit_name}.md) && uv run python -m update_python_with_ai.support.lib.low_lint {unit_dir}/low/{unit_name}.pyi && uv run pyright --project update_python_with_ai/pyright_spec.json {unit_dir}/low/{unit_name}.pyi"
 verification_success_message = "Specification, planning, and low-level specification verified for {unit_name}."
 
 [roles.qa]
@@ -331,7 +333,7 @@ persona = "QA Arbiter"
 src_pattern = ""
 guide = "update_python_with_ai/guides/qa.md"
 allows_step_mode = false
-role_deps = ["lib", "test"]
+role_deps = []
 star_role_deps = ["low"]
 feedback_role_deps = ["lib", "test"]
 tools = []
@@ -345,7 +347,7 @@ persona = "Coverage Arbiter"
 src_pattern = ""
 guide = "update_python_with_ai/guides/coverage.md"
 allows_step_mode = false
-role_deps = ["qa"]
+role_deps = []
 silent_role_deps = ["qa"]
 star_role_deps = ["low"]
 feedback_role_deps = ["lib", "test"]

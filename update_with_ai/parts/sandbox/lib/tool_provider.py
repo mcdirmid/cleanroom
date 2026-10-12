@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:03:45Z
 # CHANGE: Make the follow-up tool call reasoning text a required member as the grounding specification declares
 # CODE_HASH: beaaf2ba2946

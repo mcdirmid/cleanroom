@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
 # CODE_HASH: 3bc0162778a4
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom UV model and runtime configuration implementation."""
@@ -40,9 +40,7 @@ def _resolve_config_name() -> str:
     if name and name.strip():
         return _clean_config_name(name.strip())
 
-    target = os.environ.get("MODEL_CONFIG_TARGET") or os.environ.get(
-        "AGENT_CONFIG_TARGET"
-    )
+    target = os.environ.get("MODEL_CONFIG_TARGET")
     if target and target.strip():
         return _clean_config_name(target.strip())
 
@@ -146,7 +144,6 @@ class _ConfigData:
             (str(data["model"]) if "model" in data else None)
             or (str(data["model_name"]) if "model_name" in data else None)
             or os.environ.get("OPENAI_MODEL")
-            or os.environ.get("CLEANROOM_MODEL_NAME")
             or "gpt-4o"
         )
 
@@ -155,7 +152,6 @@ class _ConfigData:
             (str(data["base_url"]) if "base_url" in data else None)
             or (str(data["api_base"]) if "api_base" in data else None)
             or os.environ.get("OPENAI_BASE_URL")
-            or os.environ.get("OPENAI_API_BASE")
             or None
         )
 
@@ -166,18 +162,12 @@ class _ConfigData:
         else:
             self.api_key = (
                 os.environ.get("OPENAI_API_KEY")
-                or os.environ.get("AGENT_API_KEY")
                 or (str(data["api_key"]) if "api_key" in data else None)
                 or None
             )
 
         # 4. Timeout
-        if "CLEANROOM_TIMEOUT" in os.environ:
-            try:
-                self.timeout = float(os.environ["CLEANROOM_TIMEOUT"])
-            except ValueError:  # pragma: no cover (assumption: valid float)
-                self.timeout = 60.0
-        elif "timeout_seconds" in data:
+        if "timeout_seconds" in data:
             try:
                 self.timeout = float(data["timeout_seconds"])
             except (ValueError, TypeError):  # pragma: no cover (assumption: valid float)
@@ -191,12 +181,7 @@ class _ConfigData:
             self.timeout = 60.0
 
         # 5. Temperature
-        if "CLEANROOM_TEMPERATURE" in os.environ:
-            try:
-                self.temperature = float(os.environ["CLEANROOM_TEMPERATURE"])
-            except ValueError:  # pragma: no cover (assumption: valid float)
-                self.temperature = 0.7
-        elif "temperature" in data:
+        if "temperature" in data:
             try:
                 self.temperature = float(data["temperature"])
             except (ValueError, TypeError):  # pragma: no cover (assumption: valid float)
@@ -205,12 +190,7 @@ class _ConfigData:
             self.temperature = 0.7
 
         # 6. Max Tokens
-        if "CLEANROOM_MAX_TOKENS" in os.environ:
-            try:
-                self.max_tokens = int(os.environ["CLEANROOM_MAX_TOKENS"])
-            except ValueError:  # pragma: no cover (assumption: valid int)
-                self.max_tokens = None
-        elif "max_tokens" in data and data["max_tokens"] is not None:
+        if "max_tokens" in data and data["max_tokens"] is not None:
             try:
                 self.max_tokens = int(data["max_tokens"])
             except (ValueError, TypeError):  # pragma: no cover (assumption: valid int)
@@ -219,14 +199,7 @@ class _ConfigData:
             self.max_tokens = None
 
         # 7. Conversation Limit
-        if "CLEANROOM_CONVERSATION_LIMIT" in os.environ:
-            try:
-                self.conversation_limit = int(
-                    os.environ["CLEANROOM_CONVERSATION_LIMIT"]
-                )
-            except ValueError:  # pragma: no cover (assumption: valid int)
-                self.conversation_limit = 20
-        elif "max_iterations" in data:
+        if "max_iterations" in data:
             try:
                 self.conversation_limit = int(data["max_iterations"])
             except (ValueError, TypeError):  # pragma: no cover (assumption: valid int)
@@ -240,14 +213,7 @@ class _ConfigData:
             self.conversation_limit = 20
 
         # 8. Node Visit Limit
-        if "CLEANROOM_NODE_VISIT_LIMIT" in os.environ:
-            try:
-                self.node_visit_limit = int(
-                    os.environ["CLEANROOM_NODE_VISIT_LIMIT"]
-                )
-            except ValueError:  # pragma: no cover (assumption: valid int)
-                self.node_visit_limit = 100
-        elif "node_visit_limit" in data:
+        if "node_visit_limit" in data:
             try:
                 self.node_visit_limit = int(data["node_visit_limit"])
             except (ValueError, TypeError):  # pragma: no cover (assumption: valid int)
@@ -256,12 +222,7 @@ class _ConfigData:
             self.node_visit_limit = 100
 
         # 9. Batch Size
-        if "CLEANROOM_BATCH_SIZE" in os.environ:
-            try:
-                self.batch_size = int(os.environ["CLEANROOM_BATCH_SIZE"])
-            except ValueError:  # pragma: no cover (assumption: valid int)
-                self.batch_size = 1
-        elif "batch_size" in data:
+        if "batch_size" in data:
             try:
                 self.batch_size = int(data["batch_size"])
             except (ValueError, TypeError):  # pragma: no cover (assumption: valid int)
@@ -270,7 +231,7 @@ class _ConfigData:
             self.batch_size = 1
 
         self.inject_followups = bool(data.get("inject_followups", True))
-        self.is_step_mode = bool(data.get("is_step_mode", False))
+        self.is_step_mode = bool(data.get("is_step_mode", True))
         self.is_startup_reads = bool(data.get("is_startup_reads", True))
         self.edit_delta_output = bool(data.get("edit_delta_output", True))
         self.supersede_arg_keep = int(data.get("supersede_arg_keep", 1000))

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
 CODE_HASH: 60f1a46602fd
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # uv_model_config_impl implementation component
@@ -28,11 +28,12 @@ By reading target configuration from environment variables or command-line argum
 - Authentication credentials fall back to ambient environment variables when the configuration file or named entry is absent. [fallback_credentials_to_env]
 - Execution parameters fall back to standard defaults when environment variables are unset. [fallback_params_to_defaults]
 - Authentication credentials fall back to standard defaults when environment variables are unset. [fallback_credentials_to_defaults]
+- Operational policies default to active unless explicitly disabled in the configuration. [default_operational_policies_to_active]
 
 ### Woven Contracts
 
 - Active model configuration name resolution checks command-line arguments, CLEANROOM_MODEL, MODEL_CONFIG_TARGET, and the TOML default entry in order. [resolve_config_from_arg, resolve_config_from_cleanroom_model_env, resolve_config_from_model_config_target_env, resolve_config_from_file_default]
-- Execution parameters and credentials load from the resolved TOML configuration entry, falling back to ambient environment variables or standard defaults. [load_params_from_toml, load_credentials_from_toml, fallback_params_to_env, fallback_credentials_to_env, fallback_params_to_defaults, fallback_credentials_to_defaults, agent_config: [expose_execution_parameters], dag_config: [provide_node_visit_limit, provide_batch_size], openai_config: [provide_model_name, provide_base_url, provide_api_key, provide_timeout, provide_temperature, provide_max_tokens]]
+- Execution parameters and credentials load from the resolved TOML configuration entry, falling back to ambient environment variables or standard defaults. [load_params_from_toml, load_credentials_from_toml, fallback_params_to_env, fallback_credentials_to_env, fallback_params_to_defaults, fallback_credentials_to_defaults, default_operational_policies_to_active, agent_config: [expose_execution_parameters], dag_config: [provide_node_visit_limit, provide_batch_size], openai_config: [provide_model_name, provide_base_url, provide_api_key, provide_timeout, provide_temperature, provide_max_tokens]]
 
 ## Grounding
 

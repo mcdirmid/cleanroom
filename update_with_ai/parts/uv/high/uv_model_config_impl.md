@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
 CODE_HASH: 1e687a2fcc63
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # uv_model_config_impl implementation component
@@ -29,7 +29,7 @@ The openai config, agent config, and dag config load execution parameters and au
 
 The openai config provides model execution settings including target model name, base url, timeout duration, sampling temperature, and token generation limits when constrained. Authentication credentials are bound from designated environment variables specified in the configuration, defaulting to ambient process environment variables.
 
-The agent config provides conversational turn limits and operational policies for agent execution.
+The agent config provides conversational turn limits and operational policies for agent execution, defaulting operational policies to active unless explicitly disabled.
 
 The dag config provides node visit bounds and batching limits for graph execution.
 

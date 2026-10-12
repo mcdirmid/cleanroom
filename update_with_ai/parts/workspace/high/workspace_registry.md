@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-10T19:45:00Z
 CHANGE: specify methodology-bound and qualified role resolution
 CODE_HASH: afb28350e6de
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_registry interface component

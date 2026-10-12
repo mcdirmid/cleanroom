@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-06T14:35:00Z
 # CHANGE: new file
-# CODE_HASH: 1f9dd82a626a
+# CODE_HASH: 3a11e52e180f
 # SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
 # --- END CLEANROOM METADATA ---
 
@@ -22,7 +22,7 @@ The `src_metadata_ext` external component specifies the grammar, comment convent
   CODE_HASH: 3f7eec2be07d
   -->
   ```
-- Python (`.py`, `.pyi`), Starlark (`BUILD`, `BUILD.bazel`, `.bzl`), Shell (`.sh`): Enclosed in line hash comments:
+- Python (`.py`, `.pyi`), Shell (`.sh`): Enclosed in line hash comments:
   ```python
   # --- CLEANROOM METADATA ---
   # LAST_CLEANED: 2026-10-05T20:52:01Z

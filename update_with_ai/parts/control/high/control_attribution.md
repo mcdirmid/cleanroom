@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T02:45:00Z
 CHANGE: Name the session attribution coordinator and split the multi-concern file attribution bullets
 CODE_HASH: 8351f2584a6f
-SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # control_attribution interface component

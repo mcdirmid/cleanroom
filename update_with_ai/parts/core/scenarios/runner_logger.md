@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
-LAST_CHANGED: 2026-10-11T03:09:09Z
-CHANGE: Author core runner_logger concrete scenarios
+LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CHANGED: 2026-10-12T12:35:00Z
+CHANGE: Update scenarios to reflect standard output carrying event summary text without event name prefixes
 CODE_HASH: 05d9a4512686
 -->
 
@@ -14,8 +14,7 @@ log event named render_pass with the summary rendered widget in 12 milliseconds 
 representation four lines long.
 
 1. The caller consumes that event.
-   Observed: standard output gains one single-line summary naming the event render_pass and
-   carrying the text rendered widget in 12 milliseconds, and the transcript log gains a record
+   Observed: standard output gains one single-line summary carrying the text rendered widget in 12 milliseconds, and the transcript log gains a record
    whose text is the full four-line transcript representation of the event.
 
 ## Scenario 2 — Two events of the same kind
@@ -25,13 +24,11 @@ log events named evaluate with a summary of evaluated gadget and named evaluate 
 evaluated sprocket.
 
 1. The caller consumes the first event.
-   Observed: standard output gains one single-line summary naming the event evaluate and carrying
-   the text evaluated gadget, and the transcript log gains the transcript representation of the
+   Observed: standard output gains one single-line summary carrying the text evaluated gadget, and the transcript log gains the transcript representation of the
    first event.
 
 2. The caller consumes the second event.
-   Observed: standard output gains one further single-line summary naming the event evaluate and
-   carrying the text evaluated sprocket, and the transcript log gains the transcript
+   Observed: standard output gains one further single-line summary carrying the text evaluated sprocket, and the transcript log gains the transcript
    representation of the second event as a record distinct from the record of step 1.
 
 ## Scenario 3 — A long run of events
@@ -52,7 +49,7 @@ log event named start_up whose summary is absent and whose transcript representa
 long.
 
 1. The caller consumes that event.
-   Observed: standard output gains a summary line naming the event start_up, and the transcript
+   Observed: standard output gains an empty summary line, and the transcript
    log gains the full two-line transcript representation of the event.
 
 ## Scenario 5 — An event with an empty event name and an empty summary
@@ -72,6 +69,5 @@ log event named compile_pass whose summary is compiled widget in 8 seconds and w
 representation is 500 lines long.
 
 1. The caller consumes that event.
-   Observed: standard output gains exactly one single-line summary naming the event compile_pass
-   and carrying the text compiled widget in 8 seconds, and the transcript log gains one record
+   Observed: standard output gains exactly one single-line summary carrying the text compiled widget in 8 seconds, and the transcript log gains one record
    whose text is all 500 lines of the transcript representation.

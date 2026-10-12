@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T04:58:25Z
 # CHANGE: Remove generated scaffold markers and document the declared path data types and manager operations from the grounding specification
 # CODE_HASH: 53ff9bd18d18

@@ -30,6 +30,8 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] A root assembly component ready for execution implements all interface components in the binary and has no imports outside data types and external boundary components
 - [ ] Front-matter never contains `instantiates:` or `types from <dep>:` statements
 - [ ] Imported component names in `imports:` never appear in `## Types and Behavior` or `**Out of scope:**`, appearing only in `**Delegated:**` when declared
+- [ ] Implementation import accountability: every component declared in `imports:` of `high/<name>_impl.md` must be utilized in AST signatures or cited in at least one `GROUNDING:` section of `low/<name>_impl.pyi`
+- [ ] Host file literal grounding: host file names, serialization schemas, and repository marker conventions belong strictly in external boundary specifications (`high/<name>_ext.md`)
 - [ ] Section inventory is closed strictly to `## Purpose` and `## Types and Behavior` (or `## Grounding Gaps Covered` for external boundary specifications)
 - [ ] Sub-headers (`###`) are strictly prohibited
 
@@ -43,6 +45,8 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] Assembly components are purely structural aggregations of constituent components; no behavioral logic, tool installation, algorithmic branching, operational code, or runtime logic can occur at the assembly level
 - [ ] Specifications without external dependencies omit `imports:` entirely
 - [ ] `imports:` lists only component-level module names separated by commas
+- [ ] Implementation specifications declare strictly necessary imports in front-matter; every declared import must be accounted for in downstream low-level AST signatures or explicit `GROUNDING:` arguments
+- [ ] Host file names, configuration schemas, and persistence formats belong strictly in external boundary specifications (`high/<name>_ext.md`); interface and implementation specifications import `_ext` components rather than inventing host file literals
 - [ ] Assembly specifications declare `assembles: <components>` listing constituent implementation and sub-assembly components separated by commas
 - [ ] Implementation and assembly specifications declare `implements: <components>` listing closed interface component names separated by commas
 - [ ] No component appears in both `imports:` and `implements:` within the same specification
@@ -81,11 +85,11 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] Outcome and result payloads use a single canonical noun throughout the specification rather than alternating between interchangeable synonyms
 - [ ] Conjunctions in prose pair distinct conceptual conditions and never pair synonyms that imply non-existent states or dualities
 - [ ] Relationships between entities are expressed through natural possessive phrasing rather than spatial containment or artificial container nouns
-- [ ] Redundant explanatory gloss is omitted when naming already conveys type or variant intent (e.g., state "is either a *synced document* or a *draft document*" rather than appending redundant descriptive clauses like "synchronized with repository storage, or a draft document pending update"); downstream enforcement rules belong in the components that enforce them
+- [ ] Redundant explanatory gloss is omitted when naming already conveys type or variant intent; downstream enforcement rules belong in the components that enforce them
 
 ## Lifecycle tiers and architecture
 
-- [ ] Every singleton service declares its lifecycle tier using natural possessive or containment phrasing rather than "is a" classification (e.g., "The *queue coordinator* of a render session ...", "A render session's *queue coordinator* ...", or "A system's *resource manager* ..." rather than "*queue coordinator* is a render session service ..."); because scoped lifecycle phases can be duplicated, singleton services may be referenced using indefinite ("a", "an") or definite ("the") phrasing in plain text without italics; polymorphic types do not specify a lifecycle tier
+- [ ] Every singleton service declares its lifecycle tier using natural possessive phrasing rather than "is a" classification (e.g., "The *queue coordinator* of a render session..." or "A system's *resource manager*..."); polymorphic types do not specify a lifecycle tier
 - [ ] Services do not form containment or ownership hierarchies; services within the same tier access each other directly without nested type definitions
 - [ ] Aggregate services maintain collections via explicit operations, never as owned sub-types
 - [ ] Lifecycle tiers form a hierarchy rooted at system with child tiers defined by interface components; descendant tiers may access ancestor tiers, but ancestor services never hold references to descendant services
@@ -123,8 +127,7 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] Omitted edge-case branches — leaving non-standard outcomes, empty inputs, or boundary cases unhandled in the specification, forcing downstream implementations to guess behavior
 - [ ] Floating directives — specifying that a component loads or resolves data without identifying the source or the mechanism that binds it
 - [ ] Tier custody violations — an ancestor tier service holding direct references to descendant tier services without parameter passing
-- [ ] Pseudo-code jargon — using "optional", "flags", or procedural method signatures with artificial parameter italics for conceptual services instead of declarative literate prose
-- [ ] Artificial parameter signatures — inventing procedural method signatures or italicizing parameter names for conceptual service capabilities instead of expressing inputs in declarative prose
+- [ ] Pseudo-code jargon — using "optional", "flags", procedural method signatures, or artificial parameter italics for conceptual services instead of declarative literate prose
 - [ ] Enablement phrasing — writing "whether X is enabled" instead of stating the purpose or domain action of the feature
 - [ ] Listing type names or polymorphic types in implements — including type names or polymorphic types rather than concrete interface component names in front-matter
 - [ ] Incomplete interface closure — declaring an interface in implements without implementing all of its singleton types
@@ -133,8 +136,7 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] Dangling lead-ins — writing bullets that clash grammatically with the introductory fragment lead-in
 - [ ] Colon after complete sentence — ending a complete sentence with a colon before a bullet list
 - [ ] Nested bullets — creating multi-level bullet trees instead of flat single-level bullet paragraphs
-- [ ] Naming collaborators in out of scope — naming specific components in out of scope instead of in delegated
-- [ ] Confusing out of scope with delegation — placing delegated collaborator responsibilities into out of scope rather than the dedicated delegated paragraph
+- [ ] Collaborator leakage in out of scope — naming specific components in out of scope instead of in delegated
 - [ ] Bolding types — using `**term**` instead of `*term*` for introductions
 - [ ] Spatial containment — writing "inside service X" instead of peer tier membership
 - [ ] "Is-a" lifecycle classification — writing "service X is a system service" or "coordinator Y is a render session service" instead of natural possessive or containment phrasing ("A system's service X...", "The coordinator Y of a render session...", "A render session's coordinator Y...")
@@ -142,3 +144,5 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] Second-person feedback — specifying failure feedback, error diagnostics, or reminders using second-person pronouns ("you", "your") instead of declarative, impersonal constraints
 - [ ] Monolithic narrative paragraphs — packing multiple responsibilities, branching conditions, or operational outcomes into dense prose paragraphs of four or more sentences instead of decomposing them into concise paragraphs or declarative bullet points
 - [ ] Assembly-level logic — placing operational behavior, extension registration, or algorithm logic inside an assembly component instead of delegating to constituent implementation components
+- [ ] Ungrounded host file names — mentioning concrete host file names or persistence files without defining them in a dedicated external boundary specification (`high/<name>_ext.md`)
+- [ ] Dead implementation imports — declaring imports in an implementation specification that are neither used in low AST nor cited in `GROUNDING:` sections

@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-10T19:00:00Z
 CHANGE: track dirtiness through implicit role deps and star role changes
-CODE_HASH: ac72da198a24
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: c324a5db545a
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_work interface component
 
-imports: agent_session
+imports: agent_session, cleanroom_files_ext
 
 ## Purpose
 
@@ -18,7 +18,7 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 
 **Out of scope:** The workspace_work interface component does not commission workspace directories, transfer source files, or execute test commands; these are handled by other components.
 
-**Delegated:** Session lifecycle scoping is delegated to agent_session.
+**Delegated:** Session lifecycle scoping is delegated to agent_session; workspace file conventions are delegated to cleanroom_files_ext.
 
 ## Types and Behavior
 
@@ -40,8 +40,8 @@ The workspace work manager:
 
 - Rejects a new work discovery request while uncompleted dirty work remains pending from a previous query in the role workspace, unless the request is forced.
 
-- Manages pending target tracking by recording assigned targets into a local pending work buffer, removing submitted targets, and checking target dirtiness, materializing starter templates through graph storage when a missing target file belongs to a role with source patterns and upstream dependencies.
+- Manages pending target tracking by recording assigned targets into a local pending work buffer file, removing submitted targets, and checking target dirtiness, materializing starter templates through graph storage when a missing target file belongs to a role with source patterns and upstream dependencies.
 
-- Clears the pending work buffer when all targets in scope evaluate clean.
+- Clears the pending work buffer file when all targets in scope evaluate clean.
 
 - Formulates structured work queue summaries detailing ready targets, dirty reasons, prerequisite blockers, and actionable next steps for the active role.

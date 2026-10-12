@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T03:16:22Z
 CHANGE: Name the provisioner typing and contract workspace commissioning
-CODE_HASH: af74961ed576
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: 0a2f84ce71c6
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_provision interface component
@@ -26,7 +26,7 @@ Uncontrolled read-write access across an entire codebase leads to accidental cro
 - The workspace provisioner copies upstream contract dependencies into role workspaces with read-only permissions. [copy_readonly_contracts]
 - The workspace provisioner synthesizes read-only test stubs with NotImplementedError from companion specifications for stub role dependencies. [synthesize_readonly_test_stubs]
 - The workspace provisioner packages executable runner tools into the workspace bin directory with execute permissions. [deploy_runner_executables]
-- The workspace provisioner writes role configuration into .cleanroom_role.json in the workspace root. [write_role_configuration]
+- The workspace provisioner writes role configuration into cleanroom_files_ext.ROLE_DESCRIPTOR_FILE in the workspace root. [write_role_configuration]
 - The workspace provisioner synthesizes role-tailored AGENTS.md instructions in the workspace root. [write_role_agents_instructions]
 
 ### Woven Contracts
@@ -41,6 +41,8 @@ Uncontrolled read-write access across an entire codebase leads to accidental cro
 
 ### Knowledge Requirements
 
+- Role descriptor file naming conventions.
+  - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Creation of directory structures and permission-enforced file copies on the filesystem.
   - Deferred: Provided by workspace provisioner implementation.
 - Packaging and permission setting for runner executable zipapps.

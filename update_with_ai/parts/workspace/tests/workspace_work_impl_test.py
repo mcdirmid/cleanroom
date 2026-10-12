@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:58:06Z
 # CHANGE: Replace the undeclared private registry and source metadata constructors with test doubles implementing the declared WorkspaceRegistry and SourceMetadataCoordinator interfaces
-# CODE_HASH: 938963b396c3
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 3d486f386385
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_work_impl."""
@@ -427,8 +427,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as repo_root:
             part_dir = os.path.join(repo_root, "parts/sample")
             os.makedirs(os.path.join(part_dir, "high"), exist_ok=True)
-            with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-                f.write('update_python_with_ai(name="sample_iface")\n')
+            os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+            with open(os.path.join(part_dir, "low/sample_iface.pyi"), "w", encoding="utf-8") as f:
+                f.write("# sample_iface\n")
 
             ready, blocked = self.work_mgr.compute_role_work_queue(
                 role_name="high",
@@ -478,8 +479,6 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             part_a = os.path.join(repo_root, "staging/parts/pkg_a")
             for d in ["high", "planning", "low", "lib"]:
                 os.makedirs(os.path.join(part_a, d), exist_ok=True)
-            with open(os.path.join(part_a, "BUILD.bazel"), "w", encoding="utf-8") as f:
-                f.write('update_python_with_ai(name="common_stem")\n')
             with open(os.path.join(part_a, "high/common_stem.md"), "w", encoding="utf-8") as f:
                 f.write(clean_md + "# common_stem\n")
             with open(os.path.join(part_a, "planning/common_stem.md"), "w", encoding="utf-8") as f:
@@ -493,11 +492,6 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             part_b = os.path.join(repo_root, "staging/parts/pkg_b")
             for d in ["high", "planning", "low", "lib"]:
                 os.makedirs(os.path.join(part_b, d), exist_ok=True)
-            with open(os.path.join(part_b, "BUILD.bazel"), "w", encoding="utf-8") as f:
-                f.write(
-                    'update_python_with_ai(name="common_stem")\n'
-                    'update_python_with_ai(name="consumer", module_deps=[":common_stem"])\n'
-                )
             with open(os.path.join(part_b, "high/common_stem.md"), "w", encoding="utf-8") as f:
                 f.write(clean_md + "# common_stem\n")
             with open(os.path.join(part_b, "planning/common_stem.md"), "w", encoding="utf-8") as f:
@@ -508,7 +502,7 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 f.write(clean_py)
 
             with open(os.path.join(part_b, "high/consumer.md"), "w", encoding="utf-8") as f:
-                f.write(clean_md + "# consumer\n")
+                f.write(clean_md + "imports: common_stem\n\n# consumer\n")
             with open(os.path.join(part_b, "planning/consumer.md"), "w", encoding="utf-8") as f:
                 f.write(clean_md + "# consumer\n")
             with open(os.path.join(part_b, "low/consumer.pyi"), "w", encoding="utf-8") as f:
@@ -576,8 +570,6 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             part_dir = os.path.join(repo_root, "staging/parts/sample")
             for d in ["high", "planning", "low", "lib", "tests"]:
                 os.makedirs(os.path.join(part_dir, d), exist_ok=True)
-            with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-                f.write('update_python_with_ai(name="sample_impl")\n')
             with open(os.path.join(part_dir, "high/sample_impl.md"), "w", encoding="utf-8") as f:
                 f.write(clean_md + "# sample_impl\n")
             with open(os.path.join(part_dir, "planning/sample_impl.md"), "w", encoding="utf-8") as f:
@@ -659,8 +651,6 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             part_dir = os.path.join(repo_root, "staging/parts/sample")
             for d in ["high", "planning", "low", "lib", "tests"]:
                 os.makedirs(os.path.join(part_dir, d), exist_ok=True)
-            with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-                f.write('update_python_with_ai(name="sample_impl")\n')
             with open(os.path.join(part_dir, "high/sample_impl.md"), "w", encoding="utf-8") as f:
                 f.write(clean_md + "# sample_impl\n")
             with open(os.path.join(part_dir, "planning/sample_impl.md"), "w", encoding="utf-8") as f:
@@ -705,8 +695,6 @@ class WorkspaceWorkImplTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as repo_root:
             part_dir = os.path.join(repo_root, "staging/parts/sample")
             os.makedirs(os.path.join(part_dir, "scenarios"), exist_ok=True)
-            with open(os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8") as f:
-                f.write('update_python_with_ai(name="sample_impl")\n')
             # Interface scenario modified at 02:00:00Z
             with open(os.path.join(part_dir, "scenarios/sample.md"), "w", encoding="utf-8") as f:
                 f.write(

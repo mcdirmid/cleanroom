@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
 CHANGE: Reduce the assembly narrative to a single structural sentence and remove collaborator naming from prose
-CODE_HASH: 4c375e5af26f
-SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+CODE_HASH: d6b22008b8f1
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # sandbox_asm assembly component
@@ -18,7 +18,7 @@ The sandbox_asm assembly component aggregates file inspection, guarded editing, 
 
 Autonomous agents operating on source workspaces require isolated environments that combine file inspection tools, guarded in-place editors, progressive instruction delivery, and strict run completion verifiers. Without an integrated sandbox assembly, tools and validation services must be configured and wired independently across session boundaries, risking inconsistent argument conversion and permissive file write behaviors. The sandbox_asm assembly component unites concrete sandbox, tool provider, and verification modules into a cohesive subsystem, closing the sandbox and tool execution interfaces while declaring required dependencies on file aliases, configurations, and operating system storage boundaries.
 
-**Out of scope:** The sandbox_asm assembly component does not parse Bazel build manifests, manage language model network connections, or schedule topological graph passes; these are handled by other components.
+**Out of scope:** The sandbox_asm assembly component does not parse package manifests, manage language model network connections, or schedule topological graph passes; these are handled by other components.
 
 ## Types and Behavior
 

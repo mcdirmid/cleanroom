@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T04:55:45Z
 # CHANGE: Delegate assembly initialization to CONSTITUENTS on the system tier instead of registering the constituent singleton directly
 # CODE_HASH: b3a749ad8487

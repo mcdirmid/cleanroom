@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T04:08:58Z
 CHANGE: Removed the unused agent_node_config import and its delegation clause: verification check definitions are grounded in the low-level specification without an agent_node_config member, so the interface now declares only agent_session and dag_storage.
 CODE_HASH: 9b07771f7e18
-SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # control_verification interface component

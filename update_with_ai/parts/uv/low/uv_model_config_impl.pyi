@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T03:55:25Z
 # CHANGE: Resolve the active model configuration from argument, environment variables, and file default in precedence order
 # CODE_HASH: 5da3ffccf434
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom UV model and runtime configuration implementation low-level specification."""
@@ -51,7 +51,7 @@ class AgentConfig(agent_config.AgentConfig, InTier[SystemTier]):
         """Reads step mode permission.
 
         GROUNDING:
-        - Reads step mode permission from TOML configuration or defaults to false.
+        - Reads step mode permission from TOML configuration or defaults to true.
         """
         ...
 

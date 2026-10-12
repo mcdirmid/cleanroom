@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T03:37:04Z
 # CHANGE: Declare coverage evaluator system tier and align record and executable line contracts
-# CODE_HASH: bf7a891fc86a
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 245d6d8e6a09
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for tool_coverage."""
@@ -78,7 +78,7 @@ class CoverageEvaluator(InTier[SystemTier], Protocol):
 
     @operation
     def normalize_target_query(self, raw_query: str) -> str:
-        """Normalizes a target query string by stripping Bazel target or path prefixes.
+        """Normalizes a target query string by stripping package target or path prefixes.
 
         POSTCONDITIONS:
         - MUST strip leading '//' target prefixes and package specifiers.

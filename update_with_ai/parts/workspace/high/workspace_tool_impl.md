@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T16:00:00Z
 CHANGE: gate submit on role verification checks and support verification bypass
-CODE_HASH: fed7fdd41c82
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: f7f856050e57
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_tool_impl implementation component
 
-imports: agent_session, workspace_registry, workspace_provision, workspace_sync, workspace_work, control_submit, control_attribution, tool_coverage
+imports: agent_session, cleanroom_files_ext, workspace_registry, workspace_provision, workspace_sync, workspace_work, control_submit, control_attribution, tool_coverage
 implements: workspace_tool
 
 ## Purpose
@@ -19,7 +19,7 @@ Command-line subagents in Cleanroom workspaces require a robust entrypoint that 
 
 **Out of scope:** The workspace_tool_impl implementation component does not implement custom test runners or low-level file metadata storage; these are handled by other components.
 
-**Delegated:** Session tier scoping is delegated to agent_session; active workspace discovery and repository root resolution are delegated to workspace_registry; workspace commissioning is delegated to workspace_provision; file harvesting, system refresh, and pulling are delegated to workspace_sync; queue evaluation and pending target tracking are delegated to workspace_work; target submission gating and code hash validation are delegated to control_submit; defect blame attribution and failure marking are delegated to control_attribution; statement test coverage analysis is delegated to tool_coverage.
+**Delegated:** Session tier scoping is delegated to agent_session; active workspace discovery and repository root resolution are delegated to workspace_registry; workspace commissioning is delegated to workspace_provision; file harvesting, system refresh, and pulling are delegated to workspace_sync; queue evaluation and pending target tracking are delegated to workspace_work; cleanroom log file naming conventions are delegated to cleanroom_files_ext; target submission gating and code hash validation are delegated to control_submit; defect blame attribution and failure marking are delegated to control_attribution; statement test coverage analysis is delegated to tool_coverage.
 
 ## Types and Behavior
 

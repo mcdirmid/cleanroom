@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: d532701a9a97
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: 33758b0188ff
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # uv_loop_impl implementation component
@@ -70,3 +70,5 @@ By resolving targets from workspace directories, halting execution immediately u
   - Grounded: [uv_manifest_loader: [manifest_loading_service], dag_storage: [dag_storage_service]]
 - Runner logging for pass telemetry streaming to stdout and transcript.
   - Grounded: [runner_logger: [runner_logging_service]]
+- Cleanroom log file schema and naming conventions.
+  - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]

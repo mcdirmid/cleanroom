@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T03:52:48Z
 # CHANGE: Declare the workspace registry import and ground canonical repository root resolution
-# CODE_HASH: f7bc0dc3eaa7
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 47bb6cff58f2
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_sync_impl."""
@@ -15,6 +15,7 @@ from agent_session import AgentSessionTier
 import workspace_sync
 import workspace_registry
 import src_metadata
+import cleanroom_files_ext
 
 
 @singleton_type("agent_session")
@@ -33,9 +34,9 @@ class WorkspaceSynchronizer(
     - Delegates in-band metadata handling to src_metadata.SourceMetadataCoordinator, using
       compute_file_code_hash, extract_metadata, update_metadata, stamp_audit, and
       append_feedback.
-    - Accesses and mutates the role workspace blame buffer at .cleanroom_blame_buffer.json
-      and accumulates the pulled, harvested, stamped audit, and flushed blame values into
-      the workspace_sync.SyncResult record.
+    - Accesses and mutates the role workspace blame buffer designated by
+      cleanroom_files_ext.BLAME_BUFFER_FILE and accumulates the pulled, harvested,
+      stamped audit, and flushed blame values into the workspace_sync.SyncResult record.
     """
 
     @operation
@@ -123,7 +124,7 @@ class WorkspaceSynchronizer(
         """Flushes buffered blame feedback entries from workspace into main.
 
         GROUNDING:
-        - Parses .cleanroom_blame_buffer.json from the role workspace and appends unacted
+        - Parses cleanroom_files_ext.BLAME_BUFFER_FILE from the role workspace and appends unacted
           feedback to culprit files in the canonical repository through
           src_metadata.SourceMetadataCoordinator.append_feedback.
         - Deletes the consumed blame buffer file after every buffered entry is applied and

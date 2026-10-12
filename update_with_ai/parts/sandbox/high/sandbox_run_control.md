@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Declare the run controller tier and split the multi-concern tool bullets into focused statements
+LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CHANGED: 2026-10-12T11:27:00Z
+CHANGE: Remove max batch size parameter from get work tool
 CODE_HASH: 3934154abd03
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # sandbox_run_control interface component
 
-imports: tool_provider, agent_file_alias, dag_storage, agent_node_config, dag_config
+imports: tool_provider, agent_file_alias, dag_storage, agent_node_config
 
 ## Purpose
 
@@ -40,4 +40,4 @@ The run controller installs a *fail tool* which is a resolve tool that terminate
 
 The run controller installs a *blame tool* which is a resolve tool that attributes task failure to an upstream dependency node. The blame tool accepts a file alias *blame target* parameter and a text explanation parameter.
 
-The run controller installs a *get work tool* that retrieves active dirty nodes, materializes startup templates, and delivers the session task prompt. The get work tool accepts an integer *max batch size* parameter and specifies a follow-up execution of the advance tool when guide step mode is active.
+The run controller installs an argument-free *get work tool* named `get_work` that retrieves active dirty nodes, materializes startup templates, and delivers the session task prompt, specifying a follow-up execution of the advance tool when guide step mode is active.

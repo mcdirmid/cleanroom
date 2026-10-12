@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T05:14:13Z
 # CHANGE: Remove the dead PENDING_WORK_FILE pseudo-constant flagged as a type alias
-# CODE_HASH: 89997108af4c
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 8d3d9eae2555
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_work."""
@@ -13,6 +13,7 @@ from typing import Optional, Protocol, Sequence
 from framework import data_type, operation, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import cleanroom_files_ext
 
 @data_type
 @dataclass(frozen=True)
@@ -73,7 +74,7 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
         """Removes local pending work buffer file if present.
 
         POSTCONDITIONS:
-        - MUST delete .cleanroom_pending_work.json from workspace directory.
+        - MUST delete pending work file designated by cleanroom_files_ext from workspace directory.
         """
         ...
 
@@ -83,7 +84,7 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - When targets sequence is empty, MUST clear pending work buffer.
-        - When targets sequence is non-empty, MUST serialize targets to .cleanroom_pending_work.json.
+        - When targets sequence is non-empty, MUST serialize targets to pending work file designated by cleanroom_files_ext.
         """
         ...
 
@@ -92,7 +93,7 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
         """Removes a submitted target from local pending work buffer.
 
         POSTCONDITIONS:
-        - MUST remove matching target from .cleanroom_pending_work.json.
+        - MUST remove matching target from pending work file designated by cleanroom_files_ext.
         """
         ...
 

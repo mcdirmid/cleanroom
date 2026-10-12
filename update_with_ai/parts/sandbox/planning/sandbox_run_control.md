@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
-LAST_CHANGED: 2026-10-11T03:10:59Z
-CHANGE: Declare polymorphic resolve tool and run controller tier typing
+LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CHANGED: 2026-10-12T11:27:00Z
+CHANGE: Remove max batch size parameter from get work tool
 CODE_HASH: bda0be13040a
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # sandbox_run_control interface component
@@ -25,7 +25,7 @@ By providing dedicated tools for verification inspection, milestone advancement,
 - The submit tool is a resolve tool specifying a change summary parameter.
 - The fail tool is a resolve tool specifying an explanation parameter.
 - The blame tool is a resolve tool specifying a blame target parameter and an explanation parameter.
-- The get work tool specifies a max batch size parameter.
+- The get work tool is an argument-free tool named get_work.
 
 ### Contracts
 

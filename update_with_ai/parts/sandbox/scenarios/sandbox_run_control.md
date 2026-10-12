@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
-LAST_CHANGED: 2026-10-11T03:17:21Z
-CHANGE: Author sandbox sandbox_run_control concrete scenarios
+LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CHANGED: 2026-10-12T11:27:00Z
+CHANGE: Remove max batch size parameter from get work tool
 CODE_HASH: 00ca25158a53
 -->
 
@@ -205,7 +205,7 @@ step mode is inactive, the active dirty nodes are the alpha-role nodes for widge
 source artifacts `widget/src/widget.py` and `gadget/src/gadget.py` are missing on disk, and the
 startup templates for those two read-write files hold "widget_height = 30" and "gadget_height = 30".
 
-1. The agent executes the get work tool with the max batch size 2.
+1. The agent executes the get work tool without arguments.
    Observed: the two dirty nodes are retrieved as active nodes, the source artifacts
    `widget/src/widget.py` and `gadget/src/gadget.py` now exist on disk holding "widget_height = 30"
    and "gadget_height = 30", and the session task prompt is delivered naming both targets.
@@ -217,7 +217,7 @@ step mode is active with the session guide whose summary is "clean the widget ta
 dirty node is the alpha-role node for widget, whose source artifact `widget/src/widget.py` is missing
 on disk, and its startup template holds "widget_height = 30".
 
-1. The agent executes the get work tool with the max batch size 1.
+1. The agent executes the get work tool without arguments.
    Observed: the dirty node is retrieved as an active node, `widget/src/widget.py` now exists on disk
    holding "widget_height = 30", the session task prompt is delivered, and the response specifies a
    follow-up execution of the advance tool.
@@ -227,6 +227,6 @@ on disk, and its startup template holds "widget_height = 30".
 Given: the agent enters a session for role alpha in `/ws/alpha_scope_a`, no target is open, no
 workspace file has been modified during the session, and no dirty node is ready to be cleaned.
 
-1. The agent executes the get work tool with the max batch size 2.
+1. The agent executes the get work tool without arguments.
    Observed: no active node is retrieved, no startup template is materialized, and no session task
    prompt naming a target is delivered.

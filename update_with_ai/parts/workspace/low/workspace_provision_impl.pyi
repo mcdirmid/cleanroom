@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T04:14:50Z
 # CHANGE: Contract working tree type-checking coverage and missing target skeleton synthesis
-# CODE_HASH: 246b3ad50061
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: a01f880c7921
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_provision_impl."""
@@ -12,6 +12,7 @@ from typing import Optional
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import cleanroom_files_ext
 import workspace_provision
 import workspace_registry
 
@@ -69,7 +70,7 @@ class WorkspaceProvisioner(
           specifications without copying real implementation files.
         - Packages executable bin zipapps whose __main__.py invokes the cleanroom_role_tool
           runner entrypoint, writes role metadata containing the main repository root and
-          directory scope into .cleanroom_role.json, and formats AGENTS.md instructions carrying
+          directory scope into cleanroom_files_ext.ROLE_DESCRIPTOR_FILE, and formats AGENTS.md instructions carrying
           role constraints, strict boundary rules, a contamination tripwire, a fail-stop
           reporting protocol, and tool execution instructions.
         - Composes the workspace_registry.WorkspaceDescriptor from the workspace directory,

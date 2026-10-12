@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:09:58Z
 # CHANGE: Use the real cross-part file alias module for the declared interface field types instead of a private fallback container
 # CODE_HASH: 17f30c9d6a4a

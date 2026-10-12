@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T16:00:00Z
 # CHANGE: add verification check failure postcondition and no_verify parameter to run_submit
-# CODE_HASH: c5b1f3646193
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: ad6ec47351b0
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_tool."""
@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
 from framework import operation, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import cleanroom_files_ext
 
 
 @singleton_type
@@ -59,7 +60,7 @@ class WorkspaceToolRunner(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - WHEN verification checks fail and no_verify is False, MUST reject submission and return non-zero exit code.
-        - WHEN submission is accepted, MUST append submission message to .cleanroom.log in directory containing parts.
+        - WHEN submission is accepted, MUST append submission message to cleanroom_files_ext.CLEANROOM_LOG_FILE in directory containing parts.
         - WHEN submission is accepted, MUST clear target from pending work.
         """
         ...
@@ -74,7 +75,7 @@ class WorkspaceToolRunner(InTier[AgentSessionTier], Protocol):
         """Attributes defect critique to culprit target in main repository.
 
         POSTCONDITIONS:
-        - WHEN critique is accepted, MUST append blame message to .cleanroom.log in directory containing parts.
+        - WHEN critique is accepted, MUST append blame message to cleanroom_files_ext.CLEANROOM_LOG_FILE in directory containing parts.
         - WHEN critique is accepted, MUST clear target from pending work.
         """
         ...

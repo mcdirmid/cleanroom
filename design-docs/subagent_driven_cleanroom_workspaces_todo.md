@@ -14,7 +14,7 @@ This document specifies the architecture for driving convention-based, isolated 
 
 ### 1.1 The Cleanroom Dilemma: Autonomy vs. Double-Blind Isolation
 Cleanroom enforces mathematical, double-blind isolation across software construction roles:
-- **Specifications** (`high/*.md`, `planning/*.md`, `low/*.pyi`, `grounding/*.py`) must be authored without implementation shortcuts.
+- **Specifications** (`high/*.md`, `scenarios/*.md`, `planning/*.md`, `low/*.pyi`) must be authored without implementation shortcuts.
 - **Implementations** (`lib/*.py`) must adhere strictly to typed specifications without peeking at unit tests.
 - **Unit Tests** (`tests/*_test.py`) must be derived exclusively from specification contracts without overfitting to implementation code.
 
@@ -41,7 +41,7 @@ While Option 3 succeeded brilliantly for interactive, human-driven pair programm
 ```mermaid
 flowchart TD
     subgraph CanonicalRepo ["Canonical Main Workspace (/projects/<workspace_name>)"]
-        MainFiles["Canonical Source Files & Contracts\n(high/, planning/, low/, grounding/, lib/, tests/)"]
+        MainFiles["Canonical Source Files & Contracts\n(high/, scenarios/, planning/, low/, lib/, tests/)"]
         BuildGraph["Cleanroom Workspace & DAG State Engine\n(parts/workspace, parts/control, src_metadata.py)"]
         CleanroomCLI["bin/cleanroom CLI\n(commission, decommission, dirty, work-queue)"]
     end
@@ -139,7 +139,7 @@ Subagents are not ephemeral workers dispatched arbitrarily into the repository; 
 Because the workspace is physically isolated at the filesystem level:
 - In `LibSubagent`'s workspace, `tests/` does not exist. There is no software filter to bypass; test files are physically absent.
 - In `TestSubagent`'s workspace, `lib/*.py` files are read-only (`chmod 444`) interface stubs containing `raise NotImplementedError`. The test author cannot cheat or overfit to real implementation code.
-- Upstream specifications (`high/*.md`, `planning/*.md`, `low/*.pyi`, `grounding/*.py`) and configs are set to `chmod 444`. Any unauthorized modification is rejected directly by the OS kernel with `Permission denied`.
+- Upstream specifications (`high/*.md`, `scenarios/*.md`, `planning/*.md`, `low/*.pyi`) and configs are set to `chmod 444`. Any unauthorized modification is rejected directly by the OS kernel with `Permission denied`.
 
 ### 3.3 The Autonomous Subagent Turn Loop
 When woken by the coordinator, the workspace-bound subagent executes its standardized Cleanroom turn sequence:
@@ -192,12 +192,20 @@ sequenceDiagram
     deactivate Coord
 ```
 
-### 3.4 Multi-Unit Processing Invariant
+### 3.4 Multi-Unit Processing Invariant & Batch-Bounded Queue Presentation
 To prevent turn proliferation and conversational stalling, all subagents must adhere to the **Multi-Unit Processing Invariant**:
 - A subagent does **not** stop after submitting a single unit to wait for coordinator approval.
 - A subagent immediately calls `bin/get_work` after every submission or blame action.
 - It continues processing ready units sequentially until `bin/get_work` confirms that all units in scope are clean or blocked on external roles.
 - Only when zero ready units remain does the subagent emit its completion message and yield its turn.
+
+#### Batch-Bounded Work Acquisition (`batch_size`)
+To prevent overwhelming the role subagent with excessive context and cognitive load when many units are simultaneously ready:
+- `bin/get_work` resolves `batch_size` from the model or role configuration in canonical main (defaulting to e.g. 1 or 2).
+- Rather than dumping the entire ready queue into pending work, `bin/get_work` presents and marks pending at most `batch_size` ready units.
+- If additional ready units remain in the queue beyond the current batch, `bin/get_work` displays the current batch and explicitly advises:
+  > *"Completed units in this batch must be submitted via `bin/submit`; once submitted, run `bin/get_work` again to acquire the next batch of ready work."*
+- This keeps the agent's editing and verification loop focused on a small, manageable unit batch while preserving autonomous multi-unit draining across turns.
 
 ---
 
@@ -508,7 +516,7 @@ description: "Confined Cleanroom implementation engineer for library code."
 model: "deepseek-flash"
 instructions: |
   You are the Cleanroom Library Engineer bound to your role workspace directory.
-  You write production library code adhering strictly to `low/*.pyi` and `grounding/*.py`.
+  You write production library code adhering strictly to `low/*.pyi`.
   You NEVER attempt to view `tests/`.
   Upon wakeup:
   1. Run `bin/get_work` to inspect ready units.
@@ -674,7 +682,7 @@ The comparison arbiter records six objective, deterministic dimensions:
 2. **Convergence Speed (Turns & Wall-Clock)**: Number of model turns and elapsed seconds required to transition all units from dirty to clean.
 3. **Double-Blind Contract Fidelity**:
    - Number of Pyright static type errors on first submission.
-   - Number of Cleanroom linter violations (`lib_lint.py`, `grounding_lint.py`).
+   - Number of Cleanroom linter violations (`lib_lint.py`, `test_lint.py`, `low_lint.py`, `spec_lint.py`, `high_lint.py`).
 4. **Upstream Blame Precision**:
    - When given an intentionally incomplete or contradictory specification contract, does the model identify the exact requirement gap and issue a valid `bin/blame`, or does it hallucinate an ad-hoc local workaround?
 5. **Test Mutation Resistance**:
@@ -695,13 +703,13 @@ flowchart TD
         
         subgraph LibContainer ["Role Workspace: ../role_workspaces/cleanroom_lib_staging/"]
             LibSrc["lib/*.py (rw-r--r--)"]
-            LibSpec["low/*.pyi & grounding/*.py (r--r--r-- chmod 444)"]
+            LibSpec["low/*.pyi (r--r--r-- chmod 444)"]
             LibMissing["tests/ DIRECTORY DOES NOT EXIST!"]
         end
 
         subgraph TestContainer ["Role Workspace: ../role_workspaces/cleanroom_test_staging/"]
             TestSrc["tests/*_test.py (rw-r--r--)"]
-            TestSpec["low/*.pyi & grounding/*.py (r--r--r-- chmod 444)"]
+            TestSpec["low/*.pyi (r--r--r-- chmod 444)"]
             TestStub["lib/*.py (STUB ONLY: chmod 444, raise NotImplementedError)"]
             TestRealLib["REAL lib/*.py DOES NOT EXIST!"]
         end
@@ -744,13 +752,13 @@ All references to the canonical main workspace are resolved via relative convent
 
 ### 7.1 Global DAG Traversal
 The Cleanroom build graph is a directed acyclic graph where nodes represent role artifacts:
-$$\text{High} \longrightarrow \text{Planning} \longrightarrow \text{Low} \longrightarrow \text{Grounding} \longrightarrow \{\text{Lib}, \text{Test}\} \longrightarrow \text{QA} \longrightarrow \text{Coverage}$$
+$$\text{High} \longrightarrow \text{Scenario} \longrightarrow \text{Planning} \longrightarrow \text{Low} \longrightarrow \text{Spec QA} \longrightarrow \{\text{Lib}, \text{Test}\} \longrightarrow \text{QA} \longrightarrow \text{Coverage}$$
 
 The Coordinator implements dependency-first topological scheduling:
-1. **Producer Phases**:
-   - `high`, `planning`, `low`, and `grounding` execute sequentially.
-   - When `grounding` is clean, both `lib` and `test` become topologically eligible and can execute **in parallel** in their respective workspaces.
-2. **Auditor Phases**:
+1. **Producer & Specification Auditor Phases**:
+   - `high`, `scenario`, `planning`, `low`, and `spec_qa` execute sequentially.
+   - When `spec_qa` is clean, both `lib` and `test` become topologically eligible and can execute **in parallel** in their respective workspaces.
+2. **Implementation Auditor Phases**:
    - `qa` is blocked until **both** `lib` and `test` have successfully submitted and their verification targets pass.
    - `coverage` is blocked until `qa` has successfully passed.
 
@@ -800,6 +808,10 @@ The implementation of Subagent-Driven Cleanroom Workspaces proceeds across four 
 - **`CleanroomCoordinatorEngine`** (`update_with_ai/support/lib/cleanroom_coordinator_engine.py`):
   - Headless, zero-execution DAG queue evaluator built on `parts/workspace` (`workspace_work_impl.py`).
   - Exposes `CleanroomHarnessAdapter` abstract base class.
+- **Batch-Bounded `bin/get_work` Presentation (`workspace_tool_impl.py` & `workspace_work_impl.py`)**:
+  - Expose model/role `batch_size` configuration to `bin/get_work` (resolving from canonical main workspace configuration).
+  - Limit the number of presented and pending targets to `batch_size`.
+  - Format actionable diagnostic guidance advising the subagent to submit the active batch and call `bin/get_work` again to drain the remaining queue.
 - **`CleanroomTelemetry`** (`update_with_ai/support/lib/cleanroom_telemetry.py`):
   - Normalizes token telemetry (`input_tokens`, `output_tokens`, `cached_tokens`) across all harnesses.
   - Implements the centralized pricing table and calculates exact USD costs.

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:04:09Z
 # CHANGE: Implement the registry grounding directly with file path manager path construction, atomic JSON registry writes and reads, in-memory descriptor collection, and the declared key and value error branches
-# CODE_HASH: 3a6ab12e9da2
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 5784c19e88c4
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_registry_impl."""
@@ -415,7 +415,10 @@ def _match_sibling_workspace_conventions(workspace_dir: str) -> Optional[str]:
         candidate = os.path.join(projects_root, entry)
         if os.path.isdir(candidate) and (
             os.path.exists(os.path.join(candidate, ".git"))
-            or os.path.exists(os.path.join(candidate, "MODULE.bazel"))
+            or any(
+                os.path.exists(os.path.join(candidate, marker))
+                for marker in ("cleanroom.toml", "cleanroom_roles.toml", "pyproject.toml")
+            )
         ):
             return os.path.realpath(candidate)
     return None
@@ -423,33 +426,64 @@ def _match_sibling_workspace_conventions(workspace_dir: str) -> Optional[str]:
 
 def _search_ancestor_markers(start_dir: str) -> Optional[str]:
     """Searches ancestor directories for repository markers."""
-    check_marker = start_dir
-    while check_marker and check_marker != os.path.dirname(check_marker):
-        if os.path.exists(os.path.join(check_marker, ".git")):
-            return check_marker
-        if os.path.exists(os.path.join(check_marker, "MODULE.bazel")) and not os.path.exists(
-            os.path.join(check_marker, ".cleanroom_role.json")
+    curr = start_dir
+    while curr and curr != os.path.dirname(curr):
+        if os.path.exists(os.path.join(curr, ".git")):
+            return curr
+        curr = os.path.dirname(curr)
+
+    topmost: Optional[str] = None
+    curr = start_dir
+    while curr and curr != os.path.dirname(curr):
+        if (
+            any(
+                os.path.exists(os.path.join(curr, marker))
+                for marker in (
+                    "cleanroom.toml",
+                    "cleanroom_roles.toml",
+                    "cleanroom_python_roles.toml",
+                    "pyproject.toml",
+                )
+            )
+            and not os.path.exists(
+                os.path.join(curr, ".cleanroom_role.json")
+            )
         ):
-            return check_marker
-        check_marker = os.path.dirname(check_marker)
-    return None
+            topmost = curr
+        curr = os.path.dirname(curr)
+    return topmost
 
 
 def _fallback_to_ambient_working_directory() -> str:
     """Falls back to the ambient working directory environment when no marker is found."""
-    bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-    if bwd and os.path.isdir(bwd):
-        return os.path.realpath(bwd)
-
     mod_dir = os.path.dirname(os.path.realpath(__file__))
-    while mod_dir and mod_dir != os.path.dirname(mod_dir):
-        if os.path.exists(os.path.join(mod_dir, ".git")):
-            return mod_dir
-        if os.path.exists(os.path.join(mod_dir, "MODULE.bazel")) and not os.path.exists(
-            os.path.join(mod_dir, ".cleanroom_role.json")
+    curr = mod_dir
+    while curr and curr != os.path.dirname(curr):
+        if os.path.exists(os.path.join(curr, ".git")):
+            return curr
+        curr = os.path.dirname(curr)
+
+    topmost: Optional[str] = None
+    curr = mod_dir
+    while curr and curr != os.path.dirname(curr):
+        if (
+            any(
+                os.path.exists(os.path.join(curr, marker))
+                for marker in (
+                    "cleanroom.toml",
+                    "cleanroom_roles.toml",
+                    "cleanroom_python_roles.toml",
+                    "pyproject.toml",
+                )
+            )
+            and not os.path.exists(
+                os.path.join(curr, ".cleanroom_role.json")
+            )
         ):
-            return mod_dir
-        mod_dir = os.path.dirname(mod_dir)
+            topmost = curr
+        curr = os.path.dirname(curr)
+    if topmost:
+        return topmost
 
     return os.path.abspath(os.getcwd())
 
@@ -547,35 +581,42 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
         return _create_absolute_path(_fallback_to_ambient_working_directory())
 
     def _discover_canonical_repo_root(self) -> str:
-        """Discovers the canonical repository root from the ambient build environment."""
-        bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-        if bwd and any(
-            os.path.isfile(os.path.join(bwd, marker))
-            for marker in ("MODULE.bazel", "pyproject.toml", "cleanroom_roles.toml", "WORKSPACE", "WORKSPACE.bazel")
-        ):
-            return os.path.realpath(bwd)
-
+        """Discovers the canonical repository root from the ambient environment."""
         mod_dir = os.path.dirname(os.path.realpath(__file__))
-        while mod_dir and mod_dir != os.path.dirname(mod_dir):
-            if os.path.exists(os.path.join(mod_dir, ".git")):
-                return mod_dir
-            if os.path.exists(os.path.join(mod_dir, "MODULE.bazel")) and not os.path.exists(
-                os.path.join(mod_dir, ".cleanroom_role.json")
+        curr = mod_dir
+        while curr and curr != os.path.dirname(curr):
+            if os.path.exists(os.path.join(curr, ".git")):
+                return curr
+            curr = os.path.dirname(curr)
+
+        topmost_marker_dir = ""
+        curr = mod_dir
+        while curr and curr != os.path.dirname(curr):
+            if (
+                any(
+                    os.path.exists(os.path.join(curr, marker))
+                    for marker in (
+                        "cleanroom.toml",
+                        "cleanroom_roles.toml",
+                        "cleanroom_python_roles.toml",
+                        "pyproject.toml",
+                    )
+                )
+                and not os.path.exists(
+                    os.path.join(curr, ".cleanroom_role.json")
+                )
             ):
-                return mod_dir
-            if any(
-                os.path.isfile(os.path.join(mod_dir, marker))
-                for marker in ("cleanroom_roles.toml", "cleanroom_python_roles.toml")
-            ):
-                return mod_dir
-            mod_dir = os.path.dirname(mod_dir)
+                topmost_marker_dir = curr
+            curr = os.path.dirname(curr)
+        if topmost_marker_dir:
+            return topmost_marker_dir
 
         rf = os.environ.get("PYTHON_RUNFILES") or os.environ.get("TEST_SRCDIR")
         if rf:
             cand = os.path.join(rf, "_main")
             if any(
                 os.path.isfile(os.path.join(cand, marker))
-                for marker in ("MODULE.bazel", "pyproject.toml", "cleanroom_roles.toml")
+                for marker in ("cleanroom.toml", "cleanroom_roles.toml", "pyproject.toml")
             ):
                 return cand
         return ""

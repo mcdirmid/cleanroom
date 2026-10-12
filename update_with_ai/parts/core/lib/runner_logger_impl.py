@@ -1,14 +1,13 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
-# LAST_CHANGED: 2026-10-11T04:58:27Z
-# CHANGE: Resolve the transcript log path through an explicit ordered environment-variable sweep and add future annotations and a class docstring
+# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CHANGED: 2026-10-12T12:35:00Z
+# CHANGE: Present single-line event summaries to standard output without timestamps or event names
 # CODE_HASH: 8046df110732
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
-import datetime
 import os
 import sys
 from typing import Optional
@@ -45,10 +44,7 @@ class RunnerLogger(runner_logger.RunnerLogger, Singleton):
             pass
 
     def consume(self, event: runner_logger.RunnerLogEvent) -> None:
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sys.stdout.write(
-            f"[{timestamp}] [{event.event_name}] {event.summary}\n"
-        )
+        sys.stdout.write(f"{event.summary}\n")
         sys.stdout.flush()
         with open(self._log_path, "a", encoding="utf-8") as transcript:
             transcript.write(f"{event.transcript}\n")

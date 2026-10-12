@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T04:58:00Z
 # CHANGE: Track independent repetition streaks for identical tool invocations and for repeated edits to the same file and line range, each with warning and fatal thresholds, and clear both on reset
 # CODE_HASH: 6242a3830abb
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 from typing import Any, Mapping, Optional, Tuple, Union

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T04:14:51Z
 # CHANGE: Filter silent cross-role dependencies, expand star-role contracts, and fail loud on unknown roles
-# CODE_HASH: ff4c4d707a26
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: c609570c692d
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_work_impl."""
@@ -17,6 +17,7 @@ import control_work_scheduler
 import src_metadata
 import dag_storage
 import workspace_registry
+import cleanroom_files_ext
 
 
 @singleton_type("agent_session")
@@ -34,7 +35,7 @@ class WorkspaceWorkManager(
       src_metadata.SourceMetadataCoordinator.extract_metadata, evaluating auditor unit
       dirtiness across all feedback targets, evaluating producer unit dirtiness across implicit
       and star role dependencies, and managing pending work state in
-      .cleanroom_pending_work.json.
+      cleanroom_files_ext.PENDING_WORK_FILE.
     - Grounds companion contract resolution and cross-unit dependency filtering on
       workspace_registry.WorkspaceRegistry.resolve_role_definition and
       workspace_registry.WorkspaceRegistry.list_roles, reading
@@ -53,7 +54,7 @@ class WorkspaceWorkManager(
         """Reads target paths from local pending work buffer.
 
         GROUNDING:
-        - Reads and parses JSON array from .cleanroom_pending_work.json.
+        - Reads and parses JSON array from cleanroom_files_ext.PENDING_WORK_FILE.
         """
         ...
 
@@ -63,7 +64,7 @@ class WorkspaceWorkManager(
         """Removes local pending work buffer file if present.
 
         GROUNDING:
-        - Deletes .cleanroom_pending_work.json from workspace directory if it exists.
+        - Deletes cleanroom_files_ext.PENDING_WORK_FILE from workspace directory if it exists.
         """
         ...
 
@@ -73,7 +74,7 @@ class WorkspaceWorkManager(
         """Records pending target paths into local buffer file.
 
         GROUNDING:
-        - Writes targets sequence to .cleanroom_pending_work.json or removes file when empty.
+        - Writes targets sequence to cleanroom_files_ext.PENDING_WORK_FILE or removes file when empty.
         """
         ...
 

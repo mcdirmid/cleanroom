@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:03:47Z
 # CHANGE: Prune the unused Set import that the grounding specification does not declare
 # CODE_HASH: 971e42e5e86b

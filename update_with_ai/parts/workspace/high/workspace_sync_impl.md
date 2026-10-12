@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-09T02:39:58Z
 CHANGE: add contamination tripwire to AGENTS.md refresh specification
-CODE_HASH: cc98fbd579a1
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: b5b2294c88d6
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_sync_impl implementation component
 
-imports: agent_session, workspace_registry, src_metadata
+imports: agent_session, workspace_registry, src_metadata, cleanroom_files_ext
 implements: workspace_sync
 
 ## Purpose
@@ -17,9 +17,9 @@ The workspace_sync_impl implementation component realizes two-phase harvesting, 
 
 Distributing work across disjoint workspaces introduces data synchronization races and the threat of overwriting verified code with stale payloads. The workspace_sync_impl implementation component provides guarded two-phase synchronization: in the first phase, source files are parsed and compared against recorded in-band hashes to detect modifications and merge collisions; in the second phase, validated changes and audit tags are written atomically to the canonical repository. Furthermore, blame feedback accumulated in local buffers is translated into in-band comment entries on culprit files, and system files are refreshed without disturbing working tree targets.
 
-**Out of scope:** The workspace_sync_impl implementation component does not parse AST grammar, compute topological task schedules, or execute Bazel test rules; these are handled by other components.
+**Out of scope:** The workspace_sync_impl implementation component does not parse AST grammar, compute topological task schedules, or execute test runners; these are handled by other components.
 
-**Delegated:** Role configuration and workspace directory lookups are delegated to workspace_registry; in-band source metadata extraction, audit stamping, code hashing, and feedback appending are delegated to src_metadata.
+**Delegated:** Role configuration and workspace directory lookups are delegated to workspace_registry; in-band source metadata extraction, audit stamping, code hashing, and feedback appending are delegated to src_metadata; workspace file conventions are delegated to cleanroom_files_ext.
 
 ## Types and Behavior
 
@@ -45,4 +45,4 @@ When harvesting changes from a role workspace back to the canonical main reposit
 
 - In the commit phase, the synchronizer copies validated files into the main repository and updates in-band timestamps. For auditor roles, the synchronizer stamps role audit attributes onto verified targets without changing target code bodies.
 
-When flushing blame feedback, the workspace synchronizer reads the local blame buffer file `.cleanroom_blame_buffer.json`, extracts culprit file paths and critique messages, locates target files in the canonical main repository, appends unacted feedback entries with UTC timestamps to target headers in-place, and deletes the blame buffer file upon successful application.
+When flushing blame feedback, the workspace synchronizer reads the local blame buffer file, extracts culprit file paths and critique messages, locates target files in the canonical main repository, appends unacted feedback entries with UTC timestamps to target headers in-place, and deletes the blame buffer file upon successful application.

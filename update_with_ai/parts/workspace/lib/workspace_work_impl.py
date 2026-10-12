@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:04:15Z
 # CHANGE: Expand star-role contracts for declared cross-unit dependencies, suppress silent cross-role peer implementation files, and filter cross-unit dependencies against silent cross-role declarations
-# CODE_HASH: 0092f116e9d6
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 5b8b8c060d3a
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_work_impl."""
@@ -50,55 +50,8 @@ def _is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     return bool(r_def.audit_tag or not r_def.src_pattern)
 
 
-def _parse_part_units(pkg_build_path: str) -> Dict[str, List[str]]:
-    if not os.path.isfile(pkg_build_path):
-        return {}
-    try:
-        with open(pkg_build_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        tree = ast.parse(content, filename=pkg_build_path)
-    except (OSError, SyntaxError):
-        return {}
-
-    units: Dict[str, List[str]] = {}
-    for node in tree.body:
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
-            call = node.value
-            func_name = call.func.id if isinstance(call.func, ast.Name) else ""
-            if "cleanroom" in func_name or "update" in func_name or any(kw.arg in ("module_deps", "unit_deps") for kw in call.keywords):
-                name: Optional[str] = None
-                deps: List[str] = []
-                for kw in call.keywords:
-                    if kw.arg == "name" and isinstance(kw.value, ast.Constant):
-                        name = str(kw.value.value)
-                    elif kw.arg in ("module_deps", "unit_deps") and isinstance(
-                        kw.value, (ast.List, ast.Tuple)
-                    ):
-                        for elt in kw.value.elts:
-                            if isinstance(elt, ast.Constant) and isinstance(
-                                elt.value, str
-                            ):
-                                deps.append(elt.value)
-                if (
-                    name is None
-                    and call.args
-                    and isinstance(call.args[0], ast.Constant)
-                ):
-                    name = str(call.args[0].value)
-                if name:
-                    units[name] = deps
-    return units
-
-
 def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
-    # 1) Check BUILD.bazel if present
-    build_file = os.path.join(repo_root, part_dir, "BUILD.bazel")
-    if os.path.isfile(build_file):
-        units = _parse_part_units(build_file)
-        if units:
-            return units
-
-    # 2) Read part_dir/high/*.md to extract unit names and dependencies
+    # 1) Read part_dir/high/*.md to extract unit names and dependencies
     high_dir = os.path.join(repo_root, part_dir, "high")
     if os.path.isdir(high_dir):
         units = {}

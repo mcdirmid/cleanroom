@@ -1,25 +1,25 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-10T19:00:00Z
 CHANGE: evaluate producer unit dirtiness across implicit and star role dependencies
-CODE_HASH: ec4638430640
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: a93d6b85bd24
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_work_impl implementation component
 
 ## Intent
 
-Guiding autonomous agents through multi-step pipeline tasks requires distinguishing ready targets from targets blocked on upstream artifacts while enforcing completion of pending work before starting new tasks. Without strict queue tracking, agents jump between disconnected files or exit before completing verification. The workspace_work_impl implementation component invokes directory-scoped work scheduling, filters candidates by active role, evaluates pending target dirtiness against local and main workspaces, persists pending target state in .cleanroom_pending_work.json, and generates structured task outputs with actionable guidance.
+Guiding autonomous agents through multi-step pipeline tasks requires distinguishing ready targets from targets blocked on upstream artifacts while enforcing completion of pending work before starting new tasks. Without strict queue tracking, agents jump between disconnected files or exit before completing verification. The workspace_work_impl implementation component invokes directory-scoped work scheduling, filters candidates by active role, evaluates pending target dirtiness against local and main workspaces, persists pending target state in the pending work buffer file, and generates structured task outputs with actionable guidance.
 
 ## Factored Contracts
 
 ### Contracts
 
-- The workspace work manager reads target paths from .cleanroom_pending_work.json and evaluates metadata dirtiness. [read_and_check_pending_buffer]
-- The workspace work manager deletes .cleanroom_pending_work.json from disk when pending targets are resolved. [delete_pending_work_buffer]
+- The workspace work manager reads target paths from the pending work buffer file and evaluates metadata dirtiness. [read_and_check_pending_buffer]
+- The workspace work manager deletes the pending work buffer file from disk when pending targets are resolved. [delete_pending_work_buffer]
 - The workspace work manager calls schedule_work with dir_scope to obtain ready and blocked tasks. [invoke_scheduler_with_dir_scope]
-- The workspace work manager writes ready target file paths to .cleanroom_pending_work.json as JSON. [write_ready_targets_buffer]
+- The workspace work manager writes ready target file paths to the pending work buffer file as JSON. [write_ready_targets_buffer]
 - The workspace work manager generates formatted text summaries detailing ready items, blocked items, and next actions. [render_work_queue_text_summary]
 - The workspace work manager writes designated target paths into the pending work buffer file. [write_assigned_pending_targets]
 - The workspace work manager filters out a submitted or blamed target path matching pending target paths or unit stems strictly without clearing unmatched targets. [filter_out_resolved_pending_target]
@@ -55,7 +55,7 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
 ### Inherited Deferred Requirements
 
 - Persistence and evaluation of pending target lists on disk.
-  - Grounded: [pending_work_buffer_mechanics]
+  - Grounded: [pending_work_buffer_mechanics, cleanroom_files_ext: [cleanroom_files_schema]]
 
 ### Knowledge Requirements
 
@@ -65,5 +65,7 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
   - Grounded: [src_metadata: [source_metadata_service]]
 - Materialization of starter templates for missing target files.
   - Grounded: [dag_storage: [dag_storage_service]]
+- Workspace state and pending work file naming conventions.
+  - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - File reading and writing on the filesystem.
   - Grounded: [pending_work_buffer_mechanics, queue_diagnostic_rendering_logic]

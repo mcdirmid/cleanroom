@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T16:00:00Z
 CHANGE: gate submission on verification checks and support verification bypass
-CODE_HASH: f70dd9810b7a
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: eb84a65463d4
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_tool interface component
 
-imports: agent_session
+imports: agent_session, cleanroom_files_ext
 
 ## Purpose
 
@@ -16,9 +16,9 @@ The workspace_tool interface component defines operational contracts and executi
 
 Autonomous subagents executing inside isolated Cleanroom role workspaces rely on a unified suite of bin utilities to inspect work queues, submit compliant changes, blame defects, and report diagnostics. Without a consistent and declarative CLI runner interface, command handling logic becomes fragmented across entrypoints, leading to inconsistent error reporting, missing dirty state synchronization, and uncontrolled execution across workspace boundaries. The workspace_tool interface component defines structured command execution contracts and result formulations for role workspaces.
 
-**Out of scope:** The workspace_tool interface component does not directly implement filesystem mutation or Bazel build graph evaluation; these are handled by other components.
+**Out of scope:** The workspace_tool interface component does not directly implement filesystem mutation or build graph evaluation; these are handled by other components.
 
-**Delegated:** Execution phase context boundaries are delegated to agent_session.
+**Delegated:** Execution phase context boundaries are delegated to agent_session. Cleanroom log file naming conventions are delegated to cleanroom_files_ext.
 
 ## Types and Behavior
 

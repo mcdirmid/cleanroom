@@ -7,8 +7,8 @@ This document establishes the architecture, validation constraints, and phased i
 4. **Implementation Component (`_impl`) Import Accountability & Spec QA Attribution**: Enforcing complete usage of all declared imports in implementation components, requiring unexposed collaborators to be cited in natural language `GROUNDING:` arguments, and establishing Spec QA defect triage when imports are unaccounted for.
 
 > [!NOTE]
-> **Planning & Design Document (`_todo.md`)**
-> This document specifies architectural rules, validator designs, guide amendments, and work items. No code or specification changes are implemented in this document.
+> **Completed Architecture Document**
+> This document specifies the architectural rules, validator designs, guide amendments, and boundary contracts for specification grounding and assembly simplification. All implementation phases in this document have been completed and verified.
 
 ---
 
@@ -99,38 +99,38 @@ In Cleanroom, knowledge concerning external file formats, OS filesystem protocol
 - When an internal component interacts with specific files or schemas on disk, it **MUST import the corresponding `_ext` component**.
 - Low-level specifications (`low/*.pyi` and `low/*_impl.pyi`) must only reference file names, path patterns, or markers that are explicitly defined and exposed by an imported `_ext` dependency.
 
-### 2.3 Proposed External Boundary Structure for Workspace Conventions
+### 2.3 Canonical External Boundary Structure: `cleanroom_files_ext` (COMPLETED)
 
-To ground the workspace subsystem's file interactions, we introduce or consolidate external boundary components:
+To ground Cleanroom workspace and toolchain interactions, the external boundary component **`cleanroom_files_ext`** was canonically authored in `update_with_ai/parts/core/`:
+- **[`high/cleanroom_files_ext.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/core/high/cleanroom_files_ext.md)**
+- **[`low/cleanroom_files_ext.pyi`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/core/low/cleanroom_files_ext.pyi)**
 
-1. **`workspace_state_ext`** (or extension of [`src_metadata_ext`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/low/src_metadata_ext.pyi)):
-   - Documents the filenames and schemas for Cleanroom state files:
-     - Active workspace tracking: `.cleanroom_workspaces.json`
-     - Pending work tracking: `.cleanroom_pending_work.json`
-     - Feedback blame buffering: `.cleanroom_blame_buffer.json`
-     - Role configuration descriptor: `.cleanroom_role.json`
-   - Exposes path constants or schema models for dependent components.
-2. **`uv_manifest_ext`** / **`project_manifest_ext`**:
-   - Documents methodology and project configuration files:
-     - Methodology binding: `cleanroom.toml`
-     - Role definitions: `cleanroom_roles.toml`
-     - Package manifests: `pyproject.toml`
-   - Documents canonical root marker conventions (`.git`, `cleanroom_roles.toml`, `pyproject.toml`).
+It exposes canonical path constants and schemas:
+1. **`CLEANROOM_CONFIG_FILE: str = "cleanroom.toml"`**:
+   Scoped methodology configuration binding (`methodology = "//update_python_with_ai"`).
+2. **`CLEANROOM_ROLES_FILE: str = "cleanroom_roles.toml"`**:
+   Declarative role definition tables (`[roles.<role_name>]`).
+3. **`ROLE_DESCRIPTOR_FILE: str = ".cleanroom_role.json"`**:
+   Isolated role workspace descriptor written at provisioned workspace roots.
+4. **`WORKSPACES_REGISTRY_FILE: str = ".cleanroom_workspaces.json"`**:
+   Multi-role active workspace registry with file locking.
+5. **`CLEANROOM_LOG_FILE: str = ".cleanroom.log"`**:
+   Append-only change and feedback diagnostic event log.
 
 ### 2.4 Specification Derivation Example
 
-With external boundary grounding, the contracts become epistemically traceable:
+With external boundary grounding, contracts become epistemically traceable across workspace interfaces and implementations:
 
 ```python
 # CORRECT ARCHITECTURE: Grounded file references in low/workspace_work.pyi
-import workspace_state_ext
+import cleanroom_files_ext
 
 @singleton_type("agent_session")
 class WorkspaceWork(InTier[AgentSessionTier], Protocol):
     """Manages session work queues using workspace state persistence.
     
     INVARIANTS:
-    - MUST serialize pending targets conforming to workspace_state_ext schema.
+    - MUST serialize pending targets conforming to cleanroom_files_ext schema.
     """
 
     @operation
@@ -138,7 +138,7 @@ class WorkspaceWork(InTier[AgentSessionTier], Protocol):
         """Clears pending work targets.
 
         POSTCONDITIONS:
-        - MUST delete pending work file designated by workspace_state_ext from workspace directory.
+        - MUST delete pending work file designated by cleanroom_files_ext from workspace directory.
         """
         ...
 ```
@@ -146,7 +146,7 @@ class WorkspaceWork(InTier[AgentSessionTier], Protocol):
 And in the implementation stub [`low/workspace_work_impl.pyi`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/low/workspace_work_impl.pyi):
 ```python
 import workspace_work
-import workspace_state_ext
+import cleanroom_files_ext
 import filesystem_ext
 
 @singleton_type("agent_session")
@@ -154,7 +154,7 @@ class WorkspaceWork(workspace_work.WorkspaceWork, InTier[AgentSessionTier]):
     """Implementation managing session work queues.
 
     GROUNDING:
-    - Reads and writes pending targets JSON using workspace_state_ext pending work
+    - Reads and writes pending targets JSON using cleanroom_files_ext pending work
       filename and schema, invoking Path.read_text and Path.write_text from filesystem_ext.
     """
     ...
@@ -166,24 +166,25 @@ class WorkspaceWork(workspace_work.WorkspaceWork, InTier[AgentSessionTier]):
 
 Cleanroom has completely eliminated Bazel from its runtime, dependency resolution, testing, and workspace execution. However, stale references to `MODULE.bazel` remain as historical residue.
 
-### 3.1 Inventory of Legacy `MODULE.bazel` Residue
+### 3.1 Inventory of Legacy `MODULE.bazel` Residue & Status
 
-| File Path | Location / Line | Nature of Reference | Action Required |
+The repo-wide build system migration eradicated all Bazel configuration (`.bazelrc`, `.bazelversion`, `MODULE.bazel`, `BUILD.bazel`, `parts/bazel`, Starlark macros). Residual references in workspace discovery, test fixtures, and support tools have been eradicated:
+
+| File Path | Location / Line | Nature of Reference | Status |
 |:---|:---|:---|:---|
-| [`update_with_ai/parts/workspace/high/workspace_registry_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/high/workspace_registry_impl.md) | Line 10, 23 | Imports `bazel_manifest_ext`; mentions "canonical Bazel workspace indicators" | Replace import with `uv_manifest_ext` / `workspace_state_ext`; replace prose with canonical root markers |
-| [`update_with_ai/parts/workspace/planning/workspace_registry_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/planning/workspace_registry_impl.md) | Line 19 | `searches ancestor directories for MODULE.bazel or .git markers [search_ancestor_markers]` | Update contract to reference `.git` or `pyproject.toml` / `cleanroom_roles.toml` |
-| [`update_with_ai/parts/workspace/low/workspace_registry.pyi`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/low/workspace_registry.pyi) | Line 105 | `- MUST locate ancestor containing MODULE.bazel or .git marker.` | Update postcondition to reference markers from `uv_manifest_ext` |
-| [`update_with_ai/parts/workspace/low/workspace_registry_impl.pyi`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/low/workspace_registry_impl.pyi) | Line 39 | `- Traverses upward from start_dir checking for MODULE.bazel or .git files` | Update `GROUNDING:` docstring to reference `uv_manifest_ext` markers |
-| [`update_with_ai/parts/workspace/lib/workspace_registry.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/lib/workspace_registry.py) | Lines 446–509 | Hardcoded checks for `MODULE.bazel` in root traversal | Update implementation to check `cleanroom_roles.toml`, `pyproject.toml`, or `.git` |
-| [`update_with_ai/parts/workspace/tests/workspace_provision_impl_test.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/tests/workspace_provision_impl_test.py) | Lines 76, 116 | Creating dummy `MODULE.bazel` file in tests | Replace dummy marker with `pyproject.toml` |
-| [`update_with_ai/parts/workspace/tests/workspace_sync_impl_test.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/tests/workspace_sync_impl_test.py) | Lines 138, 153 | Creating dummy `MODULE.bazel` file in tests | Replace dummy marker with `pyproject.toml` |
-| [`update_python_with_ai/support/lib/build_lint_common.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/support/lib/build_lint_common.py) | Lines 297–303, 2129 | Heuristic searching for `MODULE.bazel` | Remove `MODULE.bazel`; rely exclusively on `cleanroom_roles.toml`, `pyproject.toml`, and `.git` |
-| [`update_python_with_ai/support/lib/cleanroom_role_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/support/lib/cleanroom_role_tool.py) | Line 39 | Checking `os.path.isfile(os.path.join(curr, "MODULE.bazel"))` | Remove `MODULE.bazel` check |
-| [`update_python_with_ai/support/lib/test_lint.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/support/lib/test_lint.py) | Line 337 | Checking `MODULE.bazel` in repo root marker tuple | Remove `MODULE.bazel` check |
+| [`update_with_ai/parts/workspace/high/workspace_registry_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/high/workspace_registry_impl.md) | Line 11, 24 | Line 11 imports `cleanroom_files_ext`; line 24 prose references canonical Cleanroom configuration files | **COMPLETED**: Import updated to `cleanroom_files_ext`; prose updated to canonical root markers (`cleanroom.toml`, `cleanroom_roles.toml`, `pyproject.toml`, `.git`) |
+| [`update_with_ai/parts/workspace/planning/workspace_registry_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/planning/workspace_registry_impl.md) | Line 19 | `searches ancestor directories for Cleanroom configuration files or .git markers [search_ancestor_markers]` | **COMPLETED**: Contract updated to reference `.git` or `cleanroom.toml` / `pyproject.toml` |
+| [`update_with_ai/parts/workspace/low/workspace_registry.pyi`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/low/workspace_registry.pyi) | Line 105 | `- MUST locate ancestor containing repository markers or .git directory.` | **COMPLETED**: Postcondition updated to reference markers from `cleanroom_files_ext` |
+| [`update_with_ai/parts/workspace/low/workspace_registry_impl.pyi`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/low/workspace_registry_impl.pyi) | Line 39 | `- Traverses upward from start_dir checking for repository markers or .git directories` | **COMPLETED**: `GROUNDING:` docstring updated to reference `cleanroom_files_ext` markers |
+| [`update_with_ai/parts/workspace/lib/workspace_registry_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/lib/workspace_registry_impl.py) | Lines 418, 430, 448, 554, 562, 578 | Hardcoded checks for `MODULE.bazel` in root traversal | **COMPLETED**: Updated implementation to check `cleanroom_files_ext` markers (`cleanroom.toml`, `cleanroom_roles.toml`, `pyproject.toml`, `.git`) prioritizing `.git` across all ancestors |
+| [`update_with_ai/parts/workspace/tests/workspace_provision_impl_test.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/tests/workspace_provision_impl_test.py) | Lines 159, 199 | Creating dummy `MODULE.bazel` file in tests | **COMPLETED**: Replaced dummy marker with `notes.txt` |
+| [`update_with_ai/parts/workspace/tests/workspace_sync_impl_test.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/tests/workspace_sync_impl_test.py) | Lines 345, 361 | Creating dummy `MODULE.bazel` file in tests | **COMPLETED**: Replaced dummy marker with `notes.txt` |
+| [`update_python_with_ai/support/lib/build_lint_common.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/support/lib/build_lint_common.py) | Lines 297–303, 2289 | Docstring & marker tuple checks for `MODULE.bazel` | **COMPLETED**: Removed `MODULE.bazel`; relies on `cleanroom_roles.toml`, `cleanroom.toml`, `pyproject.toml`, and `.git` |
+| [`update_python_with_ai/support/lib/cleanroom_role_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/support/lib/cleanroom_role_tool.py) | Line 39 | Checking `os.path.isfile(os.path.join(curr, "MODULE.bazel"))` | **COMPLETED**: Removed `MODULE.bazel` check; checks `cleanroom.toml` |
+| [`update_python_with_ai/support/lib/test_lint.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/support/lib/test_lint.py) | Line 337 | Checking `MODULE.bazel` in repo root marker tuple | **COMPLETED**: Removed `MODULE.bazel` check |
 
-### 3.2 Todo Item Scope & Constraints
-- **Deferred Execution**: As requested, swatting these references is documented as an explicit work item to be executed in a dedicated refactoring turn.
-- **Cascade Rule**: When this item is addressed, it must follow the Mandatory Specification-First rule: update `workspace_registry.md` and `workspace_registry_impl.md` first, then cascade down through planning, low, lib, and tests in `parts/workspace`.
+### 3.2 Todo Item Status
+- **Status**: **COMPLETED**. All residual `MODULE.bazel` references have been eliminated repo-wide outside of design documentation. Full downstream alignment was executed per the Mandatory Specification-First rule, and the complete test suite (368 passed, 9 subtests passed) and pyright (0 errors) pass cleanly via `bin/test`.
 
 ---
 
@@ -398,52 +399,57 @@ When automated checks (`high_lint.py`, `low_lint.py`) or semantic audits in `spe
 The following work items capture the concrete development tasks required to realize this design doc:
 
 ### Phase 1: Tooling & Linters (`update_python_with_ai/support/lib/`)
-- [ ] **Linter Support for Implementation Import Accountability (`high_lint.py`)**:
-  - Update `high_lint.py` Check 5b: Extend import usage checking to `_impl` components.
-  - Parse `low/<name>_impl.pyi` docstrings for `GROUNDING:` sections. Extract all tokenized identifiers.
+- [x] **Linter Support for Implementation Import Accountability (`high_lint.py`) (COMPLETED)**:
+  - Updated `high_lint.py` Check 5b: Extended import usage checking to `_impl` components.
+  - Parse `low/<name>_impl.pyi` docstrings for `GROUNDING:` sections and extract candidate class tokens from dependencies.
   - If an import $C$ in `imports_list` is absent from both AST imports/nodes and docstring `GROUNDING:` text, report error blaming `high/<name>_impl.md` or flagging for Spec QA triage.
-- [ ] **Low-Level Spec Import Usage Checking (`low_lint.py`)**:
-  - Add structural check in `low_lint.py` for `_impl.pyi`: Every imported module must either be utilized in type signatures/inheritance or cited in at least one `GROUNDING:` section.
-- [ ] **Hardcoded Filename Linter Check (`low_lint.py`)**:
-  - Add heuristic check in `low_lint.py` flagging string literals or docstring references matching file extensions (`.json`, `.toml`, `.yaml`, `.bazel`, `.py`, `.md`) or hidden dot-files (`.cleanroom_*`, `.git`) in non-`_ext` specifications unless imported from an `_ext` component.
+- [x] **Low-Level Spec Import Usage Checking (`low_lint.py`) (COMPLETED)**:
+  - Added structural Check 12 in `low_lint.py` for `_impl.pyi`: Every imported module must either be utilized in type signatures/inheritance or cited in at least one `GROUNDING:` section.
+- [x] **Hardcoded Filename Linter Check (`low_lint.py`) (COMPLETED)**:
+  - Added Check 13 in `low_lint.py` flagging string literals and docstrings containing raw host file conventions (`.json`, `.toml`, `.cleanroom_*`, `.git`) in non-`_ext` specifications unless grounded via imported `cleanroom_files_ext`.
 
 ### Phase 2: Pipeline & Role Configuration (`cleanroom_roles.toml`)
-- [ ] **Streamline Assembly Pipeline in `cleanroom_roles.toml`**:
-  - In `[roles.planning]`: Remove `"assembly"` from `active_component_types` (leaving `["implementation", "interface"]`).
-  - In `[roles.scenario]`: Verify `"assembly"` remains absent.
-  - In `[roles.low]`: Retain `"assembly"` in `active_component_types`, updating verification template to ensure `_asm.pyi` passes lightweight structural check against `high/*_asm.md`.
-  - In `[roles.spec_qa]`: Update `verify_template` and logic to skip planning checks when auditing `_asm` targets.
-- [ ] **Assembly Scaffolding in `lib_lint.py`**:
-  - Enhance `lib_lint.py --scaffold` to automatically generate `lib/<name>_asm.py` directly from `low/<name>_asm.pyi` with zero agent intervention needed.
+- [x] **Streamline Assembly Pipeline in `cleanroom_roles.toml` (COMPLETED)**:
+  - In `[roles.planning]`: Removed `"assembly"` from `active_component_types` (leaving `["implementation", "interface"]`).
+  - In `[roles.scenario]`: Verified `"assembly"` remains absent.
+  - In `[roles.low]`: Retained `"assembly"` in `active_component_types`, added `low_lint.py` to `verify_template` alongside pyright to ensure `_asm.pyi` passes lightweight structural check against `high/*_asm.md`.
+  - In `[roles.spec_qa]`: Verified `verify_template` skips planning checks (`! test -f planning/{unit_name}.md`) when auditing `_asm` targets.
+  - Safely retired all 9 redundant `planning/*_asm.md` files across parts directories.
+- [x] **Assembly Scaffolding in `lib_lint.py` (COMPLETED)**:
+  - Verified `lib_lint.py --scaffold` automatically generates `lib/<name>_asm.py` directly from `low/<name>_asm.pyi` with zero agent intervention needed.
 
 ### Phase 3: Guide Updates (`update_python_with_ai/guides/`)
-- [ ] **Update Spec QA Guide (`spec_qa.md`)**:
-  - Add audit rule: Enforce that low-level specifications never hardcode file names not grounded in imported `_ext` components.
-  - Add audit rule: Enforce that all `_impl` imports are accounted for in AST or `GROUNDING:` arguments.
-  - Add triage protocol: Detail when to blame HLS vs Planning vs Low for unaccounted imports.
-  - Document that `_asm` components bypass planning and scenario evaluation.
-- [ ] **Update Planning-to-Low Guide (`planning_to_low.md`)**:
-  - Explicitly document the requirement that `GROUNDING:` sections must mention all imported collaborator components.
-  - Forbid hardcoding file names or format conventions in `low/*.pyi` without importing their defining `_ext` component.
-  - Detail `_asm` low-level spec generation directly from HLS without planning canvases.
-- [ ] **Update High-Level Spec Guide (`high_level_spec.md`)**:
-  - Document that file names, markers, and host conventions belong strictly in `_ext` components.
-  - Reiterate that `_impl` front-matter imports must be strictly necessary and will be verified against low-level `GROUNDING:` arguments.
+- [x] **Update Spec QA Guide (`spec_qa.md`) (COMPLETED)**:
+  - Added audit rule: Enforce that low-level specifications never hardcode file names not grounded in imported `_ext` components.
+  - Added audit rule: Enforce that all `_impl` imports are accounted for in AST or `GROUNDING:` arguments.
+  - Added triage protocol: Detailed when to blame HLS vs Planning vs Low for unaccounted imports.
+  - Documented that `_asm` components bypass planning and scenario evaluation.
+- [x] **Update Planning-to-Low Guide (`planning_to_low.md`) (COMPLETED)**:
+  - Explicitly documented the requirement that `GROUNDING:` sections must mention all imported collaborator components.
+  - Forbade hardcoding file names or format conventions in `low/*.pyi` without importing their defining `_ext` component.
+  - Detailed `_asm` low-level spec generation directly from HLS without planning canvases.
+- [x] **Update High-Level Spec Guide (`high_level_spec.md`) (COMPLETED)**:
+  - Documented that file names, markers, and host conventions belong strictly in `_ext` components.
+  - Reiterated that `_impl` front-matter imports must be strictly necessary and are verified against low-level `GROUNDING:` arguments.
 
 ### Phase 4: Component Refactoring & File Name Grounding
-- [ ] **Create/Consolidate External Boundary for Workspace State (`workspace_state_ext`)**:
-  - Author `high/workspace_state_ext.md` and `low/workspace_state_ext.pyi` defining canonical file names (`.cleanroom_workspaces.json`, `.cleanroom_pending_work.json`, `.cleanroom_blame_buffer.json`, `.cleanroom_role.json`) and their schemas.
-- [ ] **Refactor Workspace Low Stubs to Import `workspace_state_ext`**:
-  - Cascade alignment across `parts/workspace` (`workspace_registry`, `workspace_work`, `workspace_sync`, `workspace_provision`) to import `workspace_state_ext` and eliminate hardcoded string literals.
+- [x] **Create/Consolidate External Boundary (`cleanroom_files_ext`) (COMPLETED)**:
+  - Authored [`high/cleanroom_files_ext.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/core/high/cleanroom_files_ext.md) and [`low/cleanroom_files_ext.pyi`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/core/low/cleanroom_files_ext.pyi) in `parts/core` defining canonical file names (`cleanroom.toml`, `cleanroom_roles.toml`, `.cleanroom_role.json`, `.cleanroom_workspaces.json`, `.cleanroom.log`, `.cleanroom_pending_work.json`, `.cleanroom_blame_buffer.json`) and their schemas.
+  - Aligned `workspace_registry_impl.md` and `uv_manifest_loader_impl.md` to import `cleanroom_files_ext`.
+- [x] **Refactor Remaining Workspace Low Stubs to Import `cleanroom_files_ext` (COMPLETED)**:
+  - Cascaded alignment across `parts/workspace` (`workspace_work`, `workspace_sync`, `workspace_provision`, `workspace_tool` and their `_impl` counterparts) across `high/`, `planning/`, and `low/` to import `cleanroom_files_ext` and eliminate hardcoded file name literals from stubs, contracts, and postconditions.
 
-### Phase 5: Todo Action Item — Swatting Legacy `MODULE.bazel` References
-- [ ] **Update Workspace HLS (`high/workspace_registry_impl.md`)**:
-  - Remove `bazel_manifest_ext` import and "canonical Bazel workspace indicators" text.
-  - Replace with canonical root markers (`cleanroom_roles.toml`, `pyproject.toml`, `.git`).
-- [ ] **Cascade Downstream Alignment for `workspace_registry`**:
-  - `planning/workspace_registry_impl.md`: Replace `MODULE.bazel` in contracts.
-  - `low/workspace_registry.pyi` and `low/workspace_registry_impl.pyi`: Update postconditions and grounding.
-  - `lib/workspace_registry.py`: Update root traversal functions.
-  - `tests/*_test.py`: Update test fixtures to use `pyproject.toml` instead of `MODULE.bazel`.
-- [ ] **Swat `MODULE.bazel` in Support Tools**:
-  - Clean up `support/lib/build_lint_common.py`, `support/lib/cleanroom_role_tool.py`, and `support/lib/test_lint.py`.
+### Phase 5: Swatting Legacy `MODULE.bazel` References
+- [x] **Eradicate Bazel Build System Files (COMPLETED)**:
+  - Deleted `.bazelrc`, `.bazelversion`, `MODULE.bazel`, `MODULE.bazel.lock`, all `BUILD.bazel` files across packages, legacy `parts/bazel` component, and Starlark macros repo-wide.
+- [x] **Update Workspace HLS Imports (COMPLETED)**:
+  - Removed `bazel_manifest_ext` import in `high/workspace_registry_impl.md` and replaced with `cleanroom_files_ext`.
+- [x] **Clean Up Workspace HLS Prose (`high/workspace_registry_impl.md`) (COMPLETED)**:
+  - Replaced line 24 prose "canonical Bazel workspace indicators" with canonical repository root markers (`cleanroom.toml`, `cleanroom_roles.toml`, `pyproject.toml`, `.git`).
+- [x] **Cascade Downstream Alignment for `workspace_registry` (COMPLETED)**:
+  - `planning/workspace_registry_impl.md`: Replaced `MODULE.bazel` in contract `[search_ancestor_markers]`.
+  - `low/workspace_registry.pyi` and `low/workspace_registry_impl.pyi`: Updated postconditions and `GROUNDING:` to reference `cleanroom_files_ext` markers instead of `MODULE.bazel`.
+  - `lib/workspace_registry_impl.py`: Updated root traversal functions (`_search_ancestor_markers`, `_fallback_to_ambient_working_directory`, and lines 554, 562, 578) to eliminate `MODULE.bazel` checks and correctly search ancestor directories.
+  - `tests/*_test.py`: Updated `workspace_provision_impl_test.py` and `workspace_sync_impl_test.py` test fixtures to use `notes.txt` / cleanroom configuration instead of `MODULE.bazel`.
+- [x] **Swat `MODULE.bazel` in Support Tools (COMPLETED)**:
+  - Cleaned up `support/lib/build_lint_common.py`, `support/lib/cleanroom_role_tool.py`, and `support/lib/test_lint.py`.

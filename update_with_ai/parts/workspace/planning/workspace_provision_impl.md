@@ -1,16 +1,16 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T04:08:00Z
 CHANGE: Contract working tree type-checking coverage and missing target skeleton synthesis
-CODE_HASH: 179250cd2358
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: 97c84beec4f7
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_provision_impl implementation component
 
 ## Intent
 
-Provisioning isolated role workspaces requires precise file-level permission control to prevent agent hallucinations from overwriting immutable upstream contracts or deleting build rules. Incomplete workspace preparation or dangling file handles can cause agent sessions to fail on startup or corrupt subsequent runs. The workspace_provision_impl implementation component creates directory trees, selectively copies source files and build configurations, applies read-only attributes to upstream dependencies, embeds self-contained zipapp runner wrappers in bin/, and writes .cleanroom_role.json.
+Provisioning isolated role workspaces requires precise file-level permission control to prevent agent hallucinations from overwriting immutable upstream contracts or deleting build rules. Incomplete workspace preparation or dangling file handles can cause agent sessions to fail on startup or corrupt subsequent runs. The workspace_provision_impl implementation component creates directory trees, selectively copies source files and build configurations, applies read-only attributes to upstream dependencies, embeds self-contained zipapp runner wrappers in bin/, and writes the role descriptor file designated by cleanroom_files_ext.
 
 ## Factored Contracts
 
@@ -23,7 +23,7 @@ Provisioning isolated role workspaces requires precise file-level permission con
 - The workspace provisioner copies files with permissions set to 0o444 for read-only contracts. [copy_file_with_read_perms]
 - The workspace provisioner synthesizes read-only test stubs with NotImplementedError from companion specifications for stub role dependencies. [synthesize_stub_role_dependencies]
 - The workspace provisioner creates executable zipapps containing __main__.py invoking cleanroom_role_tool. [package_runner_zipapps]
-- The workspace provisioner writes role metadata JSON containing main root and directory scope to .cleanroom_role.json. [serialize_role_descriptor]
+- The workspace provisioner writes role metadata JSON containing main root and directory scope to cleanroom_files_ext.ROLE_DESCRIPTOR_FILE. [serialize_role_descriptor]
 - The workspace provisioner formats AGENTS.md markdown with role constraints, strict boundary rules, a contamination tripwire, a fail-stop reporting protocol, and tool execution instructions. [format_role_agents_markdown]
 
 ### Woven Contracts
@@ -45,5 +45,7 @@ Provisioning isolated role workspaces requires precise file-level permission con
 
 ### Knowledge Requirements
 
+- Role descriptor file naming conventions.
+  - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Writing files and altering permissions on the local filesystem.
   - Grounded: [workspace_filesystem_mechanics]

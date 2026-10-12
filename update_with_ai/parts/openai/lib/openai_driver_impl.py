@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
-# LAST_CHANGED: 2026-10-11T05:42:32Z
-# CHANGE: Append a length-truncated model response to the conversation even when it carries no tool calls, so the continuation turn follows the response it continues
+# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CHANGED: 2026-10-12T12:05:00Z
+# CHANGE: Rebuild tools payload on each turn to reflect dynamically installed tools
 # CODE_HASH: 7645fbcc65af
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 import json
@@ -377,8 +377,6 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
         tool_mgr = get_singleton(tool_provider.ToolManager)
 
         client: Any = OpenAI(api_key=openai_cfg.api_key or "none", base_url=openai_cfg.base_url, timeout=float(openai_cfg.timeout)) if OpenAI is not None else None
-        tools_payload = _build_tools_payload(tool_mgr)
-
         limit = agent_cfg.conversation_limit
         self._turn_count = 0
         consecutive_truncations = 0
@@ -388,6 +386,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
         while self._turn_count < limit:
             self._turn_count += 1
             turns = self._turn_count
+            tools_payload = _build_tools_payload(tool_mgr)
             messages_payload = _build_messages_payload(history)
             token_summary, token_transcript = _token_usage_summary(last_turn_prompt_tokens, last_turn_cached_tokens)
             logger.consume(_log_event("model_request", f"[Turn {turns}] Model request: {token_summary}", f"=== Turn {turns} Request ===\nMessages: {len(messages_payload)}\nTools: {len(tools_payload)}\n{token_transcript}"))

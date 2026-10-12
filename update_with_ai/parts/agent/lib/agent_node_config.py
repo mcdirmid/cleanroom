@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T04:59:26Z
 # CHANGE: Drop the dead tier import and the generated scaffold markers from the node configuration interface
 # CODE_HASH: ba825866b221

@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: f124a1762da3
+# CODE_HASH: 5ada9c3d5e49
 # --- END CLEANROOM METADATA ---
 
 """
@@ -51,6 +51,12 @@ The `cleanroom_files_ext` external component specifies the filesystem schema, st
 
 - `CLEANROOM_LOG_FILE: str = ".cleanroom.log"`:
   Append-only change and feedback diagnostic log file located in package or parts directories.
+
+- `PENDING_WORK_FILE: str = ".cleanroom_pending_work.json"`:
+  Pending work targets file holding a serialized JSON array of target strings.
+
+- `BLAME_BUFFER_FILE: str = ".cleanroom_blame_buffer.json"`:
+  Buffered feedback critiques file holding serialized diagnostic feedback records for multi-workspace synchronization.
 
 ## Build Dependencies
 

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
 # CODE_HASH: 57e3149ecc1c
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for uv_model_config_impl aligned with grounding specifications."""
@@ -43,19 +43,9 @@ class UvModelConfigImplTest(unittest.TestCase):
             "CLEANROOM_MODEL",
             "CLEANROOM_MODEL_CONFIG_FILE",
             "MODEL_CONFIG_TARGET",
-            "AGENT_CONFIG_TARGET",
             "OPENAI_MODEL",
-            "CLEANROOM_MODEL_NAME",
             "OPENAI_BASE_URL",
-            "OPENAI_API_BASE",
             "OPENAI_API_KEY",
-            "AGENT_API_KEY",
-            "CLEANROOM_TIMEOUT",
-            "CLEANROOM_TEMPERATURE",
-            "CLEANROOM_MAX_TOKENS",
-            "CLEANROOM_CONVERSATION_LIMIT",
-            "CLEANROOM_NODE_VISIT_LIMIT",
-            "CLEANROOM_BATCH_SIZE",
         ]:
             os.environ.pop(var, None)
         sys.argv = ["cleanroom-loop"]
@@ -84,7 +74,7 @@ class UvModelConfigImplTest(unittest.TestCase):
 
             self.assertEqual(agent_cfg.conversation_limit, 20)
             self.assertTrue(agent_cfg.inject_followups)
-            self.assertFalse(agent_cfg.is_step_mode)
+            self.assertTrue(agent_cfg.is_step_mode)
             self.assertTrue(agent_cfg.is_startup_reads)
             self.assertTrue(agent_cfg.edit_delta_output)
             self.assertEqual(agent_cfg.supersede_arg_keep, 1000)
@@ -93,17 +83,11 @@ class UvModelConfigImplTest(unittest.TestCase):
             self.assertEqual(dag_cfg.batch_size, 1)
 
     def test_environment_variable_overrides(self) -> None:
-        """Overriding configuration parameters via direct ambient environment variables."""
+        """Overriding model, base url, and api key via ambient environment variables."""
         os.environ["CLEANROOM_MODEL_CONFIG_FILE"] = "/tmp/nonexistent_models_12345.toml"
         os.environ["OPENAI_MODEL"] = "custom-test-model"
         os.environ["OPENAI_BASE_URL"] = "http://localhost:9999/v1"
         os.environ["OPENAI_API_KEY"] = "sk-custom-secret"
-        os.environ["CLEANROOM_TIMEOUT"] = "45.5"
-        os.environ["CLEANROOM_TEMPERATURE"] = "0.2"
-        os.environ["CLEANROOM_MAX_TOKENS"] = "2048"
-        os.environ["CLEANROOM_CONVERSATION_LIMIT"] = "15"
-        os.environ["CLEANROOM_NODE_VISIT_LIMIT"] = "50"
-        os.environ["CLEANROOM_BATCH_SIZE"] = "3"
 
         reg = LifecycleRegistry()
         __initialize__(reg)
@@ -116,13 +100,14 @@ class UvModelConfigImplTest(unittest.TestCase):
             self.assertEqual(openai_cfg.model_name, "custom-test-model")
             self.assertEqual(openai_cfg.base_url, "http://localhost:9999/v1")
             self.assertEqual(openai_cfg.api_key, "sk-custom-secret")
-            self.assertEqual(openai_cfg.timeout, 45.5)
-            self.assertEqual(openai_cfg.temperature, 0.2)
-            self.assertEqual(openai_cfg.max_tokens, 2048)
+            self.assertEqual(openai_cfg.timeout, 60.0)
+            self.assertEqual(openai_cfg.temperature, 0.7)
+            self.assertIsNone(openai_cfg.max_tokens)
 
-            self.assertEqual(agent_cfg.conversation_limit, 15)
-            self.assertEqual(dag_cfg.node_visit_limit, 50)
-            self.assertEqual(dag_cfg.batch_size, 3)
+            self.assertEqual(agent_cfg.conversation_limit, 20)
+            self.assertTrue(agent_cfg.is_step_mode)
+            self.assertEqual(dag_cfg.node_visit_limit, 100)
+            self.assertEqual(dag_cfg.batch_size, 1)
 
     def test_load_from_toml_file(self) -> None:
         """Loading named model configurations from a TOML configuration file."""
@@ -259,7 +244,6 @@ api_key = "direct-key"
             os.environ.pop("OPENAI_MODEL", None)
             os.environ.pop("OPENAI_BASE_URL", None)
             os.environ.pop("OPENAI_API_KEY", None)
-            os.environ.pop("AGENT_API_KEY", None)
             sys.argv = ["cleanroom-loop", "--config", "standalone"]
 
             reg = LifecycleRegistry()
@@ -287,7 +271,6 @@ api_key = "direct-key"
             os.environ.pop("CLEANROOM_MODEL_CONFIG_FILE", None)
             os.environ.pop("CLEANROOM_MODEL", None)
             os.environ.pop("MODEL_CONFIG_TARGET", None)
-            os.environ.pop("AGENT_CONFIG_TARGET", None)
             os.environ.pop("OPENAI_MODEL", None)
             sys.argv = ["cleanroom-loop"]
 
@@ -372,7 +355,34 @@ api_key = "direct-key"
                 openai_cfg2 = scope2.get_singleton(OpenAIConfig)
                 self.assertEqual(openai_cfg2.model_name, "Cleanroom-Config-Model")
 
+    def test_step_mode_disabled_via_toml(self) -> None:
+        """Verifying that is_step_mode = false in TOML explicitly disables step mode."""
+        toml_content = """
+default = "no-step"
 
+[models.no-step]
+model = "no-step-model"
+is_step_mode = false
+"""
+        with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            temp_path = f.name
+
+        try:
+            os.environ["CLEANROOM_MODEL_CONFIG_FILE"] = temp_path
+            sys.argv = ["cleanroom-loop"]
+
+            reg = LifecycleRegistry()
+            __initialize__(reg)
+
+            with enter_phase("system", registry=reg) as scope:
+                agent_cfg = scope.get_singleton(AgentConfig)
+                self.assertFalse(agent_cfg.is_step_mode)
+                self.assertTrue(agent_cfg.inject_followups)
+                self.assertTrue(agent_cfg.is_startup_reads)
+                self.assertTrue(agent_cfg.edit_delta_output)
+        finally:
+            os.unlink(temp_path)
 
 
 if __name__ == "__main__":

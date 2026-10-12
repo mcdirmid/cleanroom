@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
-# LAST_CHANGED: 2026-10-11T06:00:12Z
-# CHANGE: Restrict the no-inlined-content constraint to the compact summary, leaving the verbose transcript free of unmandated content constraints
+# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CHANGED: 2026-10-12T12:05:00Z
+# CHANGE: Verify completion requests reflect tools installed dynamically across turns
 # CODE_HASH: 6dd1c7937e4b
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for openai_driver_impl aligned with grounding specifications."""
@@ -1378,6 +1378,56 @@ class OpenAIDriverImplTest(unittest.TestCase):
                 tools_arg[1]["function"]["parameters"]["properties"].keys()
             )
             self.assertEqual(zebra_params, ["z_param", "a_param"])
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_completion_request_updates_tools_payload_when_tools_installed_dynamically(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        """Postcondition: completion requests reflect tools installed dynamically across turns."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        tc1 = DummyToolCall(id="call_initial", name="initial_tool", arguments="{}")
+        comp1 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc1]))])
+        tc2 = DummyToolCall(id="call_dyn", name="dynamic_tool", arguments="{}")
+        comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc2]))])
+        mock_client.chat.completions.create.side_effect = [comp1, comp2]
+
+        tool_initial = DummyTool(name="initial_tool")
+        tool_dynamic = DummyTool(name="dynamic_tool")
+        self.tool_mgr.install_tool(tool_initial)
+
+        def handle_initial(_bindings: Any) -> ToolResponse:
+            self.tool_mgr.install_tool(tool_dynamic)
+            return ToolResponse(
+                is_failed=False,
+                is_terminated=False,
+                content=ToolResponseContent("Installed dynamic"),
+            )
+
+        self.tool_mgr.handlers["initial_tool"] = handle_initial
+        self.tool_mgr.responses["dynamic_tool"] = ToolResponse(
+            is_failed=False,
+            is_terminated=True,
+            content=ToolResponseContent("Finished"),
+        )
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(LoopDriver)
+            outcome = runner.run()
+
+            self.assertTrue(outcome.response.is_terminated)
+            self.assertEqual(mock_client.chat.completions.create.call_count, 2)
+            turn1_tools = [
+                t["function"]["name"]
+                for t in mock_client.chat.completions.create.call_args_list[0].kwargs["tools"]
+            ]
+            self.assertEqual(turn1_tools, ["initial_tool"])
+            turn2_tools = [
+                t["function"]["name"]
+                for t in mock_client.chat.completions.create.call_args_list[1].kwargs["tools"]
+            ]
+            self.assertEqual(turn2_tools, ["dynamic_tool", "initial_tool"])
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
     def test_tool_execution_logs_corrective_reminder_in_transcript(

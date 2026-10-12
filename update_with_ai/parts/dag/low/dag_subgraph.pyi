@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T03:51:54Z
 # CHANGE: Contract the empty next ready batch when no dirty node has all target subgraph dependencies clean
 # CODE_HASH: 72477e259262
-# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Dag subgraph low-level interface specification."""

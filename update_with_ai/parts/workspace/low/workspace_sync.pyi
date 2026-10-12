@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T03:37:02Z
 # CHANGE: Align synchronizer typing and test stub integrity; remove unused import
-# CODE_HASH: eb20a4d04dad
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: b8d989bd9284
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_sync."""
@@ -13,6 +13,7 @@ from typing import Protocol, Sequence
 from framework import data_type, operation, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import cleanroom_files_ext
 
 
 @data_type
@@ -107,10 +108,11 @@ class WorkspaceSynchronizer(InTier[AgentSessionTier], Protocol):
         """Flushes buffered blame feedback entries from workspace into main.
 
         POSTCONDITIONS:
-        - WHEN the role workspace contains .cleanroom_blame_buffer.json, MUST parse buffered
-          blame entries.
+        - WHEN the role workspace contains the blame buffer file designated by cleanroom_files_ext,
+          MUST parse buffered blame entries.
         - MUST append unacted feedback to culprit files in the canonical main repository.
-        - MUST remove .cleanroom_blame_buffer.json upon successful application.
+        - MUST remove the blame buffer file designated by cleanroom_files_ext upon successful
+          application.
         - MUST return the sequence of culprit file paths receiving appended feedback.
         """
         ...

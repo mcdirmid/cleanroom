@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T03:48:24Z
 # CHANGE: Import file_paths and cite its real path resolution members in read realizations
 # CODE_HASH: 3dc6e437ac6d
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file reader implementation low-level specification."""

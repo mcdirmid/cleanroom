@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
-LAST_CHANGED: 2026-10-11T03:11:00Z
-CHANGE: Drop planning front-matter, repair phantom dag storage citations, and contract submit verification refresh
+LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CHANGED: 2026-10-12T11:59:00Z
+CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
 CODE_HASH: 6461d21f2e43
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # sandbox_run_control_impl implementation component
@@ -76,7 +76,7 @@ By providing atomic failure handling for out-of-order execution, preventing subm
 - When no dirty nodes are ready, the get work tool produces an idle response. [get_work_produces_idle_response]
 - The get work tool materializes startup templates on disk through dag storage. [get_work_materializes_templates_via_storage]
 - When ready dirty nodes are obtained and guide step mode is inactive, the get work tool returns the task primer with guide file attribution. [get_work_returns_primer_with_guide_file]
-- When ready dirty nodes are obtained and guide step mode is active, the get work tool returns the task primer prompting advance. [get_work_returns_primer_with_advance_prompt]
+- When ready dirty nodes are obtained and guide step mode is active, the get work tool installs the advance tool and returns the task primer prompting advance. [get_work_returns_primer_with_advance_prompt]
 
 ### Woven Contracts
 

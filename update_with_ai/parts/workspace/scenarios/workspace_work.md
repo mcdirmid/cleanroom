@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T03:06:09Z
 CHANGE: Align workspace_work interface scenarios with the high-level specification
 CODE_HASH: 0348960327ce

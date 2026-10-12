@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T16:00:00Z
 # CHANGE: add verification check execution and no_verify parameter to run_submit grounding
-# CODE_HASH: 727fcdb047ed
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 96611b73f195
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_tool_impl."""
@@ -12,6 +12,7 @@ from typing import Optional, Sequence
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import cleanroom_files_ext
 import workspace_tool
 import workspace_registry
 import workspace_provision
@@ -96,7 +97,7 @@ class WorkspaceToolRunner(
 
         GROUNDING:
         - Validates target, executes role verification checks unless bypassed, delegates submission to control_submit.SubmissionCoordinator,
-          appends submission message to .cleanroom.log in the directory containing parts,
+          appends submission message to cleanroom_files_ext.CLEANROOM_LOG_FILE in the directory containing parts,
           clears target via workspace_work.WorkspaceWorkManager, and updates local file.
         """
         ...
@@ -114,7 +115,7 @@ class WorkspaceToolRunner(
         GROUNDING:
         - Validates single-paragraph critique, delegates attribution to
           control_attribution.AttributionCoordinator, appends blame message to
-          .cleanroom.log in the directory containing parts, and clears target from pending work.
+          cleanroom_files_ext.CLEANROOM_LOG_FILE in the directory containing parts, and clears target from pending work.
         """
         ...
 

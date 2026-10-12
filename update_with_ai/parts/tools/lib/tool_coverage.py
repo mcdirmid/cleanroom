@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:20:45Z
 # CHANGE: Remove the undeclared module-level delegation API and its cached evaluator global so the interface holds only the declared coverage record and evaluator protocol
 # CODE_HASH: 0bd1d982431a

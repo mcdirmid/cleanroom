@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:02Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
-# CODE_HASH: 5d74dff53adc
-# SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+# CODE_HASH: 61c72f35cd11
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for src_metadata_impl."""
@@ -14,6 +14,7 @@ from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import src_metadata
+import src_metadata_ext
 
 
 @singleton_type("agent_session")
@@ -25,7 +26,7 @@ class SourceMetadataCoordinator(
 
     GROUNDING:
     - Realizes in-band source file metadata parsing, deterministic code hashing, and in-place
-      rewriting by identifying HTML and line hash comment delimiters, locating boundary indices,
+      rewriting conforming to comment delimiters and grammar rules from src_metadata_ext, locating boundary indices,
       extracting code bodies, computing SHA-256 digests, and updating header blocks on disk.
     """
 

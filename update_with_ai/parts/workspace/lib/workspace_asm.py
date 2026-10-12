@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:04:06Z
 # CHANGE: Delegate assembly initialization through CONSTITUENTS instead of re-registering each constituent singleton inline
 # CODE_HASH: f442c97be40f

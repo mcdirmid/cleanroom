@@ -17,7 +17,17 @@
 ## Mandatory Specification-First (HLS-First) Rule
 
 - **ALWAYS start with HLS changes when changing code in a parts directory**: Never make stealth changes to library code (`lib/*.py`) or unit tests (`tests/*_test.py`) without first authoring and aligning the corresponding High-Level Specification (`high/*.md`).
-- **Automatic Downstream Alignment**: Whenever changes are made to HLS files (`high/*.md`), immediately and automatically cascade alignment across the entire downstream pipeline: `HLS` (`high/*.md`) $\to$ `Planning` (`planning/*.md`) $\to$ `Low` (`low/*.pyi`) $\to$ `Spec QA` $\to$ `Library` (`lib/*.py`) $\to$ `Unit Tests` (`tests/*_test.py`). Do not stop after editing HLS files or wait for separate prompts to complete downstream alignment.
+- **Every Bug or Defect is a Specification Defect**: Do NOT treat bug fixing, troubleshooting, or runtime failures as an excuse to jump directly to patching `lib/*.py` or `tests/*_test.py`. If code behaved incorrectly, determine what high-level behavioral contract was omitted or violated, author the change in `high/*.md` first, and cascade down.
+- **Automatic Downstream Alignment**: Whenever changes are made to HLS files (`high/*.md`), immediately and automatically cascade alignment across the entire downstream pipeline: `HLS` (`high/*.md`) $\to$ `Planning` (`planning/*.md`) $\to$ `Scenarios` (`scenarios/*.md`) $\to$ `Low` (`low/*.pyi`) $\to$ `Spec QA` $\to$ `Library` (`lib/*.py`) $\to$ `Unit Tests` (`tests/*_test.py`). Do not stop after editing HLS files or wait for separate prompts to complete downstream alignment.
+- **Pre-Edit Gate (STOP before touching `lib/` or `tests/`)**: Before editing any file under `parts/*/lib/` or `parts/*/tests/`, verify:
+  1. Has the corresponding `high/*.md` been authored first, with planning, scenarios, and low specifications aligned?
+  2. Or are you specifically dealing with preexisting uncontracted code?
+  If neither, **STOP**. Author the HLS change first.
+
+## Handling Uncontracted Code
+
+- **Permitted to Delete**: When specifically discovering preexisting uncontracted code in `lib/` or `tests/`, you are fully permitted to delete it if it is unneeded, redundant, or uncontracted fallback logic.
+- **Retrofitting Contracts is Discouraged but Permitted**: Retrofitting contracts backwards from code to spec is discouraged, but is sometimes the only way to deal with essential uncontracted code that must be preserved. When retrofitting, author the missing contracts up the ladder (`low/`, `scenarios/`, `planning/`, `high/`) so the functionality is no longer uncontracted. Once retrofitted, all subsequent changes must follow the strict HLS-first rule.
 
 ## Semantic Analysis Over Syntactic Checking (Anti-Mechanistic Rule)
 
@@ -41,13 +51,13 @@ Always read and maintain in context the relevant guide from `update_python_with_
 - **QA Verification**: `update_python_with_ai/guides/qa.md`
 - **Coverage Arbiter**: `update_python_with_ai/guides/coverage.md`
 
-## Bazel Test Execution Flags
+## Test Execution (bin/test)
 
-- **Required Flags**: When running tests via `bazel test`, ALWAYS include `--test_output=errors --test_timeout=100` and `--noshow_progress --noshow_loading_progress`.
+- **Required Test Runner**: Use `bin/test` to run repo verification and tests cleanly.
 
 ## Local Python Linter Invocations (test_lint.py)
 
-- **Required PYTHONPATH**: When running `test_lint.py` directly outside of Bazel (such as during dry-run collection verification), ensure `PYTHONPATH` includes `update_python_with_ai` and all constituent library directories (`update_with_ai/parts/*/lib` or package roots) to prevent cross-package `ModuleNotFoundError` during test module dry runs.
+- **Required PYTHONPATH**: When running `test_lint.py` directly (such as during dry-run collection verification), ensure `PYTHONPATH` includes `update_python_with_ai` and all constituent library directories (`update_with_ai/parts/*/lib` or package roots) to prevent cross-package `ModuleNotFoundError` during test module dry runs.
 
 ## DO NOT EDIT pyrightconfig.json to fix type problems!
 

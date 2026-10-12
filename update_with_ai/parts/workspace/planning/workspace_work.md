@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-10T19:00:00Z
 CHANGE: factor implicit role dirtiness and star role dependency dirtiness contracts
-CODE_HASH: ce045be1a107
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: 3416e818a18d
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_work interface component
@@ -22,14 +22,14 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 
 ### Contracts
 
-- The workspace work manager inspects .cleanroom_pending_work.json to check whether pending targets remain dirty. [check_pending_work_status]
-- The workspace work manager clears .cleanroom_pending_work.json when no pending targets remain dirty. [clear_pending_work_buffer]
+- The workspace work manager inspects the pending work buffer file designated by cleanroom_files_ext to check whether pending targets remain dirty. [check_pending_work_status]
+- The workspace work manager clears the pending work buffer file designated by cleanroom_files_ext when no pending targets remain dirty. [clear_pending_work_buffer]
 - The workspace work manager invokes directory-scoped work discovery to compute ready and blocked units. [discover_directory_scope_work]
 - The workspace work manager resolves companion upstream specification contract files and interface definitions for target units dynamically from workspace_registry. [resolve_unit_contract_files]
 - The workspace work manager filters cross-unit dependencies based on star_role_deps and silent_cross_role_deps from workspace_registry. [filter_role_dependencies]
 - The workspace work manager enforces fail-loud role resolution without synthetic fallbacks. [enforce_strict_role_resolution]
 - The workspace work manager materializes starter templates via graph storage for missing ready target files. [materialize_ready_target_templates]
-- The workspace work manager records ready targets into .cleanroom_pending_work.json upon discovery. [record_ready_targets_buffer]
+- The workspace work manager records ready targets into the pending work buffer file designated by cleanroom_files_ext upon discovery. [record_ready_targets_buffer]
 - The workspace work manager formats actionable diagnostic next steps for ready and blocked queue items. [format_work_queue_diagnostics]
 - The workspace work manager records assigned target paths into the pending work buffer file. [set_pending_work_targets]
 - The workspace work manager removes a resolved target path from the pending work buffer file. [remove_pending_target_path]
@@ -54,5 +54,7 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 
 ### Knowledge Requirements
 
+- Layout conventions and state marker constants for Cleanroom workspace files.
+  - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Persistence and evaluation of pending target lists on disk.
   - Deferred: Provided by workspace work manager implementation.

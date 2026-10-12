@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T16:00:00Z
 CHANGE: update execute_submit_command contract for verification gating and bypass
-CODE_HASH: 543128dee740
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: 7d5eefb7b555
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_tool interface component
@@ -44,3 +44,5 @@ Autonomous subagents executing inside isolated Cleanroom role workspaces rely on
 
 - Agent session lifecycle phase and context management.
   - Grounded: [agent_session: [agent_session_tier_provision]]
+- Cleanroom log file naming conventions.
+  - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]

@@ -334,7 +334,7 @@ def main() -> int:
             while curr and curr != os.path.dirname(curr):
                 if any(
                     os.path.isfile(os.path.join(curr, marker))
-                    for marker in ("MODULE.bazel", "pyproject.toml", "cleanroom_roles.toml")
+                    for marker in ("cleanroom.toml", "pyproject.toml", "cleanroom_roles.toml")
                 ):
                     repo_root = curr
                     break

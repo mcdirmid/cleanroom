@@ -36,7 +36,7 @@ def _get_roots() -> list[str]:
                 pass
             roots.append(curr)
             break
-        if os.path.isfile(os.path.join(curr, "pyproject.toml")) or os.path.isfile(os.path.join(curr, "MODULE.bazel")):
+        if os.path.isfile(os.path.join(curr, "pyproject.toml")) or os.path.isfile(os.path.join(curr, "cleanroom.toml")):
             roots.append(curr)
             break
         curr = os.path.dirname(curr)

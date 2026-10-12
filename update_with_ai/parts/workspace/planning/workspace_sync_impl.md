@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-09T02:39:58Z
 CHANGE: recopy AGENTS.md with contamination tripwires during fast refresh
-CODE_HASH: 226d81b02c0c
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: c760964d086a
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_sync_impl implementation component
@@ -23,7 +23,7 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 - The workspace synchronizer compares main repository code hashes against workspace baselines to detect concurrent edits. [compare_main_and_workspace_hashes]
 - The workspace synchronizer copies validated target files into the canonical repository and updates in-band clean timestamps. [copy_validated_files_to_main]
 - The workspace synchronizer calls stamp_audit and update_metadata on audited target files for auditor roles. [stamp_audit_on_targets]
-- The workspace synchronizer parses .cleanroom_blame_buffer.json and appends unacted feedback to culprit files in main. [process_blame_buffer_entries]
+- The workspace synchronizer parses the local blame buffer file and appends unacted feedback to culprit files in main. [process_blame_buffer_entries]
 
 ### Woven Contracts
 
@@ -48,5 +48,7 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 - Inspection and mutation of in-band source metadata headers.
   - Grounded: [src_metadata: [source_metadata_service]]
+- Workspace state and blame buffer file naming conventions.
+  - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Filesystem reading, writing, and permission manipulation.
   - Grounded: [workspace_pull_algorithms, workspace_harvest_algorithms]

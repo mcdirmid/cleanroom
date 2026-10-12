@@ -5,8 +5,6 @@ Guarantees across the canonical codebase (update_with_ai and update_python_with_
 1. Zero staging imports in any Python or specification file.
 2. Library encapsulation: Non-assembly modules (lib/*.py) never import foreign *_impl modules.
 3. Test isolation: Test modules (tests/*_test.py) only import their target under test.
-4. Build derivation: All lib/BUILD.bazel targets are strictly derived from parent specifications.
-5. Test build derivation: All tests/BUILD.bazel targets are strictly derived from parent specifications.
 """
 
 import glob
@@ -31,8 +29,8 @@ def find_repo_root() -> str:
     cur = os.path.abspath(os.path.dirname(__file__))
     while cur and cur != os.path.dirname(cur):
         if os.path.isdir(os.path.join(cur, "update_with_ai")) and (
-            os.path.isfile(os.path.join(cur, "MODULE.bazel"))
-            or os.path.isfile(os.path.join(cur, "WORKSPACE"))
+            os.path.isfile(os.path.join(cur, "cleanroom.toml"))
+            or os.path.isfile(os.path.join(cur, "pyproject.toml"))
         ):
             return cur
         cur = os.path.dirname(cur)
@@ -141,38 +139,6 @@ class ImportBoundariesLintTest(unittest.TestCase):
         if errors:
             self.fail(
                 f"Discovered {len(errors)} prohibited test implementation import(s):\n"
-                + "\n".join(errors)
-            )
-
-    def test_all_lib_build_targets_derived(self) -> None:
-        """Rule 4: All lib/BUILD.bazel targets and pyright_deps must be strictly derived."""
-        errors: list[str] = []
-        for root_dir in ["update_with_ai", "update_python_with_ai"]:
-            pattern = os.path.join(REPO_ROOT, root_dir, "parts", "*", "lib", "BUILD.bazel")
-            for build_file in glob.glob(pattern):
-                parent_build = os.path.join(os.path.dirname(os.path.dirname(build_file)), "BUILD.bazel")
-                if os.path.isfile(parent_build):
-                    errors.extend(check_lib_targets(build_file, parent_build, workspace_root=REPO_ROOT))
-
-        if errors:
-            self.fail(
-                f"Discovered {len(errors)} underived library target error(s):\n"
-                + "\n".join(errors)
-            )
-
-    def test_all_test_build_targets_derived(self) -> None:
-        """Rule 5: All tests/BUILD.bazel targets and pyright_deps must be strictly derived."""
-        errors: list[str] = []
-        for root_dir in ["update_with_ai", "update_python_with_ai"]:
-            pattern = os.path.join(REPO_ROOT, root_dir, "parts", "*", "tests", "BUILD.bazel")
-            for build_file in glob.glob(pattern):
-                parent_build = os.path.join(os.path.dirname(os.path.dirname(build_file)), "BUILD.bazel")
-                if os.path.isfile(parent_build):
-                    errors.extend(check_test_targets(build_file, parent_build, workspace_root=REPO_ROOT))
-
-        if errors:
-            self.fail(
-                f"Discovered {len(errors)} underived test target error(s):\n"
                 + "\n".join(errors)
             )
 

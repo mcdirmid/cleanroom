@@ -20,6 +20,7 @@ Classes, type parameters, properties, operations, and tier memberships materiali
 - [ ] Top-level statements consist strictly of imports, classes, type aliases, at most one `def __orphan__() -> None:` (non-assembly specs), at most one `def __initialize__() -> None:` (assembly specs `<name>_asm.pyi`), and optional module docstrings
 - [ ] In implementation specifications (`<name>_impl.pyi`), top-level imports declare all non-external modules specified in front-matter `imports:` of the high-level specification (`high/<name>_impl.md`)
 - [ ] In implementation specifications (`<name>_impl.pyi`), every imported module must be used in the AST or cited in at least one `GROUNDING:` docstring
+- [ ] Hardcoded host file check: non-external specifications must not contain hardcoded file names, configuration markers, or persistence files unless imported from an external boundary specification (e.g. `cleanroom_files_ext`)
 - [ ] Implementation stubs maintain 1:1 member parity with their implemented interface: every `@property` and `@operation` declared on an interface class must have an `@override` member on the implementing class
 - [ ] External specification stubs (`<name>_ext.pyi`) contain strictly a module docstring with `## External Mechanics & API Documentation`, `## Build Dependencies`, and `## Usage Snippets` sections without Python AST code
 - [ ] Top-level `__orphan__()` and `__initialize__()` take no parameters, return `None`, have no decorators, and contain strictly a docstring followed by `...`
@@ -89,7 +90,7 @@ Classes, type parameters, properties, operations, and tier memberships materiali
 
 ## Grounding arguments in implementation specifications
 
-- [ ] Implementation stubs (`low/<name>_impl.pyi`) synthesize grounded knowledge requirements into natural language arguments under `GROUNDING:` in class and member docstrings
+- [ ] Implementation stubs (`low/<name>_impl.pyi`) synthesize grounded knowledge requirements into natural language arguments under `GROUNDING:` in class and member docstrings, explicitly mentioning all imported collaborator components
 - [ ] `GROUNDING:` sections appear strictly in implementation stubs (`low/<name>_impl.pyi`) and are strictly prohibited in interface stubs (`low/<name>.pyi`)
 - [ ] `GROUNDING:` arguments explicitly name imported components, collaborator classes, and collaborator methods/properties
 - [ ] Grounding citations must cite valid `Class.member` or `module.member` tokens that genuinely exist on the referenced component specification

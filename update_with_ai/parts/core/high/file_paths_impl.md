@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T01:51:09Z
 CHANGE: Remove interface-restated catalogs and keep only implementation-specific validation and normalization behavior
 CODE_HASH: b34d186d1ab4
-SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # file_paths_impl implementation component

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T04:14:50Z
 # CHANGE: Contract role metadata descriptor and sibling workspace root discovery
-# CODE_HASH: 4209a293c737
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 4fdbb00b5cc5
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_registry_impl."""
@@ -12,6 +12,7 @@ from typing import Optional, Sequence
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import cleanroom_files_ext
 import file_paths
 import workspace_registry
 
@@ -31,7 +32,7 @@ class WorkspaceRegistry(
       match_sibling_workspace_conventions, fallback_to_ambient_working_directory,
       parse_role_definitions, normalize_role_identifier, sanitize_directory_folder_name,
       write_json_registry_atomically, and read_json_registry_descriptors mechanics over
-      the .cleanroom_workspaces.json registry file held beneath the canonical repository
+      the cleanroom_files_ext.WORKSPACES_REGISTRY_FILE registry file held beneath the canonical repository
       root.
     - Backs active workspace tracking with an in-memory workspace descriptor collection
       keyed by workspace directory, hydrated through read_json_registry_descriptors and
@@ -60,11 +61,12 @@ class WorkspaceRegistry(
         GROUNDING:
         - Searches upward from the caller-supplied start_dir, or from the ambient current
           working directory when start_dir is absent, testing each ancestor directory for
-          MODULE.bazel or .git repository markers to distinguish a canonical repository
-          from a projected role workspace, and falls back to the ambient working directory
-          when the ancestor walk reaches the filesystem root without a marker.
+          Cleanroom configuration files from cleanroom_files_ext (such as cleanroom_files_ext.CLEANROOM_CONFIG_FILE,
+          cleanroom_files_ext.CLEANROOM_ROLES_FILE), pyproject.toml, or git repository markers to distinguish
+          a canonical repository from a projected role workspace, and falls back to the
+          ambient working directory when the ancestor walk reaches the filesystem root without a marker.
         - Inspects the role metadata descriptors carried by the enclosing isolated role
-          workspace, reading the role metadata JSON recorded at .cleanroom_role.json in the
+          workspace, reading the role metadata JSON recorded at cleanroom_files_ext.ROLE_DESCRIPTOR_FILE in the
           role workspace root together with the
           workspace_registry.WorkspaceDescriptor.directory_scope,
           workspace_registry.WorkspaceDescriptor.main_repository_root, and the
@@ -167,7 +169,7 @@ class WorkspaceRegistry(
         """Records an active workspace descriptor into the persistent registry file.
 
         GROUNDING:
-        - Reads the existing descriptor array from .cleanroom_workspaces.json through
+        - Reads the existing descriptor array from cleanroom_files_ext.WORKSPACES_REGISTRY_FILE through
           read_json_registry_descriptors, upserts the supplied
           workspace_registry.WorkspaceDescriptor in the in-memory descriptor collection
           keyed by workspace directory, and commits the collection through
@@ -185,7 +187,7 @@ class WorkspaceRegistry(
         """Removes a workspace descriptor from the persistent registry file.
 
         GROUNDING:
-        - Reads the existing descriptor array from .cleanroom_workspaces.json through
+        - Reads the existing descriptor array from cleanroom_files_ext.WORKSPACES_REGISTRY_FILE through
           read_json_registry_descriptors, removes the collection entry whose workspace
           directory matches the supplied workspace_dir, commits the remaining collection
           through write_json_registry_atomically, and reports whether a matching entry was
@@ -201,7 +203,7 @@ class WorkspaceRegistry(
         """Loads active workspace descriptors from the persistent registry file.
 
         GROUNDING:
-        - Reads .cleanroom_workspaces.json from the canonical repository root through
+        - Reads cleanroom_files_ext.WORKSPACES_REGISTRY_FILE from the canonical repository root through
           read_json_registry_descriptors, decoding host text through the external
           filesystem_ext mechanics and JSON payloads through the external json_ext
           mechanics, and constructs a workspace_registry.WorkspaceDescriptor for each

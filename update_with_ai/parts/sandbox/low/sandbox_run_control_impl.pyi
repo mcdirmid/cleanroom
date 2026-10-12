@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
-# LAST_CHANGED: 2026-10-11T04:30:00Z
-# CHANGE: Declare sandbox and template_format imports with grounding for modification state and primer rendering
+# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CHANGED: 2026-10-12T11:59:00Z
+# CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
 # CODE_HASH: 7a3fe325d829
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox run control implementation low-level specification."""
@@ -21,7 +21,6 @@ import dag_storage
 import dag_subgraph
 import sandbox_file_editor
 import sandbox_guide_delivery
-import dag_config
 import sandbox
 import template_format
 
@@ -323,20 +322,6 @@ class GetWorkTool(
       dag_storage.DagStorage.materialize_template, and prepares the session task primer.
     """
 
-    @property
-    @override
-    def max_batch_size_parameter(
-        self,
-    ) -> tool_provider.ToolParameter[Optional[dag_config.BatchSize], int]:
-        """Parameter specifying the maximum number of nodes to acquire.
-
-        GROUNDING:
-        - Declares an optional tool_provider.ToolParameter over the dag_config.BatchSize bound that
-          execute_tool forwards as the maximum acquisition batch size through
-          control_coordinate.SessionCoordinator.dispatch_get_work.
-        """
-        ...
-
     @operation
     @override
     def execute_tool(
@@ -362,6 +347,9 @@ class GetWorkTool(
           agent_node_config.NodeConfig.guide_file attribution.
         - Renders the task primer content through the template_format.TemplateFormatter.format_template
           operation, substituting the session template parameters into the primer template text.
+        - Initializes guide delivery through sandbox_guide_delivery.GuideDelivery.initialize and registers
+          the advance tool through tool_provider.ToolManager.install_tool when
+          agent_node_config.NodeConfig.is_step_mode is active.
         """
         ...
 

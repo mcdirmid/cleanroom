@@ -1,7 +1,7 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
-# LAST_CHANGED: 2026-10-11T04:58:58Z
-# CHANGE: Add the declared CheckFilesTool.name, AdvanceTool.name and RunController.blame_targets_by_node members with spec-exact signatures
+# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CHANGED: 2026-10-12T11:27:00Z
+# CHANGE: Remove max batch size parameter from get work tool
 # CODE_HASH: 1ed5378cf8b2
 # --- END CLEANROOM METADATA ---
 
@@ -10,7 +10,6 @@ from typing import Any, Mapping, NewType, Optional, Protocol, Sequence, Set
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
 import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
 import update_with_ai.parts.agent.lib.agent_node_config as agent_node_config
-import update_with_ai.parts.dag.lib.dag_config as dag_config
 import update_with_ai.parts.dag.lib.dag_storage as dag_storage
 from . import tool_provider
 
@@ -109,11 +108,6 @@ class BlameTool(ResolveTool, Protocol):
 
 
 class GetWorkTool(tool_provider.Tool, Protocol):
-    @property
-    def max_batch_size_parameter(self) -> tool_provider.ToolParameter[Optional[dag_config.BatchSize], int]:
-        # TODO_max_batch_size_parameter_body
-        ...
-
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
         # TODO_execute_tool_body
         ...

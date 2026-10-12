@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: 4627fcd2bab2
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: 04904f08a22e
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # uv_loop_impl implementation component
 
-imports: dag_storage, loop_cleaner, loop_node_cleaner, runner_logger, uv_manifest_loader
+imports: cleanroom_files_ext, dag_storage, loop_cleaner, loop_node_cleaner, runner_logger, uv_manifest_loader
 implements: loop
 
 ## Purpose
@@ -19,7 +19,7 @@ Executing multi-stage agent workflows requires coordinating target loading, dirt
 
 **Out of scope:** The uv_loop_impl implementation component does not parse manifest configuration files, execute individual agent turns, or render user interfaces; these are handled by other components.
 
-**Delegated:** Target manifest loading is delegated to uv_manifest_loader; graph state storage and dirty evaluation are delegated to dag_storage; topological execution is delegated to loop_cleaner; single-node execution is delegated to loop_node_cleaner; execution telemetry and event streaming are delegated to runner_logger.
+**Delegated:** Cleanroom log file naming is delegated to cleanroom_files_ext; target manifest loading is delegated to uv_manifest_loader; graph state storage and dirty evaluation are delegated to dag_storage; topological execution is delegated to loop_cleaner; single-node execution is delegated to loop_node_cleaner; execution telemetry and event streaming are delegated to runner_logger.
 
 ## Types and Behavior
 
@@ -41,8 +41,8 @@ Deleting the last cleaned timestamp from a target node's source file metadata he
 
 When recording feedback:
 
-- Injects caller-supplied feedback into the target node's source file metadata in graph storage, identifying the blamed dependency node and the diagnostic reason, and appends the feedback entry to the `.cleanroom.log` file in the directory containing the parts.
+- Injects caller-supplied feedback into the target node's source file metadata in graph storage, identifying the blamed dependency node and the diagnostic reason, and appends the feedback entry to the cleanroom log file in the directory containing the parts.
 
 When recording changes:
 
-- Records a caller-supplied change message against a target node in graph storage, clearing the last cleaned timestamp and updating the change summary to dynamically invalidate downstream dependencies, and appends the change message to the `.cleanroom.log` file in the directory containing the parts.
+- Records a caller-supplied change message against a target node in graph storage, clearing the last cleaned timestamp and updating the change summary to dynamically invalidate downstream dependencies, and appends the change message to the cleanroom log file in the directory containing the parts.

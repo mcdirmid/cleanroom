@@ -223,28 +223,53 @@ guide = "update_python_with_ai/guides/high_level_spec.md"
 template = "update_python_with_ai/templates/hls_template.md"
 verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md"
 
-[roles.spec_qa]
-name = "spec_qa"
-persona = "Specification QA Arbiter"
-src_pattern = ""
-guide = "update_python_with_ai/guides/spec_qa.md"
-role_deps = ["planning"]
-verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md && uv run python -m update_python_with_ai.support.lib.spec_lint {unit_dir}/planning/{unit_name}.md"
+[roles.scenario]
+name = "scenario"
+persona = "Scenario Author"
+src_pattern = "{unit_dir}/scenarios/{unit_name}.md"
+guide = "update_python_with_ai/guides/high_to_scenario.md"
+template = "update_python_with_ai/templates/scenario_template.md"
+star_role_deps = ["scenario", "high"]
+feedback_role_deps = ["high"]
+verify_template = "# Scenario files verified against high_to_scenario.md"
+
+[roles.planning]
+name = "planning"
+persona = "Planning Engineer"
+src_pattern = "{unit_dir}/planning/{unit_name}.md"
+guide = "update_python_with_ai/guides/high_to_planning.md"
+template = "update_python_with_ai/templates/planning_template.md"
+star_role_deps = ["planning"]
+feedback_role_deps = ["high"]
+verify_template = "# Planning canvas verified against high_to_planning.md"
 
 [roles.low]
 name = "low"
 persona = "Low-Level Spec Engineer"
 src_pattern = "{unit_dir}/low/{unit_name}.pyi"
 guide = "update_python_with_ai/guides/planning_to_low.md"
-role_deps = ["spec_qa"]
-verify_template = "uv run python -m update_python_with_ai.support.lib.low_lint {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/low/{unit_name}.pyi"
+template = "update_python_with_ai/templates/low_template.pyi"
+star_role_deps = ["low"]
+feedback_role_deps = ["planning"]
+verify_template = "uv run pyright --project update_python_with_ai/pyright_spec.json {unit_dir}/low/{unit_name}.pyi"
+
+[roles.spec_qa]
+name = "spec_qa"
+persona = "Specification QA Arbiter"
+src_pattern = ""
+guide = "update_python_with_ai/guides/spec_qa.md"
+role_deps = ["scenario"]
+star_role_deps = ["high", "planning", "low"]
+feedback_role_deps = ["high", "planning", "low"]
+verify_template = "uv run python -m update_python_with_ai.support.lib.high_lint {unit_dir}/high/{unit_name}.md && (! test -f {unit_dir}/planning/{unit_name}.md || uv run python -m update_python_with_ai.support.lib.spec_lint {unit_dir}/planning/{unit_name}.md) && uv run python -m update_python_with_ai.support.lib.low_lint {unit_dir}/low/{unit_name}.pyi && uv run pyright --project update_python_with_ai/pyright_spec.json {unit_dir}/low/{unit_name}.pyi"
 
 [roles.lib]
 name = "lib"
 persona = "Implementation Engineer"
 src_pattern = "{unit_dir}/lib/{unit_name}.py"
 guide = "update_python_with_ai/guides/low_to_lib.md"
-role_deps = ["low_qa"]
+star_role_deps = ["low"]
+silent_role_deps = ["spec_qa"]
 verify_template = "uv run python -m update_python_with_ai.support.lib.lib_lint {unit_dir}/lib/{unit_name}.py --pyi {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/lib/{unit_name}.py"
 
 [roles.test]
@@ -252,7 +277,9 @@ name = "test"
 persona = "Test Engineer"
 src_pattern = "{unit_dir}/tests/{unit_name}_test.py"
 guide = "update_python_with_ai/guides/low_to_test.md"
-role_deps = ["low"]
+star_role_deps = ["low"]
+silent_role_deps = ["lib", "spec_qa"]
+stub_role_deps = ["lib"]
 verify_template = "uv run python -m update_python_with_ai.support.lib.test_lint {unit_dir}/tests/{unit_name}_test.py --pyi {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/tests/{unit_name}_test.py"
 
 [roles.qa]
@@ -260,7 +287,8 @@ name = "qa"
 persona = "QA Arbiter"
 src_pattern = ""
 guide = "update_python_with_ai/guides/qa.md"
-role_deps = ["lib", "test"]
+star_role_deps = ["low"]
+feedback_role_deps = ["lib", "test"]
 verify_template = "uv run pytest {unit_dir}/tests/{unit_name}_test.py"
 
 [roles.coverage]

@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T01:39:02Z
 CHANGE: Group the configuration field inventory by concern and name the serialized schema
-CODE_HASH: db1d01cc33ca
+CODE_HASH: dd9f70cef89c
 -->
 
 # model_config_ext external component
@@ -23,6 +23,6 @@ Grounding gaps covered include:
 
 - Model configuration JSON extraction: Extracts the model configuration dictionary schema emitted by model_config.bzl, covering target label and target name, model identifier, remote API base url endpoint, designated API key environment variable name, request timeout duration, maximum conversation turn limit, temperature, maximum token limit, and the guide step mode, startup file inspection, follow-up tool call injection, node visit limit, and batch size settings.
 
-- Configuration file discovery: Locates target configuration JSON files in the workspace Bazel runfiles tree, the build output directory, or the directory adjacent to the running executable, resolved from the target package and target name.
+- Configuration file discovery: Locates target configuration JSON files in the workspace runfiles tree, the build output directory, or the directory adjacent to the running executable, resolved from the target package and target name.
 
 - JSON text deserialization and credential binding: Decodes raw UTF-8 JSON text documents into structured in-memory records, validates configuration fields, extracts authentication credentials from the designated process environment variable, falls back to ambient environment credentials or standard defaults when no configuration file is present, and reports JSON parsing errors.

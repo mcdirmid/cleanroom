@@ -6,27 +6,32 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│                         THE 4-STAGE CLEANROOM PIPELINE                           │
+│                         THE 5-STAGE CLEANROOM PIPELINE                           │
 ├──────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
 │   1. High-Level Spec (high/*.md)                                                 │
 │      Literate architectural prose, italic semantic markers, lifecycle tiers       │
 │                                                                                  │
-│                                  │  high_to_planning.md                          │
-│                                  ▼                                               │
-│   2. Planning Canvas (planning/*.md)                                             │
-│      Intent prose, Factored Contracts with slugs, Epistemic Grounding DAG        │
-│                                  │  planning_to_low.md                           │
-│                                  ▼                                               │
-│   3. Low-Level Spec (low/*.pyi)                                                  │
-│      Typed Python stubs, DbC docstrings, Natural Language GROUNDING: arguments   │
-│                                  │                                               │
-│                                  ├── Gate 1: SPEC_QA Arbiter (spec_qa)           │
-│                                  ▼  low_to_lib.md / low_to_test.md               │
-│   4. Library & Tests (lib/*.py & tests/*_test.py)                                │
-│      Double-blind implementation and contract tests                              │
-│                                  │                                               │
-│                                  └── Gate 2: QA & Coverage Arbiters              │
+│              │ high_to_scenario.md               │ high_to_planning.md           │
+│              ▼                                   ▼                               │
+│   2. Concrete Scenarios (scenarios/*.md)    3. Planning Canvas (planning/*.md)   │
+│      End-to-end action walkthroughs,           Intent prose, Factored Contracts, │
+│      expected parameter & outcome bindings     Epistemic Grounding DAG           │
+│                                                  │                               │
+│                                                  │ planning_to_low.md            │
+│                                                  ▼                               │
+│                                             4. Low-Level Spec (low/*.pyi)        │
+│                                                Typed Python stubs, DbC docstrings│
+│                                                Natural Language GROUNDING: args  │
+│                                                  │                               │
+│                                                  ├── Gate 1: SPEC_QA Arbiter     │
+│                                                  ▼   (high + scenario +          │
+│                                                       planning + low stubs)      │
+│                                             5. Library & Tests                   │
+│                                                (lib/*.py & tests/*_test.py)      │
+│                                                Double-blind code & contract tests│
+│                                                  │                               │
+│                                                  └── Gate 2: QA & Coverage       │
 │                                                                                  │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -35,13 +40,14 @@
 1. **Mandatory Specification-First (HLS-First)**: Production code and tests are never authored directly. Every capability and constraint originates in literate High-Level Specifications (`high/*.md`) and cascades automatically downstream.
 2. **The Anti-Drift Principle**: Structural validation, closed-world symbol linking, relational feasibility, and test coverage auditing are enforced by **100% deterministic, zero-token Python tooling** running in milliseconds under native **`uv`**. LLMs are reserved for generative synthesis; deterministic tools enforce the guardrails.
 3. **Double-Blind Verification**: Implementers write code against specifications without seeing tests. Test authors write assertions against specifications without seeing implementation code. Neither role can cheat or bias the other.
-4. **Epistemic Feasibility in Planning**: Knowledge provisions and consumer requirements form an acyclic reachability DAG directly in planning specifications, proving capability reachability before low-level stub formalization and implementation.
-5. **Authors Author; Arbiters Lint and Audit**: Authoring models are insulated from interactive linters and type checkers to prevent mechanistic gaming; independent auditor roles (`spec_qa`, `qa`, `coverage`) run automated verification suites internally and deliver diagnostic blame attribution.
-6. **Canonical `parts/` Over `support/lib/`**: All production domain logic, workspace management, statement coverage measurement, and session coordination live in modular 4-stage Cleanroom parts (`parts/workspace`, `parts/tools`, `parts/control`, `parts/uv`, `parts/systems`), leaving `support/lib/` strictly for foundational metaclasses (`framework.py`, `lifecycle.py`) and procedural AST linters.
+4. **Concrete Scenario Grounding**: Scenarios walk continuous operational journeys through the high-level specification, verifying that every interface operation is grounded and realizable before low-level stubbing.
+5. **Epistemic Feasibility in Planning**: Knowledge provisions and consumer requirements form an acyclic reachability DAG directly in planning specifications, proving capability reachability before low-level stub formalization and implementation.
+6. **Authors Author; Arbiters Lint and Audit**: Authoring models are insulated from interactive linters and type checkers to prevent mechanistic gaming; independent auditor roles (`spec_qa`, `qa`, `coverage`) run automated verification suites internally and deliver diagnostic blame attribution.
+7. **Canonical `parts/` Over `support/lib/`**: All production domain logic, workspace management, statement coverage measurement, and session coordination live in modular Cleanroom parts (`parts/workspace`, `parts/tools`, `parts/control`, `parts/uv`, `parts/systems`), leaving `support/lib/` strictly for foundational metaclasses (`framework.py`, `lifecycle.py`) and procedural AST linters.
 
 ---
 
-## 2. The 4-Stage Specification & Verification Pipeline
+## 2. The 5-Stage Specification & Verification Pipeline
 
 ### Stage 1: High-Level Specification (`high/*.md`)
 - **Role**: Human-readable, literate architectural specification.
@@ -51,7 +57,15 @@
   - Lifecycle tiers (`*system*`, `*agent session*`, `*turn*`) governing service scope and custody.
 - **Reference**: [`high_level_spec_format.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/high_level_spec_format.md)
 
-### Stage 2: Planning Canvas (`planning/*.md`)
+### Stage 2: Concrete Scenarios (`scenarios/*.md`)
+- **Role**: Behavioral scenario grounding and end-to-end interface walkthroughs.
+- **Key Concepts**:
+  - Authored by `scenario` role via [`high_to_scenario.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/guides/high_to_scenario.md).
+  - Concrete step-by-step journeys exercising operations with realistic inputs, state transitions, and observable outcomes.
+  - Validates that high-level specifications contain no ungrounded or unreachable operations.
+- **Reference**: [`concrete_scenario_validation.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/concrete_scenario_validation.md)
+
+### Stage 3: Planning Canvas (`planning/*.md`)
 - **Role**: Semantic factorization, intent purification, and epistemic grounding.
 - **Key Concepts**:
   - Architectural rationale is segregated into continuous prose under `## Intent`.
@@ -61,26 +75,25 @@
   - Constructive feasibility is proven under `## Grounding`: exported capabilities (`### Knowledge Provisions`) pair with consumer obligations (`### Knowledge Requirements`).
   - Zero-Deferred Invariant: implementation canvases (`_impl.md`) repeat interface deferrals verbatim and ground 100% of requirements.
   - External components (`_ext.md`) strictly export provisions under `## Grounding`, omitting factored contracts and knowledge requirements.
-  - Verified by the `spec_qa` arbiter (Gate 1).
 - **Reference**: [`planning_format.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/planning_format.md)
 
-### Stage 3: Low-Level Specification (`low/*.pyi`)
+### Stage 4: Low-Level Specification (`low/*.pyi`)
 - **Role**: Formal Python interface stubs and implementation blueprints.
 - **Key Concepts**:
   - Pure Python interface stubs with ellipsis bodies (`...`).
   - Structural decorators: `@singleton_type`, `@poly_type`, `@data_type`, `@variant`, `@operation`, `@override`.
   - Design-by-Contract docstrings organizing obligations into `INVARIANTS:`, `PRECONDITIONS:`, and `POSTCONDITIONS:`.
   - Natural Language Grounding Arguments (`GROUNDING:`) in `low/*_impl.pyi` translating planning provisions into concrete collaborator classes and methods.
-  - Verified hermetically by native Pyright, `low_lint.py`, and `spec_lint.py` via the `spec_qa` arbiter (Gate 1).
+  - Verified hermetically by native Pyright (via `update_python_with_ai/pyright_spec.json`), `low_lint.py`, and `spec_lint.py` through the `spec_qa` arbiter (Gate 1).
 - **Reference**: [`low_level_spec_format.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/low_level_spec_format.md)
 
-### Stage 4: Library Code & Contract-Driven Tests
+### Stage 5: Library Code & Contract-Driven Tests
 - **Role**: Executable Python implementation and deterministic test suites.
 - **Key Concepts**:
   - `lib/*.py`: Implements production runtime logic against low-level stubs.
   - `tests/*_test.py`: Verifies contracts by citing verbatim requirement strings (`# Requirement: <exact text>`).
   - Double-blind isolation: test authors never see implementation code; implementers never see tests.
-  - Validated by native type checking (`uv run pyright`) and 100% statement test coverage via `parts/tools` (`tool_coverage.py`) through `qa` and `coverage` arbiters (Gate 3).
+  - Validated by native type checking (`uv run pyright`) and 100% statement test coverage via `parts/tools` (`tool_coverage.py`) through `qa` and `coverage` arbiters (Gate 2).
 - **Reference**: [`toolchain_and_verification.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md)
 
 ---
@@ -117,7 +130,7 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 1. **Option 1: Custom Loop Cleanroom** ([`custom_loop_cleanroom.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/custom_loop_cleanroom.md)):
    - In-process autonomous runner driving the OpenAI API (`update_with_ai/parts/systems/uv_cleanroom_asm`).
    - Traverses dependency graph nodes in topological order (`loop_cleaner.py`), running isolated turn loops (`loop_driver.py`) with repetition guards (`loop_guard.py`).
-   - Production engine for headless continuous integration and batch cleaning via `bin/cleanroom_loop`.
+   - Production engine for headless continuous integration and batch cleaning via `bin/cleanroom-loop` and root `cleanroom.toml`.
 2. **Option 3: Subagentless Cleanroom Workspaces** ([`subagentless_cleanroom_workspaces.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)):
    - Sibling workspace directories (`../role_workspaces/<workspace-name>_<role>_<dir>`) running independent conversational sessions in Antigravity.
    - Enforces double-blind isolation via OS-level `chmod 444` read-only mounts and orchestrates role coordination via `parts/workspace`, direct CLI mutations (`submit`, `blame`, `fail`), and self-synchronizing `bin/get_work`.
@@ -137,12 +150,12 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 
 ### 4.1 Specification Formats & Verification Pipeline
 - **[High-Level Specification Format (HLS)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/high_level_spec_format.md)** (`high_level_spec_format.md`): Literate prose specifications, italic semantic markers, single-level bullets, and lifecycle tiers.
+- **[Concrete Scenario Validation for HLS Translation](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/concrete_scenario_validation.md)** (`concrete_scenario_validation.md`): Concrete scenario-based evaluation of the HLS-to-LLS translation, with per-action interface requirement support and implementation realization checks, a triage for requirements no walk exercises, and a worked `workspace_work` example whose findings name the translation losses, missing realizations, and ungrounded imports.
 - **[Planning Canvas Specification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/planning_format.md)** (`planning_format.md`): Authoritative specification for Intent separation, factored typing/contracts with slugs, flat woven interactions, epistemic grounding DAG, external boundary specs (`_ext`), and `spec_qa` auditor verification.
 - **[Low-Level Specification Architecture (LLS)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/low_level_spec_format.md)** (`low_level_spec_format.md`): Strong AST types, lifecycle decorators, Design-by-Contract docstrings, and Natural Language Grounding Arguments (`GROUNDING:`).
+- **[Specification Grounding, External Boundaries, & Assembly Pipeline](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/specification_grounding_boundaries_and_assembly_architecture.md)** (`specification_grounding_boundaries_and_assembly_architecture.md`): Grounding external files via `cleanroom_files_ext`, swatting residual `MODULE.bazel` markers, streamlining the mechanical assembly (`_asm`) lifecycle, and enforcing implementation (`_impl`) import accountability.
 - **[Auditor Roles & Verification Dirtiness Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/auditor_roles_and_dirtiness_architecture.md)** (`auditor_roles_and_dirtiness_architecture.md`): In-band verification attestations (`<ROLE>_AUDIT:`), resolving the 0-byte paradox, and formalizing auditor dirty predicates.
 - **[Toolchain & Verification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md)** (`toolchain_and_verification.md`): Deterministic linters, modular test coverage engine (`update_with_ai/parts/tools/lib/tool_coverage.py`), and native Pyright static type checking.
-- **[Merged QA & Coverage Auditor Role Architecture (TODO)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/merged_qa_and_coverage_auditor_todo.md)** (`merged_qa_and_coverage_auditor_todo.md`): Architectural design for consolidating `qa` and `coverage` arbiters into a unified dynamic verification pass (`do_unit_tests && do_coverage`).
-- **[Concrete Scenario Validation for HLS Translation](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/concrete_scenario_validation.md)** (`concrete_scenario_validation.md`): Concrete scenario-based evaluation of the HLS-to-LLS translation, with per-action interface requirement support and implementation realization checks, a triage for requirements no walk exercises, and a worked `workspace_work` example whose findings name the translation losses, missing realizations, and ungrounded imports.
 
 ### 4.2 Execution & Cleaning Paradigms
 - **[Subagent-Driven Cleanroom Workspaces (TODO)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md)** (`subagent_driven_cleanroom_workspaces_todo.md`): Authoritative design for multi-harness autonomous subagent orchestration across Antigravity, DeepSeek Harness, and Goose with DeepSeek-V4 Flash economics.

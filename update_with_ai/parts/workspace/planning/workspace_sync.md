@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T03:16:09Z
 CHANGE: Declare synchronizer typing and enforce test stub integrity in refresh
-CODE_HASH: 111616c00d59
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: 6940bfc30636
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_sync interface component
@@ -44,6 +44,8 @@ Operating across isolated role workspaces requires atomic data movement to preve
 
 ### Knowledge Requirements
 
+- Layout conventions and state marker constants for Cleanroom workspace files.
+  - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Copying files across workspaces with permission preservation.
   - Deferred: Provided by workspace synchronizer implementation.
 - Two-phase conflict detection and atomic file replacement on disk.

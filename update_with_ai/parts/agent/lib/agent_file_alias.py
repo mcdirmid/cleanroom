@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T04:59:25Z
 # CHANGE: Realize the orphan postcondition that a file alias displays itself by its relative path, and drop the dead tier import and scaffold markers
 # CODE_HASH: ebf96e1b0ba3

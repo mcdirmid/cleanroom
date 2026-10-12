@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T03:16:07Z
 CHANGE: Declare the coverage evaluator system tier and align record and executable line statements
-CODE_HASH: 37bd46c0a0be
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: c0588cbfb443
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # tool_coverage interface component
@@ -28,7 +28,7 @@ Validating implementation cleanliness requires verifying that every executable s
 - A coverage evaluator measures single-target statement coverage by executing its test suite under execution tracing. [measure_target_coverage]
 - A coverage evaluator formats missing statement line numbers into compact comma-separated range strings. [format_missing_ranges]
 - A coverage evaluator groups sorted missing statement line numbers into contiguous span tuples. [group_missing_spans]
-- A coverage evaluator normalizes target query strings by stripping Bazel target or path prefixes. [normalize_query_string]
+- A coverage evaluator normalizes target query strings by stripping package target or path prefixes. [normalize_query_string]
 - A coverage evaluator formats source snippet reports for uncovered statement spans with presentation span clamping when configured. [format_spans_report]
 - A coverage evaluator formats structured coverage reports with agent guidance and deficit metrics. [format_coverage_report]
 - A coverage evaluator evaluates module coverage against a percentage threshold and updates log files. [evaluate_module_coverage]

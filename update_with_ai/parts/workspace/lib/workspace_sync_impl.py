@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:04:12Z
 # CHANGE: Validate canonical main baselines against workspace hashes before committing harvested targets, delete the consumed blame buffer, and resolve the canonical repository root and role context through the workspace descriptor
-# CODE_HASH: 809bda2be575
-# COVERAGE_AUDIT: 2026-10-11T22:09:03Z
-# QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 4de616067804
+# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
+# QA_AUDIT: 2026-10-12T18:21:04Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_sync_impl."""
@@ -74,7 +74,7 @@ def _is_stub_dep_file(
     if not role_def.stub_role_deps:
         return False
     fname = os.path.basename(rel_path)
-    if fname in ("BUILD.bazel", "__init__.py"):
+    if fname in ("__init__.py",):
         return False
     registry = get_singleton(workspace_registry.WorkspaceRegistry)
     root = repo_root or "."
@@ -376,7 +376,7 @@ def _sync_all_stub_deps(
                 if not os.path.isdir(part_ws_dep):
                     continue
                 for fname in os.listdir(part_ws_dep):
-                    if fname in ("BUILD.bazel", "__init__.py") or not fname.endswith(".py"):
+                    if fname == "__init__.py" or not fname.endswith(".py"):
                         continue
                     stem = os.path.splitext(fname)[0]
                     ws_f = os.path.join(part_ws_dep, fname)
@@ -415,7 +415,7 @@ def _sync_all_stub_deps(
 
             main_dep_dir = os.path.join(part_main, dep_dir)
             if os.path.isdir(main_dep_dir):
-                for meta_f in ("BUILD.bazel", "__init__.py"):
+                for meta_f in ("__init__.py",):
                     src_meta = os.path.join(main_dep_dir, meta_f)
                     dst_meta = os.path.join(ws_dep_dir, meta_f)
                     if os.path.isfile(src_meta) and not os.path.isfile(dst_meta):
@@ -615,7 +615,7 @@ This is an absolute tripwire. There are NO exceptions for debugging, diagnosing 
 ## Fail-Stop & Reporting Protocol (Do NOT Self-Heal)
 If any cleanroom binary (`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/submit`) fails due to:
 - A Python exception or traceback (e.g., `ModuleNotFoundError`, `ImportError`, `AttributeError`)
-- A Bazel analysis or execution failure
+- A build, type check, or test execution failure
 - A missing support file, template error, or dependency issue
 
 **STOP IMMEDIATELY.**

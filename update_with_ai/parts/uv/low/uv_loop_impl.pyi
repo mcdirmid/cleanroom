@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:03Z
 # LAST_CHANGED: 2026-10-11T03:48:44Z
 # CHANGE: Correct stale mark-dirty collaborator citation to the real graph storage member
-# CODE_HASH: 04573dbcb959
-# SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+# CODE_HASH: 47ba75fad4a1
+# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom loop implementation low-level specification."""
@@ -11,6 +11,7 @@
 from typing import Optional
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier, SystemTier
+import cleanroom_files_ext
 import dag_storage
 import loop
 import loop_cleaner
@@ -50,7 +51,7 @@ class Loop(loop.Loop, InTier[SystemTier]):
         - MUST stream telemetry capturing build outcome to standard output and transcript files.
 
         GROUNDING:
-        - Loads target graph via uv_manifest_loader, invokes loop_cleaner to execute topological cleaning passes, checks post-cleaning dirtiness, and streams telemetry to runner_logger.
+        - Loads target graph via uv_manifest_loader, invokes loop_cleaner and loop_node_cleaner to execute topological cleaning passes, checks post-cleaning dirtiness, and streams telemetry to runner_logger.
         """
         ...
 
@@ -105,12 +106,12 @@ class Loop(loop.Loop, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST inject caller-supplied feedback into the target node source file metadata in graph storage.
-        - MUST append the feedback entry to the `.cleanroom.log` file in the directory containing the parts.
+        - MUST append the feedback entry to the cleanroom log file (cleanroom_files_ext.CLEANROOM_LOG_FILE) in the directory containing the parts.
         - MUST identify the blamed dependency node in injected feedback.
         - MUST identify the diagnostic reason in injected feedback.
 
         GROUNDING:
-        - Records feedback message on target node in dag_storage, updating in-band source headers with blamed dependency and diagnostic reasoning.
+        - Records feedback message on target node in dag_storage, updating in-band source headers with blamed dependency and diagnostic reasoning, and appends to cleanroom_files_ext.CLEANROOM_LOG_FILE.
         """
         ...
 
@@ -127,11 +128,11 @@ class Loop(loop.Loop, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST record a caller-supplied change message against a target node in graph storage.
-        - MUST append the change message to the `.cleanroom.log` file in the directory containing the parts.
+        - MUST append the change message to the cleanroom log file (cleanroom_files_ext.CLEANROOM_LOG_FILE) in the directory containing the parts.
         - MUST clear the last cleaned timestamp of the target node in graph storage.
         - MUST update the change description of the target node in graph storage to dynamically invalidate downstream dependencies.
 
         GROUNDING:
-        - Records change description on target node in dag_storage, clearing last cleaned timestamp and invalidating downstream dependents.
+        - Records change description on target node in dag_storage, clearing last cleaned timestamp, invalidating downstream dependents, and appending to cleanroom_files_ext.CLEANROOM_LOG_FILE.
         """
         ...

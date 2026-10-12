@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-11T22:09:03Z
+# LAST_CLEANED: 2026-10-12T18:21:04Z
 # LAST_CHANGED: 2026-10-11T05:42:34Z
 # CHANGE: Drop the uncontracted pending work file constant that the grounding specification no longer declares
 # CODE_HASH: a2cafac18fb3

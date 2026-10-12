@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:02Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: ba53f3cafcb9
-SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
+CODE_HASH: b265a489eb67
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # control_verification_impl implementation component
@@ -12,7 +12,7 @@ SPEC_QA_AUDIT: 2026-10-11T22:09:02Z
 
 The control_verification_impl implementation component provides concrete mechanics for subprocess invocation of verification commands, regex-based diagnostic noise scrubbing, and SHA-256 file hash tracking.
 
-Compilers and build tools output varied terminal sequences and progress indicators. The implementation cleans lines matching known Bazel and compiler noise prefixes, computes SHA-256 hashes of target source files, executes checks sequentially until failure or completion, and records outcomes in an in-memory hash cache.
+Compilers and build tools output varied terminal sequences and progress indicators. The implementation cleans lines matching known compiler noise prefixes, computes SHA-256 hashes of target source files, executes checks sequentially until failure or completion, and records outcomes in an in-memory hash cache.
 
 ## Factored Contracts
 

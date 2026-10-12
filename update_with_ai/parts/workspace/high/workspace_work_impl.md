@@ -1,25 +1,25 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-10T19:00:00Z
 CHANGE: evaluate producer dirtiness across implicit role deps and star role changes
-CODE_HASH: 3a5b4a5ff60b
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: be928d99f9d2
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_work_impl implementation component
 
-imports: agent_session, workspace_registry, control_work_scheduler, src_metadata, dag_storage
+imports: agent_session, workspace_registry, control_work_scheduler, src_metadata, dag_storage, cleanroom_files_ext
 implements: workspace_work
 
 ## Purpose
 
 The workspace_work_impl implementation component realizes work queue discovery across directory scopes by role tier depth, pending work tracking, and actionable diagnostic generation.
 
-Guiding autonomous agents through multi-step pipeline tasks requires distinguishing ready targets from targets blocked on upstream artifacts while enforcing completion of pending work before starting new tasks. Without strict queue tracking, agents jump between disconnected files or exit before completing verification. The workspace_work_impl implementation component invokes directory-scoped work scheduling, filters candidates by active role, evaluates pending target dirtiness against local and main workspaces, persists pending target state in `.cleanroom_pending_work.json`, and generates structured task outputs with actionable guidance.
+Guiding autonomous agents through multi-step pipeline tasks requires distinguishing ready targets from targets blocked on upstream artifacts while enforcing completion of pending work before starting new tasks. Without strict queue tracking, agents jump between disconnected files or exit before completing verification. The workspace_work_impl implementation component invokes directory-scoped work scheduling, filters candidates by active role, evaluates pending target dirtiness against local and main workspaces, persists pending target state in the pending work buffer file, and generates structured task outputs with actionable guidance.
 
 **Out of scope:** The workspace_work_impl implementation component does not commission workspace directories, transfer source files, or execute test commands; these are handled by other components.
 
-**Delegated:** Role configuration lookups and path resolution are delegated to workspace_registry; topological dependency scheduling and dirtiness evaluation across directory scopes are delegated to control_work_scheduler; in-band source metadata extraction is delegated to src_metadata; starter template materialization is delegated to dag_storage.
+**Delegated:** Role configuration lookups and path resolution are delegated to workspace_registry; topological dependency scheduling and dirtiness evaluation across directory scopes are delegated to control_work_scheduler; in-band source metadata extraction is delegated to src_metadata; starter template materialization is delegated to dag_storage; workspace file conventions are delegated to cleanroom_files_ext.
 
 ## Types and Behavior
 
@@ -27,9 +27,9 @@ The workspace work manager discovers work items within a designated directory sc
 
 When managing pending target state:
 
-- The work manager records assigned target paths to `.cleanroom_pending_work.json`.
+- The work manager records assigned target paths to the pending work buffer file.
 
-- The work manager removes a resolved target path from `.cleanroom_pending_work.json` when submitted or blamed, matching target paths and unit stems strictly without clearing unmatched targets.
+- The work manager removes a resolved target path from the pending work buffer file when submitted or blamed, matching target paths and unit stems strictly without clearing unmatched targets.
 
 - The work manager evaluates whether a pending target remains dirty by checking in-band source metadata across local and canonical repositories, treating feedback role dependencies and star role dependencies as implicit role dependencies and evaluating targets as dirty when any star role dependency changes across same-unit, interface, or cross-unit dependencies, verifying all configured feedback role targets for auditor roles against required role audit timestamps and forward contracts, and materializing starter templates via graph storage for missing targets of roles with declared source patterns and upstream dependencies.
 

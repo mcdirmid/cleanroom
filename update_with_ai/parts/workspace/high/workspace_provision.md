@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-08T18:30:00Z
 CHANGE: document stub role dependencies synthesis in commissioning contract
-CODE_HASH: bfbef995bc8b
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: 3259d823cd04
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_provision interface component
 
-imports: agent_session, workspace_registry
+imports: agent_session, cleanroom_files_ext, workspace_registry
 
 ## Purpose
 
@@ -18,7 +18,7 @@ Uncontrolled read-write access across an entire codebase leads to accidental cro
 
 **Out of scope:** The workspace_provision interface component does not harvest code changes to the main repository, calculate topological task dirty queues, or evaluate code coverage; these are handled by other components.
 
-**Delegated:** Role metadata resolution, workspace path calculation, and registry updates are delegated to workspace_registry.
+**Delegated:** Role metadata resolution, workspace path calculation, and registry updates are delegated to workspace_registry. File naming conventions for the role descriptor configuration are delegated to cleanroom_files_ext.
 
 ## Types and Behavior
 

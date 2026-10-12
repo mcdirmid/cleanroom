@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-11T22:09:03Z
+LAST_CLEANED: 2026-10-12T18:21:03Z
 LAST_CHANGED: 2026-10-11T16:00:00Z
 CHANGE: update submit contract and woven contracts for verification gating and bypass
-CODE_HASH: fd04f0d2e6b7
-SPEC_QA_AUDIT: 2026-10-11T22:09:03Z
+CODE_HASH: a13c0ae8fd43
+SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
 -->
 
 # workspace_tool_impl implementation component
@@ -22,7 +22,7 @@ Command-line subagents in Cleanroom workspaces require a robust entrypoint that 
 
 - The realization constructs argument parsers for commission, refresh-sys, get_work, check_files, submit, blame, feedback, fail, and coverage. [construct_cli_parser]
 - In get_work, the runner pulls inbound changes from canonical main, rejects execution if pending targets remain dirty, queries the work manager, records pending targets, and formats console reports. [realize_get_work]
-- In check_files, the runner identifies the active role and target files, regenerates missing target files from starter templates for roles with declared source patterns and upstream dependencies, executes corresponding role linters and Bazel type check rules, formats clean diagnostic outputs, and returns verification exit status. [realize_check_files]
+- In check_files, the runner identifies the active role and target files, regenerates missing target files from starter templates for roles with declared source patterns and upstream dependencies, executes corresponding role linters and static type check rules, formats clean diagnostic outputs, and returns verification exit status. [realize_check_files]
 - In submit, the runner evaluates role verification checks on the target unless bypassed, rejecting submission when verification fails, delegates target submission to the submission coordinator, appends the submission record to the cleanroom log, and clears pending work upon acceptance. [realize_submit]
 - In blame and feedback, the runner delegates critique attribution to the attribution coordinator, appends the blame record to the cleanroom log, and clears pending work upon acceptance. [realize_blame]
 - In fail, the runner delegates failure diagnostics to the attribution coordinator and clears pending work upon acceptance. [realize_fail]
@@ -52,6 +52,8 @@ Command-line subagents in Cleanroom workspaces require a robust entrypoint that 
   - Grounded: [workspace_sync: [workspace_pull_service]]
 - Work queue evaluation and pending target tracking capabilities.
   - Grounded: [workspace_work: [workspace_work_discovery_service, workspace_pending_work_tracking]]
+- Cleanroom log file naming conventions.
+  - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Target submission validation and in-band metadata stamping.
   - Grounded: [control_submit: [file_submission_gating_service]]
 - Blame attribution and failure recording capabilities.
