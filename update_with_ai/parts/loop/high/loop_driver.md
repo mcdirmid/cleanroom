@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
 CHANGE: Remove the runner logger dependency from the interface scope and state turn handling declaratively
 CODE_HASH: e571710fc38b
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # loop_driver interface component

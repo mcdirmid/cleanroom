@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-11T03:05:56Z
 CHANGE: State the continuation invariant in terms of nodes no other node cleaning can address
 CODE_HASH: 789181d8cbb1
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # loop_node_cleaner interface component

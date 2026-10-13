@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
-LAST_CHANGED: 2026-10-09T02:39:58Z
-CHANGE: add contamination tripwire to AGENTS.md refresh specification
-CODE_HASH: b5b2294c88d6
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CHANGED: 2026-10-12T23:35:00Z
+CHANGE: add command execution tripwire and impasse fail protocol to AGENTS.md refresh specification
+CODE_HASH: 98e05c8b9745
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # workspace_sync_impl implementation component
@@ -35,7 +35,7 @@ When pulling changes from the canonical main repository into a role workspace, t
 
 - Deletes the files within the role workspace scope that no longer exist in the canonical main repository.
 
-When refreshing system files, the workspace synchronizer recopies the tool runners, project configurations, guide files, and linters from the main repository into the role workspace, regenerates `AGENTS.md` with its boundary rules, contamination tripwires, and fail-stop constraints without touching an in-scope source file, and validates that every stub role dependency file remains a read-only test stub.
+When refreshing system files, the workspace synchronizer recopies the tool runners, project configurations, guide files, and linters from the main repository into the role workspace, regenerates `AGENTS.md` with its boundary rules, contamination tripwires, command execution restrictions, and fail-stop/impasse constraints without touching an in-scope source file, and validates that every stub role dependency file remains a read-only test stub.
 
 When harvesting changes from a role workspace back to the canonical main repository, the workspace synchronizer performs two-phase synchronization:
 

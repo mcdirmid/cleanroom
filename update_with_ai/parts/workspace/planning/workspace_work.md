@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-10T19:00:00Z
 CHANGE: factor implicit role dirtiness and star role dependency dirtiness contracts
-CODE_HASH: 3416e818a18d
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+CODE_HASH: 65e774a60b5c
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # workspace_work interface component
@@ -17,7 +17,7 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 ### Typing
 
 - A work queue item record encapsulates a target file, a role name, dirtiness reasons, dependency files, companion contract files, blocked reasons, and an is ready status indicating whether prerequisites are satisfied.
-- A work queue summary record encapsulates ready items, blocked items, and an is clean status indicating whether all units in scope evaluate clean.
+- A work queue summary record encapsulates ready items, blocked items, an is clean status indicating whether all units in scope evaluate clean, and an optional remaining ready count indicating unpresented ready tasks beyond the current batch.
 - A workspace work manager operates within the agent session lifecycle tier.
 
 ### Contracts
@@ -25,6 +25,7 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 - The workspace work manager inspects the pending work buffer file designated by cleanroom_files_ext to check whether pending targets remain dirty. [check_pending_work_status]
 - The workspace work manager clears the pending work buffer file designated by cleanroom_files_ext when no pending targets remain dirty. [clear_pending_work_buffer]
 - The workspace work manager invokes directory-scoped work discovery to compute ready and blocked units. [discover_directory_scope_work]
+- The workspace work manager bounds presented ready items when a batch size is specified, recording the remaining unpresented count. [bound_ready_items_by_batch_size]
 - The workspace work manager resolves companion upstream specification contract files and interface definitions for target units dynamically from workspace_registry. [resolve_unit_contract_files]
 - The workspace work manager filters cross-unit dependencies based on star_role_deps and silent_cross_role_deps from workspace_registry. [filter_role_dependencies]
 - The workspace work manager enforces fail-loud role resolution without synthetic fallbacks. [enforce_strict_role_resolution]
@@ -40,7 +41,7 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 
 ### Woven Contracts
 
-- When discovering work in a role workspace, the manager checks pending work status, discovers directory scope work if unblocked, resolves companion contracts, filters cross-unit dependencies according to star and silent role rules, tracks implicit role dirtiness, flags star dependency dirtiness, materializes starter templates for missing ready files, records ready targets, and formats diagnostic outputs. [check_pending_work_status, discover_directory_scope_work, resolve_unit_contract_files, filter_role_dependencies, track_implicit_role_dirtiness, flag_star_dependency_dirtiness, enforce_strict_role_resolution, materialize_ready_target_templates, record_ready_targets_buffer, format_work_queue_diagnostics]
+- When discovering work in a role workspace, the manager checks pending work status, discovers directory scope work if unblocked, bounds presented ready items when configured, resolves companion contracts, filters cross-unit dependencies according to star and silent role rules, tracks implicit role dirtiness, flags star dependency dirtiness, materializes starter templates for missing ready files, records ready targets, and formats diagnostic outputs. [check_pending_work_status, discover_directory_scope_work, bound_ready_items_by_batch_size, resolve_unit_contract_files, filter_role_dependencies, track_implicit_role_dirtiness, flag_star_dependency_dirtiness, enforce_strict_role_resolution, materialize_ready_target_templates, record_ready_targets_buffer, format_work_queue_diagnostics]
 - When all targets in scope evaluate clean, the manager clears the pending work buffer and indicates clean status. [clear_pending_work_buffer, discover_directory_scope_work]
 - When a target is resolved, the work manager removes the target from the pending buffer, evaluates implicit role dirtiness, and checks whether any pending work remains dirty. [remove_pending_target_path, track_implicit_role_dirtiness, is_pending_target_dirty_disk]
 
@@ -51,6 +52,7 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 - Directory-scoped work queue discovery and diagnostic presentation services. [workspace_work_discovery_service]
 - Pending work buffer state management and target tracking capabilities. [workspace_pending_work_tracking]
 - Role work queue computation and topological unit sorting capabilities. [role_work_queue_computation_service]
+- Batch-bounded work queue presentation and remaining task tracking capabilities. [batch_bounded_work_presentation]
 
 ### Knowledge Requirements
 

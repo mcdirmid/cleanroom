@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
-LAST_CHANGED: 2026-10-11T04:08:00Z
-CHANGE: Contract working tree type-checking coverage and missing target skeleton synthesis
-CODE_HASH: 97c84beec4f7
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CHANGED: 2026-10-12T23:35:00Z
+CHANGE: align AGENTS.md planning with command execution tripwire and impasse fail protocol
+CODE_HASH: 86087e9779f1
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # workspace_provision_impl implementation component
@@ -24,7 +24,7 @@ Provisioning isolated role workspaces requires precise file-level permission con
 - The workspace provisioner synthesizes read-only test stubs with NotImplementedError from companion specifications for stub role dependencies. [synthesize_stub_role_dependencies]
 - The workspace provisioner creates executable zipapps containing __main__.py invoking cleanroom_role_tool. [package_runner_zipapps]
 - The workspace provisioner writes role metadata JSON containing main root and directory scope to cleanroom_files_ext.ROLE_DESCRIPTOR_FILE. [serialize_role_descriptor]
-- The workspace provisioner formats AGENTS.md markdown with role constraints, strict boundary rules, a contamination tripwire, a fail-stop reporting protocol, and tool execution instructions. [format_role_agents_markdown]
+- The workspace provisioner formats AGENTS.md markdown with role constraints, strict boundary rules, a contamination tripwire, a command execution restriction tripwire, a fail-stop reporting protocol with unresolvable impasse handling via bin/fail, and tool execution instructions. [format_role_agents_markdown]
 
 ### Woven Contracts
 

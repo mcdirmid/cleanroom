@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-12T12:07:00Z
 CHANGE: Rebuild completion tools payload on each turn from currently installed tools
-CODE_HASH: d868874c8ba2
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+CODE_HASH: c75cafcce109
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # openai_driver_impl implementation component

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T05:04:00Z
 # CHANGE: Resolve auditor classification locally through the declared source metadata dependency, honour the declared directory scope default, and resolve unspecified submission targets through the alias manager and bound workspace paths
 # CODE_HASH: fc4f67329e8f
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# COVERAGE_AUDIT: 2026-10-12T23:37:36Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:37Z
 # LAST_CHANGED: 2026-10-11T04:56:35Z
 # CHANGE: Prune the uncontracted public 'messages' property so the implementation exposes only the conversation operations declared by the grounding specification
 # CODE_HASH: 43acfa91915e
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in openai_conversation_impl.pyi

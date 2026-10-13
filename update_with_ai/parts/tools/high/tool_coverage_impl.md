@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-11T04:09:44Z
 CHANGE: Aligned the coverage evaluator with the system-tier grounding: removed the agent_session import and stated the evaluator as a system service rather than a session service.
 CODE_HASH: 0567e59d5bff
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # tool_coverage_impl implementation component

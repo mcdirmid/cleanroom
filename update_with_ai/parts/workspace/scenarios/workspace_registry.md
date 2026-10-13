@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-11T03:16:34Z
 CHANGE: Rework workspace_registry interface scenarios for literal instances and declaration constraints
 CODE_HASH: b6c1f6a0e38d

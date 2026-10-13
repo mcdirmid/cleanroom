@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-11T02:45:00Z
 CHANGE: Restate the root assembly structurally and remove the constituent enumeration from prose
 CODE_HASH: 689df5af468d
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # uv_cleanroom_asm assembly component

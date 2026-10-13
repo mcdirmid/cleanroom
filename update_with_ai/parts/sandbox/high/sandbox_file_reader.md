@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T21:57:18Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
 CHANGE: Split the read manager capabilities into declarative statements
 CODE_HASH: d610347ba20d
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
 -->
 
 # sandbox_file_reader interface component

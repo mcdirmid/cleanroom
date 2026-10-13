@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-11T03:16:51Z
 CHANGE: Resynchronize registry implementation scenarios with the reworked interface
 CODE_HASH: a0b460032fd3

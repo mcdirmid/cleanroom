@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T03:19:48Z
 # CHANGE: Align loop driver turn, correlation, reminder, and termination contracts
 # CODE_HASH: d64f6418d1e5
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Loop driver low-level interface specification."""

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
-# LAST_CHANGED: 2026-10-11T06:00:31Z
-# CHANGE: Assert the contracted syntax and type verification reminder instead of an unmandated check substring
-# CODE_HASH: e46f407e4c93
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:47:50Z
+# LAST_CHANGED: 2026-10-12T23:43:51Z
+# CHANGE: Cover whitespace fallback unique match replacement and ambiguous match failure guidance when exact matching finds zero occurrences
+# CODE_HASH: 9930eaae853f
+# COVERAGE_AUDIT: 2026-10-12T23:47:50Z
+# QA_AUDIT: 2026-10-12T23:44:20Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_file_editor_impl per its grounding specification."""
@@ -66,6 +66,9 @@ def _make_read_write_file(rel_path: str) -> agent_file_alias.ReadWriteFile:
 class MockAgentConfig:
     tier = system
 
+    def __init__(self, edit_delta_output: bool = False) -> None:
+        self._edit_delta_output = edit_delta_output
+
     @property
     def conversation_limit(self) -> agent_config.ConversationLimit:
         return agent_config.ConversationLimit(100)
@@ -84,7 +87,7 @@ class MockAgentConfig:
 
     @property
     def edit_delta_output(self) -> bool:
-        return False
+        return self._edit_delta_output
 
     @property
     def supersede_arg_keep(self) -> agent_config.SupersedeArgKeepLimit:
@@ -135,13 +138,18 @@ class MockToolManager:
 class MockAliasManager:
     tier = agent_session
 
-    def __init__(self, workspace_root: str) -> None:
+    def __init__(
+        self,
+        workspace_root: str,
+        known_files: Optional[Set[agent_file_alias.FileAlias]] = None,
+    ) -> None:
         self._workspace_root = agent_file_alias.file_paths.WorkspaceRoot(
             agent_file_alias.file_paths.PathString(str(workspace_root))
         )
+        self._known_files = known_files if known_files is not None else set()
 
     @property
-    def workspace_root(self) -> Any:
+    def workspace_root(self) -> agent_file_alias.file_paths.WorkspaceRoot:
         return self._workspace_root
 
     @property
@@ -153,6 +161,9 @@ class MockAliasManager:
         return str
 
     def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+        for f in self._known_files:
+            if str(f.relative_path) == wire_value:
+                return f
         return agent_file_alias.UnboundFile(agent_file_alias.RelativePath(wire_value))
 
     def sanitize_text(
@@ -211,7 +222,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             keys=[tool_provider.ToolManager],
             tier=agent_session,
         )
-        self.mock_alias_manager = MockAliasManager(self.root)
+        self.mock_alias_manager = MockAliasManager(
+            self.root, known_files={self.read_only_file, self.read_write_file}
+        )
         self.registry.register_instance(
             self.mock_alias_manager,
             keys=[
@@ -327,6 +340,26 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 sandbox_file_editor.FileHash(expected),
             )
 
+    def test_file_hash_unbound_file_alias_resolves_to_declared_file(self) -> None:
+        """Postcondition: file_hash MUST compute MD5 digest for an unbound file alias that resolves to a declared workspace file."""
+        unbound_rw = agent_file_alias.UnboundFile(
+            relative_path=agent_file_alias.RelativePath("read_write.py")
+        )
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            edit_manager = scope.get_singleton(EditManager)
+            expected_hash = hashlib.md5(INITIAL_CONTENT.encode("utf-8")).hexdigest()
+            digest = edit_manager.file_hash(unbound_rw)
+            self.assertEqual(digest, sandbox_file_editor.FileHash(expected_hash))
+
+        unbound_ro = agent_file_alias.UnboundFile(
+            relative_path=agent_file_alias.RelativePath("read_only.py")
+        )
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            edit_manager = scope.get_singleton(EditManager)
+            expected_ro_hash = hashlib.md5(b"readonly\n").hexdigest()
+            digest_ro = edit_manager.file_hash(unbound_ro)
+            self.assertEqual(digest_ro, sandbox_file_editor.FileHash(expected_ro_hash))
+
     def test_has_modifications_reflects_edits(self) -> None:
         """Postcondition: has_modifications MUST reflect modification status."""
         with enter_phase(agent_session, registry=self.registry) as scope:
@@ -379,6 +412,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             self.assertGreater(edit_manager.file_update_revision, rev0)
             self.assertEqual(edit_manager.last_read_or_edited_file, self.read_write_file)
+            self.assertEqual(
+                resp.suppression_key,
+                tool_provider.SuppressionKey("replace_file_content"),
+            )
             # Requirement: WHEN the replacement succeeds, MUST remind the agent to verify syntax and
             # type correctness before making further writes.
             self.assertIsNotNone(resp.reminder)
@@ -401,7 +438,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         registry.register_instance(MockAgentConfig(), keys=[agent_config.AgentConfig], tier=system)
         registry.register_instance(MockToolManager(), keys=[tool_provider.ToolManager], tier=agent_session)
         registry.register_instance(
-            MockAliasManager(self.root),
+            MockAliasManager(self.root, known_files={nested}),
             keys=[
                 agent_file_alias.AliasManager,
                 tool_provider.ParameterType[agent_file_alias.FileAlias, str],
@@ -423,6 +460,48 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 self.assertTrue(os.path.isfile(host))
                 with open(host, "r", encoding="utf-8") as fh:
                     self.assertIn("new content", fh.read())
+
+    def test_replace_missing_target_file_treated_as_empty(self) -> None:
+        """Postcondition: WHEN the target file is missing from the filesystem, MUST treat its content as empty."""
+        missing_rw = _make_read_write_file("newly_created.py")
+        registry = LifecycleRegistry()
+        __initialize__(registry)
+        registry.register_instance(
+            MockNodeConfig(read_write_files={missing_rw}),
+            keys=[agent_node_config.NodeConfig],
+            tier=agent_session,
+        )
+        registry.register_instance(MockAgentConfig(), keys=[agent_config.AgentConfig], tier=system)
+        registry.register_instance(self.mock_tool_manager, keys=[tool_provider.ToolManager], tier=agent_session)
+        registry.register_instance(
+            MockAliasManager(self.root, known_files={missing_rw}),
+            keys=[
+                agent_file_alias.AliasManager,
+                tool_provider.ParameterType[agent_file_alias.FileAlias, str],
+            ],
+            tier=agent_session,
+        )
+        registry.register_instance(
+            self.mock_src_metadata,
+            keys=[src_metadata.SourceMetadataCoordinator],
+            tier=agent_session,
+        )
+        with enter_phase(agent_session, registry=registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            resp = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    "",
+                    "brand new content\n",
+                    path=missing_rw,
+                    start_line=1,
+                )
+            )
+            self.assertFalse(resp.is_failed)
+            host = os.path.join(self.root, "newly_created.py")
+            self.assertTrue(os.path.isfile(host))
+            with open(host, "r", encoding="utf-8") as fh:
+                self.assertEqual(fh.read(), "brand new content\n")
 
     def test_replace_multiple_when_allowed(self) -> None:
         """Postcondition: WHEN multiple replacements permitted, MUST replace multiple occurrences."""
@@ -477,16 +556,253 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIn("6", str(resp.content))
             self.assertEqual(self._read_rw(), INITIAL_CONTENT)
 
-    def test_replace_whitespace_fallback(self) -> None:
-        """Postcondition: WHEN exact match finds zero and allow_multiple false, MUST fall back to stripped matching."""
+    def test_replace_whitespace_fallback_unique_match_replaces(self) -> None:
+        """Postcondition: WHEN exact matching finds zero occurrences and allow_multiple is false, MUST fall back to line-by-line whitespace-stripped matching and replace unique match."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            # Ensure exact matching finds zero occurrences: target has 8 leading spaces,
+            # while the file line has only 4 leading spaces ("    indented line\n").
             resp = replace_tool.execute_tool(
-                self._bindings(replace_tool, "indented line", "    renamed line", path=self.read_write_file)
+                self._bindings(
+                    replace_tool,
+                    "        indented line",
+                    "    renamed line",
+                    path=self.read_write_file,
+                    allow_multiple=False,
+                )
             )
             self.assertFalse(resp.is_failed)
             self.assertIn("renamed line", self._read_rw())
             self.assertNotIn("indented line", self._read_rw())
+
+    def test_replace_whitespace_fallback_multiline_unique_match_replaces(self) -> None:
+        """Postcondition: WHEN exact matching finds zero occurrences for multi-line target and allow_multiple is false, MUST fall back to line-by-line whitespace-stripped matching and replace unique match."""
+        multi_content = (
+            "def calculate(x):\n"
+            "    y = x + 1\n"
+            "    return y\n"
+        )
+        with open(self.rw_host_path, "w", encoding="utf-8") as fh:
+            fh.write(multi_content)
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            # Target has 8 leading spaces on each line so exact string matching finds zero occurrences
+            target = (
+                "        def calculate(x):\n"
+                "        y = x + 1\n"
+                "        return y\n"
+            )
+            replacement = (
+                "def calculate(x):\n"
+                "    y = x + 2\n"
+                "    return y\n"
+            )
+            resp = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    target,
+                    replacement,
+                    path=self.read_write_file,
+                    allow_multiple=False,
+                )
+            )
+            self.assertFalse(resp.is_failed)
+            self.assertIn("y = x + 2", self._read_rw())
+            self.assertNotIn("y = x + 1", self._read_rw())
+
+    def test_replace_whitespace_fallback_multiple_matches_fails_with_guidance(self) -> None:
+        """Postcondition: WHEN exact matching finds zero occurrences, allow_multiple is false, and whitespace-stripped fallback matches multiple locations within the search window, MUST fail indicating first two line numbers and guidance."""
+        multi_ws_content = (
+            "header line\n"
+            "  duplicate whitespace item\n"
+            "middle line\n"
+            "    duplicate whitespace item\n"
+            "footer line\n"
+        )
+        with open(self.rw_host_path, "w", encoding="utf-8") as fh:
+            fh.write(multi_ws_content)
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            # Target has 8 leading spaces, while file lines have 2 and 4 spaces,
+            # ensuring exact string matching finds zero occurrences in the file.
+            resp = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    "        duplicate whitespace item",
+                    "replacement",
+                    path=self.read_write_file,
+                    allow_multiple=False,
+                )
+            )
+            self.assertTrue(resp.is_failed)
+            content_str = str(resp.content).lower()
+            self.assertIn("2", str(resp.content))
+            self.assertIn("4", str(resp.content))
+            self.assertTrue(
+                "surrounding" in content_str
+                or ("start" in content_str and "end" in content_str)
+                or "line" in content_str,
+                f"Expected surrounding lines or line range guidance, got: {resp.content}",
+            )
+            self.assertEqual(self._read_rw(), multi_ws_content)
+
+    def test_replace_whitespace_fallback_multiline_multiple_matches_fails_with_guidance(self) -> None:
+        """Postcondition: WHEN exact matching finds zero occurrences for multi-line target, allow_multiple is false, and whitespace-stripped fallback matches multiple locations within search window, MUST fail indicating first two line numbers and guidance."""
+        multi_ws_block_content = (
+            "section one\n"
+            "  item alpha\n"
+            "  item beta\n"
+            "middle section\n"
+            "    item alpha\n"
+            "    item beta\n"
+            "end section\n"
+        )
+        with open(self.rw_host_path, "w", encoding="utf-8") as fh:
+            fh.write(multi_ws_block_content)
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            # Multi-line target has 8 leading spaces, so exact matching finds zero occurrences
+            target = (
+                "        item alpha\n"
+                "        item beta\n"
+            )
+            resp = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    target,
+                    "replacement\n",
+                    path=self.read_write_file,
+                    allow_multiple=False,
+                )
+            )
+            self.assertTrue(resp.is_failed)
+            content_str = str(resp.content).lower()
+            self.assertIn("2", str(resp.content))
+            self.assertIn("5", str(resp.content))
+            self.assertTrue(
+                "surrounding" in content_str
+                or ("start" in content_str and "end" in content_str)
+                or "line" in content_str,
+                f"Expected surrounding lines or line range guidance, got: {resp.content}",
+            )
+            self.assertEqual(self._read_rw(), multi_ws_block_content)
+
+    def test_replace_whitespace_fallback_exceeds_search_window_bounds_fails(self) -> None:
+        """Postcondition: WHEN exact matching finds zero occurrences, allow_multiple is false, and target content exceeds search window bounds during whitespace-stripped matching, MUST fail."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            # 3-line target content exceeds the 2-line search window (start_line=2, end_line=3)
+            target_exceeding = (
+                "repeated\n"
+                "indented line\n"
+                "repeated\n"
+            )
+            resp = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    target_exceeding,
+                    "replacement\n",
+                    path=self.read_write_file,
+                    start_line=2,
+                    end_line=3,
+                    allow_multiple=False,
+                )
+            )
+            self.assertTrue(resp.is_failed)
+            self.assertEqual(self._read_rw(), INITIAL_CONTENT)
+
+    def test_replace_multiple_target_not_found_in_search_window_fails(self) -> None:
+        """Postcondition: WHEN allow_multiple is true and target content is not found within the search window, MUST fail."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            resp = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    "completely_absent_target_content_xyz",
+                    "replacement",
+                    path=self.read_write_file,
+                    allow_multiple=True,
+                )
+            )
+            self.assertTrue(resp.is_failed)
+            self.assertIn("not found", str(resp.content).lower())
+            self.assertEqual(self._read_rw(), INITIAL_CONTENT)
+
+    def test_replace_multiple_target_absent_from_bounded_search_window_fails(self) -> None:
+        """Postcondition: WHEN allow_multiple is true and target content is absent from bounded search window, MUST fail."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            resp = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    "outside_target",
+                    "replacement",
+                    path=self.read_write_file,
+                    start_line=1,
+                    end_line=3,
+                    allow_multiple=True,
+                )
+            )
+            self.assertTrue(resp.is_failed)
+            self.assertEqual(self._read_rw(), INITIAL_CONTENT)
+
+    def test_replace_appends_diff_delta_when_delta_output_configured(self) -> None:
+        """Postcondition: WHEN delta output is configured, MUST include a diff delta representation of the change in response content."""
+        registry = LifecycleRegistry()
+        __initialize__(registry)
+        registry.register_instance(
+            MockNodeConfig(read_write_files={self.read_write_file}),
+            keys=[agent_node_config.NodeConfig],
+            tier=agent_session,
+        )
+        registry.register_instance(
+            MockAgentConfig(edit_delta_output=True),
+            keys=[agent_config.AgentConfig],
+            tier=system,
+        )
+        registry.register_instance(
+            self.mock_tool_manager,
+            keys=[tool_provider.ToolManager],
+            tier=agent_session,
+        )
+        registry.register_instance(
+            self.mock_alias_manager,
+            keys=[
+                agent_file_alias.AliasManager,
+                tool_provider.ParameterType[agent_file_alias.FileAlias, str],
+            ],
+            tier=agent_session,
+        )
+        registry.register_instance(
+            self.mock_src_metadata,
+            keys=[src_metadata.SourceMetadataCoordinator],
+            tier=agent_session,
+        )
+        with enter_phase(agent_session, registry=registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            resp = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    "unique_target",
+                    "delta_target",
+                    path=self.read_write_file,
+                )
+            )
+            self.assertFalse(resp.is_failed)
+            self.assertEqual(
+                resp.suppression_key,
+                tool_provider.SuppressionKey("replace_file_content"),
+            )
+            self.assertIn("delta_target", self._read_rw())
+            content_str = str(resp.content)
+            self.assertTrue(
+                "-" in content_str or "+" in content_str or "diff" in content_str.lower(),
+                f"Expected diff delta representation in response content, got: {resp.content}",
+            )
+            self.assertIn("delta_target", content_str)
 
     def test_replace_noop_fails(self) -> None:
         """Postcondition: WHEN the edit produces no change, MUST fail reminding no-op edits will fail."""
@@ -525,13 +841,44 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     self.assertTrue(resp.is_failed)
             self.assertEqual(self._read_rw(), INITIAL_CONTENT)
 
-    def test_replace_omitted_path_without_history_fails(self) -> None:
-        """Postcondition: WHEN path omitted and no read-write history exists, MUST fail."""
+    def test_replace_start_line_total_plus_one_appends(self) -> None:
+        """Postcondition: start_line equal to total line count plus one allows appending to end of file."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            total = len(INITIAL_CONTENT.splitlines())
+            resp = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    "",
+                    "appended line\n",
+                    path=self.read_write_file,
+                    start_line=total + 1,
+                )
+            )
+            self.assertFalse(resp.is_failed)
+            self.assertTrue(self._read_rw().endswith("appended line\n"))
+
+    def test_replace_omitted_path_when_no_file_read_or_edited_fails(self) -> None:
+        """Postcondition: WHEN path parameter is omitted and no file was read or edited in session, MUST fail."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            edit_manager = scope.get_singleton(EditManager)
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            self.assertIsNone(edit_manager.last_read_or_edited_file)
+            resp = replace_tool.execute_tool(
+                self._bindings(replace_tool, "unique_target", "new_target")
+            )
+            self.assertTrue(resp.is_failed)
+            self.assertEqual(self._read_rw(), INITIAL_CONTENT)
+
+    def test_replace_omitted_path_when_last_file_not_read_write_fails(self) -> None:
+        """Postcondition: WHEN path parameter is omitted and last read/edited file is not read-write, MUST fail."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             edit_manager = scope.get_singleton(EditManager)
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
             edit_manager.record_file_read(self.read_only_file)
-            resp = replace_tool.execute_tool(self._bindings(replace_tool, "unique_target", "x"))
+            resp = replace_tool.execute_tool(
+                self._bindings(replace_tool, "unique_target", "new_target")
+            )
             self.assertTrue(resp.is_failed)
             self.assertEqual(self._read_rw(), INITIAL_CONTENT)
 
@@ -596,6 +943,177 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             replace_tool.initialize()
             self.assertIn(tool_provider.ToolName("replace_file_content"), self.mock_tool_manager.installed_tools)
             self.assertIs(self.mock_tool_manager.installed_tools[tool_provider.ToolName("replace_file_content")], replace_tool)
+
+    def test_target_content_parameter_missing_note_when_line_range_supplied(self) -> None:
+        """Postcondition: WHEN line range arguments are supplied, missing note MUST explain that start line and end line only restrict search window."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            param = replace_tool.target_content_parameter
+            self.assertIsNotNone(param.missing_message)
+            assert param.missing_message is not None
+
+            # With start_line supplied
+            note_start = param.missing_message({tool_provider.ParameterName("start_line")})
+            self.assertIsInstance(note_start, str)
+            note_start_lower = str(note_start).lower()
+            self.assertTrue(
+                "restrict" in note_start_lower or "search window" in note_start_lower,
+                f"Expected search window restriction explanation, got: {note_start}",
+            )
+
+            # With end_line supplied
+            note_end = param.missing_message({tool_provider.ParameterName("end_line")})
+            self.assertIsInstance(note_end, str)
+            note_end_lower = str(note_end).lower()
+            self.assertTrue(
+                "restrict" in note_end_lower or "search window" in note_end_lower,
+                f"Expected search window restriction explanation, got: {note_end}",
+            )
+
+            # With both start_line and end_line supplied
+            note_both = param.missing_message({
+                tool_provider.ParameterName("start_line"),
+                tool_provider.ParameterName("end_line"),
+            })
+            self.assertIsInstance(note_both, str)
+            note_both_lower = str(note_both).lower()
+            self.assertTrue(
+                "restrict" in note_both_lower or "search window" in note_both_lower,
+                f"Expected search window restriction explanation, got: {note_both}",
+            )
+
+    def test_target_content_parameter_missing_note_when_line_range_omitted(self) -> None:
+        """Postcondition: WHEN line range arguments are omitted, missing note MUST explain that target content must match existing text to append or insert content."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            param = replace_tool.target_content_parameter
+            self.assertIsNotNone(param.missing_message)
+            assert param.missing_message is not None
+
+            # With neither start_line nor end_line supplied
+            note_omitted = param.missing_message({tool_provider.ParameterName("path")})
+            self.assertIsInstance(note_omitted, str)
+            note_omitted_lower = str(note_omitted).lower()
+            self.assertTrue(
+                "match existing text" in note_omitted_lower
+                or "append" in note_omitted_lower
+                or "insert" in note_omitted_lower,
+                f"Expected match existing text / append / insert explanation, got: {note_omitted}",
+            )
+
+            # With empty parameter set
+            note_empty = param.missing_message(set())
+            self.assertIsInstance(note_empty, str)
+            note_empty_lower = str(note_empty).lower()
+            self.assertTrue(
+                "match existing text" in note_empty_lower
+                or "append" in note_empty_lower
+                or "insert" in note_empty_lower,
+                f"Expected match existing text / append / insert explanation, got: {note_empty}",
+            )
+
+    def test_parameter_type_conversion_target_content(self) -> None:
+        """Postcondition: target_content parameter type converts valid wire string and rejects invalid wire value."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            param = replace_tool.target_content_parameter
+            self.assertEqual(param.name, tool_provider.ParameterName("target_content"))
+            self.assertTrue(param.is_required)
+            conv = param.parameter_type
+            self.assertIsNotNone(conv.actual_type)
+            self.assertTrue(conv.actual_type is sandbox_file_editor.TargetContent or conv.actual_type is str)
+            self.assertEqual(conv.wire_type, str)
+            converted = conv.convert("target text")
+            self.assertEqual(converted, sandbox_file_editor.TargetContent("target text"))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, 12345))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, None))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, ["invalid"]))
+
+    def test_parameter_type_conversion_replacement_content(self) -> None:
+        """Postcondition: replacement_content parameter type converts valid wire string and rejects invalid wire value."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            param = replace_tool.replacement_content_parameter
+            self.assertEqual(param.name, tool_provider.ParameterName("replacement_content"))
+            self.assertTrue(param.is_required)
+            conv = param.parameter_type
+            self.assertIsNotNone(conv.actual_type)
+            self.assertTrue(conv.actual_type is sandbox_file_editor.ReplacementContent or conv.actual_type is str)
+            self.assertEqual(conv.wire_type, str)
+            converted = conv.convert("replacement text")
+            self.assertEqual(converted, sandbox_file_editor.ReplacementContent("replacement text"))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, 999))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, None))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, {"invalid": "dict"}))
+
+    def test_parameter_type_conversion_start_line(self) -> None:
+        """Postcondition: start_line parameter type converts valid wire int and converts optional line number when omitted."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            param = replace_tool.start_line_parameter
+            self.assertEqual(param.name, tool_provider.ParameterName("start_line"))
+            self.assertFalse(param.is_required)
+            self.assertIsNone(param.default_value)
+            conv = param.parameter_type
+            self.assertIsNotNone(conv.actual_type)
+            self.assertEqual(conv.wire_type, int)
+            converted = conv.convert(42)
+            self.assertEqual(converted, sandbox_file_editor.LineNumber(42))
+            # Converting optional line number wire values when omitted
+            self.assertIsNone(conv.convert(cast(Any, None)))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, "not_an_int"))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, [1, 2]))
+
+    def test_parameter_type_conversion_end_line(self) -> None:
+        """Postcondition: end_line parameter type converts valid wire int and converts optional line number when omitted."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            param = replace_tool.end_line_parameter
+            self.assertEqual(param.name, tool_provider.ParameterName("end_line"))
+            self.assertFalse(param.is_required)
+            self.assertIsNone(param.default_value)
+            conv = param.parameter_type
+            self.assertIsNotNone(conv.actual_type)
+            self.assertEqual(conv.wire_type, int)
+            converted = conv.convert(100)
+            self.assertEqual(converted, sandbox_file_editor.LineNumber(100))
+            converted_one = conv.convert(1)
+            self.assertEqual(converted_one, sandbox_file_editor.LineNumber(1))
+            # Converting optional line number wire values when omitted
+            self.assertIsNone(conv.convert(cast(Any, None)))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, "not_an_int"))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, [1, 2]))
+
+    def test_parameter_type_conversion_allow_multiple(self) -> None:
+        """Postcondition: allow_multiple parameter type converts valid wire bool and rejects invalid wire value."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            param = replace_tool.allow_multiple_parameter
+            self.assertEqual(param.name, tool_provider.ParameterName("allow_multiple"))
+            self.assertFalse(param.is_required)
+            self.assertFalse(bool(param.default_value))
+            conv = param.parameter_type
+            self.assertIsNotNone(conv.actual_type)
+            self.assertTrue(conv.actual_type is sandbox_file_editor.AllowMultiple or conv.actual_type is bool)
+            self.assertEqual(conv.wire_type, bool)
+            self.assertEqual(conv.convert(True), sandbox_file_editor.AllowMultiple(True))
+            self.assertEqual(conv.convert(False), sandbox_file_editor.AllowMultiple(False))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, "true"))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, 1))
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                conv.convert(cast(Any, None))
 
 
 if __name__ == "__main__":

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T21:57:18Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
 CHANGE: State write detection and the can write capability declaratively and remove redundant lead-ins
 CODE_HASH: 861261bf69fd
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
 -->
 
 # sandbox_file_editor interface component

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T03:21:58Z
 # CHANGE: Canonicalize warning-of-two and fatal thresholds and split reminder content statements
 # CODE_HASH: 86baa7b3771e
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Loop guard implementation low-level specification."""

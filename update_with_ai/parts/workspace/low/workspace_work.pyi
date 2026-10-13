@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T05:14:13Z
 # CHANGE: Remove the dead PENDING_WORK_FILE pseudo-constant flagged as a type alias
-# CODE_HASH: 8d3d9eae2555
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# CODE_HASH: e7ab0563410b
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_work."""
@@ -48,11 +48,13 @@ class WorkQueueSummary:
         ready_items: Sequence of tasks ready for execution.
         blocked_items: Sequence of tasks blocked on prerequisites.
         is_clean: True if all units in scope evaluate clean.
+        remaining_ready_count: Number of unpresented ready tasks beyond current batch.
     """
 
     ready_items: Sequence[WorkQueueItem]
     blocked_items: Sequence[WorkQueueItem]
     is_clean: bool
+    remaining_ready_count: int = 0
 
 
 @singleton_type("agent_session")
@@ -140,6 +142,7 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
         role_name: str,
         workspace_dir: Optional[str] = None,
         force: bool = False,
+        batch_size: Optional[int] = None,
     ) -> WorkQueueSummary:
         """Evaluates dirty units in scope and returns work queue summary.
 
@@ -147,6 +150,7 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
         - When pending dirty work remains and force is false, MUST raise RuntimeError.
         - MUST schedule work for directory scope using dynamic role precedence.
         - MUST partition tasks into ready and blocked items.
+        - WHEN batch_size is provided and positive, MUST bound ready_items to at most batch_size and record remaining unpresented count.
         - MUST return WorkQueueSummary detailing ready and blocked items.
         """
         ...

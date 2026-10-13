@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:37Z
 # LAST_CHANGED: 2026-10-11T05:42:36Z
 # CHANGE: Define the pending work buffer filename locally now that the workspace work interface no longer declares it
-# CODE_HASH: 9aed6b0c93d9
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# CODE_HASH: fde75c1f6a8e
+# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_tool_impl."""
@@ -348,6 +348,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         dir_scope: Optional[str] = None,
         repo_root: Optional[str] = None,
         force: bool = False,
+        batch_size: Optional[int] = None,
     ) -> int:
         """Evaluates dirtiness in local workspace scope and prints next ready tasks for this role."""
         ws_root = os.path.realpath(find_workspace_root())
@@ -450,16 +451,45 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
             )
             return 0
 
-        if ready_items and meta:
+        effective_batch_size = batch_size
+        if effective_batch_size is None and meta and meta.get("batch_size"):
+            try:
+                effective_batch_size = int(meta["batch_size"])
+            except (ValueError, TypeError):
+                pass
+        if effective_batch_size is None and main_root:
+            model_cfg_path = os.path.join(main_root, "model_configs.toml")
+            if os.path.isfile(model_cfg_path):
+                try:
+                    import tomllib
+                    with open(model_cfg_path, "rb") as mf:
+                        m_data = tomllib.load(mf)
+                    def_model = m_data.get("default")
+                    if def_model and "models" in m_data and def_model in m_data["models"]:
+                        b_val = m_data["models"][def_model].get("batch_size")
+                        if b_val is not None:
+                            effective_batch_size = int(b_val)
+                except Exception:
+                    pass
+
+        total_ready = len(ready_items)
+        remaining_count = 0
+        if effective_batch_size is not None and effective_batch_size > 0 and len(ready_items) > effective_batch_size:
+            remaining_count = len(ready_items) - effective_batch_size
+            presented_items = ready_items[:effective_batch_size]
+        else:
+            presented_items = ready_items
+
+        if presented_items and meta:
             work_mgr.set_pending_work(
-                ws_root, [item["target_file"] for item in ready_items]
+                ws_root, [item["target_file"] for item in presented_items]
             )
         elif meta:
             work_mgr.clear_pending_work(ws_root)
 
-        total_dirty = len(ready_items) + len(blocked_items)
-        print(f"Found {total_dirty} dirty unit(s) ({len(ready_items)} ready to clean):")
-        for item in ready_items:
+        total_dirty = total_ready + len(blocked_items)
+        print(f"Found {total_dirty} dirty unit(s) ({total_ready} ready to clean):")
+        for item in presented_items:
             print(f"\n  • [READY - {item['role'].upper()}] {item['target_file']}")
             if item.get("contract_files"):
                 print("      Contracts / Specifications to Read:")
@@ -472,6 +502,14 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 print("      Dependencies:")
                 for dep in item["dependencies"]:
                     print(f"        - {dep}")
+
+        if remaining_count > 0:
+            print(
+                f"\nNote: {remaining_count} additional ready unit(s) remain in the queue."
+            )
+            print(
+                "Submit completed units in this batch via 'bin/submit', then run 'bin/get_work' to acquire the next batch."
+            )
 
         if blocked_items:
             print(f"\nBlocked unit(s) ({len(blocked_items)} waiting on prerequisites):")
@@ -828,12 +866,17 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
 
     def run_commission(
         self,
-        role_name: str,
-        dir_scope: str = "staging",
+        role_name: Optional[str] = None,
+        dir_scope: Optional[str] = None,
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
+        all_roles: bool = False,
     ) -> int:
-        """Commissions an isolated role workspace."""
+        """Commissions an isolated role workspace or all workspaces in a directory scope."""
+        if all_roles and not dir_scope and role_name:
+            dir_scope = role_name
+            role_name = None
+
         if not dir_scope:
             root_cand = repo_root or find_workspace_root() or os.getcwd()
             try:
@@ -843,7 +886,27 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                         break
             except OSError:
                 pass
+
+        if not dir_scope:
+            print("Error: directory scope must be specified or detected from the active workspace.")
+            return 1
+
         prov = get_singleton(workspace_provision.WorkspaceProvisioner)
+        reg = get_singleton(workspace_registry.WorkspaceRegistry)
+
+        if all_roles:
+            all_r_defs = reg.list_roles(repo_root=repo_root, dir_scope=dir_scope)
+            for r_def in all_r_defs:
+                desc = prov.commission(
+                    r_def.role_name, dir_scope, repo_root=repo_root, custom_dest=custom_dest
+                )
+                print(f"✔ Commissioned workspace for role '{r_def.role_name}' at: {desc.workspace_dir}")
+            return 0
+
+        if not role_name:
+            print("Error: role_name is required when --all is not specified.")
+            return 1
+
         desc = prov.commission(
             role_name, dir_scope, repo_root=repo_root, custom_dest=custom_dest
         )
@@ -899,10 +962,11 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         p_comm = subparsers.add_parser(
             "commission", help="Commission an isolated role workspace"
         )
-        p_comm.add_argument("role", help="Role name to commission (e.g. high, planning, low, lib, test, qa, coverage)")
+        p_comm.add_argument("role", nargs="?", default=None, help="Role name to commission (e.g. high, planning, low, lib, test, qa, coverage)")
         p_comm.add_argument("dir", nargs="?", default="", help="Directory scope")
         p_comm.add_argument("--repo-root", default=None, help="Root of canonical repository")
         p_comm.add_argument("--dest", default=None, help="Custom destination directory")
+        p_comm.add_argument("--all", "-a", action="store_true", help="Commission workspaces for all declared roles in scope")
 
         # refresh-sys
         p_ref = subparsers.add_parser(
@@ -924,6 +988,13 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
             "-f",
             action="store_true",
             help="Force get_work even if work is pending",
+        )
+        p_work.add_argument(
+            "--batch-size",
+            "-b",
+            type=int,
+            default=None,
+            help="Maximum number of ready units to present in this batch",
         )
 
         # submit
@@ -1017,11 +1088,17 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
         args = parser.parse_args(list(argv))
 
         if args.command == "commission":
+            role_name = args.role
+            dir_scope = args.dir
+            if args.all and not dir_scope and role_name:
+                dir_scope = role_name
+                role_name = None
             return self.run_commission(
-                args.role,
-                dir_scope=args.dir,
+                role_name,
+                dir_scope=dir_scope,
                 repo_root=args.repo_root,
                 custom_dest=args.dest,
+                all_roles=args.all,
             )
         elif args.command in ("refresh-sys", "refresh_sys"):
             return self.run_refresh_sys(
@@ -1030,7 +1107,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 repo_root=args.repo_root,
             )
         elif args.command == "get_work":
-            return self.run_get_work(dir_scope=args.dir, force=args.force)
+            return self.run_get_work(dir_scope=args.dir, force=args.force, batch_size=args.batch_size)
         elif args.command in ("check_files", "check-files"):
             return self.run_check_files(target=args.target, repo_root=args.repo_root)
         elif args.command == "submit":

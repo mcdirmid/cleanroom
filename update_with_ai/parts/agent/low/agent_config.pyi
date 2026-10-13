@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T03:06:34Z
 # CHANGE: Align agent config typing with canonical policy properties and supersede arg keep resolution
 # CODE_HASH: c3e2e7ea39f7
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Agent config interface component."""

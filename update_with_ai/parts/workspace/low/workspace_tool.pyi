@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T16:00:00Z
 # CHANGE: add verification check failure postcondition and no_verify parameter to run_submit
-# CODE_HASH: ad6ec47351b0
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# CODE_HASH: 1e228a0538b4
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_tool."""
@@ -30,8 +30,14 @@ class WorkspaceToolRunner(InTier[AgentSessionTier], Protocol):
         dir_scope: Optional[str] = None,
         repo_root: Optional[str] = None,
         force: bool = False,
+        batch_size: Optional[int] = None,
     ) -> int:
-        """Evaluates dirty work in local workspace and prints ready tasks."""
+        """Evaluates dirty work in local workspace and prints ready tasks.
+
+        POSTCONDITIONS:
+        - WHEN batch_size is provided or resolved from configuration, MUST bound presented ready tasks to at most batch_size and advise when remaining tasks await subsequent batches.
+        - MUST evaluate dirty work in local workspace and print ready tasks.
+        """
         ...
 
     @operation
@@ -108,12 +114,13 @@ class WorkspaceToolRunner(InTier[AgentSessionTier], Protocol):
     @operation
     def run_commission(
         self,
-        role_name: str,
-        dir_scope: str = "staging",
+        role_name: Optional[str] = None,
+        dir_scope: Optional[str] = None,
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
+        all_roles: bool = False,
     ) -> int:
-        """Commissions an isolated role workspace."""
+        """Commissions an isolated role workspace or all workspaces in a directory scope."""
         ...
 
     @operation

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
-LAST_CHANGED: 2026-10-09T02:39:58Z
-CHANGE: add contamination tripwire to AGENTS.md synthesis specification
-CODE_HASH: 65323664815d
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CHANGED: 2026-10-12T23:35:00Z
+CHANGE: add command execution tripwire and impasse fail protocol to AGENTS.md synthesis specification
+CODE_HASH: 11b11f74a16e
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # workspace_provision_impl implementation component
@@ -47,6 +47,8 @@ The workspace provisioner:
 
 - Writes boundary rules into the guide that confine the agent to the workspace, forbid git operations, and declare the main repository read-only, and writes a contamination tripwire that mandates an immediate abort upon reading an out-of-bounds file.
 
-- Writes a fail-stop and reporting protocol into the guide that prohibits self-healing on an infrastructure traceback, error, or missing dependency, while distinguishing an ordinary verification test failure that is destined for blame attribution.
+- Writes a command execution tripwire into the guide that strictly restricts execution to prescribed `bin/` executables (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, `bin/fail`) and mandates an immediate abort upon executing unapproved commands.
+
+- Writes a fail-stop and reporting protocol into the guide that prohibits self-healing on an infrastructure traceback, error, or missing dependency, while distinguishing ordinary verification test failures and establishing an unresolvable impasse protocol where failures are recorded via `bin/fail` and escalated to the coordinator.
 
 - Registers the new workspace descriptor in the workspace registry.

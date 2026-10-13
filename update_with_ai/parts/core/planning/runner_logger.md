@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-11T02:58:45Z
 CHANGE: Declare runner log event as an observable execution event record
-CODE_HASH: 62ccbc07c12c
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+CODE_HASH: 9f9ef7373333
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # runner_logger interface component

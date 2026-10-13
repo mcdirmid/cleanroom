@@ -1,17 +1,17 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-11T03:06:09Z
 CHANGE: Align workspace_work_impl scenarios with the high-level specification
-CODE_HASH: a26befa8db0c
+CODE_HASH: b30243460916
 -->
 
 # Concrete scenarios for `workspace_work_impl` (implementation)
 
-Scenarios 1 through 5 restate the caller observations of the interface scenarios and add, beside
+Scenarios 1 through 6 restate the caller observations of the interface scenarios and add, beside
 each observation, the realization that produces it. Restating them rather than writing fresh ones
 is what makes realizability structural: an implementation scenario that cannot name a realization
-for its observation is a defect in the implementation rather than a gap in the set. Scenarios 6
-through 10 cover behaviours the interface does not expose to a caller, and each of them is a
+for its observation is a defect in the implementation rather than a gap in the set. Scenarios 7
+through 11 cover behaviours the interface does not expose to a caller, and each of them is a
 candidate for the question of whether it belongs in the interface set instead.
 
 ## Reused from the interface
@@ -110,9 +110,21 @@ Given: no role definition declares role zeta.
    undeclared role fails, and the component's own propagation of that failure without
    substituting a synthetic role.
 
+### Scenario 6 — Bounding ready tasks by batch size
+
+Given: scope_a contains multiple ready units for role alpha, and the pending work buffer is empty.
+
+1. The agent asks for work in scope_a as role alpha with batch size one.
+   Observed: exactly one ready item is reported, the remaining ready count indicates unpresented ready items, and only the single presented ready item is recorded in the pending work buffer.
+   Realized by: the component's own batch-bounded partition mechanics, slicing the ready queue to batch size, tracking the remaining unpresented count, and recording only the bounded ready targets into `.cleanroom_pending_work.json`.
+
+2. The agent submits the presented target and asks for work in scope_a as role alpha with batch size one again.
+   Observed: the previous target is clean, the next ready item is presented, and the remaining count decrements.
+   Realized by: the component's pending work clearing on clean status, followed by re-evaluation and batch-bounded presentation of the next unit.
+
 ## Implementation-only
 
-### Scenario 6 — Judging a pending target that is missing
+### Scenario 7 — Judging a pending target that is missing
 
 Given: role alpha declares a source pattern and upstream dependencies, the alpha-role target for
 widget is missing from disk, and the beta-role target for widget is clean.
@@ -126,7 +138,7 @@ widget is missing from disk, and the beta-role target for widget is clean.
    Observed: not dirty.
    Realized by: `src_metadata`, now finding current metadata on a present target.
 
-### Scenario 7 — An auditor unit whose feedback targets are not all audited
+### Scenario 8 — An auditor unit whose feedback targets are not all audited
 
 Given: the active role epsilon is an auditor whose feedback role targets are the alpha-role and
 beta-role targets for widget, the alpha-role target has no role audit attribute, and the beta-role
@@ -152,7 +164,7 @@ target carries a current one.
    Observed: dirty, because a feedback target is missing.
    Realized by: `src_metadata`, reporting a feedback target that is absent.
 
-### Scenario 8 — A target path that matches no role
+### Scenario 9 — A target path that matches no role
 
 Given: one target path matches no configured role source pattern.
 
@@ -161,7 +173,7 @@ Given: one target path matches no configured role source pattern.
    Realized by: role configuration lookups through `workspace_registry`, whose pattern resolution
    finds no match, and the component's own propagation of that failure.
 
-### Scenario 9 — Where units and dependencies come from
+### Scenario 10 — Where units and dependencies come from
 
 Given: one part directory has a build definition declaring the units widget and gadget and
 widget's dependency on gadget; a second part directory has only specifications, whose widget
@@ -184,7 +196,7 @@ component directories named widget and gadget.
    Realized by: the component's own discovery mechanics, deriving unit names from component
    directories when neither a build definition nor a specification is present.
 
-### Scenario 10 — Recording ready work and compiling the summary
+### Scenario 11 — Recording ready work and compiling the summary
 
 Given: the agent is working as alpha inside a role workspace, scope_a holds the ready unit
 widget, dirty because the beta-role contract changed, and the blocked unit gadget, whose

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
-# LAST_CHANGED: 2026-10-11T03:52:48Z
-# CHANGE: Declare the workspace registry import and ground canonical repository root resolution
-# CODE_HASH: 47bb6cff58f2
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
+# LAST_CHANGED: 2026-10-12T23:35:00Z
+# CHANGE: align AGENTS.md refresh low spec with command execution tripwire and impasse fail protocol
+# CODE_HASH: ac14df123a69
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_sync_impl."""
@@ -79,8 +79,8 @@ class WorkspaceSynchronizer(
           through workspace_registry.WorkspaceRegistry.discover_repository_root and
           workspace_registry.WorkspaceDescriptor before recopying system files from that root.
         - Recopies tool runners, project configurations, guides, and AGENTS.md carrying
-          boundary rules, contamination tripwires, and fail-stop constraints from main into
-          the workspace without altering writable targets.
+          boundary rules, contamination tripwires, command execution restrictions, and
+          fail-stop/impasse constraints from main into the workspace without altering writable targets.
         - Re-asserts read-only test stub integrity for stub role dependencies by replacing
           leaked implementation code and restoring read-only permissions on stub targets.
         """

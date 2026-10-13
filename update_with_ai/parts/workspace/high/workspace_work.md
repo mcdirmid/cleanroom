@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-10T19:00:00Z
 CHANGE: track dirtiness through implicit role deps and star role changes
-CODE_HASH: c324a5db545a
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+CODE_HASH: 137092e219c3
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # workspace_work interface component
@@ -24,13 +24,13 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 
 A *work queue item* record encapsulates a pending task, carrying a *target file*, a *role name*, *dirtiness reasons*, *dependency files*, companion *contract files*, *blocked reasons*, and an *is ready* status indicating whether the prerequisites of the task are satisfied.
 
-A *work queue summary* record encapsulates the overall state of a directory scope, carrying *ready items*, *blocked items*, and an *is clean* status indicating whether every unit in scope evaluates clean.
+A *work queue summary* record encapsulates the overall state of a directory scope, carrying *ready items*, *blocked items*, an *is clean* status indicating whether every unit in scope evaluates clean, and an optional *remaining ready count* indicating unpresented ready tasks beyond the current batch.
 
 An agent session's *workspace work manager* evaluates and presents actionable work items for role workspaces.
 
 The workspace work manager:
 
-- Evaluates dirty targets and topological readiness across a specified directory scope, discovering ready and blocked work items by role tier depth without requiring a subgraph, treating feedback role dependencies and star role dependencies as implicit role dependencies for dirty tracking, evaluating a target as dirty when any star role dependency changes, and materializing starter templates through graph storage for missing ready target files.
+- Evaluates dirty targets and topological readiness across a specified directory scope, discovering ready and blocked work items by role tier depth without requiring a subgraph, bounding presented ready items when a batch size is specified, treating feedback role dependencies and star role dependencies as implicit role dependencies for dirty tracking, evaluating a target as dirty when any star role dependency changes, and materializing starter templates through graph storage for missing ready target files.
 
 - Resolves the companion upstream specification contracts and interface definitions of target units from role definitions, guiding agent implementation and verification.
 

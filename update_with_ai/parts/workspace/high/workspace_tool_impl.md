@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
-LAST_CHANGED: 2026-10-11T16:00:00Z
-CHANGE: gate submit on role verification checks and support verification bypass
-CODE_HASH: f7f856050e57
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CHANGED: 2026-10-12T21:14:00Z
+CHANGE: dynamic directory scope resolution and positional scope mapping for all roles commissioning
+CODE_HASH: 534896d27d56
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # workspace_tool_impl implementation component
@@ -29,7 +29,7 @@ The realization parses command-line arguments across the work, check files, subm
 
 The realization:
 
-- Pulls inbound changes from the canonical main workspace during work execution, verifies whether prior dirty targets remain pending in the role workspace, evaluates ready and blocked items from the work manager, records pending targets, and formats actionable next steps.
+- Pulls inbound changes from the canonical main workspace during work execution, verifies whether prior dirty targets remain pending in the role workspace, resolves batch size constraints from configuration or command options, evaluates ready and blocked items from the work manager, records the bounded batch of pending targets, advises when remaining ready units await subsequent batches, and formats actionable next steps.
 
 - Resolves the active role and target files during check files execution, regenerates a missing target file from its starter template for roles that declare source patterns and upstream dependencies before verification, executes the corresponding static linting, type-checking, or test rules, formats clean diagnostic outcomes, and returns the verification exit status.
 
@@ -41,4 +41,4 @@ The realization:
 
 - Delegates statement coverage evaluation to the coverage evaluator during coverage execution, using the local workspace files when present, and formats diagnostic span reports.
 
-- Delegates workspace provisioning, registration, and system synchronization across the active role workspaces during commission and refresh system execution.
+- Delegates workspace provisioning, registration, and system synchronization across active role workspaces during commission and refresh system execution, dynamically discovering or requiring the directory scope without hardcoded defaults, mapping directory scope arguments when provisioning across all declared roles, and supporting provisioning across all declared roles within a directory scope when requested.

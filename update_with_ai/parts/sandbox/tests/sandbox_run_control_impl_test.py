@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T21:57:18Z
 # LAST_CHANGED: 2026-10-12T11:59:00Z
 # CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
-# CODE_HASH: 342a2ea2cab6
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# CODE_HASH: aecc47b28b90
+# COVERAGE_AUDIT: 2026-10-12T21:57:18Z
+# QA_AUDIT: 2026-10-12T21:57:18Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_run_control_impl per its grounding specification."""

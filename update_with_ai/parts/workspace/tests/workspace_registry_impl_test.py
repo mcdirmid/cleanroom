@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:37Z
 # LAST_CHANGED: 2026-10-10T19:25:00Z
 # CHANGE: add tests rejecting conflicting silent role dependencies and auditor role dependencies
 # CODE_HASH: 094c5b1d4727
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_registry_impl."""

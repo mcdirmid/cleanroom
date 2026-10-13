@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-10T19:00:00Z
 CHANGE: evaluate producer dirtiness across implicit role deps and star role changes
-CODE_HASH: be928d99f9d2
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+CODE_HASH: 4e3847086b64
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # workspace_work_impl implementation component
@@ -47,11 +47,11 @@ When evaluating work in a role workspace:
 
 - The work manager inspects the build definitions when present, extracting the imported, implemented, and assembled dependencies from the High-Level Specifications of the unit, or derives dependencies from the filesystem component stems when discovering units and dependencies in a part directory.
 
-- The work manager partitions candidate tasks into ready items whose forward dependencies are clean, and blocked items whose prerequisites remain dirty.
+- The work manager partitions candidate tasks into ready items whose forward dependencies are clean, and blocked items whose prerequisites remain dirty, bounding presented ready items by the requested batch size when positive and tracking the remaining unpresented ready count.
 
 - The work manager materializes starter templates via graph storage for any ready tasks of roles with declared source patterns and upstream dependencies whose target source files do not exist on disk.
 
-- If ready items exist and a role workspace is active, the manager records the ready target file paths into the pending work buffer.
+- If ready items exist and a role workspace is active, the manager records the bounded ready target file paths into the pending work buffer.
 
 - The work manager resolves companion upstream specification contract files and interface definitions for candidate targets using dynamic role definitions, avoiding peer implementation file leakage.
 

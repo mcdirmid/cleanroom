@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
-# LAST_CHANGED: 2026-10-11T04:14:50Z
-# CHANGE: Contract working tree type-checking coverage and missing target skeleton synthesis
-# CODE_HASH: a01f880c7921
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
+# LAST_CHANGED: 2026-10-12T23:35:00Z
+# CHANGE: align AGENTS.md low spec with command execution tripwire and impasse fail protocol
+# CODE_HASH: 1f706f0f0a66
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_provision_impl."""
@@ -71,8 +71,9 @@ class WorkspaceProvisioner(
         - Packages executable bin zipapps whose __main__.py invokes the cleanroom_role_tool
           runner entrypoint, writes role metadata containing the main repository root and
           directory scope into cleanroom_files_ext.ROLE_DESCRIPTOR_FILE, and formats AGENTS.md instructions carrying
-          role constraints, strict boundary rules, a contamination tripwire, a fail-stop
-          reporting protocol, and tool execution instructions.
+          role constraints, strict boundary rules, a contamination tripwire, a command execution
+          restriction tripwire, a fail-stop reporting protocol with unresolvable impasse handling via bin/fail,
+          and tool execution instructions.
         - Composes the workspace_registry.WorkspaceDescriptor from the workspace directory,
           main repository root, directory scope, and resolved workspace_registry.RoleDefinition,
           then persists it through workspace_registry.WorkspaceRegistry.record_workspace.

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T21:57:18Z
 # LAST_CHANGED: 2026-10-09T03:03:42Z
 # CHANGE: Rewrote tool_provider_impl tests with recording mock Tool, mock ParameterTypes (incl. one raising ParameterConversionError) and missing-note callback; covers install_tool/installed_tools and every execute_tool postcondition: unknown tool, unknown parameter (+reminder), missing required with/without note (+reminder, note receives present params), default binding, conversion error (+reminder), and successful dispatch with converted bindings returning the tool response.
 # CODE_HASH: 6cf845de04da
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# COVERAGE_AUDIT: 2026-10-12T21:57:18Z
+# QA_AUDIT: 2026-10-12T21:57:18Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for tool_provider_impl per its grounding specification."""

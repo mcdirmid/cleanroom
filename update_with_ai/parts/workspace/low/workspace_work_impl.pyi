@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T04:14:51Z
 # CHANGE: Filter silent cross-role dependencies, expand star-role contracts, and fail loud on unknown roles
-# CODE_HASH: c609570c692d
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# CODE_HASH: dcb33ef49944
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_work_impl."""
@@ -133,6 +133,7 @@ class WorkspaceWorkManager(
         role_name: str,
         workspace_dir: Optional[str] = None,
         force: bool = False,
+        batch_size: Optional[int] = None,
     ) -> workspace_work.WorkQueueSummary:
         """Evaluates dirty units in scope and returns work queue summary.
 
@@ -142,8 +143,8 @@ class WorkspaceWorkManager(
 
         GROUNDING:
         - Checks pending target dirtiness via src_metadata, schedules tasks via
-          control_work_scheduler.WorkScheduler.schedule_work with dir_scope, records ready targets,
-          and formats the WorkQueueSummary.
+          control_work_scheduler.WorkScheduler.schedule_work with dir_scope, bounds ready tasks to
+          batch_size when provided, records ready targets, and formats the WorkQueueSummary.
         - Resolves the active workspace_registry.RoleDefinition through
           workspace_registry.WorkspaceRegistry.resolve_role_definition and lets an undeclared role or
           an unmatched target path raise an explicit exception instead of falling back to a

@@ -1,17 +1,17 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
-LAST_CHANGED: 2026-10-11T03:14:23Z
-CHANGE: Author workspace workspace_tool_impl concrete scenarios
-CODE_HASH: 5fd6730ecdbf
+LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CHANGED: 2026-10-12T21:15:17Z
+CHANGE: Update Scenario 10 for dynamic directory scope and positional scope mapping
+CODE_HASH: 49f85ebf316e
 -->
 
 # Concrete scenarios for `workspace_tool_impl` (implementation)
 
-Scenarios 1 through 8 restate the caller observations of the interface scenarios and add, beside
+Scenarios 1 through 9 restate the caller observations of the interface scenarios and add, beside
 each observation, the realization that produces it. Restating them rather than writing fresh ones
 is what makes realizability structural: an implementation scenario that cannot name a realization
-for its observation is a defect in the implementation rather than a gap in the set. Scenarios 9
-through 11 cover behaviours the interface does not expose to a caller, and each of them is a
+for its observation is a defect in the implementation rather than a gap in the set. Scenarios 10
+through 12 cover behaviours the interface does not expose to a caller, and each of them is a
 candidate for the question of whether it belongs in the interface set instead.
 
 ## Reused from the interface
@@ -139,9 +139,25 @@ Given: role alpha is active in scope_a.
    Realized by: the component's own command-line argument parsing, which rejects a subcommand it
    does not implement before any domain coordinator is reached.
 
+### Scenario 9 — Running the work subcommand with batch size bounding
+
+Given: role alpha is active in scope_a with two ready targets, and the pending work buffer is empty.
+
+1. The caller runs the work subcommand for scope_a with batch size one.
+   Observed: a console report presenting the first ready target, advising that one additional ready unit remains in the queue and should be acquired after submitting the active batch, only the first target recorded in pending work, and an exit code of one indicating work is ready.
+   Realized by: the component's get_work argument parsing, which extracts the batch size constraint, bounds the ready items queried from `workspace_work`, records only the bounded targets into the pending work buffer, and formats the remaining queue advice.
+
+### Scenario 10 — Commissioning all roles for a directory scope
+
+Given: scope_a declares multiple roles in its methodology configuration, and no role workspaces have been commissioned.
+
+1. The caller runs the commission subcommand with the all flag for scope_a (`commission --all scope_a`).
+   Observed: role workspaces for all declared roles within scope_a are created and registered, mapping scope_a as the directory scope rather than a role name, and the exit code is zero.
+   Realized by: the component's commission argument parsing, detecting that the all flag treats any provided positional argument as the directory scope, discovering all declared roles for that directory scope via `workspace_registry`, and commissioning each workspace through `workspace_provision`.
+
 ## Implementation-only
 
-### Scenario 9 — The feedback subcommand buffers a critique
+### Scenario 12 — The feedback subcommand buffers a critique
 
 Given: role alpha is active in scope_a, no local blame buffer exists, and the companion
 specification `beta/high/beta.md` declares a refusal that names no target.
@@ -159,7 +175,7 @@ specification `beta/high/beta.md` declares a refusal that names no target.
    Realized by: `workspace_sync`, whose flush reads the local blame buffer and appends the entries
    in-band.
 
-### Scenario 10 — Work execution pulls before it evaluates
+### Scenario 13 — Work execution pulls before it evaluates
 
 Given: role alpha is active in scope_a, the canonical main repository holds newer content for
 `beta/high/beta.md` than the workspace does, and no in-scope target carries an uncommitted change.
@@ -170,7 +186,7 @@ Given: role alpha is active in scope_a, the canonical main repository holds newe
    Realized by: inbound change pulling through `workspace_sync`, which the work path runs before
    `workspace_work` evaluates the queue.
 
-### Scenario 11 — Startup synchronization of the system files
+### Scenario 14 — Startup synchronization of the system files
 
 Given: role alpha is active in scope_a and the workspace tool runner in `bin/` differs from the
 canonical tool runner.

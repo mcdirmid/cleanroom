@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T21:57:18Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
 CHANGE: Replace the single-item bullet list with declarative prose and name the modification state
 CODE_HASH: 8a7f8982f2fd
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
 -->
 
 # sandbox interface component

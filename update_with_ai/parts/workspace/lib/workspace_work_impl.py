@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:37Z
 # LAST_CHANGED: 2026-10-11T05:04:15Z
 # CHANGE: Expand star-role contracts for declared cross-unit dependencies, suppress silent cross-role peer implementation files, and filter cross-unit dependencies against silent cross-role declarations
-# CODE_HASH: 5b8b8c060d3a
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# CODE_HASH: 2d74ad36dd0c
+# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_work_impl."""
@@ -422,8 +422,6 @@ def _eval_unit_dirty(
                     f"Target {fb_rel} missing valid in-band metadata header"
                 )
                 continue
-            if fb_meta.dirty:
-                reasons.append(f"Target {fb_rel} explicitly marked DIRTY: {fb_meta.dirty}")
             if fb_meta.feedback:
                 for fb in fb_meta.feedback:
                     reasons.append(f"Unacted feedback in {fb_rel}: {fb}")
@@ -1150,6 +1148,7 @@ class WorkspaceWorkManager(
         role_name: str,
         workspace_dir: Optional[str] = None,
         force: bool = False,
+        batch_size: Optional[int] = None,
     ) -> workspace_work.WorkQueueSummary:
         clean_role = role_name.split(":")[-1].strip().lower()
 
@@ -1228,17 +1227,24 @@ class WorkspaceWorkManager(
                                 ),
                             )
                         )
+                    total_sched_ready = len(sched_ready)
+                    remaining_count = 0
+                    if batch_size is not None and batch_size > 0 and len(sched_ready) > batch_size:
+                        remaining_count = len(sched_ready) - batch_size
+                        sched_ready = list(sched_ready[:batch_size])
+
                     if workspace_dir:
                         if sched_ready:
                             self.set_pending_work(workspace_dir, [item.target_file for item in sched_ready])
                         else:
                             self.clear_pending_work(workspace_dir)
 
-                    is_clean = len(sched_ready) == 0
+                    is_clean = total_sched_ready == 0
                     return workspace_work.WorkQueueSummary(
                         ready_items=sched_ready,
                         blocked_items=(),
                         is_clean=is_clean,
+                        remaining_ready_count=remaining_count,
                     )
             except (RuntimeError, ValueError, AttributeError, KeyError):
                 pass
@@ -1247,17 +1253,24 @@ class WorkspaceWorkManager(
             clean_role, dir_scope, eval_root
         )
 
+        total_ready = len(ready_items)
+        remaining_count = 0
+        if batch_size is not None and batch_size > 0 and len(ready_items) > batch_size:
+            remaining_count = len(ready_items) - batch_size
+            ready_items = list(ready_items[:batch_size])
+
         if workspace_dir:
             if ready_items:
                 self.set_pending_work(workspace_dir, [item.target_file for item in ready_items])
             else:
                 self.clear_pending_work(workspace_dir)
 
-        is_clean = len(ready_items) == 0 and len(blocked_items) == 0
+        is_clean = total_ready == 0 and len(blocked_items) == 0
         return workspace_work.WorkQueueSummary(
             ready_items=ready_items,
             blocked_items=blocked_items,
             is_clean=is_clean,
+            remaining_ready_count=remaining_count,
         )
 
     def resolve_contract_files(

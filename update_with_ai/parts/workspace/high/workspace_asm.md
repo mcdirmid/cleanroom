@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-06T22:55:00Z
 CHANGE: restore core constituents
-CODE_HASH: a30166e44db2
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+CODE_HASH: fdf0034aca28
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # workspace_asm assembly component
@@ -16,7 +16,7 @@ implements: workspace_registry, workspace_provision, workspace_sync, workspace_w
 
 The workspace_asm assembly component aggregates constituent workspace management implementation components, exposing complete role workspace provisioning, synchronization, and work queue services.
 
-Decentralized multi-role Cleanroom operations require coordinated wiring of registry persistence, permission-isolated provisioning, bi-directional synchronization, and work discovery. Binding these components individually in consumer binaries duplicates initialization sequences and risks omitted services. The workspace_asm assembly component closes workspace interfaces and assembles all constituent implementation components into a unified assembly.
+Multi-role Cleanroom operations require coordinated wiring of registry persistence, permission-isolated provisioning, bi-directional synchronization, and work discovery. Binding these components individually in consumer binaries duplicates initialization sequences and risks omitted services. The workspace_asm assembly component closes workspace interfaces and assembles all constituent implementation components into a unified assembly.
 
 **Out of scope:** The workspace_asm assembly component does not define custom business logic, dispatch agent requests, or drive pipeline execution; these are handled by other components.
 

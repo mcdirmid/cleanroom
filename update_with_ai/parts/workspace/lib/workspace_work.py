@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T05:42:34Z
 # CHANGE: Drop the uncontracted pending work file constant that the grounding specification no longer declares
-# CODE_HASH: a2cafac18fb3
+# CODE_HASH: 9d826860f054
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_work."""
@@ -43,11 +43,13 @@ class WorkQueueSummary:
         ready_items: Sequence of tasks ready for execution.
         blocked_items: Sequence of tasks blocked on prerequisites.
         is_clean: True if all units in scope evaluate clean.
+        remaining_ready_count: Number of unpresented ready tasks beyond current batch.
     """
 
     ready_items: Sequence[WorkQueueItem]
     blocked_items: Sequence[WorkQueueItem]
     is_clean: bool
+    remaining_ready_count: int = 0
 
 
 class WorkspaceWorkManager(Protocol):
@@ -82,6 +84,7 @@ class WorkspaceWorkManager(Protocol):
         role_name: str,
         workspace_dir: Optional[str] = None,
         force: bool = False,
+        batch_size: Optional[int] = None,
     ) -> WorkQueueSummary: ...
 
     def resolve_contract_files(

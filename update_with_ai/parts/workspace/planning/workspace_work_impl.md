@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-10T19:00:00Z
 CHANGE: evaluate producer unit dirtiness across implicit and star role dependencies
-CODE_HASH: a93d6b85bd24
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+CODE_HASH: d830400087d5
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # workspace_work_impl implementation component
@@ -18,6 +18,7 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
 
 - The workspace work manager reads target paths from the pending work buffer file and evaluates metadata dirtiness. [read_and_check_pending_buffer]
 - The workspace work manager deletes the pending work buffer file from disk when pending targets are resolved. [delete_pending_work_buffer]
+- The workspace work manager bounds presented ready items by the requested batch size when positive and records the remaining unpresented ready count in the work queue summary. [bound_ready_items_batch_size]
 - The workspace work manager calls schedule_work with dir_scope to obtain ready and blocked tasks. [invoke_scheduler_with_dir_scope]
 - The workspace work manager writes ready target file paths to the pending work buffer file as JSON. [write_ready_targets_buffer]
 - The workspace work manager generates formatted text summaries detailing ready items, blocked items, and next actions. [render_work_queue_text_summary]
@@ -36,7 +37,7 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
 
 ### Woven Contracts
 
-- When checking work status, the work manager checks the pending buffer, invokes the work scheduler with dir_scope, resolves companion contracts, filters cross-unit dependencies, writes ready targets to disk, and renders the text summary. [read_and_check_pending_buffer, invoke_scheduler_with_dir_scope, discover_unit_contract_files, filter_and_expand_dependencies, fail_loud_on_unrecognized_roles, write_ready_targets_buffer, render_work_queue_text_summary, workspace_work: [check_pending_work_status, discover_directory_scope_work, resolve_unit_contract_files, filter_role_dependencies, enforce_strict_role_resolution, record_ready_targets_buffer, format_work_queue_diagnostics], workspace_registry: [resolve_role_definition, list_all_role_definitions], control_work_scheduler: [discover_directory_candidates, filter_ready_dependencies]]
+- When checking work status, the work manager checks the pending buffer, invokes the work scheduler with dir_scope, bounds presented ready items when configured, resolves companion contracts, filters cross-unit dependencies, writes ready targets to disk, and renders the text summary. [read_and_check_pending_buffer, invoke_scheduler_with_dir_scope, bound_ready_items_batch_size, discover_unit_contract_files, filter_and_expand_dependencies, fail_loud_on_unrecognized_roles, write_ready_targets_buffer, render_work_queue_text_summary, workspace_work: [check_pending_work_status, discover_directory_scope_work, bound_ready_items_by_batch_size, resolve_unit_contract_files, filter_role_dependencies, enforce_strict_role_resolution, record_ready_targets_buffer, format_work_queue_diagnostics], workspace_registry: [resolve_role_definition, list_all_role_definitions], control_work_scheduler: [discover_directory_candidates, filter_ready_dependencies]]
 - When computing role work queues, the work manager discovers part units and dependencies across parts in scope, evaluates auditor units across all feedback targets, evaluates producer units across implicit and star role dependencies, materializes starter templates via graph storage for missing ready files, and sorts ready and blocked units topologically. [discover_part_units_and_dependencies, evaluate_auditor_unit_dirtiness, evaluate_producer_unit_dirtiness, evaluate_star_dependency_dirtiness, compute_and_sort_role_work_queue, materialize_ready_target_templates, workspace_work: [compute_role_work_queue_targets, materialize_ready_target_templates, track_implicit_role_dirtiness, flag_star_dependency_dirtiness], dag_storage: [materialize_node_template]]
 - When all targets are clean, the manager deletes the pending work buffer and renders a clean summary. [delete_pending_work_buffer, render_work_queue_text_summary, workspace_work: [clear_pending_work_buffer]]
 - When managing target assignments, the work manager writes assigned targets to disk, removes submitted targets, and checks dirtiness against repository metadata. [write_assigned_pending_targets, filter_out_resolved_pending_target, test_pending_target_dirty_state, evaluate_producer_unit_dirtiness, evaluate_star_dependency_dirtiness, workspace_work: [set_pending_work_targets, remove_pending_target_path, is_pending_target_dirty_disk, track_implicit_role_dirtiness, flag_star_dependency_dirtiness], src_metadata: [extract_metadata_disk]]

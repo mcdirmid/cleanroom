@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:37Z
 # LAST_CHANGED: 2026-10-11T06:10:36Z
 # CHANGE: Record the blame explanation as the feedback message content instead of the blamed target label, and present the session role through the contracted role config key so the services that read RoleConfig observe it
 # CODE_HASH: 24247e5ea5df
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 import os

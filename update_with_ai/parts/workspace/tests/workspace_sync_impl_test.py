@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:37Z
 # LAST_CHANGED: 2026-10-11T05:57:40Z
 # CHANGE: Replace the undeclared private registry and source metadata constructors with test doubles implementing the declared WorkspaceRegistry and SourceMetadataCoordinator interfaces
-# CODE_HASH: ee895710893e
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# CODE_HASH: 737f2bc98152
+# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_sync_impl."""
@@ -366,6 +366,9 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                 agents_text = f.read()
             self.assertIn("## Contamination Tripwire (Poison Pill)", agents_text)
             self.assertIn("CRITICAL CONTAMINATION: I read a file outside my assigned role workspace", agents_text)
+            self.assertIn("## Command Execution Tripwire (Restricted Binaries Only)", agents_text)
+            self.assertIn("bin/fail", agents_text)
+            self.assertIn("## Unresolvable Impasse & Failure Protocol", agents_text)
 
 
     def test_pull_updates_unmodified_writable_target_and_ensures_perms(self) -> None:

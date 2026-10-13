@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T03:36:59Z
 # CHANGE: Split verification evaluation and diagnostic noise filtering into atomic contracts
 # CODE_HASH: c912c687971d
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_verification."""

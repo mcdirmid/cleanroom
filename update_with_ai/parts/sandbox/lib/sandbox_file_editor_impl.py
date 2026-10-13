@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
-# LAST_CHANGED: 2026-10-11T05:03:48Z
-# CHANGE: Realize the missing target-content note branches, the whitespace-stripped line-window fallback, the replace-file-content suppression key, the edit delta output branch, the end-line bound, the split omitted-path failure branches with carried warnings, the writes-occurred flag, and pathlib filesystem operations resolved through file path manager workspace roots and bound workspace paths
-# CODE_HASH: 6e367bb9d634
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:47:50Z
+# LAST_CHANGED: 2026-10-12T23:15:12Z
+# CHANGE: Validate wire value types strictly in parameter converters and raise ParameterConversionError for invalid types
+# CODE_HASH: 9cc8130beb4c
+# COVERAGE_AUDIT: 2026-10-12T23:47:50Z
+# QA_AUDIT: 2026-10-12T23:44:20Z
 # --- END CLEANROOM METADATA ---
 
 import difflib
@@ -124,12 +124,19 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier], Sin
 
     def file_hash(self, file: agent_file_alias.FileAlias) -> sandbox_file_editor.FileHash:
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        node_cfg = get_singleton(agent_node_config.NodeConfig)
         ws_root = str(alias_mgr.workspace_root.path)
-        relative = (
-            str(file.workspace_path.path)
-            if isinstance(file, agent_file_alias.BoundFile)
-            else str(file.relative_path)
-        )
+        if isinstance(file, agent_file_alias.BoundFile):
+            relative = str(file.workspace_path.path)
+        else:
+            relative = str(file.relative_path)
+            for declared in node_cfg.read_write_files | node_cfg.read_only_files:
+                if (
+                    str(declared.relative_path) == relative
+                    or str(declared.workspace_path.path) == relative
+                ):
+                    relative = str(declared.workspace_path.path)
+                    break
         disk_path = Path(ws_root) / relative
         content = disk_path.read_text(encoding="utf-8") if disk_path.is_file() else ""
         return sandbox_file_editor.FileHash(hashlib.md5(content.encode("utf-8")).hexdigest())
@@ -148,6 +155,7 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier], Sin
             if (
                 str(rw_file.relative_path) == relative
                 or str(rw_file.workspace_path.path) == relative
+                or (isinstance(path, agent_file_alias.BoundFile) and rw_file.workspace_path == path.workspace_path)
             ):
                 matching_rw = rw_file
                 break
@@ -177,7 +185,13 @@ class _TargetContentParamType(tool_provider.ParameterType[sandbox_file_editor.Ta
         return str
 
     def convert(self, wire_value: str) -> sandbox_file_editor.TargetContent:
-        return sandbox_file_editor.TargetContent(str(wire_value))
+        if not isinstance(wire_value, str):
+            raise tool_provider.ParameterConversionError(
+                message=tool_provider.ConversionErrorMessage(
+                    f"Expected str for target_content, got {type(wire_value).__name__}"
+                )
+            )
+        return sandbox_file_editor.TargetContent(wire_value)
 
 
 @dataclass(frozen=True)
@@ -191,7 +205,13 @@ class _ReplacementContentParamType(tool_provider.ParameterType[sandbox_file_edit
         return str
 
     def convert(self, wire_value: str) -> sandbox_file_editor.ReplacementContent:
-        return sandbox_file_editor.ReplacementContent(str(wire_value))
+        if not isinstance(wire_value, str):
+            raise tool_provider.ParameterConversionError(
+                message=tool_provider.ConversionErrorMessage(
+                    f"Expected str for replacement_content, got {type(wire_value).__name__}"
+                )
+            )
+        return sandbox_file_editor.ReplacementContent(wire_value)
 
 
 @dataclass(frozen=True)
@@ -205,7 +225,15 @@ class _LineNumberParamType(tool_provider.ParameterType[Optional[sandbox_file_edi
         return int
 
     def convert(self, wire_value: int) -> Optional[sandbox_file_editor.LineNumber]:
-        return sandbox_file_editor.LineNumber(int(wire_value))
+        if wire_value is None:
+            return None
+        if not isinstance(wire_value, int) or isinstance(wire_value, bool):
+            raise tool_provider.ParameterConversionError(
+                message=tool_provider.ConversionErrorMessage(
+                    f"Expected int for line number, got {type(wire_value).__name__}"
+                )
+            )
+        return sandbox_file_editor.LineNumber(wire_value)
 
 
 @dataclass(frozen=True)
@@ -219,7 +247,13 @@ class _AllowMultipleParamType(tool_provider.ParameterType[sandbox_file_editor.Al
         return bool
 
     def convert(self, wire_value: bool) -> sandbox_file_editor.AllowMultiple:
-        return sandbox_file_editor.AllowMultiple(bool(wire_value))
+        if not isinstance(wire_value, bool):
+            raise tool_provider.ParameterConversionError(
+                message=tool_provider.ConversionErrorMessage(
+                    f"Expected bool for allow_multiple, got {type(wire_value).__name__}"
+                )
+            )
+        return sandbox_file_editor.AllowMultiple(wire_value)
 
 
 class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[AgentSessionTier], Singleton):
@@ -339,7 +373,11 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
                     "Error: Path parameter omitted and no file has been read or edited in this session."
                 )
             declared_rw = [
-                f for f in node_cfg.read_write_files if f.relative_path == last.relative_path
+                f for f in node_cfg.read_write_files if (
+                    str(f.relative_path) == str(last.relative_path)
+                    or str(f.workspace_path.path) == str(last.relative_path)
+                    or (isinstance(last, agent_file_alias.BoundFile) and f.workspace_path == last.workspace_path)
+                )
             ]
             if not declared_rw:
                 return fail(
@@ -353,7 +391,11 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             )
 
         matching_rw_files = [
-            f for f in node_cfg.read_write_files if f.relative_path == target_file.relative_path
+            f for f in node_cfg.read_write_files if (
+                str(f.relative_path) == str(target_file.relative_path)
+                or str(f.workspace_path.path) == str(target_file.relative_path)
+                or (isinstance(target_file, agent_file_alias.BoundFile) and f.workspace_path == target_file.workspace_path)
+            )
         ]
         if not matching_rw_files:
             return fail(
@@ -361,7 +403,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             )
         target_rw_file = matching_rw_files[0]
 
-        disk_path = Path(ws_root) / str(target_file.relative_path)
+        disk_path = Path(ws_root) / str(target_rw_file.workspace_path.path)
         content = disk_path.read_text(encoding="utf-8") if disk_path.is_file() else ""
 
         lines = content.splitlines(keepends=True)
@@ -429,10 +471,12 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             if target_content in global_text:
                 locations: List[int] = []
                 pos = global_text.find(target_content)
+                step = max(1, len(target_content))
                 while pos != -1:
                     locations.append(global_text[:pos].count("\n") + 1)
-                    pos = global_text.find(target_content, pos + len(target_content))
-                located = ", ".join(str(line_number) for line_number in locations)
+                    pos = global_text.find(target_content, pos + step)
+                unique_locations = list(dict.fromkeys(locations))
+                located = ", ".join(str(line_number) for line_number in unique_locations)
                 return fail(
                     f"Error: Target content was not found within the search window "
                     f"(lines {s_idx + 1}-{e_idx}) but was located at line(s): {located}."
@@ -444,7 +488,8 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
 
         if exact_count > 1 and not allow_multiple:
             first_pos = window_text.find(target_content)
-            second_pos = window_text.find(target_content, first_pos + len(target_content))
+            step = max(1, len(target_content))
+            second_pos = window_text.find(target_content, first_pos + step)
             first_line = s_idx + 1 + window_text[:first_pos].count("\n")
             second_line = s_idx + 1 + window_text[:second_pos].count("\n")
             return fail(

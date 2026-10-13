@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
-LAST_CHANGED: 2026-10-11T16:00:00Z
-CHANGE: update execute_submit_command contract for verification gating and bypass
-CODE_HASH: 7d5eefb7b555
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CHANGED: 2026-10-12T21:14:00Z
+CHANGE: update execute_commission_command contract for dynamic directory scope
+CODE_HASH: 1010d25e9028
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # workspace_tool interface component
@@ -21,13 +21,13 @@ Autonomous subagents executing inside isolated Cleanroom role workspaces rely on
 ### Contracts
 
 - The workspace tool runner dispatches CLI arguments across role subcommands and executes the selected action. [dispatch_role_subcommand]
-- The workspace tool runner coordinates get_work execution by checking pending targets, evaluating the queue, and formatting diagnostic next steps with target files and companion specification contracts. [execute_get_work_command]
+- The workspace tool runner coordinates get_work execution by checking pending targets, bounding presented ready items by batch size, evaluating the queue, advising when remaining units await subsequent batches, and formatting diagnostic next steps with target files and companion specification contracts. [execute_get_work_command]
 - The workspace tool runner coordinates check_files execution by running role-specific static linters and type checkers for target files, regenerating missing target files from starter templates for roles with declared source patterns and upstream dependencies. [execute_check_files_command]
 - The workspace tool runner coordinates submit execution by evaluating verification checks on the target and rejecting failing targets unless bypassed, updating metadata, appending to the cleanroom log, and clearing pending targets upon success. [execute_submit_command]
 - The workspace tool runner coordinates blame and feedback execution by validating critique constraints, injecting feedback, appending to the cleanroom log, and clearing pending targets. [execute_blame_command]
 - The workspace tool runner coordinates fail execution by applying dirty tags, recording failure feedback, and clearing pending targets. [execute_fail_command]
 - The workspace tool runner coordinates statement test coverage evaluation and outputs diagnostics. [execute_coverage_command]
-- The workspace tool runner coordinates workspace commissioning and returns directory results. [execute_commission_command]
+- The workspace tool runner coordinates workspace commissioning for specified roles or across all declared roles within a directory scope, dynamically discovering or requiring the directory scope without hardcoded defaults. [execute_commission_command]
 - The workspace tool runner coordinates system file, binary utility, and guide refresh across active workspaces. [execute_refresh_sys_command]
 
 ### Woven Contracts

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T21:57:18Z
 # LAST_CHANGED: 2026-10-12T11:59:00Z
 # CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
-# CODE_HASH: 7a3fe325d829
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# CODE_HASH: cf45569112e7
+# SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox run control implementation low-level specification."""

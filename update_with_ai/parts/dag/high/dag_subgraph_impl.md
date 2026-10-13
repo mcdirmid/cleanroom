@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-11T01:39:02Z
 CHANGE: Remove interface-restated catalogs and retain only implementation-specific ordering and batching mechanics
 CODE_HASH: 67d2e86d33fa
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # dag_subgraph_impl implementation component

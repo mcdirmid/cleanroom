@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T03:06:36Z
 # CHANGE: Add role address tie-break and unsatisfied dependency batch termination grounding
 # CODE_HASH: 4a92655e8659
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Dag subgraph implementation specification."""

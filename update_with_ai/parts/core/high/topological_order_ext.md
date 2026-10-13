@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-11T01:39:02Z
 CHANGE: Restore cleaned metadata and tighten purpose rationale to two paragraphs
 CODE_HASH: d17c245878e4

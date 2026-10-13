@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T21:57:18Z
 LAST_CHANGED: 2026-10-12T11:27:00Z
 CHANGE: Remove max batch size parameter from get work tool
-CODE_HASH: 9f365a5dc443
+CODE_HASH: 477d051b749f
 -->
 
 # Concrete scenarios for `sandbox_run_control_impl` (implementation)

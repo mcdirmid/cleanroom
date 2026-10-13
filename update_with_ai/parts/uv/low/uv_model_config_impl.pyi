@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T03:55:25Z
 # CHANGE: Resolve the active model configuration from argument, environment variables, and file default in precedence order
-# CODE_HASH: 5da3ffccf434
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# CODE_HASH: 4e0a436c7bd7
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom UV model and runtime configuration implementation low-level specification."""

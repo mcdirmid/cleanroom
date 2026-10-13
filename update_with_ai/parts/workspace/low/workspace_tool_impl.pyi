@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T16:00:00Z
 # CHANGE: add verification check execution and no_verify parameter to run_submit grounding
-# CODE_HASH: 96611b73f195
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# CODE_HASH: 8351b2d6ce6f
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_tool_impl."""
@@ -58,13 +58,15 @@ class WorkspaceToolRunner(
         dir_scope: Optional[str] = None,
         repo_root: Optional[str] = None,
         force: bool = False,
+        batch_size: Optional[int] = None,
     ) -> int:
         """Evaluates dirty work in local workspace and prints ready tasks.
 
         GROUNDING:
         - Invokes workspace_sync.WorkspaceSynchronizer.pull and refresh_system_files,
           verifies pending target dirtiness, queries workspace_work.WorkspaceWorkManager.compute_role_work_queue,
-          persists pending targets via workspace_work.WorkspaceWorkManager, and formats console instructions.
+          bounds ready items to batch_size when provided or configured, persists bounded pending targets via
+          workspace_work.WorkspaceWorkManager, advises when remaining items exist, and formats console instructions.
         """
         ...
 
@@ -160,15 +162,18 @@ class WorkspaceToolRunner(
     @override
     def run_commission(
         self,
-        role_name: str,
-        dir_scope: str = "staging",
+        role_name: Optional[str] = None,
+        dir_scope: Optional[str] = None,
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
+        all_roles: bool = False,
     ) -> int:
-        """Commissions an isolated role workspace.
+        """Commissions an isolated role workspace or all workspaces in a directory scope.
 
         GROUNDING:
-        - Delegates workspace creation to workspace_provision.WorkspaceProvisioner.commission.
+        - When all_roles is true, discovers all declared roles in dir_scope via workspace_registry.WorkspaceRegistry
+          and commissions each role workspace via workspace_provision.WorkspaceProvisioner.commission.
+        - Otherwise delegates workspace creation for role_name to workspace_provision.WorkspaceProvisioner.commission.
         """
         ...
 

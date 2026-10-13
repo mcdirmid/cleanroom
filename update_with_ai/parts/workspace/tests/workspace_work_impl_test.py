@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:37Z
 # LAST_CHANGED: 2026-10-11T05:58:06Z
 # CHANGE: Replace the undeclared private registry and source metadata constructors with test doubles implementing the declared WorkspaceRegistry and SourceMetadataCoordinator interfaces
-# CODE_HASH: 3d486f386385
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# CODE_HASH: af4d851cb7e2
+# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_work_impl."""
@@ -640,6 +640,25 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 )
             )
 
+            # If feedback target is marked DIRTY: but unmodified (QA_AUDIT > LAST_CHANGED), qa remains clean
+            dirty_tagged_lib = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-08T00:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-08T00:00:00Z\n"
+                "# DIRTY: Check carefully\n"
+                "# QA_AUDIT: 2026-10-08T01:00:00Z\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+            with open(os.path.join(part_dir, "lib/sample_impl.py"), "w", encoding="utf-8") as f:
+                f.write(dirty_tagged_lib)
+            self.assertFalse(
+                self.work_mgr.is_pending_target_dirty(
+                    "staging/parts/sample/lib/sample_impl.py",
+                    repo_root,
+                    role_name="qa",
+                )
+            )
+
     def test_eval_auditor_unit_dirtiness_when_contract_dependency_modified(self) -> None:
         with tempfile.TemporaryDirectory() as repo_root:
             clean_md = (
@@ -738,6 +757,41 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 role_name="scenario",
             )
             self.assertIn("staging/parts/sample/scenarios/sample.md", contracts)
+
+    def test_evaluate_work_bounds_ready_items_by_batch_size(self) -> None:
+        tasks = [
+            control_work_scheduler.ScheduledTask(
+                node=dag_storage.DagNode(
+                    unit_address=dag_storage.UnitAddress(f"staging/parts/sample/lib/unit_{i}.py"),
+                    role_address=dag_storage.RoleAddress("//update_python_with_ai:lib"),
+                ),
+                task_prompt=f"Implement unit_{i}.py",
+                dependency_paths=[],
+                feedback_messages=[],
+            )
+            for i in range(3)
+        ]
+        mock_sched = MockWorkScheduler(tasks=tasks)
+        self.registry.register_instance(
+            mock_sched,
+            keys=[control_work_scheduler.WorkScheduler],
+            tier=agent_session.agent_session,
+        )
+        with tempfile.TemporaryDirectory() as ws_dir:
+            summary = self.work_mgr.evaluate_work(
+                dir_scope="staging",
+                role_name="lib",
+                workspace_dir=ws_dir,
+                force=True,
+                batch_size=1,
+            )
+            self.assertEqual(len(summary.ready_items), 1)
+            self.assertEqual(summary.remaining_ready_count, 2)
+            self.assertFalse(summary.is_clean)
+
+            pending = self.work_mgr.get_pending_work(ws_dir)
+            self.assertEqual(len(pending), 1)
+            self.assertEqual(pending[0], summary.ready_items[0].target_file)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:44:59Z
 # LAST_CHANGED: 2026-10-12T11:27:00Z
 # CHANGE: Remove max batch size parameter from get work tool
-# CODE_HASH: 1ed5378cf8b2
+# CODE_HASH: d6cea8a40555
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations

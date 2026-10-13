@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T21:57:18Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
 CHANGE: Split the formatting mechanics sentence from the resolution surface and separate conditional polarity into its own bullets
 CODE_HASH: 461aba5adb9d
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
 -->
 
 # template_format_impl implementation component

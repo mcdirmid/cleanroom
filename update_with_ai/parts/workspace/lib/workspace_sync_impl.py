@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
-# LAST_CHANGED: 2026-10-11T05:04:12Z
-# CHANGE: Validate canonical main baselines against workspace hashes before committing harvested targets, delete the consumed blame buffer, and resolve the canonical repository root and role context through the workspace descriptor
-# CODE_HASH: 4de616067804
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:37Z
+# LAST_CHANGED: 2026-10-12T23:35:00Z
+# CHANGE: refresh AGENTS.md with command execution tripwire and impasse fail protocol
+# CODE_HASH: cd9da74eda64
+# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_sync_impl."""
@@ -580,6 +580,7 @@ def _write_role_agents_md(
 3. Run verification checks: `bin/check_files [target_file]`
 4. Submit verification stamp: `bin/submit <target_file>`
 5. Blame defects if discovered: `bin/blame <culprit_file> "<explanation>"`
+6. If target cannot be certified or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
 """
     else:
         workflow = f"""1. Run `bin/get_work` to inspect and pull pending work.
@@ -587,6 +588,7 @@ def _write_role_agents_md(
 3. Run verification checks: `bin/check_files [target_file]`
 4. Submit completed targets: `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>` if unmodified)
 5. If upstream contracts are defective: `bin/blame <culprit_contract> "<explanation>"`
+6. If success is impossible or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
 """
 
     content = f"""# Cleanroom Role Instructions: {role_def.role_name.capitalize()}
@@ -601,6 +603,22 @@ def _write_role_agents_md(
 2. **Git Operations Prohibited**: This is a projected cleanroom workspace, not a git repository. Never invoke `git` commands (`git checkout`, `git restore`, `git reset`, etc.) under any circumstances.
 3. **Main Repository Inviolability**: The main workspace is strictly read-only and off-limits to direct agent actions. All interaction with main occurs exclusively through the prescribed `bin/` tools.
 
+## Command Execution Tripwire (Restricted Binaries Only)
+**ZERO TOLERANCE FOR UNAPPROVED COMMANDS.**
+
+You are strictly permitted to run ONLY the prescribed workspace binaries:
+- `bin/get_work`
+- `bin/check_files`
+- `bin/submit`
+- `bin/blame`
+- `bin/fail`
+
+Executing ANY other command, tool, or script (including but not limited to `python`, `python3`, `bash`, `sh`, `find`, `grep`, `git`, `cat`, or inspecting zipapps/executables) is STRICTLY PROHIBITED. If you execute any unapproved command:
+1. **YOU ARE PERMANENTLY CONTAMINATED.**
+2. **ALL WORK MUST CEASE IMMEDIATELY.**
+3. **IMMEDIATE ABORT**: Report the unapproved command execution to the user and stop all tool usage:
+   > `CRITICAL CONTAMINATION: I executed an unapproved command outside the prescribed bin/ tools ([command]). This session is compromised and terminated.`
+
 ## Contamination Tripwire (Poison Pill)
 **ZERO TOLERANCE FOR READING OUT-OF-BOUNDS FILES.**
 
@@ -613,7 +631,7 @@ If you read ANY file outside of your assigned role workspace (via ANY tool such 
 This is an absolute tripwire. There are NO exceptions for debugging, diagnosing tracebacks, inspecting imports, or reading dependencies.
 
 ## Fail-Stop & Reporting Protocol (Do NOT Self-Heal)
-If any cleanroom binary (`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/submit`) fails due to:
+If any cleanroom binary (`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/submit`, `bin/fail`) fails due to:
 - A Python exception or traceback (e.g., `ModuleNotFoundError`, `ImportError`, `AttributeError`)
 - A build, type check, or test execution failure
 - A missing support file, template error, or dependency issue
@@ -624,7 +642,14 @@ If any cleanroom binary (`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/su
 - **DO NOT** attempt alternate execution paths outside `bin/`.
 - **REPORT IMMEDIATELY**: Output the exact command that failed and its verbatim error/traceback to the user, state what dependency or file appears to be missing, and wait for human instruction.
 
-NOTE: Verification test failures (e.g. `[FAIL] Verification failed` output from tests or linters on code under test) are NORMAL test results to be acted upon via `bin/blame` or code edits, NOT infrastructure crashes. Fail-Stop applies ONLY to internal tool crashes, tracebacks, or missing tooling/dependencies.
+NOTE: Verification test failures (e.g. `[FAIL] Verification failed` output from tests or linters on code under test) are NORMAL test results to be acted upon via `bin/blame`, `bin/fail`, or code edits, NOT infrastructure crashes. Fail-Stop applies ONLY to internal tool crashes, tracebacks, or missing tooling/dependencies.
+
+## Unresolvable Impasse & Failure Protocol
+If you determine that success is not possible (e.g. unreachable code under test, contradictory specification contracts, or dead ends that blame cannot resolve):
+1. **DO NOT** attempt ad-hoc debugging, script execution, or reverse-engineering of cleanroom tools.
+2. Execute: `bin/fail <target_file> "<reason>"`
+3. Report failure to the coordinator via `send_message`: `FAILED: <target_file> - <reason>`
+4. Cease work immediately.
 
 ## Standard Workflow
 {workflow}

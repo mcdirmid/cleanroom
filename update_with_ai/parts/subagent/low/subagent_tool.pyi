@@ -1,0 +1,48 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-12T23:37:36Z
+# LAST_CHANGED: 2026-10-12T21:00:00Z
+# CHANGE: author subagent_tool interface low-level specification
+# CODE_HASH: 651ef9627ff4
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+# --- END CLEANROOM METADATA ---
+
+"""Low-level interface specification for subagent_tool."""
+
+from typing import Optional, Protocol, Sequence
+from framework import operation, singleton_type
+from support.lib.lifecycle import InTier
+from agent_session import AgentSessionTier
+
+
+@singleton_type("agent_session")
+class SubagentToolRunner(InTier[AgentSessionTier], Protocol):
+    """Command dispatch and execution runner for subagent orchestration."""
+
+    @operation
+    def execute_command(self, argv: Sequence[str]) -> int:
+        """Dispatches and executes subagent commands matching an argument sequence.
+
+        POSTCONDITIONS:
+        - MUST parse CLI argument sequence and execute selected action.
+        - MUST return integer exit status code.
+        """
+        ...
+
+    @operation
+    def run_orchestrate(
+        self,
+        dir_scope: str,
+        harness: Optional[str] = None,
+        model: Optional[str] = None,
+        max_waves: int = 50,
+        batch_size: Optional[int] = None,
+        repo_root: Optional[str] = None,
+    ) -> int:
+        """Orchestrates multi-agent execution across topological waves until convergence.
+
+        POSTCONDITIONS:
+        - MUST resolve execution harness adapter.
+        - MUST coordinate wave execution via subagent coordinator.
+        - MUST return 0 on convergence, 1 otherwise.
+        """
+        ...

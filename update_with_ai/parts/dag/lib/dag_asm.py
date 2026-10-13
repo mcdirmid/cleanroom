@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T04:59:18Z
 # CHANGE: Resolve the default lifecycle registry in assembly initialization before delegating to constituents
 # CODE_HASH: 6252ba29acfc

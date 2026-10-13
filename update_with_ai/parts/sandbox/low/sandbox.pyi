@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T21:57:18Z
 # LAST_CHANGED: 2026-10-11T03:21:33Z
 # CHANGE: Drop stale operation content and redundant modification postcondition
 # CODE_HASH: 66282bd5d6ce
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox low-level interface specification."""

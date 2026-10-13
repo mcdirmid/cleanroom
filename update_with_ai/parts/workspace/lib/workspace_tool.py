@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T05:25:18Z
 # CHANGE: Prune the uncontracted get_workspace_tool_runner module function and its lifecycle import so the interface holds only the declared runner protocol, restore the declared directory scope default, and carry the grounding specification's postconditions into the protocol docstrings
-# CODE_HASH: a64291ae9729
+# CODE_HASH: a61a0558b455
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_tool."""
@@ -24,6 +24,7 @@ class WorkspaceToolRunner(Protocol):
         dir_scope: Optional[str] = None,
         repo_root: Optional[str] = None,
         force: bool = False,
+        batch_size: Optional[int] = None,
     ) -> int:
         """Evaluates dirty work in local workspace and prints ready tasks."""
         ...
@@ -96,12 +97,13 @@ class WorkspaceToolRunner(Protocol):
 
     def run_commission(
         self,
-        role_name: str,
-        dir_scope: str = "staging",
+        role_name: Optional[str] = None,
+        dir_scope: Optional[str] = None,
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
+        all_roles: bool = False,
     ) -> int:
-        """Commissions an isolated role workspace."""
+        """Commissions an isolated role workspace or all workspaces in a directory scope."""
         ...
 
     def run_refresh_sys(

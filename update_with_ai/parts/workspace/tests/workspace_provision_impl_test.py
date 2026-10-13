@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:37Z
 # LAST_CHANGED: 2026-10-11T05:58:13Z
 # CHANGE: Replace the undeclared private workspace registry constructor with a test double implementing the declared WorkspaceRegistry interface
-# CODE_HASH: ecfb2f651ff3
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# CODE_HASH: b57075bb7ac0
+# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_provision_impl."""
@@ -186,6 +186,9 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
                 agents_text = f.read()
             self.assertIn("## Contamination Tripwire (Poison Pill)", agents_text)
             self.assertIn("CRITICAL CONTAMINATION: I read a file outside my assigned role workspace", agents_text)
+            self.assertIn("## Command Execution Tripwire (Restricted Binaries Only)", agents_text)
+            self.assertIn("bin/fail", agents_text)
+            self.assertIn("## Unresolvable Impasse & Failure Protocol", agents_text)
 
             # Decoupled project configurations copied as read-only
             ws_pyproj = os.path.join(ws_dir, "pyproject.toml")

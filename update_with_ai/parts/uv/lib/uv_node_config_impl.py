@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:37Z
 # LAST_CHANGED: 2026-10-11T05:10:00Z
 # CHANGE: Resolve declared feedback dependencies into per-node blame targets and read-only files, include the guide target manifest source file in guide candidates, construct workspace paths through the declared frozen constructors, derive role-aware dependency fallbacks, prune uncontracted members and dead override state, and register the alias manager with the realized parameterized key
 # CODE_HASH: 437f6c800c62
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 import json

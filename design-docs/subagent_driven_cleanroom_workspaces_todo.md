@@ -23,36 +23,45 @@ In the previous subagent integration attempt (**Option 2**), Cleanroom attempted
 2. The subagent instantiation tax, prompt preamble injection, and turn multiplication under Google One Ultra subscription quotas burned through 5-hour burst limits in under 45 minutes ($30–$50 token equivalent per pass).
 3. Software-based confinement inside a single folder required complex, fragile interceptors, sentinel files (`.mcp.active`), and concurrency locks.
 
-### 1.2 The Breakthrough: Physical Workspaces + Zero-Execution Coordinator
+### 1.2 The Breakthrough: Physical Workspaces + Dedicated Coordinator Subagent
 To solve these challenges, Cleanroom established **Option 3: Subagentless Cleanroom Workspaces** ([`subagentless_cleanroom_workspaces.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)), which moved isolation from the software runtime to the operating system filesystem:
 - Role workspaces live in isolated sibling directories (`../role_workspaces/<ws>_<role>_<dir>/`).
 - Implementers physically have no `tests/` directory; test authors physically have no real `lib/*.py` (replaced with `chmod 444` interface stubs containing `raise NotImplementedError`).
 - In-band source metadata headers (`LAST_CLEANED`, `LAST_CHANGED`, `FEEDBACK:`) and direct Python CLI mutations (`bin/submit`, `bin/blame`, `bin/fail`) eliminate synchronization daemons and buffer files.
-- Role sessions run `bin/get_work`, edit files with native editor tools, and call `bin/submit`.
+- Role sessions run `bin/get_work`, edit files with native editor tools, and call `bin/submit`, `bin/blame`, or `bin/fail`.
 
 While Option 3 succeeded brilliantly for interactive, human-driven pair programming, it required a developer to manually switch between IDE chat tabs to prompt each role when upstream work was ready.
 
-**The Subagent-Driven Cleanroom Workspaces Architecture** closes this loop:
-1. **Zero-Execution Coordinator**: A central coordinator that **never** reads code, edits files, or runs tests. Its sole responsibility is inspecting the global directed acyclic graph (DAG) work queue and waking up the subagent bound to an active role workspace when work is available.
-2. **Workspace-Bound Subagents**: Subagents are persistently bound to their respective role workspace directories (`cwd = ../role_workspaces/<ws>_<role>_<dir>`). They possess standard native tools (read file, edit file, shell command) and **zero custom MCP or framework tools**.
-3. **Self-Synchronizing In-Band Protocol**: Subagents communicate through existing workspace tools (`bin/get_work`, `bin/submit`, `bin/blame`, `bin/fail`). The subagent drains its role queue autonomously and sends a lean completion status back to the coordinator.
-4. **Multi-Harness Flexibility**: The architecture runs identically across **Google Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose**, breaking vendor lock-in and slashing token costs via **DeepSeek-V4 Flash**.
+**The Subagent-Driven Cleanroom Workspaces Architecture** closes this loop via a strict three-tier hierarchy:
+1. **Tier 0: Human Conversation Chat & CLI (`bin/cleanroom clean-all`)**: The user-facing chat window. It **never** acts as the coordinator and never executes queue or build commands directly. Its sole responsibility upon receiving a cleaning request is triggering the CLI or invoking the dedicated Coordinator Subagent, then stepping completely out of the way.
+2. **Tier 1: Dedicated Coordinator Subagent (`cleanroom_coordinator`)**: An autonomous, hyper-restricted subagent with **zero code custody**. It never reads source code, never runs tests, and never executes open-ended search tools (`find`, `grep`).
+   - **Strict Tool Permissions**: The coordinator possesses **only 4 tools**: `run_command` (used strictly to query `bin/cleanroom work-queue`), `send_message`, `invoke_subagent`, and `manage_subagents`. It is explicitly stripped of all file viewing/editing tools (`view_file`, `write_to_file`, `replace_file_content`), web tools, image generation, notebooks, and timers.
+   - **Instant Queue Evaluation**: It queries the global directed acyclic graph (DAG) for unblocked ready **nodes** via a single, fast CLI command: `bin/cleanroom work-queue <scope>`.
+   - **Pre-Registered Worker Dispatch**: It dispatches or messages Tier 2 role subagents using the pre-registered `cleanroom_worker` subagent type, pinned strictly to each role's commissioned workspace directory (`../role_workspaces/<ws>_<role>_<scope>/`). Setting `TypeName: "self"` or `Workspace: "inherit"` is strictly forbidden.
+   - **Reactive Convergence Loop**: It sleeps reactively until worker completion notifications arrive, re-checks `bin/cleanroom work-queue <scope>`, and repeats until all nodes in scope converge clean.
+3. **Tier 2: Workspace-Bound Role Subagents (`cleanroom_worker`)**: Subagents persistently bound to their respective role workspace directories (`cwd = ../role_workspaces/<ws>_<role>_<dir>`). They possess standard native tools (read file, edit file, shell command) and **zero custom MCP or framework tools**. They execute role duties defined in their workspace `AGENTS.md` and companion guides, draining ready nodes and resolving them via `bin/submit`, `bin/blame`, or `bin/fail`.
+4. **Self-Synchronizing In-Band Protocol**: Subagents communicate through existing workspace tools (`bin/get_work`, `bin/submit`, `bin/blame`, `bin/fail`). The subagent drains its ready nodes autonomously and sends a lean completion status back to the coordinator.
+5. **Multi-Harness Flexibility**: The architecture runs identically across **Google Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose**, breaking vendor lock-in and slashing token costs via **DeepSeek-V4 Flash**.
 
 ```mermaid
 flowchart TD
-    subgraph CanonicalRepo ["Canonical Main Workspace (/projects/<workspace_name>)"]
-        MainFiles["Canonical Source Files & Contracts\n(high/, scenarios/, planning/, low/, lib/, tests/)"]
-        BuildGraph["Cleanroom Workspace & DAG State Engine\n(parts/workspace, parts/control, src_metadata.py)"]
-        CleanroomCLI["bin/cleanroom CLI\n(commission, decommission, dirty, work-queue)"]
+    subgraph Tier0 ["Tier 0: Human Chat & Entrypoint"]
+        UserChat["Conversation Chat\nbin/cleanroom clean-all <scope>"]
     end
 
-    subgraph CoordinatorTier ["Coordinator Layer (Zero Execution)"]
-        CoordAgent["Cleanroom Coordinator Agent\n(Antigravity / DeepSeek Harness / Goose)"]
-        CoordQueue["Evaluates Global DAG Work Queue\n(No file edits, no test runs)"]
+    subgraph Tier1 ["Tier 1: Dedicated Coordinator Subagent (Zero Execution)"]
+        CoordAgent["Cleanroom Coordinator Subagent\n(cleanroom_coordinator)\n• 4 tools only: run_command, send_message, invoke_subagent, manage_subagents\n• No code custody (no file edits)\n• No exploratory searches (no find/grep)\n• Evaluates DAG via bin/cleanroom work-queue"]
+        CoordQueue["bin/cleanroom work-queue <scope>\n(Instant DAG evaluation)"]
         CoordAgent --> CoordQueue
     end
 
-    subgraph RoleWorkspaces ["Physically Confined Sibling Role Workspaces (../role_workspaces/)"]
+    subgraph CanonicalRepo ["Canonical Main Workspace (/projects/<workspace_name>)"]
+        MainFiles["Canonical Source Files & Contracts\n(high/, scenarios/, planning/, low/, lib/, tests/)"]
+        BuildGraph["Cleanroom Workspace & DAG State Engine\n(parts/workspace, parts/control, src_metadata.py)"]
+        CleanroomCLI["bin/cleanroom CLI\n(commission, clean-all, work-queue)"]
+    end
+
+    subgraph Tier2 ["Tier 2: Physically Confined Sibling Role Workspaces (../role_workspaces/)"]
         subgraph LibWS ["<ws>_lib_<dir>/"]
             LibFiles["lib/*.py (writable)\nlow/*.pyi (chmod 444)\nNO tests/ directory!"]
             LibTools["bin/get_work | bin/submit\nbin/blame    | bin/fail"]
@@ -72,22 +81,24 @@ flowchart TD
         end
     end
 
-    CoordQueue -.->|"Evaluates DAG"| BuildGraph
-    CoordAgent ==>|"1. Wake: 'Work Ready'"| LibSubagent
-    CoordAgent ==>|"1. Wake: 'Work Ready'"| TestSubagent
-    CoordAgent ==>|"4. Wake: 'Work Ready'"| QASubagent
+    UserChat ==>|"1. invoke_subagent"| CoordAgent
+    CoordQueue -.->|"Evaluates ready nodes"| BuildGraph
+    CoordAgent ==>|"2. Wake: 'Ready nodes available'"| LibSubagent
+    CoordAgent ==>|"2. Wake: 'Ready nodes available'"| TestSubagent
+    CoordAgent ==>|"5. Wake: 'Ready nodes available'"| QASubagent
 
-    LibSubagent -->|"2. Run bin/get_work -> Edit -> bin/submit"| LibTools
-    TestSubagent -->|"2. Run bin/get_work -> Edit -> bin/submit"| TestTools
-    QASubagent -->|"5. Run bin/get_work -> Audit -> bin/submit"| QATools
+    LibSubagent -->|"3. bin/get_work -> Edit -> submit/blame/fail"| LibTools
+    TestSubagent -->|"3. bin/get_work -> Edit -> submit/blame/fail"| TestTools
+    QASubagent -->|"6. bin/get_work -> Audit -> submit/blame/fail"| QATools
 
-    LibTools ==>|"Direct Python Mutation (bin/submit)"| MainFiles
-    TestTools ==>|"Direct Python Mutation (bin/submit)"| MainFiles
-    QATools ==>|"Direct Python Mutation (bin/submit)"| MainFiles
+    LibTools ==>|"Direct Python Mutation (submit/blame/fail)"| MainFiles
+    TestTools ==>|"Direct Python Mutation (submit/blame/fail)"| MainFiles
+    QATools ==>|"Direct Python Mutation (submit/blame/fail)"| MainFiles
 
-    LibSubagent -.->|"3. Done: {submitted: [foo]}"| CoordAgent
-    TestSubagent -.->|"3. Done: {submitted: [foo_test]}"| CoordAgent
-    QASubagent -.->|"6. Done: {audited: [foo]}"| CoordAgent
+    LibSubagent -.->|"4. Done: {submitted: [node_a], blamed: []}"| CoordAgent
+    TestSubagent -.->|"4. Done: {submitted: [node_b], blamed: []}"| CoordAgent
+    QASubagent -.->|"7. Done: {audited: [node_c]}"| CoordAgent
+    CoordAgent -.->|"8. Convergence report"| UserChat
 ```
 
 ---
@@ -110,22 +121,24 @@ The table below contrasts the failed Option 2 architecture with Option 3 (Subage
 
 ## 3. Core Principles & System Design
 
-### 3.1 The Zero-Execution Coordinator
-In traditional multi-agent systems, the supervisor agent frequently becomes a bottleneck: it reads source files, attempts to summarize diffs, runs test suites, and plans micro-steps. This burns exorbitant tokens and causes context degradation.
+### 3.1 The Zero-Execution Coordinator Subagent
+In traditional multi-agent systems, the supervisor agent frequently becomes a bottleneck: it reads source files, attempts to summarize diffs, runs test suites, and plans micro-steps. This burns exorbitant tokens and causes context degradation. Crucially, attempting to have the human-facing conversation chat act as a coordinator fails because the chat session is distractible, open-ended, and prone to exploratory rabbit holes (`grep`, `find`).
 
-In this architecture, the Coordinator is strictly **zero-execution**:
+In this architecture, the Coordinator is a **dedicated, autonomous subagent** that is strictly **zero-execution**:
 1. **No Code Custody**: The coordinator never opens, reads, or edits a source file (`lib/`, `tests/`, `low/`, etc.).
 2. **No Build/Test Execution**: The coordinator never runs `pytest`, `pyright`, or test runners.
-3. **Queue Evaluation Only**: The coordinator evaluates the repository DAG state by invoking `parts/workspace` (or reading `bin/cleanroom work-queue <role>`).
-4. **Reactive Wakeup & Sleep**:
-   - The coordinator identifies all roles with topologically unblocked, ready work.
+3. **No Exploratory Searching**: The coordinator never runs `find`, `grep`, `git diff`, or directory tree walks.
+4. **Queue Evaluation Only**: The coordinator evaluates the repository DAG state exclusively by querying the DAG work queue for topologically ready **nodes** (each node representing a `(unit, role)` pair).
+5. **Workspace Commissioning**: Ensures that all 9 role workspaces for the target scope are commissioned (`bin/cleanroom commission <role> <scope>`) prior to dispatch.
+6. **Reactive Wakeup & Sleep**:
+   - The coordinator identifies all roles with topologically unblocked, ready nodes.
    - It issues an asynchronous notification message to the subagents bound to those roles:
      ```json
      {
        "action": "wake",
        "role": "lib",
        "workspace": "cleanroom_lib_staging",
-       "reason": "Ready units detected in global DAG"
+       "reason": "Ready nodes detected in global DAG"
      }
      ```
    - The coordinator enters an idle/sleep state, waiting for reactive wakeups from worker completions. It does **not** poll or loop.
@@ -140,63 +153,72 @@ Because the workspace is physically isolated at the filesystem level:
 - In `LibSubagent`'s workspace, `tests/` does not exist. There is no software filter to bypass; test files are physically absent.
 - In `TestSubagent`'s workspace, `lib/*.py` files are read-only (`chmod 444`) interface stubs containing `raise NotImplementedError`. The test author cannot cheat or overfit to real implementation code.
 - Upstream specifications (`high/*.md`, `scenarios/*.md`, `planning/*.md`, `low/*.pyi`) and configs are set to `chmod 444`. Any unauthorized modification is rejected directly by the OS kernel with `Permission denied`.
+- **Command Execution Tripwire**: Role subagents are strictly restricted to running the 5 prescribed workspace binaries (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, `bin/fail`). Executing arbitrary shell commands (`python`, `bash`, `find`, `grep`, zip extraction, etc.) is strictly forbidden and triggers an immediate session abort.
+- **Unresolvable Impasse Protocol**: If a subagent determines that success is impossible or an unresolvable impasse occurs, it executes `bin/fail <target> "<reason>"`, immediately ceases work, and sends `FAILED: <target> - <reason>` to the coordinator. The coordinator immediately halts the loop, terminates workers, and escalates the failure to the user.
 
 ### 3.3 The Autonomous Subagent Turn Loop
-When woken by the coordinator, the workspace-bound subagent executes its standardized Cleanroom turn sequence:
+When woken by the coordinator, the workspace-bound subagent executes its standardized Cleanroom turn sequence, consulting its workspace `AGENTS.md` and resolving ready nodes via `bin/submit`, `bin/blame`, or `bin/fail`:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Coord as Coordinator (Zero-Execution)
+    actor Coord as Coordinator Subagent (Zero-Execution)
     actor Subagent as Role Subagent (Lib/Test/QA)
     participant WS as Role Workspace (Physical OS)
     participant Main as Canonical Main Repo
     participant Control as Control Engine (parts/control)
 
-    Coord->>Subagent: Wakeup: "Ready work available"
+    Coord->>Subagent: Wakeup: "Ready nodes available"
     activate Subagent
     
     Subagent->>WS: bin/get_work
     WS->>Main: Silent Inbound Pull (sync contracts, stubs, feedback)
     WS->>WS: Fast System Refresh (AGENTS.md, tools, guides)
     WS->>Main: Evaluate Global DAG Work Queue
-    WS-->>Subagent: Work Queue: [READY: unit_a, unit_b | BLOCKED: unit_c]
+    WS-->>Subagent: Work Queue: [READY: (unit_a, role), (unit_b, role) | BLOCKED: (unit_c, role)]
 
-    loop Drain Ready Units
+    loop Drain Ready Nodes
         Note over Subagent,WS: Read companion guide, inspect contract, edit code
         Subagent->>WS: Native file edit (replace_file_content / write_to_file)
-        Subagent->>WS: Run local verification (pyright lib/ or uv run pytest)
+        Subagent->>WS: Run local verification (bin/check_files)
         
         alt Verification Succeeded
             Subagent->>WS: bin/submit staging/parts/pkg/lib/unit_a.py "Implement unit_a"
             WS->>Main: Copy modified file to main
             WS->>Control: Submit via control_submit_impl.py -- "Implement unit_a"
             Control-->>WS: 0 (Success: stamped LAST_CLEANED, cleared FEEDBACK)
-            WS-->>Subagent: ✔ Submitted unit_a.py
+            WS-->>Subagent: ✔ Submitted unit_a.py (Node clean)
         else Upstream Contract Defect Found
             Subagent->>WS: bin/blame staging/parts/pkg/low/unit_a.pyi "Missing parameter 'ctx'"
             WS->>Control: Blame via control_attribution_impl.py -- "Missing parameter 'ctx'"
             Control-->>WS: 0 (Success: injected FEEDBACK, advanced LAST_CLEANED)
             WS-->>Subagent: ✔ Blamed unit_a.pyi (marked upstream dirty)
+        else Unresolvable Blocker
+            Subagent->>WS: bin/fail staging/parts/pkg/lib/unit_a.py "Unresolvable type recursion"
+            WS->>Control: Fail via control_failure_impl.py
+            Control-->>WS: 0 (Success: marked dirty with failure reason)
+            WS-->>Subagent: ✖ Failed unit_a.py (Reported diagnostic)
+            Subagent->>Coord: Message: "FAILED: staging/parts/pkg/lib/unit_a.py - Unresolvable type recursion"
+            Note over Coord: Immediately halts DAG loop, kills workers, and escalates failure to user
         end
 
-        Subagent->>WS: bin/get_work (Check next ready unit)
-        WS-->>Subagent: Work Queue: [READY: unit_b | BLOCKED: unit_c]
+        Subagent->>WS: bin/get_work (Check next ready node)
+        WS-->>Subagent: Work Queue: [READY: (unit_b, role) | BLOCKED: (unit_c, role)]
     end
 
     Subagent->>Coord: Message: {"status": "idle", "submitted": ["unit_a", "unit_b"], "blamed": []}
     deactivate Subagent
     
     activate Coord
-    Note over Coord: Re-evaluates DAG queue. unit_a and unit_b are clean in lib!<br/>Now triggers Test or QA subagents.
+    Note over Coord: Re-evaluates DAG queue. Nodes (unit_a, lib) and (unit_b, lib) are clean!<br/>Now triggers Test or QA subagents for downstream nodes.
     deactivate Coord
 ```
 
-### 3.4 Multi-Unit Processing Invariant & Batch-Bounded Queue Presentation
-To prevent turn proliferation and conversational stalling, all subagents must adhere to the **Multi-Unit Processing Invariant**:
-- A subagent does **not** stop after submitting a single unit to wait for coordinator approval.
-- A subagent immediately calls `bin/get_work` after every submission or blame action.
-- It continues processing ready units sequentially until `bin/get_work` confirms that all units in scope are clean or blocked on external roles.
+### 3.4 Multi-Node Processing Invariant & Batch-Bounded Queue Presentation
+To prevent turn proliferation and conversational stalling, all subagents must adhere to the **Multi-Node Processing Invariant**:
+- A subagent does **not** stop after submitting or resolving a single node to wait for coordinator approval.
+- A subagent immediately calls `bin/get_work` after every submission, blame, or failure action.
+- It continues processing ready nodes sequentially until `bin/get_work` confirms that all nodes in scope are clean or blocked on external roles.
 - Only when zero ready units remain does the subagent emit its completion message and yield its turn.
 
 #### Batch-Bounded Work Acquisition (`batch_size`)
@@ -206,6 +228,15 @@ To prevent overwhelming the role subagent with excessive context and cognitive l
 - If additional ready units remain in the queue beyond the current batch, `bin/get_work` displays the current batch and explicitly advises:
   > *"Completed units in this batch must be submitted via `bin/submit`; once submitted, run `bin/get_work` again to acquire the next batch of ready work."*
 - This keeps the agent's editing and verification loop focused on a small, manageable unit batch while preserving autonomous multi-unit draining across turns.
+
+### 3.5 Auditor Dirtiness Semantics & In-Band Certification
+Cleanroom auditor roles (`qa`, `coverage`, `spec_qa`) evaluate dirtiness strictly based on temporal certification contracts in source metadata headers:
+- An auditor node `(unit, auditor_role)` evaluates **dirty** if and only if:
+  1. The feedback target lacks the required role audit attribute (e.g., missing `QA_AUDIT` or `COVERAGE_AUDIT`).
+  2. The feedback target was modified after its audit timestamp (`fb_meta.last_changed > audit_ts`).
+  3. A non-silent upstream contract dependency was modified after the audit timestamp (`contract_ts > audit_ts`).
+  4. The feedback target does not exist or has an unparseable header.
+- **Independence from Explicit Upstream Dirtiness Tags**: An auditor node is **never** marked dirty simply because its feedback target has an explicit `# DIRTY:` tag if the code itself has not been modified. If an upstream role (`lib`) inspects a target tagged `# DIRTY:`, verifies that all contracts and tests pass, and submits via `bin/submit` without modifying the code, `LAST_CHANGED` is unchanged, `# DIRTY:` is removed, and downstream auditor certification remains 100% valid without requiring a redundant re-audit.
 
 ---
 
@@ -305,52 +336,45 @@ class CleanroomHarnessAdapter(ABC):
 
 ### 4.2 Harness 1: Google Antigravity
 
-Google Antigravity provides an interactive desktop IDE environment powered by Gemini models, featuring hierarchical subagents and reactive messaging without polling loops.
+Google Antigravity provides an interactive desktop IDE environment powered by Gemini models, featuring hierarchical subagents and reactive messaging without polling loops. Under **Option A**, all Antigravity-specific adapters, provisioning logic, and configuration generators are isolated in a dedicated part: `update_with_ai/parts/antigravity/`, preserving `update_with_ai/parts/subagent/` as a purely generic, multi-platform coordinator.
 
-#### Topology & Configuration
-- **Supervisor Session**: The main conversational chat window initializes the Cleanroom Coordinator subagent (`cleanroom_coordinator`).
-- **Role Worker Subagents**: Persistent subagents declared via `invoke_subagent` or subagent manifests, permanently mapped to role workspaces.
+#### Topology & Hierarchical Subagent Separation
+Antigravity enforces a strict two-tier subagent hierarchy that completely decouples the user-facing chat from the coordinator engine:
+1. **Tier 0: Human Conversation Chat & `bin/cleanroom clean-all <scope> [role]`**:
+   - The user triggers orchestration either by running `bin/cleanroom clean-all <scope> [role]` (e.g. `bin/cleanroom clean-all -antigravity staging qa`) or by prompting the assistant to clean dirty nodes in `<scope>` up to `[role]`.
+   - The CLI commissions any uncommissioned role workspaces up to the requested role boundary and emits the handover directive.
+   - The conversation chat's **sole** action is invoking the dedicated Coordinator Subagent (`cleanroom_coordinator`) with the target scope and optional role boundary, then waiting for its completion report. The conversation chat never attempts to evaluate queues, search files, or coordinate directly.
+2. **Tier 1: Coordinator Subagent (`cleanroom_coordinator`)**:
+   - **4 Tools Only**: Possesses strictly `run_command` (solely for executing `bin/cleanroom work-queue <scope> [role]`), `send_message`, `invoke_subagent`, and `manage_subagents`. Has zero file reading, editing, or search tools.
+   - **Instant Queue Inspection**: Evaluates DAG ready nodes `(unit, role)` via `bin/cleanroom work-queue <scope> [role] --json` without running exploratory shell loops or Python scripts. When a role boundary is provided (e.g. `qa`), only roles up to and including that role are evaluated; downstream roles (e.g. `coverage`) are excluded.
+   - **Pre-Registered Worker Dispatch**: Wakes or spawns Tier 2 role worker subagents using `TypeName: "cleanroom_worker"` pinned strictly to each role workspace directory. Setting `TypeName: "self"` is forbidden.
+   - **Reactive Convergence**: Enters reactive sleep until completion notifications arrive, re-evaluates `bin/cleanroom work-queue <scope> [role]`, and repeats until all nodes in scope converge clean across target roles.
+3. **Tier 2: Role Worker Subagents (`cleanroom_worker`)**: Persistent subagents declared via `invoke_subagent` (or messaged via `send_message`), permanently mapped to role workspaces.
 
-#### Project Policy Hardening (`~/.gemini/config/projects/<workspace_hash>.json`)
-When `bin/cleanroom commission` provisions a role workspace, it writes an Antigravity project configuration enforcing strict workspace confinement:
-```json
-{
-  "settings": {
-    "fileAccessPolicy": "AGENT_SETTING_POLICY_DENY",
-    "sandboxMode": false
-  },
-  "isWorkspaceOnly": true
-}
-```
-Antigravity's internal tool dispatcher rejects any attempt by `view_file` or `write_to_file` to access paths outside the role workspace directory.
+#### Workspace-Local Confinement & Policy (Strictly Inside Provisioned Workspaces)
+All Antigravity configuration and safety boundaries live **strictly inside each provisioned workspace** (`../role_workspaces/<ws>_<role>_<scope>/`), never touching machine-global settings like `~/.gemini/config/projects/`:
+- **Workspace-Local `.agents/rules/isolation.md`**: Enforces strict boundaries forbidding navigation or edits outside the role workspace root.
+- **Workspace-Local `AGENTS.md`**: Provides the role guide, mandatory verification gates (`bin/check_files`), and submission/resolution protocols (`bin/submit`, `bin/blame`, `bin/fail`).
+- **Kernel Permissions**: Physical OS absence of foreign directories (e.g. no `tests/` in `lib`) and `chmod 444` kernel protection on stubs make software bypass impossible.
 
-#### Subagent Invocation & Workspace Binding (Prohibiting `Workspace: inherit`)
-> [!IMPORTANT]
-> **Why `Workspace: inherit` is Strictly Prohibited**:
-> In Antigravity, setting `Workspace: "inherit"` forces the child subagent to run in the parent's working directory—which for the Coordinator is the un-blinded canonical main workspace (`/projects/cleanroom`).
-> 
-> Doing so completely destroys Cleanroom's double-blind isolation! Subagents **must never** inherit the main workspace. Instead, each role worker must be explicitly dispatched with its execution context pinned strictly to its commissioned role workspace directory (`../role_workspaces/<ws>_<role>_<dir>/`).
+#### Role Subagent Invocation & Workspace Binding
+Role worker subagents are bound to their respective role workspaces through two supported dispatch modes:
 
-Role worker subagents are bound to their respective role workspaces through two supported Antigravity dispatch modes:
-
-1. **Programmatic Dispatch via Antigravity SDK (`antigravity-sdk` Python)**:
-   The Coordinator instantiates or triggers persistent role sessions with `workspace_path` explicitly targeted to the commissioned role workspace:
-   ```python
-   # Coordinator dispatching to the role-confined workspace
-   session = client.sessions.create(
-       workspace_path=os.path.realpath(f"../role_workspaces/{ws_name}_{role}_{dir_scope}"),
-       model="gemini-3.8-flash",
-       system_instruction=open(f"../role_workspaces/{ws_name}_{role}_{dir_scope}/AGENTS.md").read(),
-   )
-   session.send_message("Work is available in scope. Run bin/get_work and drain ready units.")
+1. **Interactive In-IDE Dispatch via Antigravity Skills & Subagents**:
+   The Coordinator subagent uses `invoke_subagent` (or `send_message` for already running subagents). The role workspace directory is explicitly pinned in the worker prompt, and every command execution enforces `Cwd`:
+   ```json
+   {
+     "TypeName": "cleanroom_worker",
+     "Role": "Cleanroom Lib Worker",
+     "Prompt": "You are an autonomous Cleanroom 'lib' worker executing in /Users/seanmcdirmid/projects/role_workspaces/cleanroom_lib_staging. You must operate strictly inside that directory, running all commands with Cwd set to your role workspace directory. Run bin/get_work to acquire pending ready nodes. Consult your workspace AGENTS.md, perform role verification, resolve nodes via bin/submit, bin/blame, or bin/fail, and drain all ready nodes before completing."
+   }
    ```
 
-2. **Antigravity CLI Session Binding (`agy --cwd`)**:
-   When orchestrating via the command line or terminal tasks, the Coordinator launches the role agent process pinned to the role directory:
-   ```bash
-   agy --cwd "../role_workspaces/cleanroom_lib_staging" \
-       --prompt "Execute Cleanroom turn: run bin/get_work, verify code, submit via bin/submit, and drain ready units."
-   ```
+2. **Programmatic Dispatch via Antigravity Harness Adapter (`parts/antigravity`)**:
+   `AntigravityHarnessAdapter` implements `subagent_coordinator.HarnessAdapter` in Python:
+   - Spawns and manages subagent turns targeted to the role workspace directory.
+   - Extracts token metrics from `<appDataDir>/brain/<id>/.system_generated/logs/transcript.jsonl`.
+   - Returns structured `RoleTurnResult` payloads to the coordinator.
 
 #### Reactive Waking (No Polling)
 The Coordinator never executes a busy-waiting loop or sleep timer to poll workers:
@@ -788,12 +812,66 @@ stateDiagram-v2
     RoleBlamed --> RouteFeedback: Mark Upstream Node Dirty
     RouteFeedback --> EvaluatingDAG: Re-schedule Upstream Role
     
-    TerminatingClean --> [*]: Report Overall Success
+---
+
+## 8. Deployment Architecture: Zero-Repo-Pollution via uv & Antigravity Plugins
+
+A core requirement of Cleanroom is that consumer repositories must never be polluted with framework boilerplate, temporary folders, or mandatory in-tree scripts. Cleanroom deploys as a lean, dual-mode system:
+
+```mermaid
+flowchart TD
+    subgraph DeploymentModes ["Cleanroom Distribution & Execution Layers"]
+        subgraph UVLayer ["1. Python / uv Package (Headless Core)"]
+            UVTool["uv tool install cleanroom / uvx cleanroom"]
+            GlobalCLI["Global CLI executable on PATH: 'cleanroom'"]
+            UVTool --> GlobalCLI
+        end
+
+        subgraph AntigravityPlugin ["2. Global Antigravity Plugin (In-IDE Chat)"]
+            PluginDir["~/.gemini/config/plugins/cleanroom/"]
+            CoordSkill["Global Skill: cleanroom_coordinator\n(Mounted in any repo chat via /cleanroom_coordinator)"]
+            PluginDir --> CoordSkill
+        end
+
+        subgraph ConsumerRepo ["3. Clean Consumer Project Repository (/projects/my_project)"]
+            RepoSource["Project Source Files & Contracts\n(No bin/ directory! No .agents/ directory!)"]
+            CleanroomConfig["cleanroom.toml"]
+        end
+
+        subgraph ProvisionedWorkspaces ["4. External Role Workspaces (../role_workspaces/)"]
+            RoleWS["Commissioned Sibling Directories\n• Contains auto-generated bin/ (get_work, submit, blame)\n• Contains role AGENTS.md & workspace .agents/\n• Physically outside the consumer repo"]
+        end
+    end
+
+    GlobalCLI -->|"cleanroom commission --all"| RoleWS
+    GlobalCLI -->|"cleanroom orchestrate"| RoleWS
+    CoordSkill -->|"invoke_subagent(Workspace=...)"| RoleWS
 ```
+
+### 8.1 No `bin/` Directory in Consumer Repositories
+- The `bin/` directory in Cleanroom's own codebase is purely a developer convenience for local repo workflows (`bin/test`, `bin/cleanroom`).
+- Consumer projects running Cleanroom via `uv` install the package globally via `uv tool install cleanroom` or run it ephemerally with `uvx cleanroom`.
+- The CLI command `cleanroom` lives on the user's system `PATH`.
+- The **only place `bin/` directories exist** is inside the **commissioned role workspaces** (`../role_workspaces/<ws>_<role>_<scope>/bin/`), where `WorkspaceProvisioner` automatically packages self-contained executable runner zipapps (`bin/get_work`, `bin/submit`, `bin/blame`, `bin/fail`). The consumer repo remains completely untouched.
+
+### 8.2 No Mandatory `.agents/` Directory in Consumer Repositories
+- Antigravity's Customization System supports **Global Plugins** (`~/.gemini/config/plugins/`) and **Global Skills** (`~/.gemini/config/skills/`).
+- Cleanroom's Antigravity Coordinator is packaged and installed **once** on the developer's machine as a global Antigravity plugin.
+- When the developer opens any Cleanroom project in the Antigravity IDE:
+  - The `cleanroom_coordinator` skill is automatically available in chat without requiring an `.agents/` folder in the project root.
+  - If a team desires version-controlled in-tree skills, `cleanroom init --antigravity` can optionally scaffold project-level `.agents/`, but this is strictly optional.
+
+### 8.3 Dual Execution Modalities
+1. **Headless / CI Mode (`cleanroom orchestrate <scope>`)**:
+   - Executes purely via Python and `uv` from the terminal.
+   - Evaluates the DAG, auto-commissions missing role workspaces, dispatches subagents, and monitors convergence without opening any IDE.
+2. **In-IDE Interactive Chat Mode**:
+   - The developer invokes `/cleanroom_coordinator` in the Antigravity chat window.
+   - The coordinator agent evaluates the queue and dispatches worker subagents via `invoke_subagent` targeted to the external role workspaces.
 
 ---
 
-## 8. Implementation Roadmap
+## 9. Implementation Roadmap
 
 The implementation of Subagent-Driven Cleanroom Workspaces proceeds across four distinct phases:
 
@@ -818,12 +896,12 @@ The implementation of Subagent-Driven Cleanroom Workspaces proceeds across four 
 - **Universal CLI Command**:
   - `bin/cleanroom orchestrate [dir_scope] [--harness=<antigravity|dsh|goose>]`.
 
-### Phase 2: Phase 1 Production Harness Adapters
-1. **Google Antigravity Adapter (`antigravity_adapter.py`)**:
-   - Integrates with Antigravity Python SDK and `agy --cwd` session binding.
-   - Enforces `fileAccessPolicy: AGENT_SETTING_POLICY_DENY` across all commissioned workspaces.
-   - Parses `<appDataDir>/brain/<id>/.system_generated/logs/transcript.jsonl` for token usage.
-2. **DeepSeek Harness Adapter (`dsh_adapter.py`)**:
+### Phase 2: Platform-Specific Harness Parts (Option A)
+1. **Google Antigravity Part (`update_with_ai/parts/antigravity/`)**:
+   - **`antigravity_workspace`**: Generates workspace-local `.agents/` configuration and strict isolation rules directly inside each commissioned role workspace (`../role_workspaces/<ws>_<role>_<scope>/`).
+   - **`antigravity_coordinator_skill`**: Authors, validates, and installs the zero-execution coordinator prompt and skill artifact (`.agents/skills/cleanroom_coordinator/SKILL.md`) for in-IDE orchestration.
+   - **`antigravity_harness`**: Implements `subagent_coordinator.HarnessAdapter` in Python for programmatic session dispatch and parses token telemetry from `<appDataDir>/brain/<id>/.system_generated/logs/transcript.jsonl`.
+2. **DeepSeek Harness Part (`update_with_ai/parts/dsh/`)**:
    - Implements Cordis coordinator plugin `@cleanroom/dsh-coordinator`.
    - Utilizes `dsh-tool-subagent-control` (`send_message`, `list_agents`, `interrupt_agent`) for subagent steering.
    - Supports both cloud DeepSeek-V4.1-Flash API and 100% local air-gapped inference via Ollama / vLLM.
@@ -848,7 +926,7 @@ The implementation of Subagent-Driven Cleanroom Workspaces proceeds across four 
 
 ---
 
-## 9. Conclusion
+## 10. Conclusion
 
 The Subagent-Driven Cleanroom Workspaces architecture combines the best of both worlds:
 1. **Impenetrable Double-Blind Isolation**: Enforced by physical OS directory separation and kernel `chmod 444` permissions, completely eliminating the brittle software hooks and HTTP daemons of Option 2.

@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
-LAST_CHANGED: 2026-10-11T03:14:22Z
-CHANGE: Author workspace workspace_tool concrete scenarios
-CODE_HASH: 3e7026ee2180
+LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CHANGED: 2026-10-12T21:15:14Z
+CHANGE: Update Scenario 10 for dynamic directory scope
+CODE_HASH: c5469fba6677
 -->
 
 # Concrete scenarios for `workspace_tool` (interface)
@@ -98,3 +98,17 @@ Given: role alpha is active in scope_a.
 1. The caller runs the subcommand `polish` for the alpha-role target for widget.
    Observed: the request is refused, naming `polish` as unknown, no file is changed, and the exit
    code is non-zero.
+
+## Scenario 9 — Running the work subcommand with batch size bounding
+
+Given: role alpha is active in scope_a with two ready targets, and the pending work buffer is empty.
+
+1. The caller runs the work subcommand for scope_a with batch size one.
+   Observed: a console report presenting the first ready target, advising that one additional ready unit remains in the queue and should be acquired after submitting the active batch, only the first target recorded in pending work, and an exit code of one indicating work is ready.
+
+## Scenario 10 — Commissioning all roles for a directory scope
+
+Given: scope_a declares multiple roles in its methodology configuration, and no role workspaces have been commissioned.
+
+1. The caller runs the commission subcommand with the all flag for scope_a (`commission --all scope_a`).
+   Observed: role workspaces for all declared roles within scope_a are created and registered, mapping the positional scope parameter as directory scope rather than a role name, and the exit code is zero.

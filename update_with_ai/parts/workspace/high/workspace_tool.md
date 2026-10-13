@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
-LAST_CHANGED: 2026-10-11T16:00:00Z
-CHANGE: gate submission on verification checks and support verification bypass
-CODE_HASH: eb84a65463d4
-SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CHANGED: 2026-10-12T21:14:00Z
+CHANGE: dynamic directory scope resolution for workspace commissioning without hardcoded defaults
+CODE_HASH: 167fdb531f63
+SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 -->
 
 # workspace_tool interface component
@@ -26,7 +26,7 @@ An agent session's *workspace tool runner* provides command dispatch and executi
 
 The workspace tool runner dispatches and executes role commands matching an argument sequence, returning an integer exit code.
 
-The workspace tool runner evaluates ready tasks for the active role scope through the work manager, formatting structured console reports carrying target paths, the companion specification contracts to read, and actionable next steps.
+The workspace tool runner evaluates ready tasks for the active role scope through the work manager, bounding presented ready items by configured or requested batch sizes, providing diagnostic advice when additional ready units remain, and formatting structured console reports carrying target paths, the companion specification contracts to read, and actionable next steps.
 
 The workspace tool runner submits target files, evaluating verification checks and rejecting failing targets prior to submission unless bypassed, enforcing producer change summaries, attesting auditor stamps, appending submission records to the cleanroom log, and clearing the pending target buffers on success.
 
@@ -36,4 +36,4 @@ The workspace tool runner evaluates statement test coverage across implementatio
 
 The workspace tool runner evaluates static verification checks, linters, and type checking for specified or pending target files, regenerating a missing target file from its starter template before verification for roles that declare source patterns and upstream dependencies.
 
-The workspace tool runner commissions isolated role workspaces for specified roles and directory scopes, and refreshes system configuration files, bin utilities, and companion guides across the active role workspaces.
+The workspace tool runner commissions isolated role workspaces for specified roles or across all declared roles within a directory scope, dynamically discovering or requiring the directory scope without hardcoded defaults, and refreshes system configuration files, bin utilities, and companion guides across the active role workspaces.

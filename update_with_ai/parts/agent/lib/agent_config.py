@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-11T04:59:24Z
 # CHANGE: Remove generated scaffold markers so every declared configuration property is a clean protocol stub
 # CODE_HASH: bbf111dbbbfc

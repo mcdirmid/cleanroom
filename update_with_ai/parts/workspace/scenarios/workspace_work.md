@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T18:21:03Z
+LAST_CLEANED: 2026-10-12T23:37:36Z
 LAST_CHANGED: 2026-10-11T03:06:09Z
 CHANGE: Align workspace_work interface scenarios with the high-level specification
-CODE_HASH: 0348960327ce
+CODE_HASH: c919433ec3bd
 -->
 
 # Concrete scenarios for `workspace_work` (interface)
@@ -72,3 +72,13 @@ Given: no role definition declares role zeta.
 
 1. The agent asks for work in scope_a as role zeta.
    Observed: the request fails explicitly and names zeta, and no work is reported.
+
+## Scenario 6 — Bounding ready tasks by batch size
+
+Given: scope_a contains multiple ready units for role alpha, and the pending work buffer is empty.
+
+1. The agent asks for work in scope_a as role alpha with batch size one.
+   Observed: exactly one ready item is reported, the remaining ready count indicates unpresented ready items, and only the single presented ready item is recorded in the pending work buffer.
+
+2. The agent submits the presented target and asks for work in scope_a as role alpha with batch size one again.
+   Observed: the previous target is clean, the next ready item is presented, and the remaining count decrements.

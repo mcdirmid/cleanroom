@@ -66,3 +66,7 @@ If a test doesn't matter, don't run the test! Do not edit pyrightconfig.json to 
 ## Git Operations
 
 - **NO Unprompted Commits or Pushes**: NEVER commit or push to git unless explicitly directed to do so by the user.
+
+## Autonomous Clean-All Antigravity Execution
+
+- **Immediate Coordinator Invocation on clean-all**: When `bin/cleanroom clean-all -antigravity ...` is executed (or outputs the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE`), do NOT stop to ask for confirmation. Immediately and automatically invoke the `cleanroom_coordinator` subagent in the very same turn to drive DAG convergence.

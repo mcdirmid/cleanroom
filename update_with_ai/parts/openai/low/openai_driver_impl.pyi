@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:03Z
+# LAST_CLEANED: 2026-10-12T23:37:36Z
 # LAST_CHANGED: 2026-10-12T12:07:00Z
 # CHANGE: Rebuild completion tools payload on each turn from currently installed tools
-# CODE_HASH: 645a45c2256f
-# SPEC_QA_AUDIT: 2026-10-12T18:21:03Z
+# CODE_HASH: a1cc60ea657d
+# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """OpenAI driver implementation low-level specification."""

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T18:21:04Z
+# LAST_CLEANED: 2026-10-12T23:37:37Z
 # LAST_CHANGED: 2026-10-08T12:55:00Z
 # CHANGE: remove uncontracted dependencies and use collaborator doubles
-# CODE_HASH: ac24e20185fb
-# COVERAGE_AUDIT: 2026-10-12T18:21:04Z
-# QA_AUDIT: 2026-10-12T18:21:04Z
+# CODE_HASH: 48f643e55a62
+# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
+# QA_AUDIT: 2026-10-12T23:37:36Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_tool_impl."""
@@ -46,7 +46,7 @@ class FakeWorkspaceRegistry:
         return "/fake_repo"
 
     def list_roles(
-        self, repo_root: Optional[str] = None
+        self, repo_root: Optional[str] = None, dir_scope: Optional[str] = None
     ) -> Sequence[workspace_registry.RoleDefinition]:
         return self.roles
 
@@ -481,6 +481,75 @@ class WorkspaceToolImplTest(unittest.TestCase):
         with open(written_path, "r", encoding="utf-8") as f:
             content = f.read()
         self.assertIn("Test log entry for submit\n", content)
+
+    def test_get_work_with_batch_size(self) -> None:
+        desc = self.fake_prov.commission(
+            "lib", dir_scope="staging", repo_root=self.fake_repo
+        )
+        meta_file = os.path.join(desc.workspace_dir, ".cleanroom_role.json")
+        self.fake_work.ready_items = [
+            workspace_work.WorkQueueItem(
+                target_file=f"staging/parts/pkg/lib/unit_{i}.py",
+                role_name="lib",
+                dirtiness_reasons=["dirty"],
+                dependency_files=[],
+                is_ready=True,
+            )
+            for i in range(3)
+        ]
+
+        runner = workspace_tool_impl.WorkspaceToolRunner()
+        cwd_orig = os.getcwd()
+        try:
+            os.chdir(desc.workspace_dir)
+            out = io.StringIO()
+            with redirect_stdout(out):
+                ret = runner.execute_command(["get_work", "--batch-size", "1"])
+            self.assertEqual(ret, 1)
+            stdout = out.getvalue()
+            self.assertIn("unit_0.py", stdout)
+            self.assertNotIn("unit_1.py", stdout)
+            self.assertIn("Note: 2 additional ready unit(s) remain in the queue.", stdout)
+            self.assertIn("Submit completed units in this batch via 'bin/submit'", stdout)
+
+            # Check that only unit_0 is set as pending
+            pending = self.fake_work.get_pending_work(desc.workspace_dir)
+            self.assertEqual(len(pending), 1)
+            self.assertIn("unit_0.py", pending[0])
+        finally:
+            os.chdir(cwd_orig)
+
+    def test_commission_all_roles(self) -> None:
+        runner = workspace_tool_impl.WorkspaceToolRunner()
+        out = io.StringIO()
+        with redirect_stdout(out):
+            ret = runner.execute_command(
+                ["commission", "--all", "pkg_custom", "--repo-root", self.fake_repo]
+            )
+        self.assertEqual(ret, 0)
+        stdout = out.getvalue()
+        self.assertIn("Commissioned workspace for role 'lib'", stdout)
+        self.assertIn("Commissioned workspace for role 'spec_qa'", stdout)
+        self.assertIn("Commissioned workspace for role 'high'", stdout)
+
+        self.assertTrue(os.path.isdir(os.path.join(self.fake_repo, "role_lib")))
+        self.assertTrue(os.path.isdir(os.path.join(self.fake_repo, "role_spec_qa")))
+        self.assertTrue(os.path.isdir(os.path.join(self.fake_repo, "role_high")))
+
+        with open(os.path.join(self.fake_repo, "role_lib", ".cleanroom_role.json"), "r") as f:
+            data = json.load(f)
+            self.assertEqual(data["dir_scope"], "pkg_custom")
+
+    def test_commission_all_roles_missing_scope_error(self) -> None:
+        runner = workspace_tool_impl.WorkspaceToolRunner()
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as empty_dir:
+            with redirect_stdout(out):
+                ret = runner.execute_command(
+                    ["commission", "--all", "--repo-root", empty_dir]
+                )
+        self.assertEqual(ret, 1)
+        self.assertIn("Error: directory scope must be specified or detected", out.getvalue())
 
 
 if __name__ == "__main__":
