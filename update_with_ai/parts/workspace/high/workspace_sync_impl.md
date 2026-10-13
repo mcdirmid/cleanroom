@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-12T23:35:00Z
 CHANGE: add command execution tripwire and impasse fail protocol to AGENTS.md refresh specification
 CODE_HASH: 98e05c8b9745
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # workspace_sync_impl implementation component

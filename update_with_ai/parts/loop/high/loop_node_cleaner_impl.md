@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
 CHANGE: Split the phase execution paragraph, canonicalize change timestamps, and state the feedback routing invariant
 CODE_HASH: 9f59a0f134ba
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # loop_node_cleaner_impl implementation component

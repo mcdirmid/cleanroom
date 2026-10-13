@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CHANGED: 2026-10-13T19:15:00Z
 CHANGE: author antigravity_harness planning specification
-CODE_HASH: 48f151cd4238
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+CODE_HASH: 246bfe42f018
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # antigravity_harness interface component
@@ -24,6 +24,7 @@ Autonomous multi-agent execution requires reliable dispatch into isolated role w
 ### Contracts
 
 - An antigravity harness adapter dispatches the role directive into the target role workspace and monitors turn completion. [dispatch_role_to_workspace]
+- An antigravity harness adapter polls active role turns non-blockingly without halting caller execution. [poll_active_turn]
 - An antigravity harness adapter extracts token usage metrics from the execution transcript log and applies standard model pricing rate cards. [extract_transcript_telemetry]
 - An antigravity harness adapter inspects role workspace submission outcomes and blame buffers to construct a complete role turn result. [construct_role_turn_result]
 - An antigravity harness adapter interrupts active turns when execution deadlines are exceeded. [interrupt_active_turn]
@@ -31,6 +32,7 @@ Autonomous multi-agent execution requires reliable dispatch into isolated role w
 ### Woven Contracts
 
 - When executing a role turn, the harness adapter dispatches the directive, monitors completion, extracts telemetry, and constructs a role turn result. [dispatch_role_to_workspace, extract_transcript_telemetry, construct_role_turn_result]
+- When supervising active turns, the harness adapter polls status non-blockingly and returns turn results upon completion. [poll_active_turn]
 - When an active turn exceeds its execution deadline, the harness adapter interrupts the turn. [interrupt_active_turn]
 
 ## Grounding

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-12T21:00:00Z
 CHANGE: author subagent_harness_impl planning specification
-CODE_HASH: cf2aa4e91aa3
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+CODE_HASH: 22fe752001b9
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # subagent_harness_impl implementation component
@@ -23,8 +23,8 @@ The subagent_harness_impl implementation component realizes the command harness 
 
 - The realization constructs instructional task prompts detailing role, scope, targets, verification, and submit or blame actions. [construct_role_workflow_prompt]
 - The realization captures initial pending targets prior to process execution. [capture_pre_execution_pending_work]
-- The realization executes the configured subagent command template with workspace directory and prompt substitutions. [execute_subagent_command_template]
-- The realization monitors subagent process lifecycle, enforcing configured timeout limits. [monitor_subagent_process_lifecycle]
+- The realization executes the configured subagent command template with workspace directory and prompt substitutions, configuring context token compaction limits in the environment. [execute_subagent_command_template]
+- The realization monitors subagent process lifecycle, enforcing configured timeout limits when specified. [monitor_subagent_process_lifecycle]
 - The realization inspects the blame buffer file for reported upstream defects. [inspect_blame_buffer_records]
 - The realization computes submitted targets from the set difference of pre-turn and post-turn pending work items. [compute_submitted_work_targets]
 - The realization extracts token metrics from log output and calculates financial costs. [tally_log_token_metrics]
@@ -33,7 +33,7 @@ The subagent_harness_impl implementation component realizes the command harness 
 
 ### Woven Contracts
 
-- When executing a role subagent turn, the realization constructs role prompts, captures pre-execution pending targets, executes the subagent command template, monitors process lifecycle, inspects blame buffers, computes submitted targets, tallies token metrics, and formulates turn outcome results. [construct_role_workflow_prompt, capture_pre_execution_pending_work, execute_subagent_command_template, monitor_subagent_process_lifecycle, inspect_blame_buffer_records, compute_submitted_work_targets, tally_log_token_metrics, formulate_turn_outcome_result, subagent_harness: [format_subagent_task_prompt, capture_initial_pending_targets, spawn_subagent_process, await_subagent_process_lifecycle, inspect_workspace_blame_buffer, determine_submitted_targets, extract_process_token_telemetry, synthesize_role_turn_result], subagent_coordinator: [execute_wave_roles]]
+- When executing a role subagent turn, the realization constructs role prompts, captures pre-execution pending targets, executes the subagent command template, monitors process lifecycle, inspects blame buffers, computes submitted targets, tallies token metrics, and formulates turn outcome results. [construct_role_workflow_prompt, capture_pre_execution_pending_work, execute_subagent_command_template, monitor_subagent_process_lifecycle, inspect_blame_buffer_records, compute_submitted_work_targets, tally_log_token_metrics, formulate_turn_outcome_result, subagent_harness: [format_subagent_task_prompt, capture_initial_pending_targets, spawn_subagent_process, await_subagent_process_lifecycle, inspect_workspace_blame_buffer, determine_submitted_targets, extract_process_token_telemetry, synthesize_role_turn_result], subagent_coordinator: [dispatch_concurrent_role_workers, poll_active_role_workers]]
 
 ## Grounding
 

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_harness_impl implementation specification
-CODE_HASH: 01453c746b54
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CHANGED: 2026-10-13T19:15:00Z
+CHANGE: support non-blocking child process polling in antigravity harness realization
+CODE_HASH: 5fd8186862cb
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # antigravity_harness_impl implementation component
@@ -28,6 +28,8 @@ The antigravity harness manager realization manages Antigravity execution adapte
 When executing a role turn:
 
 - The realization spawns the Antigravity subagent process bound to the role workspace directory.
+
+- The realization polls running child processes non-blockingly to determine turn completion.
 
 - The realization parses JSONL event lines from the transcript log to extract model token usage.
 

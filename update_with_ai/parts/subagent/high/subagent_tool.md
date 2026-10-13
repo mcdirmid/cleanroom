@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-12T21:00:00Z
 CHANGE: author subagent_tool interface specification
-CODE_HASH: 89a9b46b4009
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+CODE_HASH: 2d991ec35409
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # subagent_tool interface component
@@ -12,9 +12,9 @@ imports: agent_session
 
 ## Purpose
 
-The subagent_tool interface component defines operational contracts for running subagent coordination commands including multi-agent orchestration across topological waves.
+The subagent_tool interface component defines operational contracts for running subagent coordination commands including multi-agent orchestration across dynamic queue-driven process supervision.
 
-Multi-agent coordination requires command-line entrypoints for triggering wave dispatch, configuring harness adapters, specifying model overrides, and displaying convergence summaries. The subagent_tool interface component defines structured command execution contracts and result formulations for subagent orchestration.
+Multi-agent coordination requires command-line entrypoints for triggering dynamic supervision, configuring harness adapters, specifying model overrides, tuning batch sizes, setting timeout limits, and displaying convergence summaries. The subagent_tool interface component defines structured command execution contracts and result formulations for subagent orchestration.
 
 **Out of scope:** The subagent_tool interface component does not directly execute subagent processes or mutate workspace files; these are handled by other components.
 
@@ -26,4 +26,4 @@ An agent session's *subagent tool runner* provides command dispatch and executio
 
 The subagent tool runner dispatches and executes orchestration commands matching an argument sequence, returning an integer exit code.
 
-The subagent tool runner orchestrates multi-agent execution across topological execution waves for a directory scope through a designated harness adapter until DAG convergence or failure, rendering cumulative telemetry and financial expenditures.
+The subagent tool runner orchestrates multi-agent execution across dynamic queue-driven process supervision for a directory scope and optional target role boundary through a designated harness adapter with configurable batch sizes, execution timeouts, and conversation token limits until DAG convergence or failure, rendering cumulative telemetry and financial expenditures.

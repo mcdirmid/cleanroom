@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-09T22:20:00Z
 CHANGE: Record change summary during clean status transition without appending dirty change message
 CODE_HASH: 0433704faf59
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # control_submit interface component

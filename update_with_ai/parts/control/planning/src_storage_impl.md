@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-11T04:07:59Z
 CHANGE: Add the missing inherited deferred requirement for target manifest discovery and in-band metadata parsing
 CODE_HASH: 578503f4b274
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # src_storage_impl implementation component

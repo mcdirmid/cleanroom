@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-11T02:58:43Z
 CHANGE: Align agent session typing with the simplified agent definition and system tier relationship
 CODE_HASH: 47ed11ea0242
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # agent_session interface component

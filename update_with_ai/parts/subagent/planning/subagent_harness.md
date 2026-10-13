@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-12T21:00:00Z
 CHANGE: author subagent_harness planning specification
-CODE_HASH: 7c64753608cf
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+CODE_HASH: f5f89b418ee9
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # subagent_harness interface component
@@ -23,8 +23,8 @@ Multi-agent coordination requires dispatching autonomous agents into isolated ro
 
 - The command harness adapter formats instructional task prompts detailing role, directory scope, targets, verification, and action commands. [format_subagent_task_prompt]
 - The command harness adapter records initial pending targets prior to process execution. [capture_initial_pending_targets]
-- The command harness adapter spawns external subagent processes matching configured command templates within the workspace directory. [spawn_subagent_process]
-- The command harness adapter monitors process execution bounded by timeout limits, killing delinquent processes upon timeout. [await_subagent_process_lifecycle]
+- The command harness adapter spawns external subagent processes matching configured command templates within the workspace directory, configuring context token compaction limits in the process environment. [spawn_subagent_process]
+- The command harness adapter provides non-blocking polling and awaiting of process completion without mandatory execution timeouts, terminating stalled processes only when an explicit timeout limit is configured. [await_subagent_process_lifecycle]
 - The command harness adapter inspects the workspace blame buffer for attributed defects. [inspect_workspace_blame_buffer]
 - The command harness adapter determines submitted targets by set difference with remaining pending items. [determine_submitted_targets]
 - The command harness adapter extracts token usage metrics from process log files. [extract_process_token_telemetry]
@@ -33,7 +33,7 @@ Multi-agent coordination requires dispatching autonomous agents into isolated ro
 
 ### Woven Contracts
 
-- When executing a subagent turn, the command harness adapter formats instructional task prompts, captures initial pending targets, spawns subagent processes, awaits completion, inspects blame buffers, determines submitted targets, extracts token telemetry, and synthesizes role turn results. [format_subagent_task_prompt, capture_initial_pending_targets, spawn_subagent_process, await_subagent_process_lifecycle, inspect_workspace_blame_buffer, determine_submitted_targets, extract_process_token_telemetry, synthesize_role_turn_result, subagent_coordinator: [execute_wave_roles]]
+- When executing a subagent turn, the command harness adapter formats instructional task prompts, captures initial pending targets, spawns subagent processes, awaits completion, inspects blame buffers, determines submitted targets, extracts token telemetry, and synthesizes role turn results. [format_subagent_task_prompt, capture_initial_pending_targets, spawn_subagent_process, await_subagent_process_lifecycle, inspect_workspace_blame_buffer, determine_submitted_targets, extract_process_token_telemetry, synthesize_role_turn_result, subagent_coordinator: [dispatch_concurrent_role_workers, poll_active_role_workers]]
 
 ## Grounding
 

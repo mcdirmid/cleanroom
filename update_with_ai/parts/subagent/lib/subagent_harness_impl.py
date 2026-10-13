@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_harness_impl implementation library
-# CODE_HASH: 6c2389e8cab2
-# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
-# QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: e53250475845
+# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
+# QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for subagent_harness_impl."""
@@ -32,7 +32,7 @@ from . import subagent_coordinator, subagent_harness
 
 PLATFORM_TEMPLATES: Dict[str, str] = {
     "antigravity": "agy run --cwd {workspace_dir} --file {prompt_file}",
-    "goose": "goose run --instruction-file {prompt_file}",
+    "goose": "goose run --instructions {prompt_file}",
     "dsh": "dsh --dir {workspace_dir} --instruction {prompt_file}",
     "simulation": "echo simulation",
 }
@@ -127,12 +127,14 @@ class CommandHarnessAdapter(
     def __init__(
         self,
         cmd_template: str = "agy run {prompt_file}",
-        timeout_seconds: float = 600.0,
+        timeout_seconds: Optional[float] = None,
+        max_context_tokens: Optional[int] = None,
         model_name: Optional[str] = None,
         simulation_mode: bool = False,
     ) -> None:
         self.cmd_template = cmd_template
         self.timeout_seconds = timeout_seconds
+        self.max_context_tokens = max_context_tokens
         self.model_name = model_name
         self.simulation_mode = simulation_mode
         self._active_tasks: Dict[str, _ActiveTask] = {}
@@ -196,6 +198,9 @@ class CommandHarnessAdapter(
                 log_file=log_file,
             )
             log_f = open(log_file, "w", encoding="utf-8")
+            env = os.environ.copy()
+            if self.max_context_tokens is not None and self.max_context_tokens > 0:
+                env["GOOSE_AUTO_COMPACT_TOKEN_LIMIT"] = str(self.max_context_tokens)
             try:
                 proc = subprocess.Popen(
                     cmd,
@@ -204,6 +209,7 @@ class CommandHarnessAdapter(
                     stdout=log_f,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    env=env,
                 )
             except Exception as e:
                 log_f.write(f"Failed to spawn process: {e}\n")
@@ -235,7 +241,10 @@ class CommandHarnessAdapter(
 
         if not self.simulation_mode and task.proc is not None:
             try:
-                task.proc.wait(timeout=self.timeout_seconds)
+                if self.timeout_seconds is not None and self.timeout_seconds > 0:
+                    task.proc.wait(timeout=self.timeout_seconds)
+                else:
+                    task.proc.wait()
             except subprocess.TimeoutExpired:
                 task.proc.kill()
                 task.proc.wait()
@@ -278,6 +287,29 @@ class CommandHarnessAdapter(
             wall_clock_seconds=elapsed,
         )
 
+    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+        """Polls subagent turn execution without blocking."""
+        task = self._active_tasks.get(task_handle)
+        if task is None:
+            return subagent_coordinator.RoleTurnResult(
+                role="unknown",
+                status="failed",
+                failure_reason=f"Task handle '{task_handle}' not found.",
+            )
+
+        if self.simulation_mode or task.proc is None:
+            return self.await_role(task_handle)
+
+        poll_res = task.proc.poll()
+        if poll_res is None:
+            if self.timeout_seconds is not None and self.timeout_seconds > 0:
+                elapsed = time.time() - task.start_time
+                if elapsed >= self.timeout_seconds:
+                    return self.await_role(task_handle)
+            return None
+
+        return self.await_role(task_handle)
+
     def interrupt_role(self, task_handle: str) -> None:
         """Aborts active subagent task execution upon timeout or loop limit."""
         task = self._active_tasks.get(task_handle)
@@ -301,7 +333,8 @@ class HarnessResolver(
         self,
         platform_name: str,
         model_name: Optional[str] = None,
-        timeout_seconds: float = 600.0,
+        timeout_seconds: Optional[float] = None,
+        max_context_tokens: Optional[int] = None,
         custom_cmd: Optional[str] = None,
         simulation_mode: bool = False,
     ) -> subagent_coordinator.HarnessAdapter:
@@ -310,19 +343,47 @@ class HarnessResolver(
             return CommandHarnessAdapter(
                 cmd_template="simulation",
                 timeout_seconds=timeout_seconds,
+                max_context_tokens=max_context_tokens,
                 model_name=model_name,
                 simulation_mode=True,
             )
+
+        plat_key = platform_name.lower()
+        if plat_key == "goose":
+            try:
+                from update_with_ai.parts.goose.lib import goose_harness
+                mgr = get_singleton(goose_harness.GooseHarnessManager)
+                return mgr.create_harness_adapter(
+                    model_name=model_name,
+                    timeout_seconds=timeout_seconds,
+                    max_context_tokens=max_context_tokens,
+                    custom_cmd=custom_cmd,
+                )
+            except Exception:
+                pass
+
+        if plat_key == "dsh":
+            try:
+                from update_with_ai.parts.dsh.lib import dsh_harness
+                mgr = get_singleton(dsh_harness.DshHarnessManager)
+                return mgr.create_harness_adapter(
+                    model_name=model_name,
+                    timeout_seconds=timeout_seconds,
+                    max_context_tokens=max_context_tokens,
+                    custom_cmd=custom_cmd,
+                )
+            except Exception:
+                pass
 
         if custom_cmd:
             return CommandHarnessAdapter(
                 cmd_template=custom_cmd,
                 timeout_seconds=timeout_seconds,
+                max_context_tokens=max_context_tokens,
                 model_name=model_name,
                 simulation_mode=simulation_mode,
             )
 
-        plat_key = platform_name.lower()
         template = PLATFORM_TEMPLATES.get(plat_key)
         if template is None:
             avail = ", ".join(sorted(PLATFORM_TEMPLATES.keys()))
@@ -333,6 +394,7 @@ class HarnessResolver(
         return CommandHarnessAdapter(
             cmd_template=template,
             timeout_seconds=timeout_seconds,
+            max_context_tokens=max_context_tokens,
             model_name=model_name,
             simulation_mode=simulation_mode,
         )

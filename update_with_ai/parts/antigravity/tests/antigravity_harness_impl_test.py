@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_harness_impl unit tests
-# CODE_HASH: 5c9bdd25bc94
-# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
-# QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: aead38fd0e51
+# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
+# QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for antigravity_harness_impl."""
@@ -15,6 +15,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import unittest
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
@@ -153,6 +154,31 @@ class AntigravityHarnessImplTest(unittest.TestCase):
 
             parser = mgr.get_transcript_parser()
             self.assertIsNotNone(parser)
+
+    def test_poll_role_turn(self) -> None:
+        """Scenario 5: Verifies non-blocking polling of role turn."""
+        adapter = antigravity_harness_impl.AntigravityHarnessAdapter(
+            model_name="gemini-flash",
+            custom_cmd="echo [SUBMITTED] lib/test_unit.py",
+        )
+        dispatch = subagent_coordinator.RoleDispatch(
+            role_name="lib",
+            workspace_dir=self.test_dir,
+            dir_scope="pkg_a",
+            ready_targets=("lib/test_unit.py",),
+        )
+        handle = adapter.dispatch_role(dispatch)
+        result = None
+        for _ in range(50):
+            result = adapter.poll_role(handle)
+            if result is not None:
+                break
+            time.sleep(0.05)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.role, "lib")
+        self.assertEqual(result.status, "complete")
+        self.assertIn("lib/test_unit.py", result.submitted_targets)
 
 
 if __name__ == "__main__":

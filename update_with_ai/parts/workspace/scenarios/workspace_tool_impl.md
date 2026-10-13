@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:15Z
 LAST_CHANGED: 2026-10-12T21:15:17Z
 CHANGE: Update Scenario 10 for dynamic directory scope and positional scope mapping
 CODE_HASH: 49f85ebf316e

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-12T21:00:00Z
 CHANGE: author subagent_tool_impl planning specification
-CODE_HASH: 34743d44b2e1
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+CODE_HASH: 09f5ecee700f
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # subagent_tool_impl implementation component
@@ -20,12 +20,12 @@ Multi-agent coordination requires command-line entrypoints for triggering wave d
 
 ### Contracts
 
-- The realization constructs argument parsers for the orchestrate command. [construct_orchestrate_cli_parser]
-- In orchestrate, the runner resolves the command harness adapter, coordinates iterative wave execution via the coordinator, and renders summary metrics. [realize_orchestrate]
+- The realization constructs argument parsers for the orchestrate command supporting scope, target role, harness adapter, model, max waves, batch size, timeout, and max context tokens options. [construct_orchestrate_cli_parser]
+- In orchestrate, the runner resolves the command harness adapter with timeout and token limit options, coordinates dynamic queue-driven supervision via the coordinator, and renders summary metrics. [realize_orchestrate]
 
 ### Woven Contracts
 
-- When running orchestrate, the runner resolves the harness adapter through subagent_harness, invokes coordinator orchestration across execution waves, and prints convergence telemetry. [construct_orchestrate_cli_parser, realize_orchestrate, subagent_coordinator: [orchestrate_pipeline_convergence], subagent_harness: [resolve_platform_harness_adapter], subagent_tool: [dispatch_subagent_subcommand, execute_orchestrate_command]]
+- When running orchestrate, the runner resolves the harness adapter through subagent_harness, invokes coordinator orchestration across dynamic queue supervision, and prints convergence telemetry. [construct_orchestrate_cli_parser, realize_orchestrate, subagent_coordinator: [orchestrate_pipeline_convergence], subagent_harness: [resolve_platform_harness_adapter], subagent_tool: [dispatch_subagent_subcommand, execute_orchestrate_command]]
 
 ## Grounding
 

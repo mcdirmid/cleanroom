@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-11T03:26:00Z
 # CHANGE: Align configured guide delivery, milestone advancement, and failure reporting contracts
 # CODE_HASH: 8948e9f16fed
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox guide delivery low-level interface specification."""

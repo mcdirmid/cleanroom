@@ -1,16 +1,16 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-12T21:00:00Z
 CHANGE: author subagent_tool planning specification
-CODE_HASH: 8021b2eaa78d
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+CODE_HASH: 8b8a27d23b01
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # subagent_tool interface component
 
 ## Intent
 
-Multi-agent coordination requires command-line entrypoints for triggering wave dispatch, configuring harness adapters, specifying model overrides, and displaying convergence summaries. The subagent_tool interface component defines structured command execution contracts and result formulations for subagent orchestration.
+Multi-agent coordination requires command-line entrypoints for triggering dynamic supervision, configuring harness adapters, specifying model overrides, tuning batch sizes, setting timeout limits, and displaying convergence summaries. The subagent_tool interface component defines structured command execution contracts and result formulations for subagent orchestration.
 
 ## Factored Contracts
 
@@ -21,11 +21,11 @@ Multi-agent coordination requires command-line entrypoints for triggering wave d
 ### Contracts
 
 - The subagent tool runner dispatches CLI arguments for orchestration subcommands and executes the selected action. [dispatch_subagent_subcommand]
-- The subagent tool runner coordinates multi-agent workspace orchestration through a designated harness adapter until DAG convergence or failure. [execute_orchestrate_command]
+- The subagent tool runner coordinates multi-agent workspace orchestration up to an optional target role boundary through a designated harness adapter with configurable batch sizes, execution timeouts, and conversation token limits until DAG convergence or failure. [execute_orchestrate_command]
 
 ### Woven Contracts
 
-- When orchestrating convergence, the tool runner dispatches CLI options, delegates wave execution to the coordinator, and prints summary telemetry. [dispatch_subagent_subcommand, execute_orchestrate_command]
+- When orchestrating convergence, the tool runner dispatches CLI options, delegates dynamic queue-driven supervision to the coordinator, and prints summary telemetry. [dispatch_subagent_subcommand, execute_orchestrate_command]
 
 ## Grounding
 

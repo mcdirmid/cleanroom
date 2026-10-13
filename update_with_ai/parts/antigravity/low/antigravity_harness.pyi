@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_harness interface low-level specification
-# CODE_HASH: d2a1356a0e55
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: d487c9f31e09
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for antigravity_harness."""
@@ -80,6 +80,16 @@ class AntigravityHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         ...
 
     @operation
+    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+        """Polls subagent turn execution non-blockingly without waiting for completion.
+
+        POSTCONDITIONS:
+        - MUST return None if turn is still actively running.
+        - MUST return RoleTurnResult if turn has completed or failed.
+        """
+        ...
+
+    @operation
     def interrupt_role(self, task_handle: str) -> None:
         """Aborts active subagent task execution upon timeout or limit.
 
@@ -97,7 +107,7 @@ class AntigravityHarnessManager(InTier[AgentSessionTier], Protocol):
     def create_harness_adapter(
         self,
         model_name: Optional[str] = None,
-        timeout_seconds: float = 600.0,
+        timeout_seconds: Optional[float] = None,
         custom_cmd: Optional[str] = None,
     ) -> AntigravityHarnessAdapter:
         """Constructs an Antigravity harness adapter instance.

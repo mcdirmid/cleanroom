@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_tool_impl implementation library
-# CODE_HASH: a1f968840fbc
-# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
-# QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: fada3a6276b7
+# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
+# QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for subagent_tool_impl."""
@@ -54,10 +54,22 @@ class SubagentToolRunner(
             help="Directory scope to orchestrate.",
         )
         orch_parser.add_argument(
+            "target_role",
+            nargs="?",
+            default=None,
+            help="Optional target role boundary to execute up to.",
+        )
+        orch_parser.add_argument(
             "--scope",
             dest="scope_opt",
             default="",
             help="Directory scope (alternative flag).",
+        )
+        orch_parser.add_argument(
+            "--role",
+            dest="role_opt",
+            default=None,
+            help="Target role boundary (alternative flag).",
         )
         orch_parser.add_argument(
             "--harness",
@@ -82,6 +94,18 @@ class SubagentToolRunner(
             help="Maximum targets dispatched per role turn.",
         )
         orch_parser.add_argument(
+            "--timeout",
+            type=float,
+            default=None,
+            help="Maximum execution timeout in seconds for subagent processes (default: no timeout).",
+        )
+        orch_parser.add_argument(
+            "--max-context-tokens",
+            type=int,
+            default=None,
+            help="Context token compaction limit for subagent processes.",
+        )
+        orch_parser.add_argument(
             "--repo-root",
             default=None,
             help="Repository root directory.",
@@ -96,22 +120,24 @@ class SubagentToolRunner(
 
         # Allow passing args without explicit 'orchestrate' subcommand keyword
         args_list = list(argv)
-        if args_list and args_list[0] != "orchestrate" and not args_list[0].startswith("-"):
+        if not args_list or args_list[0] != "orchestrate":
             args_list = ["orchestrate"] + args_list
-        elif not args_list:
-            args_list = ["orchestrate"]
 
         parsed = parser.parse_args(args_list)
         if parsed.command == "orchestrate":
             scope = parsed.scope_opt or parsed.dir_scope
             if not scope:
                 parser.error("Directory scope must be specified.")
+            target_role = parsed.role_opt or parsed.target_role
             return self.run_orchestrate(
                 dir_scope=scope,
+                target_role=target_role,
                 harness="simulation" if parsed.simulation else parsed.harness,
                 model=parsed.model,
                 max_waves=parsed.max_waves,
                 batch_size=parsed.batch_size,
+                timeout=parsed.timeout,
+                max_context_tokens=parsed.max_context_tokens,
                 repo_root=parsed.repo_root,
             )
 
@@ -121,10 +147,13 @@ class SubagentToolRunner(
     def run_orchestrate(
         self,
         dir_scope: str,
+        target_role: Optional[str] = None,
         harness: Optional[str] = None,
         model: Optional[str] = None,
         max_waves: int = 50,
         batch_size: Optional[int] = None,
+        timeout: Optional[float] = None,
+        max_context_tokens: Optional[int] = None,
         repo_root: Optional[str] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence."""
@@ -134,6 +163,8 @@ class SubagentToolRunner(
         adapter = resolver.resolve_harness(
             platform_name=harness_name,
             model_name=model,
+            timeout_seconds=timeout,
+            max_context_tokens=max_context_tokens,
             simulation_mode=simulation_mode,
         )
 
@@ -141,9 +172,11 @@ class SubagentToolRunner(
         summary = coordinator.orchestrate(
             dir_scope=dir_scope,
             harness=adapter,
+            target_role=target_role,
             max_waves=max_waves,
             batch_size=batch_size,
             repo_root=repo_root,
+            model_name=model,
         )
 
         print("\n=== Cleanroom Orchestration Summary ===")

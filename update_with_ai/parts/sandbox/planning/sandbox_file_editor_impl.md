@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-11T04:08:18Z
 CHANGE: Extend multiple-match failure feedback with surrounding-line and line-range guidance
 CODE_HASH: 73f154f9c734
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # sandbox_file_editor_impl implementation component

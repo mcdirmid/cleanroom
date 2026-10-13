@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-11T05:14:13Z
 # CHANGE: Remove the dead PENDING_WORK_FILE pseudo-constant flagged as a type alias
 # CODE_HASH: e7ab0563410b
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_work."""

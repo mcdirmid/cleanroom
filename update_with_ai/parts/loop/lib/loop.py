@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-11T04:57:55Z
 # CHANGE: Align mark_dirty with the declared ChangeMessage parameter and prune the uncontracted broadcast_change member
 # CODE_HASH: b0ee25671e8a

@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:15Z
 LAST_CHANGED: 2026-10-12T21:15:07Z
 CHANGE: Add subagent harness impl scenarios
-CODE_HASH: 70da102ca57e
+CODE_HASH: c33ebe5f2de0
 -->
 
 # subagent_harness_impl scenarios
@@ -47,15 +47,23 @@ Given: a consumer requests a harness adapter for a platform name.
    Observed: the corresponding CLI command template is resolved for Antigravity, Goose, or DeepSeek Harness, or simulation mode is enabled.
    Realized by: the component's platform template dictionary mapping.
 
-### Scenario 6 — Enforcing execution timeouts
+### Scenario 6 — Enforcing execution timeouts when explicitly configured
 
-Given: a subagent process exceeds the configured timeout duration.
+Given: a subagent process exceeds the configured timeout duration when an explicit timeout limit is specified.
 
 1. The harness awaits turn completion.
    Observed: the runaway process is terminated and the turn returns failed status noting timeout expiration.
    Realized by: the component's subprocess timeout monitoring and process termination.
 
-### Scenario 7 — Parsing token metrics from execution logs
+### Scenario 7 — Non-blocking polling without mandatory execution timeout
+
+Given: an active subagent process executes with default configuration without a timeout limit.
+
+1. The harness polls the active process.
+   Observed: running processes return none without termination, and completed processes return final turn results.
+   Realized by: the component's non-blocking process polling via `proc.poll()`.
+
+### Scenario 8 — Parsing token metrics from execution logs
 
 Given: a subagent turn log contains token reporting strings.
 

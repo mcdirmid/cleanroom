@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:15Z
 LAST_CHANGED: 2026-10-13T01:30:00Z
 CHANGE: eliminate cleanroom_workspaces.json workspace registry file
-CODE_HASH: b6c1f6a0e38d
+CODE_HASH: 06f6dba399c6
 -->
 
 # Concrete scenarios for `workspace_registry` (interface)

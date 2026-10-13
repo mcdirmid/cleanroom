@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_harness_impl implementation low-level specification
-# CODE_HASH: 3d1d1b17fa1d
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: 68f98b377fe4
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for antigravity_harness_impl."""
@@ -82,6 +82,20 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
 
     @operation
     @override
+    def poll_role(
+        self,
+        task_handle: str,
+    ) -> Optional[subagent_coordinator.RoleTurnResult]:
+        """Polls subagent turn execution non-blockingly without waiting for completion.
+
+        GROUNDING:
+        - Checks subprocess status via poll() or equivalent non-blocking probe, returning
+          None while active, or collating RoleTurnResult when terminated.
+        """
+        ...
+
+    @operation
+    @override
     def interrupt_role(
         self,
         task_handle: str,
@@ -111,7 +125,7 @@ class AntigravityHarnessManager(
     def create_harness_adapter(
         self,
         model_name: Optional[str] = None,
-        timeout_seconds: float = 600.0,
+        timeout_seconds: Optional[float] = None,
         custom_cmd: Optional[str] = None,
     ) -> antigravity_harness.AntigravityHarnessAdapter:
         """Constructs an Antigravity harness adapter instance.

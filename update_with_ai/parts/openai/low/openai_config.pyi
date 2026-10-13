@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-11T03:37:03Z
 # CHANGE: Add conditional endpoint, credential, and token bound contracts
 # CODE_HASH: fdd074302969
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """OpenAI configuration low-level interface specification."""

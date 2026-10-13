@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_tool_impl implementation low-level specification
-# CODE_HASH: dfd98c7ae709
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: 93e66ab0c6d1
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for subagent_tool_impl."""
@@ -45,10 +45,13 @@ class SubagentToolRunner(
     def run_orchestrate(
         self,
         dir_scope: str,
+        target_role: Optional[str] = None,
         harness: Optional[str] = None,
         model: Optional[str] = None,
         max_waves: int = 50,
         batch_size: Optional[int] = None,
+        timeout: Optional[float] = None,
+        max_context_tokens: Optional[int] = None,
         repo_root: Optional[str] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence.

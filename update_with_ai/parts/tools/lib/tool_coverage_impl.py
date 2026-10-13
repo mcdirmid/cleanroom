@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-11T04:55:44Z
 # CHANGE: Register the coverage evaluator on the system tier as the spec declares, add __initialize__ registering both the impl and interface protocol keys, discover implementation/test pairs across all repository part packages instead of a hardcoded package name, and include the compact missing ranges alongside the spans in the deficit report
 # CODE_HASH: 6567b26d0b71
-# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
-# QA_AUDIT: 2026-10-13T01:05:05Z
+# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
+# QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
+LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CHANGED: 2026-10-13T19:15:00Z
 CHANGE: author antigravity_harness_impl scenarios
-CODE_HASH: d0e66e7a6fd9
+CODE_HASH: 4f246e95f2c8
 -->
 
 # antigravity_harness_impl scenarios
@@ -38,3 +38,11 @@ Given: an active turn that exceeds its execution timeout limit.
 1. The harness adapter invokes interrupt.
    Observed: execution is terminated immediately and the turn reports failure.
    Realized by: the component's process termination sending kill signals to active subagent processes.
+
+### Scenario 5 — Polling active turns non-blockingly
+
+Given: an active role turn currently executing in a role workspace.
+
+1. The harness adapter polls the active turn.
+   Observed: returns None while the process continues running, and returns a completed turn result once finished.
+   Realized by: the component's process polling checking subprocess return status without blocking.

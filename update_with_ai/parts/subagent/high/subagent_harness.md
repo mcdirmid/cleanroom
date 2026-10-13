@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-12T21:00:00Z
 CHANGE: author subagent_harness interface specification
-CODE_HASH: 11c2ffb831a6
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+CODE_HASH: 417c06a38252
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # subagent_harness interface component
@@ -30,9 +30,9 @@ When dispatching and awaiting role turns:
 
 - The command harness adapter records initial pending targets from the workspace pending work buffer prior to process execution.
 
-- The command harness adapter spawns external subagent processes matching configured command templates within the designated role workspace directory, tracking active task handles.
+- The command harness adapter spawns external subagent processes matching configured command templates within the designated role workspace directory, configuring context token compaction limits in the process environment, and tracking active task handles.
 
-- The command harness adapter awaits process completion or timeout, terminates stalled processes upon timeout expiration, inspects the workspace blame buffer for attributed defects, checks remaining pending targets to identify submitted files, and extracts token usage telemetry from execution logs.
+- The command harness adapter provides non-blocking polling and awaiting of process completion without mandatory execution timeouts, terminating stalled processes only when an explicit timeout limit is configured, inspecting the workspace blame buffer for attributed defects, checking remaining pending targets to identify submitted files, and extracting token usage telemetry from execution logs.
 
 - The command harness adapter produces role turn results carrying turn status (clean, blamed, or failed), submitted target sequences, blamed target sequences, failure diagnostics, token usage telemetry, and elapsed wall-clock duration.
 

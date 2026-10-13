@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_coordinator interface low-level specification
-# CODE_HASH: 9ee734b16165
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: f32373193143
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for subagent_coordinator."""
@@ -126,6 +126,16 @@ class HarnessAdapter(Protocol):
         ...
 
     @operation
+    def poll_role(self, task_handle: str) -> Optional[RoleTurnResult]:
+        """Polls subagent turn execution without blocking.
+
+        POSTCONDITIONS:
+        - WHEN subagent process has terminated, MUST return role turn result.
+        - WHEN subagent process is still running, MUST return None without blocking or termination.
+        """
+        ...
+
+    @operation
     def interrupt_role(self, task_handle: str) -> None:
         """Aborts active subagent task execution upon timeout or loop limit.
 
@@ -143,6 +153,7 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
     def compute_execution_waves(
         self,
         dir_scope: str,
+        target_role: Optional[str] = None,
         repo_root: Optional[str] = None,
         batch_size: Optional[int] = None,
     ) -> Sequence[Sequence[RoleDispatch]]:
@@ -177,16 +188,19 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         self,
         dir_scope: str,
         harness: HarnessAdapter,
+        target_role: Optional[str] = None,
         max_waves: int = 50,
         batch_size: Optional[int] = None,
         repo_root: Optional[str] = None,
+        model_name: Optional[str] = None,
     ) -> OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure.
 
         POSTCONDITIONS:
+        - MUST reset preexisting role workspaces for declared roles upon initiating orchestration.
         - MUST iterate through execution waves until all units in scope evaluate clean, a role fails, or max_waves is reached.
         - WHEN a role turn reports status failed, MUST stop execution and return non-converged summary with failure details.
-        - WHEN all units evaluate clean across all roles, MUST return converged summary.
+        - WHEN all units evaluate clean across all roles, MUST automatically delete all provisioned role workspaces in scope and return converged summary.
         - MUST aggregate cumulative token usage and monetary expenditure in orchestration summary.
         """
         ...

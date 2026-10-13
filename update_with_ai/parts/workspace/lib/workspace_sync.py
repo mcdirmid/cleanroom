@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-11T05:04:11Z
 # CHANGE: Prune the surplus public copy helper from the interface so it holds only the sync result and synchronizer protocol
 # CODE_HASH: 62c1357b69e0

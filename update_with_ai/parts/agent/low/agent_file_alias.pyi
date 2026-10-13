@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-11T03:08:12Z
 # CHANGE: Align alias manager parameter conversion typing and split text sanitization masking contracts
 # CODE_HASH: e491152975f5
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Agent file alias low-level interface specification."""

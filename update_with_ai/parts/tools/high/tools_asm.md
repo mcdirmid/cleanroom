@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-11T04:09:45Z
 CHANGE: Removed the agent_session import: it was contributed solely by tool_coverage_impl, which is now system-tier, and is no longer imported by any constituent.
 CODE_HASH: cd333ec6b850
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # tools_asm assembly component

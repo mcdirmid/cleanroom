@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-11T03:10:58Z
 CHANGE: Contract guide acquisition on session init and passing verification as the advancement prerequisite
 CODE_HASH: b489197d39a1
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # sandbox_guide_delivery_impl implementation component

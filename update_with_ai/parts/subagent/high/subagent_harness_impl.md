@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-12T21:00:00Z
 CHANGE: author subagent_harness_impl implementation specification
-CODE_HASH: 8c46b38a177c
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+CODE_HASH: d219a777ac51
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # subagent_harness_impl implementation component
@@ -31,9 +31,9 @@ When realizing subagent dispatch and outcome monitoring:
 
 - The realization captures initial pending targets from the workspace pending work buffer prior to process execution.
 
-- The realization interpolates command templates with workspace directory, role name, and task prompt variables, spawning subprocesses within the target workspace directory and recording active process handles.
+- The realization interpolates command templates with workspace directory, role name, and task prompt variables, configuring context token compaction limits in the subprocess environment, spawning subprocesses within the target workspace directory, and recording active process handles.
 
-- The realization awaits subprocess termination bounded by configured timeout limits, killing delinquent processes upon timeout, reading blame records from the workspace blame buffer, determining submitted targets by set difference with remaining pending items, parsing token metrics from process log files, and computing financial costs.
+- The realization polls and awaits subprocess termination without enforcing mandatory timeouts, killing delinquent processes only when an explicit timeout limit is configured, reading blame records from the workspace blame buffer, determining submitted targets by set difference with remaining pending items, parsing token metrics from process log files, and computing financial costs.
 
 - The realization returns role turn results reflecting clean execution, blamed feedback, or process failures with captured error diagnostics.
 

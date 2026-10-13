@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-11T01:39:02Z
 CHANGE: Replace the session config fragment lead-in with a declarative parameter inventory and canonicalize session terminology
 CODE_HASH: 4a49596edaf5
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # agent_node_config interface component

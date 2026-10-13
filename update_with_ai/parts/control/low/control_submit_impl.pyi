@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-11T04:05:48Z
 # CHANGE: Align implementation with every interface operation: file target submission and resolution
 # CODE_HASH: 176934aaf307
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_submit_impl."""

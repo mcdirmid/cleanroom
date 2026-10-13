@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:15Z
 LAST_CHANGED: 2026-10-13T01:25:00Z
 CHANGE: eliminate cleanroom_workspaces.json workspace registry file
-CODE_HASH: 7682226a8598
+CODE_HASH: 35d8c4f624c1
 -->
 
 # cleanroom_files_ext external component

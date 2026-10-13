@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-12T21:00:00Z
 CHANGE: author subagent_coordinator_impl implementation specification
-CODE_HASH: 4b08bbaf9b19
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+CODE_HASH: fd14cbf6ce37
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # subagent_coordinator_impl implementation component
@@ -13,9 +13,9 @@ implements: subagent_coordinator
 
 ## Purpose
 
-The subagent_coordinator_impl implementation component realizes zero-execution multi-agent workspace coordination, DAG wave partitioning, concurrent wave execution, and iterative loop convergence across external harness adapters.
+The subagent_coordinator_impl implementation component realizes zero-execution multi-agent workspace coordination, dynamic queue-driven process supervision, fine-grained concurrency, and iterative loop convergence across external harness adapters.
 
-Complex software development methodologies partition work into specialized roles that depend on upstream artifacts. Executing these roles concurrently without ordering guarantees leads to cache thrashing, race conditions, and invalidated context. The subagent_coordinator_impl implementation component formalizes topological wave clustering, parallel and sequential execution waves, harness abstraction, turn result aggregation, blame defect propagation, and cumulative token rate-card accounting.
+Complex software development methodologies partition work into specialized roles that depend on upstream artifacts. Executing these roles with rigid static waves or hardcoded role assumptions leads to artificial serialization, idle worker capacity, and invalidated context. The subagent_coordinator_impl implementation component formalizes dynamic queue-driven process supervision, fine-grained node concurrency, harness abstraction, turn result aggregation, blame defect propagation, model configuration resolution, and cumulative token rate-card accounting.
 
 **Out of scope:** The subagent_coordinator_impl implementation component does not directly execute subagent processes or mutate workspace files; these are handled by other components.
 
@@ -27,14 +27,22 @@ The subagent coordinator realization schedules and coordinates autonomous subage
 
 When coordinating multi-agent execution:
 
-- The realization queries commissioned workspaces and evaluates dirty role work queues.
+- The realization resets preexisting role workspaces for declared roles upon initiating orchestration.
 
-- The realization commissions absent role workspaces when ready tasks are identified.
+- The realization resolves subagent batch sizes and conversation token limits from declarative model configurations matching designated model names or identifiers.
 
-- The realization groups dirty roles into sequential specification waves and parallel implementation waves according to declared role dependencies.
+- The realization queries commissioned workspaces and evaluates unblocked dirty role work queues.
 
-- The realization dispatches role directives through the configured harness adapter, collecting role turn results.
+- The realization bounds role discovery and execution up to an optional target role boundary when specified.
 
-- The realization manages the convergence loop across execution waves, continuing until all units evaluate clean, a turn reports failure, or maximum wave iterations are reached.
+- The realization commissions absent role workspaces on demand when ready tasks are identified, recording effective batch size limits into role descriptors.
+
+- The realization dispatches role directives concurrently for roles possessing ready work, tracking active worker handles without static wave partitioning.
+
+- The realization periodically polls active workers through non-blocking checks on the configured harness adapter, collecting role turn results upon completion.
+
+- The realization manages the dynamic supervision loop, continuing until all units evaluate clean, a turn reports failure, or maximum wave iterations are reached.
+
+- The realization automatically deletes all provisioned role workspaces in scope upon achieving clean convergence.
 
 - The realization normalizes token metrics from turn outcomes and tallies total costs according to model pricing rate cards.

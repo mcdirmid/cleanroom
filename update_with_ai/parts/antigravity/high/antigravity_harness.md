@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_harness interface specification
-CODE_HASH: 911a04f89118
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CHANGED: 2026-10-13T19:15:00Z
+CHANGE: support non-blocking turn polling and optional timeout in antigravity harness
+CODE_HASH: ad08887b1658
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # antigravity_harness interface component
@@ -33,6 +33,8 @@ A system's *antigravity harness manager* manages Antigravity execution adapters 
 When executing a role turn:
 
 - The antigravity harness adapter dispatches the role directive into the target role workspace and monitors turn completion.
+
+- The antigravity harness adapter polls active role turns non-blockingly to determine whether turn execution has concluded.
 
 - The antigravity harness adapter extracts token usage metrics from the execution transcript log and applies standard model pricing rate cards.
 

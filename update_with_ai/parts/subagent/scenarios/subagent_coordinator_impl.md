@@ -1,64 +1,80 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
-LAST_CHANGED: 2026-10-12T21:15:06Z
-CHANGE: Add subagent coordinator impl scenarios
-CODE_HASH: 749c3b779a40
+LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CHANGED: 2026-10-13T12:00:00Z
+CHANGE: update subagent coordinator impl scenarios for dynamic queue supervision
+CODE_HASH: c7354708f303
 -->
 
 # subagent_coordinator_impl scenarios
 
-### Scenario 1 — Partitioning dirty roles into topological execution waves
+### Scenario 1 — Resetting preexisting role workspaces on startup
+
+Given: role workspaces for scope_a already exist from a previous run.
+
+1. The coordinator initiates orchestration.
+   Observed: preexisting role workspace directories for declared roles in scope_a are removed to establish a clean initial state.
+   Realized by: the component's workspace reset routine deleting existing workspace directories for declared roles before queue evaluation.
+
+### Scenario 2 — Dynamically identifying unblocked roles with available work
+
+Given: scope_a has dirty roles across multiple levels where some roles have unsatisfied prerequisites.
+
+1. The coordinator evaluates work queues for all roles.
+   Observed: roles with blocked prerequisites report empty queues, while unblocked roles with ready targets are identified for execution.
+   Realized by: the component's dynamic queue query querying `workspace_work` across declared roles without hardcoded topology logic.
+
+### Scenario 3 — Dispatching concurrent worker processes for unblocked roles
+
+Given: scope_a has unblocked roles role_a and role_b each with available work targets and no active workers.
+
+1. The coordinator dispatches workers.
+   Observed: role workspaces are provisioned and concurrent subagent processes are launched for role_a and role_b simultaneously.
+   Realized by: the component's concurrent worker dispatch commissioning workspaces via `workspace_provision` and invoking `spawn_role` on `subagent_harness`.
+
+### Scenario 4 — Continuous non-blocking polling and dynamic supervisor loop
+
+Given: active workers are executing in background processes for role_a and role_b.
+
+1. The coordinator polls active workers.
+   Observed: completed workers are reaped without blocking while running workers continue execution unhindered.
+   Realized by: the component's supervisor loop calling `poll_role` on `subagent_harness` and sleeping briefly between poll cycles.
+
+### Scenario 5 — Restarting role workers when new unblocked work emerges
+
+Given: role_a completes and submits changes that unblock ready targets in downstream role_c.
+
+1. The coordinator continues dynamic supervision.
+   Observed: the coordinator provisions role_c workspace and launches a worker process for role_c.
+   Realized by: the component's continuous loop re-evaluating `workspace_work.compute_role_work_queue` and launching workers for newly unblocked roles.
+
+### Scenario 6 — Early termination upon role worker failure
+
+Given: an active subagent worker process for role_a fails or exits with an unresolvable error.
+
+1. The coordinator polls active workers.
+   Observed: dynamic supervision halts and returns a non-converged summary with failure diagnostics.
+   Realized by: the component's error handler detecting failed turn status and breaking the supervisor loop.
+
+### Scenario 7 — Cumulative token telemetry aggregation
+
+Given: multiple concurrent subagent turns complete consuming tokens.
+
+1. The coordinator reaps finished worker turns.
+   Observed: input, cached, and output tokens from all completed turns are aggregated into cumulative financial costs.
+   Realized by: the component's telemetry accumulator aggregating turn token usages into cumulative project totals.
+
+### Scenario 8 — Restricting execution up to a target role boundary
 
 Given: scope_a has dirty roles across specification and implementation levels.
 
-1. The coordinator evaluates work queues and computes waves.
-   Observed: dirty roles with unsatisfied prerequisites wait, while unblocked roles are scheduled in the first wave.
-   Realized by: the component's topological wave discovery querying `workspace_registry` and `workspace_work`.
+1. The coordinator inspects work queues bounded by a target role.
+   Observed: only roles up to the target role boundary are evaluated and scheduled; downstream roles are excluded.
+   Realized by: the component's role filtering slicing declared roles up to the matching target role.
 
-### Scenario 2 — Separating specification roles into single-role waves
+### Scenario 9 — Deleting provisioned role workspaces upon clean convergence
 
-Given: scope_a has multiple dirty specification roles without stub dependencies.
+Given: dynamic supervision achieves clean convergence across all evaluated roles in scope_a.
 
-1. The coordinator computes waves.
-   Observed: each specification role is partitioned into its own single-role wave to execute sequentially.
-   Realized by: the component's wave partitioning isolating roles that do not declare stub dependencies.
-
-### Scenario 3 — Grouping independent implementation roles into parallel waves
-
-Given: scope_a has unblocked implementation roles declaring stub role dependencies.
-
-1. The coordinator computes waves.
-   Observed: unblocked implementation roles are clustered together into a parallel execution wave.
-   Realized by: the component's wave partitioning clustering unblocked implementation roles with stub dependencies into parallel waves.
-
-### Scenario 4 — Iterative wave execution until DAG convergence
-
-Given: scope_a has dirty units across roles.
-
-1. The coordinator runs multi-wave orchestration through the harness.
-   Observed: waves execute iteratively until all units evaluate clean, returning a converged summary.
-   Realized by: the component's convergence loop iteratively running waves until work queues empty.
-
-### Scenario 5 — Early termination upon role failure
-
-Given: a subagent turn in an execution wave reports failure.
-
-1. The coordinator runs orchestration.
-   Observed: execution terminates early and returns a non-converged summary with failure diagnostics.
-   Realized by: the component's error handling breaking the wave loop upon non-zero exit or failure status.
-
-### Scenario 6 — Cumulative token telemetry aggregation
-
-Given: multiple subagents complete turns consuming tokens.
-
-1. The coordinator completes an execution wave.
-   Observed: total input, cached, and output tokens are aggregated into cumulative financial costs.
-   Realized by: the component's rate card pricing calculation tallying turn token usages.
-
-### Scenario 7 — Auto-commissioning absent role workspaces before dispatch
-
-Given: scope_a has an unblocked dirty role whose workspace directory has not yet been provisioned.
-
-1. The coordinator computes waves.
-   Observed: the coordinator detects the absent workspace directory and commissions it via `workspace_provision` before constructing the role dispatch.
-   Realized by: the component's absent workspace check delegating to `workspace_provision.WorkspaceProvisioner.commission`.
+1. The coordinator concludes orchestration.
+   Observed: all provisioned role workspace directories for scope_a are automatically deleted before returning the summary.
+   Realized by: the component's convergence cleanup deleting all provisioned role workspace directories for scope_a when is_converged is true.

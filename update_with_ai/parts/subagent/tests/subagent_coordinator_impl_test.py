@@ -1,16 +1,19 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_coordinator_impl unit tests
-# CODE_HASH: 11430ed98755
-# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
-# QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: 730b37f7f3f0
+# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
+# QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for subagent_coordinator_impl."""
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 import unittest
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -65,9 +68,10 @@ class FakeWorkspaceRegistry:
 
     tier = agent_session.agent_session
 
-    def __init__(self, roles: Sequence[workspace_registry.RoleDefinition]) -> None:
+    def __init__(self, roles: Sequence[workspace_registry.RoleDefinition], base_dir: Optional[str] = None) -> None:
         self.roles = list(roles)
         self.role_map = {r.role_name: r for r in self.roles}
+        self.base_dir = base_dir
 
     def discover_repository_root(self, start_dir: Optional[str] = None) -> str:
         return "/repo/cleanroom"
@@ -99,6 +103,8 @@ class FakeWorkspaceRegistry:
     ) -> str:
         if custom_dest:
             return custom_dest
+        if self.base_dir:
+            return os.path.join(self.base_dir, f"{role_name}_{dir_scope}")
         return f"/repo/cleanroom/.workspaces/{role_name}_{dir_scope}"
 
     def record_workspace(self, descriptor: workspace_registry.WorkspaceDescriptor, repo_root: Optional[str] = None) -> None:
@@ -170,6 +176,9 @@ class FakeHarnessAdapter:
             submitted_targets=("target.py",),
             telemetry=subagent_coordinator.TokenUsage(100, 50, 20, 170, 0.001),
         )
+
+    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+        return self.await_role(task_handle)
 
     def interrupt_role(self, task_handle: str) -> None:
         self.interrupted.append(task_handle)
@@ -430,6 +439,96 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             waves = coord.compute_execution_waves("pkg_a")
             self.assertEqual(len(waves), 1)
             self.assertIn(("high", "pkg_a"), self.fake_provisioner.commissioned)
+
+    def test_target_role_boundary_filtering(self) -> None:
+        """Scenario 8: Restricts execution waves up to target role boundary."""
+        fake_reg = FakeWorkspaceRegistry([
+            self.spec_role_high,
+            self.spec_role_low,
+            self.impl_role_lib,
+            self.impl_role_test,
+        ])
+        fake_work = FakeWorkspaceWorkManager({
+            "high": (([_make_item("high/unit.md", "high")], ())),
+            "low": (([_make_item("low/unit.pyi", "low")], ())),
+            "lib": (([_make_item("lib/unit.py", "lib")], ())),
+            "test": (([_make_item("tests/unit_test.py", "test")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            waves = coord.compute_execution_waves("pkg_a", target_role="low")
+            role_names = [d.role_name for wave in waves for d in wave]
+            self.assertIn("high", role_names)
+            self.assertIn("low", role_names)
+            self.assertNotIn("lib", role_names)
+            self.assertNotIn("test", role_names)
+
+    def test_orchestrate_resets_preexisting_workspaces_on_startup(self) -> None:
+        """Scenario 9: Resets preexisting role workspace directories on orchestration startup."""
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            fake_reg = FakeWorkspaceRegistry([self.spec_role_high], base_dir=tmp_dir)
+            ws_dir = os.path.join(tmp_dir, "high_pkg_a")
+            os.makedirs(ws_dir, exist_ok=True)
+            stale_file = os.path.join(ws_dir, "stale.txt")
+            with open(stale_file, "w") as f:
+                f.write("stale")
+            self.assertTrue(os.path.isfile(stale_file))
+
+            fake_work = FakeWorkspaceWorkManager({
+                "high": ((), ()),
+            })
+            self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+            self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+            harness = FakeHarnessAdapter({})
+
+            with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+                coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+                summary = coord.orchestrate("pkg_a", harness)
+                self.assertTrue(summary.is_converged)
+                self.assertFalse(os.path.exists(ws_dir))
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    def test_orchestrate_deletes_workspaces_on_clean_convergence(self) -> None:
+        """Scenario 10: Automatically deletes provisioned role workspaces upon clean convergence."""
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            fake_reg = FakeWorkspaceRegistry([self.spec_role_high], base_dir=tmp_dir)
+            ws_dir = os.path.join(tmp_dir, "high_pkg_a")
+            fake_work = FakeWorkspaceWorkManager({
+                "high": (([_make_item("high/unit.md", "high")], ())),
+            })
+            self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+            self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+            harness = FakeHarnessAdapter({
+                "h_high": subagent_coordinator.RoleTurnResult(
+                    role="high",
+                    status="clean",
+                    submitted_targets=("high/unit.md",),
+                ),
+            })
+
+            with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+                coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+
+                def mock_run_wave(wave, h):
+                    os.makedirs(ws_dir, exist_ok=True)
+                    fake_work.queue_data["high"] = ((), ())
+                    return (h.await_role("h_high"),)
+
+                coord.run_wave = mock_run_wave  # type: ignore
+
+                summary = coord.orchestrate("pkg_a", harness)
+                self.assertTrue(summary.is_converged)
+                self.assertFalse(os.path.exists(ws_dir))
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

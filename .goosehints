@@ -1,39 +1,28 @@
-1. use bazel to run tests
-2. you can type check using bazel by adding _type_check to the end of the target, you should always type check a file after you make changes. 
-3. Always run tests with bazel's test timeout (120 seconds).
-4. If you decide to break rule 1 and run the test directly, you must still set a timeout.
+# Cleanroom Root Repository Guidance for Goose
 
-## Bazel Test Timeout Implementation
+## Canonical Codebase & Workspace Boundaries
+- Production specifications, library implementations, and builds live exclusively in:
+  - `update_with_ai/`
+  - `update_python_with_ai/`
+- **NEVER modify or rely on the `staging/` directory**: The `staging/` directory is an ephemeral test consumer directory that can be deleted or wiped at any time.
 
-### Bazel Commands:
-- Run tests: `bazel test //path/to/target`
-- Run with timeout: `bazel test --test_timeout=120 //path/to/target`
-- Run type check: `bazel test //path/to/target_type_check`
-- Run all tests: `bazel test //...`
-- Run specific test: `bazel test //path/to/target --test_filter=test_name`
+## Cleanroom Coordinator Instructions (Zero-Execution Mandate)
+When acting as the Cleanroom Coordinator:
+- **ZERO CODE CUSTODY**: Under NO circumstances should you read, grep, or edit source files in this repository. You are NOT a code-fixing assistant.
+- **NEVER SELF-HEAL**: If a subagent or tool encounters an error, traceback, or reaches max turns, do NOT attempt to inspect, patch, or edit files in the repository. Report the status or re-evaluate the queue.
+- **QUEUE-DRIVEN WAVE DELEGATION**:
+  1. Run headless loop: `bin/cleanroom orchestrate <scope> [role] --harness goose`
+  2. Evaluate DAG: `bin/cleanroom work-queue <scope> [role] --json`
+  3. For each ready role in the current wave, delegate ONLY that role to its dedicated role recipe:
+     - `source: "cleanroom_<role>"`
+     - Pass task instructions with the role's workspace directory from `workspace_dirs[<role>]`.
+     - Do NOT set `working_dir` on `delegate` (Goose rejects out-of-tree `working_dir`); instruct the worker to `cd <workspace_dir>` for all commands.
+     - NEVER dispatch a single mega-subagent across multiple roles or entire pipelines.
+  4. On worker failure (`FAILED: <target> - <reason>`), abort convergence immediately and report to user.
+  5. When all ready roles finish, re-run `bin/cleanroom work-queue <scope> [role] --json` until `is_clean: true`.
 
-### Test Timeout Flags:
-- `--test_timeout`: Set timeout in seconds (120 seconds recommended)
-- `--test_verbose_timeout_warnings`: Show tests with oversized timeouts
-- `--test_timeout=300`: Set 5-minute timeout for slow tests
-- `--test_timeout=120`: Set 2-minute timeout for standard tests
-
-## Python Direct Test Execution Timeout Implementation
-
-### For pytest:
-1. Always use blaze test, not pytest.
-2. If you break that rule, run: `pytest --timeout=120`
-3. Per-test timeout: `@pytest.mark.timeout(120)`
-4. Global config in `pytest.ini`: `timeout = 120`
-
-### For unittest:
-1. Use subprocess with timeout: `subprocess.run(["python3", "-m", "unittest"], timeout=120)`
-2. Use Popen with wait: `proc.wait(timeout=120)`
-
-### Example for direct Python execution:
-```python
-import subprocess
-result = subprocess.run(["python3", "-m", "unittest"], timeout=120, check=True)
-```
-
-Note: Always wrap subprocess calls with try/except to handle TimeoutExpired exceptions gracefully.
+## General Cleanroom Behavioral Constraints
+- **Mandatory Specification-First (HLS-First) Rule**: Always start with HLS (`high/*.md`) before editing library code (`lib/*.py`) or tests (`tests/*_test.py`), cascading downstream: `high` -> `planning` -> `scenarios` -> `low` -> `lib` -> `tests`.
+- **No Hardcoded Paths or Role Names**: Never hardcode paths, scopes, or role names. Dynamically discover roles and derive scopes.
+- **Test Runner**: Always use `bin/test` to run repo verification and tests.
+- **Git Operations**: NEVER commit or push to git unless explicitly directed to do so by the user.

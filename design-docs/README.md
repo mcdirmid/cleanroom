@@ -138,6 +138,7 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 3. **Option 4: Subagent-Driven Cleanroom Workspaces** ([`subagent_driven_cleanroom_workspaces_todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md)):
    - Autonomous multi-agent architecture driving Option 3's pre-confined workspaces via a **Zero-Execution Coordinator**.
    - Uniform support across **Google Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose**.
+   - Built on canonical Cleanroom parts: `update_with_ai/parts/subagent/` (generic DAG coordinator and command harness) and platform parts (`parts/antigravity/` and `parts/goose/` completed; `parts/dsh/` planned).
    - Leverages **DeepSeek-V4 Flash** (`deepseek-flash`) for 98% token cost reductions and establishes a reproducible framework for side-by-side Gemini vs. DeepSeek model benchmarking.
 4. **Option 2 (Archived Post-Mortem): Antigravity Subagents & MCP Server** ([`antigravity_integration_failed.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)):
    - Detailed analysis of why in-tree subagents communicating with an execution server failed: token cost explosion ($30–$50 per run), multi-agent instruction degradation, and socket execution brittleness. Formally superseded by Option 4.

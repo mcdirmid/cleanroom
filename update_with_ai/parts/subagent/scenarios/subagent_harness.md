@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:15Z
 LAST_CHANGED: 2026-10-12T21:15:06Z
 CHANGE: Add subagent harness scenarios
-CODE_HASH: 99f29775b07d
+CODE_HASH: 39f29f9fb0dc
 -->
 
 # subagent_harness scenarios
@@ -42,14 +42,21 @@ Given: a consumer requests a harness adapter for a platform name.
 1. The resolver resolves the platform name.
    Observed: the corresponding CLI command template is resolved for Antigravity, Goose, or DeepSeek Harness, or simulation mode is enabled.
 
-## Scenario 6 — Enforcing execution timeouts
+## Scenario 6 — Enforcing execution timeouts when explicitly configured
 
-Given: a subagent process exceeds the configured timeout duration.
+Given: a subagent process exceeds the configured timeout duration when an explicit timeout limit is specified.
 
 1. The harness awaits turn completion.
    Observed: the runaway process is terminated and the turn returns failed status noting timeout expiration.
 
-## Scenario 7 — Parsing token metrics from execution logs
+## Scenario 7 — Non-blocking polling without mandatory execution timeout
+
+Given: an active subagent process executes with default configuration without a timeout limit.
+
+1. The harness polls the active process.
+   Observed: running processes return none without termination, and completed processes return final turn results.
+
+## Scenario 8 — Parsing token metrics from execution logs
 
 Given: a subagent turn log contains token reporting strings.
 

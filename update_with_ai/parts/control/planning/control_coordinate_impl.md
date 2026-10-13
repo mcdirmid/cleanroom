@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-11T04:27:23Z
 CHANGE: Contract dispatch state transitions for submit, blame, and fail with in-batch dependent failure marks
 CODE_HASH: 53361977594d
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # control_coordinate_impl implementation component

@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T11:27:00Z
 # CHANGE: Remove max batch size parameter from get work tool
 # CODE_HASH: d6cea8a40555

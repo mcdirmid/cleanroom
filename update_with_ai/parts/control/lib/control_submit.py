@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-11T05:20:44Z
 # CHANGE: Remove the undeclared module-level resolution wrappers so the interface holds only the declared outcome type and coordinator protocol; callers now resolve the coordinator singleton directly
 # CODE_HASH: 6fe1a425f019

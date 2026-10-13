@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_coordinator interface library
-# CODE_HASH: 4314fbb50955
+# CODE_HASH: 2b0536764588
 # --- END CLEANROOM METADATA ---
 
 """Interface specification for subagent_coordinator."""
@@ -110,6 +110,10 @@ class HarnessAdapter(Protocol):
         """Awaits subagent turn completion and returns outcome result."""
         ...
 
+    def poll_role(self, task_handle: str) -> Optional[RoleTurnResult]:
+        """Polls subagent turn execution without blocking."""
+        ...
+
     def interrupt_role(self, task_handle: str) -> None:
         """Aborts active subagent task execution upon timeout or loop limit."""
         ...
@@ -121,6 +125,7 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
     def compute_execution_waves(
         self,
         dir_scope: str,
+        target_role: Optional[str] = None,
         repo_root: Optional[str] = None,
         batch_size: Optional[int] = None,
     ) -> Sequence[Sequence[RoleDispatch]]:
@@ -139,9 +144,11 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         self,
         dir_scope: str,
         harness: HarnessAdapter,
+        target_role: Optional[str] = None,
         max_waves: int = 50,
         batch_size: Optional[int] = None,
         repo_root: Optional[str] = None,
+        model_name: Optional[str] = None,
     ) -> OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure."""
         ...

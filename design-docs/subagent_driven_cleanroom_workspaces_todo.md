@@ -33,7 +33,7 @@ To solve these challenges, Cleanroom established **Option 3: Subagentless Cleanr
 While Option 3 succeeded brilliantly for interactive, human-driven pair programming, it required a developer to manually switch between IDE chat tabs to prompt each role when upstream work was ready.
 
 **The Subagent-Driven Cleanroom Workspaces Architecture** closes this loop via a strict three-tier hierarchy:
-1. **Tier 0: Human Conversation Chat & CLI (`bin/cleanroom clean-all`)**: The user-facing chat window. It **never** acts as the coordinator and never executes queue or build commands directly. Its sole responsibility upon receiving a cleaning request is triggering the CLI or invoking the dedicated Coordinator Subagent, then stepping completely out of the way.
+1. **Tier 0: Human Conversation Chat & CLI (`bin/cleanroom orchestrate`)**: The user-facing chat window. It **never** acts as the coordinator and never executes queue or build commands directly. Its sole responsibility upon receiving a cleaning request is triggering the CLI or invoking the dedicated Coordinator Subagent, then stepping completely out of the way.
 2. **Tier 1: Dedicated Coordinator Subagent (`cleanroom_coordinator`)**: An autonomous, hyper-restricted subagent with **zero code custody**. It never reads source code, never runs tests, and never executes open-ended search tools (`find`, `grep`).
    - **Strict Tool Permissions**: The coordinator possesses **only 4 tools**: `run_command` (used strictly to query `bin/cleanroom work-queue`), `send_message`, `invoke_subagent`, and `manage_subagents`. It is explicitly stripped of all file viewing/editing tools (`view_file`, `write_to_file`, `replace_file_content`), web tools, image generation, notebooks, and timers.
    - **Instant Queue Evaluation**: It queries the global directed acyclic graph (DAG) for unblocked ready **nodes** via a single, fast CLI command: `bin/cleanroom work-queue <scope>`.
@@ -46,7 +46,7 @@ While Option 3 succeeded brilliantly for interactive, human-driven pair programm
 ```mermaid
 flowchart TD
     subgraph Tier0 ["Tier 0: Human Chat & Entrypoint"]
-        UserChat["Conversation Chat\nbin/cleanroom clean-all <scope>"]
+        UserChat["Conversation Chat\nbin/cleanroom orchestrate <scope>"]
     end
 
     subgraph Tier1 ["Tier 1: Dedicated Coordinator Subagent (Zero Execution)"]
@@ -58,7 +58,7 @@ flowchart TD
     subgraph CanonicalRepo ["Canonical Main Workspace (/projects/<workspace_name>)"]
         MainFiles["Canonical Source Files & Contracts\n(high/, scenarios/, planning/, low/, lib/, tests/)"]
         BuildGraph["Cleanroom Workspace & DAG State Engine\n(parts/workspace, parts/control, src_metadata.py)"]
-        CleanroomCLI["bin/cleanroom CLI\n(commission, clean-all, work-queue)"]
+        CleanroomCLI["bin/cleanroom CLI\n(commission, orchestrate, work-queue)"]
     end
 
     subgraph Tier2 ["Tier 2: Physically Confined Sibling Role Workspaces (../role_workspaces/)"]
@@ -238,6 +238,30 @@ Cleanroom auditor roles (`qa`, `coverage`, `spec_qa`) evaluate dirtiness strictl
   4. The feedback target does not exist or has an unparseable header.
 - **Independence from Explicit Upstream Dirtiness Tags**: An auditor node is **never** marked dirty simply because its feedback target has an explicit `# DIRTY:` tag if the code itself has not been modified. If an upstream role (`lib`) inspects a target tagged `# DIRTY:`, verifies that all contracts and tests pass, and submits via `bin/submit` without modifying the code, `LAST_CHANGED` is unchanged, `# DIRTY:` is removed, and downstream auditor certification remains 100% valid without requiring a redundant re-audit.
 
+### 3.6 Context Length Budgeting, In-Place Token Compaction, and Small Batches
+For resource-constrained or local models (such as `custom_omlx Qwen3.6-35B-A3B-oQ6-mtp`), excessive context windows and monolithic task lists cause rapid cognitive degradation, reasoning loops, and instruction drift:
+- **Declarative Model Configuration (`model_configs.toml`)**:
+  Execution parameters are not hardcoded. Cleanroom dynamically inspects `model_configs.toml` in the repository root, matching either the section key (e.g. `qwen-moe-q6`) or the `model` identifier (e.g. `Qwen3.6-35B-A3B-oQ6-mtp`):
+  ```toml
+  [models.qwen-moe-q6]
+  model = "Qwen3.6-35B-A3B-oQ6-mtp"
+  subagent_batch_size = 3
+  conversation_max_tokens = 100000
+  ```
+- **Small Batch Size (`subagent_batch_size = 3`)**: Subagents must not be overwhelmed with 15+ ready units at once. Work acquisition via `bin/get_work` is bounded by `subagent_batch_size` resolved from `model_configs.toml` (or CLI `--batch-size`). The agent implements, verifies, and submits this small batch before acquiring subsequent work. Workspaces record this batch bound in `.cleanroom_role.json` on commissioning/dispatch so every `bin/get_work` invocation automatically respects the limit.
+- **In-Place Token Compaction Over Process Killing (`conversation_max_tokens = 100000`)**:
+  Rather than killing and restarting the agent process when tokens accumulate, Goose natively supports in-place context compaction without tearing down the process:
+  - **`GOOSE_AUTO_COMPACT_TOKEN_LIMIT`**: Configured in the subagent environment resolved from `conversation_max_tokens` (defaulting to 100,000 tokens for smaller models like Qwen3.6-35B). When cumulative session context nears this limit, Goose's built-in memory management **automatically summarizes older turns** into a concise block, keeping the context lean.
+  - **Explicit Compaction via ACP (`/compact`)**: Goose supports slash commands over ACP. The Python coordinator can send `/compact` over the open stdio ACP pipe, prompting Goose to compress its token footprint while keeping the agent process and tool connections alive.
+  - **Warm Process Preservation**: The agent process stays warm in memory, avoiding the initialization tax of respawning processes.
+  - **Fallback Session Re-initialization**: Only if a harness completely lacks compaction capabilities or if context cannot be shrunk does the coordinator close the session and start fresh. Because Cleanroom stores all code and progress in-band in the filesystem (`bin/submit` updates main files; `LAST_CLEANED` and `FEEDBACK` headers reflect state), any new session resumes seamlessly with zero lost work.
+
+### 3.7 Elimination of Arbitrary Execution Timeouts
+Multi-node cleanroom construction across deep dependency trees can legitimately run for multiple hours:
+- **No Hardcoded Timeout Defaults**: Arbitrary time limits (such as the legacy 10-minute / 600-second kill switch) are completely eliminated (`timeout_seconds = None` by default). Subagents are never killed by wall-clock timers during ordinary operation.
+- **Optional CLI Upper Bound (`--timeout <seconds>`)**: If a developer or automated CI job wishes to enforce a global ceiling to catch infinite loops or runaway processes, an explicit `--timeout` parameter may be supplied to `bin/cleanroom orchestrate`.
+- **Tripwire & Blame as Primary Terminations**: Turn termination relies on explicit semantic signals (`bin/get_work` empty -> clean completion, `bin/blame` -> upstream feedback, `bin/fail` -> impasse escalation) rather than mechanistic timers.
+
 ---
 
 ## 4. Multi-Harness Integration & Common Code Architecture
@@ -249,20 +273,20 @@ To avoid maintaining separate orchestration engines for each agent framework, Cl
 ```mermaid
 flowchart TD
     subgraph CommonCore ["100% Shared Canonical Cleanroom Core"]
-        CoordEngine["CleanroomCoordinatorEngine\n• Evaluates repository DAG via parts/workspace\n• Computes topological execution waves\n• Manages role state machine & blame feedback routing"]
+        CoordEngine["CleanroomCoordinatorEngine\n• Evaluates repository DAG via parts/workspace\n• Dynamic queue-driven process supervisor\n• Zero hardcoded roles; continuous readiness polling\n• Context token budgeting (100k limit) & session retirement"]
         RoleBinaries["Universal In-Band Binaries (bin/*)\n• bin/get_work (self-syncing pull & DAG queue)\n• bin/submit (direct Python CLI mutations)\n• bin/blame (direct feedback injection)\n• bin/fail (failure diagnostic stamping)"]
         GuidesAndSpecs["Universal Contract Guides & Prompts\n• low_to_lib.md, low_to_test.md, qa.md\n• Canonical AGENTS.md constraints & templates"]
         TelemetryEngine["Universal Telemetry & Cost Engine\n• TokenUsage normalizer (input, output, cached)\n• Standardized multi-model pricing registry"]
     end
 
     subgraph AdapterInterface ["CleanroomHarnessAdapter Interface (Abstract Python Contract)"]
-        Contract["• dispatch_role(role, workspace_dir, prompt) -> TaskHandle\n• await_role(task_handle, timeout) -> RoleTurnResult\n• get_telemetry(task_handle) -> TokenUsage\n• interrupt_role(task_handle)"]
+        Contract["• dispatch_role(dispatch) -> TaskHandle\n• poll_role(task_handle) -> Optional[RoleTurnResult]\n• await_role(task_handle) -> RoleTurnResult\n• get_telemetry(task_handle) -> TokenUsage\n• interrupt_role(task_handle)\n• timeout_seconds: Optional[float] = None\n• max_context_tokens: int = 100_000"]
     end
 
     subgraph Phase1Adapters ["Phase 1 Production Harness Adapters"]
         AGYAdapter["AntigravityAdapter\n(Desktop IDE / CLI / SDK)"]
         DSHAdapter["DeepSeekHarnessAdapter\n(Cordis Plugin & subagent-control)"]
-        GooseAdapter["GooseAdapter\n(summon.delegate & Recipes)"]
+        GooseAdapter["GooseAdapter\n(Agent Client Protocol & CLI Sessions)"]
     end
 
     subgraph Phase2Adapters ["Phase 2 Future Harness Adapters"]
@@ -285,51 +309,53 @@ flowchart TD
 ```
 
 #### What is 100% Common Across All Platforms:
-1. **The Core Orchestrator Engine (`CleanroomCoordinatorEngine`)**:
-   - Pure Python, zero external framework dependencies.
-   - Evaluates the global DAG via `parts/workspace` (`workspace_work_impl.py`), computes ready/blocked roles, groups parallel execution waves (e.g. `lib` and `test` running simultaneously), and updates in-band DAG state.
-2. **The Universal In-Band Role Binaries (`bin/*`)**:
-   - `bin/get_work`, `bin/submit`, `bin/blame`, `bin/fail` are compiled as self-contained executable zipapps or shell scripts.
+1. **The Dynamic Queue-Driven Process Supervisor (`parts/subagent/`)**:
+   - `subagent_coordinator`: Pure Python, zero external framework dependencies.
+   - Evaluates the global DAG via `parts/workspace` (`workspace_work_impl.py`).
+   - **Zero hardcoded role names or static wave partitions**: Roles are discovered dynamically from `cleanroom_roles.toml` and target arguments.
+   - If `compute_role_work_queue` indicates a role has ready nodes and no active worker process, a worker is dispatched or prompted.
+   - Independent roles (such as `lib` and `test` when `low` is clean, or `qa` auditing previously completed nodes while `lib` works on other units) execute concurrently and dynamically.
+   - Workers are polled continuously, reaped upon turn completion, and re-dispatched when upstream nodes become clean.
+   - Tracks session context tokens, retiring sessions at 100k tokens to maintain reasoning quality for smaller models.
+2. **The Command Harness Adapter (`subagent_harness`)**:
+   - Manages process-based subagent turn execution matching configurable platform command templates within isolated role workspaces.
+   - Inspects blame buffers (`.cleanroom_blame_buffer.json`), extracts remaining pending work, and calculates token expenditures.
+   - Removes arbitrary 600s timeouts (`timeout_seconds: Optional[float] = None`).
+3. **The Universal In-Band Role Binaries (`bin/*`) and Support Tools**:
+   - `bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, `bin/fail` are compiled as self-contained executable runner zipapps or shell scripts.
    - Any agent harness that can execute terminal shell commands or edit files calls these tools identically.
-3. **The Role Guides and Behavioral Invariants**:
+4. **The Role Guides and Behavioral Invariants**:
    - Role contracts, Pyright configurations, and companion guides (`low_to_lib.md`, `low_to_test.md`, `qa.md`) are completely agnostic to the model or agent platform.
-4. **The Telemetry & Cost Engine (`cleanroom_telemetry.py`)**:
-   - Normalizes token counts and computes monetary costs using a uniform rate registry.
+5. **The Telemetry & Cost Engine (`subagent_coordinator`)**:
+   - Normalizes token counts (`TokenUsage`) and computes monetary costs using a uniform rate registry.
 
-#### The Abstract Adapter Protocol (`CleanroomHarnessAdapter`):
+#### The Abstract Adapter Protocol (`HarnessAdapter`):
 ```python
-from abc import ABC, abstractmethod
-from typing import List, Optional
-from cleanroom_telemetry import TokenUsage, RoleTurnResult
+from typing import Optional, Protocol, Sequence
+from update_with_ai.parts.subagent.lib.subagent_coordinator import (
+    RoleDispatch,
+    RoleTurnResult,
+    TokenUsage,
+)
 
-class CleanroomHarnessAdapter(ABC):
-    """Abstract interface implemented by each agent framework harness."""
+class HarnessAdapter(Protocol):
+    """Abstract interface implemented by external agent execution harnesses."""
 
-    @abstractmethod
-    def dispatch_role(
-        self,
-        role: str,
-        workspace_dir: str,
-        prompt: str,
-        timeout_seconds: float = 300.0,
-    ) -> str:
-        """Dispatches work to a subagent bound to workspace_dir. Returns a task/session handle."""
-        pass
+    def dispatch_role(self, dispatch: RoleDispatch) -> str:
+        """Dispatches work directive to a subagent bound to the role workspace."""
+        ...
 
-    @abstractmethod
+    def poll_role(self, task_handle: str) -> Optional[RoleTurnResult]:
+        """Non-blocking poll: returns RoleTurnResult if completed, or None if still running."""
+        ...
+
     def await_role(self, task_handle: str) -> RoleTurnResult:
-        """Awaits subagent turn completion; returns submitted/blamed units and status."""
-        pass
+        """Awaits subagent turn completion and returns outcome result."""
+        ...
 
-    @abstractmethod
-    def get_token_usage(self, task_handle: str) -> TokenUsage:
-        """Extracts normalized input, output, and cached token metrics for the turn."""
-        pass
-
-    @abstractmethod
     def interrupt_role(self, task_handle: str) -> None:
-        """Immediately halts subagent if loop guards or budgets trigger."""
-        pass
+        """Aborts active subagent task execution upon timeout or loop limit."""
+        ...
 ```
 
 ---
@@ -340,8 +366,8 @@ Google Antigravity provides an interactive desktop IDE environment powered by Ge
 
 #### Topology & Hierarchical Subagent Separation
 Antigravity enforces a strict two-tier subagent hierarchy that completely decouples the user-facing chat from the coordinator engine:
-1. **Tier 0: Human Conversation Chat & `bin/cleanroom clean-all <scope> [role]`**:
-   - The user triggers orchestration either by running `bin/cleanroom clean-all <scope> [role]` (e.g. `bin/cleanroom clean-all -antigravity staging qa`) or by prompting the assistant to clean dirty nodes in `<scope>` up to `[role]`.
+1. **Tier 0: Human Conversation Chat & `bin/cleanroom orchestrate <scope> [role]`**:
+   - The user triggers orchestration either by running `bin/cleanroom orchestrate <scope> [role]` (e.g. `bin/cleanroom orchestrate staging qa --harness antigravity`) or by prompting the assistant to clean dirty nodes in `<scope>` up to `[role]`.
    - The CLI commissions any uncommissioned role workspaces up to the requested role boundary and emits the handover directive.
    - The conversation chat's **sole** action is invoking the dedicated Coordinator Subagent (`cleanroom_coordinator`) with the target scope and optional role boundary, then waiting for its completion report. The conversation chat never attempts to evaluate queues, search files, or coordinate directly.
 2. **Tier 1: Coordinator Subagent (`cleanroom_coordinator`)**:
@@ -435,42 +461,21 @@ DeepSeek Harness is strictly model-agnostic via OpenAI-compatible API schemas. C
 2. **Local Ollama Inference**: Launchable via `ollama launch dsh` or by configuring the base URL to `http://127.0.0.1:11434/v1`. Enables running local weights (e.g. `deepseek-r1`, `qwen2.5-coder:32b`, `deepseek-coder-v2`) with **zero cloud egress and $0 token cost**.
 3. **Local vLLM / SGLang Cluster**: High-throughput inference for enterprise CI/CD clusters (`vllm serve deepseek-ai/DeepSeek-R1` at `http://localhost:8000/v1`).
 
-#### Plugin Configuration (`cordis.config.yml`)
-```yaml
-plugins:
-  # Mount standard file and shell tools for role workers
-  - name: "@deepseek-ai/dsh-core-tools"
-    config:
-      enable_shell: true
-      enable_fs: true
-      restrict_to_cwd: true
-
-  # Mount subagent control tools for the Coordinator
-  - name: "@deepseek-ai/dsh-tool-subagent-control"
-  - name: "@deepseek-ai/dsh-subagent-spawn-in-process"
-
-  # Cleanroom coordinator configuration
-  - name: "@cleanroom/dsh-coordinator"
-    config:
-      canonical_root: "./"
-      role_workspaces_dir: "../role_workspaces"
-      # Provider can be cloud or local endpoint:
-      # provider: "deepseek-cloud" # model: "deepseek-flash"
-      provider: "ollama-local"
-      base_url: "http://127.0.0.1:11434/v1"
-      model: "deepseek-r1:32b"
-      concurrency_limit: 4
-```
-
-#### Autonomous Headless Execution
-Unlike desktop IDE sessions, `dsh` can be executed headlessly via CLI or CI/CD pipelines:
+#### Headless CLI Architecture & Dynamic Overlay Patching
+Cleanroom integrates with DeepSeek Harness via its headless runtime profile:
 ```bash
-# Cloud execution with DeepSeek-V4 Flash
-npx @deepseek-ai/dsh run --plugin @cleanroom/dsh-coordinator --clean //staging/parts/sandbox:all
-
-# 100% local, air-gapped execution via Ollama
-ollama launch dsh --config cordis.local.yml --clean //staging/parts/sandbox:all
+dsh --profile headless --patch .cleanroom/dsh_patch.yml --json "{task_prompt}"
 ```
+Key architectural advantages of DeepSeek Harness for Cleanroom subagents:
+1. **Append-Only Prefix Caching (Zero Cache Busting)**: Unlike agents that inject fluctuating timestamps (e.g. `current-time` updates) into initial messages on every turn, `dsh` maintains an append-only conversation history. For local inference (oMLX, vLLM), SSD prefix caching operates at 100% efficiency without invalidating tens of thousands of tokens of shared prompt context.
+2. **Dynamic Overlay Patching (`--patch`)**: Role workspaces configure a targeted YAML patch layer (`.cleanroom/dsh_patch.yml`) overriding Cordis bundle settings:
+   - Configures `@deepseek-ai/dsh-agent-default-model` to dynamically select the target model (`deepseek-flash` for cloud, or `Qwen3.6-35B-A3B-oQ6-mtp` for local oMLX).
+   - Configures `@deepseek-ai/dsh-user-approval` with `policy: never` and `@deepseek-ai/dsh-permission-presets` with `defaultPreset: danger-full-access` so autonomous subagents execute tool calls without interactive prompts.
+3. **Structured Event Streaming (`--json`)**: Headless execution emits newline-delimited JSON run events to stdout, enabling immediate token usage parsing (`usage.inputTokens`, `usage.cacheReadTokens`, `usage.outputTokens`, `usage.totalTokens`) alongside disk archives in `session.v4.jsonl.zstd`.
+4. **Adaptive Context & Batch Bounds**:
+   - `DeepSeek-V41-Flash`: `subagent_batch_size = 10`, `conversation_max_tokens = 256000`.
+   - Local MoE models (`Qwen3.6-35B-A3B-oQ6-mtp`): `subagent_batch_size = 3`, `conversation_max_tokens = 100000`.
+
 
 ---
 
@@ -511,59 +516,36 @@ flowchart TD
     SummonExt -.->|"3. load(task_id) -> Completion Report"| TestTask
 ```
 
-#### Architecture: Roles as Version-Controlled Recipes
-In Goose, an entire agent persona, tool configuration, and system prompt is declared as a declarative YAML **Recipe**. Cleanroom provides standard recipes for the coordinator and each role under `update_with_ai/recipes/`:
+#### Architecture: Native AGENTS.md Confinement & Zero-Recipe Deployment
+In Goose, context files are discovered automatically via standard `AGENTS.md` and `.goosehints` files inside each role workspace (`cwd = ../role_workspaces/<ws>_<role>_<scope>/`). Cleanroom dispenses with proprietary YAML recipes entirely:
+- **`AGENTS.md` Confinement**: Each role workspace contains an `AGENTS.md` file specifying role boundaries, the 5-command restriction tripwire (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, `bin/fail`), guide references, and submission instructions.
+- **Physical Workspace Isolation**: The Goose process executes with `cwd` set strictly to the role workspace directory, operating under OS file permissions (`chmod 444` specs, missing `tests/` in `lib/`, interface stubs in `test/`).
 
-##### Coordinator Recipe (`recipes/cleanroom_coordinator.yaml`):
-```yaml
-name: cleanroom-coordinator
-version: 1.0.0
-description: "Zero-execution coordinator evaluating Cleanroom DAG queues and delegating to role subagents."
-model: "deepseek-flash"
-instructions: |
-  You are the Cleanroom Zero-Execution Coordinator.
-  You NEVER read code, edit files, or execute tests.
-  Your turns consist strictly of:
-  1. Evaluate DAG work queue via `bin/cleanroom work-queue <role>`.
-  2. For ready roles, call `delegate(source="cleanroom_<role>", working_dir="../role_workspaces/<ws>_<role>_<dir>", async=true)`.
-  3. Await completions via `load(task_id)`.
-  4. Repeat until all units across all roles are clean.
-extensions:
-  - developer
-  - type: platform
-    name: summon  # Mounts delegate and load tools
-```
+#### Generic Python Communication with Agent Processes
+To prevent the overhead of constantly restarting agent processes, Cleanroom communicates with Goose through two Python-driven modalities:
 
-##### Lib Role Recipe (`recipes/cleanroom_lib.yaml`):
-```yaml
-name: cleanroom-lib
-version: 1.0.0
-description: "Confined Cleanroom implementation engineer for library code."
-model: "deepseek-flash"
-instructions: |
-  You are the Cleanroom Library Engineer bound to your role workspace directory.
-  You write production library code adhering strictly to `low/*.pyi`.
-  You NEVER attempt to view `tests/`.
-  Upon wakeup:
-  1. Run `bin/get_work` to inspect ready units.
-  2. Follow the role companion guide to implement target files.
-  3. Verify with Pyright and `lib_lint.py`.
-  4. Submit verified files via `bin/submit <file> "<summary>"`.
-  5. Drain all ready units before finishing and report completed units.
-extensions:
-  - developer
-```
+##### 1. Agent Client Protocol (ACP) over stdio (`goose acp`)
+Goose natively implements the open **Agent Client Protocol (ACP)** over standard input/output (`stdio`) using JSON-RPC 2.0:
+- **Long-Lived Process**: The Python harness launches `goose acp` once per role workspace as a persistent background process.
+- **Protocol Handshake**: Python sends `initialize` and creates a role session (`session/new`).
+- **Turn Prompting**: When `bin/get_work` identifies ready nodes, Python sends `session/prompt` (`"Work is available. Run bin/get_work and drain ready units."`).
+- **Warm Idle State**: The Goose agent executes autonomously, drains ready units via `bin/submit`, and returns `status: idle` when `bin/get_work` is empty. **The process does not exit**; it remains warm in memory, retaining its loaded state and model connections.
+- **Re-Prompting**: When upstream roles produce new clean artifacts, Python sends the next `session/prompt` to the existing idle ACP worker.
+- **Context Budgeting**: When cumulative session tokens cross 100k tokens, Python closes the ACP session (`session/close`) and opens a fresh one to guarantee high reasoning quality.
 
-#### Persistent Multi-Session Orchestration (CLI Mode)
-In addition to in-process delegation via `summon`, Goose supports managing persistent named sessions anchored in distinct workspace directories:
+##### 2. Persistent CLI Session Resumption (`goose run --name ... --resume`)
+For environments where ACP is not used, Goose supports managing persistent named sessions anchored in distinct workspace directories:
 ```bash
-# Initialize persistent role sessions bound to their respective role workspaces
-goose session start --name cleanroom-lib --recipe update_with_ai/recipes/cleanroom_lib.yaml --cwd ../role_workspaces/cleanroom_lib_staging
-goose session start --name cleanroom-test --recipe update_with_ai/recipes/cleanroom_test.yaml --cwd ../role_workspaces/cleanroom_test_staging
-
-# The Coordinator dispatches tasks into active role sessions as work becomes ready
-goose run --session cleanroom-lib -t "Work is available in scope 'staging'. Run bin/get_work and drain ready units."
+# Dispatch turns into a persistent named session across waves
+goose run --name cleanroom-lib --instructions .cleanroom_task_prompt.md --resume
 ```
+This preserves conversation state and SQLite metrics across individual turns without requiring a long-running stdio daemon.
+
+#### Dedicated Goose Part Architecture (`update_with_ai/parts/goose/`)
+Adhering to Cleanroom's architectural rule (**Canonical `parts/` Over `support/lib/`**), Goose integration is encapsulated in a dedicated Cleanroom part: `update_with_ai/parts/goose/`, following the exact pattern of `update_with_ai/parts/antigravity/`:
+- **`goose_workspace`**: Configures workspace-local isolation rules, generates `.goosehints` with boundary rules and 5-command restriction tripwires, and aligns role `AGENTS.md` directly inside commissioned role workspaces.
+- **`goose_harness`**: Implements `subagent_coordinator.HarnessAdapter`, managing ACP / process-based execution, eliminating arbitrary timeouts (`timeout_seconds = None`), monitoring 100k context budgets, inspecting blame buffers (`.cleanroom_blame_buffer.json`), tracking submitted units, and normalizing SQLite session telemetry (`sessions.db` sessions & usage_ledger tables) into `TokenUsage`.
+- **`goose_asm`**: Provides singleton lifecycle and assembly wiring to register Goose harness adapters into the subagent coordinator and CLI.
 
 ---
 
@@ -600,7 +582,7 @@ Because Cleanroom decouples orchestration via the `CleanroomHarnessAdapter` inte
 
 ### 5.1 The Unified Token Telemetry Contract (`TokenUsage`)
 
-To fairly and objectively compare performance and cost across all harnesses (Antigravity, DeepSeek Harness, Goose, Claude Code, Codex) and models (Gemini, DeepSeek, Claude, GPT, local models), Cleanroom defines a **Universal Telemetry Contract** in `update_with_ai/support/lib/cleanroom_telemetry.py`:
+To fairly and objectively compare performance and cost across all harnesses (Antigravity, DeepSeek Harness, Goose, Claude Code, Codex) and models (Gemini, DeepSeek, Claude, GPT, local models), Cleanroom defines a **Universal Telemetry Contract** in `update_with_ai/parts/subagent/lib/subagent_coordinator.py`:
 
 ```python
 from dataclasses import dataclass
@@ -609,21 +591,22 @@ from typing import List, Optional
 @dataclass(frozen=True)
 class TokenUsage:
     """Normalized token telemetry for a single turn or complete cleaning session."""
-    input_tokens: int        # Uncached prompt tokens (cache miss)
-    cached_tokens: int       # Cached prompt tokens (cache hit)
-    output_tokens: int       # Generated completion tokens
-    total_tokens: int        # input_tokens + cached_tokens + output_tokens
-    cost_usd: float          # Standardized monetary expenditure in USD
+    input_tokens: int = 0        # Uncached prompt tokens (cache miss)
+    cached_tokens: int = 0       # Cached prompt tokens (cache hit)
+    output_tokens: int = 0       # Generated completion tokens
+    total_tokens: int = 0        # input_tokens + cached_tokens + output_tokens
+    cost_usd: float = 0.0        # Standardized monetary expenditure in USD
 
 @dataclass(frozen=True)
 class RoleTurnResult:
     """Outcome of an autonomous role subagent turn."""
     role: str
-    status: str              # "idle", "complete", "blamed", "failed"
-    units_submitted: List[str]
-    units_blamed: List[str]
-    telemetry: TokenUsage
-    wall_clock_seconds: float
+    status: str = "clean"        # "clean", "blamed", or "failed"
+    units_submitted: List[str] = field(default_factory=list)
+    units_blamed: List[str] = field(default_factory=list)
+    failure_reason: Optional[str] = None
+    telemetry: TokenUsage = field(default_factory=TokenUsage)
+    wall_clock_seconds: float = 0.0
 ```
 
 ### 5.2 Harvesting Telemetry Across Harnesses
@@ -776,17 +759,24 @@ All references to the canonical main workspace are resolved via relative convent
 
 ## 7. Lifecycle State Machine & Coordinator Logic
 
-### 7.1 Global DAG Traversal
-The Cleanroom build graph is a directed acyclic graph where nodes represent role artifacts:
-$$\text{High} \longrightarrow \text{Scenario} \longrightarrow \text{Planning} \longrightarrow \text{Low} \longrightarrow \text{Spec QA} \longrightarrow \{\text{Lib}, \text{Test}\} \longrightarrow \text{QA} \longrightarrow \text{Coverage}$$
-
-The Coordinator implements dependency-first topological scheduling:
-1. **Producer & Specification Auditor Phases**:
-   - `high`, `scenario`, `planning`, `low`, and `spec_qa` execute sequentially.
-   - When `spec_qa` is clean, both `lib` and `test` become topologically eligible and can execute **in parallel** in their respective workspaces.
-2. **Implementation Auditor Phases**:
-   - `qa` is blocked until **both** `lib` and `test` have successfully submitted and their verification targets pass.
-   - `coverage` is blocked until `qa` has successfully passed.
+### 7.1 Dynamic Queue-Driven Process Supervision (Zero-Hardcoding Supervisor)
+Cleanroom enforces mathematical, double-blind isolation while eliminating rigid wave execution and role hardcoding:
+- **Zero Role Hardcoding**: The supervisor never hardcodes role names, role categories, or execution wave schedules. Roles, permissions, and dependencies are resolved dynamically from `cleanroom_roles.toml` and target arguments.
+- **Node-Level Readiness & Fine-Grained Concurrency**: Work readiness is evaluated at the `(unit, role)` node level via `workspace_work.compute_role_work_queue`. If multiple roles have topologically unblocked ready nodes, they are all eligible to run concurrently. For example:
+  - When `low` contracts are clean, both `lib` and `test` run in parallel.
+  - While `lib` and `test` are working on unit 2, `qa` can concurrently audit unit 1 whose implementation and test are already submitted and clean!
+- **Continuous Supervisor Loop**:
+  1. **Startup Reset**: Cleans and resets preexisting role workspaces in scope to eliminate stale work or partial edits from previous aborted runs.
+  2. **Active Worker Registry**: Maintains `active_workers: Dict[str, TaskHandle]` tracking live subagent processes or interactive ACP sessions.
+  3. **Continuous Polling Tick**: On every supervisor tick:
+     - **Poll Active Workers**: Checks `poll_role(handle)`. When a worker completes its turn, the supervisor harvests submitted targets, blame feedback, failure diagnostics, and token telemetry.
+     - **Context Budget Gate**: If a worker session crosses **100,000 tokens**, the session is retired (`close_session`), ensuring that subsequent turns start with a clean context.
+     - **Evaluate Work Queue**: Queries `compute_role_work_queue` across all declared roles up to `target_role`.
+     - **Dispatch Ready Workers**: For any role with ready work and no active worker, commissions the workspace on demand and launches a worker process (or sends a new prompt to an existing idle ACP session).
+     - **Convergence Check**: When `active_workers` is empty:
+       - If all roles have 0 ready and 0 blocked units $\to$ **Clean Convergence!** Delete provisioned role workspaces and return success.
+       - If all roles have 0 ready units but blocked units remain $\to$ **Deadlock Impasse!** Abort and report unresolved prerequisites.
+     - **Tick Sleep**: If workers are active, the supervisor sleeps briefly (e.g., 1–2 seconds) before the next polling tick.
 
 ### 7.2 Blame & Defect Routing
 When a downstream role identifies a specification ambiguity or contradiction:
@@ -865,7 +855,7 @@ Instead of scaffolding `.agents/` in every project root, Antigravity subagent de
 - Manifest: `plugin.json` declaring the Cleanroom plugin metadata.
 - Coordinator Subagent: `agents/cleanroom_coordinator/agent.md` defines the Tier 1 zero-execution coordinator, equipped only with `run_command`, `send_message`, `invoke_subagent`, and `manage_subagents`.
 - Role Worker Subagent: `agents/cleanroom_worker/agent.md` defines the Tier 2 workspace-bound role worker, equipped with native file tools, `send_message`, and `run_command`.
-- **No Global Skill Required**: Cleanroom avoids creating or registering global chat skills (`skills/`). Running orchestration directly through `bin/cleanroom clean-all` eliminates skill indirection and saves system prompt tokens.
+- **No Global Skill Required**: Cleanroom avoids creating or registering global chat skills (`skills/`). Running orchestration directly through `bin/cleanroom orchestrate` eliminates skill indirection and saves system prompt tokens.
 
 #### Automatic On-Demand Provisioning (`ensure_antigravity_plugin_installed`)
 Subagent definitions are maintained and refreshed on every execution without manual setup:
@@ -873,9 +863,9 @@ Subagent definitions are maintained and refreshed on every execution without man
 - If any legacy `skills/` directory exists, it is automatically purged.
 - This ensures subagent definitions are always synchronized with the canonical codebase without requiring manual installation commands, discoverability polling, or in-tree repository clutter.
 
-#### Direct Execution Flow via `bin/cleanroom clean-all`
+#### Direct Execution Flow via `bin/cleanroom orchestrate`
 The execution procedure is lean and deterministic:
-1. **Run CLI Pre-Flight**: The user or assistant runs `bin/cleanroom clean-all <scope> [target_role]`.
+1. **Run CLI Pre-Flight**: The user or assistant runs `bin/cleanroom orchestrate <scope> [target_role]`.
 2. **Global Agent Refresh**: The CLI automatically ensures `cleanroom_coordinator` and `cleanroom_worker` definitions are up to date in `~/.gemini/config/plugins/cleanroom/`.
 3. **Workspace Commissioning & DAG Pre-flight**: The CLI commissions all necessary role workspaces up to `target_role` and evaluates DAG dirtiness.
 4. **Handoff to Coordinator**: The CLI outputs the autonomous coordination directive, prompting the Tier 0 chat to invoke `cleanroom_coordinator` using `invoke_subagent`.
@@ -883,7 +873,7 @@ The execution procedure is lean and deterministic:
 ### 8.3 Role-Boundary Filtering (`[target_role]`)
 Orchestration supports explicit role boundary targeting across both CLI commands and DAG evaluations:
 ```bash
-bin/cleanroom clean-all -antigravity staging qa
+bin/cleanroom orchestrate staging qa --harness antigravity
 bin/cleanroom work-queue staging qa --json
 ```
 - When a target role boundary is specified (e.g. `qa`), only roles in the topological sequence up to and including that role (`high -> scenario -> planning -> low -> spec_qa -> lib/test -> qa`) are commissioned and evaluated.
@@ -908,7 +898,7 @@ To avoid turn proliferation and the token tax of repeated subagent instantiation
    - Executes purely via Python and `uv` from the terminal.
    - Evaluates the DAG, auto-commissions missing role workspaces, dispatches subagents, and monitors convergence without opening any IDE.
 2. **In-IDE Interactive Chat Mode**:
-   - The developer invokes `/cleanroom` or runs `bin/cleanroom clean-all -antigravity <scope> [target_role]`.
+   - The developer invokes `/cleanroom` or runs `bin/cleanroom orchestrate <scope> [target_role] --harness antigravity`.
    - The coordinator agent evaluates the queue and dispatches worker subagents via `invoke_subagent` targeted to the external role workspaces.
 
 ---
@@ -924,37 +914,59 @@ The implementation of Subagent-Driven Cleanroom Workspaces proceeds across four 
 - **[COMPLETED] Zero Hardcoded Paths**: Dynamic upward hierarchical search (`parts/cleanroom.toml` and package namespace detection) enables isolated workspaces anywhere on the filesystem.
 - **[COMPLETED] Pure-uv Architecture Operational**: Sibling role workspaces (`../role_workspaces/<ws>_<role>_<dir>/`) are fully decoupled from Bazel manifests and ready for direct subagent binding.
 
-### Phase 1: Shared Canonical Core & Telemetry Engine (IN PROGRESS)
+### Phase 1: Shared Canonical Core & Telemetry Engine (COMPLETED)
 - **[COMPLETED] Zero-Repo-Pollution via Global Plugin Auto-Installation**: Removed `.agents/` completely from repository root; `bin/cleanroom` automatically deploys and refreshes global agent definitions in `~/.gemini/config/plugins/cleanroom/`.
-- **[COMPLETED] Role-Boundary Filtering (`[target_role]`)**: Implemented across `bin/cleanroom clean-all` and `bin/cleanroom work-queue --json`, scoping commissioning and DAG convergence up to a specified role.
+- **[COMPLETED] Role-Boundary Filtering (`[target_role]`)**: Implemented across `bin/cleanroom orchestrate` and `bin/cleanroom work-queue --json`, scoping commissioning and DAG convergence up to a specified role.
 - **[COMPLETED] Command Restriction Tripwire & Failure Escalation**: Enforced 5-binary restriction for workers; integrated `bin/fail` with `FAILED: <target> - <reason>` immediate escalation and abort.
-- **[COMPLETED] Direct CLI Coordination Entrypoint**: Orchestration is driven directly via `bin/cleanroom clean-all`, eliminating the need for a global chat skill.
-- **`CleanroomCoordinatorEngine`** (`update_with_ai/support/lib/cleanroom_coordinator_engine.py`):
-  - Headless, zero-execution DAG queue evaluator built on `parts/workspace` (`workspace_work_impl.py`).
-  - Exposes `CleanroomHarnessAdapter` abstract base class.
-- **Batch-Bounded `bin/get_work` Presentation (`workspace_tool_impl.py` & `workspace_work_impl.py`)**:
-  - Expose model/role `batch_size` configuration to `bin/get_work` (resolving from canonical main workspace configuration).
-  - Limit the number of presented and pending targets to `batch_size`.
-  - Format actionable diagnostic guidance advising the subagent to submit the active batch and call `bin/get_work` again to drain the remaining queue.
-- **`CleanroomTelemetry`** (`update_with_ai/support/lib/cleanroom_telemetry.py`):
-  - Normalizes token telemetry (`input_tokens`, `output_tokens`, `cached_tokens`) across all harnesses.
-  - Implements the centralized pricing table and calculates exact USD costs.
-- **Universal CLI Command**:
-  - `bin/cleanroom orchestrate [dir_scope] [--harness=<antigravity|dsh|goose>]`.
+- **[COMPLETED] Direct CLI Coordination Entrypoint**: Orchestration is driven directly via `bin/cleanroom orchestrate`, eliminating the need for a global chat skill.
+- **[COMPLETED] Canonical Coordinator Core (`parts/subagent/`)**:
+  - Implemented `subagent_coordinator` and `subagent_coordinator_impl`: pure Cleanroom part managing topological execution waves, wave clustering (sequential spec roles vs parallel implementation roles), turn outcome aggregation, blame defect propagation, and token rate-card accounting.
+  - Implemented `subagent_harness` and `subagent_harness_impl`: command harness adapter, template resolution, blame buffer reading, process execution, and log-based token parsing.
+  - Implemented `subagent_tool` and `subagent_tool_impl`: CLI tool integration for running subagent orchestration.
+  - Implemented `subagent_asm`: assembly wiring and singleton lifecycle management.
+- **[COMPLETED] Batch-Bounded `bin/get_work` Presentation (`workspace_tool_impl.py` & `workspace_work_impl.py`)**:
+  - Exposes model/role `batch_size` configuration to `bin/get_work` (resolving from canonical main workspace configuration).
+  - Limits the number of presented and pending targets to `batch_size`.
+  - Formats actionable diagnostic guidance advising the subagent to submit the active batch and call `bin/get_work` again to drain the remaining queue.
+- **[COMPLETED] Unified Telemetry & Rate-Card Accounting (`parts/subagent/`)**:
+  - Normalized token telemetry (`input_tokens`, `output_tokens`, `cached_tokens`) across all harnesses into `TokenUsage`.
+  - Centralized rate registry and calculated exact USD costs.
+- **[COMPLETED] Dynamic Queue-Driven Process Supervision & Session Budgeting (`parts/subagent/`)**:
+  - Transitioned `subagent_coordinator` from static wave clustering to continuous dynamic process supervision with zero hardcoded roles.
+  - Implemented non-blocking worker polling (`poll_role`) across `CommandHarnessAdapter`, `GooseHarnessAdapter`, and `AntigravityHarnessAdapter`.
+  - Eliminated hardcoded 600s timeouts (`timeout_seconds = None` default), exposing optional `--timeout` CLI flag.
+  - Dynamically resolved model parameters (`subagent_batch_size = 3`, `conversation_max_tokens = 100000`) from `model_configs.toml`, persisting batch bounds to `.cleanroom_role.json` on commissioning and dispatch.
+  - Injected `GOOSE_AUTO_COMPACT_TOKEN_LIMIT` into subagent environments to trigger in-place token compaction rather than tearing down processes.
+  - Automatically deletes provisioned role workspaces upon clean DAG convergence.
+- **[COMPLETED] 100% Verification Clean**: Passed 438 Pytest unit tests across the entire repository with 0 Pyright type errors and 100% specification linter conformance (`high_lint`, `spec_lint`, `low_lint`).
+- **[COMPLETED] Universal CLI Command**:
+  - `bin/cleanroom orchestrate` fully operational; legacy aliases removed.
 
-### Phase 2: Platform-Specific Harness Parts (Option A)
-1. **Google Antigravity Part (`update_with_ai/parts/antigravity/`)**:
+### Phase 2: Platform-Specific Harness Parts
+1. **Google Antigravity Part (`update_with_ai/parts/antigravity/`) (COMPLETED)**:
    - **[COMPLETED] Coordinator & Worker Agent Definitions**: Packaged into global plugin with 4-tool coordinator restrictions, worker persistence, and failure handlers.
-   - **`antigravity_workspace`**: Generates workspace-local isolation rules directly inside each commissioned role workspace (`../role_workspaces/<ws>_<role>_<scope>/`).
-   - **`antigravity_harness`**: Implements `subagent_coordinator.HarnessAdapter` in Python for programmatic session dispatch and parses token telemetry from `<appDataDir>/brain/<id>/.system_generated/logs/transcript.jsonl`.
-2. **DeepSeek Harness Part (`update_with_ai/parts/dsh/`)**:
-   - Implements Cordis coordinator plugin `@cleanroom/dsh-coordinator`.
-   - Utilizes `dsh-tool-subagent-control` (`send_message`, `list_agents`, `interrupt_agent`) for subagent steering.
-   - Supports both cloud DeepSeek-V4.1-Flash API and 100% local air-gapped inference via Ollama / vLLM.
-3. **Goose Adapter (`goose_adapter.py`)**:
-   - Authors standard role recipes under `update_with_ai/recipes/`.
-   - Dispatches tasks via `summon.delegate(working_dir=..., async=true)` and Named Sessions (`goose run --session`).
-   - Extracts usage telemetry from `goose session info --json`.
+   - **[COMPLETED] `antigravity_workspace`**: Generates workspace-local isolation rules (`.agents/rules/isolation.md`) directly inside each commissioned role workspace (`../role_workspaces/<ws>_<role>_<scope>/`).
+   - **[COMPLETED] `antigravity_harness`**: Implements `subagent_coordinator.HarnessAdapter` in Python for programmatic session dispatch, non-blocking `poll_role`, and parses token telemetry from `<appDataDir>/brain/<id>/.system_generated/logs/transcript.jsonl` with Gemini 3.8 Flash/Pro rate-cards.
+   - **[COMPLETED] `antigravity_asm`**: Complete assembly component integrating Antigravity coordinator and harness into Cleanroom runtime.
+2. **Goose Part (`update_with_ai/parts/goose/`) (COMPLETED)**:
+   - **[COMPLETED] Native `AGENTS.md` Confinement**: Eliminated YAML recipes; role workspaces configure `AGENTS.md` and `.goosehints` directly with 5-command restriction tripwires.
+   - **[COMPLETED] `goose_workspace` / `goose_workspace_impl`**: Configures workspace isolation boundaries, generates `.goosehints` with boundary rules and 5-command restriction tripwires directly inside commissioned role workspaces.
+   - **[COMPLETED] `goose_harness` / `goose_harness_impl`**: Implements `subagent_coordinator.HarnessAdapter` for Goose subagent execution, non-blocking `poll_role`, parses SQLite session telemetry (`sessions.db` sessions & usage_ledger tables) and log text fallbacks, computes model rate-card costs, tracks pending work diffs, and inspects `.cleanroom_blame_buffer.json`.
+   - **[COMPLETED] ACP / Token Compaction & Timeout Elimination**:
+     - Removed 600s hardcoded process timeout in `goose_harness_impl.py` (`timeout_seconds: Optional[float] = None`).
+     - Configured `GOOSE_AUTO_COMPACT_TOKEN_LIMIT` from `conversation_max_tokens` (100k) for in-place token compaction.
+     - Small batch size enforcement (`subagent_batch_size = 3`) via `.cleanroom_role.json`.
+   - **[COMPLETED] `goose_asm`**: Singleton lifecycle and assembly wiring registering Goose harness adapters into the subagent coordinator and CLI.
+   - **[COMPLETED] 100% Verification Clean**: Passed 11 unit tests in `update_with_ai/parts/goose/tests/` with 0 Pyright errors and 100% test pass.
+3. **DeepSeek Harness Part (`update_with_ai/parts/dsh/`) (IN PROGRESS / ACTIVE)**:
+   - **`dsh_workspace` / `dsh_workspace_impl`**: Configures workspace-local isolation rules in `AGENTS.md` and generates targeted Cordis overlay patch `.cleanroom/dsh_patch.yml` configuring model routing (`deepseek-official` or `omlx`), `approval: never`, and `permission: danger-full-access`.
+   - **`dsh_harness` / `dsh_harness_impl`**: Implements `subagent_coordinator.HarnessAdapter` for DeepSeek Harness subagent execution via `dsh --profile headless --patch .cleanroom/dsh_patch.yml --json`, non-blocking `poll_role`, process supervision, blame inspection via `.cleanroom_blame_buffer.json`, and token telemetry extraction from `--json` event streams and `session.v4.jsonl.zstd`.
+   - **Append-Only Prefix Cache Preservation**: Eliminates dynamic timestamp injection into early messages, providing 100% prefix caching hit rates on local models (oMLX/vLLM).
+   - **Dynamic Model Parameter Resolution**: Configured in `model_configs.toml`:
+     - `DeepSeek-V41-Flash`: `subagent_batch_size = 10`, `conversation_max_tokens = 256000`.
+     - `qwen-moe-q6` (`Qwen3.6-35B-A3B-oQ6-mtp`): `subagent_batch_size = 3`, `conversation_max_tokens = 100000`.
+   - **`dsh_asm`**: Singleton lifecycle and assembly wiring registering DeepSeek Harness adapters into Cleanroom CLI and subagent resolver.
+
 
 ### Phase 3: Phase 2 Harness Adapters (Anthropic Claude Code & OpenAI Codex)
 1. **Anthropic Claude Code Adapter (`claude_code_adapter.py`)**:

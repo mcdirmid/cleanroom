@@ -1,16 +1,16 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
-LAST_CHANGED: 2026-10-12T21:00:00Z
-CHANGE: author subagent_coordinator_impl planning specification
-CODE_HASH: 3e0ed11fef53
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CHANGED: 2026-10-13T11:20:00Z
+CHANGE: add workspace reset and convergence deletion contracts
+CODE_HASH: e86c3df03d09
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # subagent_coordinator_impl implementation component
 
 ## Intent
 
-The subagent_coordinator_impl implementation component realizes zero-execution multi-agent workspace coordination, DAG wave partitioning, concurrent wave execution, and iterative loop convergence across external harness adapters.
+The subagent_coordinator_impl implementation component realizes zero-execution multi-agent workspace coordination, dynamic queue-driven process supervision, fine-grained concurrency, and iterative loop convergence across external harness adapters.
 
 ## Factored Contracts
 
@@ -20,30 +20,34 @@ The subagent_coordinator_impl implementation component realizes zero-execution m
 
 ### Contracts
 
+- The realization resets preexisting role workspaces for declared roles upon initiating orchestration. [reset_preexisting_role_workspaces]
+- The realization resolves subagent batch sizes and conversation token limits from declarative model configurations matching designated model names or identifiers. [resolve_model_execution_parameters]
 - The realization discovers commissioned workspaces and queries work queues via the work manager. [query_workspace_work_queues]
-- The realization commissions absent role workspaces via the workspace provisioner. [commission_absent_workspaces]
-- The realization identifies unblocked dirty roles and partitions them into topological waves. [partition_topological_waves]
-- The realization executes wave directives concurrently or sequentially through the harness adapter. [dispatch_wave_directives]
-- The realization iterates through execution waves until DAG convergence or failure. [drive_convergence_loop]
+- The realization commissions absent role workspaces on demand via the workspace provisioner when ready tasks are identified, recording effective batch size limits into role descriptors. [commission_absent_workspaces]
+- The realization dispatches role directives concurrently for roles possessing ready work, tracking active worker handles without static wave partitioning. [dispatch_concurrent_role_workers]
+- The realization periodically polls active workers through non-blocking checks on the configured harness adapter, collecting role turn results upon completion. [poll_active_role_workers]
+- The realization manages the dynamic supervision loop, continuing until all units evaluate clean, a turn reports failure, or maximum wave iterations are reached. [drive_convergence_loop]
+- The realization automatically deletes all provisioned role workspaces in scope upon achieving clean convergence. [delete_role_workspaces_on_convergence]
 - The realization calculates token costs based on model pricing rate cards. [tally_turn_telemetry]
 
 ### Woven Contracts
 
-- When evaluating wave execution, the realization queries work queues, commissions absent workspaces, partitions waves, dispatches directives, and tallies turn telemetry. [query_workspace_work_queues, commission_absent_workspaces, partition_topological_waves, dispatch_wave_directives, tally_turn_telemetry, subagent_coordinator: [compute_execution_waves, commission_absent_workspaces, isolate_specification_roles, cluster_implementation_roles, execute_wave_roles], workspace_provision: [commission_role_workspace], workspace_registry: [load_active_workspace_descriptors], workspace_work: [compute_role_work_queue_targets]]
-- When orchestrating convergence, the realization drives iterative waves until clean convergence or failure. [drive_convergence_loop, subagent_coordinator: [orchestrate_pipeline_convergence]]
+- When initiating orchestration and managing convergence, the realization resets preexisting workspaces, resolves model parameters, drives the supervision loop, and deletes provisioned workspaces upon clean convergence. [reset_preexisting_role_workspaces, resolve_model_execution_parameters, drive_convergence_loop, delete_role_workspaces_on_convergence, subagent_coordinator: [reset_preexisting_role_workspaces, resolve_model_execution_parameters, orchestrate_pipeline_convergence, delete_role_workspaces_on_convergence]]
+- When supervising active workers, the realization queries work queues, commissions absent workspaces, dispatches concurrent workers, polls active workers, and tallies turn telemetry. [query_workspace_work_queues, commission_absent_workspaces, dispatch_concurrent_role_workers, poll_active_role_workers, tally_turn_telemetry, subagent_coordinator: [evaluate_ready_work_queues, commission_absent_workspaces, dispatch_concurrent_role_workers, poll_active_role_workers, aggregate_cumulative_telemetry], workspace_provision: [commission_role_workspace], workspace_registry: [load_active_workspace_descriptors], workspace_work: [compute_role_work_queue_targets]]
 
 ## Grounding
 
 ### Knowledge Provisions
 
-- Topological wave partitioning and role clustering logic. [topological_wave_partitioning]
-- Multi-agent wave dispatch and await execution mechanics. [wave_dispatch_mechanics]
+- Workspace lifecycle management including initial reset and convergence deletion mechanics. [workspace_lifecycle_mechanics]
+- Dynamic process supervision and queue-driven concurrency logic. [dynamic_process_supervision]
+- Multi-agent dispatch and non-blocking polling mechanics. [worker_polling_mechanics]
 - Model rate card pricing and token usage aggregation. [rate_card_telemetry_tally]
 
 ### Inherited Deferred Requirements
 
-- Subagent scheduling and wave execution logic.
-  - Grounded: [topological_wave_partitioning, wave_dispatch_mechanics, rate_card_telemetry_tally]
+- Subagent scheduling, dynamic process supervision, and workspace lifecycle logic.
+  - Grounded: [dynamic_process_supervision, worker_polling_mechanics, rate_card_telemetry_tally, workspace_lifecycle_mechanics]
 
 ### Knowledge Requirements
 

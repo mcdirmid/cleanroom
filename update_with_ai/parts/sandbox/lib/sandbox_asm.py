@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-11T04:58:56Z
 # CHANGE: Restrict assembly CONSTITUENTS to exactly the constituent modules declared in the grounding specification
 # CODE_HASH: 9edb479d3655

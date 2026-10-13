@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-13T01:30:00Z
 # CHANGE: eliminate cleanroom_workspaces.json workspace registry file
-# CODE_HASH: 494394a90327
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: ab44f6b59912
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_registry."""

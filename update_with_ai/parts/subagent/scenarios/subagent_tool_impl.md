@@ -1,18 +1,18 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
-LAST_CHANGED: 2026-10-12T21:15:08Z
-CHANGE: Add subagent tool impl scenarios
-CODE_HASH: 7056e57a13a8
+LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CHANGED: 2026-10-13T12:00:00Z
+CHANGE: update subagent tool impl scenarios for dynamic supervision and options
+CODE_HASH: 7059c6ce17f1
 -->
 
 # subagent_tool_impl scenarios
 
-### Scenario 1 — Running the orchestrate command across execution waves
+### Scenario 1 — Running the orchestrate command via dynamic queue supervision
 
-Given: scope_a has unblocked roles and commissioned role workspaces.
+Given: scope_a has unblocked roles and ready work targets.
 
 1. The caller runs the orchestrate command for scope_a through a designated harness adapter.
-   Observed: the coordinator executes topological waves until convergence, prints cumulative telemetry and financial expenditures, and returns an exit code of zero.
+   Observed: the coordinator executes dynamic queue-driven supervision until convergence, prints cumulative telemetry and financial expenditures, and returns an exit code of zero.
    Realized by: the component's orchestrate argument parsing, resolving the command harness adapter through `subagent_harness`, invoking `orchestrate` on `subagent_coordinator`, and printing summary metrics.
 
 ### Scenario 2 — Refusing an unknown subcommand
@@ -22,3 +22,19 @@ Given: the caller provides an unsupported command.
 1. The caller runs the command `fly`.
    Observed: the request is rejected with non-zero exit status and usage advice.
    Realized by: the component's CLI argument parsing rejecting unknown subcommands.
+
+### Scenario 3 — Bounding orchestration to a target role
+
+Given: scope_a has unblocked roles across multiple development stages.
+
+1. The caller runs the orchestrate command specifying a target role.
+   Observed: the coordinator executes supervision only up to the target role, ignoring downstream stages.
+   Realized by: the component's orchestrate CLI parsing extracting the target role argument and passing it to the coordinator.
+
+### Scenario 4 — Configuring batch size, execution timeout, and context token limits
+
+Given: scope_a has unblocked roles and ready work targets.
+
+1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, and `--max-context-tokens 100000`.
+   Observed: the coordinator and harness adapter receive the configured batch size, timeout, and context compaction limits.
+   Realized by: the component's CLI options parsing `--batch-size`, `--timeout`, and `--max-context-tokens` and propagating them to harness resolution and coordinator options.

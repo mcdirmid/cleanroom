@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:16Z
 LAST_CHANGED: 2026-10-13T01:25:00Z
 CHANGE: eliminate cleanroom_workspaces.json workspace registry file
-CODE_HASH: afb28350e6de
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+CODE_HASH: 98ba1e403c17
+SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 -->
 
 # workspace_registry interface component

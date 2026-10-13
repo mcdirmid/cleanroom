@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_harness_impl implementation library
-# CODE_HASH: bc1d7ab763d1
-# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
-# QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: ccbe59b5c364
+# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
+# QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for antigravity_harness_impl."""
@@ -157,7 +157,7 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
     def __init__(
         self,
         model_name: Optional[str] = None,
-        timeout_seconds: float = 600.0,
+        timeout_seconds: Optional[float] = None,
         custom_cmd: Optional[str] = None,
         transcript_parser: Optional[TranscriptTelemetryParser] = None,
     ) -> None:
@@ -209,6 +209,36 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
             "prompt_file": prompt_file,
         }
         return handle
+
+    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+        """Polls subagent turn execution non-blockingly without waiting for completion."""
+        task = self._tasks.get(task_handle)
+        if not task:
+            return subagent_coordinator.RoleTurnResult(
+                role="",
+                status="failed",
+                failure_reason=f"Unknown task handle: {task_handle}",
+            )
+
+        proc: Optional[subprocess.Popen[str]] = task.get("proc")
+        if proc is None:
+            return self.await_role(task_handle)
+
+        retcode = proc.poll()
+        if retcode is None:
+            if self.timeout_seconds is not None:
+                start_time: float = task.get("start_time", time.time())
+                elapsed = time.time() - start_time
+                if elapsed > self.timeout_seconds:
+                    try:
+                        proc.kill()
+                        proc.wait()
+                    except OSError:
+                        pass
+                    return self.await_role(task_handle)
+            return None
+
+        return self.await_role(task_handle)
 
     def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
         """Awaits subagent turn completion and returns outcome result."""
@@ -303,7 +333,7 @@ class AntigravityHarnessManager(
     def create_harness_adapter(
         self,
         model_name: Optional[str] = None,
-        timeout_seconds: float = 600.0,
+        timeout_seconds: Optional[float] = None,
         custom_cmd: Optional[str] = None,
     ) -> antigravity_harness.AntigravityHarnessAdapter:
         """Constructs an Antigravity harness adapter instance."""

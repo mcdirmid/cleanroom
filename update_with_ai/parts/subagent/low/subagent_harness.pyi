@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_harness interface low-level specification
-# CODE_HASH: 6b4dfb2cf920
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: 70b476bfbf14
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for subagent_harness."""
@@ -45,11 +45,21 @@ class CommandHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         """Awaits subagent turn completion and returns outcome result.
 
         POSTCONDITIONS:
-        - MUST await process completion bounded by configured timeout limit.
+        - MUST await process completion without mandatory timeout unless an explicit limit is configured.
         - WHEN process times out, MUST terminate process and return failed result.
         - MUST inspect workspace blame buffer for reported defects.
         - MUST determine submitted targets by set difference with remaining pending items.
         - MUST extract token usage metrics and return synthesized RoleTurnResult.
+        """
+        ...
+
+    @operation
+    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+        """Polls subagent turn execution without blocking.
+
+        POSTCONDITIONS:
+        - WHEN subagent process has terminated, MUST return role turn result.
+        - WHEN subagent process is still running, MUST return None without blocking or termination.
         """
         ...
 
@@ -72,7 +82,8 @@ class HarnessResolver(InTier[AgentSessionTier], Protocol):
         self,
         platform_name: str,
         model_name: Optional[str] = None,
-        timeout_seconds: float = 600.0,
+        timeout_seconds: Optional[float] = None,
+        max_context_tokens: Optional[int] = None,
         custom_cmd: Optional[str] = None,
         simulation_mode: bool = False,
     ) -> subagent_coordinator.HarnessAdapter:

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CLEANED: 2026-10-13T20:42:15Z
 LAST_CHANGED: 2026-10-11T01:39:02Z
 CHANGE: Replace the fragment policy lead-in with declarative policy properties and canonicalize policy terminology
 CODE_HASH: 247b6a2a335e
-SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+SPEC_QA_AUDIT: 2026-10-13T20:42:15Z
 -->
 
 # agent_config interface component

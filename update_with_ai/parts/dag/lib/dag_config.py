@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-11T04:59:19Z
 # CHANGE: Remove generated scaffold markers and carry the grounding specification's class and property contracts into the interface
 # CODE_HASH: 33567465df66

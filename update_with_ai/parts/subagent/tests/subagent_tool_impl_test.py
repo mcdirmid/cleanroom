@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_tool_impl unit tests
-# CODE_HASH: 96140368a208
-# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
-# QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: caf14b5ec7f0
+# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
+# QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for subagent_tool_impl."""
@@ -34,8 +34,15 @@ class FakeCoordinator:
 
     def __init__(self, converged: bool = True) -> None:
         self.converged = converged
+        self.last_target_role: Optional[str] = None
 
-    def compute_execution_waves(self, dir_scope: str, repo_root: Optional[str] = None, batch_size: Optional[int] = None):
+    def compute_execution_waves(
+        self,
+        dir_scope: str,
+        target_role: Optional[str] = None,
+        repo_root: Optional[str] = None,
+        batch_size: Optional[int] = None,
+    ):
         return ()
 
     def run_wave(self, wave, harness):
@@ -45,10 +52,13 @@ class FakeCoordinator:
         self,
         dir_scope: str,
         harness: subagent_coordinator.HarnessAdapter,
+        target_role: Optional[str] = None,
         max_waves: int = 50,
         batch_size: Optional[int] = None,
         repo_root: Optional[str] = None,
+        model_name: Optional[str] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
+        self.last_target_role = target_role
         return subagent_coordinator.OrchestrationSummary(
             is_converged=self.converged,
             total_waves=3,
@@ -74,9 +84,10 @@ class FakeHarnessResolver:
         self,
         platform_name: str,
         model_name: Optional[str] = None,
-        timeout_seconds: float = 600.0,
+        timeout_seconds: Optional[float] = None,
         custom_cmd: Optional[str] = None,
         simulation_mode: bool = False,
+        max_context_tokens: Optional[int] = None,
     ) -> subagent_coordinator.HarnessAdapter:
         class DummyAdapter:
             def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
@@ -84,6 +95,9 @@ class FakeHarnessResolver:
 
             def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
                 return subagent_coordinator.RoleTurnResult(role="test", status="clean")
+
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+                return self.await_role(task_handle)
 
             def interrupt_role(self, task_handle: str) -> None:
                 pass
@@ -140,6 +154,14 @@ class SubagentToolImplTest(unittest.TestCase):
             runner = scope.get_singleton(subagent_tool.SubagentToolRunner)
             status = runner.execute_command(["pkg_a", "--simulation"])
             self.assertEqual(status, 0)
+
+    def test_execute_command_orchestrate_with_target_role(self) -> None:
+        """Scenario 3: Verifies execute_command parses target_role positional argument."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(subagent_tool.SubagentToolRunner)
+            status = runner.execute_command(["orchestrate", "staging", "qa", "--simulation"])
+            self.assertEqual(status, 0)
+            self.assertEqual(self.fake_coord.last_target_role, "qa")
 
 
 if __name__ == "__main__":

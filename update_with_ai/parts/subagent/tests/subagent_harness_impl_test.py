@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_harness_impl unit tests
-# CODE_HASH: 30be20589a41
-# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
-# QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: c1212e7ed311
+# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
+# QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for subagent_harness_impl."""
@@ -175,6 +175,7 @@ class SubagentHarnessImplTest(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 resolver.resolve_harness("nonexistent_platform")
+
 
     def test_enforcing_execution_timeouts(self) -> None:
         """Scenario 6: Terminates runaway subagent process when timeout expires."""

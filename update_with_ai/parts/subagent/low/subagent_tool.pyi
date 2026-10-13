@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CLEANED: 2026-10-13T20:42:16Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_tool interface low-level specification
-# CODE_HASH: 651ef9627ff4
-# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
+# CODE_HASH: 27f491b6e993
+# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for subagent_tool."""
@@ -32,17 +32,20 @@ class SubagentToolRunner(InTier[AgentSessionTier], Protocol):
     def run_orchestrate(
         self,
         dir_scope: str,
+        target_role: Optional[str] = None,
         harness: Optional[str] = None,
         model: Optional[str] = None,
         max_waves: int = 50,
         batch_size: Optional[int] = None,
+        timeout: Optional[float] = None,
+        max_context_tokens: Optional[int] = None,
         repo_root: Optional[str] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence.
 
         POSTCONDITIONS:
-        - MUST resolve execution harness adapter.
-        - MUST coordinate wave execution via subagent coordinator.
+        - MUST resolve execution harness adapter with timeout and token limit options.
+        - MUST coordinate dynamic supervision via subagent coordinator up to optional target role.
         - MUST return 0 on convergence, 1 otherwise.
         """
         ...
