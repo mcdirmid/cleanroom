@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CLEANED: 2026-10-13T01:05:05Z
 LAST_CHANGED: 2026-10-11T03:07:14Z
 CHANGE: Canonicalize warning and fatal thresholds and split reminder content statements
 CODE_HASH: 6303af4c1696
-SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # loop_guard_impl implementation component

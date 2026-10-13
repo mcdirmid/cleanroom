@@ -1,14 +1,15 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:37Z
-# LAST_CHANGED: 2026-10-10T19:25:00Z
-# CHANGE: add tests rejecting conflicting silent role dependencies and auditor role dependencies
+# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CHANGED: 2026-10-13T01:30:00Z
+# CHANGE: test role metadata workspace discovery without persistent registry file
 # CODE_HASH: 094c5b1d4727
-# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
-# QA_AUDIT: 2026-10-12T23:37:36Z
+# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
+# QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_registry_impl."""
 
+import json
 import os
 import tempfile
 import unittest
@@ -292,6 +293,38 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
                 "//external_pkg:ext_role", repo_root=tmp_root
             )
             self.assertEqual(role_def.role_name, "ext_role")
+
+    def test_discover_active_workspaces_from_provisioned_role_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as base_tmp:
+            repo_root = os.path.join(base_tmp, "my_repo")
+            os.makedirs(repo_root, exist_ok=True)
+            roles_file = os.path.join(repo_root, "cleanroom_roles.toml")
+            with open(roles_file, "w", encoding="utf-8") as f:
+                f.write(
+                    '[roles.lib]\n'
+                    'name = "lib"\n'
+                    'src_pattern = "{unit_dir}/lib/{unit_name}.py"\n'
+                )
+
+            workspaces_dir = os.path.join(base_tmp, "role_workspaces")
+            ws_dir = os.path.join(workspaces_dir, "my_repo_lib_staging")
+            os.makedirs(ws_dir, exist_ok=True)
+            meta_path = os.path.join(ws_dir, ".cleanroom_role.json")
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "role_name": "lib",
+                    "dir_scope": "staging",
+                    "main_workspace_root": repo_root,
+                    "last_sync_timestamp": "2026-01-02T03:04:05Z",
+                }, f)
+
+            fresh_registry = workspace_registry_impl.WorkspaceRegistry()
+            active = fresh_registry.load_active_workspaces(repo_root=repo_root)
+            self.assertEqual(len(active), 1)
+            self.assertEqual(active[0].workspace_dir, os.path.abspath(ws_dir))
+            self.assertEqual(active[0].role_definition.role_name, "lib")
+            self.assertEqual(active[0].directory_scope, "staging")
+            self.assertEqual(active[0].last_sync_timestamp, "2026-01-02T03:04:05Z")
 
 
 if __name__ == "__main__":

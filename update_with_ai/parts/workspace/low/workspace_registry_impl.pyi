@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:36Z
-# LAST_CHANGED: 2026-10-11T04:14:50Z
-# CHANGE: Contract role metadata descriptor and sibling workspace root discovery
+# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CHANGED: 2026-10-13T01:30:00Z
+# CHANGE: eliminate cleanroom_workspaces.json workspace registry file
 # CODE_HASH: 4fdbb00b5cc5
-# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_registry_impl."""
@@ -22,21 +22,19 @@ class WorkspaceRegistry(
     workspace_registry.WorkspaceRegistry,
     InTier[AgentSessionTier],
 ):
-    """Realizes role configuration resolution and persistent workspace registration.
+    """Realizes role configuration resolution and active workspace tracking.
 
     GROUNDING:
     - Realizes workspace_registry.WorkspaceRegistry by producing
       workspace_registry.RoleDefinition records from parsed role declarations and
-      workspace_registry.WorkspaceDescriptor records from persistent registry entries.
+      workspace_registry.WorkspaceDescriptor records from active session memory or provisioned role workspaces.
     - Implements the search_ancestor_markers, inspect_role_metadata_descriptor,
       match_sibling_workspace_conventions, fallback_to_ambient_working_directory,
       parse_role_definitions, normalize_role_identifier, sanitize_directory_folder_name,
-      write_json_registry_atomically, and read_json_registry_descriptors mechanics over
-      the cleanroom_files_ext.WORKSPACES_REGISTRY_FILE registry file held beneath the canonical repository
-      root.
+      record_in_memory_descriptor, and discover_active_workspace_descriptors mechanics.
     - Backs active workspace tracking with an in-memory workspace descriptor collection
-      keyed by workspace directory, hydrated through read_json_registry_descriptors and
-      replaced through write_json_registry_atomically on every record or unregister.
+      keyed by workspace directory, hydrated through in-memory registration and provisioned
+      role workspace discovery.
     - Constructs absolute and relative path representations with
       file_paths.FilePathManager.create_absolute_path,
       file_paths.FilePathManager.create_workspace_path, and
@@ -166,16 +164,11 @@ class WorkspaceRegistry(
         descriptor: workspace_registry.WorkspaceDescriptor,
         repo_root: Optional[str] = None,
     ) -> None:
-        """Records an active workspace descriptor into the persistent registry file.
+        """Records an active workspace descriptor into active session memory.
 
         GROUNDING:
-        - Reads the existing descriptor array from cleanroom_files_ext.WORKSPACES_REGISTRY_FILE through
-          read_json_registry_descriptors, upserts the supplied
-          workspace_registry.WorkspaceDescriptor in the in-memory descriptor collection
-          keyed by workspace directory, and commits the collection through
-          write_json_registry_atomically by encoding deterministic JSON via the external
-          json_ext mechanics into a temporary sibling file and atomically replacing the
-          registry file.
+        - Stores or updates the supplied workspace_registry.WorkspaceDescriptor in the
+          in-memory descriptor collection keyed by workspace directory.
         """
         ...
 
@@ -184,14 +177,12 @@ class WorkspaceRegistry(
     def unregister_workspace(
         self, workspace_dir: str, repo_root: Optional[str] = None
     ) -> bool:
-        """Removes a workspace descriptor from the persistent registry file.
+        """Removes a workspace descriptor from active session memory.
 
         GROUNDING:
-        - Reads the existing descriptor array from cleanroom_files_ext.WORKSPACES_REGISTRY_FILE through
-          read_json_registry_descriptors, removes the collection entry whose workspace
-          directory matches the supplied workspace_dir, commits the remaining collection
-          through write_json_registry_atomically, and reports whether a matching entry was
-          removed.
+        - Removes the collection entry whose workspace directory matches the supplied
+          workspace_dir from the in-memory descriptor collection, and reports whether
+          a matching entry was removed.
         """
         ...
 
@@ -200,13 +191,14 @@ class WorkspaceRegistry(
     def load_active_workspaces(
         self, repo_root: Optional[str] = None
     ) -> Sequence[workspace_registry.WorkspaceDescriptor]:
-        """Loads active workspace descriptors from the persistent registry file.
+        """Loads active workspace descriptors from active session memory and provisioned role workspaces.
 
         GROUNDING:
-        - Reads cleanroom_files_ext.WORKSPACES_REGISTRY_FILE from the canonical repository root through
-          read_json_registry_descriptors, decoding host text through the external
-          filesystem_ext mechanics and JSON payloads through the external json_ext
-          mechanics, and constructs a workspace_registry.WorkspaceDescriptor for each
-          entry, treating an absent registry file as an empty descriptor collection.
+        - Combines in-memory workspace descriptors with descriptors discovered by scanning
+          the role_workspaces directory for provisioned role workspace directories carrying
+          role metadata descriptors, decoding host text through the external filesystem_ext
+          mechanics and JSON payloads through the external json_ext mechanics, constructing
+          a workspace_registry.WorkspaceDescriptor for each discovered workspace matching
+          the canonical repository root.
         """
         ...

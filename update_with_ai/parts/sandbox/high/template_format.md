@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T21:57:18Z
+LAST_CLEANED: 2026-10-13T01:05:05Z
 LAST_CHANGED: 2026-10-06T00:52:26Z
 CHANGE: import commonmark_ext and declare delegated token patterns
 CODE_HASH: d3b3c391fcba
-SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # template_format interface component

@@ -82,7 +82,7 @@ In standard Markdown viewers, the `<!-- for: ... -->` comment is invisible in re
 The template system integrates across four core subsystems in Cleanroom:
 
 ```
-[cleanroom.toml / cleanroom_roles.toml]
+[parts/cleanroom.toml / cleanroom_roles.toml]
   Emits: template_parameters in project configuration
          |
          v
@@ -102,7 +102,7 @@ The template system integrates across four core subsystems in Cleanroom:
   read-write starter files                read-only markdown files
 ```
 
-### 3.1 Project Configuration (`cleanroom.toml` / `cleanroom_roles.toml`)
+### 3.1 Project Configuration (`parts/cleanroom.toml` / `cleanroom_roles.toml`)
 Cleanroom targets accept a `template_parameters` dictionary (mapping string keys to strings, booleans, lists, or nested mappings).
 - Project target definitions encode `template_parameters` into the node's target specification.
 - `uv_manifest_loader_impl` parses `template_parameters` into the target manifest dictionary.

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T21:57:18Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-09T04:44:11Z
 # CHANGE: Assert missing attributes on parameter objects leave placeholders unrendered
 # CODE_HASH: c65de8ced2c4
-# COVERAGE_AUDIT: 2026-10-12T21:57:18Z
-# QA_AUDIT: 2026-10-12T21:57:18Z
+# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
+# QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for template_format_impl per its grounding specification."""

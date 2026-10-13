@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:37Z
-# LAST_CHANGED: 2026-10-11T05:04:09Z
-# CHANGE: Implement the registry grounding directly with file path manager path construction, atomic JSON registry writes and reads, in-memory descriptor collection, and the declared key and value error branches
+# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CHANGED: 2026-10-13T01:30:00Z
+# CHANGE: eliminate cleanroom_workspaces.json workspace registry file
 # CODE_HASH: 5784c19e88c4
-# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
-# QA_AUDIT: 2026-10-12T23:37:36Z
+# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
+# QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_registry_impl."""
@@ -14,7 +14,6 @@ from __future__ import annotations
 import ast
 import json
 import os
-import tempfile
 import tomllib
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -29,7 +28,6 @@ from update_with_ai.parts.agent.lib import agent_session
 from update_with_ai.parts.core.lib import file_paths
 from . import workspace_registry
 
-_REGISTRY_FILE = ".cleanroom_workspaces.json"
 _ROLE_CACHE: Dict[str, Tuple[float, Dict[str, workspace_registry.RoleDefinition]]] = {}
 
 
@@ -488,68 +486,8 @@ def _fallback_to_ambient_working_directory() -> str:
     return os.path.abspath(os.getcwd())
 
 
-def _read_json_registry_descriptors(path: str) -> List[Dict[str, Any]]:
-    """Decodes the workspace descriptor array held in the persistent registry file."""
-    if not os.path.isfile(path):
-        return []
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return []
-    if isinstance(data, dict):
-        entries = data.get("workspaces")
-        if isinstance(entries, list):
-            return [e for e in entries if isinstance(e, dict)]
-        return []
-    if isinstance(data, list):
-        return [e for e in data if isinstance(e, dict)]
-    return []
-
-
-def _registry_uses_object_envelope(path: str) -> bool:
-    """Reports whether the persistent registry file wraps its array in an object envelope."""
-    if not os.path.isfile(path):
-        return False
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return False
-    return isinstance(data, dict) and "workspaces" in data
-
-
-def _write_json_registry_atomically(
-    path: str, descriptors: List[Dict[str, Any]], wrap_in_object: bool = False
-) -> None:
-    """Encodes deterministic JSON into a temporary sibling file and atomically replaces the registry file."""
-    payload: Any = {"workspaces": descriptors} if wrap_in_object else descriptors
-    directory = os.path.dirname(path)
-    os.makedirs(directory, exist_ok=True)
-    temp_fd, temp_path = tempfile.mkstemp(
-        prefix=".workspaces_", suffix=".json", dir=directory
-    )
-    with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
-        f.write(json.dumps(payload, sort_keys=True, indent=2))
-        f.write("\n")
-    os.replace(temp_path, path)
-
-
-def _descriptor_entry(
-    descriptor: workspace_registry.WorkspaceDescriptor,
-) -> Dict[str, Any]:
-    """Serializes a workspace descriptor into its persistent registry entry."""
-    return {
-        "workspace_dir": descriptor.workspace_dir,
-        "main_workspace_root": descriptor.main_repository_root,
-        "role": descriptor.role_definition.role_name,
-        "dir": descriptor.directory_scope,
-        "last_sync_timestamp": descriptor.last_sync_timestamp or "",
-    }
-
-
 class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
-    """Realizes role configuration resolution and persistent workspace registration."""
+    """Realizes role configuration resolution and active workspace tracking."""
 
     tier = agent_session.agent_session
 
@@ -800,35 +738,27 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
             os.path.join(parent_dir, "role_workspaces"), folder_name
         )
 
-    def _get_registry_path(self, repo_root: Optional[str] = None) -> str:
-        """Resolves the persistent registry file path held beside the role workspaces."""
-        root = self.discover_repository_root(repo_root)
-        parent_dir = os.path.dirname(root)
-        workspaces_dir = os.path.join(parent_dir, "role_workspaces")
-        os.makedirs(workspaces_dir, exist_ok=True)
-        return os.path.join(workspaces_dir, _REGISTRY_FILE)
-
-    def _read_all_descriptor_entries(
-        self, repo_root: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """Hydrates the in-memory descriptor collection from the persistent registry files."""
-        entries = _read_json_registry_descriptors(self._get_registry_path(repo_root))
-        root = self.discover_repository_root(repo_root)
-        entries.extend(
-            _read_json_registry_descriptors(os.path.join(root, _REGISTRY_FILE))
-        )
-        return entries
-
     def load_active_workspaces(
         self, repo_root: Optional[str] = None
     ) -> Sequence[workspace_registry.WorkspaceDescriptor]:
-        """Loads active workspace descriptors from the persistent registry file."""
+        """Loads active workspace descriptors from active session memory and provisioned role workspaces."""
         root = self.discover_repository_root(repo_root)
-        repo_reg_path = os.path.join(root, _REGISTRY_FILE)
         target_repo = os.path.abspath(root) if repo_root else None
 
-        candidates: List[Dict[str, Any]] = self._read_all_descriptor_entries(repo_root)
+        seen_dirs: Set[str] = set()
+        descriptors: List[workspace_registry.WorkspaceDescriptor] = []
 
+        # 1. Collect from in-memory session descriptors
+        for ws_dir, desc in list(self._workspaces.items()):
+            norm_ws = os.path.abspath(ws_dir)
+            if target_repo is not None:
+                item_repo = os.path.abspath(desc.main_repository_root)
+                if item_repo != target_repo:
+                    continue
+            seen_dirs.add(norm_ws)
+            descriptors.append(desc)
+
+        # 2. Discover provisioned role workspaces from role_workspaces directory
         parent_dir = os.path.dirname(root)
         workspaces_dir = os.path.join(parent_dir, "role_workspaces")
         expected_prefix = f"{os.path.basename(root)}_"
@@ -836,6 +766,9 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
             try:
                 for item_name in sorted(os.listdir(workspaces_dir)):
                     item_path = os.path.join(workspaces_dir, item_name)
+                    norm_ws = os.path.abspath(item_path)
+                    if norm_ws in seen_dirs:
+                        continue
                     if os.path.isdir(item_path):
                         role_cfg_path = os.path.join(item_path, ".cleanroom_role.json")
                         if os.path.isfile(role_cfg_path):
@@ -847,58 +780,37 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
                                     if not item_name.startswith(expected_prefix):
                                         continue
                                     repo = root
-                                candidates.append({
-                                    "workspace_dir": item_path,
-                                    "role": rdata.get("role_name") or rdata.get("role", ""),
-                                    "dir": rdata.get("parts_dir") or rdata.get("dir_scope", ""),
-                                    "main_workspace_root": repo,
-                                    "last_sync_timestamp": rdata.get("last_sync_timestamp"),
-                                })
+                                item_repo = os.path.abspath(repo)
+                                if target_repo is not None and item_repo != target_repo:
+                                    continue
+                                role_identifier = rdata.get("role_name") or rdata.get("role", "")
+                                if not role_identifier:
+                                    continue
+                                dir_scope = rdata.get("parts_dir") or rdata.get("dir_scope", "")
+                                try:
+                                    r_def = self.resolve_role_definition(
+                                        role_identifier,
+                                        repo_root=repo,
+                                        dir_scope=dir_scope,
+                                    )
+                                except (KeyError, ValueError, OSError):
+                                    continue
+
+                                descriptor = workspace_registry.WorkspaceDescriptor(
+                                    workspace_dir=norm_ws,
+                                    main_repository_root=repo,
+                                    directory_scope=dir_scope,
+                                    role_definition=r_def,
+                                    last_sync_timestamp=rdata.get("last_sync_timestamp"),
+                                )
+                                self._workspaces[norm_ws] = descriptor
+                                seen_dirs.add(norm_ws)
+                                descriptors.append(descriptor)
                             except (OSError, json.JSONDecodeError):
                                 pass
             except OSError:
                 pass
 
-        seen_dirs: Set[str] = set()
-        descriptors: List[workspace_registry.WorkspaceDescriptor] = []
-        for item in candidates:
-            ws_path = item.get("workspace_dir", "")
-            if not ws_path:
-                continue
-            norm_ws = os.path.abspath(ws_path)
-            if norm_ws in seen_dirs:
-                continue
-
-            item_repo = (
-                os.path.abspath(item.get("main_workspace_root", ""))
-                if item.get("main_workspace_root")
-                else None
-            )
-            if target_repo is not None and item_repo is not None and item_repo != target_repo:
-                continue
-
-            seen_dirs.add(norm_ws)
-            role_identifier = item.get("role") or item.get("role_name", "")
-            if not role_identifier:
-                continue
-            try:
-                r_def = self.resolve_role_definition(
-                    role_identifier,
-                    repo_root=item.get("main_workspace_root") or root,
-                    dir_scope=item.get("dir", item.get("parts_dir", "")),
-                )
-            except (KeyError, ValueError, OSError):
-                continue
-
-            descriptor = workspace_registry.WorkspaceDescriptor(
-                workspace_dir=norm_ws,
-                main_repository_root=item.get("main_workspace_root") or root,
-                directory_scope=item.get("dir", item.get("parts_dir", "")),
-                role_definition=r_def,
-                last_sync_timestamp=item.get("last_sync_timestamp"),
-            )
-            self._workspaces[norm_ws] = descriptor
-            descriptors.append(descriptor)
         return tuple(descriptors)
 
     def record_workspace(
@@ -906,54 +818,19 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
         descriptor: workspace_registry.WorkspaceDescriptor,
         repo_root: Optional[str] = None,
     ) -> None:
-        """Records an active workspace descriptor into the persistent registry file."""
+        """Records an active workspace descriptor into active session memory."""
         self._workspaces[descriptor.workspace_dir] = descriptor
-        reg_path = self._get_registry_path(repo_root)
-        root = self.discover_repository_root(repo_root)
-        repo_reg_path = os.path.join(root, _REGISTRY_FILE)
-        entry = _descriptor_entry(descriptor)
-        target_ws = os.path.abspath(descriptor.workspace_dir)
-
-        for path in (reg_path, repo_reg_path):
-            wrapped = _registry_uses_object_envelope(path)
-            entries = _read_json_registry_descriptors(path)
-            updated: List[Dict[str, Any]] = []
-            for item in entries:
-                if os.path.abspath(str(item.get("workspace_dir", ""))) == target_ws:
-                    continue
-                updated.append(item)
-            updated.append(entry)
-            _write_json_registry_atomically(path, updated, wrap_in_object=wrapped)
 
     def unregister_workspace(
         self, workspace_dir: str, repo_root: Optional[str] = None
     ) -> bool:
-        """Removes a workspace descriptor from the persistent registry file."""
-        reg_path = self._get_registry_path(repo_root)
-        root = self.discover_repository_root(repo_root)
-        repo_reg_path = os.path.join(root, _REGISTRY_FILE)
+        """Removes a workspace descriptor from active session memory."""
         target_abs = os.path.abspath(workspace_dir)
         removed = False
-
-        for path in (reg_path, repo_reg_path):
-            if not os.path.isfile(path):
-                continue
-            wrapped = _registry_uses_object_envelope(path)
-            entries = _read_json_registry_descriptors(path)
-            remaining: List[Dict[str, Any]] = []
-            file_removed = False
-
-            for item in entries:
-                if os.path.abspath(str(item.get("workspace_dir", ""))) == target_abs:
-                    file_removed = True
-                    removed = True
-                else:
-                    remaining.append(item)
-
-            if file_removed:
-                _write_json_registry_atomically(path, remaining, wrap_in_object=wrapped)
-
-        self._workspaces.pop(workspace_dir, None)
+        for key in list(self._workspaces.keys()):
+            if os.path.abspath(key) == target_abs:
+                del self._workspaces[key]
+                removed = True
         return removed
 
 

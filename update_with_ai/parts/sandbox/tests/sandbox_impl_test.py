@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T21:57:18Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-09T03:03:01Z
 # CHANGE: Add MockEditManager collaborator and tests verifying Sandbox.has_modifications returns true/false by delegating to EditManager.has_modifications (including live, non-cached state); strengthen initialization test to check interface-key singleton identity.
 # CODE_HASH: 4d36952be67d
-# COVERAGE_AUDIT: 2026-10-12T21:57:18Z
-# QA_AUDIT: 2026-10-12T21:57:18Z
+# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
+# QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_impl per its grounding specification."""

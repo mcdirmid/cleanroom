@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:36Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-11T05:03:55Z
 # CHANGE: Record failure diagnostics and force dirty state through graph storage in fail_target, mark blamed culprits dirty in blame_target, resolve culprit files through the alias manager, and synchronize blamed source metadata headers
 # CODE_HASH: cab1f22dc870
-# COVERAGE_AUDIT: 2026-10-12T23:37:36Z
-# QA_AUDIT: 2026-10-12T23:37:36Z
+# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
+# QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations

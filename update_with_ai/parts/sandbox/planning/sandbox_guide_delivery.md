@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T21:57:18Z
+LAST_CLEANED: 2026-10-13T01:05:05Z
 LAST_CHANGED: 2026-10-11T03:10:53Z
 CHANGE: Declare progressive guide delivery, primer, and step advancement typing statements
 CODE_HASH: 20548bbc54e4
-SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # sandbox_guide_delivery interface component

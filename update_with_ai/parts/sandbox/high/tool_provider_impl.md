@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T21:57:18Z
+LAST_CLEANED: 2026-10-13T01:05:05Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
 CHANGE: Canonicalize the missing note term and state wire value conversion declaratively
 CODE_HASH: 73c193090cd4
-SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # tool_provider_impl implementation component

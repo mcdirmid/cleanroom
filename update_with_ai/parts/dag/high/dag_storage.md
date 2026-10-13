@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CLEANED: 2026-10-13T01:05:05Z
 LAST_CHANGED: 2026-10-11T01:51:09Z
 CHANGE: Complete the operation inventory, scope out low-level operations correctly, and bind the dirty reason and message-clearing semantics
 CODE_HASH: 700cd79d46dd
-SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # dag_storage interface component

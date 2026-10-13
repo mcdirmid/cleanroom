@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CLEANED: 2026-10-13T01:05:05Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
 CHANGE: Name the node cleaning capability canonically and state the continuation invariant declaratively
 CODE_HASH: 8207d6f64baf
-SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # loop_node_cleaner interface component

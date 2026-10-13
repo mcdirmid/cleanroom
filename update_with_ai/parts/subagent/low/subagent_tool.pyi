@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:36Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_tool interface low-level specification
 # CODE_HASH: 651ef9627ff4
-# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for subagent_tool."""

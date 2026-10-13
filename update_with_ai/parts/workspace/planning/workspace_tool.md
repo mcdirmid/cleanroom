@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CLEANED: 2026-10-13T01:05:05Z
 LAST_CHANGED: 2026-10-12T21:14:00Z
 CHANGE: update execute_commission_command contract for dynamic directory scope
 CODE_HASH: 1010d25e9028
-SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # workspace_tool interface component

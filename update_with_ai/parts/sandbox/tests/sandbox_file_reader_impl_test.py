@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T22:37:48Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-11T05:48:53Z
 # CHANGE: Carry workspace_path as the contracted file_paths.WorkspacePath record, expose a WorkspaceRoot record, and drop the undeclared resolve_path alias attribute
 # CODE_HASH: 921458873efd
-# COVERAGE_AUDIT: 2026-10-12T21:57:18Z
-# QA_AUDIT: 2026-10-12T22:37:48Z
+# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
+# QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_file_reader_impl per its grounding specification."""

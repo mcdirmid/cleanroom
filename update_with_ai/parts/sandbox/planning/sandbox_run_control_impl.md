@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T21:57:18Z
+LAST_CLEANED: 2026-10-13T01:05:05Z
 LAST_CHANGED: 2026-10-12T11:59:00Z
 CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
 CODE_HASH: e92a1009189e
-SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # sandbox_run_control_impl implementation component

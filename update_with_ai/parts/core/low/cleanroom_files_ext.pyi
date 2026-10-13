@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:36Z
-# LAST_CHANGED: 2026-10-11T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 5ada9c3d5e49
+# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CHANGED: 2026-10-13T01:30:00Z
+# CHANGE: remove cleanroom_workspaces.json
+# CODE_HASH: 56c829b4e7ae
 # --- END CLEANROOM METADATA ---
 
 """
@@ -13,7 +13,7 @@ The `cleanroom_files_ext` external component specifies the filesystem schema, st
 **Canonical File Names & Schema Constants**
 
 - `CLEANROOM_CONFIG_FILE: str = "cleanroom.toml"`:
-  Scoped methodology configuration file discovered by searching upward from package directories to workspace root.
+  Scoped methodology configuration file present in the `parts` directory of a cleanroom project (not workspace), binding that package hierarchy to its methodology specification package.
   - Schema:
     - `methodology: str`: Canonical target address or package path to the methodology defining the roles (e.g. `"//update_python_with_ai"`).
 
@@ -45,9 +45,6 @@ The `cleanroom_files_ext` external component specifies the filesystem schema, st
     - `dir_scope: str`: Directory scope string.
     - `main_workspace_root: str`: Canonical repository root path.
     - `role_address: Optional[str]`: Fully qualified role address.
-
-- `WORKSPACES_REGISTRY_FILE: str = ".cleanroom_workspaces.json"`:
-  Registry file tracking provisioned workspace directories and metadata.
 
 - `CLEANROOM_LOG_FILE: str = ".cleanroom.log"`:
   Append-only change and feedback diagnostic log file located in package or parts directories.

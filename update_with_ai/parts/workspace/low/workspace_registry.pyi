@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:36Z
-# LAST_CHANGED: 2026-10-11T03:37:00Z
-# CHANGE: Align repository discovery, role resolution, and registry wording with revised contracts
+# LAST_CLEANED: 2026-10-13T01:05:05Z
+# LAST_CHANGED: 2026-10-13T01:30:00Z
+# CHANGE: eliminate cleanroom_workspaces.json workspace registry file
 # CODE_HASH: 494394a90327
-# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_registry."""
@@ -170,10 +170,10 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
     def record_workspace(
         self, descriptor: WorkspaceDescriptor, repo_root: Optional[str] = None
     ) -> None:
-        """Records an active workspace descriptor into the persistent workspaces registry file.
+        """Records an active workspace descriptor into active session memory.
 
         POSTCONDITIONS:
-        - MUST append or update the workspace descriptor in the persistent workspaces registry file.
+        - MUST record or update the workspace descriptor in active session memory.
         """
         ...
 
@@ -181,10 +181,10 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
     def unregister_workspace(
         self, workspace_dir: str, repo_root: Optional[str] = None
     ) -> bool:
-        """Removes a workspace descriptor from the persistent workspaces registry file.
+        """Removes a workspace descriptor from active session memory.
 
         POSTCONDITIONS:
-        - MUST remove the matching workspace directory entry from the persistent workspaces registry file.
+        - MUST remove the matching workspace directory entry from active session memory.
         - WHEN a matching workspace directory entry is removed, MUST return true.
         """
         ...
@@ -193,10 +193,10 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
     def load_active_workspaces(
         self, repo_root: Optional[str] = None
     ) -> Sequence[WorkspaceDescriptor]:
-        """Loads all active workspace descriptors from the persistent workspaces registry file.
+        """Loads all active workspace descriptors from active session memory and provisioned role workspaces.
 
         POSTCONDITIONS:
-        - MUST deserialize active workspace descriptors from the persistent workspaces registry file.
-        - WHEN the persistent workspaces registry file is absent, MUST return an empty sequence.
+        - MUST return active workspace descriptors tracked in memory or discovered by inspecting provisioned role workspace directories carrying role metadata descriptors.
+        - WHEN no workspaces have been recorded or provisioned, MUST return an empty sequence.
         """
         ...

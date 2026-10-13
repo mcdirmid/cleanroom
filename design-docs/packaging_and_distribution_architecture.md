@@ -315,7 +315,7 @@ imports: dag_config, dag_storage
 Horizontal dependencies (`implements:`, `imports:`, `assembles:`) are parsed directly from the HLS, while vertical role dependencies are governed by `cleanroom_roles.toml`.
 
 ### 7.2 Scope Methodology Binding (`cleanroom.toml`)
-Package directories declare their methodology once:
+In a cleanroom project, `cleanroom.toml` should be present in the `parts` directory (not workspace) and declares its methodology once:
 ```toml
 # parts/cleanroom.toml
 methodology = "//update_python_with_ai"

@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T23:37:36Z
-LAST_CHANGED: 2026-10-11T03:16:34Z
-CHANGE: Rework workspace_registry interface scenarios for literal instances and declaration constraints
+LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CHANGED: 2026-10-13T01:30:00Z
+CHANGE: eliminate cleanroom_workspaces.json workspace registry file
 CODE_HASH: b6c1f6a0e38d
 -->
 
@@ -148,7 +148,7 @@ Given: the canonical repository root is `/srv/repos/repo`, and the role is alpha
 
 ## Scenario 10 — Loading, commissioning, and decommissioning active workspaces
 
-Given: no persistent workspaces registry exists.
+Given: no workspaces have been recorded or provisioned.
 
 1. The caller loads the active workspaces.
    Observed: no workspace descriptor comes back.

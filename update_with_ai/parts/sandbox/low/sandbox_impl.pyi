@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T21:57:18Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-11T03:26:02Z
 # CHANGE: State modification reporting as delegation to the edit manager
 # CODE_HASH: 863c55d9447e
-# SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
+# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox implementation low-level specification."""

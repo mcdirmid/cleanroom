@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:36Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_coordinator_impl implementation library
 # CODE_HASH: 62b479f1b86a
-# COVERAGE_AUDIT: 2026-10-12T23:37:36Z
-# QA_AUDIT: 2026-10-12T23:37:36Z
+# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
+# QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for antigravity_coordinator_impl."""

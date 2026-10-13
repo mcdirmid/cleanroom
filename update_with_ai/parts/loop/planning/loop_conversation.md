@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CLEANED: 2026-10-13T01:05:05Z
 LAST_CHANGED: 2026-10-11T03:06:38Z
 CHANGE: Complete conversation capability statements and canonicalize stubbing terminology
 CODE_HASH: fdbc662fdb15
-SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # loop_conversation interface component

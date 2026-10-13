@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:36Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-11T03:48:23Z
 # CHANGE: Declare the inherited dirty evaluation explicitly for in-band metadata and non-silent dependency changes
 # CODE_HASH: cac5a8cbb49a
-# SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Agent storage low-level interface specification."""

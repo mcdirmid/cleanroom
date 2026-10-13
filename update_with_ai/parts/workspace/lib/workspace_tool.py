@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:36Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-11T05:25:18Z
 # CHANGE: Prune the uncontracted get_workspace_tool_runner module function and its lifecycle import so the interface holds only the declared runner protocol, restore the declared directory scope default, and carry the grounding specification's postconditions into the protocol docstrings
 # CODE_HASH: a61a0558b455

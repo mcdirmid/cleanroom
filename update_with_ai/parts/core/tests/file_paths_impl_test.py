@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:37Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-09T02:54:02Z
 # CHANGE: Inspect message field on PathValidationError instead of str(ctx.exception)
 # CODE_HASH: 86753e1b71b9
-# COVERAGE_AUDIT: 2026-10-12T23:37:37Z
-# QA_AUDIT: 2026-10-12T23:37:36Z
+# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
+# QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for file_paths_impl per its grounding specification."""

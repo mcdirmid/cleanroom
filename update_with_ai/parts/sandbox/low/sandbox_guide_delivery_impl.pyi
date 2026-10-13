@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T21:57:18Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-11T03:26:01Z
 # CHANGE: Add guide acquisition on session init and ground parsing and advancement mechanics
 # CODE_HASH: c0e4f0cd9020
-# SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
+# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox guide delivery implementation low-level specification."""

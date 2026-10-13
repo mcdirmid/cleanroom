@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:36Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-11T05:09:56Z
 # CHANGE: Resolve the default lifecycle registry in assembly initialization before delegating to constituents and document the aggregation
 # CODE_HASH: b589db914d43

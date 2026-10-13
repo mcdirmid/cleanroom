@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T21:57:18Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-12T11:27:00Z
 # CHANGE: Remove max batch size parameter from get work tool
 # CODE_HASH: 007d8d944175
-# SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
+# SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox run control low-level interface specification."""

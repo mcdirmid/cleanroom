@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T21:57:18Z
+LAST_CLEANED: 2026-10-13T01:05:05Z
 LAST_CHANGED: 2026-10-11T03:10:59Z
 CHANGE: State modification reporting as a delegated report rather than a query
 CODE_HASH: c80b3357a565
-SPEC_QA_AUDIT: 2026-10-12T21:57:18Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # sandbox_impl implementation component

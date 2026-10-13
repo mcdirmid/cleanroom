@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T23:37:36Z
-LAST_CHANGED: 2026-10-11T03:16:51Z
-CHANGE: Resynchronize registry implementation scenarios with the reworked interface
+LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CHANGED: 2026-10-13T01:30:00Z
+CHANGE: eliminate cleanroom_workspaces.json workspace registry file
 CODE_HASH: a0b460032fd3
 -->
 
@@ -192,12 +192,11 @@ Given: the canonical repository root is `/srv/repos/repo`, and the role is alpha
 
 ### Scenario 10 — Loading, commissioning, and decommissioning active workspaces
 
-Given: no persistent workspaces registry exists.
+Given: no workspaces have been recorded or provisioned.
 
 1. The caller loads the active workspaces.
    Observed: no workspace descriptor comes back.
-   Realized by: the component's own read of the persistent registry file, which reports no
-   descriptors when the file is absent.
+   Realized by: the component's own query of active session memory and discovery scan of provisioned role workspaces, which reports no descriptors when none have been recorded or provisioned.
 
 2. The caller records a descriptor for role alpha in scope_a whose workspace directory is
    `/ws/alpha_scope_a`, whose main repository root is `/repo`, whose role definition declares guide
@@ -207,21 +206,19 @@ Given: no persistent workspaces registry exists.
    `/ws/alpha_scope_a`, its main repository root is `/repo`, its directory scope is scope_a, its
    role definition identifies alpha and reports the guide path `guides/alpha` and the source
    pattern `alpha/{unit}.md`, and its last sync timestamp is `2026-01-02T03:04:05Z`.
-   Realized by: the component's own atomic registry write, which stages the updated registry in a
-   temporary file before it replaces the registry file.
+   Realized by: the component's own recording of workspace descriptors in active session memory.
 
 3. The caller records a descriptor for the same workspace directory `/ws/alpha_scope_a` in scope_a
    with last sync timestamp `2026-01-03T03:04:05Z`.
    Observed: loading returns one descriptor for `/ws/alpha_scope_a`, carrying the last sync
    timestamp `2026-01-03T03:04:05Z`, not two descriptors.
-   Realized by: the component's own register-or-update path, which matches an existing descriptor
-   by workspace directory and scope before appending a new one.
+   Realized by: the component's own register-or-update path in active session memory, which matches an existing descriptor
+   by workspace directory and scope before updating the entry.
 
 4. The caller unregisters the alpha workspace in scope_a.
    Observed: loading the active workspaces returns no descriptor, and the previously recorded
    `/ws/alpha_scope_a` state is served afresh rather than from a cached read.
-   Realized by: the component's own removal of every matching descriptor followed by the atomic
-   registry write, and its re-reading of the registry file on each load.
+   Realized by: the component's own removal of the matching workspace descriptor from active session memory.
 
 ## Implementation-only
 
@@ -239,17 +236,13 @@ descriptor records the canonical repository root `/repo`, and no repository indi
    over the surrounding directory tree, and its fallback to the ambient process working directory
    when neither an indicator nor a descriptor is present.
 
-### Scenario 12 — A concurrent read never observes a partial registry
+### Scenario 12 — Discovering active workspaces from provisioned role metadata
 
-Given: the registry file already holds a descriptor for `/ws/alpha_scope_a`, and a second process is
-recording a descriptor for `/ws/beta_scope_b` at the same time.
+Given: the canonical repository root is `/repo`, and a role workspace exists at `/role_workspaces/alpha_scope_a` carrying a valid role metadata descriptor for role alpha in scope scope_a with main repository root `/repo` and last sync timestamp `2026-01-02T03:04:05Z`.
 
-1. The caller records the beta descriptor while a concurrent reader repeatedly loads the active
-   workspaces.
-   Observed: every load returns a complete registry, holding either one descriptor or both, and
-   never a partially written record.
-   Realized by: the component's own write through a temporary staging file, which replaces the
-   registry file atomically, and its file locking around the update.
+1. The caller loads the active workspaces for `/repo` without prior in-memory recording.
+   Observed: loading returns one descriptor for `/role_workspaces/alpha_scope_a`, identifying role alpha, directory scope scope_a, main repository root `/repo`, and last sync timestamp `2026-01-02T03:04:05Z`.
+   Realized by: the component's own discovery scan of the role workspaces directory, which reads the role metadata descriptor of each provisioned workspace matching the repository root.
 
 ### Scenario 13 — Read-only patterns derived from the declared dependencies
 

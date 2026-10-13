@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T23:37:36Z
-LAST_CHANGED: 2026-10-11T00:00:00Z
-CHANGE: new file
-CODE_HASH: 2dc662b66a9b
+LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CHANGED: 2026-10-13T01:25:00Z
+CHANGE: eliminate cleanroom_workspaces.json workspace registry file
+CODE_HASH: 7682226a8598
 -->
 
 # cleanroom_files_ext external component
@@ -21,13 +21,11 @@ The cleanroom_files_ext component provides external schema knowledge and naming 
 
 Grounding gaps covered include:
 
-- Cleanroom methodology binding schema: Defines `cleanroom.toml`, containing the scoped `methodology` address attribute that binds a package hierarchy to its methodology specification package.
+- Cleanroom methodology binding schema: Defines `cleanroom.toml`, containing the scoped `methodology` address attribute that binds a package hierarchy to its methodology specification package. In a Cleanroom project, `cleanroom.toml` should be present in the `parts` directory (not workspace).
 
 - Role definitions schema: Defines `cleanroom_roles.toml` and `cleanroom_python_roles.toml`, containing methodology metadata and the role definition table that specifies persona descriptions, source patterns, prompt templates, verification check templates, guide paths, step mode eligibility, component types, and role dependencies.
 
 - Role workspace descriptor schema: Defines `.cleanroom_role.json`, containing provisioned role workspace attributes including role name, directory scope, and canonical repository root.
-
-- Workspaces registry schema: Defines `.cleanroom_workspaces.json`, tracking active provisioned workspace directories and metadata records with file locking.
 
 - Cleanroom event log schema: Defines `.cleanroom.log`, an append-only event log capturing recorded change descriptions and feedback messages within parts directories.
 

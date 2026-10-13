@@ -130,7 +130,7 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 1. **Option 1: Custom Loop Cleanroom** ([`custom_loop_cleanroom.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/custom_loop_cleanroom.md)):
    - In-process autonomous runner driving the OpenAI API (`update_with_ai/parts/systems/uv_cleanroom_asm`).
    - Traverses dependency graph nodes in topological order (`loop_cleaner.py`), running isolated turn loops (`loop_driver.py`) with repetition guards (`loop_guard.py`).
-   - Production engine for headless continuous integration and batch cleaning via `bin/cleanroom-loop` and root `cleanroom.toml`.
+   - Production engine for headless continuous integration and batch cleaning via `bin/cleanroom-loop` and `parts/cleanroom.toml`.
 2. **Option 3: Subagentless Cleanroom Workspaces** ([`subagentless_cleanroom_workspaces.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)):
    - Sibling workspace directories (`../role_workspaces/<workspace-name>_<role>_<dir>`) running independent conversational sessions in Antigravity.
    - Enforces double-blind isolation via OS-level `chmod 444` read-only mounts and orchestrates role coordination via `parts/workspace`, direct CLI mutations (`submit`, `blame`, `fail`), and self-synchronizing `bin/get_work`.

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:36Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-11T05:04:01Z
 # CHANGE: Narrow the broad exception handlers to the failures that can occur, resolve verification checks per node and by role nodes, hash bound workspace paths, and filter compiler diagnostics with compiled patterns including elapsed timing
 # CODE_HASH: 7d67f9e1c851
-# COVERAGE_AUDIT: 2026-10-12T23:37:36Z
-# QA_AUDIT: 2026-10-12T23:37:36Z
+# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
+# QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations

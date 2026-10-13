@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T23:37:36Z
-LAST_CHANGED: 2026-10-06T22:55:00Z
-CHANGE: new file
+LAST_CLEANED: 2026-10-13T01:05:05Z
+LAST_CHANGED: 2026-10-13T01:25:00Z
+CHANGE: eliminate cleanroom_workspaces.json workspace registry file
 CODE_HASH: 9f5c48591fbf
-SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # workspace_registry_impl implementation component
@@ -13,13 +13,13 @@ implements: workspace_registry
 
 ## Purpose
 
-The workspace_registry_impl implementation component realizes role configuration resolution, path sanitization, and persistent workspace registration in the workspaces registry file designated by cleanroom_files_ext.
+The workspace_registry_impl implementation component realizes role configuration resolution, path sanitization, and active workspace tracking and discovery without central registry files.
 
-Reliable multi-role orchestration depends on atomic registry file updates and deterministic workspace naming conventions across platforms. Incomplete role resolution or corrupted registry records lead to orphaned role trees, stale lock files, and race conditions during simultaneous provisioning. The workspace_registry_impl implementation component resolves role definitions dynamically from declarative role configuration files using TOML parsing (falling back to build files using AST evaluation when TOML is absent), normalizes role identifiers, computes directory hashes, and performs atomic JSON registry serialization with file locking.
+Reliable multi-role orchestration depends on clean workspace discovery and deterministic workspace naming conventions across platforms. Incomplete role resolution or corrupted registry records lead to orphaned role trees, stale lock files, and race conditions during simultaneous provisioning. The workspace_registry_impl implementation component resolves role definitions dynamically from declarative role configuration files using TOML parsing (falling back to build files using AST evaluation when TOML is absent), normalizes role identifiers, and tracks commissioned workspaces.
 
 **Out of scope:** The workspace_registry_impl implementation component does not provision directory contents, synchronize git state, or evaluate task dirty status; these are handled by other components.
 
-**Delegated:** Cleanroom configuration, registry, and role descriptor file naming contracts are delegated to cleanroom_files_ext; session tier management is delegated to agent_session.
+**Delegated:** Cleanroom configuration and role descriptor file naming contracts are delegated to cleanroom_files_ext; session tier management is delegated to agent_session.
 
 ## Types and Behavior
 
@@ -29,4 +29,4 @@ The workspace registry resolves a role definition by loading the declarative rol
 
 The workspace registry computes a role workspace directory path by combining the parent directory of the repository root with the role name and the directory scope, sanitizing directory delimiters into underscores to produce a collision-free sibling workspace.
 
-The workspace registry reads and writes the active workspace descriptors in its registry file, writing through a temporary staging file so that a concurrent read never observes a partial record. Registering a workspace appends or updates the descriptor in the registry, and unregistering removes the matching workspace directories.
+The workspace registry tracks active workspace descriptors in memory and discovers provisioned workspaces across the role workspaces directory by reading each workspace's role metadata descriptor. Registering a workspace records the descriptor in memory, and unregistering removes the matching workspace descriptor.

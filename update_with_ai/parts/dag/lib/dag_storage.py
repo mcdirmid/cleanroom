@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:37:36Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-11T04:59:20Z
 # CHANGE: Align the message sum type with its declaration (base dataclass frozen with init disabled, real default values on the variants) and document every declared operation and postcondition
 # CODE_HASH: 0f6b87cd41ca

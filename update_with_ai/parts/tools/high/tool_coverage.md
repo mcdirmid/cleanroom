@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-12T23:37:36Z
+LAST_CLEANED: 2026-10-13T01:05:05Z
 LAST_CHANGED: 2026-10-11T04:09:00Z
 CHANGE: Removed the unused agent_session import and its delegation clause: the low-level specification places the coverage evaluator under the system lifecycle tier with no agent_session member, so the interface now declares no imports.
 CODE_HASH: b999cce9061f
-SPEC_QA_AUDIT: 2026-10-12T23:37:36Z
+SPEC_QA_AUDIT: 2026-10-13T01:05:05Z
 -->
 
 # tool_coverage interface component

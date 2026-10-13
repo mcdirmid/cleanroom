@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T23:44:59Z
+# LAST_CLEANED: 2026-10-13T01:05:05Z
 # LAST_CHANGED: 2026-10-11T05:03:46Z
 # CHANGE: Name the installed tool registry per the grounding, copy it for the installed-tools view, list installed tools in stable sorted order, and report conversion diagnostics from the declared message member
 # CODE_HASH: d4feb578eb7c
-# COVERAGE_AUDIT: 2026-10-12T21:57:18Z
-# QA_AUDIT: 2026-10-12T21:57:18Z
+# COVERAGE_AUDIT: 2026-10-13T01:05:05Z
+# QA_AUDIT: 2026-10-13T01:05:05Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
