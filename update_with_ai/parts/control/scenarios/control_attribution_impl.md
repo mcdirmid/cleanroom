@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:12:03Z
 CHANGE: Author control control_attribution_impl concrete scenarios
-CODE_HASH: d32869e3e638
+CODE_HASH: f244809ae876
 -->
 
 # Concrete scenarios for `control_attribution_impl` (implementation)
@@ -239,3 +239,11 @@ feedback item, and its local role workspace copy is
    unchanged.
    Realized by: the component's own newline check over the critique, which refuses before
    `src_metadata` appends anything and before the component's own synchronization runs.
+
+### Scenario 13 — Refusing blame critiques that exceed maximum feedback character limits
+
+Given: the agent is cleaning the file `/ws/alpha_scope_a/parts/widget/widget_spec.md`, the blame target is `/repo/parts/gadget/gadget_spec.md`, and the maximum feedback character limit is configured as 600 characters; the critique is a single continuous paragraph of 750 characters.
+
+1. The agent blames the culprit file with that oversized critique.
+   Observed: the attribution is refused with an explicit error indicating that the critique exceeds the maximum length of 600 characters (750 provided) and advising to prioritize contract discrepancies to report so the authoring role can make progress; neither the canonical repository file nor the local role workspace copy is modified.
+   Realized by: the component's own critique character length validation against configured model limits, refusing before `src_metadata` appends feedback.

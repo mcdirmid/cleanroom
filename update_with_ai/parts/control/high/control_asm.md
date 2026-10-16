@@ -1,16 +1,16 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T19:43:56Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: 7559d57062f1
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: e941aa09002b
+SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
 -->
 
 # control_asm assembly component
 
-assembles: control_coordinate_impl, control_verification_impl, control_work_scheduler_impl, control_submit_impl, control_attribution_impl, src_metadata_impl
-imports: agent_session, dag_storage, dag_subgraph, agent_node_config, agent_file_alias, agent_config, src_metadata_ext
-implements: control_coordinate, control_verification, control_work_scheduler, control_submit, control_attribution, src_metadata
+assembles: control_attribution_impl, control_coordinate_impl, control_submit_impl, control_verification_impl, control_work_scheduler_impl
+imports: agent_config, agent_file_alias, agent_node_config, agent_session, dag_storage, dag_subgraph, src_metadata
+implements: control_attribution, control_coordinate, control_submit, control_verification, control_work_scheduler
 
 ## Purpose
 
@@ -22,4 +22,4 @@ Complex multi-stage workflows require an integrated runtime environment where ve
 
 ## Types and Behavior
 
-The control_asm assembly component aggregates the implementations of control coordinate, control verification, control work scheduler, control submit, control attribution, and src metadata, providing a unified assembly for the control plane.
+The control_asm assembly component aggregates the implementations of control coordinate, control verification, control work scheduler, control submit, and control attribution, providing a unified assembly for the control plane.

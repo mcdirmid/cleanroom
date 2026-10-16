@@ -455,6 +455,19 @@ In Cleanroom, the implementer writes code against the **formal specification**, 
 2. The Lib agent runs Cleanroom code linters (`lib_lint.py`).
 3. The Lib agent does **not** execute unit tests. Test verification is deferred to the QA phase in the Main Workspace or QA role workspace.
 
+### 8.3 In-Place Agent Loop Decoupling & Auto-Scaffolding
+When running inside the in-place single-agent loop (`bin/cleanroom_loop`), separate role workspaces with `chmod 444` mount isolation are not provisioned; all mutations occur in-place in the repository.
+
+To allow the `test` role to be fully independent of `lib` without introducing an artificial serialization dependency (`silent_role_deps = ["lib"]`):
+1. **No Silent Dependency on Lib**: `cleanroom_roles.toml` specifies `silent_role_deps = ["spec_qa"]` and `stub_role_deps = ["lib"]`. The test role depends strictly on specifications (`low`, `spec_qa`).
+2. **Automated Companion Scaffolding**: When `test_lint.py` runs (either with `--scaffold` or prior to dry-run test collection during verification), it inspects the companion implementation file `{unit_dir}/lib/{unit_name}.py`.
+3. **Type-Correct Skeletons on Demand**: If the companion `lib` file is missing or uninitialized, `test_lint.py` automatically scaffolds it via `generate_lib_skeleton` (or `generate_asm_content` for assemblies) derived from `low/{unit_name}.pyi`.
+4. **Outcome**:
+   - `lib/{unit_name}.py` contains all class declarations, method signatures, parameter types, and `raise NotImplementedError` bodies matching the `.pyi` contract.
+   - Dynamic test discovery (`unittest.defaultTestLoader.loadTestsFromModule`) and `pyright` type checking both succeed immediately, even if `test` is cleaned before `lib`.
+   - Existing implementation code is preserved without overwriting.
+   - Outside the loop (in role workspaces and sub-agents), the workspace provisioner handles stubs hermetically, ensuring double-blind isolation.
+
 ---
 
 ## 9. Threat Model & Confinement Guarantees

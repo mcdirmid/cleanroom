@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:09:58Z
 # CHANGE: Use the real cross-part file alias module for the declared interface field types instead of a private fallback container
 # CODE_HASH: 17f30c9d6a4a
@@ -29,6 +29,7 @@ class TargetManifest:
     guide_target: Optional[TargetLabel] = None
     verification_check: Optional[VerificationCommand] = None
     allows_step_mode: Optional[bool] = True
+    verification_success_message: Optional[str] = None
 
 
 class UvManifestLoader(Protocol):

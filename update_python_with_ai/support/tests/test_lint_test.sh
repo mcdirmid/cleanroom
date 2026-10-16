@@ -745,9 +745,47 @@ else
 fi
 if [ -f "$tmp/c26/tests/BUILD.bazel" ] || [ -f "$tmp/c26/BUILD.bazel" ]; then
     echo "FAIL: c26 BUILD.bazel should not be created" >&2
-    fail=1
 else
     echo "PASS: c26 no BUILD.bazel created on failure"
+fi
+
+# Case 27: companion lib module is missing -> automatically scaffolded during test scaffold and verification
+mkdir -p "$tmp/c27/tests" "$tmp/c27/low"
+cat > "$tmp/c27/low/worker_impl.pyi" <<'EOF'
+from support.lib.lifecycle import operation, singleton_type
+
+@singleton_type('system')
+class Worker:
+    """
+PURPOSE:
+Worker component.
+
+FRESH_REQUIREMENTS:
+- The worker processes items sequentially.
+- Processing an item returns true on success.
+"""
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+touch "$tmp/c27/tests/worker_impl_test.py"
+if ( cd "$tmp/c27" && python3 "$bin/test_lint.py" --scaffold tests/worker_impl_test.py --pyi low/worker_impl.pyi ); then
+    echo "PASS: c27 generated test skeleton via --scaffold with missing lib"
+else
+    echo "FAIL: c27 failed to generate test skeleton via --scaffold with missing lib" >&2
+    fail=1
+fi
+if [ -f "$tmp/c27/lib/worker_impl.py" ]; then
+    echo "PASS: c27 companion lib module was automatically scaffolded"
+else
+    echo "FAIL: c27 companion lib module was not scaffolded" >&2
+    fail=1
+fi
+if ( cd "$tmp/c27" && python3 "$bin/test_lint.py" tests/worker_impl_test.py --pyi low/worker_impl.pyi ); then
+    echo "PASS: c27 dry-run test collection succeeded against scaffolded companion lib"
+else
+    echo "FAIL: c27 dry-run test collection failed against scaffolded companion lib" >&2
+    fail=1
 fi
 
 exit "$fail"

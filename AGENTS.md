@@ -69,4 +69,7 @@ If a test doesn't matter, don't run the test! Do not edit pyrightconfig.json to 
 
 ## Autonomous Orchestration Antigravity Execution
 
-- **Immediate Coordinator Invocation on orchestrate**: When `bin/cleanroom orchestrate ...` is executed (or outputs the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE`), do NOT stop to ask for confirmation. Immediately and automatically invoke the `cleanroom_coordinator` subagent in the very same turn to drive DAG convergence.
+- **Immediate Coordinator Invocation on orchestrate (Antigravity Only)**: When running under the Google Antigravity agent, if `uv run cleanroom orchestrate ...` (or `uv run cleanroom clean ... --harness antigravity`) is executed (or outputs the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE`), do NOT stop to ask for confirmation and do NOT inspect tool source code. The `cleanroom_coordinator` agent definition is already installed. Immediately invoke:
+  `invoke_subagent(Subagents=[{"TypeName": "cleanroom_coordinator", "Role": "Cleanroom Coordinator", "Prompt": "Clean all dirty nodes in <scope> up to <role> using cleanroom_coordinator"}])`
+  In other environments (such as DeepSeek Harness / DSH Desktop), run `uv run cleanroom clean <scope> [target_role] --harness dsh` directly via the terminal tool.
+  For autonomous in-process loop execution, run `uv run cleanroom clean <target>` (which defaults to `--harness loop`).

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_coordinator_impl implementation library
-# CODE_HASH: 0060229bde26
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 01b4d975e313
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for subagent_coordinator_impl."""
@@ -32,10 +32,10 @@ from support.lib.lifecycle import (
     get_singleton,
 )
 from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.tools.lib import workspace_work
 from update_with_ai.parts.workspace.lib import (
     workspace_provision,
     workspace_registry,
-    workspace_work,
 )
 from . import subagent_coordinator
 
@@ -268,11 +268,18 @@ class SubagentCoordinator(
         batch_size: Optional[int] = None,
         repo_root: Optional[str] = None,
         model_name: Optional[str] = None,
+        poll_interval: Optional[float] = None,
+        max_unproductive_turns: Optional[int] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure."""
         reg = get_singleton(workspace_registry.WorkspaceRegistry)
         work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
         root = repo_root or reg.discover_repository_root()
+
+        effective_max_unproductive = max_unproductive_turns if max_unproductive_turns is not None else 2
+        unproductive_turns: Dict[str, int] = {}
+
+        print(f"[ORCHESTRATE] Starting orchestration: scope='{dir_scope}', max_waves={max_waves}", flush=True)
 
         # Resolve model parameters from model_configs.toml
         resolved_batch, _ = _resolve_model_parameters(root, model_name=model_name)
@@ -389,6 +396,16 @@ class SubagentCoordinator(
                         if res.status == "failed":
                             failure_msg = res.failure_reason or f"Role {res.role} failed execution."
                             break
+                        if len(res.submitted_targets) == 0 and len(res.blamed_targets) == 0:
+                            unproductive_turns[res.role] = unproductive_turns.get(res.role, 0) + 1
+                            if unproductive_turns[res.role] >= effective_max_unproductive:
+                                failure_msg = (
+                                    f"Role '{res.role}' made no progress (0 submitted, 0 blamed) "
+                                    f"for {unproductive_turns[res.role]} consecutive turns."
+                                )
+                                break
+                        else:
+                            unproductive_turns[res.role] = 0
                     if failure_msg is not None or wave_count >= max_waves:
                         break
 
@@ -397,9 +414,12 @@ class SubagentCoordinator(
         else:
             # Continuous dynamic queue-driven process supervision loop
             active_workers: Dict[str, str] = {}  # role_name -> task_handle
+            queue_dirty = True
+            sleep_interval = poll_interval if poll_interval is not None else 10.0
 
             while wave_count < max_waves:
                 # 1. Harvest finished workers (non-blocking)
+                worker_finished = False
                 for role_name, handle in list(active_workers.items()):
                     if hasattr(harness, "poll_role"):
                         res = harness.poll_role(handle)
@@ -407,6 +427,7 @@ class SubagentCoordinator(
                         res = harness.await_role(handle)
                     if res is not None:
                         del active_workers[role_name]
+                        worker_finished = True
                         submitted_count += len(res.submitted_targets)
                         blamed_count += len(res.blamed_targets)
                         if res.telemetry:
@@ -414,111 +435,147 @@ class SubagentCoordinator(
                             cumulative_cached += res.telemetry.cached_tokens
                             cumulative_output += res.telemetry.output_tokens
                             cumulative_cost += res.telemetry.cost_usd
+                        tok_info = f", tokens={res.telemetry.total_tokens} (${res.telemetry.cost_usd:.4f})" if res.telemetry else ""
+                        print(
+                            f"[ORCHESTRATE] Worker '{role_name}' finished [{res.status}]: "
+                            f"submitted={len(res.submitted_targets)}, blamed={len(res.blamed_targets)}{tok_info}, "
+                            f"elapsed={res.wall_clock_seconds:.1f}s",
+                            flush=True,
+                        )
                         if res.status == "failed":
                             failure_msg = res.failure_reason or f"Role {role_name} failed execution."
                             break
+                        if len(res.submitted_targets) == 0 and len(res.blamed_targets) == 0:
+                            unproductive_turns[role_name] = unproductive_turns.get(role_name, 0) + 1
+                            if unproductive_turns[role_name] >= effective_max_unproductive:
+                                failure_msg = (
+                                    f"Role '{role_name}' made no progress (0 submitted, 0 blamed) "
+                                    f"for {unproductive_turns[role_name]} consecutive turns."
+                                )
+                                print(f"[ORCHESTRATE] Circuit breaker tripped: {failure_msg}", flush=True)
+                                break
+                        else:
+                            unproductive_turns[role_name] = 0
+
+                if worker_finished:
+                    queue_dirty = True
 
                 if failure_msg is not None:
                     for h in active_workers.values():
                         harness.interrupt_role(h)
                     break
 
-                # 2. Check work queues across all roles_to_evaluate
-                all_clean = True
-                blocked_count = 0
-                ready_roles_map: Dict[str, Sequence[str]] = {}
+                # 2. Check work queues only if queue is dirty or no active workers
+                if queue_dirty or not active_workers:
+                    all_clean = True
+                    blocked_count = 0
+                    ready_roles_map: Dict[str, Sequence[str]] = {}
 
-                for r_entry in roles_to_evaluate:
-                    r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
-                    ready, blocked = work_mgr.compute_role_work_queue(
-                        r_name, dir_scope=dir_scope, repo_root=root
-                    )
-                    if ready:
-                        all_clean = False
-                        ready_roles_map[r_name] = [item.target_file for item in ready]
-                    if blocked:
-                        all_clean = False
-                        blocked_count += len(blocked)
-
-                # 3. Clean convergence check
-                if not active_workers and all_clean:
-                    for r_entry in all_scope_roles:
+                    for r_entry in roles_to_evaluate:
                         r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
-                        ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
-                        if os.path.isdir(ws_dir):
-                            shutil.rmtree(ws_dir, ignore_errors=True)
-
-                    total_tokens = cumulative_input + cumulative_cached + cumulative_output
-                    telemetry = subagent_coordinator.TokenUsage(
-                        input_tokens=cumulative_input,
-                        cached_tokens=cumulative_cached,
-                        output_tokens=cumulative_output,
-                        total_tokens=total_tokens,
-                        cost_usd=cumulative_cost,
-                    )
-                    return subagent_coordinator.OrchestrationSummary(
-                        is_converged=True,
-                        total_waves=wave_count,
-                        submitted_count=submitted_count,
-                        blamed_count=blamed_count,
-                        total_telemetry=telemetry,
-                        status_message="All units converged cleanly across all roles.",
-                    )
-
-                # 4. Deadlock check: no active workers, no ready roles, but blocked units remain
-                if not active_workers and not ready_roles_map:
-                    total_tokens = cumulative_input + cumulative_cached + cumulative_output
-                    telemetry = subagent_coordinator.TokenUsage(
-                        input_tokens=cumulative_input,
-                        cached_tokens=cumulative_cached,
-                        output_tokens=cumulative_output,
-                        total_tokens=total_tokens,
-                        cost_usd=cumulative_cost,
-                    )
-                    return subagent_coordinator.OrchestrationSummary(
-                        is_converged=False,
-                        total_waves=wave_count,
-                        submitted_count=submitted_count,
-                        blamed_count=blamed_count,
-                        total_telemetry=telemetry,
-                        status_message=f"Orchestration deadlocked: {blocked_count} units blocked on unresolved prerequisites.",
-                    )
-
-                # 5. Dispatch unblocked ready roles concurrently
-                dispatched_any = False
-                for r_name, target_paths in ready_roles_map.items():
-                    if r_name not in active_workers:
-                        if effective_batch_size is not None and effective_batch_size > 0:
-                            target_paths = target_paths[:effective_batch_size]
-
-                        ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
-                        if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
-                            prov = get_singleton(workspace_provision.WorkspaceProvisioner)
-                            prov.commission(r_name, dir_scope=dir_scope, repo_root=root)
-
-                        if effective_batch_size is not None:
-                            _persist_batch_size(ws_dir, effective_batch_size)
-
-                        dispatch = subagent_coordinator.RoleDispatch(
-                            role_name=r_name,
-                            workspace_dir=ws_dir,
-                            dir_scope=dir_scope,
-                            ready_targets=tuple(target_paths),
-                            batch_size=effective_batch_size,
-                            task_prompt="",
+                        ready, blocked = work_mgr.compute_role_work_queue(
+                            r_name, dir_scope=dir_scope, repo_root=root
                         )
-                        handle = harness.dispatch_role(dispatch)
-                        active_workers[r_name] = handle
-                        dispatched_any = True
+                        if ready:
+                            all_clean = False
+                            ready_roles_map[r_name] = [item.target_file for item in ready]
+                        if blocked:
+                            all_clean = False
+                            blocked_count += len(blocked)
 
-                if dispatched_any:
-                    wave_count += 1
-                    if wave_count >= max_waves:
-                        break
+                    queue_dirty = False
 
-                # 6. Sleep briefly if active workers are still running
+                    # 3. Clean convergence check
+                    if not active_workers and all_clean:
+                        for r_entry in all_scope_roles:
+                            r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                            ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
+                            if os.path.isdir(ws_dir):
+                                shutil.rmtree(ws_dir, ignore_errors=True)
+
+                        total_tokens = cumulative_input + cumulative_cached + cumulative_output
+                        telemetry = subagent_coordinator.TokenUsage(
+                            input_tokens=cumulative_input,
+                            cached_tokens=cumulative_cached,
+                            output_tokens=cumulative_output,
+                            total_tokens=total_tokens,
+                            cost_usd=cumulative_cost,
+                        )
+                        print(
+                            f"[ORCHESTRATE] Clean convergence achieved across all roles in scope '{dir_scope}'!",
+                            flush=True,
+                        )
+                        return subagent_coordinator.OrchestrationSummary(
+                            is_converged=True,
+                            total_waves=wave_count,
+                            submitted_count=submitted_count,
+                            blamed_count=blamed_count,
+                            total_telemetry=telemetry,
+                            status_message="All units converged cleanly across all roles.",
+                        )
+
+                    # 4. Deadlock check: no active workers, no ready roles, but blocked units remain
+                    if not active_workers and not ready_roles_map:
+                        total_tokens = cumulative_input + cumulative_cached + cumulative_output
+                        telemetry = subagent_coordinator.TokenUsage(
+                            input_tokens=cumulative_input,
+                            cached_tokens=cumulative_cached,
+                            output_tokens=cumulative_output,
+                            total_tokens=total_tokens,
+                            cost_usd=cumulative_cost,
+                        )
+                        print(
+                            f"[ORCHESTRATE] Deadlocked: {blocked_count} units blocked on unresolved prerequisites.",
+                            flush=True,
+                        )
+                        return subagent_coordinator.OrchestrationSummary(
+                            is_converged=False,
+                            total_waves=wave_count,
+                            submitted_count=submitted_count,
+                            blamed_count=blamed_count,
+                            total_telemetry=telemetry,
+                            status_message=f"Orchestration deadlocked: {blocked_count} units blocked on unresolved prerequisites.",
+                        )
+
+                    # 5. Dispatch unblocked ready roles concurrently
+                    dispatched_any = False
+                    for r_name, target_paths in ready_roles_map.items():
+                        if r_name not in active_workers:
+                            if effective_batch_size is not None and effective_batch_size > 0:
+                                target_paths = target_paths[:effective_batch_size]
+
+                            ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
+                            if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
+                                prov = get_singleton(workspace_provision.WorkspaceProvisioner)
+                                prov.commission(r_name, dir_scope=dir_scope, repo_root=root)
+
+                            if effective_batch_size is not None:
+                                _persist_batch_size(ws_dir, effective_batch_size)
+
+                            dispatch = subagent_coordinator.RoleDispatch(
+                                role_name=r_name,
+                                workspace_dir=ws_dir,
+                                dir_scope=dir_scope,
+                                ready_targets=tuple(target_paths),
+                                batch_size=effective_batch_size,
+                                task_prompt="",
+                            )
+                            handle = harness.dispatch_role(dispatch)
+                            active_workers[r_name] = handle
+                            dispatched_any = True
+                            print(
+                                f"[ORCHESTRATE] Dispatched role '{r_name}' on {len(target_paths)} target(s): {', '.join(target_paths)}",
+                                flush=True,
+                            )
+
+                    if dispatched_any:
+                        wave_count += 1
+                        if wave_count >= max_waves:
+                            break
+
+                # 6. Sleep if active workers are still running
                 if active_workers:
-                    time.sleep(0.05)
+                    time.sleep(sleep_interval)
 
         total_tokens = cumulative_input + cumulative_cached + cumulative_output
         telemetry = subagent_coordinator.TokenUsage(
@@ -530,6 +587,7 @@ class SubagentCoordinator(
         )
 
         if failure_msg is not None:
+            print(f"[ORCHESTRATE] Execution halted: {failure_msg}", flush=True)
             return subagent_coordinator.OrchestrationSummary(
                 is_converged=False,
                 total_waves=wave_count,
@@ -539,6 +597,7 @@ class SubagentCoordinator(
                 status_message=f"Orchestration failed: {failure_msg}",
             )
 
+        print(f"[ORCHESTRATE] Maximum wave limit ({max_waves}) reached before convergence.", flush=True)
         return subagent_coordinator.OrchestrationSummary(
             is_converged=False,
             total_waves=wave_count,

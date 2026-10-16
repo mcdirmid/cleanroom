@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T20:00:00Z
 CHANGE: author dsh_workspace planning specification
 CODE_HASH: 99460640d1c9
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # dsh_workspace interface component
@@ -23,7 +23,7 @@ Autonomous agents operating inside role workspaces require explicit boundary gui
 
 - A dsh workspace configurer ensures role agent documentation instructs DeepSeek Harness agents never to access or mutate files outside the provisioned workspace root. [instruct_workspace_boundary]
 - A dsh workspace configurer embeds command execution constraints in role agent documentation restricting shell usage strictly to the five prescribed workspace binaries. [embed_command_constraints_in_docs]
-- A dsh workspace configurer generates a targeted Cordis overlay patch file configuring model routing and unattended execution permissions. [generate_cordis_overlay_patch]
+- A dsh workspace configurer generates a targeted Cordis overlay patch file configuring model routing, resolving declared model configuration profiles to their underlying model identifiers, and unattended execution permissions. [generate_cordis_overlay_patch]
 - A dsh workspace configurer returns a dsh confinement report documenting all configured boundary files. [return_confinement_report]
 
 ### Woven Contracts

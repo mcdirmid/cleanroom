@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-04T23:01:55Z
 CHANGE: new file
-CODE_HASH: a3258b57ac7c
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 1e72aa5b410a
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # tool_provider interface component
 
-imports: agent_session
+imports: agent_session, agent_file_alias
 
 ## Purpose
 
@@ -29,6 +29,8 @@ Each tool parameter has a name and description so the agent can satisfy them. A 
 Each tool parameter has a *parameter type* describing the parameter's *actual type* and *wire type*. A parameter type converts a wire value into the actual value a tool expects, and provides feedback when conversion fails. Wire values are limited to wire strings, wire integers, wire booleans, wire floats, wire lists, and wire mappings.
 
 An *identity parameter type* has identical actual and wire types with trivial conversion that cannot fail. A *list parameter type* converts lists using an element parameter type, while a *mapping parameter type* converts mappings using key and value parameter types. A composite parameter type formed from other parameter types propagates every failure from its constituent parameter types.
+
+An agent session's *alias manager type* is a parameter type over file aliases that wraps the session's alias manager, converting a wire string to a file alias using the alias manager's to alias capability.
 
 Via the tool manager, an agent can execute a tool by name with *wired parameter bindings*, which map parameter names to wire values. The tool manager finds the tool by name from installed tools, resolves parameter specifications, converts arguments into actual values, applies default values, and checks requirements. The tool manager then calls the tool with *action parameter bindings* mapping tool parameters to converted actual values, and fails when the tool is not called properly, providing diagnostic feedback for the agent to correct the call.
 

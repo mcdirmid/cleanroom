@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T12:05:00Z
 # CHANGE: Verify completion requests reflect tools installed dynamically across turns
 # CODE_HASH: 9ec8b0e09d0b
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for openai_driver_impl aligned with grounding specifications."""

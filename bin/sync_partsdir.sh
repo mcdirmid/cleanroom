@@ -98,12 +98,18 @@ for p in [
         sys.path.insert(0, p)
 
 try:
-    from update_with_ai.parts.control.lib import src_metadata
+    from update_with_ai.parts.storage.lib import src_metadata
 except ImportError:
     try:
-        from update_python_with_ai.parts.control.lib import src_metadata
+        from update_with_ai.parts.control.lib import src_metadata
     except ImportError:
-        src_metadata = None
+        try:
+            from update_python_with_ai.parts.storage.lib import src_metadata
+        except ImportError:
+            try:
+                from update_python_with_ai.parts.control.lib import src_metadata
+            except ImportError:
+                src_metadata = None
 
 target_dirs_env = os.environ.get("TARGET_DIRS", "").strip()
 target_dirs = set(target_dirs_env.split()) if target_dirs_env else set()

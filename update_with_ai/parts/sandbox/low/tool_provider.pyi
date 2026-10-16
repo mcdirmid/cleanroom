@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T03:44:40Z
 # CHANGE: Make follow-up tool call reasoning text a required member rather than optional
-# CODE_HASH: 61d8664abed8
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 8dff0b8eeacd
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Tool provider low-level interface specification."""
@@ -13,6 +13,7 @@ from typing import Any, Callable, Mapping, NewType, Optional, Protocol, Sequence
 from framework import data_type, operation, override, poly_type, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import agent_file_alias
 
 ToolName = NewType("ToolName", str)
 ToolDescription = NewType("ToolDescription", str)
@@ -337,5 +338,42 @@ class ToolManager(InTier[AgentSessionTier], Protocol):
         - WHEN a call omits a non-required parameter specifying a default value, MUST bind the default value for the call.
         - WHEN wire conversion fails for a parameter, MUST fail with feedback citing the parameter name and the conversion failure feedback.
         - WHEN all parameter symbols resolve, required parameters are present, defaults are applied, and wire conversions succeed, MUST call the tool with action parameter bindings and return its tool response.
+        """
+        ...
+
+
+@singleton_type("agent_session")
+class AliasManagerType(
+    ParameterType[agent_file_alias.FileAlias, str],
+    InTier[AgentSessionTier],
+    Protocol,
+):
+    """Adapts the session alias manager to provide file alias parameter conversion."""
+
+    @property
+    @override
+    def actual_type(self) -> type[agent_file_alias.FileAlias]:
+        """Data type produced by the converter."""
+        ...
+
+    @property
+    @override
+    def wire_type(self) -> type[str]:
+        """Primitive wire type accepted by the converter."""
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+        """Converts wire string to file alias using the session alias manager.
+
+        Args:
+            wire_value: The wire string to convert into a file alias.
+
+        Returns:
+            The resolved FileAlias.
+
+        POSTCONDITIONS:
+        - MUST convert wire strings to file aliases via the session alias manager.
         """
         ...

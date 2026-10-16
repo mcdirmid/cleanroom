@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T03:19:49Z
 # CHANGE: Align conversation stubbing and model request contracts
 # CODE_HASH: 3a1d3e61f85d
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Loop conversation low-level interface specification."""

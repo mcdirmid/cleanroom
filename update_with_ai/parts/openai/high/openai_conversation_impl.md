@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
 CHANGE: Split the stubbing paragraph and state argument preservation as a parallel list
 CODE_HASH: c10d471c70d8
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # openai_conversation_impl implementation component

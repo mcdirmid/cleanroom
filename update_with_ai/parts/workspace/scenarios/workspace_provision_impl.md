@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
-LAST_CHANGED: 2026-10-11T03:14:21Z
-CHANGE: Author workspace workspace_provision_impl concrete scenarios
-CODE_HASH: 027239bec2f4
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T17:45:00Z
+CHANGE: align AGENTS.md scenarios with in-workspace file inspection and terminal command restrictions
+CODE_HASH: 48150813effc
 -->
 
 # Concrete scenarios for `workspace_provision_impl` (implementation)
@@ -33,13 +33,14 @@ unit gadget is present, and the persistent workspaces registry is empty.
    Realized by: role definition resolution and the workspace directory computation of
    `workspace_registry`, which also persists the descriptor, and the component's own tree
    creation, pattern inspection, writable-file copying, contract copying, and starter skeleton
-   synthesis.
+   synthesis delegated to `workspace_scaffold`.
 
 2. The provisioner commissions the alpha workspace for scope_a a second time.
    Observed: the tree still holds one copy of each file, the read-only files stay read-only, and
    the persistent registry still holds exactly one descriptor for `/ws/alpha_scope_a`.
-   Realized by: the component's own repeated copying and skeleton synthesis, which overwrite
-   rather than duplicate, and the register-or-update path of `workspace_registry`.
+   Realized by: the component's own repeated copying and skeleton synthesis delegated to
+   `workspace_scaffold`, which overwrite rather than duplicate, and the register-or-update path
+   of `workspace_registry`.
 
 ### Scenario 2 — Workspaces for two scopes stay separate
 
@@ -67,8 +68,8 @@ Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a`.
    Observed: the workspace `bin/` directory holds the runner tools for the work, check files,
    submit, blame, fail, and coverage subcommands, each executable, and each runs without any
    tooling installed outside the workspace.
-   Realized by: the component's own zipapp runner deployment, which embeds a self-contained
-   executable wrapper for each subcommand and gives it execution permissions.
+   Realized by: runner zipapp deployment delegated to `workspace_scaffold`, which embeds a
+   self-contained executable wrapper for each subcommand and gives it execution permissions.
 
 ### Scenario 4 — The synthesized role guide
 
@@ -78,15 +79,19 @@ Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a` with main r
 1. The provisioner commissions the alpha workspace.
    Observed: the workspace guide states that the agent acts only inside `/ws/alpha_scope_a`, that
    version control operations are forbidden, that `/repo` is read-only and reachable only through
-   the workspace runner tools, and that reading a file outside the workspace aborts the session at
-   once.
-   Realized by: the component's own guide synthesis, which writes the boundary rules, the
-   contamination tripwire, and the fail-stop reporting protocol into the guide file.
+   the workspace runner tools, that terminal commands are restricted to prescribed `bin/` tools,
+   that reading a file outside the workspace aborts the session at once, that inspecting in-workspace
+   specifications and code using file-reading tools is explicitly permitted, and that passing static
+   checks does not mean feedback is resolved, requiring runtime defects to be addressed before submit
+   and requiring target change headers to be inspected before auditor blame delivery.
+   Realized by: role guide synthesis delegated to `workspace_scaffold`, which writes the boundary
+   rules, the contamination tripwire, the blame and feedback resolution instructions, and the
+   fail-stop reporting protocol into the guide file.
 
 2. The agent runs the work runner tool from the workspace `bin/` directory.
    Observed: the tool runs from the workspace alone and reports alpha work.
-   Realized by: the component's own runner deployment, whose wrappers carry their dependencies
-   inside the workspace.
+   Realized by: runner deployment delegated to `workspace_scaffold`, whose wrappers carry their
+   dependencies inside the workspace.
 
 ### Scenario 5 — Stub role dependencies are synthesized rather than copied
 
@@ -153,11 +158,10 @@ excludes a directory that exists inside the workspace.
 
 ### Scenario 10 — The workspace role descriptor
 
-Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a` with main repository root
-`/repo`.
+Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a`.
 
 1. The provisioner commissions the alpha workspace.
    Observed: the workspace role descriptor records the role address alpha, the role name alpha,
-   the directory scope scope_a, and the canonical main repository root `/repo`.
-   Realized by: the component's own descriptor writing, and the role definition and repository
-   root resolved through `workspace_registry`.
+   and the directory scope scope_a, omitting host repository roots to preserve double-blind isolation.
+   Realized by: the component's own descriptor writing, and the role definition resolved through
+   `workspace_registry`.

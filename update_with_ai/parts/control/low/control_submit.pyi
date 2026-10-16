@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T03:55:49Z
 # CHANGE: Reject producer file targets outside directory scope
 # CODE_HASH: 373a2e9c9afc
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_submit."""
@@ -50,6 +50,7 @@ class SubmissionCoordinator(InTier[AgentSessionTier], Protocol):
         - When auditor role supplies a change summary, MUST reject submission.
         - When files modified and change summary omitted, MUST reject submission.
         - When files unmodified and change summary supplied, MUST reject submission.
+        - When session feedback is present and files unmodified, MUST reject submission.
         - When accepted, MUST mark target node clean in graph storage with the change summary.
         """
         ...

@@ -1,16 +1,17 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:03:46Z
 # CHANGE: Name the installed tool registry per the grounding, copy it for the installed-tools view, list installed tools in stable sorted order, and report conversion diagnostics from the declared message member
-# CODE_HASH: d4feb578eb7c
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 9c506123a9e3
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
 from typing import Any, Dict, Mapping, Optional, Set, cast
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
 from update_with_ai.parts.agent.lib.agent_session import agent_session
+import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
 from . import tool_provider
 
 # Requirements specified in tool_provider_impl.pyi
@@ -103,6 +104,28 @@ class ToolManager(tool_provider.ToolManager, Singleton):
         return tool.execute_tool(actual_bindings)
 
 
+class AliasManagerType(tool_provider.AliasManagerType, Singleton):
+    tier = agent_session
+
+    @property
+    def actual_type(self) -> type[agent_file_alias.FileAlias]:
+        return agent_file_alias.FileAlias
+
+    @property
+    def wire_type(self) -> type[str]:
+        return str
+
+    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+        if not isinstance(wire_value, str):
+            raise tool_provider.ParameterConversionError(
+                message=tool_provider.ConversionErrorMessage(
+                    f"Expected str for file alias, got {type(wire_value).__name__}"
+                )
+            )
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        return alias_mgr.to_alias(wire_value)
+
+
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Registers constituent singletons into the lifecycle registry."""
@@ -110,6 +133,11 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         ToolManager,
         keys=[ToolManager, tool_provider.ToolManager],
+        tier=agent_session,
+    )
+    reg.register_singleton(
+        AliasManagerType,
+        keys=[AliasManagerType, tool_provider.AliasManagerType],
         tier=agent_session,
     )
 

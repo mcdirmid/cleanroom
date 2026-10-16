@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:48:53Z
 # CHANGE: Carry workspace_path as the contracted file_paths.WorkspacePath record, expose a WorkspaceRoot record, and drop the undeclared resolve_path alias attribute
-# CODE_HASH: 921458873efd
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: af3fbc15ccf4
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_file_reader_impl per its grounding specification."""
@@ -149,8 +149,10 @@ class MockAliasManager:
     def wire_type(self) -> type[str]:
         return str
 
-    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
-        return agent_file_alias.FileAlias(agent_file_alias.RelativePath(wire_value))
+    def to_alias(self, path: str) -> agent_file_alias.FileAlias:
+        return agent_file_alias.FileAlias(agent_file_alias.RelativePath(path))
+
+    convert = to_alias
 
     def sanitize_text(
         self, text: agent_file_alias.UnsanitizedText
@@ -160,6 +162,24 @@ class MockAliasManager:
         if root in s:
             s = s.replace(root, "<sanitized_root>")
         return agent_file_alias.SanitizedText(s)
+
+
+class MockAliasManagerType:
+    tier = agent_session.agent_session
+
+    def __init__(self, alias_mgr: MockAliasManager) -> None:
+        self._alias_mgr = alias_mgr
+
+    @property
+    def actual_type(self) -> type[agent_file_alias.FileAlias]:
+        return agent_file_alias.FileAlias
+
+    @property
+    def wire_type(self) -> type[str]:
+        return str
+
+    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+        return self._alias_mgr.to_alias(wire_value)
 
 
 class MockFilePathManager:
@@ -259,8 +279,12 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.mock_alias_manager,
             keys=[
                 agent_file_alias.AliasManager,
-                tool_provider.ParameterType[agent_file_alias.FileAlias, str],
             ],
+            tier=agent_session.agent_session,
+        )
+        self.registry.register_instance(
+            MockAliasManagerType(self.mock_alias_manager),
+            keys=[tool_provider.AliasManagerType],
             tier=agent_session.agent_session,
         )
         self.mock_file_path_manager = MockFilePathManager()

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:09:57Z
 # CHANGE: Halt with a failing build result when node cleaning fails, materialize templates and stamp clean metadata while traversing the resolved subgraph, delegate dirty marking to graph storage, append feedback and change entries to the cleanroom log, and prune uncontracted aliases
 # CODE_HASH: 8c98514b2974
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 import os

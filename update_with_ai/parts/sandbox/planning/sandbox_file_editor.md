@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:10:52Z
 CHANGE: Remove stale template initialization lead-in and the unsupported edit manager write statement
 CODE_HASH: 33ead2a8ff31
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # sandbox_file_editor interface component

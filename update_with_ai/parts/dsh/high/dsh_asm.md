@@ -1,16 +1,16 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T19:43:56Z
 LAST_CHANGED: 2026-10-13T20:00:00Z
 CHANGE: author dsh_asm assembly specification
-CODE_HASH: dd9f919aac09
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 6407b4266acb
+SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
 -->
 
 # dsh_asm assembly component
 
-assembles: dsh_workspace_impl, dsh_harness_impl
+assembles: dsh_workspace_impl, dsh_telemetry_impl, dsh_harness_impl
 imports: agent_session, dsh_ext, subagent_coordinator, workspace_work
-implements: dsh_workspace, dsh_harness
+implements: dsh_workspace, dsh_telemetry, dsh_harness
 
 ## Purpose
 

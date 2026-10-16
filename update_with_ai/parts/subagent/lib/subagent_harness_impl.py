@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_harness_impl implementation library
-# CODE_HASH: e53250475845
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T11:00:00Z
+# CHANGE: turn down support for goose, supporting only antigravity and dsh
+# CODE_HASH: 7fd31d6b5b1d
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for subagent_harness_impl."""
@@ -17,7 +17,7 @@ import os
 import re
 import subprocess
 import time
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from support.lib.lifecycle import (
     LifecycleRegistry,
@@ -26,16 +26,8 @@ from support.lib.lifecycle import (
     get_singleton,
 )
 from update_with_ai.parts.agent.lib import agent_session
-from update_with_ai.parts.workspace.lib import workspace_work
+from update_with_ai.parts.tools.lib import workspace_work
 from . import subagent_coordinator, subagent_harness
-
-
-PLATFORM_TEMPLATES: Dict[str, str] = {
-    "antigravity": "agy run --cwd {workspace_dir} --file {prompt_file}",
-    "goose": "goose run --instructions {prompt_file}",
-    "dsh": "dsh --dir {workspace_dir} --instruction {prompt_file}",
-    "simulation": "echo simulation",
-}
 
 
 def _read_blame_buffer(workspace_dir: str) -> List[str]:
@@ -153,6 +145,7 @@ class CommandHarnessAdapter(
             f"- Scope: {dispatch.dir_scope}\n"
             f"- Workspace: {dispatch.workspace_dir}\n\n"
             f"## Assigned Targets\n{targets_str}\n\n"
+            "CRITICAL: DO NOT EDIT METADATA. Never touch `# --- CLEANROOM METADATA ---` or `<!-- CLEANROOM METADATA -->` headers. Use only tools.\n\n"
             f"## Instructions\n"
             f"1. Align and verify your assigned targets according to your role guide.\n"
             f"2. Run verification commands to check consistency:\n"
@@ -176,15 +169,16 @@ class CommandHarnessAdapter(
             pre_pending = list(dispatch.ready_targets)
             work_mgr.set_pending_work(dispatch.workspace_dir, pre_pending)
 
+        log_dir = subagent_coordinator.resolve_cleanroom_log_dir(dispatch.workspace_dir)
         prompt_text = self.format_task_prompt(dispatch)
-        prompt_file = os.path.join(dispatch.workspace_dir, ".cleanroom_task_prompt.md")
+        prompt_file = os.path.join(log_dir, f".cleanroom_task_prompt_{handle}.md")
         try:
             with open(prompt_file, "w", encoding="utf-8") as f:
                 f.write(prompt_text)
         except OSError:
             pass
 
-        log_file = os.path.join(dispatch.workspace_dir, f".cleanroom_turn_{handle}.log")
+        log_file = os.path.join(log_dir, f".cleanroom_turn_{handle}.log")
         start_time = time.time()
 
         proc: Optional[subprocess.Popen[str]] = None
@@ -199,8 +193,6 @@ class CommandHarnessAdapter(
             )
             log_f = open(log_file, "w", encoding="utf-8")
             env = os.environ.copy()
-            if self.max_context_tokens is not None and self.max_context_tokens > 0:
-                env["GOOSE_AUTO_COMPACT_TOKEN_LIMIT"] = str(self.max_context_tokens)
             try:
                 proc = subprocess.Popen(
                     cmd,
@@ -321,13 +313,28 @@ class CommandHarnessAdapter(
                 pass
 
 
-class HarnessResolver(
-    subagent_harness.HarnessResolver,
+class HarnessRegistry(
+    subagent_harness.HarnessRegistry,
     Singleton,
 ):
-    """Realizes harness resolution for external agent platforms."""
+    """Realizes harness registry and resolution for external agent platforms."""
 
     tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self._installed_harnesses: Dict[str, subagent_harness.HarnessAdapterFactory] = {}
+
+    @property
+    def installed_harnesses(self) -> Mapping[str, subagent_harness.HarnessAdapterFactory]:
+        return dict(self._installed_harnesses)
+
+    def install_harness(
+        self,
+        platform_name: str,
+        adapter_factory: subagent_harness.HarnessAdapterFactory,
+    ) -> None:
+        """Installs a harness adapter factory for a designated platform name."""
+        self._installed_harnesses[platform_name.lower()] = adapter_factory
 
     def resolve_harness(
         self,
@@ -348,33 +355,6 @@ class HarnessResolver(
                 simulation_mode=True,
             )
 
-        plat_key = platform_name.lower()
-        if plat_key == "goose":
-            try:
-                from update_with_ai.parts.goose.lib import goose_harness
-                mgr = get_singleton(goose_harness.GooseHarnessManager)
-                return mgr.create_harness_adapter(
-                    model_name=model_name,
-                    timeout_seconds=timeout_seconds,
-                    max_context_tokens=max_context_tokens,
-                    custom_cmd=custom_cmd,
-                )
-            except Exception:
-                pass
-
-        if plat_key == "dsh":
-            try:
-                from update_with_ai.parts.dsh.lib import dsh_harness
-                mgr = get_singleton(dsh_harness.DshHarnessManager)
-                return mgr.create_harness_adapter(
-                    model_name=model_name,
-                    timeout_seconds=timeout_seconds,
-                    max_context_tokens=max_context_tokens,
-                    custom_cmd=custom_cmd,
-                )
-            except Exception:
-                pass
-
         if custom_cmd:
             return CommandHarnessAdapter(
                 cmd_template=custom_cmd,
@@ -384,20 +364,24 @@ class HarnessResolver(
                 simulation_mode=simulation_mode,
             )
 
-        template = PLATFORM_TEMPLATES.get(plat_key)
-        if template is None:
-            avail = ", ".join(sorted(PLATFORM_TEMPLATES.keys()))
+        plat_key = platform_name.lower()
+        factory = self._installed_harnesses.get(plat_key)
+        if factory is None:
+            avail = ", ".join(sorted(self._installed_harnesses.keys()))
             raise ValueError(
                 f"Unknown platform '{platform_name}'. Available platforms: {avail}"
             )
 
-        return CommandHarnessAdapter(
-            cmd_template=template,
+        return factory(
+            model_name=model_name,
             timeout_seconds=timeout_seconds,
             max_context_tokens=max_context_tokens,
-            model_name=model_name,
+            custom_cmd=custom_cmd,
             simulation_mode=simulation_mode,
         )
+
+
+HarnessResolver = HarnessRegistry
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -405,8 +389,12 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
-        HarnessResolver,
-        keys=[subagent_harness.HarnessResolver, HarnessResolver],
+        HarnessRegistry,
+        keys=[
+            subagent_harness.HarnessRegistry,
+            subagent_harness.HarnessResolver,
+            HarnessRegistry,
+        ],
         tier=agent_session.agent_session,
     )
 

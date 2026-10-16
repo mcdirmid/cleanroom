@@ -278,6 +278,67 @@ def generate_test_skeleton(
     return "\n".join(lines)
 
 
+def _resolve_lib_dir(module_path: str, lib_pkg: str | None = None) -> str:
+    if lib_pkg and os.path.isdir(lib_pkg):
+        return os.path.abspath(lib_pkg)
+    abs_mod = os.path.abspath(module_path)
+    parent = os.path.dirname(os.path.dirname(abs_mod))
+    cand = os.path.join(parent, "lib")
+    if os.path.isdir(cand) or not lib_pkg:
+        return cand
+    if os.path.isdir(lib_pkg):
+        return os.path.abspath(lib_pkg)
+    return cand
+
+
+def ensure_companion_lib_scaffolded(
+    module_path: str,
+    impl_stem: str,
+    pyi_path: str | None,
+    raw_deps: list[str],
+    lib_pkg: str | None = None,
+) -> None:
+    if not pyi_path or not os.path.isfile(pyi_path):
+        return
+    lib_dir = _resolve_lib_dir(module_path, lib_pkg)
+    lib_file = os.path.join(lib_dir, f"{impl_stem}.py")
+    if os.path.isfile(lib_file):
+        try:
+            content = read_text(lib_file).strip()
+            if content and "<TargetClass>" not in content:
+                try:
+                    from lib_lint import is_uninitialized_module
+                except ImportError:
+                    from update_python_with_ai.support.lib.lib_lint import (
+                        is_uninitialized_module,
+                    )
+                if not is_uninitialized_module(content):
+                    return
+        except (ImportError, OSError):
+            return
+
+    try:
+        from lib_lint import generate_asm_content, generate_lib_skeleton
+    except ImportError:
+        try:
+            from update_python_with_ai.support.lib.lib_lint import (
+                generate_asm_content,
+                generate_lib_skeleton,
+            )
+        except ImportError:
+            return
+
+    try:
+        os.makedirs(lib_dir, exist_ok=True)
+        if impl_stem.endswith("_asm"):
+            skeleton = generate_asm_content(lib_dir, raw_deps, spec_file=pyi_path)
+        else:
+            skeleton = generate_lib_skeleton(pyi_path, impl_stem)
+        write_text(lib_file, skeleton)
+    except (OSError, SyntaxError, ValueError):
+        pass
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Maintain a pyright_test BUILD entry.")
     ap.add_argument(
@@ -361,6 +422,9 @@ def main() -> int:
         args.pyi = pyi_path
 
     if args.scaffold:
+        ensure_companion_lib_scaffolded(
+            args.module_path, impl_stem, pyi_path, deps, lib_pkg=args.lib_pkg
+        )
         if pyi_path and os.path.isfile(pyi_path) and impl_stem.endswith("_impl"):
             skeleton = generate_test_skeleton(pyi_path, stem, impl_stem, args.lib_pkg)
             if skeleton:
@@ -627,6 +691,9 @@ def main() -> int:
                 sys.stderr.write(err + "\n")
             return 1
 
+        ensure_companion_lib_scaffolded(
+            args.module_path, impl_stem, pyi_path, deps, lib_pkg=args.lib_pkg
+        )
         dry_run_errors = check_test_dry_run(args.lib_pkg, args.module_path)
         if dry_run_errors:
             for err in dry_run_errors:

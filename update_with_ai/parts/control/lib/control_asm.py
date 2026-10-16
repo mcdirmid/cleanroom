@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:03:54Z
 # CHANGE: Delegate assembly initialization to CONSTITUENTS instead of registering constituent singletons inline
-# CODE_HASH: c52bd73ceb5b
+# CODE_HASH: a4b370b77fb6
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -14,8 +14,6 @@ from . import (
     control_submit_impl,
     control_verification_impl,
     control_work_scheduler_impl,
-    src_metadata_impl,
-    src_storage_impl,
 )
 
 CONSTITUENTS = (
@@ -24,8 +22,6 @@ CONSTITUENTS = (
     control_submit_impl,
     control_verification_impl,
     control_work_scheduler_impl,
-    src_metadata_impl,
-    src_storage_impl,
 )
 
 

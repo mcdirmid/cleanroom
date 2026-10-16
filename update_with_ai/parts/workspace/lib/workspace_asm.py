@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:04:06Z
 # CHANGE: Delegate assembly initialization through CONSTITUENTS instead of re-registering each constituent singleton inline
-# CODE_HASH: f442c97be40f
+# CODE_HASH: 2b8e0ccd5cd5
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -11,15 +11,19 @@ from support.lib.lifecycle import LifecycleRegistry
 from . import (
     workspace_provision_impl,
     workspace_registry_impl,
+    workspace_roles_impl,
+    workspace_scaffold_impl,
+    workspace_stub_impl,
     workspace_sync_impl,
-    workspace_work_impl,
 )
 
 CONSTITUENTS = (
+    workspace_roles_impl,
     workspace_registry_impl,
+    workspace_scaffold_impl,
     workspace_provision_impl,
+    workspace_stub_impl,
     workspace_sync_impl,
-    workspace_work_impl,
 )
 
 

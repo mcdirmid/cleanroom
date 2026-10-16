@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: 7b0f006a17cb
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: d26c03ec64b5
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # uv_node_config_impl implementation component
@@ -55,7 +55,7 @@ By resolving per-node metadata from target manifests, aggregating session parame
 - The node config combines feedback messages from graph storage across active nodes. [combine_session_feedback_messages]
 - The node config maps each active node to its per node info. [map_session_per_node_info_by_node]
 - The alias manager generates file aliases with relative paths for accessible workspace files. [generate_relative_file_aliases]
-- The alias manager matches relative paths to file aliases when converting wire type strings. [match_relative_paths_to_aliases]
+- The alias manager matches relative paths to file aliases when resolving path strings. [match_relative_paths_to_aliases]
 - The alias manager produces unbound files when relative paths are unmapped. [produce_unbound_files_when_unmapped]
 - The alias manager replaces matching host paths with relative workspace paths when sanitizing output text. [replace_matching_host_paths_with_relative_paths]
 - The alias manager masks occurrences of workspace root path prefixes when sanitizing output text. [strip_workspace_root_prefixes]
@@ -68,7 +68,7 @@ By resolving per-node metadata from target manifests, aggregating session parame
 - Declared guide targets retrieve manifests via the manifest loader, resolve candidate paths across workspace trees, read resolved guide files, and provide unbound guide files. [retrieve_guide_target_manifest, resolve_candidate_guide_paths_from_source_file, resolve_candidate_guide_paths_from_label, load_guide_content_from_resolved_file, provide_unbound_guide_file, uv_manifest_loader: [retrieve_manifest_for_node]]
 - Task guide content is parsed into summaries, step sections, and verification failure instructions while omitting metadata headings. [guide_extract_summary_preceding_first_heading, guide_extract_summary_under_summary_heading, guide_capture_verification_failure_instructions, guide_create_sequential_step_sections, guide_exclude_metadata_sections_from_steps, agent_node_config: [session_config_guide]]
 - Session parameters aggregate active nodes' files, templates, parameters, and checks, activating step mode only for single feedback-free nodes. [aggregate_session_read_only_files, aggregate_session_read_write_files, combine_session_template_parameters, step_mode_eligibility_single_node, activate_step_mode_when_criteria_met, provide_session_guide_in_step_mode, map_session_blame_targets_by_node, aggregate_session_verification_checks, map_session_verification_checks_by_node, map_session_src_file_alias_by_node, provide_single_node_verification_success_message, combine_session_feedback_messages, map_session_per_node_info_by_node, agent_node_config: [session_config_read_only_files, session_config_read_write_files, session_config_templates, session_config_template_params, session_config_verification_checks, session_config_blame_targets, session_config_messages]]
-- The alias manager generates relative aliases for active workspace files, resolves wire paths, and sanitizes output text by replacing host path prefixes with relative workspace paths. [generate_relative_file_aliases, match_relative_paths_to_aliases, produce_unbound_files_when_unmapped, replace_matching_host_paths_with_relative_paths, strip_workspace_root_prefixes, strip_execution_root_prefixes, agent_file_alias: [convert_matching_bound_file, convert_unmatched_unbound_file, sanitize_mask_ws_paths, sanitize_mask_preceding_prefixes]]
+- The alias manager generates relative aliases for active workspace files, resolves path strings, and sanitizes output text by replacing host path prefixes with relative workspace paths. [generate_relative_file_aliases, match_relative_paths_to_aliases, produce_unbound_files_when_unmapped, replace_matching_host_paths_with_relative_paths, strip_workspace_root_prefixes, strip_execution_root_prefixes, agent_file_alias: [to_alias_matching_bound_file, to_alias_unmatched_unbound_file, sanitize_mask_ws_paths, sanitize_mask_preceding_prefixes]]
 
 ## Grounding
 

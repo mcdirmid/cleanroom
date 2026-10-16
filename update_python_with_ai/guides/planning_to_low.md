@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-07T05:04:27Z
 LAST_CHANGED: 2026-10-10T21:52:00Z
-CHANGE: remove ASSUMPTIONS, add member parity, authority hierarchy, file grounding rule, grounding validation, and asm rules
+CHANGE: Clarify that cleanroom metadata headers are managed automatically by submit
 CODE_HASH: 7bf214d4ec11
 -->
 
@@ -9,7 +9,7 @@ CODE_HASH: 7bf214d4ec11
 
 ## Summary
 
-The artifact is a Low-Level Python stub specification (`low/<name>.pyi` or `low/<name>_impl.pyi`) that structurally formalizes `planning/<name>.md`, submitted via `submit(target="<target_file>", change_summary="...")`. In multi-node sessions, multiple low-level specs are processed together by package-relative alias path. Authority hierarchy: when planning or high-level specifications and a low-level file disagree, the low-level file is wrong and must align with upstream specifications. External specifications (`low/<name>_ext.pyi`) formalize foreign API documentation, usage snippets, and mechanics from `high/<name>_ext.md` into module docstrings without AST code. Assembly specifications (`low/<name>_asm.pyi`) directly mirror assembly instructions from `high/<name>_asm.md` without standalone planning canvases, defining `__initialize__()` with `CONSTITUENTS:` guaranteeing that every constituent implementation is registered into the lifecycle.
+The artifact is a Low-Level Python stub specification (`low/<name>.pyi` or `low/<name>_impl.pyi`) that structurally formalizes `planning/<name>.md`, submitted via `submit(target="<target_file>", change_summary="...")`. In multi-node sessions, multiple low-level specs are processed together by package-relative alias path. Cleanroom metadata headers (under `# --- CLEANROOM METADATA ---`) are managed automatically by Cleanroom tooling upon `submit(change_summary=...)`; direct edits to metadata headers are prohibited and rejected by editing tools. Authority hierarchy: when planning or high-level specifications and a low-level file disagree, the low-level file is wrong and must align with upstream specifications. External specifications (`low/<name>_ext.pyi`) formalize foreign API documentation, usage snippets, and mechanics from `high/<name>_ext.md` into module docstrings without AST code. Assembly specifications (`low/<name>_asm.pyi`) directly mirror assembly instructions from `high/<name>_asm.md` without standalone planning canvases, defining `__initialize__()` with `CONSTITUENTS:` guaranteeing that every constituent implementation is registered into the lifecycle.
 
 Classes, type parameters, properties, operations, and tier memberships materialize in the AST. Types, records, and variants use domain-qualified compound names (e.g. `CommandResult`, `QueryFilter`, `WidgetPayload`). Planning contract requirements are assigned to type invariants (`INVARIANTS:`), caller prerequisites (`PRECONDITIONS:`), and operation outcomes (`POSTCONDITIONS:`). Interface stubs (`low/<name>.pyi`) define abstract protocols without collaborator names. Implementation stubs (`low/<name>_impl.pyi`) maintain 1:1 class parity and full member-level parity with their interfaces, and synthesize planning grounding into natural language arguments under `GROUNDING:` citing valid collaborator classes and methods. A specification may name a concrete file literal only if that file is its own artifact, named in its own planning; knowledge of external file formats, host markers, or shared state files must go through an imported `_ext` external specification. Verification is conducted by the `spec_qa` auditor role.
 

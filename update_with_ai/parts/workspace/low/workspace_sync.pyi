@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T03:37:02Z
 # CHANGE: Align synchronizer typing and test stub integrity; remove unused import
 # CODE_HASH: b8d989bd9284
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_sync."""

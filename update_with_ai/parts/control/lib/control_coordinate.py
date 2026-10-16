@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:03:56Z
 # CHANGE: Remove a stray blank line from the coordinator protocol body
 # CODE_HASH: 52d01a6fc2ea

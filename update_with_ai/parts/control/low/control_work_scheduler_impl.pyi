@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T04:05:49Z
 # CHANGE: Align implementation with every interface operation: file target submission and resolution
 # CODE_HASH: cc18e4709354
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_work_scheduler_impl."""
@@ -46,6 +46,8 @@ class WorkScheduler(
         GROUNDING:
         - Grounded via DagStorage to identify dirty nodes with clean upstream dependencies,
           DagSubgraph or directory filtering, and formatting task prompts with defect feedback.
+        - Formats dependency paths on each scheduled task using user-facing file aliases rather
+          than raw graph node addresses.
         """
         ...
 
@@ -70,5 +72,8 @@ class WorkScheduler(
         GROUNDING:
         - Formats the aggregated prompt lines for the supplied dag_storage.DagNode sequence,
           composing each candidate node's prompt text into a single returned string.
+        - For auditor sessions, lists configured blame targets against grounding files and
+          includes read-only workspace directives, check_files, submit, and blame instructions.
+        - For multi-node sessions, includes instructions directing target specification as file paths.
         """
         ...

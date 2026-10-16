@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
-LAST_CHANGED: 2026-10-12T21:00:00Z
-CHANGE: author subagent_harness interface specification
-CODE_HASH: 417c06a38252
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T11:00:00Z
+CHANGE: turn down support for goose, supporting only antigravity and dsh
+CODE_HASH: 7b23bffa984f
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # subagent_harness interface component
@@ -12,7 +12,7 @@ imports: agent_session, subagent_coordinator
 
 ## Purpose
 
-The subagent_harness interface component defines contracts for process-based subagent execution harnesses driving role turns across external AI platforms such as Antigravity, Goose, and DeepSeek Harness.
+The subagent_harness interface component defines contracts for process-based subagent execution harnesses and platform harness registries driving role turns across external AI platforms.
 
 Multi-agent coordination requires dispatching autonomous agents into isolated role workspaces, instructing them with role directives, awaiting turn completion, and extracting outcome telemetry without coupling the central scheduler to platform-specific SDKs. Without a generalized process harness contract, each agent platform requires bespoke process management, inconsistent prompt formulation, and duplicate buffer inspection. The subagent_harness interface component formalizes command template execution, structured role prompt formulation, workspace pending and blame buffer inspection, process lifecycle control, and turn result synthesis.
 
@@ -36,4 +36,6 @@ When dispatching and awaiting role turns:
 
 - The command harness adapter produces role turn results carrying turn status (clean, blamed, or failed), submitted target sequences, blamed target sequences, failure diagnostics, token usage telemetry, and elapsed wall-clock duration.
 
-- A *harness resolver* resolves platform command templates for designated harness platforms including Antigravity, Goose, and DeepSeek Harness, or produces simulation harnesses when simulation mode is active.
+- An *adapter factory* creates harness adapters configured with model name, timeout, context limits, custom command templates, or simulation mode.
+
+- An agent session's *harness registry* maintains installed adapter factories by platform name, installs platform adapter factories, and resolves harness adapters for designated platform names, custom command templates, or simulation mode.

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_harness_impl unit tests
-# CODE_HASH: aead38fd0e51
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: ae55f2f2b258
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for antigravity_harness_impl."""
@@ -16,6 +16,7 @@ import os
 import shutil
 import tempfile
 import time
+from typing import Any
 import unittest
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
@@ -24,7 +25,17 @@ from update_with_ai.parts.antigravity.lib import (
     antigravity_harness,
     antigravity_harness_impl,
 )
-from update_with_ai.parts.subagent.lib import subagent_coordinator
+from update_with_ai.parts.subagent.lib import subagent_coordinator, subagent_harness
+
+
+class MockHarnessRegistry:
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.installed: dict[str, Any] = {}
+
+    def install_harness(self, platform_name: str, factory: Any) -> None:
+        self.installed[platform_name] = factory
 
 
 class AntigravityHarnessImplTest(unittest.TestCase):
@@ -33,6 +44,12 @@ class AntigravityHarnessImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.test_dir = tempfile.mkdtemp()
         self.registry = LifecycleRegistry()
+        self.mock_harness_registry = MockHarnessRegistry()
+        self.registry.register_instance(
+            self.mock_harness_registry,
+            keys=[subagent_harness.HarnessRegistry],
+            tier=agent_session.agent_session,
+        )
         antigravity_harness_impl.__initialize__(self.registry)
 
     def tearDown(self) -> None:
@@ -179,6 +196,15 @@ class AntigravityHarnessImplTest(unittest.TestCase):
         self.assertEqual(result.role, "lib")
         self.assertEqual(result.status, "complete")
         self.assertIn("lib/test_unit.py", result.submitted_targets)
+
+    def test_registering_antigravity_harness_factory(self) -> None:
+        """Scenario 6: Installs Antigravity adapter factory into HarnessRegistry."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            mgr = scope.get_singleton(antigravity_harness.AntigravityHarnessManager)
+            self.assertIn("antigravity", self.mock_harness_registry.installed)
+            factory = self.mock_harness_registry.installed["antigravity"]
+            adapter = factory(model_name="gemini-flash")
+            self.assertIsInstance(adapter, antigravity_harness_impl.AntigravityHarnessAdapter)
 
 
 if __name__ == "__main__":

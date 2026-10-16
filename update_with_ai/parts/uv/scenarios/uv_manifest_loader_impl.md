@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:23:51Z
 CHANGE: Restrict reused scenarios to the declared imports closure
 CODE_HASH: 4c0d15db21ff
@@ -324,3 +324,11 @@ whose text `parts::` holds an empty package path segment.
    Realized by: unit component type classification and role definition deserialization through
    `uv_manifest_ext`, whose failure the component's own propagation reports, and dependency
    registration through `dag_storage`, which records no edge.
+
+### Scenario 19 — Evaluating parameterized verification success message templates
+
+Given: role test declares a verification success message template `{unit_name}_test.py passed static checks.` and role test defines the widget unit of the parts package.
+
+1. The caller asks the uv manifest loader for the manifest of the test-role target for widget.
+   Observed: the manifest's verification success message is `widget_test.py passed static checks.`.
+   Realized by: the component's own evaluation of the role verification success message template parameterized with unit metadata.

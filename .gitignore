@@ -17,4 +17,5 @@ __pycache__/
 /.cleanroom_blame_buffer.json
 *.bak
 *.bak/
+/logs/
 

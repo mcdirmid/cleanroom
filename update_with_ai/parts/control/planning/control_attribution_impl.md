@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: c32fb9d8ab63
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 1bda378bf292
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # control_attribution_impl implementation component
@@ -20,21 +20,22 @@ The implementation matches blame strings against upstream file aliases, validate
 
 - The attribution coordinator resolves the culprit node corresponding to the blame target string. [resolve_culprit_node]
 - The attribution coordinator validates that the culprit node is in the source node's upstream dependency set. [validate_culprit_upstream]
-- The attribution coordinator inspects the explanation string for newline and carriage return characters. [check_explanation_newlines]
-- The attribution coordinator formats a rejection response listing allowed blame targets when matching fails. [format_invalid_target_error]
-- The attribution coordinator formats a rejection response when newlines are detected. [format_newline_error]
+- The attribution coordinator inspects the explanation string for newline and carriage return characters and validates critique length against configured feedback limits. [check_explanation_newlines]
+- The attribution coordinator formats a rejection response listing allowed blame targets as file aliases when matching fails. [format_invalid_target_error]
+- The attribution coordinator formats a rejection response when newlines or excessive character lengths are detected, advising defect prioritization when length is exceeded. [format_newline_error]
 - The attribution coordinator creates a feedback message and stores it on the culprit node. [store_feedback_message]
 - The attribution coordinator updates culprit node status to dirty in graph storage. [update_culprit_status_dirty]
 - The attribution coordinator updates dependent node states to failed in the active session. [update_dependent_nodes_failed]
+- The attribution coordinator formats blame and failure outcome messages using user-facing file aliases. [format_attribution_outcome_aliases]
 - The attribution coordinator resolves culprit files and executes in-band feedback mutations directly in the canonical repository. [execute_file_blame_mechanics]
 - The attribution coordinator resolves target files and appends failure diagnostics to in-band metadata. [execute_file_failure_mechanics]
 
 ### Woven Contracts
 
-- When a blame target does not match an upstream dependency, the coordinator rejects attribution with an error listing valid targets. [resolve_culprit_node, validate_culprit_upstream, format_invalid_target_error]
+- When a blame target does not match an upstream dependency, the coordinator rejects attribution with an error listing valid targets as file aliases. [resolve_culprit_node, validate_culprit_upstream, format_invalid_target_error]
 - When an explanation contains newlines, the coordinator rejects attribution with a single-paragraph requirement error. [check_explanation_newlines, format_newline_error]
-- When blame validation succeeds, the coordinator stores the feedback message, updates the culprit to dirty, and marks dependents as failed. [store_feedback_message, update_culprit_status_dirty, update_dependent_nodes_failed, control_attribution: [mark_source_attributed]]
-- When blaming a culprit file, the coordinator checks newlines, writes in-band feedback directly in the canonical repository, and constructs formatted blame messages. [check_explanation_newlines, execute_file_blame_mechanics, control_attribution: [execute_file_blame_mutation], src_metadata: [append_feedback_entry, mark_dirty_status, update_metadata_disk]]
+- When blame validation succeeds, the coordinator stores the feedback message, updates the culprit to dirty, marks dependents as failed, and formats outcomes using file aliases. [store_feedback_message, update_culprit_status_dirty, update_dependent_nodes_failed, format_attribution_outcome_aliases, control_attribution: [mark_source_attributed]]
+- When blaming a culprit file, the coordinator checks newlines, writes in-band feedback directly in the canonical repository, and constructs formatted blame messages. [check_explanation_newlines, execute_file_blame_mechanics, control_attribution: [execute_file_blame_mutation], src_metadata: [append_feedback_entry, update_metadata_disk]]
 - When failing a target file, the coordinator writes failure diagnostics and copies files. [execute_file_failure_mechanics, control_attribution: [execute_file_failure_mutation], src_metadata: [append_feedback_entry, update_metadata_disk]]
 
 ## Grounding

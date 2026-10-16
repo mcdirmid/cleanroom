@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-12T21:00:00Z
 CHANGE: author subagent_harness_impl planning specification
-CODE_HASH: 22fe752001b9
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 466dcc16ecaf
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # subagent_harness_impl implementation component
@@ -17,7 +17,7 @@ The subagent_harness_impl implementation component realizes the command harness 
 ### Typing
 
 - The command harness adapter realization implements CommandHarnessAdapter and operates within agent_session.
-- The harness resolver realization implements HarnessResolver and operates within agent_session.
+- The harness registry realization implements HarnessRegistry and operates within agent_session.
 
 ### Contracts
 
@@ -29,7 +29,8 @@ The subagent_harness_impl implementation component realizes the command harness 
 - The realization computes submitted targets from the set difference of pre-turn and post-turn pending work items. [compute_submitted_work_targets]
 - The realization extracts token metrics from log output and calculates financial costs. [tally_log_token_metrics]
 - The realization synthesizes role turn results containing status, submitted items, blamed items, telemetry, and error diagnostics. [formulate_turn_outcome_result]
-- The realization resolves platform-specific command templates or simulation mode. [resolve_platform_command_templates]
+- The realization installs platform adapter factories into the harness registry mapping. [register_platform_harness_adapter]
+- The realization resolves harness adapters via registered platform factories, custom command templates, or simulation mode. [resolve_platform_command_templates]
 
 ### Woven Contracts
 

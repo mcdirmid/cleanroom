@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:42:33Z
 # CHANGE: Keep declared direct dependencies propagating when their manifest cannot be discovered, synthesizing only the fallback definition and reserving non-propagation for declared silent and promptless pass-through dependencies
 # CODE_HASH: a8ea782fbeb8
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 import os
@@ -405,6 +405,20 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
                 if implied not in direct_deps:
                     direct_deps.append(implied)
 
+        if not role_cfg.get("src_pattern"):
+            for fd in feedback_deps:
+                if fd not in direct_deps:
+                    direct_deps.append(fd)
+
+        v_success_msg = None
+        if "verification_success_message" in role_cfg and role_cfg["verification_success_message"]:
+            try:
+                v_success_msg = role_cfg["verification_success_message"].format(
+                    unit_name=unit_name, unit_dir=pkg_dir
+                )
+            except Exception:
+                v_success_msg = role_cfg["verification_success_message"]
+
         manifest = uv_manifest_loader.TargetManifest(
             label=uv_manifest_loader.TargetLabel(f"//{pkg_dir}:{unit_name}#{role_name}"),
             task_prompt=task_prompt,
@@ -418,6 +432,7 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
             guide_target=guide_target,
             verification_check=verification_check,
             allows_step_mode=role_cfg.get("allows_step_mode", True),
+            verification_success_message=v_success_msg,
         )
         self._manifests[node] = manifest
         return manifest

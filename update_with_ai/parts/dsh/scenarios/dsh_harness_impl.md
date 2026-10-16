@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T20:00:00Z
 CHANGE: author dsh_harness_impl scenarios
-CODE_HASH: 8e0c6626c378
+CODE_HASH: 7f0712377f91
 -->
 
 # dsh_harness_impl scenarios
@@ -12,8 +12,8 @@ CODE_HASH: 8e0c6626c378
 Given: a role dispatch directive for role_a with prompt and ready targets in workspace_dir_a.
 
 1. The harness adapter dispatches the turn.
-   Observed: a task prompt file is written and a DeepSeek Harness subagent process is launched with handle `dsh-task-1-role_a`.
-   Realized by: the component's process launcher writing the prompt file and executing the dsh headless command with overlay patch parameters.
+   Observed: a role-tailored task prompt file is written and a DeepSeek Harness subagent process is launched with handle `dsh-task-1-role_a`.
+   Realized by: the component's process launcher writing the role-tailored prompt file and executing the dsh headless command with overlay patch parameters.
 
 ### Scenario 2 — Awaiting successful turn and extracting token telemetry
 
@@ -21,7 +21,7 @@ Given: an active turn for role_a completes with zero exit code and recorded sess
 
 1. The harness adapter awaits turn completion.
    Observed: a role turn result is returned with clean status, submitted targets, and token telemetry reflecting input and output tokens.
-   Realized by: the component's telemetry parser querying event streams or session storage archives for token counts.
+   Realized by: telemetry extraction delegated to dsh_telemetry, querying event streams or session storage archives for token counts.
 
 ### Scenario 3 — Handling blamed targets from blame buffer
 
@@ -46,3 +46,19 @@ Given: an active DeepSeek Harness subagent process executes with default configu
 1. The harness adapter polls the active process.
    Observed: running processes return none without termination, and completed processes return final turn results.
    Realized by: the component's non-blocking process polling checking process termination without raising TimeoutExpired.
+
+### Scenario 6 — Returning unresolved status when zero targets submitted or blamed
+
+Given: an active DeepSeek Harness subagent process terminates without submitting any targets and without writing to the blame buffer.
+
+1. The harness adapter awaits turn completion.
+   Observed: a role turn result is returned with unresolved status and empty submitted and blamed target sequences.
+   Realized by: the component's buffer diffing assigning unresolved status when both submitted and blamed targets are empty.
+
+### Scenario 7 — Registering DeepSeek Harness adapter factory
+
+Given: an agent session with an active harness registry.
+
+1. The harness manager initializes.
+   Observed: the DeepSeek Harness adapter factory is installed in the harness registry under platform name dsh.
+   Realized by: the component's harness manager querying the harness registry singleton and installing its adapter factory during initialization.

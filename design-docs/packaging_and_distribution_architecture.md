@@ -278,7 +278,7 @@ persona = "Test Engineer"
 src_pattern = "{unit_dir}/tests/{unit_name}_test.py"
 guide = "update_python_with_ai/guides/low_to_test.md"
 star_role_deps = ["low"]
-silent_role_deps = ["lib", "spec_qa"]
+silent_role_deps = ["spec_qa"]
 stub_role_deps = ["lib"]
 verify_template = "uv run python -m update_python_with_ai.support.lib.test_lint {unit_dir}/tests/{unit_name}_test.py --pyi {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/tests/{unit_name}_test.py"
 

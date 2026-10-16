@@ -2,6 +2,9 @@
 # Native model configuration definitions for Cleanroom UV runner.
 
 default = "qwen-moe-q6"
+loop_default = "qwen-moe-q6"
+antigravity_default = "gemini-3.8-flash"
+dsh_default = "deepseek-v41-flash"
 
 [models.qwen-moe-q4]
 model = "stamsam-Qwen3.6-35B-A3B-Q4"
@@ -11,6 +14,7 @@ temperature = 0.7
 timeout_seconds = 100.0
 api_key_env = "OPENAI_API_KEY"
 max_tokens = 2048
+max_feedback_chars = 600
 
 [models.coder-next-reap]
 model = "Coder-Next-REAP-48B-A3B-Q4"
@@ -20,6 +24,7 @@ temperature = 0.7
 timeout_seconds = 100.0
 api_key_env = "OPENAI_API_KEY"
 max_tokens = 2048
+max_feedback_chars = 600
 
 [models.coder-next]
 model = "Qwen3-Coder-Next-4bit"
@@ -29,6 +34,7 @@ temperature = 0.7
 timeout_seconds = 100.0
 api_key_env = "OPENAI_API_KEY"
 max_tokens = 2048
+max_feedback_chars = 600
 
 [models.qwen-dense-q4]
 model = "Qwen3.8-27B-MLX-oQ4e-mtp"
@@ -38,6 +44,7 @@ temperature = 0.7
 timeout_seconds = 100.0
 api_key_env = "OPENAI_API_KEY"
 max_tokens = 2048
+max_feedback_chars = 600
 
 [models.qwen-moe-q6]
 model = "Qwen3.6-35B-A3B-oQ6-mtp"
@@ -50,6 +57,7 @@ max_tokens = 8192
 batch_size = 1
 subagent_batch_size = 3
 conversation_max_tokens = 100000
+max_feedback_chars = 600
 
 
 [models.deepseek-v41-flash]
@@ -63,6 +71,7 @@ api_key_env = "DEEPSEEK_API_KEY"
 max_tokens = 8192
 subagent_batch_size = 10
 conversation_max_tokens = 256000
+max_feedback_chars = 4000
 
 [models.qwen-flash-next-q2]
 model = "Qwen3.8-Flash-Next-MLX-oQ2"
@@ -73,4 +82,31 @@ timeout_seconds = 100.0
 api_key_env = "OPENAI_API_KEY"
 max_tokens = 4096
 batch_size = 2
+max_feedback_chars = 400
+
+[models.gemini-3.8-flash]
+model = "gemini-3.8-flash"
+provider = "google"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 120.0
+max_tokens = 8192
+subagent_batch_size = 5
+conversation_max_tokens = 256000
+max_feedback_chars = 4000
+
+[models.qwen38-27b-q4-mtp]
+model = "Qwen38-27B-Q4-MTP"
+base_url = "http://localhost:8000/v1"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 100.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 8192
+batch_size = 1
+subagent_batch_size = 3
+conversation_max_tokens = 100000
+max_feedback_chars = 600
+
+
 

@@ -113,7 +113,7 @@ def run_role_linters(target_path_str: str, parts_cfg: Path):
     elif target_path_str.endswith(".pyi") and "/low/" in target_path_str:
         if low_tool:
             subprocess.run(["uv", "run", "python", "-m", low_tool, target_path_str], check=True)
-    else:
+    elif not target_path_str or (repo_root / target_path_str).is_dir():
         cmd_arg = [target_path_str] if target_path_str else []
         if high_tool:
             subprocess.run(["uv", "run", "python", "-m", high_tool] + cmd_arg, check=True)

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
-# LAST_CHANGED: 2026-10-12T23:35:00Z
-# CHANGE: align AGENTS.md refresh low spec with command execution tripwire and impasse fail protocol
-# CODE_HASH: ac14df123a69
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T17:45:00Z
+# CHANGE: align AGENTS.md refresh low spec with in-workspace file inspection and terminal command restrictions
+# CODE_HASH: 22fc959096c1
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_sync_impl."""
@@ -14,6 +14,7 @@ from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import workspace_sync
 import workspace_registry
+import workspace_provision
 import src_metadata
 import cleanroom_files_ext
 
@@ -29,6 +30,8 @@ class WorkspaceSynchronizer(
     - Realizes permission-preserving inbound pulls and system file refresh
       (workspace_pull_algorithms) through newer-file copying with 0o444 contract
       permissions, 0o644 writable target updates, and missing-file deletion.
+    - Delegates runner deployment, role guide generation, test stub synchronization,
+      and permission-enforced file copying to workspace_provision.WorkspaceProvisioner.
     - Realizes two-phase conflict detection and atomic file replacement on disk
       (workspace_harvest_algorithms) through temporary staging files.
     - Delegates in-band metadata handling to src_metadata.SourceMetadataCoordinator, using
@@ -54,11 +57,12 @@ class WorkspaceSynchronizer(
         GROUNDING:
         - Copies newer upstream files from main into the role workspace, setting 0o444 on
           read-only contracts, updating writable targets that are not modified with 0o644,
-          and deleting files absent from main.
+          and deleting files absent from main, using
+          workspace_provision.WorkspaceProvisioner.copy_file_with_permissions.
         - Determines writable target modification state through
           src_metadata.SourceMetadataCoordinator.is_code_modified.
-        - Synthesizes read-only test stubs from companion specifications for stub role
-          dependencies, replaces leaked implementation code, and deletes orphaned stubs.
+        - Delegates test stub synchronization to
+          workspace_provision.WorkspaceProvisioner.sync_test_stubs.
         """
         ...
 
@@ -78,13 +82,14 @@ class WorkspaceSynchronizer(
         - Resolves the canonical repository root and role context of the synchronized workspace
           through workspace_registry.WorkspaceRegistry.discover_repository_root and
           workspace_registry.WorkspaceDescriptor before recopying system files from that root.
-        - Recopies tool runners, project configurations, guides, and AGENTS.md carrying
-          boundary rules, contamination tripwires, command execution restrictions, and
-          fail-stop/impasse constraints from main into the workspace without altering writable targets.
-        - Re-asserts read-only test stub integrity for stub role dependencies by replacing
-          leaked implementation code and restoring read-only permissions on stub targets.
+        - Recopies project configurations, guides, and linters from main into the workspace
+          using workspace_provision.WorkspaceProvisioner.copy_file_with_permissions without altering writable targets.
+        - Delegates runner packaging to workspace_provision.WorkspaceProvisioner.deploy_runner_zipapps,
+          role guide regeneration to workspace_provision.WorkspaceProvisioner.write_role_agents_guide,
+          and test stub synchronization to workspace_provision.WorkspaceProvisioner.sync_test_stubs.
         """
         ...
+
 
     @operation
     @override

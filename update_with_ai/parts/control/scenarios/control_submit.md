@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:14:19Z
 CHANGE: Author control control_submit concrete scenarios
 CODE_HASH: 6b95eb91cfeb
@@ -148,3 +148,16 @@ it has not been modified since its target was last clean; the current UTC timest
    Observed: an accepted submission outcome, and the canonical repository file
    `/repo/parts/gadget/gadget_spec.md` records last cleaned `2026-01-12T00:00:00Z` and no change
    summary.
+
+## Scenario 8 — Submitting a target with session feedback when files were not modified
+
+Given: role alpha is not an auditor role; the alpha-role target node for unit widget is dirty, has
+no in-batch dependency, has passing verification checks, and carries open session feedback
+`rename widget field`; its workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` has not
+been modified since the target was last clean.
+
+1. The agent submits the alpha-role target for unit widget with no change summary.
+   Observed: the submission is refused with an explicit error explaining that session feedback is
+   present and workspace files must be modified to address feedback before submitting or fail must
+   be called, and the alpha-role target node for unit widget stays dirty.
+

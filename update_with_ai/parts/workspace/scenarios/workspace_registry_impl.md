@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T01:30:00Z
 CHANGE: eliminate cleanroom_workspaces.json workspace registry file
-CODE_HASH: d18e963b9232
+CODE_HASH: 0d01979a2989
 -->
 
 # Concrete scenarios for `workspace_registry_impl` (implementation)
@@ -224,25 +224,19 @@ Given: no workspaces have been recorded or provisioned.
 
 ### Scenario 11 — Finding the canonical repository root from inside a role workspace
 
-Given: the caller is working inside the projected role workspace `/ws/alpha_scope_a`, whose role
-descriptor records the canonical repository root `/repo`, and no repository indicator lies above
-`/ws/alpha_scope_a`.
+Given: the caller is working inside the projected role workspace `/projects/role_workspaces/repo_alpha_scope_a`, and no repository indicator lies above `/projects/role_workspaces/repo_alpha_scope_a`.
 
 1. The caller resolves the canonical repository root.
-   Observed: `/repo`, taken from the role descriptor rather than from the current directory, and
-   the projected role workspace directory carrying the descriptor is not itself treated as the
-   repository root.
-   Realized by: the component's own inspection of the role metadata descriptor, which it prefers
-   over the surrounding directory tree, and its fallback to the ambient process working directory
-   when neither an indicator nor a descriptor is present.
+   Observed: `/projects/repo`, derived from sibling workspace conventions (`../../<workspace-short-name>`) rather than from host paths in the role descriptor, and the projected role workspace directory carrying the descriptor is not itself treated as the repository root.
+   Realized by: the component's own sibling workspace convention matching, and its fallback to the ambient process working directory when neither an indicator nor a sibling match is present.
 
 ### Scenario 12 — Discovering active workspaces from provisioned role metadata
 
-Given: the canonical repository root is `/repo`, and a role workspace exists at `/role_workspaces/alpha_scope_a` carrying a valid role metadata descriptor for role alpha in scope scope_a with main repository root `/repo` and last sync timestamp `2026-01-02T03:04:05Z`.
+Given: the canonical repository root is `/projects/repo`, and a role workspace exists at `/projects/role_workspaces/repo_alpha_scope_a` carrying a valid role metadata descriptor for role alpha in scope scope_a and last sync timestamp `2026-01-02T03:04:05Z`.
 
-1. The caller loads the active workspaces for `/repo` without prior in-memory recording.
-   Observed: loading returns one descriptor for `/role_workspaces/alpha_scope_a`, identifying role alpha, directory scope scope_a, main repository root `/repo`, and last sync timestamp `2026-01-02T03:04:05Z`.
-   Realized by: the component's own discovery scan of the role workspaces directory, which reads the role metadata descriptor of each provisioned workspace matching the repository root.
+1. The caller loads the active workspaces for `/projects/repo` without prior in-memory recording.
+   Observed: loading returns one descriptor for `/projects/role_workspaces/repo_alpha_scope_a`, identifying role alpha, directory scope scope_a, main repository root `/projects/repo`, and last sync timestamp `2026-01-02T03:04:05Z`.
+   Realized by: the component's own discovery scan of the role workspaces directory, which reads the role metadata descriptor of each provisioned workspace matching the repository root prefix.
 
 ### Scenario 13 — Read-only patterns derived from the declared dependencies
 

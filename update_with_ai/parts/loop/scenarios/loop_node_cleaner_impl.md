@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:11:44Z
 CHANGE: Author loop loop_node_cleaner_impl concrete scenarios
-CODE_HASH: 6bb3c13a5218
+CODE_HASH: 809c2aa071b1
 -->
 
 # Concrete scenarios for `loop_node_cleaner_impl` (implementation)
@@ -40,8 +40,8 @@ beta-role target for gadget is dirty, and neither node depends on the other.
    the beta-role target for gadget is still dirty.
    Realized by: role configuration lookups through `agent_node_config`, which present role alpha to
    the session services; the node definition and task prompt of widget through `agent_storage`; the
-   agent session phase, with turn loop execution through `loop_driver`, session services through
-   `sandbox`, and conversation initialization through `loop_conversation` with the instruction
+   agent session phase, with turn loop execution through `loop_driver`, tool execution in
+   `agent_session`, and conversation initialization through `loop_conversation` with the instruction
    directing the agent to call the get work tool; clean marking through `dag_storage`; and the
    component's own selection of the dirty nodes that share role alpha, which leaves the beta-role
    target for gadget untouched.
@@ -55,7 +55,7 @@ another.
    Observed: processing continues, and all three nodes are clean in graph storage.
    Realized by: the component's own session phase over the three nodes that share role alpha, with
    the task prompt of each node supplied by `agent_storage`, turn loop execution through
-   `loop_driver`, session services through `sandbox`, and clean marking of each resolved node through
+   `loop_driver`, tool execution in `agent_session`, and clean marking of each resolved node through
    `dag_storage`.
 
 ### Scenario 4 — A failure that another node cleaning addresses
@@ -99,9 +99,9 @@ to read the new parser output"; and neither node depends on the other.
    Observed: processing continues; the alpha-role target for widget is clean with the change summary
    from the outcome and an advanced change timestamp; and the alpha-role target for gadget is clean
    with its change timestamp unchanged.
-   Realized by: `agent_storage` for the task prompts; the workspace modification state exposed by
-   `sandbox`; the outcome and its change summary from `loop_driver`; and the component's own clean
-   marking through `dag_storage`, which advances the change timestamp only for the node that
+   Realized by: `agent_storage` for the task prompts; the workspace modification state evaluated
+   through `src_metadata`; the outcome and its change summary from `loop_driver`; and the component's own
+   clean marking through `dag_storage`, which advances the change timestamp only for the node that
    modified workspace files.
 
 ### Scenario 7 — Blame is recorded only against the declared feedback dependency that owns the blamed file

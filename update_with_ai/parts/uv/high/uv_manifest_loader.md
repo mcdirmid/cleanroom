@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
 CODE_HASH: 8f4587055edf
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # uv_manifest_loader interface component
@@ -22,7 +22,7 @@ Target execution requires resolving methodology configurations and package layou
 
 ## Types and Behavior
 
-A *target manifest* is a build artifact carrying node reference fields and file path fields for a workspace target, including target node label, task prompt, declared source file, silent source files, template, direct dependencies, silent dependencies, star dependencies, feedback dependencies, guide target, and verification check.
+A *target manifest* is a build artifact carrying node reference fields and file path fields for a workspace target, including target node label, task prompt, declared source file, silent source files, template, direct dependencies, silent dependencies, star dependencies, feedback dependencies, guide target, verification check, and verification success message.
 
 A system's *uv manifest loader* resolves manifests into graph structures and node definitions.
 

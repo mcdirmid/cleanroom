@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
 LAST_CHANGED: 2026-10-11T03:16:09Z
 CHANGE: Declare synchronizer typing and enforce test stub integrity in refresh
-CODE_HASH: 6940bfc30636
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: e1f7f39a7146
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # workspace_sync interface component
@@ -22,8 +22,8 @@ Operating across isolated role workspaces requires atomic data movement to preve
 ### Contracts
 
 - The workspace synchronizer pulls updated upstream contracts and source files from the canonical main repository into a role workspace. [pull_upstream_contracts]
-- The workspace synchronizer synchronizes read-only test stubs for stub role dependencies without copying implementation code. [sync_stub_dependencies]
-- The workspace synchronizer refreshes non-parts system files from the canonical main repository into a role workspace, enforcing test stub integrity. [refresh_system_files_into_workspace]
+- The workspace synchronizer delegates test stub synchronization for stub role dependencies to workspace provisioning without copying implementation code. [sync_stub_dependencies]
+- The workspace synchronizer refreshes non-parts system files from the canonical main repository into a role workspace, delegating runner deployment, role guide regeneration, and test stub synchronization. [refresh_system_files_into_workspace]
 - The workspace synchronizer scans writable target files in a role workspace to identify modified content. [scan_modified_targets]
 - The workspace synchronizer verifies that canonical main targets match workspace baseline hashes before committing harvested files. [validate_harvest_baselines]
 - The workspace synchronizer copies validated target files from a role workspace into the canonical main repository. [commit_harvested_files]
@@ -33,6 +33,7 @@ Operating across isolated role workspaces requires atomic data movement to preve
 ### Woven Contracts
 
 - When pulling updates from the canonical repository, the synchronizer copies newer upstream files into the role workspace, synchronizes stub dependencies, and enforces read-only permissions on contracts. [pull_upstream_contracts, sync_stub_dependencies]
+- When refreshing system files, the synchronizer recopies project configurations and guides, refreshing system files and stub dependencies. [refresh_system_files_into_workspace]
 - When harvesting changes, the synchronizer scans modified targets, validates baseline hashes against the main repository, commits validated files, stamps audits for auditor roles, and flushes buffered blame feedback. [scan_modified_targets, validate_harvest_baselines, commit_harvested_files, stamp_auditor_role_audits, flush_blame_buffer_entries]
 
 ## Grounding

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
-# LAST_CHANGED: 2026-10-13T01:30:00Z
-# CHANGE: eliminate cleanroom_workspaces.json workspace registry file
-# CODE_HASH: b2b027b29b92
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:45:00Z
+# CHANGE: Delegate role configuration resolution to workspace_roles
+# CODE_HASH: 47b98b0105c9
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for workspace_registry_impl."""
@@ -15,6 +15,7 @@ from agent_session import AgentSessionTier
 import cleanroom_files_ext
 import file_paths
 import workspace_registry
+import workspace_roles
 
 
 @singleton_type("agent_session")
@@ -25,13 +26,12 @@ class WorkspaceRegistry(
     """Realizes role configuration resolution and active workspace tracking.
 
     GROUNDING:
-    - Realizes workspace_registry.WorkspaceRegistry by producing
-      workspace_registry.RoleDefinition records from parsed role declarations and
-      workspace_registry.WorkspaceDescriptor records from active session memory or provisioned role workspaces.
+    - Realizes workspace_registry.WorkspaceRegistry by delegating role definition resolution
+      to workspace_roles.RoleResolver and producing workspace_registry.WorkspaceDescriptor
+      records from active session memory or provisioned role workspaces.
     - Implements the search_ancestor_markers, inspect_role_metadata_descriptor,
       match_sibling_workspace_conventions, fallback_to_ambient_working_directory,
-      parse_role_definitions, normalize_role_identifier, sanitize_directory_folder_name,
-      record_in_memory_descriptor, and discover_active_workspace_descriptors mechanics.
+      sanitize_directory_folder_name, record_in_memory_descriptor, and discover_active_workspace_descriptors mechanics.
     - Backs active workspace tracking with an in-memory workspace descriptor collection
       keyed by workspace directory, hydrated through in-memory registration and provisioned
       role workspace discovery.
@@ -41,8 +41,6 @@ class WorkspaceRegistry(
       file_paths.FilePathManager.resolve_path, delegating host filesystem text reads,
       writes, and directory marker checks to the external filesystem_ext mechanics and
       deterministic JSON encoding and decoding to the external json_ext mechanics.
-    - Parses role configuration declarations from declarative role files through the
-      external cleanroom_files_ext role_manifest_parsing provision.
     """
 
     @operation
@@ -53,8 +51,7 @@ class WorkspaceRegistry(
         """Discovers the canonical repository root by searching ancestor directories.
 
         POSTCONDITIONS:
-        - WHEN discovering repository roots from within an isolated role workspace, MUST inspect role metadata descriptors to resolve the canonical repository root.
-        - WHEN discovering repository roots from within an isolated role workspace, MUST match sibling workspace conventions to resolve the canonical repository root.
+        - WHEN discovering repository roots from within an isolated role workspace, MUST match sibling workspace conventions to resolve the canonical repository root without reading host paths from role descriptors.
 
         GROUNDING:
         - Searches upward from the caller-supplied start_dir, or from the ambient current
@@ -63,20 +60,10 @@ class WorkspaceRegistry(
           cleanroom_files_ext.CLEANROOM_ROLES_FILE), pyproject.toml, or git repository markers to distinguish
           a canonical repository from a projected role workspace, and falls back to the
           ambient working directory when the ancestor walk reaches the filesystem root without a marker.
-        - Inspects the role metadata descriptors carried by the enclosing isolated role
-          workspace, reading the role metadata JSON recorded at cleanroom_files_ext.ROLE_DESCRIPTOR_FILE in the
-          role workspace root together with the
-          workspace_registry.WorkspaceDescriptor.directory_scope,
-          workspace_registry.WorkspaceDescriptor.main_repository_root, and the
-          workspace_registry.RoleDefinition role identity and pattern fields role_name,
-          role_address, src_pattern, writable_file_patterns, and readonly_file_patterns,
-          and resolves the canonical repository root from the recorded main repository
-          root.
-        - Matches sibling workspace conventions by enumerating the sibling role workspace
-          directories beside the enclosing role workspace beneath the role_workspaces
-          container directory of the parent projects root, and adopts the main repository
-          root that those sibling role workspaces carry in their own role metadata
-          descriptors as the canonical repository root.
+        - Matches sibling workspace conventions by resolving the parent projects root from
+          the enclosing role workspace directory beneath the role_workspaces container,
+          identifying the sibling project root matching the workspace prefix conventions,
+          and returns the resulting path string without reading host paths from the role descriptor.
         - Promotes the discovered directory through
           file_paths.FilePathManager.create_absolute_path and returns the resulting path
           string.
@@ -90,26 +77,11 @@ class WorkspaceRegistry(
         role_name_or_address: str,
         repo_root: Optional[str] = None,
         dir_scope: Optional[str] = None,
-    ) -> workspace_registry.RoleDefinition:
+    ) -> workspace_roles.RoleDefinition:
         """Resolves a role configuration matching declared roles or addressed packages.
 
         GROUNDING:
-        - Normalizes the supplied role name or package-qualified address into a canonical
-          role name through normalize_role_identifier before any lookup.
-        - Loads the addressed package role declarations when the address is
-          package-qualified, discovers and loads the methodology configuration bound to
-          the supplied dir_scope or its package hierarchy when the address is unqualified
-          and dir_scope is supplied, and otherwise parses declarative role declarations
-          from the repository root, evaluating declarations through the
-          external cleanroom_files_ext role_manifest_parsing provision.
-        - Extracts every declared role attribute from the parsed declaration into a
-          workspace_registry.RoleDefinition record, deriving the configured guide path,
-          source pattern, file patterns, dependency sequences, and audit tag.
-        - Raises KeyError when the normalized role name is undeclared, and raises
-          ValueError when a declaration redundantly lists feedback or star role
-          dependencies in role_deps, lists a dependency as both role_deps and
-          silent_role_deps, or declares an auditor role in role_deps, star_role_deps, or
-          feedback_role_deps.
+        - Delegates resolution to workspace_roles.RoleResolver.resolve_role_definition.
         """
         ...
 
@@ -119,17 +91,11 @@ class WorkspaceRegistry(
         self,
         repo_root: Optional[str] = None,
         dir_scope: Optional[str] = None,
-    ) -> Sequence[workspace_registry.RoleDefinition]:
+    ) -> Sequence[workspace_roles.RoleDefinition]:
         """Loads and resolves all role definitions declared in the repository.
 
         GROUNDING:
-        - Enumerates every role configuration declaration from the repository build files
-          or from the methodology configuration bound to the supplied dir_scope and its
-          package hierarchy, normalizing each declared role identifier through
-          normalize_role_identifier.
-        - Constructs a workspace_registry.RoleDefinition for every parsed declaration and
-          applies the same redundant dependency, conflicting silent dependency, and
-          auditor dependency rejection as resolve_role_definition.
+        - Delegates role listing to workspace_roles.RoleResolver.list_roles.
         """
         ...
 

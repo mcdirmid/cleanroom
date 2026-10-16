@@ -1,19 +1,20 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_harness interface low-level specification
-# CODE_HASH: d487c9f31e09
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 7ebe036f65a4
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for antigravity_harness."""
 
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 from framework import data_type, operation, poly_type, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import subagent_coordinator
+import subagent_harness
 
 
 @data_type
@@ -108,12 +109,24 @@ class AntigravityHarnessManager(InTier[AgentSessionTier], Protocol):
         self,
         model_name: Optional[str] = None,
         timeout_seconds: Optional[float] = None,
+        max_context_tokens: Optional[int] = None,
         custom_cmd: Optional[str] = None,
+        simulation_mode: bool = False,
+        **kwargs: Any,
     ) -> AntigravityHarnessAdapter:
         """Constructs an Antigravity harness adapter instance.
 
         POSTCONDITIONS:
         - MUST construct and return configured Antigravity harness adapter instance.
+        """
+        ...
+
+    @operation
+    def initialize(self) -> None:
+        """Initializes the manager and installs the adapter factory into the harness registry.
+
+        POSTCONDITIONS:
+        - MUST install antigravity harness adapter factory into subagent harness registry.
         """
         ...
 

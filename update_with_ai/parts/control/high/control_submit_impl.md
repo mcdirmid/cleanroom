@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-09T22:20:00Z
 CHANGE: Record change summary during clean status transition without appending dirty change message
 CODE_HASH: 3f376f45cb7a
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # control_submit_impl implementation component
@@ -37,7 +37,11 @@ When submitting a target:
 
 - The submission coordinator forbids a non-empty change summary when workspace files were unmodified and the target is not an auditor role, rejecting submissions that document changes when no modification occurred.
 
+- The submission coordinator rejects submissions when session feedback is present and no workspace files were modified, instructing that workspace files must be modified to address feedback before submitting, or that fail must be called if the feedback cannot be resolved.
+
 - The submission coordinator marks the target node status as clean in graph storage with the change summary and returns an accepted submission outcome once every precondition and change summary rule is satisfied.
+
+- The submission coordinator formats submission outcomes and in-batch dependency errors using user-facing file aliases rather than raw graph node addresses.
 
 When submitting a file target:
 

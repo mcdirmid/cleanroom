@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-13T20:00:00Z
 # CHANGE: author dsh_asm assembly library
-# CODE_HASH: 53d57ca36792
+# CODE_HASH: 380b2579395b
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -11,11 +11,13 @@ from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry
 from . import (
     dsh_workspace_impl,
+    dsh_telemetry_impl,
     dsh_harness_impl,
 )
 
 CONSTITUENTS = (
     dsh_workspace_impl,
+    dsh_telemetry_impl,
     dsh_harness_impl,
 )
 

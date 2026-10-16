@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T04:08:18Z
-CHANGE: Extend multiple-match failure feedback with surrounding-line and line-range guidance
+CHANGE: Reject editing tool replacements that alter the cleanroom metadata header
 CODE_HASH: 73f154f9c734
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # sandbox_file_editor_impl implementation component
@@ -27,6 +27,8 @@ Furthermore, the implementation tracks revision counters and emits structured di
 - Editing tool execution reminds the agent that only declared read-write files can be written when the target file is not a read-write file. [remind_only_read_write_writable]
 - Editing tool execution fails when the edit produces no change to file content. [fail_when_edit_produces_no_change]
 - Editing tool execution reminds the agent that the edit had no effect when the edit produces no change. [remind_no_op_edits_fail]
+- Editing tool execution fails when the edit alters the cleanroom metadata header. [fail_when_edit_alters_cleanroom_metadata]
+- Editing tool execution reminds the agent that cleanroom metadata is managed automatically by submit when the edit alters the cleanroom metadata header. [remind_metadata_managed_by_submit]
 - Successful editing tool execution writes updated file content to the filesystem. [write_updated_content_on_success]
 - Successful editing tool execution creates missing parent directories. [create_missing_parent_dirs_on_success]
 - Successful editing tool execution records that workspace file writes occurred. [record_writes_occurred_on_success]
@@ -65,7 +67,7 @@ Furthermore, the implementation tracks revision counters and emits structured di
 - The replace file content tool is installed for the agent session to enable targeted text replacement in declared read-write files. [install_replace_file_content_tool, sandbox_file_editor: [install_replace_file_content_tool]]
 - Validating write access confirms access and records file edits for declared read-write files, but rejects undeclared targets. [can_write_fails_when_not_read_write, can_write_records_file_edit, can_write_produces_success_response, remind_only_read_write_writable, sandbox_file_editor: [can_write_validates_access]]
 - Missing path arguments default to the last read or edited read-write file with an advisory warning, failing if no valid file history exists. [implicitly_bind_last_read_or_edited_file, warn_when_path_implicitly_bound, fail_when_path_omitted_and_no_last_file, fail_when_path_omitted_and_last_not_read_write, sandbox_file_editor: [track_last_read_or_edited]]
-- Line search windows are validated against file bounds, rejecting non-positive or inverted bounds before matching proceeds. [fail_when_start_line_less_than_one, fail_when_start_line_exceeds_line_count_plus_one, fail_when_end_line_less_than_one, fail_when_end_line_exceeds_line_count, fail_when_start_exceeds_end]
+- Line search windows are validated against file bounds, rejecting non-positive or inverted bounds before matching proceeds, and edits that alter the cleanroom metadata header are rejected. [fail_when_start_line_less_than_one, fail_when_start_line_exceeds_line_count_plus_one, fail_when_end_line_less_than_one, fail_when_end_line_exceeds_line_count, fail_when_start_exceeds_end, fail_when_edit_alters_cleanroom_metadata, remind_metadata_managed_by_submit]
 - Target content matching attempts exact matching first, falling back to whitespace-tolerant matching when single replacements are requested. [match_target_content_exactly, fallback_whitespace_stripped_matching, whitespace_fallback_succeeds_on_single_match]
 - Ambiguous or missing target content triggers detailed line location diagnostics to guide correction. [fail_when_not_found_single, fail_when_multiple_matches_single, feedback_first_two_matching_lines, feedback_relocated_lines_when_outside_range]
 - Successful replacements update the filesystem, advance the update revision, and emit reminders to verify syntax with check files. [write_updated_content_on_success, create_missing_parent_dirs_on_success, record_writes_occurred_on_success, remind_call_check_files, increment_revision_on_file_update, share_replace_file_content_suppression_key, sandbox_file_editor: [replace_content_in_line_range, replace_multiple_when_permitted]]

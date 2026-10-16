@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:11:55Z
 CHANGE: Author sandbox tool_provider concrete scenarios
-CODE_HASH: 0f99a17e2034
+CODE_HASH: a03670754e9d
 -->
 
 # Concrete scenarios for `tool_provider` (interface)
@@ -222,3 +222,11 @@ parameter `height`, and the session records the call to that tool.
    wire integer `30`.
    Observed: the call fails with diagnostic feedback from the parameter type of `height`, and no
    tool is called.
+
+## Scenario 12 — Converting wire strings with alias manager type
+
+Given: the alias manager type is available in an agent session, and the session's alias manager resolves
+the string `widget/notes/draft.md` to a bound file.
+
+1. The caller converts the wire string `widget/notes/draft.md` with the alias manager type.
+   Observed: the conversion produces the bound file resolved by the alias manager without failure.

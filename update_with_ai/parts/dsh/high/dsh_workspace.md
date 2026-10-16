@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T20:00:00Z
 CHANGE: author dsh_workspace interface specification
 CODE_HASH: 402edcb4a5b0
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # dsh_workspace interface component
@@ -32,6 +32,6 @@ When configuring a role workspace:
 
 - The dsh workspace configurer embeds command execution constraints in role agent documentation restricting shell usage strictly to the five prescribed workspace binaries.
 
-- The dsh workspace configurer generates a targeted Cordis overlay patch file configuring model routing and unattended execution permissions.
+- The dsh workspace configurer generates a targeted Cordis overlay patch file configuring model routing, resolving declared model configuration profiles to their underlying model identifiers, and unattended execution permissions.
 
 - The dsh workspace configurer returns a dsh confinement report documenting all configured boundary files.

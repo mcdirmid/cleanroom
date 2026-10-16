@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_harness_impl implementation library
-# CODE_HASH: ccbe59b5c364
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 7ad6cfb1160c
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for antigravity_harness_impl."""
@@ -25,7 +25,7 @@ from support.lib.lifecycle import (
     get_singleton,
 )
 from update_with_ai.parts.agent.lib import agent_session
-from update_with_ai.parts.subagent.lib import subagent_coordinator
+from update_with_ai.parts.subagent.lib import subagent_coordinator, subagent_harness
 from . import antigravity_harness
 
 
@@ -330,17 +330,31 @@ class AntigravityHarnessManager(
     def __init__(self) -> None:
         self._parser = TranscriptTelemetryParser()
 
+    def initialize(self) -> None:
+        """Initializes the manager and installs the adapter factory into the harness registry."""
+        try:
+            registry = get_singleton(subagent_harness.HarnessRegistry)
+            registry.install_harness("antigravity", self.create_harness_adapter)
+        except Exception:
+            pass
+
     def create_harness_adapter(
         self,
         model_name: Optional[str] = None,
         timeout_seconds: Optional[float] = None,
+        max_context_tokens: Optional[int] = None,
         custom_cmd: Optional[str] = None,
+        simulation_mode: bool = False,
+        **kwargs: Any,
     ) -> antigravity_harness.AntigravityHarnessAdapter:
         """Constructs an Antigravity harness adapter instance."""
+        cmd = custom_cmd
+        if simulation_mode and not cmd:
+            cmd = "simulation"
         return AntigravityHarnessAdapter(
             model_name=model_name,
             timeout_seconds=timeout_seconds,
-            custom_cmd=custom_cmd,
+            custom_cmd=cmd,
             transcript_parser=self._parser,
         )
 

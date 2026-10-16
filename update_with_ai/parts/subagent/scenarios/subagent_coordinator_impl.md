@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T12:00:00Z
 CHANGE: update subagent coordinator impl scenarios for dynamic queue supervision
-CODE_HASH: c7354708f303
+CODE_HASH: 7dc34696b488
 -->
 
 # subagent_coordinator_impl scenarios
@@ -37,7 +37,7 @@ Given: active workers are executing in background processes for role_a and role_
 
 1. The coordinator polls active workers.
    Observed: completed workers are reaped without blocking while running workers continue execution unhindered.
-   Realized by: the component's supervisor loop calling `poll_role` on `subagent_harness` and sleeping briefly between poll cycles.
+   Realized by: the component's supervisor loop calling `poll_role` on `subagent_harness` and sleeping between poll cycles at the configured polling interval (defaulting to 10 seconds).
 
 ### Scenario 5 — Restarting role workers when new unblocked work emerges
 
@@ -78,3 +78,11 @@ Given: dynamic supervision achieves clean convergence across all evaluated roles
 1. The coordinator concludes orchestration.
    Observed: all provisioned role workspace directories for scope_a are automatically deleted before returning the summary.
    Realized by: the component's convergence cleanup deleting all provisioned role workspace directories for scope_a when is_converged is true.
+
+### Scenario 10 — Halting orchestration upon consecutive unproductive turn impasse
+
+Given: role_a completes consecutive execution turns without submitting or blaming any ready targets.
+
+1. The coordinator polls active workers.
+   Observed: dynamic supervision halts when unproductive turns reach the threshold, returning a non-converged summary with impasse details.
+   Realized by: the component's impasse detection tracking consecutive turns yielding zero submitted and zero blamed targets and breaking the supervisor loop.

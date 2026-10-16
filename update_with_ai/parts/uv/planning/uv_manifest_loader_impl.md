@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
 CODE_HASH: d5bc2f2feadd
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # uv_manifest_loader_impl implementation component
@@ -21,6 +21,7 @@ By resolving package directories against the workspace root, parsing role config
 - The uv manifest loader discovers methodology bindings by searching package directories upwards for scope configuration files and locates role definition files. [locate_role_definitions]
 - The uv manifest loader evaluates role source patterns parameterized with unit metadata. [evaluate_source_patterns]
 - The uv manifest loader evaluates role prompt templates parameterized with unit metadata. [evaluate_prompt_templates]
+- The uv manifest loader evaluates role verification success message templates parameterized with unit metadata. [evaluate_verification_success_message_templates]
 - The uv manifest loader normalizes repository-relative paths without duplicating package paths. [normalize_repository_paths]
 - The uv manifest loader resolves bare cross-package unit dependency references to their containing packages within parts workspaces. [resolve_cross_package_units]
 - The uv manifest loader forwards constituent unit dependencies and role dependencies for inactive pass-through nodes. [forward_pass_through_dependencies]
@@ -28,7 +29,7 @@ By resolving package directories against the workspace root, parsing role config
 
 ### Woven Contracts
 
-- Locating role definitions and evaluating parameterized patterns synthesizes target manifests and populates agent storage, resolving cross-package references and forwarding pass-through dependencies. [locate_role_definitions, evaluate_source_patterns, evaluate_prompt_templates, normalize_repository_paths, resolve_cross_package_units, forward_pass_through_dependencies, uv_manifest_loader: [resolve_manifests_into_nodes, resolve_manifests_into_definitions, resolve_manifests_into_prompts, populate_agent_storage]]
+- Locating role definitions and evaluating parameterized patterns synthesizes target manifests and populates agent storage, resolving cross-package references and forwarding pass-through dependencies. [locate_role_definitions, evaluate_source_patterns, evaluate_prompt_templates, evaluate_verification_success_message_templates, normalize_repository_paths, resolve_cross_package_units, forward_pass_through_dependencies, uv_manifest_loader: [resolve_manifests_into_nodes, resolve_manifests_into_definitions, resolve_manifests_into_prompts, populate_agent_storage]]
 - Missing dependency manifests synthesize empty graph definitions in agent storage to maintain graph reachability. [synthesize_empty_definitions, uv_manifest_loader: [synthesize_missing_dependency_definitions]]
 
 ## Grounding

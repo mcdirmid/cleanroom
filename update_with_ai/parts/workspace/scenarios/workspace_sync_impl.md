@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:14:22Z
 CHANGE: Author workspace workspace_sync_impl concrete scenarios
-CODE_HASH: 2a8ccca5b996
+CODE_HASH: b8ff635770a2
 -->
 
 # Concrete scenarios for `workspace_sync_impl` (implementation)
@@ -88,9 +88,9 @@ changed the tool runner, the project configuration, and the guide file
 1. The synchronizer refreshes the non-parts system files for alpha.
    Observed: the workspace tool runner, project configuration, and guide hold the canonical
    content, and the locally modified alpha source for widget is untouched.
-   Realized by: the component's own system file refresh, which recopies tool runners, project
-   configurations, and guides while skipping every in-scope source file, and its own guide
-   regeneration with the boundary rules and fail-stop constraints.
+   Realized by: the component's own system file refresh, which recopies project
+   configurations and guides while skipping every in-scope source file, and delegation of runner
+   deployment, role guide regeneration, and test stub synchronization to `workspace_provision`.
 
 ### Scenario 6 — Harvesting validated targets and an auditor audit
 
@@ -160,12 +160,12 @@ repository's `beta/high/beta.md` has since changed.
    Observed: the workspace stub for beta raises `NotImplementedError` and matches the changed
    companion specification, and no content from the main repository implementation
    `beta/lib/beta.py` appears in the workspace.
-   Realized by: the component's own stub validation and regeneration from the companion
-   specification, which never copies an implementation file matching a stub role dependency.
+   Realized by: stub validation and regeneration from companion specifications delegated to
+   `workspace_provision`, which never copies an implementation file matching a stub role dependency.
 
 2. The main repository's `beta/high/beta.md` is removed, and the synchronizer pulls again.
    Observed: the orphaned workspace stub for beta is deleted.
-   Realized by: the component's own purge of stubs whose companion specification no longer exists.
+   Realized by: stub synchronization delegated to `workspace_provision`, purging stubs whose companion specification no longer exists.
 
 ### Scenario 10 — Regenerating the guide without disturbing targets
 
@@ -175,7 +175,8 @@ changed.
 
 1. The synchronizer refreshes the non-parts system files for alpha.
    Observed: the regenerated guide again states the workspace boundary, the prohibition on version
-   control operations, and the fail-stop protocol, and `alpha/widget.md` still holds
+   control operations, the blame and feedback resolution instructions (including target change
+   header inspection before auditor blame delivery), and the fail-stop protocol, and `alpha/widget.md` still holds
    `widget local`.
-   Realized by: the component's own guide regeneration, which rewrites only the guide file and
+   Realized by: role guide regeneration delegated to `workspace_provision`, which rewrites only the guide file and
    leaves every in-scope source file alone.

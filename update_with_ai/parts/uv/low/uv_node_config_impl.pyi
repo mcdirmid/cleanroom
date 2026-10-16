@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: 565e14a8d37d
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 3ba1ddb8419f
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom node config implementation low-level specification."""
@@ -19,7 +19,6 @@ from update_with_ai.parts.core.lib import file_paths
 import agent_config
 import dag_storage
 import file_paths
-import tool_provider
 import uv_manifest_loader
 
 
@@ -263,7 +262,7 @@ class AliasManager(
     """Realizes minimal file alias resolution and safe path masking.
 
     GROUNDING:
-    - Realizes agent_file_alias and tool_provider parameter conversion contracts by constructing relative file aliases anchored to the workspace root and masking host path occurrences.
+    - Realizes agent_file_alias contracts by constructing relative file aliases anchored to the workspace root and masking host path occurrences.
     """
 
     @property
@@ -276,44 +275,24 @@ class AliasManager(
         """
         ...
 
-    @property
-    @override
-    def actual_type(self) -> Type[agent_file_alias.FileAlias]:
-        """Exposes FileAlias as the concrete parameter target type.
-
-        GROUNDING:
-        - Exposes FileAlias as the concrete parameter target type.
-        """
-        ...
-
-    @property
-    @override
-    def wire_type(self) -> Type[str]:
-        """Exposes str as the wire-level serialization type.
-
-        GROUNDING:
-        - Exposes str as the wire-level serialization type.
-        """
-        ...
-
     @operation
     @override
-    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
-        """Converts a wire type string to a file alias.
+    def to_alias(self, path: str) -> agent_file_alias.FileAlias:
+        """Converts a path string to a file alias.
 
         Args:
-            wire_value: The wire string to convert into a file alias.
+            path: The path string to convert into a file alias.
 
         Returns:
             The resolved FileAlias (BoundFile if matched, UnboundFile otherwise).
 
         POSTCONDITIONS:
         - MUST generate file aliases with relative paths for accessible workspace files.
-        - MUST match relative paths to file aliases when converting wire type strings.
+        - MUST match relative paths to file aliases when resolving path strings.
         - MUST produce unbound files when relative paths are unmapped.
 
         GROUNDING:
-        - Resolves wire string paths against declared session bound files or falls back to an UnboundFile.
+        - Resolves path strings against declared session bound files or falls back to an UnboundFile.
         """
         ...
 

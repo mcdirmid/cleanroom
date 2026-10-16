@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T20:00:00Z
 CHANGE: author dsh_harness scenarios
-CODE_HASH: 2b3dd5117cda
+CODE_HASH: aab023d783f0
 -->
 
 # dsh_harness scenarios
@@ -41,3 +41,17 @@ Given: an active DeepSeek Harness subagent process executes with default configu
 
 1. The harness adapter polls the active process.
    Observed: running processes return none without termination, and completed processes return final turn results.
+
+## Scenario 6 — Returning unresolved status when zero targets submitted or blamed
+
+Given: an active DeepSeek Harness subagent process terminates without submitting any targets and without writing to the blame buffer.
+
+1. The harness adapter awaits turn completion.
+   Observed: a role turn result is returned with unresolved status and empty submitted and blamed target sequences.
+
+## Scenario 7 — Registering DeepSeek Harness adapter factory
+
+Given: an agent session with an active harness registry.
+
+1. The harness manager initializes.
+   Observed: the DeepSeek Harness adapter factory is installed in the harness registry under platform name dsh.

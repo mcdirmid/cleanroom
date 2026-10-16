@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
-# LAST_CHANGED: 2026-10-13T20:00:00Z
-# CHANGE: author dsh_workspace_impl implementation low-level specification
-# CODE_HASH: ae13aa2f0f56
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T17:45:00Z
+# CHANGE: align dsh_workspace_impl low spec with auditor code inspection and terminal command restrictions
+# CODE_HASH: 5854fe785540
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for dsh_workspace_impl."""
@@ -40,9 +40,9 @@ class DshWorkspaceConfigurer(
         """Configures role agent documentation and Cordis overlay patch for DeepSeek Harness.
 
         GROUNDING:
-        - Incorporates explicit isolation boundaries, tripwires, and restricted binary
-          directives tailored for DeepSeek Harness into AGENTS.md, writes Cordis patch
-          into .cleanroom/dsh_patch.yml conforming to dsh_ext, verifies configured files exist,
-          and returns a populated dsh_workspace.DshWorkspaceConfinementReport.
+        - Incorporates explicit isolation boundaries, tripwires, restricted binary
+          directives, and auditor rules (mandating in-workspace code and change header inspection while prohibiting code edits) tailored for DeepSeek Harness into AGENTS.md,
+          writes Cordis patch into .cleanroom/dsh_patch.yml conforming to dsh_ext (resolving declared model profile names against model configuration definitions), verifies configured
+          files exist, and returns a populated dsh_workspace.DshWorkspaceConfinementReport.
         """
         ...

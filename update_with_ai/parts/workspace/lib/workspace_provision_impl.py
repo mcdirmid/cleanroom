@@ -1,576 +1,50 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
-# LAST_CHANGED: 2026-10-12T23:35:00Z
-# CHANGE: synthesize AGENTS.md with command execution tripwire and impasse fail protocol
-# CODE_HASH: aff5d87bbeaa
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:50:00Z
+# CHANGE: Delegate workspace scaffolding to workspace_scaffold
+# CODE_HASH: a9bb36672a7b
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for workspace_provision_impl."""
 
 from __future__ import annotations
 
-import ast
 import fnmatch
-import json
 import os
 import re
 import shutil
-import sys
-import zipfile
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import List, Optional, Sequence
 
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 from update_with_ai.parts.agent.lib import agent_session
-from . import workspace_provision, workspace_registry
+from . import workspace_provision, workspace_registry, workspace_scaffold, workspace_stub
 
 
 BLAME_BUFFER_FILE = ".cleanroom_blame_buffer.json"
-ROLE_CONFIG_FILE = ".cleanroom_role.json"
+PENDING_WORK_FILE = ".cleanroom_pending_work.json"
 
 
 def write_file_with_perms(
-    dst: str, content: str, readonly: bool = False, executable: bool = False
+    path: str, content: str, readonly: bool = False, executable: bool = False
 ) -> None:
-    """Writes a text file and sets exact permissions, handling existing read-only files cleanly."""
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
-    if os.path.exists(dst):
+    """Writes a file with specific content and permissions."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
         try:
-            os.chmod(dst, 0o644)
+            os.chmod(path, 0o644)
         except OSError:
             pass
-    with open(dst, "w", encoding="utf-8") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-    mode = 0o555 if executable else (0o444 if readonly else 0o644)
+    mode = 0o444 if readonly else 0o644
+    if executable:
+        mode |= 0o111
     try:
-        os.chmod(dst, mode)
+        os.chmod(path, mode)
     except OSError:
         pass
-
-
-def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
-    """Decomposes a source path pattern into its directory, stem suffix, and extension."""
-    if not pat:
-        return "", "", ""
-    parts = pat.split("/")
-    d = parts[1] if len(parts) > 1 else ""
-    f = parts[-1]
-    stem, ext = os.path.splitext(f)
-    suffix = ""
-    if "_" in stem and not stem.startswith("{"):
-        suffix = stem.replace("{unit_name}", "")
-    return d, suffix, ext
-
-
-def _is_stub_dep_file(
-    rel_path: str,
-    role_def: workspace_registry.RoleDefinition,
-    repo_root: Optional[str] = None,
-) -> bool:
-    """Returns True if rel_path matches any role in stub_role_deps."""
-    if not role_def.stub_role_deps:
-        return False
-    fname = os.path.basename(rel_path)
-    if fname in ("__init__.py",):
-        return False
-    registry = get_singleton(workspace_registry.WorkspaceRegistry)
-    root = repo_root or "."
-    for stub_target in role_def.stub_role_deps:
-        try:
-            stub_def = registry.resolve_role_definition(stub_target, root)
-        except (KeyError, ValueError, RuntimeError, OSError):
-            continue
-        parent = os.path.basename(os.path.dirname(rel_path))
-        if stub_def.writable_file_patterns:
-            for pat in stub_def.writable_file_patterns:
-                if (
-                    fnmatch.fnmatch(rel_path, pat)
-                    or fnmatch.fnmatch(rel_path, f"*/{pat}")
-                    or fnmatch.fnmatch(rel_path, f"*{pat}")
-                    or fnmatch.fnmatch(fname, pat)
-                ):
-                    return True
-        if stub_def.src_pattern:
-            d, _, ext = _parse_pat_to_glob(stub_def.src_pattern)
-            if d and (parent == d or f"/{d}/" in rel_path.replace("\\", "/")) and (not ext or fname.endswith(ext)):
-                return True
-    return False
-
-
-def _get_part_module_map(
-    repo_root: str,
-    parts_bases: Sequence[str],
-) -> Dict[str, Tuple[str, str]]:
-    """Maps module name -> (part_name, base_dir) across specified parts directories."""
-    mapping: Dict[str, Tuple[str, str]] = {}
-    for base in parts_bases:
-        parts_dir = (
-            os.path.join(repo_root, base, "parts")
-            if not base.endswith("parts")
-            else os.path.join(repo_root, base)
-        )
-        if not os.path.isdir(parts_dir):
-            continue
-        try:
-            for p in os.listdir(parts_dir):
-                p_dir = os.path.join(parts_dir, p)
-                if not os.path.isdir(p_dir) or p.startswith("."):
-                    continue
-                try:
-                    with os.scandir(p_dir) as it:
-                        for entry in it:
-                            if (
-                                entry.is_dir()
-                                and not entry.name.startswith(".")
-                                and not entry.name.startswith("_")
-                            ):
-                                try:
-                                    for f in os.listdir(entry.path):
-                                        if f.endswith(".py") or f.endswith(".pyi"):
-                                            mod_name = f.rsplit(".", 1)[0]
-                                            mapping[mod_name] = (p, base)
-                                except OSError:
-                                    pass
-                except OSError:
-                    pass
-        except OSError:
-            pass
-    return mapping
-
-
-def _find_spec_pyi(
-    part_path: str, stem: str, main_root: Optional[str] = None
-) -> Optional[str]:
-    """Finds companion .pyi specification file for a unit stem in a part directory."""
-    for spec_dir in ("low", "grounding"):
-        candidate = os.path.join(part_path, spec_dir, f"{stem}.pyi")
-        if os.path.isfile(candidate):
-            return candidate
-    if main_root:
-        part_name = os.path.basename(part_path)
-        try:
-            for entry in os.listdir(main_root):
-                base_dir = os.path.join(main_root, entry)
-                if not os.path.isdir(base_dir) or entry.startswith((".", "bazel-", "venv")):
-                    continue
-                for spec_dir in ("low", "grounding"):
-                    candidate = os.path.join(
-                        base_dir, "parts", part_name, spec_dir, f"{stem}.pyi"
-                    )
-                    if os.path.isfile(candidate):
-                        return candidate
-        except OSError:
-            pass
-    return None
-
-
-def _matches_any_pattern(rel_path: str, patterns: Sequence[str]) -> bool:
-    """Reports whether a relative path matches any configured glob pattern."""
-    normalized = rel_path.replace("\\", "/")
-    fname = os.path.basename(normalized)
-    return any(
-        fnmatch.fnmatch(normalized, p)
-        or fnmatch.fnmatch(normalized, f"*/{p}")
-        or fnmatch.fnmatch(normalized, f"*{p}")
-        or fnmatch.fnmatch(fname, p)
-        for p in patterns
-    )
-
-
-def _declared_units(repo_root: str, scope_dir: str) -> List[Tuple[str, str]]:
-    """Returns declared (unit_dir, unit_name) pairs beneath a synchronized scope."""
-    units: List[Tuple[str, str]] = []
-    seen: Set[Tuple[str, str]] = set()
-    part_dirs: List[str] = []
-    parts_dir = os.path.join(scope_dir, "parts")
-    if os.path.isdir(parts_dir):
-        part_dirs = [
-            os.path.join(parts_dir, name)
-            for name in sorted(os.listdir(parts_dir))
-            if os.path.isdir(os.path.join(parts_dir, name)) and not name.startswith(".")
-        ]
-    elif os.path.isdir(scope_dir):
-        part_dirs = [
-            os.path.join(scope_dir, name)
-            for name in sorted(os.listdir(scope_dir))
-            if os.path.isdir(os.path.join(scope_dir, name)) and not name.startswith(".")
-        ]
-    for part_dir in part_dirs:
-        rel_part = os.path.relpath(part_dir, repo_root).replace("\\", "/")
-        stems: Set[str] = set()
-        for sub in ("low", "grounding", "high"):
-            sub_dir = os.path.join(part_dir, sub)
-            if not os.path.isdir(sub_dir):
-                continue
-            try:
-                for fname in os.listdir(sub_dir):
-                    if fname.startswith(".") or fname == "__init__.py":
-                        continue
-                    if not fname.endswith((".pyi", ".py", ".md")):
-                        continue
-                    stem = os.path.splitext(fname)[0]
-                    if stem and stem != "__init__" and not stem.endswith("_ext"):
-                        stems.add(stem)
-            except OSError:
-                pass
-        for stem in sorted(stems):
-            key = (rel_part, stem)
-            if key not in seen:
-                seen.add(key)
-                units.append(key)
-    return units
-
-
-def _missing_target_skeleton(
-    repo_root: str,
-    rel_path: str,
-    unit_dir: str,
-    unit_name: str,
-    role_def: workspace_registry.RoleDefinition,
-) -> Optional[str]:
-    """Synthesizes starter skeleton content for a declared writable target file."""
-    if role_def.template:
-        template_path = os.path.join(repo_root, role_def.template)
-        if os.path.isfile(template_path):
-            try:
-                with open(template_path, "r", encoding="utf-8") as f:
-                    return f.read()
-            except (OSError, UnicodeDecodeError):
-                return None
-    if not rel_path.endswith(".py"):
-        return None
-    pyi_path = _find_spec_pyi(
-        os.path.join(repo_root, unit_dir), unit_name, main_root=repo_root
-    )
-    if pyi_path is None or not os.path.isfile(pyi_path):
-        return None
-    try:
-        try:
-            from update_python_with_ai.support.lib.lib_lint import generate_lib_skeleton
-        except ImportError:
-            try:
-                from support.lib.lib_lint import generate_lib_skeleton
-            except ImportError:
-                from update_with_ai.support.lib.lib_lint import generate_lib_skeleton
-        segments = unit_dir.replace("\\", "/").split("/")
-        base_pkg = ""
-        if "parts" in segments and segments.index("parts") > 0:
-            base_pkg = segments[segments.index("parts") - 1]
-        return generate_lib_skeleton(pyi_path, unit_name, parts_base=base_pkg or None)
-    except (ImportError, OSError, SyntaxError, RuntimeError, ValueError):
-        return None
-
-
-def _create_missing_target_skeletons(
-    workspace_dir: str,
-    repo_root: str,
-    dir_scope: str,
-    role_def: workspace_registry.RoleDefinition,
-) -> List[str]:
-    """Creates a missing target skeleton for every declared writable target file absent from disk."""
-    created: List[str] = []
-    if not role_def.src_pattern or not role_def.writable_file_patterns:
-        return created
-    scope_dir = os.path.join(repo_root, dir_scope) if dir_scope else repo_root
-    for unit_dir, unit_name in _declared_units(repo_root, scope_dir):
-        rel_path = role_def.src_pattern.format(unit_dir=unit_dir, unit_name=unit_name)
-        if not _matches_any_pattern(rel_path, role_def.writable_file_patterns):
-            continue
-        if os.path.isfile(os.path.join(workspace_dir, rel_path)) or os.path.isfile(
-            os.path.join(repo_root, rel_path)
-        ):
-            continue
-        skeleton = _missing_target_skeleton(
-            repo_root, rel_path, unit_dir, unit_name, role_def
-        )
-        if skeleton is None:
-            continue
-        write_file_with_perms(
-            os.path.join(workspace_dir, rel_path), skeleton, readonly=False
-        )
-        created.append(rel_path)
-    return created
-
-
-def _is_valid_test_stub(file_path: str) -> bool:
-    """Checks whether file_path is already a valid cleanroom test stub."""
-    if not os.path.isfile(file_path):
-        return False
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read(500)
-            return "CLEANROOM TEST STUB v4" in content
-    except OSError:
-        return False
-
-
-def _generate_readonly_test_stub(
-    pyi_path: Optional[str],
-    stem: str,
-    out_path: str,
-    dep_dir: str = "lib",
-    part_map: Optional[Dict[str, Tuple[str, str]]] = None,
-) -> None:
-    """Generates a read-only dependency stub from a .pyi specification."""
-    parts_split = out_path.split(os.sep)
-    current_base = "update_with_ai"
-    current_part = ""
-    if "parts" in parts_split:
-        idx = parts_split.index("parts")
-        if idx > 0:
-            current_base = parts_split[idx - 1]
-        if idx + 1 < len(parts_split):
-            current_part = parts_split[idx + 1]
-
-    skeleton: Optional[str] = None
-    if pyi_path and os.path.isfile(pyi_path):
-        try:
-            try:
-                from update_python_with_ai.support.lib.lib_lint import generate_lib_skeleton
-            except ImportError:
-                try:
-                    from support.lib.lib_lint import generate_lib_skeleton
-                except ImportError:
-                    from update_with_ai.support.lib.lib_lint import generate_lib_skeleton
-            skeleton = generate_lib_skeleton(pyi_path, stem, parts_base=current_base)
-        except (ImportError, OSError, SyntaxError, RuntimeError, ValueError):
-            skeleton = None
-
-    if skeleton is None:
-        stub_lines = [
-            "from __future__ import annotations",
-            f"# Requirements specified in {stem}.pyi",
-            "# CLEANROOM TEST STUB v4: Implementation details omitted. Refer strictly to companion .pyi file.",
-            "",
-            f'raise NotImplementedError("Cleanroom Test Stub: {stem}")\n',
-        ]
-        write_file_with_perms(out_path, "\n".join(stub_lines), readonly=True)
-        return
-
-    lifecycle_names: Set[str] = set()
-    if pyi_path and os.path.isfile(pyi_path):
-        try:
-            with open(pyi_path, "r", encoding="utf-8") as f:
-                pyi_tree = ast.parse(f.read(), filename=pyi_path)
-            for node in pyi_tree.body:
-                if isinstance(node, ast.ImportFrom) and node.module in (
-                    "support.lib.lifecycle",
-                    "lifecycle",
-                ):
-                    for a in node.names:
-                        lifecycle_names.add(a.name)
-        except (OSError, SyntaxError, TypeError, ValueError):
-            pass
-
-    if part_map is None:
-        if f"{os.sep}parts{os.sep}" in out_path:
-            root_dir = out_path.split(f"{os.sep}parts{os.sep}")[0]
-            root_parent = os.path.dirname(root_dir)
-            part_map = _get_part_module_map(
-                root_parent, [current_base, "update_with_ai", "update_python_with_ai"]
-            )
-        else:
-            part_map = {}
-
-    spec_name = os.path.basename(pyi_path) if pyi_path else f"{stem}.pyi"
-    stub_lines = [
-        "from __future__ import annotations",
-    ]
-    if lifecycle_names:
-        stub_lines.append(
-            f"from support.lib.lifecycle import {', '.join(sorted(lifecycle_names))}"
-        )
-    stub_lines.extend(
-        [
-            f"# Requirements specified in {spec_name}",
-            "# CLEANROOM TEST STUB v4: Implementation details omitted. Refer strictly to companion .pyi file.",
-            "",
-        ]
-    )
-
-    for line in skeleton.splitlines():
-        if line.startswith("from __future__") or line.startswith("# Requirements"):
-            continue
-        if (
-            line.strip() == "from dataclasses import dataclass"
-            and ("field(" in skeleton or "field:" in skeleton)
-        ):
-            line = "from dataclasses import dataclass, field"
-        m = re.match(
-            r"^import\s+([a-zA-Z0-9_]+)(?:\s+as\s+([a-zA-Z0-9_]+))?$", line.strip()
-        )
-        if m:
-            mod_name = m.group(1)
-            alias = f" as {m.group(2)}" if m.group(2) else ""
-            if mod_name in part_map:
-                target_part, _ = part_map[mod_name]
-                if target_part == current_part:
-                    line = f"from . import {mod_name}{alias}"
-                else:
-                    line = f"from {current_base}.parts.{target_part}.{dep_dir} import {mod_name}{alias}"
-        m_from = re.match(
-            r"^from\s+([a-zA-Z0-9_]+)\s+import\s+(.+)$", line.strip()
-        )
-        if m_from:
-            mod_name = m_from.group(1)
-            names_part = m_from.group(2)
-            if mod_name in part_map:
-                target_part, _ = part_map[mod_name]
-                if target_part == current_part:
-                    line = f"from .{mod_name} import {names_part}"
-                else:
-                    line = f"from {current_base}.parts.{target_part}.{dep_dir}.{mod_name} import {names_part}"
-        if re.search(r"\bparts\.", line):
-            line = re.sub(
-                r"\b(?:[a-zA-Z0-9_]+\.)?parts\.", f"{current_base}.parts.", line
-            )
-        if line.strip().startswith("# TODO_"):
-            continue
-        if line.strip() == "raise NotImplementedError":
-            indent = " " * (len(line) - len(line.lstrip()))
-            stub_lines.append(
-                f'{indent}raise NotImplementedError("Cleanroom Test Stub: Behavior specified in .pyi")'
-            )
-        else:
-            stub_lines.append(line)
-
-    if pyi_path and os.path.isfile(pyi_path):
-        try:
-            with open(pyi_path, "r", encoding="utf-8") as f:
-                pyi_tree = ast.parse(f.read(), filename=pyi_path)
-            for node in pyi_tree.body:
-                if isinstance(node, ast.FunctionDef):
-                    fn_name = node.name
-                    if not any(f"def {fn_name}" in l for l in stub_lines):
-                        args_unp = ast.unparse(node.args)
-                        ret_ann = f" -> {ast.unparse(node.returns)}" if node.returns else ""
-                        stub_lines.append(f"def {fn_name}({args_unp}){ret_ann}:")
-                        stub_lines.append('    raise NotImplementedError("Cleanroom Test Stub: Behavior specified in .pyi")')
-                        stub_lines.append("")
-        except (OSError, SyntaxError, TypeError, ValueError):
-            pass
-
-    write_file_with_perms(out_path, "\n".join(stub_lines) + "\n", readonly=True)
-
-
-def _sync_all_stub_deps(
-    ws_scope_dir: str,
-    main_scope_dir: str,
-    role_def: workspace_registry.RoleDefinition,
-    main_root: str,
-    dir_scope: str,
-    part_map: Optional[Dict[str, Tuple[str, str]]] = None,
-) -> int:
-    """Synchronizes read-only test stubs for all stub_role_deps."""
-    if not role_def.stub_role_deps or not os.path.isdir(main_scope_dir):
-        return 0
-    if part_map is None:
-        part_map = _get_part_module_map(
-            main_root, [dir_scope, "update_with_ai", "update_python_with_ai"]
-        )
-
-    synced_count = 0
-    registry = get_singleton(workspace_registry.WorkspaceRegistry)
-
-    for stub_target in role_def.stub_role_deps:
-        try:
-            stub_def = registry.resolve_role_definition(stub_target, main_root)
-        except (KeyError, ValueError, RuntimeError, OSError):
-            continue
-        dep_dir = "lib"
-        if stub_def.src_pattern:
-            parts = stub_def.src_pattern.split("/")
-            if len(parts) >= 2:
-                dep_dir = parts[-2]
-
-        main_parts_dir = os.path.join(main_scope_dir, "parts")
-        ws_parts_dir = os.path.join(ws_scope_dir, "parts")
-        if not os.path.isdir(main_parts_dir):
-            for cand in ("update_with_ai", "update_python_with_ai"):
-                cand_p = os.path.join(main_root, cand, "parts")
-                if os.path.isdir(cand_p):
-                    main_parts_dir = cand_p
-                    break
-        if not os.path.isdir(main_parts_dir):
-            continue
-
-        if os.path.isdir(ws_parts_dir):
-            for part_name in os.listdir(ws_parts_dir):
-                part_ws_dep = os.path.join(ws_parts_dir, part_name, dep_dir)
-                part_main = os.path.join(main_parts_dir, part_name)
-                if not os.path.isdir(part_ws_dep):
-                    continue
-                for fname in os.listdir(part_ws_dep):
-                    if fname == "__init__.py" or not fname.endswith(".py"):
-                        continue
-                    stem = os.path.splitext(fname)[0]
-                    ws_f = os.path.join(part_ws_dep, fname)
-                    pyi_path = _find_spec_pyi(part_main, stem, main_root=main_root)
-                    if pyi_path is None or not os.path.isfile(pyi_path):
-                        try:
-                            os.chmod(ws_f, 0o644)
-                            os.remove(ws_f)
-                            synced_count += 1
-                        except OSError:
-                            pass
-                    else:
-                        is_stub = _is_valid_test_stub(ws_f)
-                        needs_gen = not is_stub
-                        if is_stub:
-                            try:
-                                if os.path.getmtime(pyi_path) > os.path.getmtime(ws_f):
-                                    needs_gen = True
-                            except OSError:
-                                pass
-                        if needs_gen:
-                            _generate_readonly_test_stub(
-                                pyi_path, stem, ws_f, dep_dir=dep_dir, part_map=part_map
-                            )
-                            synced_count += 1
-
-        for part_name in os.listdir(main_parts_dir):
-            part_main = os.path.join(main_parts_dir, part_name)
-            if not os.path.isdir(part_main) or part_name.startswith("."):
-                continue
-            low_dir = os.path.join(part_main, "low")
-            if not os.path.isdir(low_dir):
-                continue
-            ws_dep_dir = os.path.join(ws_parts_dir, part_name, dep_dir)
-            os.makedirs(ws_dep_dir, exist_ok=True)
-
-            main_dep_dir = os.path.join(part_main, dep_dir)
-            if os.path.isdir(main_dep_dir):
-                for meta_f in ("__init__.py",):
-                    src_meta = os.path.join(main_dep_dir, meta_f)
-                    dst_meta = os.path.join(ws_dep_dir, meta_f)
-                    if os.path.isfile(src_meta) and not os.path.isfile(dst_meta):
-                        copy_file_with_perms(src_meta, dst_meta, readonly=True)
-
-            for spec_f in os.listdir(low_dir):
-                if not spec_f.endswith(".pyi"):
-                    continue
-                stem = os.path.splitext(spec_f)[0]
-                if stem.endswith("_ext"):
-                    continue
-                pyi_path = os.path.join(low_dir, spec_f)
-                dst_stub = os.path.join(ws_dep_dir, f"{stem}.py")
-                if not os.path.isfile(dst_stub) or not _is_valid_test_stub(dst_stub):
-                    _generate_readonly_test_stub(
-                        pyi_path, stem, dst_stub, dep_dir=dep_dir, part_map=part_map
-                    )
-                    synced_count += 1
-                else:
-                    try:
-                        if os.path.getmtime(pyi_path) > os.path.getmtime(dst_stub):
-                            _generate_readonly_test_stub(
-                                pyi_path, stem, dst_stub, dep_dir=dep_dir, part_map=part_map
-                            )
-                            synced_count += 1
-                    except OSError:
-                        pass
-
-    return synced_count
 
 
 def copy_file_with_perms(
@@ -590,222 +64,6 @@ def copy_file_with_perms(
         mode = 0o444 if readonly else 0o644
     try:
         os.chmod(dst, mode)
-    except OSError:
-        pass
-
-
-def package_runner_zipapps(bin_dir: str) -> None:
-    """Packages runner zipapps into bin_dir with executable permissions."""
-    os.makedirs(bin_dir, exist_ok=True)
-    tools = {
-        "get_work": "get_work",
-        "check_files": "check_files",
-        "submit": "submit",
-        "blame": "blame",
-        "feedback": "blame",
-        "fail": "fail",
-    }
-    cov_path = os.path.join(bin_dir, "coverage")
-    if os.path.isfile(cov_path):
-        try:
-            os.remove(cov_path)
-        except OSError:
-            pass
-    for tool_name, cmd in tools.items():
-        tool_path = os.path.join(bin_dir, tool_name)
-        runner_code = f'''import json
-import os
-import sys
-
-curr = os.getcwd()
-main_root = None
-ws_dir = curr
-while ws_dir and ws_dir != os.path.dirname(ws_dir):
-    cfg = os.path.join(ws_dir, "{ROLE_CONFIG_FILE}")
-    if os.path.isfile(cfg):
-        try:
-            with open(cfg, "r", encoding="utf-8") as f:
-                meta = json.load(f)
-                main_root = meta.get("main_workspace_root") or meta.get("repo_root")
-        except Exception as e:
-            sys.stderr.write(f"Warning: Failed parsing role config '{{cfg}}': {{e}}\\n")
-        break
-    ws_dir = os.path.dirname(ws_dir)
-
-search_roots = [ws_dir, curr]
-if main_root:
-    search_roots.append(main_root)
-for root in search_roots:
-    if root and os.path.isdir(root):
-        if root not in sys.path:
-            sys.path.insert(0, root)
-        try:
-            for entry in os.listdir(root):
-                pkg_dir = os.path.join(root, entry)
-                if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
-                    sup_lib = os.path.join(pkg_dir, "support", "lib")
-                    if os.path.isdir(sup_lib):
-                        if pkg_dir not in sys.path:
-                            sys.path.insert(0, pkg_dir)
-                        if sup_lib not in sys.path:
-                            sys.path.insert(0, sup_lib)
-        except OSError:
-            pass
-
-try:
-    import cleanroom_role_tool
-except ImportError:
-    import importlib
-    cleanroom_role_tool = None
-    for root in search_roots:
-        if not root or not os.path.isdir(root):
-            continue
-        try:
-            for entry in os.listdir(root):
-                pkg_dir = os.path.join(root, entry)
-                if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
-                    if os.path.isdir(os.path.join(pkg_dir, "support", "lib")):
-                        try:
-                            cleanroom_role_tool = importlib.import_module(f"{{entry}}.support.lib.cleanroom_role_tool")
-                            break
-                        except ImportError:
-                            pass
-        except OSError:
-            pass
-        if cleanroom_role_tool is not None:
-            break
-    if cleanroom_role_tool is None:
-        raise
-
-if __name__ == "__main__":
-    sys.exit(cleanroom_role_tool.main(["{cmd}"] + sys.argv[1:]))
-'''
-        with open(tool_path, "wb") as f:
-            f.write(b"#!/usr/bin/env python3\n")
-            with zipfile.ZipFile(f, "w", compression=zipfile.ZIP_DEFLATED) as z:
-                z.writestr("__main__.py", runner_code)
-        try:
-            os.chmod(tool_path, 0o755)
-        except OSError:
-            pass
-
-
-def write_role_metadata(
-    workspace_dir: str, role_name: str, dir_scope: str, repo_root: str
-) -> None:
-    """Writes .cleanroom_role.json in workspace root."""
-    meta_path = os.path.join(workspace_dir, ROLE_CONFIG_FILE)
-    data = {
-        "role": role_name,
-        "role_name": role_name,
-        "parts_dir": dir_scope,
-        "dir_scope": dir_scope,
-        "main_workspace_root": repo_root,
-        "repo_root": repo_root,
-    }
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
-    try:
-        os.chmod(meta_path, 0o644)
-    except OSError:
-        pass
-
-
-def write_role_agents_md(
-    workspace_dir: str,
-    role_def: workspace_registry.RoleDefinition,
-    dir_scope: str,
-) -> None:
-    """Generates role AGENTS.md instructions in the workspace."""
-    agents_path = os.path.join(workspace_dir, "AGENTS.md")
-    is_auditor = not role_def.writable_file_patterns
-    guide = role_def.guide_path
-
-    if is_auditor:
-        workflow = f"""1. Run `bin/get_work` to synchronize with main and inspect pending dirty units.
-2. Follow companion guide `{guide}` to verify target compliance.
-3. Run verification checks: `bin/check_files [target_file]`
-4. Submit verification stamp: `bin/submit <target_file>`
-5. Blame defects if discovered: `bin/blame <culprit_file> "<explanation>"`
-6. If target cannot be certified or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
-"""
-    else:
-        workflow = f"""1. Run `bin/get_work` to inspect and pull pending work.
-2. Follow companion guide `{guide}` to author or update targets in scope.
-3. Run verification checks: `bin/check_files [target_file]`
-4. Submit completed targets: `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>` if unmodified)
-5. If upstream contracts are defective: `bin/blame <culprit_contract> "<explanation>"`
-6. If success is impossible or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
-"""
-
-    content = f"""# Cleanroom Role Instructions: {role_def.role_name.capitalize()}
-
-## Scope & Constraints
-- Role: `{role_def.role_name}`
-- Directory Scope: `{dir_scope}`
-- Companion Guide: `{guide}`
-
-## Strict Boundary Rules (Zero Exceptions)
-1. **Workspace Boundary**: All commands and tool invocations MUST execute strictly within this workspace directory (`.`). You are strictly prohibited from passing any other directory (such as `main_workspace_root` or `../cleanroom`) as `Cwd` or running commands outside this workspace.
-2. **Git Operations Prohibited**: This is a projected cleanroom workspace, not a git repository. Never invoke `git` commands (`git checkout`, `git restore`, `git reset`, etc.) under any circumstances.
-3. **Main Repository Inviolability**: The main workspace is strictly read-only and off-limits to direct agent actions. All interaction with main occurs exclusively through the prescribed `bin/` tools.
-
-## Command Execution Tripwire (Restricted Binaries Only)
-**ZERO TOLERANCE FOR UNAPPROVED COMMANDS.**
-
-You are strictly permitted to run ONLY the prescribed workspace binaries:
-- `bin/get_work`
-- `bin/check_files`
-- `bin/submit`
-- `bin/blame`
-- `bin/fail`
-
-Executing ANY other command, tool, or script (including but not limited to `python`, `python3`, `bash`, `sh`, `find`, `grep`, `git`, `cat`, or inspecting zipapps/executables) is STRICTLY PROHIBITED. If you execute any unapproved command:
-1. **YOU ARE PERMANENTLY CONTAMINATED.**
-2. **ALL WORK MUST CEASE IMMEDIATELY.**
-3. **IMMEDIATE ABORT**: Report the unapproved command execution to the user and stop all tool usage:
-   > `CRITICAL CONTAMINATION: I executed an unapproved command outside the prescribed bin/ tools ([command]). This session is compromised and terminated.`
-
-## Contamination Tripwire (Poison Pill)
-**ZERO TOLERANCE FOR READING OUT-OF-BOUNDS FILES.**
-
-If you read ANY file outside of your assigned role workspace (via ANY tool such as `view_file`, shell commands like `cat`/`head`, scripts, or any other mechanism):
-1. **YOU ARE PERMANENTLY CONTAMINATED.**
-2. **ALL WORK MUST CEASE IMMEDIATELY.** You are strictly prohibited from performing any further work, authoring code, modifying files, running verification checks, or submitting targets (`bin/submit`).
-3. **IMMEDIATE ABORT**: Your ONLY permitted action is to immediately report the exact contamination to the user and STOP all tool usage:
-   > `CRITICAL CONTAMINATION: I read a file outside my assigned role workspace ([path]). This session is compromised and terminated.`
-
-This is an absolute tripwire. There are NO exceptions for debugging, diagnosing tracebacks, inspecting imports, or reading dependencies.
-
-## Fail-Stop & Reporting Protocol (Do NOT Self-Heal)
-If any cleanroom binary (`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/submit`, `bin/fail`) fails due to:
-- A Python exception or traceback (e.g., `ModuleNotFoundError`, `ImportError`, `AttributeError`)
-- A build, type check, or test execution failure
-- A missing support file, template error, or dependency issue
-
-**STOP IMMEDIATELY.**
-- **DO NOT** attempt to fix, patch, restore, or work around the infrastructure.
-- **DO NOT** create, undelete, or check out missing files.
-- **DO NOT** attempt alternate execution paths outside `bin/`.
-- **REPORT IMMEDIATELY**: Output the exact command that failed and its verbatim error/traceback to the user, state what dependency or file appears to be missing, and wait for human instruction.
-
-NOTE: Verification test failures (e.g. `[FAIL] Verification failed` output from tests or linters on code under test) are NORMAL test results to be acted upon via `bin/blame`, `bin/fail`, or code edits, NOT infrastructure crashes. Fail-Stop applies ONLY to internal tool crashes, tracebacks, or missing tooling/dependencies.
-
-## Unresolvable Impasse & Failure Protocol
-If you determine that success is not possible (e.g. unreachable code under test, contradictory specification contracts, or dead ends that blame cannot resolve):
-1. **DO NOT** attempt ad-hoc debugging, script execution, or reverse-engineering of cleanroom tools.
-2. Execute: `bin/fail <target_file> "<reason>"`
-3. Report failure to the coordinator via `send_message`: `FAILED: <target_file> - <reason>`
-4. Cease work immediately.
-
-## Standard Workflow
-{workflow}
-"""
-    with open(agents_path, "w", encoding="utf-8") as f:
-        f.write(content)
-    try:
-        os.chmod(agents_path, 0o644)
     except OSError:
         pass
 
@@ -841,12 +99,74 @@ class WorkspaceProvisioner(
     def __init__(self) -> None:
         pass
 
+    def copy_file_with_permissions(
+        self,
+        src: str,
+        dst: str,
+        readonly: bool = False,
+        executable: bool = False,
+    ) -> None:
+        copy_file_with_perms(src, dst, readonly=readonly, executable=executable)
+
+    def write_file_with_permissions(
+        self,
+        dst: str,
+        content: str,
+        readonly: bool = False,
+        executable: bool = False,
+    ) -> None:
+        scaffolder = get_singleton(workspace_scaffold.WorkspaceScaffolder)
+        scaffolder.write_file_with_permissions(
+            dst, content, readonly=readonly, executable=executable
+        )
+
+    def deploy_runner_zipapps(self, bin_dir: str) -> None:
+        scaffolder = get_singleton(workspace_scaffold.WorkspaceScaffolder)
+        scaffolder.deploy_runner_zipapps(bin_dir)
+
+    def write_role_agents_guide(
+        self,
+        workspace_dir: str,
+        role_name: str,
+        dir_scope: str,
+        repo_root: Optional[str] = None,
+    ) -> None:
+        registry = get_singleton(workspace_registry.WorkspaceRegistry)
+        root = registry.discover_repository_root(repo_root)
+        role_def = registry.resolve_role_definition(
+            role_name, root, dir_scope=dir_scope
+        )
+        scaffolder = get_singleton(workspace_scaffold.WorkspaceScaffolder)
+        scaffolder.write_role_agents_guide(workspace_dir, role_def, dir_scope)
+
+    def sync_test_stubs(
+        self,
+        workspace_dir: str,
+        role_name: str,
+        dir_scope: str,
+        repo_root: Optional[str] = None,
+    ) -> int:
+        registry = get_singleton(workspace_registry.WorkspaceRegistry)
+        root = registry.discover_repository_root(repo_root)
+        role_def = registry.resolve_role_definition(
+            role_name, root, dir_scope=dir_scope
+        )
+        stub_synth = get_singleton(workspace_stub.WorkspaceStubSynthesizer)
+        return stub_synth.sync_all_stub_deps(
+            workspace_dir=workspace_dir,
+            main_root=root,
+            role_def=role_def,
+            dir_scope=dir_scope,
+        )
+
     def commission(
         self,
         role_name: str,
         dir_scope: str,
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
+        reset: bool = False,
+        model: Optional[str] = None,
     ) -> workspace_registry.WorkspaceDescriptor:
         registry = get_singleton(
             workspace_registry.WorkspaceRegistry
@@ -859,9 +179,33 @@ class WorkspaceProvisioner(
             role_name, dir_scope, resolved_root, custom_dest
         )
 
+        if reset and os.path.isdir(workspace_dir):
+            for stale_f in (
+                PENDING_WORK_FILE,
+                ".cleanroom_pending_work",
+                BLAME_BUFFER_FILE,
+                ".cleanroom_blame_buffer.json",
+            ):
+                sp = os.path.join(workspace_dir, stale_f)
+                if os.path.isfile(sp):
+                    try:
+                        os.remove(sp)
+                    except OSError:
+                        pass
+            try:
+                for fname in os.listdir(workspace_dir):
+                    if fname.startswith((".cleanroom_turn_", ".dsh_prompt_")):
+                        fp = os.path.join(workspace_dir, fname)
+                        if os.path.isfile(fp):
+                            os.remove(fp)
+            except OSError:
+                pass
+
         os.makedirs(workspace_dir, exist_ok=True)
         bin_dir = os.path.join(workspace_dir, "bin")
         os.makedirs(bin_dir, exist_ok=True)
+
+        scaffolder = get_singleton(workspace_scaffold.WorkspaceScaffolder)
 
         scope_dir = os.path.join(resolved_root, dir_scope)
         if os.path.isdir(scope_dir):
@@ -873,11 +217,12 @@ class WorkspaceProvisioner(
                     else os.path.join(workspace_dir, dir_scope)
                 )
                 os.makedirs(ws_d, exist_ok=True)
+            stub_synth = get_singleton(workspace_stub.WorkspaceStubSynthesizer)
             writable_rel = _find_matching_files(
                 scope_dir, role_def.writable_file_patterns
             )
             for rel in writable_rel:
-                if _is_stub_dep_file(rel, role_def, resolved_root):
+                if stub_synth.is_stub_dep_file(rel, role_def, resolved_root):
                     continue
                 src_f = os.path.join(scope_dir, rel)
                 dst_f = os.path.join(workspace_dir, dir_scope, rel)
@@ -887,22 +232,21 @@ class WorkspaceProvisioner(
                 scope_dir, role_def.readonly_file_patterns
             )
             for rel in readonly_rel:
-                if _is_stub_dep_file(rel, role_def, resolved_root):
+                if stub_synth.is_stub_dep_file(rel, role_def, resolved_root):
                     continue
                 src_f = os.path.join(scope_dir, rel)
                 dst_f = os.path.join(workspace_dir, dir_scope, rel)
                 copy_file_with_perms(src_f, dst_f, readonly=True)
 
             if role_def.stub_role_deps:
-                _sync_all_stub_deps(
-                    ws_scope_dir=os.path.join(workspace_dir, dir_scope),
-                    main_scope_dir=scope_dir,
-                    role_def=role_def,
+                stub_synth.sync_all_stub_deps(
+                    workspace_dir=workspace_dir,
                     main_root=resolved_root,
+                    role_def=role_def,
                     dir_scope=dir_scope,
                 )
 
-            _create_missing_target_skeletons(
+            scaffolder.create_missing_target_skeletons(
                 workspace_dir=workspace_dir,
                 repo_root=resolved_root,
                 dir_scope=dir_scope,
@@ -982,10 +326,48 @@ class WorkspaceProvisioner(
             except OSError:
                 pass
 
+        scaffolder.deploy_runner_zipapps(bin_dir)
 
-        package_runner_zipapps(bin_dir)
-        write_role_metadata(workspace_dir, role_def.role_name, dir_scope, resolved_root)
-        write_role_agents_md(workspace_dir, role_def, dir_scope)
+        resolved_batch_size: Optional[int] = None
+        resolved_max_feedback_chars: Optional[int] = None
+        resolved_model_name: Optional[str] = model
+        if model:
+            m_cfg_file = os.path.join(resolved_root, "model_configs.toml")
+            if os.path.isfile(m_cfg_file):
+                try:
+                    import tomllib
+                    with open(m_cfg_file, "rb") as mf:
+                        m_data = tomllib.load(mf)
+                    models_sec = m_data.get("models", {})
+                    clean_model = model.strip()
+                    for prefix in ("dsh ", "antigravity ", "models."):
+                        if clean_model.startswith(prefix):
+                            clean_model = clean_model[len(prefix):].strip()
+                    target_cfg = None
+                    if clean_model in models_sec:
+                        target_cfg = models_sec[clean_model]
+                    else:
+                        for k, v in models_sec.items():
+                            if isinstance(v, dict) and (v.get("model") == clean_model or k == clean_model):
+                                target_cfg = v
+                                break
+                    if target_cfg:
+                        resolved_batch_size = target_cfg.get("subagent_batch_size") or target_cfg.get("batch_size")
+                        resolved_max_feedback_chars = target_cfg.get("max_feedback_chars")
+                        resolved_model_name = clean_model
+                except Exception:
+                    pass
+
+        scaffolder.write_role_metadata(
+            workspace_dir,
+            role_def.role_name,
+            dir_scope,
+            resolved_root,
+            model=resolved_model_name,
+            batch_size=resolved_batch_size,
+            max_feedback_chars=resolved_max_feedback_chars,
+        )
+        scaffolder.write_role_agents_guide(workspace_dir, role_def, dir_scope)
 
         descriptor = workspace_registry.WorkspaceDescriptor(
             workspace_dir=workspace_dir,

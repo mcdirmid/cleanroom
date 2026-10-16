@@ -1,31 +1,31 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
-LAST_CHANGED: 2026-10-13T01:25:00Z
-CHANGE: eliminate cleanroom_workspaces.json workspace registry file
-CODE_HASH: 7a0e195cc57c
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T18:45:00Z
+CHANGE: Delegate role configuration resolution to workspace_roles
+CODE_HASH: 15fc0baccb9d
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # workspace_registry_impl implementation component
 
-imports: agent_session, cleanroom_files_ext
+imports: agent_session, cleanroom_files_ext, workspace_roles
 implements: workspace_registry
 
 ## Purpose
 
-The workspace_registry_impl implementation component realizes role configuration resolution, path sanitization, and active workspace tracking and discovery without central registry files.
+The workspace_registry_impl implementation component realizes path sanitization, role delegation, and active workspace tracking and discovery without central registry files.
 
-Reliable multi-role orchestration depends on clean workspace discovery and deterministic workspace naming conventions across platforms. Incomplete role resolution or corrupted registry records lead to orphaned role trees, stale lock files, and race conditions during simultaneous provisioning. The workspace_registry_impl implementation component resolves role definitions dynamically from declarative role configuration files using TOML parsing (falling back to build files using AST evaluation when TOML is absent), normalizes role identifiers, and tracks commissioned workspaces.
+Reliable multi-role orchestration depends on clean workspace discovery and deterministic workspace naming conventions across platforms. Incomplete role resolution or corrupted registry records lead to orphaned role trees, stale lock files, and race conditions during simultaneous provisioning. The workspace_registry_impl implementation component coordinates role resolution through dedicated role services, normalizes role workspace identifiers, and tracks commissioned workspaces.
 
 **Out of scope:** The workspace_registry_impl implementation component does not provision directory contents, synchronize git state, or evaluate task dirty status; these are handled by other components.
 
-**Delegated:** Cleanroom configuration and role descriptor file naming contracts are delegated to cleanroom_files_ext; session tier management is delegated to agent_session.
+**Delegated:** Cleanroom configuration and role descriptor file naming contracts are delegated to cleanroom_files_ext; session tier management is delegated to agent_session; role configuration resolution and validation are delegated to workspace_roles.
 
 ## Types and Behavior
 
-The workspace registry discovers the canonical repository root by ascending the directory tree until it locates git metadata directories or canonical Cleanroom configuration files, ignoring the projected role workspace directories that carry a role descriptor. From within an isolated role workspace, the registry inspects role metadata descriptors or matches sibling workspace conventions, and it falls back to the ambient process working directory when no indicator is present.
+The workspace registry discovers the canonical repository root by ascending the directory tree until it locates git metadata directories or canonical Cleanroom configuration files, ignoring the projected role workspace directories that carry a role descriptor. From within an isolated role workspace, the registry derives the canonical repository root by matching sibling workspace conventions (`../../<workspace-short-name>`) or environment overrides without inspecting host paths from role metadata descriptors, and it falls back to the ambient process working directory when no indicator is present.
 
-The workspace registry resolves a role definition by loading the declarative role configuration files of the repository root or methodology directory, falling back to parsing the role declarations of the repository build file by abstract syntax tree evaluation when no role configuration file exists. Resolution extracts every declared role attribute, derives writable file patterns from source patterns, derives read-only file patterns from role dependencies and star role dependencies, and computes audit tags for auditor roles that carry no primary source artifact. Resolution of an unknown or undeclared role fails fast by raising an explicit error without a synthetic fallback.
+The workspace registry resolves role definitions and lists all declared roles by delegating to role resolution services.
 
 The workspace registry computes a role workspace directory path by combining the parent directory of the repository root with the role name and the directory scope, sanitizing directory delimiters into underscores to produce a collision-free sibling workspace.
 

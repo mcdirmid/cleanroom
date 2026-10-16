@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T11:20:00Z
 CHANGE: add workspace reset and convergence deletion contracts
-CODE_HASH: c9ea2f0a150b
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 19689d905946
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # subagent_coordinator interface component
@@ -30,7 +30,9 @@ Complex software development methodologies partition work into specialized roles
 - A subagent coordinator evaluates DAG work queues across declared roles, dynamically identifying roles with ready work up to an optional target role boundary without static role hardcoding. [evaluate_ready_work_queues]
 - A subagent coordinator ensures absent role workspaces are commissioned via workspace provisioning on demand before dispatching directives, persisting effective batch size bounds into workspace configurations. [commission_absent_workspaces]
 - A subagent coordinator dispatches role directives to unblocked ready roles concurrently, tracking active worker handles without static wave partitioning. [dispatch_concurrent_role_workers]
-- A subagent coordinator periodically polls active workers through the harness adapter, reaping completed turns and propagating blame defects into the build graph. [poll_active_role_workers]
+- A subagent coordinator periodically polls active workers through the harness adapter at a configurable polling interval (defaulting to 10 seconds), reaping completed turns and propagating blame defects into the build graph. [poll_active_role_workers]
+- A subagent coordinator tracks consecutive unproductive turns yielding zero submitted and zero blamed targets, halting orchestration when unproductive turns on unresolved targets exceed a threshold. [detect_unproductive_turn_impasse]
+- A subagent coordinator emits real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state. [emit_realtime_orchestration_telemetry]
 - A subagent coordinator drives the supervision loop until all units in scope evaluate clean, a role reports failure, or maximum wave limits are reached. [orchestrate_pipeline_convergence]
 - A subagent coordinator automatically deletes all provisioned role workspaces in scope upon achieving clean convergence. [delete_role_workspaces_on_convergence]
 - A subagent coordinator aggregates cumulative token consumption into monetary expenditures across all dispatched roles. [aggregate_cumulative_telemetry]
@@ -39,7 +41,7 @@ Complex software development methodologies partition work into specialized roles
 
 - When initiating orchestration, the coordinator resets preexisting role workspaces, resolves model execution parameters, and drives pipeline convergence until clean convergence or failure. [reset_preexisting_role_workspaces, resolve_model_execution_parameters, orchestrate_pipeline_convergence, delete_role_workspaces_on_convergence]
 - When evaluating work queues, the coordinator commissions absent workspaces with batch size bounds and dispatches concurrent role workers without static wave partitioning. [evaluate_ready_work_queues, commission_absent_workspaces, dispatch_concurrent_role_workers]
-- When supervising active workers, the coordinator periodically polls active workers through the harness adapter and aggregates cumulative telemetry. [poll_active_role_workers, aggregate_cumulative_telemetry]
+- When supervising active workers, the coordinator periodically polls active workers through the harness adapter, detects unproductive turn impasses, emits real-time telemetry, and aggregates cumulative telemetry. [poll_active_role_workers, detect_unproductive_turn_impasse, emit_realtime_orchestration_telemetry, aggregate_cumulative_telemetry]
 
 ## Grounding
 

@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T12:00:00Z
 CHANGE: update subagent tool scenarios for dynamic supervision and options
 CODE_HASH: 506f34fa28ba

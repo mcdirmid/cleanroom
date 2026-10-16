@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
 CODE_HASH: 17d1ee3d255e
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # uv_manifest_loader interface component
@@ -30,6 +30,7 @@ By synthesizing unit specifications and role definitions into target records, tr
 - A target manifest includes feedback dependencies.
 - A target manifest includes a guide target.
 - A target manifest includes a verification check.
+- A target manifest includes a verification success message.
 
 ### Contracts
 

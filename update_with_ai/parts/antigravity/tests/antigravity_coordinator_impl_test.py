@@ -1,16 +1,19 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_coordinator_impl unit tests
-# CODE_HASH: 17552a3bd531
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: b7c2197c9313
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for antigravity_coordinator_impl."""
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 import unittest
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
@@ -18,16 +21,55 @@ from update_with_ai.parts.agent.lib import agent_session
 from update_with_ai.parts.antigravity.lib import (
     antigravity_coordinator,
     antigravity_coordinator_impl,
+    antigravity_workspace,
 )
 from update_with_ai.parts.subagent.lib import subagent_coordinator
 
 
 class AntigravityCoordinatorImplTest(unittest.TestCase):
-    """Test cases for AntigravityCoordinatorGenerator."""
+    """Test cases for AntigravityCoordinatorGenerator and AntigravityWorkspaceConfigurer."""
 
     def setUp(self) -> None:
+        self.test_dir = tempfile.mkdtemp()
         self.registry = LifecycleRegistry()
         antigravity_coordinator_impl.__initialize__(self.registry)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_configure_workspace_creates_isolation_rules(self) -> None:
+        """Scenario: Verifies that configure_workspace writes .agents/rules/isolation.md."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            configurer = scope.get_singleton(
+                antigravity_workspace.AntigravityWorkspaceConfigurer
+            )
+            self.assertIsNotNone(configurer)
+            self.assertIsInstance(
+                configurer,
+                antigravity_coordinator_impl.AntigravityWorkspaceConfigurer,
+            )
+
+            report = configurer.configure_workspace(
+                workspace_dir=self.test_dir,
+                role_name="lib",
+                dir_scope="pkg_a",
+            )
+
+            self.assertTrue(report.is_confined)
+            self.assertEqual(report.role_name, "lib")
+            self.assertIn(".agents/rules/isolation.md", report.rule_paths)
+
+            rule_file = os.path.join(self.test_dir, ".agents", "rules", "isolation.md")
+            self.assertTrue(os.path.isfile(rule_file))
+
+            with open(rule_file, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("NEVER Navigate Outside This Workspace", content)
+            self.assertIn("bin/get_work", content)
+            self.assertIn("bin/submit", content)
+            self.assertIn("bin/blame", content)
+            self.assertIn("bin/fail", content)
 
     def test_generate_coordinator_skill(self) -> None:
         """Scenario 1 & 2: Verifies skill generation and workspace pinning requirements."""

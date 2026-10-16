@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:15Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-13T01:30:00Z
 # CHANGE: remove cleanroom_workspaces.json
-# CODE_HASH: adeda9bc8b16
+# CODE_HASH: 72349ce478e4
 # --- END CLEANROOM METADATA ---
 
 """
@@ -43,7 +43,9 @@ The `cleanroom_files_ext` external component specifies the filesystem schema, st
   - Schema:
     - `role_name: str`: Active role name string.
     - `dir_scope: str`: Directory scope string.
-    - `main_workspace_root: str`: Canonical repository root path.
+    - `model: Optional[str]`: Model profile identifier.
+    - `batch_size: Optional[int]`: Batch size limit.
+    - `max_feedback_chars: Optional[int]`: Maximum feedback character limit.
     - `role_address: Optional[str]`: Fully qualified role address.
 
 - `CLEANROOM_LOG_FILE: str = ".cleanroom.log"`:

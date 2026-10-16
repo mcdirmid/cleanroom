@@ -1,10 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T19:49:56Z
 # LAST_CHANGED: 2026-10-11T05:03:57Z
 # CHANGE: Track node state with the declared target-state values instead of ad-hoc strings, normalize aliases through the alias manager, disambiguate default targets by workspace path modification time, always register scheduled nodes, and prune uncontracted public members
-# CODE_HASH: f96c245b00d8
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 06f481714eab
+# COVERAGE_AUDIT: 2026-10-15T19:49:56Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -71,7 +70,7 @@ def _normalize_alias(alias: str) -> str:
     """Normalizes an alias string through the session alias manager."""
     raw = alias.strip()
     try:
-        converted = get_singleton(agent_file_alias.AliasManager).convert(raw)
+        converted = get_singleton(agent_file_alias.AliasManager).to_alias(raw)
     except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
         converted = None
     if converted is not None:
@@ -87,6 +86,68 @@ def _bound_file_path(bound_file: Any) -> str:
     if ws_path is not None:
         return str(getattr(ws_path, "path", ws_path))
     return str(getattr(bound_file, "relative_path", bound_file))
+
+
+def _node_display_alias(node: dag_storage.DagNode) -> str:
+    """Returns a user/agent-facing file alias for a node, avoiding raw Bazel target addresses."""
+    try:
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        if getattr(cfg, "src_file_alias_by_node", None) and node in cfg.src_file_alias_by_node:
+            return str(cfg.src_file_alias_by_node[node])
+        for bt_set in getattr(cfg, "blame_targets_by_node", {}).values():
+            for bt in bt_set:
+                if getattr(bt, "owning_node", None) == node:
+                    return str(getattr(bt, "relative_path", bt))
+        for ro in getattr(cfg, "read_only_files", ()):
+            if getattr(ro, "owning_node", None) == node:
+                return str(getattr(ro, "relative_path", ro))
+        for rw in getattr(cfg, "read_write_files", ()):
+            if getattr(rw, "owning_node", None) == node:
+                return str(getattr(rw, "relative_path", rw))
+    except Exception:
+        pass
+
+    addr = str(node.unit_address).strip()
+    if ":" in addr:
+        pkg, unit_name = addr.split(":", 1)
+        pkg = pkg.lstrip("/").strip()
+    elif "/" in addr:
+        pkg, unit_name = addr.rsplit("/", 1)
+        pkg = pkg.lstrip("/").strip()
+    else:
+        pkg, unit_name = "", addr
+
+    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
+    try:
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        role_defs = getattr(cfg, "role_definitions", {})
+        if role in role_defs:
+            r_def = role_defs[role]
+            src_pat = getattr(r_def, "src_pattern", "") or (
+                r_def.get("src_pattern") if isinstance(r_def, dict) else ""
+            )
+            if src_pat:
+                formatted = src_pat.replace("{unit_dir}", pkg).replace(
+                    "{unit_name}", unit_name
+                ).strip("/")
+                if formatted:
+                    return formatted
+    except Exception:
+        pass
+
+    if role == "test":
+        return f"{pkg}/tests/{unit_name}_test.py" if pkg else f"tests/{unit_name}_test.py"
+    if role == "lib":
+        return f"{pkg}/lib/{unit_name}.py" if pkg else f"lib/{unit_name}.py"
+    if role == "low":
+        return f"{pkg}/low/{unit_name}.pyi" if pkg else f"low/{unit_name}.pyi"
+    if role == "high":
+        return f"{pkg}/high/{unit_name}.md" if pkg else f"high/{unit_name}.md"
+    if role == "planning":
+        return f"{pkg}/planning/{unit_name}.md" if pkg else f"planning/{unit_name}.md"
+    if role == "scenario":
+        return f"{pkg}/scenarios/{unit_name}.md" if pkg else f"scenarios/{unit_name}.md"
+    return f"{pkg}/{unit_name}" if pkg else unit_name
 
 
 class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
@@ -139,11 +200,7 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
                         src_alias = getattr(f, "relative_path", "")
                         break
 
-            display_alias = src_alias or (
-                unit_name
-                if is_unique_unit
-                else (f"{pkg}/{unit_name}" if pkg else unit_name)
-            )
+            display_alias = src_alias or _node_display_alias(n)
             self._node_to_alias[n] = display_alias
             self._alias_to_node[display_alias] = n
             if src_alias:
@@ -230,14 +287,60 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
             or reg_alias.endswith("/" + norm_cand)
             or norm_cand.endswith("/" + reg_alias.lstrip("/"))
         ]
-        return matching[0] if len(matching) == 1 else None
+        if len(matching) == 1:
+            return matching[0]
+
+        # Match by file proxy (e.g. path/to/lib/unit.py or tests/unit_test.py)
+        cand_base = os.path.basename(cand)
+        cand_stem, _ = os.path.splitext(cand_base)
+        cand_unit = cand_stem.removesuffix("_test")
+        cand_dir = os.path.dirname(norm_cand)
+        parts = cand_dir.split("/") if cand_dir else []
+        role_dir = (
+            parts.pop()
+            if parts and parts[-1] in ("lib", "tests", "low", "high", "planning", "scenarios", "support")
+            else None
+        )
+        cand_pkg = "/".join(parts)
+
+        expected_role: Optional[str] = None
+        if cand_stem.endswith("_test") or role_dir == "tests":
+            expected_role = "test"
+        elif role_dir == "lib":
+            expected_role = "lib"
+        elif role_dir == "low" or cand_base.endswith(".pyi"):
+            expected_role = "low"
+        elif role_dir == "high":
+            expected_role = "high"
+        elif role_dir == "planning":
+            expected_role = "planning"
+        elif role_dir == "scenarios":
+            expected_role = "scenario"
+
+        matching_proxy: List[dag_storage.DagNode] = []
+        for node in self._nodes:
+            pkg, unit = _extract_unit_info(node)
+            node_role = (
+                str(node.role_address).split(":")[-1].strip().lower()
+                if node.role_address
+                else ""
+            )
+            if expected_role and node_role != expected_role:
+                continue
+            if cand_unit == unit:
+                if not cand_pkg or cand_pkg == pkg or pkg.endswith(cand_pkg) or cand_pkg.endswith(pkg):
+                    matching_proxy.append(node)
+
+        if len(matching_proxy) == 1:
+            return matching_proxy[0]
+
+        return None
 
     def get_alias_for_node(self, node: dag_storage.DagNode) -> str:
         alias = self._node_to_alias.get(node)
         if alias:
             return alias
-        pkg, unit_name = _extract_unit_info(node)
-        return f"{pkg}/{unit_name}" if pkg else unit_name
+        return _node_display_alias(node)
 
     def _in_batch_dependencies(
         self, node: dag_storage.DagNode
@@ -352,6 +455,8 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         evaluator = get_singleton(control_verification.VerificationEvaluator)
         if target_alias:
             node = self.get_node_for_alias(target_alias)
+            if node is None and len(self._open_nodes()) == 1:
+                node = self._open_nodes()[0]
             if node is not None:
                 return evaluator.evaluate_verification(target=node)
         open_targets = self._open_nodes()
@@ -382,6 +487,8 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
             if target_alias
             else self.resolve_default_target()
         )
+        if target_node is None and target_alias and len(self._open_nodes()) == 1:
+            target_node = self._open_nodes()[0]
         if (
             target_node is None
             or self._get_target_state(target_node)
@@ -417,11 +524,40 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         blame_target_alias: Optional[str] = None,
         explanation: str = "",
     ) -> control_coordinate.ControlDispatchOutcome:
+        attrib_coord = get_singleton(control_attribution.AttributionCoordinator)
+
+        # Disambiguate if blame target was passed as source alias or vice versa
+        if len(self._open_nodes()) == 1:
+            single_open = self._open_nodes()[0]
+            if blame_target_alias is None and source_alias:
+                try:
+                    if (
+                        attrib_coord.match_blame_target(single_open, None, source_alias)
+                        is not None
+                    ):
+                        blame_target_alias = source_alias
+                        source_alias = None
+                except Exception:
+                    pass
+            elif blame_target_alias and source_alias == blame_target_alias:
+                try:
+                    if (
+                        attrib_coord.match_blame_target(
+                            single_open, None, blame_target_alias
+                        )
+                        is not None
+                    ):
+                        source_alias = None
+                except Exception:
+                    pass
+
         source_node = (
             self.get_node_for_alias(source_alias)
             if source_alias
             else self.resolve_default_target()
         )
+        if source_node is None and source_alias and len(self._open_nodes()) == 1:
+            source_node = self._open_nodes()[0]
         if source_node is None:
             open_list = ", ".join(f"`{self.get_alias_for_node(n)}`" for n in self._open_nodes())
             return control_coordinate.ControlDispatchOutcome(
@@ -430,15 +566,35 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
                 remaining_open_targets=self._open_nodes(),
             )
 
-        blame_target_node = (
-            self.get_node_for_alias(blame_target_alias) if blame_target_alias else None
-        )
-        if blame_target_node is None:
+        blame_target_node = None
+        if blame_target_alias:
+            try:
+                matched_bound = attrib_coord.match_blame_target(
+                    source_node, None, blame_target_alias
+                )
+                if (
+                    matched_bound is not None
+                    and getattr(matched_bound, "owning_node", None) is not None
+                ):
+                    blame_target_node = matched_bound.owning_node
+                    self.register_node(
+                        blame_target_node,
+                        alias=blame_target_alias,
+                        state=control_coordinate.TargetState.ATTRIBUTED,
+                    )
+            except Exception:
+                pass
+            if blame_target_node is None:
+                cand = self.get_node_for_alias(blame_target_alias)
+                if cand is not None and cand != source_node:
+                    blame_target_node = cand
+
+        if blame_target_node is None or blame_target_node == source_node:
             return control_coordinate.ControlDispatchOutcome(
                 success=False,
                 message=(
                     f"Error: Blame target '{blame_target_alias or ''}' could not be "
-                    f"resolved."
+                    f"resolved to an upstream dependency."
                 ),
                 remaining_open_targets=self._open_nodes(),
             )
@@ -475,6 +631,8 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
             if target_alias
             else self.resolve_default_target()
         )
+        if target_node is None and target_alias and len(self._open_nodes()) == 1:
+            target_node = self._open_nodes()[0]
         if target_node is None:
             open_list = ", ".join(f"`{self.get_alias_for_node(n)}`" for n in self._open_nodes())
             return control_coordinate.ControlDispatchOutcome(

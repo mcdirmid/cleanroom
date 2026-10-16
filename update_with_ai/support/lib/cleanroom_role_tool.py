@@ -7,7 +7,7 @@ import json
 import os
 import shutil
 import sys
-from typing import Any
+from typing import Any, Sequence
 
 
 def _get_dir_scope() -> str:
@@ -30,13 +30,19 @@ def _get_roots() -> list[str]:
     while curr and curr != os.path.dirname(curr):
         cfg = os.path.join(curr, ".cleanroom_role.json")
         if os.path.isfile(cfg):
-            try:
-                with open(cfg, "r", encoding="utf-8") as f:
-                    m = json.load(f).get("main_workspace_root")
-                if m and os.path.isdir(m):
-                    roots.append(m)
-            except Exception:
-                pass
+            env_main = os.environ.get("CLEANROOM_MAIN_ROOT")
+            if env_main and os.path.isdir(env_main):
+                roots.append(env_main)
+            parent = os.path.dirname(curr)
+            if os.path.basename(parent) == "role_workspaces":
+                p_root = os.path.dirname(parent)
+                ws_base = os.path.basename(curr)
+                for entry in sorted(os.listdir(p_root), key=len, reverse=True):
+                    if entry != "role_workspaces" and ws_base.startswith(f"{entry}_"):
+                        cand = os.path.join(p_root, entry)
+                        if os.path.isdir(cand):
+                            roots.append(cand)
+                            break
             roots.append(curr)
             break
         if os.path.isfile(os.path.join(curr, "pyproject.toml")) or os.path.isfile(os.path.join(curr, "cleanroom.toml")):
@@ -66,6 +72,9 @@ for _r in _get_roots():
         pass
 
 workspace_tool_impl = None
+workspace_commands_impl = None
+workspace_pending_impl = None
+
 for _r in _get_roots():
     if not os.path.isdir(_r):
         continue
@@ -74,46 +83,199 @@ for _r in _get_roots():
             if _dir_scope and _entry == _dir_scope:
                 continue
             if not _entry.startswith((".", "bazel-", "venv")):
-                _cand_tool = os.path.join(_r, _entry, "parts", "workspace", "lib", "workspace_tool_impl.py")
-                if os.path.isfile(_cand_tool) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
-                    try:
-                        workspace_tool_impl = importlib.import_module(f"{_entry}.parts.workspace.lib.workspace_tool_impl")
-                        break
-                    except ImportError:
-                        pass
+                for _sub in ("tools", "workspace"):
+                    if workspace_tool_impl is None:
+                        _cand_tool = os.path.join(_r, _entry, "parts", _sub, "lib", "workspace_tool_impl.py")
+                        if os.path.isfile(_cand_tool) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
+                            try:
+                                workspace_tool_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.workspace_tool_impl")
+                            except ImportError:
+                                pass
+                    if workspace_commands_impl is None:
+                        _cand_cmds = os.path.join(_r, _entry, "parts", _sub, "lib", "workspace_commands_impl.py")
+                        if os.path.isfile(_cand_cmds) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
+                            try:
+                                workspace_commands_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.workspace_commands_impl")
+                            except ImportError:
+                                pass
+                    if workspace_pending_impl is None:
+                        _cand_pend = os.path.join(_r, _entry, "parts", _sub, "lib", "workspace_pending_impl.py")
+                        if os.path.isfile(_cand_pend) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
+                            try:
+                                workspace_pending_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.workspace_pending_impl")
+                            except ImportError:
+                                pass
+                if workspace_tool_impl is not None and workspace_commands_impl is not None and workspace_pending_impl is not None:
+                    break
     except OSError:
         pass
-    if workspace_tool_impl is not None:
+    if workspace_tool_impl is not None and workspace_commands_impl is not None and workspace_pending_impl is not None:
         break
 
 if workspace_tool_impl is None:
     try:
-        from update_with_ai.parts.workspace.lib import workspace_tool_impl
+        from update_with_ai.parts.tools.lib import workspace_tool_impl
     except ImportError:
         try:
-            workspace_tool_impl = importlib.import_module("parts.workspace.lib.workspace_tool_impl")
+            workspace_tool_impl = importlib.import_module("update_with_ai.parts.workspace.lib.workspace_tool_impl")
+        except ImportError:
+            try:
+                workspace_tool_impl = importlib.import_module("parts.tools.lib.workspace_tool_impl")
+            except ImportError:
+                try:
+                    workspace_tool_impl = importlib.import_module("parts.workspace.lib.workspace_tool_impl")
+                except ImportError:
+                    pass
+
+if workspace_commands_impl is None:
+    try:
+        from update_with_ai.parts.tools.lib import workspace_commands_impl
+    except ImportError:
+        try:
+            workspace_commands_impl = importlib.import_module("parts.tools.lib.workspace_commands_impl")
+        except ImportError:
+            pass
+
+if workspace_pending_impl is None:
+    try:
+        from update_with_ai.parts.tools.lib import workspace_pending_impl
+    except ImportError:
+        try:
+            workspace_pending_impl = importlib.import_module("parts.tools.lib.workspace_pending_impl")
         except ImportError:
             pass
 
 if workspace_tool_impl is None:
     raise ImportError("Failed to locate workspace_tool_impl module across discovered Cleanroom roots")
 
-AUDIT_BUFFER_FILE = workspace_tool_impl.AUDIT_BUFFER_FILE
-BLAME_BUFFER_FILE = workspace_tool_impl.BLAME_BUFFER_FILE
-PENDING_WORK_FILE = workspace_tool_impl.PENDING_WORK_FILE
-write_file_with_perms = workspace_tool_impl.write_file_with_perms
-copy_file_with_perms = workspace_tool_impl.copy_file_with_perms
-compute_role_work_queue = workspace_tool_impl.compute_role_work_queue
-get_pending_work = workspace_tool_impl.get_pending_work
-set_pending_work = workspace_tool_impl.set_pending_work
-clear_pending_work = workspace_tool_impl.clear_pending_work
-remove_pending_target = workspace_tool_impl.remove_pending_target
-is_pending_target_dirty = workspace_tool_impl.is_pending_target_dirty
-find_workspace_root = workspace_tool_impl.find_workspace_root
-get_current_role_metadata = workspace_tool_impl.get_current_role_metadata
-is_auditor_role = workspace_tool_impl.is_auditor_role
-resolve_cleanroom_log_path = workspace_tool_impl.resolve_cleanroom_log_path
-append_cleanroom_log = workspace_tool_impl.append_cleanroom_log
+cleanroom_uv_runner = None
+try:
+    import cleanroom_uv_runner
+except ImportError:
+    try:
+        from update_with_ai.support.lib import cleanroom_uv_runner
+    except ImportError:
+        try:
+            from update_python_with_ai.support.lib import cleanroom_uv_runner
+        except ImportError:
+            pass
+
+AUDIT_BUFFER_FILE = getattr(workspace_commands_impl, "AUDIT_BUFFER_FILE", ".cleanroom_audit_buffer.json")
+BLAME_BUFFER_FILE = getattr(workspace_commands_impl, "BLAME_BUFFER_FILE", ".cleanroom_blame_buffer.json")
+PENDING_WORK_FILE = getattr(workspace_commands_impl, "PENDING_WORK_FILE", ".cleanroom_pending_work.json")
+
+
+def write_file_with_perms(
+    dst: str, content: str, readonly: bool = False, executable: bool = False
+) -> None:
+    """Writes a text file and sets exact permissions, handling existing read-only files cleanly."""
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    if os.path.exists(dst):
+        try:
+            os.chmod(dst, 0o644)
+        except OSError:
+            pass
+    with open(dst, "w", encoding="utf-8") as f:
+        f.write(content)
+    mode = 0o555 if executable else (0o444 if readonly else 0o644)
+    try:
+        os.chmod(dst, mode)
+    except OSError:
+        pass
+
+
+def copy_file_with_perms(src: str, dst: str, readonly: bool = False, executable: bool = False) -> None:
+    assert workspace_commands_impl is not None
+    workspace_commands_impl.copy_file_with_perms(src, dst, readonly=readonly, executable=executable)
+
+
+def compute_role_work_queue(role_name: str, dir_scope: str, repo_root: str | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    root = repo_root or find_workspace_root()
+    from support.lib.lifecycle import get_singleton
+    from update_with_ai.parts.tools.lib import workspace_work
+    work = get_singleton(workspace_work.WorkspaceWorkManager)
+    ready, blocked = work.compute_role_work_queue(role_name, dir_scope=dir_scope, repo_root=root)
+
+    def _to_dict(it: Any) -> dict[str, Any]:
+        if isinstance(it, dict):
+            return it
+        stem = os.path.splitext(os.path.basename(it.target_file))[0]
+        if stem.endswith("_test"):
+            stem = stem[:-5]
+        return {
+            "target": it.target_file,
+            "target_file": it.target_file,
+            "role": it.role_name,
+            "reasons": list(it.dirtiness_reasons),
+            "blocked_reasons": list(it.blocked_reasons),
+            "dependencies": list(it.dependency_files),
+            "contract_files": list(it.contract_files),
+            "unit": stem,
+            "unit_name": stem,
+        }
+
+    return ([_to_dict(x) for x in ready], [_to_dict(x) for x in blocked])
+
+
+def find_workspace_root() -> str:
+    assert workspace_commands_impl is not None
+    return workspace_commands_impl.find_workspace_root()
+
+
+def get_current_role_metadata(workspace_dir: str | None = None) -> dict[str, Any]:
+    assert workspace_commands_impl is not None
+    return workspace_commands_impl.get_current_role_metadata() or {}
+
+
+def is_auditor_role(role_name: str, repo_root: str | None = None, dir_scope: str | None = None) -> bool:
+    assert workspace_commands_impl is not None
+    return workspace_commands_impl.is_auditor_role(role_name, repo_root=repo_root)
+
+
+def resolve_cleanroom_log_path(role_name: str, repo_root: str | None = None, dir_scope: str | None = None) -> str:
+    assert workspace_commands_impl is not None
+    return workspace_commands_impl.resolve_cleanroom_log_path(role_name, repo_root=repo_root)
+
+
+def append_cleanroom_log(role_name: str, line: str, repo_root: str | None = None, dir_scope: str | None = None) -> None:
+    assert workspace_commands_impl is not None
+    workspace_commands_impl.append_cleanroom_log(role_name, line, repo_root=repo_root)
+
+
+def _get_pending_manager():
+    from update_with_ai.parts.tools.lib import workspace_pending
+    from support.lib.lifecycle import get_singleton
+    return get_singleton(workspace_pending.WorkspacePendingManager)
+
+
+def get_pending_work(workspace_dir: str) -> list[str]:
+    return list(_get_pending_manager().get_pending_work(workspace_dir))
+
+
+def set_pending_work(workspace_dir: str, targets: Sequence[str]) -> None:
+    _get_pending_manager().set_pending_work(workspace_dir, targets)
+
+
+def clear_pending_work(workspace_dir: str) -> None:
+    _get_pending_manager().clear_pending_work(workspace_dir)
+
+
+def remove_pending_target(workspace_dir: str, target: str) -> None:
+    _get_pending_manager().remove_pending_target(workspace_dir, target)
+
+
+def is_pending_target_dirty(
+    workspace_dir: str,
+    rel_path: str,
+    repo_root: str | None = None,
+    role_name: str | None = None,
+) -> bool:
+    return _get_pending_manager().is_pending_target_dirty(
+        target_path=rel_path,
+        workspace_dir=workspace_dir,
+        main_root=repo_root,
+        role_name=role_name,
+    )
 
 
 COORDINATOR_AGENT_MD = """---
@@ -137,7 +299,7 @@ Your sole, monomaniacal mission is coordinating multi-agent DAG convergence acro
 
 ## STRICT TOOL RESTRICTIONS & INVARIANTS:
 1. YOU ONLY HAVE SUBAGENT & RUN COMMAND TOOLS:
-   - `run_command` (used EXCLUSIVELY to run `bin/cleanroom work-queue <scope> [role] --json`)
+   - `run_command` (used to run `uv run cleanroom work-queue <scope> [role] --json` and `uv run cleanroom decommission <scope>`)
    - `invoke_subagent` (used to dispatch `cleanroom_worker` subagents)
    - `send_message` (used to wake/message subagents or report to parent)
    - `manage_subagents` (used to list active workers or clean them up)
@@ -147,9 +309,9 @@ Your sole, monomaniacal mission is coordinating multi-agent DAG convergence acro
 4. INSTANT QUEUE EVALUATION:
    To evaluate the DAG queue, execute the binary:
    ```bash
-   bin/cleanroom work-queue <scope> [role] --json
+   uv run cleanroom work-queue <scope> [role] --json
    ```
-   Parse the returned JSON to determine ready roles and targets, and retrieve role workspace directories from `workspace_dirs`. If `is_clean` is true, your mission is complete!
+   Parse the returned JSON to determine ready roles and targets, and retrieve role workspace directories from `workspace_dirs`. If `is_clean` is true, proceed to step 9!
 5. DISPATCH OR WAKE WORKSPACE-BOUND ROLE WORKERS:
    For each role with ready nodes in the queue:
    - Check active subagents using `manage_subagents` with action `list`.
@@ -169,14 +331,16 @@ Your sole, monomaniacal mission is coordinating multi-agent DAG convergence acro
      2. Clean up all workers: `manage_subagents(Action="kill_all")`.
      3. Escalate the failure directly to your parent/user:
         "Cleanroom convergence aborted: Worker for role '<role>' failed target '<target>' with reason: <reason>"
-   - When a worker reports completion, re-run `bin/cleanroom work-queue <scope> [role] --json`.
+   - When a worker reports completion, re-run `uv run cleanroom work-queue <scope> [role] --json`.
 8. ITERATE TO CONVERGENCE:
    Repeat step 4-7 until `is_clean` is true and all nodes evaluate clean.
-9. FINAL REPORT:
+9. FINAL CLEANUP & REPORT:
    Once `is_clean` is true:
    - Clean up workers using `manage_subagents(Action="kill_all")`.
+   - Decommission role workspaces via run_command:
+     `uv run cleanroom decommission <scope>`
    - Send completion message back to parent:
-     "Scope '<scope>' converged clean across all roles (up to '<role>')."
+     "Scope '<scope>' converged clean across all roles (up to '<role>'). All provisioned role workspaces decommissioned."
 """
 
 WORKER_AGENT_MD = """---
@@ -216,12 +380,17 @@ If you determine that success is not possible (e.g. unreachable code under test,
    `FAILED: <target_file> - <reason>`
 4. Cease work immediately.
 
+## RESOLVING BLAME & FEEDBACK:
+- `bin/check_files` ONLY checks static syntax and types. It does NOT run tests.
+- When an active node carries unacted feedback or blame from downstream roles (QA), passing `bin/check_files` does NOT mean the defect is resolved.
+- You MUST inspect `low/*.pyi` and `tests/*_test.py`, modify code logic to satisfy contracts and pass tests, ensure `bin/check_files` passes, and submit with a change summary describing how the feedback was fixed.
+
 ## STANDARD WORKFLOW:
-1. Run `bin/get_work` to acquire pending ready nodes.
+1. Run `bin/get_work` to acquire pending ready nodes and review unacted feedback.
 2. Consult your workspace `AGENTS.md` and companion guide to perform role duties.
 3. Perform role verification using `bin/check_files`.
 4. Resolve nodes:
-   - If clean: `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>`)
+   - If clean and all feedback resolved: `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>`)
    - If defective upstream contract: `bin/blame <culprit_file> "<explanation>"`
    - If success is impossible / impasse: `bin/fail <target_file> "<reason>"` and send `FAILED: <target_file> - <reason>` to coordinator.
 5. Drain all ready nodes until `bin/get_work` confirms all units in scope are clean.
@@ -262,6 +431,108 @@ def ensure_antigravity_plugin_installed() -> str:
     return plugin_dir
 
 
+def parse_cleanroom_target(target_str: str) -> tuple[str, str | None, bool]:
+    """Uniformly parses any target representation into (scope, role, is_unit_target).
+
+    Accepts:
+      - Canonical DAG label: //staging/parts/agent:config#lib or //staging/parts/agent:config
+      - File path: staging/parts/agent/lib/config.py or ...#lib
+      - Scope + role: staging#qa
+      - Part + role: staging/parts/agent#qa
+      - Scope: staging
+    """
+    raw = target_str.strip()
+    role: str | None = None
+    if "#" in raw:
+        raw, role_part = raw.split("#", 1)
+        role = role_part.strip().lower() or None
+
+    if raw.startswith("@@//"):
+        raw = raw[2:]
+    elif raw.startswith("@//"):
+        raw = raw[1:]
+
+    is_unit = False
+
+    # 1. Canonical DAG label e.g. //staging/parts/agent:config
+    if raw.startswith("//"):
+        norm = raw.lstrip("/")
+        if ":" in norm:
+            pkg_part, _ = norm.split(":", 1)
+            is_unit = True
+        else:
+            pkg_part = norm
+        segs = pkg_part.split("/")
+        scope = segs[0] if segs else raw
+        if not is_unit and len(segs) >= 2 and "." in segs[-1]:
+            is_unit = True
+            if not role and len(segs) >= 3:
+                folder = segs[-2]
+                folder_map = {
+                    "high": "high", "planning": "planning", "scenarios": "scenario",
+                    "scenario": "scenario", "low": "low", "lib": "lib",
+                    "tests": "test", "test": "test",
+                }
+                role = folder_map.get(folder, role)
+        return scope, role, is_unit
+
+    # 2. Filesystem path containing /parts/
+    norm_path = raw.replace("\\", "/").strip("/")
+    segs = norm_path.split("/")
+    if "parts" in segs:
+        p_idx = segs.index("parts")
+        scope = "/".join(segs[:p_idx]) if p_idx > 0 else segs[0]
+        if len(segs) > p_idx + 2 and "." in segs[-1]:
+            is_unit = True
+            if not role:
+                folder = segs[-2]
+                folder_map = {
+                    "high": "high", "planning": "planning", "scenarios": "scenario",
+                    "scenario": "scenario", "low": "low", "lib": "lib",
+                    "tests": "test", "test": "test"
+                }
+                role = folder_map.get(folder, role)
+        return scope, role, is_unit
+
+    # 3. Simple scope or scope#role
+    scope = segs[0] if segs else raw
+    return scope, role, False
+
+
+def resolve_default_model(repo_root: str | None = None, harness: str | None = None) -> str | None:
+    """Resolves default model profile name from model_configs.toml if present.
+    Checks harness-specific defaults first (e.g. loop_default, antigravity_default, dsh_default),
+    then falls back to the top-level 'default' key.
+    """
+    root = repo_root or find_workspace_root()
+    import tomllib
+    for cand in (
+        os.path.join(root, "model_configs.toml"),
+        os.path.join(os.path.dirname(root), "model_configs.toml"),
+    ):
+        if os.path.isfile(cand):
+            try:
+                with open(cand, "rb") as f:
+                    data = tomllib.load(f)
+                    if harness:
+                        h_clean = harness.strip().lower()
+                        if h_clean in ("deepseek", "deepseek-harness"):
+                            h_clean = "dsh"
+                        val = data.get(f"{h_clean}_default") or data.get(f"default_{h_clean}")
+                        if isinstance(val, str) and val.strip():
+                            return val.strip()
+                        defs_sec = data.get("defaults")
+                        if isinstance(defs_sec, dict):
+                            val = defs_sec.get(h_clean)
+                            if isinstance(val, str) and val.strip():
+                                return val.strip()
+                    val = data.get("default")
+                    if isinstance(val, str) and val.strip():
+                        return val.strip()
+            except Exception:
+                pass
+    return None
+
 
 def run_work_queue(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
@@ -297,20 +568,31 @@ def run_work_queue(argv: list[str]) -> int:
         action="store_true",
         help="Output queue state as structured JSON.",
     )
+    parser.add_argument(
+        "--repo-root",
+        dest="repo_root",
+        default=None,
+        help="Repository root directory.",
+    )
     parsed = parser.parse_args(argv)
-    scope = parsed.scope_opt or parsed.scope or _get_dir_scope()
-    if not scope:
-        print("Error: Directory scope must be specified (e.g. bin/cleanroom work-queue staging).", file=sys.stderr)
+    target_input = parsed.scope_opt or parsed.scope or _get_dir_scope()
+    if not target_input:
+        print("Error: Directory scope must be specified (e.g. uv run cleanroom work-queue staging or staging#qa).", file=sys.stderr)
         return 1
 
-    target_role = (parsed.role_opt or parsed.target_role or "").strip().lower()
+    scope, parsed_role, _ = parse_cleanroom_target(target_input)
+    target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
 
-    root = find_workspace_root()
-    assert workspace_tool_impl is not None
+    root = parsed.repo_root or find_workspace_root()
+    from support.lib.lifecycle import enter_phase, get_singleton
+    from update_with_ai.parts.agent.lib import agent_session
+    from update_with_ai.parts.workspace.lib import workspace_registry, workspace_provision
+    from update_with_ai.parts.tools.lib import workspace_work
 
-    with workspace_tool_impl.enter_phase(workspace_tool_impl.agent_session.agent_session):
-        reg = workspace_tool_impl.get_singleton(workspace_tool_impl.workspace_registry.WorkspaceRegistry)
-        work = workspace_tool_impl.get_singleton(workspace_tool_impl.workspace_work.WorkspaceWorkManager)
+    with enter_phase(agent_session.agent_session):
+        reg = get_singleton(workspace_registry.WorkspaceRegistry)
+        work = get_singleton(workspace_work.WorkspaceWorkManager)
+        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
 
         declared_roles = reg.list_roles(root, dir_scope=scope)
         if not declared_roles:
@@ -320,7 +602,8 @@ def run_work_queue(argv: list[str]) -> int:
         if target_role:
             matching_idx = None
             for idx, r in enumerate(declared_roles):
-                if r.role_name.lower() == target_role:
+                r_clean = r.role_name.split(":")[-1].strip().lower()
+                if r_clean == target_role or r.role_name.lower() == target_role:
                     matching_idx = idx
                     break
             if matching_idx is None:
@@ -328,6 +611,15 @@ def run_work_queue(argv: list[str]) -> int:
                 print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
                 return 1
             declared_roles = list(declared_roles[: matching_idx + 1])
+
+        # Auto-commission any missing role workspaces up to target_role
+        default_model = resolve_default_model(root, harness="antigravity")
+        workspace_dirs: dict[str, str] = {}
+        for r in declared_roles:
+            ws_dir = reg.compute_workspace_dir(r.role_name, dir_scope=scope, repo_root=root)
+            if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
+                prov.commission(role_name=r.role_name, dir_scope=scope, repo_root=root, model=default_model)
+            workspace_dirs[r.role_name] = ws_dir
 
         ready_by_role: dict[str, list[dict[str, Any]]] = {}
         blocked_by_role: dict[str, list[dict[str, Any]]] = {}
@@ -347,10 +639,6 @@ def run_work_queue(argv: list[str]) -> int:
         is_clean = not ready_by_role and not blocked_by_role
         if parsed.json:
             import json
-            workspace_dirs = {
-                r.role_name: reg.compute_workspace_dir(r.role_name, dir_scope=scope, repo_root=root)
-                for r in declared_roles
-            }
             payload: dict[str, Any] = {
                 "scope": scope,
                 "is_clean": is_clean,
@@ -389,16 +677,948 @@ def run_work_queue(argv: list[str]) -> int:
         return 0
 
 
+def _find_subagent_tool_mod(target_scope: str | None, args_list: list[str]) -> Any:
+    subagent_tool_mod = None
+    for _r in _get_roots():
+        for _entry in os.listdir(_r) if os.path.isdir(_r) else []:
+            if _entry.startswith((".", "bazel-", "venv")):
+                continue
+            if (_dir_scope and _entry == _dir_scope) or (target_scope and _entry == target_scope) or (_entry in args_list):
+                continue
+            _cand = os.path.join(_r, _entry, "parts", "subagent", "lib", "subagent_tool_impl.py")
+            if os.path.isfile(_cand) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
+                try:
+                    subagent_tool_mod = importlib.import_module(f"{_entry}.parts.subagent.lib.subagent_tool_impl")
+                    break
+                except ImportError:
+                    pass
+        if subagent_tool_mod:
+            break
+    if subagent_tool_mod is None:
+        try:
+            from update_with_ai.parts.subagent.lib import subagent_tool_impl as subagent_tool_mod
+        except ImportError:
+            try:
+                subagent_tool_mod = importlib.import_module("parts.subagent.lib.subagent_tool_impl")
+            except ImportError:
+                pass
+    return subagent_tool_mod
+
+
+def run_loop_target(
+    target_str: str,
+    up_to_role: str | None = None,
+    model: str | None = None,
+    action: str = "clean",
+    message: str | None = None,
+    repo_root: str | None = None,
+    workspace_dir: str | None = None,
+    config: str | None = None,
+) -> int:
+    assert cleanroom_uv_runner is not None, "cleanroom_uv_runner module not found"
+    ws = workspace_dir or repo_root
+    return cleanroom_uv_runner.run_cleanroom_target(
+        target_str=target_str,
+        action=action,
+        model=model or config,
+        message=message,
+        workspace_dir=ws,
+        up_to_role=up_to_role,
+    )
+
+
+def run_mark_clean_cli(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="cleanroom mark-clean",
+        description="Mark target or scope clean in DAG metadata without running LLM loop.",
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default=None,
+        help="Target node, file path, or scope directory.",
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        "-w",
+        default=None,
+        help="Custom workspace directory (default: current working directory).",
+    )
+    parsed = parser.parse_args(argv)
+    target = parsed.target or _get_dir_scope()
+    if not target:
+        print("Error: Target node, file path, or scope directory must be specified (e.g. uv run cleanroom mark-clean staging).", file=sys.stderr)
+        return 1
+    assert cleanroom_uv_runner is not None, "cleanroom_uv_runner module not found"
+    return cleanroom_uv_runner.run_cleanroom_target(
+        target_str=target,
+        action="mark-clean",
+        workspace_dir=parsed.workspace_dir,
+    )
+
+
+def run_dirty_cli(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="cleanroom dirty",
+        description="Mark target or scope dirty in DAG storage.",
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default=None,
+        help="Target node, file path, or scope directory.",
+    )
+    parser.add_argument(
+        "message",
+        nargs="?",
+        default=None,
+        help="Optional reason why the target is marked dirty.",
+    )
+    parser.add_argument(
+        "-m",
+        "--message",
+        dest="msg_flag",
+        default=None,
+        help="Reason why the target is marked dirty.",
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        "-w",
+        default=None,
+        help="Custom workspace directory (default: current working directory).",
+    )
+    parser.add_argument(
+        "extra_args",
+        nargs="*",
+        help="Additional arguments or trailing message",
+    )
+    parsed = parser.parse_args(argv)
+    target = parsed.target or _get_dir_scope()
+    if not target:
+        print("Error: Target node, file path, or scope directory must be specified (e.g. uv run cleanroom dirty staging).", file=sys.stderr)
+        return 1
+    msg = parsed.msg_flag or parsed.message
+    if not msg and parsed.extra_args:
+        msg = " ".join(parsed.extra_args)
+    if not msg:
+        msg = "Marked dirty"
+    assert cleanroom_uv_runner is not None, "cleanroom_uv_runner module not found"
+    return cleanroom_uv_runner.run_cleanroom_target(
+        target_str=target,
+        action="dirty",
+        message=msg,
+        workspace_dir=parsed.workspace_dir,
+    )
+
+
+def run_change_cli(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="cleanroom change",
+        description="Record a change description on a target node or scope.",
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default=None,
+        help="Target node, file path, or scope directory.",
+    )
+    parser.add_argument(
+        "message",
+        nargs="?",
+        default=None,
+        help="Change description.",
+    )
+    parser.add_argument(
+        "-m",
+        "--message",
+        dest="msg_flag",
+        default=None,
+        help="Change description.",
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        "-w",
+        default=None,
+        help="Custom workspace directory.",
+    )
+    parser.add_argument(
+        "extra_args",
+        nargs="*",
+        help="Additional arguments or trailing message",
+    )
+    parsed = parser.parse_args(argv)
+    target = parsed.target or _get_dir_scope()
+    if not target:
+        print("Error: Target must be specified (e.g. uv run cleanroom change <target> [message]).", file=sys.stderr)
+        return 1
+    desc = parsed.msg_flag or parsed.message
+    if not desc and parsed.extra_args:
+        desc = " ".join(parsed.extra_args)
+    desc = desc or "Manual change"
+    assert cleanroom_uv_runner is not None, "cleanroom_uv_runner module not found"
+    return cleanroom_uv_runner.run_cleanroom_target(
+        target_str=target,
+        action="change",
+        message=desc,
+        workspace_dir=parsed.workspace_dir,
+    )
+
+
+def run_prompt_cli(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="cleanroom prompt",
+        description="Print task prompt for a target node or scope.",
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default=None,
+        help="Target node, file path, or scope directory.",
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        "-w",
+        default=None,
+        help="Custom workspace directory.",
+    )
+    parsed = parser.parse_args(argv)
+    target = parsed.target or _get_dir_scope()
+    if not target:
+        print("Error: Target must be specified (e.g. uv run cleanroom prompt <target>).", file=sys.stderr)
+        return 1
+    assert cleanroom_uv_runner is not None, "cleanroom_uv_runner module not found"
+    return cleanroom_uv_runner.run_cleanroom_target(
+        target_str=target,
+        action="prompt",
+        workspace_dir=parsed.workspace_dir,
+    )
+
+
+def run_feedback_cli(argv: list[str], prog: str = "cleanroom feedback") -> int:
+    parser = argparse.ArgumentParser(
+        prog=prog,
+        description="Attribute feedback or blame critique to a target node or culprit file.",
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default=None,
+        help="Target node or culprit file path receiving feedback.",
+    )
+    parser.add_argument(
+        "critique",
+        nargs="?",
+        default=None,
+        help="Actionable critique message.",
+    )
+    parser.add_argument(
+        "-m",
+        "--message",
+        dest="msg_flag",
+        default=None,
+        help="Actionable critique message.",
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Path to canonical repository root.",
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        "-w",
+        default=None,
+        help="Custom workspace directory.",
+    )
+    parsed = parser.parse_args(argv)
+    target = parsed.target
+    if not target:
+        print(f"Error: Target must be specified (e.g. uv run {prog} <target> '<critique>').", file=sys.stderr)
+        return 1
+
+    critique = parsed.msg_flag or parsed.critique
+    if not critique:
+        print(f"Error: feedback command requires a critique message (e.g. uv run {prog} <target> '<critique>' or -m '<critique>').", file=sys.stderr)
+        return 2
+
+    # Check if executing within an isolated role workspace or target looks like a file path
+    is_role_ws = os.path.isfile(".cleanroom_role.json")
+    is_target_label = target.startswith("//") or (":" in target and not os.path.exists(target))
+
+    if (is_role_ws or not is_target_label) and workspace_tool_impl is not None:
+        cmd_args = ["blame", target, critique]
+        if parsed.repo_root:
+            cmd_args.extend(["--repo-root", parsed.repo_root])
+        try:
+            ret = workspace_tool_impl.main(cmd_args)
+            if ret == 0 or is_role_ws:
+                return ret
+        except Exception:
+            if is_role_ws:
+                raise
+
+    # Fallback / standalone DAG mode: add feedback message via cleanroom_uv_runner
+    assert cleanroom_uv_runner is not None, "cleanroom_uv_runner module not found"
+    return cleanroom_uv_runner.run_cleanroom_target(
+        target_str=target,
+        action="feedback",
+        message=critique,
+        workspace_dir=parsed.workspace_dir,
+    )
+
+
+def run_orchestrate(
+    argv: list[str],
+    default_harness: str = "antigravity",
+    prog: str = "cleanroom orchestrate",
+) -> int:
+    parser = argparse.ArgumentParser(
+        prog=prog,
+        description="Cleanroom Multi-Agent Workspace Orchestrator" if "orchestrate" in prog else "Cleanroom Autonomous Convergence Tool",
+    )
+    parser.add_argument(
+        "dir_scope",
+        nargs="?",
+        default="",
+        help="Directory scope or target to orchestrate/clean.",
+    )
+    parser.add_argument(
+        "target_role",
+        nargs="?",
+        default=None,
+        help="Optional target role boundary to execute up to.",
+    )
+    parser.add_argument(
+        "--scope",
+        dest="scope_opt",
+        default="",
+        help="Directory scope (alternative flag).",
+    )
+    parser.add_argument(
+        "--role",
+        dest="role_opt",
+        default=None,
+        help="Target role boundary (alternative flag).",
+    )
+    parser.add_argument(
+        "--harness",
+        default=None,
+        help="Subagent execution harness (loop, antigravity, dsh, simulation).",
+    )
+    parser.add_argument(
+        "--loop",
+        action="store_true",
+        help="Run autonomous in-process loop execution rather than external subagent harness (alias for --harness loop).",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Model configuration or profile name (e.g. default, deepseek-v41-flash, gemini-3.8-flash).",
+    )
+    parser.add_argument(
+        "--action",
+        "-a",
+        default="clean",
+        help="Action to perform in loop execution (default: clean).",
+    )
+    parser.add_argument(
+        "--message",
+        "-m",
+        default=None,
+        help="Message payload for loop action.",
+    )
+    parser.add_argument(
+        "--max-waves",
+        type=int,
+        default=50,
+        help="Maximum execution wave iterations (default: 50).",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Maximum targets dispatched per role turn.",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="Maximum execution timeout in seconds for subagent processes (default: no timeout).",
+    )
+    parser.add_argument(
+        "--max-context-tokens",
+        type=int,
+        default=None,
+        help="Context token compaction limit for subagent processes.",
+    )
+    parser.add_argument(
+        "--repo-root",
+        "--workspace-dir",
+        "-w",
+        dest="repo_root",
+        default=None,
+        help="Repository root or workspace directory.",
+    )
+    parser.add_argument(
+        "--simulation",
+        "--simulate",
+        dest="simulation",
+        action="store_true",
+        help="Run in simulation mode without external subprocesses.",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Force headless execution even on antigravity harness.",
+    )
+    parser.add_argument(
+        "extra_args",
+        nargs="*",
+        help="Additional arguments or trailing message",
+    )
+    parsed = parser.parse_args(argv)
+
+    target_input = parsed.scope_opt or parsed.dir_scope or _get_dir_scope()
+    if not target_input:
+        print(f"Error: Directory scope or target must be specified (e.g. uv run {prog} staging or staging#qa).", file=sys.stderr)
+        return 1
+
+    scope, parsed_role, is_unit = parse_cleanroom_target(target_input)
+    target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
+
+    active_harness = "loop" if parsed.loop else (parsed.harness or default_harness).strip().lower()
+
+    if active_harness == "loop":
+        cfg = parsed.model or resolve_default_model(parsed.repo_root, harness="loop")
+        if cfg == "default":
+            resolved = resolve_default_model(parsed.repo_root, harness="loop")
+            if resolved:
+                cfg = resolved
+        msg = parsed.message
+        if not msg and parsed.extra_args:
+            msg = " ".join(parsed.extra_args)
+        loop_target = target_input
+        return run_loop_target(
+            target_str=loop_target,
+            up_to_role=target_role or None,
+            model=cfg,
+            action=parsed.action,
+            message=msg,
+            repo_root=parsed.repo_root,
+        )
+
+    # Headless / CI Mode (or dsh / simulation harnesses)
+    is_headless = parsed.headless or parsed.simulation or active_harness in ("dsh", "simulation", "deepseek", "deepseek-harness")
+    if is_headless:
+        subagent_tool_mod = _find_subagent_tool_mod(scope, argv)
+        if subagent_tool_mod is not None:
+            forward_args = ["orchestrate", "--scope", scope]
+            if target_role:
+                forward_args.extend(["--role", target_role])
+            forward_args.extend(["--harness", active_harness])
+            h_model = parsed.model or resolve_default_model(parsed.repo_root, harness=active_harness)
+            if h_model:
+                forward_args.extend(["--model", h_model])
+            if parsed.max_waves != 50:
+                forward_args.extend(["--max-waves", str(parsed.max_waves)])
+            if parsed.batch_size is not None:
+                forward_args.extend(["--batch-size", str(parsed.batch_size)])
+            if parsed.timeout is not None:
+                forward_args.extend(["--timeout", str(parsed.timeout)])
+            if parsed.max_context_tokens is not None:
+                forward_args.extend(["--max-context-tokens", str(parsed.max_context_tokens)])
+            if parsed.repo_root:
+                forward_args.extend(["--repo-root", parsed.repo_root])
+            if parsed.simulation:
+                forward_args.append("--simulation")
+            return subagent_tool_mod.main(forward_args)
+        print("Error: Subagent tool runner module not found for headless execution.", file=sys.stderr)
+        return 1
+
+    # In-IDE Antigravity interactive mode:
+    # 1. Refresh global agent definitions
+    ensure_antigravity_plugin_installed()
+
+    root = parsed.repo_root or find_workspace_root()
+    from support.lib.lifecycle import enter_phase, get_singleton
+    from update_with_ai.parts.agent.lib import agent_session
+    from update_with_ai.parts.workspace.lib import workspace_registry, workspace_provision
+    from update_with_ai.parts.tools.lib import workspace_work
+
+    with enter_phase(agent_session.agent_session):
+        reg = get_singleton(workspace_registry.WorkspaceRegistry)
+        work = get_singleton(workspace_work.WorkspaceWorkManager)
+        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
+
+        declared_roles = reg.list_roles(root, dir_scope=scope)
+        if not declared_roles:
+            print(f"Error: No declared roles found for directory scope '{scope}'.", file=sys.stderr)
+            return 1
+
+        if target_role:
+            matching_idx = None
+            for idx, r in enumerate(declared_roles):
+                r_clean = r.role_name.split(":")[-1].strip().lower()
+                if r_clean == target_role or r.role_name.lower() == target_role:
+                    matching_idx = idx
+                    break
+            if matching_idx is None:
+                valid_names = ", ".join(r.role_name for r in declared_roles)
+                print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
+                return 1
+            declared_roles = list(declared_roles[: matching_idx + 1])
+
+        # Check DAG readiness across declared roles
+        ready_nodes: list[tuple[str, str, list[str]]] = []
+        blocked_nodes: list[tuple[str, str, list[str]]] = []
+        for r in declared_roles:
+            q_ready, q_blocked = work.compute_role_work_queue(r.role_name, dir_scope=scope, repo_root=root)
+            for it in q_ready:
+                ready_nodes.append((r.role_name, it.target_file, list(it.dirtiness_reasons)))
+            for it in q_blocked:
+                blocked_nodes.append((r.role_name, it.target_file, list(it.blocked_reasons)))
+
+        role_suffix = f" (up to role: {target_role})" if target_role else ""
+        if not ready_nodes and not blocked_nodes:
+            deleted = decommission_workspaces(scope, target_role=target_role, repo_root=root)
+            cleanup_msg = f" Decommissioned {deleted} role workspace(s)." if deleted else ""
+            print(f"✔ CLEAN: All nodes in scope '{scope}' evaluate CLEAN{role_suffix}.{cleanup_msg} No work pending.")
+            return 0
+
+        harness = active_harness
+        model_to_bind = parsed.model or resolve_default_model(root, harness=harness)
+        if model_to_bind == "default":
+            resolved = resolve_default_model(root, harness=harness)
+            if resolved:
+                model_to_bind = resolved
+        model_hint = f" (model: {model_to_bind})" if model_to_bind else ""
+        action_title = "Clean" if "clean" in prog.split() else "Orchestrate"
+        print(f"=== Cleanroom {action_title} Pre-flight [Scope: {scope}{role_suffix}] ===")
+        print(f"Commissioning/verifying {len(declared_roles)} role workspaces{model_hint}...")
+        commissioned_dirs = []
+        for r in declared_roles:
+            ws_dir = reg.compute_workspace_dir(r.role_name, dir_scope=scope, repo_root=root)
+            if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
+                ws_info = prov.commission(
+                    role_name=r.role_name,
+                    dir_scope=scope,
+                    repo_root=root,
+                    model=model_to_bind,
+                )
+                commissioned_dirs.append((r.role_name, ws_info.workspace_dir))
+            else:
+                commissioned_dirs.append((r.role_name, ws_dir))
+        parent_ws_dir = os.path.dirname(commissioned_dirs[0][1]) if commissioned_dirs else ""
+        print(f"[OK] All {len(commissioned_dirs)} role workspaces ready in {parent_ws_dir}.")
+
+        print(f"\nDirty Nodes Detected in Scope '{scope}'{role_suffix}:")
+        print(f"  • {len(ready_nodes)} node(s) READY for dispatch:")
+        for r_name, t_file, reasons in ready_nodes:
+            r_msg = reasons[0] if reasons else "dirty"
+            print(f"      [{r_name}] {t_file} -> {r_msg}")
+        if blocked_nodes:
+            print(f"  • {len(blocked_nodes)} node(s) BLOCKED on upstream dependencies:")
+            for r_name, t_file, reasons in blocked_nodes:
+                b_msg = reasons[0] if reasons else "blocked"
+                print(f"      [{r_name}] {t_file} -> {b_msg}")
+
+        role_hint = f" up to {target_role}" if target_role else ""
+        queue_hint = f" {target_role}" if target_role else ""
+        print("\n" + "=" * 72)
+        print("AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE:")
+        print("The 'cleanroom_coordinator' subagent definition is installed and ready.")
+        print("Immediately invoke the coordinator subagent in this turn:")
+        print("  invoke_subagent(")
+        print("    Subagents=[{")
+        print('      "TypeName": "cleanroom_coordinator",')
+        print('      "Role": "Cleanroom Coordinator",')
+        print(f'      "Prompt": "Clean all dirty nodes in {scope}{role_hint} using cleanroom_coordinator."')
+        print("    }]")
+        print("  )")
+        print("\nCoordinator execution steps:")
+        print(f"  1. Evaluate DAG ready nodes via 'uv run cleanroom work-queue {scope}{queue_hint} --json'.")
+        print("  2. Wake/dispatch workspace-bound role subagents (TypeName: 'cleanroom_worker').")
+        print("  3. Direct role workers to drain ready nodes via submit, blame, or fail.")
+        print("  4. Converge the DAG across topological waves.")
+        print("  5. Decommission role workspaces upon clean convergence.")
+        print("=" * 72)
+        return 0
+
+
+def run_clean_cli(argv: list[str]) -> int:
+    return run_orchestrate(argv, default_harness="loop", prog="cleanroom clean")
+
+
+def main_clean(argv: list[str] | None = None) -> int:
+    args_list = list(argv) if argv is not None else sys.argv[1:]
+    return run_clean_cli(args_list)
+
+
+def main_orchestrate(argv: list[str] | None = None) -> int:
+    args_list = list(argv) if argv is not None else sys.argv[1:]
+    return run_orchestrate(args_list)
+
+
+def run_commission_cli(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="cleanroom commission",
+        description="Commission and initialize isolated role workspaces with model and harness bindings.",
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default=None,
+        help="Target scope or role target (e.g. staging#qa, or staging with --all).",
+    )
+    parser.add_argument(
+        "secondary_target",
+        nargs="?",
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--scope",
+        dest="scope_opt",
+        default="",
+        help="Directory scope (alternative flag).",
+    )
+    parser.add_argument(
+        "--role",
+        dest="role_opt",
+        default=None,
+        help="Role name (alternative flag).",
+    )
+    parser.add_argument(
+        "--all",
+        "-a",
+        action="store_true",
+        help="Commission workspaces for all declared roles in scope.",
+    )
+    parser.add_argument(
+        "--model",
+        "-m",
+        default=None,
+        help="Model profile to bind (e.g. default, deepseek-v41-flash, gemini-3.8-flash).",
+    )
+    parser.add_argument(
+        "--harness",
+        default="antigravity",
+        help="Subagent execution harness to tailor the workspace for (antigravity, dsh, simulation).",
+    )
+    parser.add_argument(
+        "--reset",
+        "-r",
+        action="store_true",
+        help="Reset workspace to clean state, clearing stale work buffers.",
+    )
+    parser.add_argument(
+        "--dest",
+        default=None,
+        help="Custom destination directory.",
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Root of canonical repository.",
+    )
+    parsed = parser.parse_args(argv)
+
+    root = parsed.repo_root or find_workspace_root()
+
+    target = parsed.target
+    secondary = parsed.secondary_target
+    role_name = parsed.role_opt
+    dir_scope = parsed.scope_opt
+    all_roles = parsed.all
+
+    if target:
+        p_scope, p_role, _ = parse_cleanroom_target(target)
+        if not dir_scope:
+            dir_scope = p_scope
+        if not role_name and p_role:
+            role_name = p_role
+
+    if secondary:
+        s_scope, s_role, _ = parse_cleanroom_target(secondary)
+        if not role_name and s_role:
+            role_name = s_role
+        elif not role_name:
+            is_dir_target = (
+                os.path.isdir(os.path.join(root, dir_scope or "", "parts"))
+                or (dir_scope in ("staging", "update_with_ai", "update_python_with_ai"))
+            )
+            if is_dir_target:
+                role_name = s_scope
+            else:
+                role_name = dir_scope
+                dir_scope = s_scope
+
+    if not dir_scope:
+        dir_scope = _get_dir_scope()
+
+    if not dir_scope:
+        try:
+            for entry in os.listdir(root):
+                if os.path.isdir(os.path.join(root, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
+                    dir_scope = entry
+                    break
+        except OSError:
+            pass
+
+    if not dir_scope:
+        print("Error: Directory scope must be specified (e.g. uv run cleanroom commission --all staging or staging#qa).", file=sys.stderr)
+        return 1
+
+    from support.lib.lifecycle import enter_phase, get_singleton
+    from update_with_ai.parts.agent.lib import agent_session
+    from update_with_ai.parts.workspace.lib import workspace_registry, workspace_provision
+
+    with enter_phase(agent_session.agent_session):
+        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
+        reg = get_singleton(workspace_registry.WorkspaceRegistry)
+
+        if all_roles:
+            declared = reg.list_roles(root, dir_scope=dir_scope)
+            if not declared:
+                print(f"Error: No declared roles found for directory scope '{dir_scope}'.", file=sys.stderr)
+                return 1
+            roles_to_commission = [r.role_name for r in declared]
+        else:
+            if not role_name:
+                print(f"Error: Role must be specified using <scope>#<role> syntax (e.g. uv run cleanroom commission {dir_scope}#qa) or use --all.", file=sys.stderr)
+                return 1
+            roles_to_commission = [role_name]
+
+        harness = (parsed.harness or "antigravity").strip().lower()
+        if harness == "antigravity":
+            ensure_antigravity_plugin_installed()
+
+        bound_model = parsed.model or resolve_default_model(root, harness=harness)
+        if bound_model == "default":
+            resolved = resolve_default_model(root, harness=harness)
+            if resolved:
+                bound_model = resolved
+
+        for r in roles_to_commission:
+            desc = prov.commission(
+                role_name=r,
+                dir_scope=dir_scope,
+                repo_root=root,
+                custom_dest=parsed.dest,
+                reset=parsed.reset,
+                model=bound_model,
+            )
+
+            # Harness-specific tailoring
+            if harness in ("dsh", "deepseek", "deepseek-harness"):
+                try:
+                    from update_with_ai.parts.dsh.lib import dsh_workspace
+                    ws_cfg = get_singleton(dsh_workspace.DshWorkspaceConfigurer)
+                    ws_cfg.configure_role_workspace(
+                        workspace_dir=desc.workspace_dir,
+                        role_name=r,
+                        model_name=bound_model,
+                    )
+                except Exception:
+                    pass
+
+            # Record harness in .cleanroom_role.json
+            role_cfg_path = os.path.join(desc.workspace_dir, ".cleanroom_role.json")
+            if os.path.isfile(role_cfg_path):
+                try:
+                    with open(role_cfg_path, "r", encoding="utf-8") as rf:
+                        role_data = json.load(rf)
+                    role_data["harness"] = harness
+                    if bound_model:
+                        role_data["model"] = bound_model
+                    with open(role_cfg_path, "w", encoding="utf-8") as wf:
+                        json.dump(role_data, wf, indent=2)
+                except Exception:
+                    pass
+
+            harness_label = f" [harness: {harness}]" if harness != "antigravity" else ""
+            model_label = f" [model: {bound_model}]" if bound_model else ""
+            print(f"✔ Commissioned workspace for role '{r}'{harness_label}{model_label} at: {desc.workspace_dir}")
+
+        return 0
+
+
+def decommission_workspaces(
+    dir_scope: str,
+    target_role: str | None = None,
+    repo_root: str | None = None,
+) -> int:
+    """Decommissions and deletes role workspaces for a scope (and optional role boundary)."""
+    root = repo_root or find_workspace_root()
+    from support.lib.lifecycle import enter_phase, get_singleton
+    from update_with_ai.parts.agent.lib import agent_session
+    from update_with_ai.parts.workspace.lib import workspace_registry
+
+    with enter_phase(agent_session.agent_session):
+        reg = get_singleton(workspace_registry.WorkspaceRegistry)
+        declared_roles = reg.list_roles(root, dir_scope=dir_scope)
+        if target_role:
+            target_clean = target_role.split(":")[-1].strip().lower()
+            matching_idx = None
+            for idx, r in enumerate(declared_roles):
+                r_clean = r.role_name.split(":")[-1].strip().lower()
+                if r_clean == target_clean or r.role_name.lower() == target_clean:
+                    matching_idx = idx
+                    break
+            if matching_idx is not None:
+                declared_roles = list(declared_roles[: matching_idx + 1])
+
+        deleted_count = 0
+        deleted_paths: set[str] = set()
+
+        def _delete_dir(path: str) -> None:
+            if not os.path.isdir(path):
+                return
+            for dirpath, dirs, files in os.walk(path):
+                for d in dirs:
+                    try:
+                        os.chmod(os.path.join(dirpath, d), 0o755)
+                    except OSError:
+                        pass
+                for f in files:
+                    try:
+                        os.chmod(os.path.join(dirpath, f), 0o644)
+                    except OSError:
+                        pass
+            shutil.rmtree(path, ignore_errors=True)
+
+        for r in declared_roles:
+            ws_dir = reg.compute_workspace_dir(r.role_name, dir_scope=dir_scope, repo_root=root)
+            if os.path.isdir(ws_dir):
+                _delete_dir(ws_dir)
+                reg.unregister_workspace(ws_dir, repo_root=root)
+                deleted_count += 1
+                deleted_paths.add(os.path.abspath(ws_dir))
+
+        # Also sweep any orphaned workspaces in role_workspaces associated with dir_scope
+        parent_dir = os.path.dirname(root)
+        rw_dir = os.path.join(parent_dir, "role_workspaces")
+        if os.path.isdir(rw_dir):
+            clean_scope = dir_scope.strip("/").split("/")[0]
+            for item in os.listdir(rw_dir):
+                item_path = os.path.join(rw_dir, item)
+                if not os.path.isdir(item_path) or os.path.abspath(item_path) in deleted_paths:
+                    continue
+                role_cfg = os.path.join(item_path, ".cleanroom_role.json")
+                should_delete = False
+                if os.path.isfile(role_cfg):
+                    try:
+                        with open(role_cfg, "r", encoding="utf-8") as f:
+                            cdata = json.load(f)
+                        cfg_scope = str(cdata.get("dir_scope") or cdata.get("parts_dir") or "")
+                        if clean_scope in cfg_scope.split("/") or cfg_scope.startswith(clean_scope) or cfg_scope.startswith(f"//{clean_scope}"):
+                            r_role = str(cdata.get("role_name") or cdata.get("role") or "").lower()
+                            if not target_role or r_role in [r.role_name.lower() for r in declared_roles]:
+                                should_delete = True
+                    except Exception:
+                        pass
+                if not should_delete and (f"_{clean_scope}_" in item or item.endswith(f"_{clean_scope}")):
+                    should_delete = True
+
+                if should_delete:
+                    _delete_dir(item_path)
+                    reg.unregister_workspace(item_path, repo_root=root)
+                    deleted_count += 1
+                    deleted_paths.add(os.path.abspath(item_path))
+
+        return deleted_count
+
+
+def run_decommission_cli(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="cleanroom decommission",
+        description="Decommission and delete provisioned Cleanroom role workspaces for a scope.",
+    )
+    parser.add_argument(
+        "scope",
+        nargs="?",
+        default="",
+        help="Directory scope (e.g. staging).",
+    )
+    parser.add_argument(
+        "target_role",
+        nargs="?",
+        default=None,
+        help="Optional role boundary (e.g. qa).",
+    )
+    parser.add_argument(
+        "--scope",
+        dest="scope_opt",
+        default="",
+        help="Directory scope (alternative flag).",
+    )
+    parser.add_argument(
+        "--role",
+        dest="role_opt",
+        default=None,
+        help="Optional role boundary (alternative flag).",
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Repository root directory.",
+    )
+    parsed = parser.parse_args(argv)
+    target_input = parsed.scope_opt or parsed.scope or _get_dir_scope()
+    if not target_input:
+        print("Error: Directory scope must be specified (e.g. uv run cleanroom decommission staging or staging#qa).", file=sys.stderr)
+        return 1
+    scope, parsed_role, _ = parse_cleanroom_target(target_input)
+    target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
+    deleted = decommission_workspaces(scope, target_role=target_role or None, repo_root=parsed.repo_root)
+    print(f"✔ Decommissioned {deleted} role workspace(s) for scope '{scope}'.")
+    return 0
+
+
+def print_cleanroom_help() -> None:
+    print("""usage: cleanroom [-h] <command> ...
+
+Cleanroom Multi-Agent Workspace & Role Tool
+
+positional arguments:
+  <command>
+    clean               Converge targets or scope clean (default: --harness loop)
+    orchestrate         Orchestrate Cleanroom multi-agent convergence across role workspaces
+    work-queue (queue)  Inspect Cleanroom DAG work queue for ready and blocked nodes
+    dirty               Mark target or scope dirty in DAG storage
+    mark-clean          Mark target or scope clean in DAG metadata without running LLM loop
+    commission          Commission an isolated role workspace
+    decommission        Decommission and delete provisioned role workspaces
+    refresh-sys         Refresh system files, tools, configs, and guides across role workspaces
+    get_work            Get ready dirty tasks in workspace scope
+    submit              Verify and submit target with in-band header update
+    feedback (blame)    Attribute feedback or blame critique to a target node or culprit file
+    fail                Record verification failure and force dirty state
+    coverage            Evaluate statement test coverage for a module
+    check_files         Run role-specific verification checks on target files
+    change              Record a change description on a target node or scope
+    prompt              Print task prompt for a target node or scope
+    install-plugin      Install/refresh Cleanroom Antigravity plugin and agent definitions
+
+options:
+  -h, --help            show this help message and exit
+  --harness HARNESS     Subagent execution harness (loop, antigravity, dsh, simulation)
+  --loop                Run autonomous in-process loop execution (alias for --harness loop)
+""")
+
+
 def main(argv: list[str] | None = None) -> int:
     asm_modules = (
         "parts.systems.lib.uv_cleanroom_asm",
         "parts.core.lib.file_paths_impl",
         "parts.control.lib.control_asm",
+        "parts.storage.lib.storage_asm",
         "parts.tools.lib.tools_asm",
+        "parts.tools.lib.workspace_tool_impl",
         "parts.workspace.lib.workspace_asm",
-        "parts.workspace.lib.workspace_tool_impl",
         "parts.subagent.lib.subagent_asm",
         "parts.subagent.lib.subagent_tool_impl",
+        "parts.antigravity.lib.antigravity_asm",
+        "parts.dsh.lib.dsh_asm",
     )
     for mod_name in asm_modules:
         try:
@@ -421,12 +1641,13 @@ def main(argv: list[str] | None = None) -> int:
                             "systems.lib.uv_cleanroom_asm",
                             "core.lib.file_paths_impl",
                             "control.lib.control_asm",
+                            "storage.lib.storage_asm",
                             "tools.lib.tools_asm",
+                            "tools.lib.workspace_tool_impl",
                             "workspace.lib.workspace_asm",
-                            "workspace.lib.workspace_tool_impl",
                             "subagent.lib.subagent_asm",
                             "subagent.lib.subagent_tool_impl",
-                            "goose.lib.goose_asm",
+                            "antigravity.lib.antigravity_asm",
                             "dsh.lib.dsh_asm",
                         ):
                             try:
@@ -442,39 +1663,53 @@ def main(argv: list[str] | None = None) -> int:
     # Re-install agent files each time cleanroom is executed
     ensure_antigravity_plugin_installed()
 
-    if args_list and args_list[0] in ("install-plugin", "install_plugin", "install-agents"):
+    if not args_list or args_list[0] in ("-h", "--help", "help"):
+        print_cleanroom_help()
+        return 0 if args_list else 1
+
+    if args_list[0] in ("install-plugin", "install_plugin", "install-agents"):
         p = ensure_antigravity_plugin_installed()
         print(f"[OK] Cleanroom Antigravity plugin and agent definitions installed at: {p}")
         return 0
 
-    if args_list and args_list[0] in ("work-queue", "work_queue", "queue"):
+    if args_list[0] in ("work-queue", "work_queue", "queue"):
         return run_work_queue(args_list[1:])
 
-    if args_list and args_list[0] == "orchestrate":
-        subagent_tool_mod = None
-        for _r in _get_roots():
-            for _entry in os.listdir(_r) if os.path.isdir(_r) else []:
-                if _entry.startswith((".", "bazel-", "venv")):
-                    continue
-                if (_dir_scope and _entry == _dir_scope) or (_entry in args_list):
-                    continue
-                try:
-                    subagent_tool_mod = importlib.import_module(f"{_entry}.parts.subagent.lib.subagent_tool_impl")
-                    break
-                except ImportError:
-                    pass
-            if subagent_tool_mod:
-                break
-        if subagent_tool_mod is None:
-            try:
-                from update_with_ai.parts.subagent.lib import subagent_tool_impl as subagent_tool_mod
-            except ImportError:
-                try:
-                    subagent_tool_mod = importlib.import_module("parts.subagent.lib.subagent_tool_impl")
-                except ImportError:
-                    pass
-        if subagent_tool_mod is not None:
-            return subagent_tool_mod.main(args_list)
+    if args_list[0] in ("dirty",):
+        return run_dirty_cli(args_list[1:])
+
+    if args_list[0] in ("mark-clean", "mark_clean"):
+        return run_mark_clean_cli(args_list[1:])
+
+    if args_list[0] in ("change",):
+        return run_change_cli(args_list[1:])
+
+    if args_list[0] in ("prompt",):
+        return run_prompt_cli(args_list[1:])
+
+    if args_list[0] in ("feedback", "blame"):
+        return run_feedback_cli(args_list[1:], prog=f"cleanroom {args_list[0]}")
+
+    if args_list[0] == "clean":
+        return run_clean_cli(args_list[1:])
+
+    if args_list[0] == "orchestrate":
+        return run_orchestrate(args_list[1:])
+
+    if args_list[0] in ("commission",):
+        return run_commission_cli(args_list[1:])
+
+    if args_list[0] == "decommission":
+        return run_decommission_cli(args_list[1:])
+
+    if "--loop" in args_list:
+        clean_args = [a for a in args_list if a != "--loop"]
+        if clean_args and clean_args[0] == "clean":
+            clean_args = clean_args[1:]
+        return run_clean_cli(clean_args)
+
+    if any(a.startswith("--harness") for a in args_list):
+        return run_clean_cli(args_list)
 
     assert workspace_tool_impl is not None
     return workspace_tool_impl.main(argv)

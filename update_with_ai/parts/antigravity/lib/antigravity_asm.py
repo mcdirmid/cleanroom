@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_asm assembly module
-# CODE_HASH: f7f79b87fa7f
+# CODE_HASH: e9cf329595da
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -12,13 +12,11 @@ from support.lib.lifecycle import LifecycleRegistry
 from . import (
     antigravity_coordinator_impl,
     antigravity_harness_impl,
-    antigravity_workspace_impl,
 )
 
 CONSTITUENTS = (
     antigravity_coordinator_impl,
     antigravity_harness_impl,
-    antigravity_workspace_impl,
 )
 
 

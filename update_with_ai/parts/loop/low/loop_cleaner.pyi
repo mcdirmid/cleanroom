@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T03:19:47Z
 # CHANGE: Align loop cleaner acyclic caller guarantee, halt, and conclusion contracts
 # CODE_HASH: c7bc8c8c4d92
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Loop cleaner low-level interface specification."""

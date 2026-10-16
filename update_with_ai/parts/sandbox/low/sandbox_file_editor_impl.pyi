@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T04:14:49Z
-# CHANGE: Extend multiple-match failure feedback with surrounding-line and line-range guidance
+# CHANGE: Reject editing tool replacements that alter the cleanroom metadata header
 # CODE_HASH: 43c41d3dd53f
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox file editor implementation low-level specification."""
@@ -285,6 +285,7 @@ class ReplaceFileContentTool(
           content or to specify start line and end line.
         - WHEN target content is not found within the search window but exists elsewhere in the file, MUST fail indicating the line numbers where target content was located.
         - WHEN the edit produces no change to file content, MUST fail reminding the agent that the edit had no effect.
+        - WHEN the edit alters the cleanroom metadata header, MUST fail reminding the agent that cleanroom metadata is managed automatically by submit.
         - WHEN the replacement succeeds, MUST write updated content to the filesystem.
         - WHEN the replacement succeeds, MUST create missing parent directories.
         - WHEN the replacement succeeds, MUST record that workspace file writes occurred.
@@ -305,6 +306,9 @@ class ReplaceFileContentTool(
         - Reports the enumerated host content line numbers through those same pathlib filesystem
           operations, disclosing the first two matching line numbers of an ambiguous match and the line
           numbers where target content was located outside the search window.
+        - Checks that the replacement does not alter the in-band cleanroom metadata header using block
+          boundary detection from src_metadata, failing before writing to disk when cleanroom metadata is
+          modified.
         - Writes the replaced content back through those same filesystem operations while creating
           missing parent directories, records the successful edit through
           sandbox_file_editor.EditManager.record_file_edit, includes a diff delta through

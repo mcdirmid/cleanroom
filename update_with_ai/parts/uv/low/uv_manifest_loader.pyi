@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T03:48:25Z
 # CHANGE: Register synthesized pass-through definitions as non-propagating graph dependencies
 # CODE_HASH: d383f1f2a4e5
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom manifest loader low-level interface specification."""
@@ -38,6 +38,7 @@ class TargetManifest:
         guide_target: Declared guide target label.
         verification_check: Verification check command or specification.
         allows_step_mode: Whether the target allows step mode execution.
+        verification_success_message: Optional message presented when verification succeeds.
     """
     label: TargetLabel
     task_prompt: Optional[agent_storage.TaskPrompt] = ...
@@ -51,6 +52,7 @@ class TargetManifest:
     guide_target: Optional[TargetLabel] = ...
     verification_check: Optional[VerificationCommand] = ...
     allows_step_mode: Optional[bool] = ...
+    verification_success_message: Optional[str] = ...
 
 
 @singleton_type("system")

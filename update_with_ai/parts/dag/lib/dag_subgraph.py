@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T04:59:21Z
 # CHANGE: Remove generated scaffold markers and document the declared subgraph operations with their conditional postconditions
 # CODE_HASH: e7cd5665aee4

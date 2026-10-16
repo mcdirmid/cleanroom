@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-12T21:00:00Z
 CHANGE: author subagent_harness planning specification
-CODE_HASH: f5f89b418ee9
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 7dbf22244d86
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # subagent_harness interface component
@@ -17,7 +17,8 @@ Multi-agent coordination requires dispatching autonomous agents into isolated ro
 ### Typing
 
 - A command harness adapter realises the coordinator harness adapter protocol to execute role subagent turns through configurable process command templates.
-- A harness resolver resolves platform command templates for designated harness platforms or produces simulation harnesses.
+- An adapter factory creates harness adapters configured with model name, timeout, context limits, custom command templates, or simulation mode.
+- An agent session's harness registry maintains installed adapter factories by platform name, installs platform adapter factories, and resolves harness adapters for designated platform names, custom command templates, or simulation mode.
 
 ### Contracts
 
@@ -29,7 +30,8 @@ Multi-agent coordination requires dispatching autonomous agents into isolated ro
 - The command harness adapter determines submitted targets by set difference with remaining pending items. [determine_submitted_targets]
 - The command harness adapter extracts token usage metrics from process log files. [extract_process_token_telemetry]
 - The command harness adapter synthesizes role turn results containing status, submitted items, blamed items, telemetry, and diagnostics. [synthesize_role_turn_result]
-- The harness resolver resolves platform command templates for designated harness platforms or enables simulation mode. [resolve_platform_harness_adapter]
+- The harness registry installs adapter factories for platform names. [install_platform_harness_adapter]
+- The harness registry resolves harness adapters by platform name, custom command template, or simulation mode. [resolve_platform_harness_adapter]
 
 ### Woven Contracts
 
@@ -40,7 +42,8 @@ Multi-agent coordination requires dispatching autonomous agents into isolated ro
 ### Knowledge Provisions
 
 - Process-based subagent execution harness services. [command_harness_service]
-- Platform harness template resolution services. [harness_resolver_service]
+- Platform harness registry services. [harness_registry_service]
+- Platform harness adapter resolution services. [harness_resolver_service]
 
 ### Knowledge Requirements
 

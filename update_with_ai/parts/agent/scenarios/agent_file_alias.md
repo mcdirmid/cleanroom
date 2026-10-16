@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:11:14Z
 CHANGE: Author agent agent_file_alias interface scenarios
-CODE_HASH: 70dbc0df3c6f
+CODE_HASH: 425d9e28fbb2
 -->
 
 # Concrete scenarios for `agent_file_alias` (interface)
@@ -12,7 +12,7 @@ CODE_HASH: 70dbc0df3c6f
 Given: the alias manager is configured with the workspace root `/ws/alpha_scope_a`, and the widget
 node declares the bound file whose workspace path is `widget/notes/draft.md` as a read-write file.
 
-1. The caller converts the wire string `widget/notes/draft.md`.
+1. The caller calls to alias with the string `widget/notes/draft.md`.
    Observed: a bound file owning the workspace path `widget/notes/draft.md`, of the read-write kind,
    owned by the widget node, displaying itself as `widget/notes/draft.md`.
 
@@ -22,7 +22,7 @@ Given: the alias manager is configured with the workspace root `/ws/alpha_scope_
 declares the bound file whose workspace path is `widget/contracts/widget.md` as a read-only file,
 and no target declares the workspace path `widget/notes/draft.md`.
 
-1. The caller converts the wire string `widget/contracts/widget.md`.
+1. The caller calls to alias with the string `widget/contracts/widget.md`.
    Observed: a bound file owning the workspace path `widget/contracts/widget.md`, of the read-only
    kind, owned by the widget node, displaying itself as `widget/contracts/widget.md`.
 
@@ -35,7 +35,7 @@ and no target declares the workspace path `widget/notes/draft.md`.
 Given: the alias manager is configured with the workspace root `/ws/alpha_scope_a`, and no target
 declares the workspace path `widget/notes/scratch.md`.
 
-1. The caller converts the wire string `widget/notes/scratch.md`.
+1. The caller calls to alias with the string `widget/notes/scratch.md`.
    Observed: the conversion succeeds and yields an unbound file that maps to no workspace file and
    is owned by no node, rather than refusing the undeclared path.
 
@@ -43,7 +43,7 @@ declares the workspace path `widget/notes/scratch.md`.
 
 Given: the alias manager is configured with the workspace root `/ws/alpha_scope_a`.
 
-1. The caller converts the empty wire string.
+1. The caller calls to alias with the empty string.
    Observed: an unbound file that names no workspace file and no owning node.
 
 ## Scenario 5 — Read-only and read-write bound files

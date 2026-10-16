@@ -153,8 +153,21 @@ Because the workspace is physically isolated at the filesystem level:
 - In `LibSubagent`'s workspace, `tests/` does not exist. There is no software filter to bypass; test files are physically absent.
 - In `TestSubagent`'s workspace, `lib/*.py` files are read-only (`chmod 444`) interface stubs containing `raise NotImplementedError`. The test author cannot cheat or overfit to real implementation code.
 - Upstream specifications (`high/*.md`, `scenarios/*.md`, `planning/*.md`, `low/*.pyi`) and configs are set to `chmod 444`. Any unauthorized modification is rejected directly by the OS kernel with `Permission denied`.
-- **Command Execution Tripwire**: Role subagents are strictly restricted to running the 5 prescribed workspace binaries (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, `bin/fail`). Executing arbitrary shell commands (`python`, `bash`, `find`, `grep`, zip extraction, etc.) is strictly forbidden and triggers an immediate session abort.
+- **Command Execution Tripwire**: Role subagents are strictly restricted to running the 5 prescribed workspace binaries (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, `bin/fail`) in the terminal. Executing arbitrary shell commands (`python`, `bash`, `find`, `grep`, zip extraction, etc.) is strictly forbidden and triggers an immediate session abort.
+- **In-Workspace File Inspection (Fully Permitted & Required)**: Role subagents (including auditors like QA) are explicitly permitted and expected to read in-workspace specifications (`low/*.pyi`), test suites (`tests/*_test.py`), implementation code (`lib/*.py`), and `# CHANGE:` commit headers using native file-viewing tools (`view_file`, `read_file`) to triage failures, locate line numbers/functions, and understand author reactions to prior blame. The Contamination Tripwire applies strictly to out-of-bounds files outside the workspace directory.
 - **Unresolvable Impasse Protocol**: If a subagent determines that success is impossible or an unresolvable impasse occurs, it executes `bin/fail <target> "<reason>"`, immediately ceases work, and sends `FAILED: <target> - <reason>` to the coordinator. The coordinator immediately halts the loop, terminates workers, and escalates the failure to the user.
+
+### 3.2.1 Absolute Host Path Isolation & Zero-Leaked Main Root Convention
+To preserve double-blind integrity, **role workspaces must NEVER expose host filesystem paths or main repository roots to the subagent**:
+- **Strict Prohibition on Exposing `main_workspace_root`**: Storing `"main_workspace_root": "/Users/..."` or `"repo_root": "/Users/..."` in `.cleanroom_role.json` or workspace files is strictly prohibited. Exposing host paths invites cheating: subagents reading their local configuration discover the main repository root and attempt cross-boundary file reads or out-of-band edits.
+- **Convention-Driven Relative Traversal (`../../<workspace-short-name>`)**: Tooling dynamically resolves the canonical repository root strictly via relative structural convention: from `../role_workspaces/<ws>_<role>_<scope>/`, the canonical repository lives at `../../<ws>` where `<ws>` is the workspace short-name derived from the directory prefix (e.g. `cleanroom`), or via execution environment variables (`CLEANROOM_MAIN_ROOT`, `BUILD_WORKSPACE_DIRECTORY`).
+- **Clean `.cleanroom_role.json` Schema**: Only role identity and execution constraints (`role`, `role_name`, `dir_scope`, `batch_size`, `max_feedback_chars`, `model`) are persisted. No host absolute paths ever appear in files readable by the agent.
+
+### 3.2.2 Centralized Turn Logging & Prompt Storage (`logs/`)
+To protect subagents from accidental self-contamination or peeking into execution histories:
+- **Zero Turn Logs in Role Workspaces**: Execution logs (`.cleanroom_turn_<handle>.log`) and task prompt markdown files (`.dsh_prompt_<handle>.md`, `.goose_instructions_<handle>.md`) must **never** be written to the role workspace directory. Writing them in the workspace exposes past execution traces, tool call dumps, and prior turn dialogues to the active agent during directory scans or file listings.
+- **Dedicated Centralized Logs Directory (`<main_root>/logs/`)**: All harness adapters (`DshHarnessAdapter`, `GooseHarnessAdapter`, `CommandHarnessAdapter`) resolve the canonical repository root and route execution logs and prompt files directly into `<main_root>/logs/` (ignored via `.gitignore`).
+- **Clean Workspace Guarantee**: Role workspaces contain exclusively active source files, upstream read-only contracts, `bin/` runners, `AGENTS.md`, and unprivileged `.cleanroom_role.json`. The `.cleanroom_pending_work.json` buffer is strictly maintained, and no extraneous log or prompt files are ever visible to the agent.
 
 ### 3.3 The Autonomous Subagent Turn Loop
 When woken by the coordinator, the workspace-bound subagent executes its standardized Cleanroom turn sequence, consulting its workspace `AGENTS.md` and resolving ready nodes via `bin/submit`, `bin/blame`, or `bin/fail`:
@@ -229,6 +242,16 @@ To prevent overwhelming the role subagent with excessive context and cognitive l
   > *"Completed units in this batch must be submitted via `bin/submit`; once submitted, run `bin/get_work` again to acquire the next batch of ready work."*
 - This keeps the agent's editing and verification loop focused on a small, manageable unit batch while preserving autonomous multi-unit draining across turns.
 
+#### Mandatory Resolution Invariant & Anti-Idle Reminders
+A common failure mode observed in conversational LLM agents (particularly during auditor verification) is noticing that verification checks or test failures did not change, and merely outputting conversational commentary or complaints in chat without invoking a cleanroom resolution tool. Because conversational text never mutates graph state, this stalls the orchestration loop:
+- **Strict Turn Resolution Requirement**: Every pending unit acquired via `bin/get_work` **must** be resolved before concluding the turn.
+- **Three Resolution Pathways**:
+  1. `bin/submit <target_file>` (when verification checks pass and contracts are certified)
+  2. `bin/blame <culprit_file> "<actionable critique>"` (when verification fails or contracts are violated—attribute the defect to the authoring role immediately)
+  3. `bin/fail <target_file> "<reason>"` (when an unresolvable impasse is reached or success is impossible)
+- **Pending Work Anti-Idle Gate**: If an agent calls `bin/get_work` while pending dirty targets remain unresolved, `bin/get_work` rejects execution with an imperative advisory reminding the model of the mandatory resolution invariant and detailing the exact `bin/submit`, `bin/blame`, and `bin/fail` commands needed to proceed.
+- **Confinement & Guide Enforcement**: Role `AGENTS.md` instructions and companion guides (e.g. `qa.md`) strictly prohibit concluding turns with conversational text when checks fail, enforcing immediate blame delivery.
+
 ### 3.5 Auditor Dirtiness Semantics & In-Band Certification
 Cleanroom auditor roles (`qa`, `coverage`, `spec_qa`) evaluate dirtiness strictly based on temporal certification contracts in source metadata headers:
 - An auditor node `(unit, auditor_role)` evaluates **dirty** if and only if:
@@ -247,8 +270,15 @@ For resource-constrained or local models (such as `custom_omlx Qwen3.6-35B-A3B-o
   model = "Qwen3.6-35B-A3B-oQ6-mtp"
   subagent_batch_size = 3
   conversation_max_tokens = 100000
+  max_feedback_chars = 600
   ```
 - **Small Batch Size (`subagent_batch_size = 3`)**: Subagents must not be overwhelmed with 15+ ready units at once. Work acquisition via `bin/get_work` is bounded by `subagent_batch_size` resolved from `model_configs.toml` (or CLI `--batch-size`). The agent implements, verifies, and submits this small batch before acquiring subsequent work. Workspaces record this batch bound in `.cleanroom_role.json` on commissioning/dispatch so every `bin/get_work` invocation automatically respects the limit.
+- **Throttling Blame Feedback & Defect Prioritization (`max_feedback_chars = 600`)**:
+  Lower capable models (e.g., 35B models) suffer severe cognitive overload and paralysis when presented with monolithic 1,500+ character failure catalogs describing 10+ test failures at once. Cleanroom implements a dual-sided feedback protection architecture:
+  - **Bounded Work Queue Presentation**: `bin/get_work` dynamically inspects the active model's `max_feedback_chars` and cleanly truncates oversized unacted feedback strings with a truncation indicator (`... [feedback throttled to N chars]`).
+  - **Elimination of Redundant Header Tags**: `# DIRTY:` is strictly reserved for manual out-of-band marking (`bin/cleanroom dirty ...`) and failure terminal states (`bin/fail`). During in-band blame attributions (`bin/blame`), `# DIRTY:` is omitted entirely; the critique lives exclusively under `# FEEDBACK:`, and graph storage treats unacted feedback as dirty automatically without wasting tokens duplicating the text into `# DIRTY:`.
+  - **Pure Critique Feedback Framing**: Redundant transport metadata prefixes such as `[<timestamp> from <sender>]: ` are stripped from `# FEEDBACK:` entries and `bin/get_work` reasons. File headers already record the attribution timestamp in `LAST_CLEANED:`. Stripping redundant metadata brackets eliminates transport overhead from the `max_feedback_chars` budget, avoids model confusion over critique targets (e.g. mistaking `BlameTool` for a tool mechanism rather than the class under test), and presents pure, distraction-free critique text to the authoring role.
+  - **Blame Validation & Prioritization**: When a critique exceeds the configured character limit, `bin/blame` rejects the attribution with a structured error advising: *"Critique exceeds maximum length; you might prioritize contract discrepancies to report so the authoring role can make progress"*, preventing wave cascades while protecting downstream worker context.
 - **In-Place Token Compaction Over Process Killing (`conversation_max_tokens = 100000`)**:
   Rather than killing and restarting the agent process when tokens accumulate, Goose natively supports in-place context compaction without tearing down the process:
   - **`GOOSE_AUTO_COMPACT_TOKEN_LIMIT`**: Configured in the subagent environment resolved from `conversation_max_tokens` (defaulting to 100,000 tokens for smaller models like Qwen3.6-35B). When cumulative session context nears this limit, Goose's built-in memory management **automatically summarizes older turns** into a concise block, keeping the context lean.
@@ -256,7 +286,17 @@ For resource-constrained or local models (such as `custom_omlx Qwen3.6-35B-A3B-o
   - **Warm Process Preservation**: The agent process stays warm in memory, avoiding the initialization tax of respawning processes.
   - **Fallback Session Re-initialization**: Only if a harness completely lacks compaction capabilities or if context cannot be shrunk does the coordinator close the session and start fresh. Because Cleanroom stores all code and progress in-band in the filesystem (`bin/submit` updates main files; `LAST_CLEANED` and `FEEDBACK` headers reflect state), any new session resumes seamlessly with zero lost work.
 
-### 3.7 Elimination of Arbitrary Execution Timeouts
+### 3.7 Profile-Driven Workspace Commissioning & Manual Interactive Evaluation
+To evaluate and debug subagent cognition and tooling behavior without running headless multi-hour orchestration loops, Cleanroom supports commissioning and resetting role workspaces configured for specific model and harness profiles:
+- **Profile-Bound Role Workspaces**: Workspaces are provisioned and stamped with the designated model profile (`dsh models.qwen-moe-q6`, `dsh models.deepseek-v41-flash`, or `antigravity Gemini 3.8 Flash`).
+- **Zero Stale State on Reset (`--reset`)**: All stale work buffers (`.cleanroom_pending_work`, `.cleanroom_blame_buffer.json`) and prior scratch artifacts are wiped, presenting an entirely clean starting queue for the target directory scope.
+- **Direct Interactive Testing in DSH Desktop & Antigravity**: A developer can launch DSH Desktop or open an Antigravity session pointing directly to the provisioned role workspace directory (e.g. `role_workspaces/cleanroom_lib`), start an interactive conversation with the assigned model, and prompt:
+  ```
+  Immediately run bin/get_work to acquire pending ready nodes. Consult your workspace AGENTS.md, perform role verification via bin/check_files, resolve nodes via bin/submit, bin/blame, or bin/fail, and drain all ready nodes.
+  ```
+  This surfaces the subagent's internal reasoning, tool calls, and error handling in real time within the desktop UI before launching autonomous batch runs.
+
+### 3.8 Elimination of Arbitrary Execution Timeouts
 Multi-node cleanroom construction across deep dependency trees can legitimately run for multiple hours:
 - **No Hardcoded Timeout Defaults**: Arbitrary time limits (such as the legacy 10-minute / 600-second kill switch) are completely eliminated (`timeout_seconds = None` by default). Subagents are never killed by wall-clock timers during ordinary operation.
 - **Optional CLI Upper Bound (`--timeout <seconds>`)**: If a developer or automated CI job wishes to enforce a global ceiling to catch infinite loops or runaway processes, an explicit `--timeout` parameter may be supplied to `bin/cleanroom orchestrate`.
@@ -476,6 +516,18 @@ Key architectural advantages of DeepSeek Harness for Cleanroom subagents:
    - `DeepSeek-V41-Flash`: `subagent_batch_size = 10`, `conversation_max_tokens = 256000`.
    - Local MoE models (`Qwen3.6-35B-A3B-oQ6-mtp`): `subagent_batch_size = 3`, `conversation_max_tokens = 100000`.
 
+#### DSH Desktop Session Persistence & Lock Contention Protocol
+DeepSeek Harness enforces a strict single-writer model: each session directory contains an OS-level file lock (`session.lock`) guarding the compressed event log (`session.v4.jsonl.zstd`).
+
+- **Single-Writer Conflict with DSH Desktop**:
+  When a session is active or selected in the DSH Desktop Electron application, the desktop app's background node service acquires an exclusive write lock (`flock(LOCK_EX)`) on `session.lock` to support interactive messaging.
+  If the Cleanroom headless runner attempts to resume that session using `dsh --profile headless --session-id <saved_sid>`, the CLI process exits immediately with a fatal error: `session "..." is already owned by an active write handle`.
+- **Defensive Fallback (Current Behavior)**:
+  `DshHarnessAdapter` evaluates `session.lock` via non-blocking `fcntl.flock(LOCK_EX | LOCK_NB)` before dispatching. If the session is currently locked by DSH Desktop, the adapter defensively omits `--session-id` and boots a fresh turn session rather than aborting orchestration. While this avoids catastrophic crashes, it creates duplicate session threads in DSH Desktop across turns if the user is watching the session in the desktop UI.
+- **Future Improvements**:
+  1. *Desktop RPC Turn Dispatch*: Rather than invoking a headless CLI subprocess when DSH Desktop is active, evaluate dispatching turns directly over DSH Desktop's local RPC bridge (using the Chromium auth cookie) via a `session/prompt` or `turn/dispatch` RPC method, avoiding process and lock contention completely.
+  2. *Spectator / Read-Only Mode in DSH Desktop*: Explore configuring or patching DSH Desktop to support read-only session monitoring tabs that don't hold exclusive write locks on background sessions.
+  3. *Coordinated Lock Handoff*: Support signaling DSH Desktop over RPC to temporarily relinquish write ownership before headless CLI execution, re-mounting upon turn completion.
 
 ---
 
@@ -948,16 +1000,9 @@ The implementation of Subagent-Driven Cleanroom Workspaces proceeds across four 
    - **[COMPLETED] `antigravity_workspace`**: Generates workspace-local isolation rules (`.agents/rules/isolation.md`) directly inside each commissioned role workspace (`../role_workspaces/<ws>_<role>_<scope>/`).
    - **[COMPLETED] `antigravity_harness`**: Implements `subagent_coordinator.HarnessAdapter` in Python for programmatic session dispatch, non-blocking `poll_role`, and parses token telemetry from `<appDataDir>/brain/<id>/.system_generated/logs/transcript.jsonl` with Gemini 3.8 Flash/Pro rate-cards.
    - **[COMPLETED] `antigravity_asm`**: Complete assembly component integrating Antigravity coordinator and harness into Cleanroom runtime.
-2. **Goose Part (`update_with_ai/parts/goose/`) (COMPLETED)**:
-   - **[COMPLETED] Native `AGENTS.md` Confinement**: Eliminated YAML recipes; role workspaces configure `AGENTS.md` and `.goosehints` directly with 5-command restriction tripwires.
-   - **[COMPLETED] `goose_workspace` / `goose_workspace_impl`**: Configures workspace isolation boundaries, generates `.goosehints` with boundary rules and 5-command restriction tripwires directly inside commissioned role workspaces.
-   - **[COMPLETED] `goose_harness` / `goose_harness_impl`**: Implements `subagent_coordinator.HarnessAdapter` for Goose subagent execution, non-blocking `poll_role`, parses SQLite session telemetry (`sessions.db` sessions & usage_ledger tables) and log text fallbacks, computes model rate-card costs, tracks pending work diffs, and inspects `.cleanroom_blame_buffer.json`.
-   - **[COMPLETED] ACP / Token Compaction & Timeout Elimination**:
-     - Removed 600s hardcoded process timeout in `goose_harness_impl.py` (`timeout_seconds: Optional[float] = None`).
-     - Configured `GOOSE_AUTO_COMPACT_TOKEN_LIMIT` from `conversation_max_tokens` (100k) for in-place token compaction.
-     - Small batch size enforcement (`subagent_batch_size = 3`) via `.cleanroom_role.json`.
-   - **[COMPLETED] `goose_asm`**: Singleton lifecycle and assembly wiring registering Goose harness adapters into the subagent coordinator and CLI.
-   - **[COMPLETED] 100% Verification Clean**: Passed 11 unit tests in `update_with_ai/parts/goose/tests/` with 0 Pyright errors and 100% test pass.
+2. **Goose Part (`update_with_ai/parts/goose/`) (TURNED DOWN / DECOMMISSIONED)**:
+   - *Status*: Goose support has been turned down to exclusively support Google Antigravity and DeepSeek Harness (DSH).
+   - Historical implementation delivered native `AGENTS.md` confinement, `goose_workspace`, `goose_harness` with ACP/SQLite session parsing, and `goose_asm`. The part and `.goosehints` have been decommissioned and removed from active assemblies.
 3. **DeepSeek Harness Part (`update_with_ai/parts/dsh/`) (IN PROGRESS / ACTIVE)**:
    - **`dsh_workspace` / `dsh_workspace_impl`**: Configures workspace-local isolation rules in `AGENTS.md` and generates targeted Cordis overlay patch `.cleanroom/dsh_patch.yml` configuring model routing (`deepseek-official` or `omlx`), `approval: never`, and `permission: danger-full-access`.
    - **`dsh_harness` / `dsh_harness_impl`**: Implements `subagent_coordinator.HarnessAdapter` for DeepSeek Harness subagent execution via `dsh --profile headless --patch .cleanroom/dsh_patch.yml --json`, non-blocking `poll_role`, process supervision, blame inspection via `.cleanroom_blame_buffer.json`, and token telemetry extraction from `--json` event streams and `session.v4.jsonl.zstd`.
@@ -966,6 +1011,7 @@ The implementation of Subagent-Driven Cleanroom Workspaces proceeds across four 
      - `DeepSeek-V41-Flash`: `subagent_batch_size = 10`, `conversation_max_tokens = 256000`.
      - `qwen-moe-q6` (`Qwen3.6-35B-A3B-oQ6-mtp`): `subagent_batch_size = 3`, `conversation_max_tokens = 100000`.
    - **`dsh_asm`**: Singleton lifecycle and assembly wiring registering DeepSeek Harness adapters into Cleanroom CLI and subagent resolver.
+   - **Future Improvement — Desktop Session Lock Reconciliation**: Currently, viewing active role sessions in DSH Desktop causes `session.lock` contention, forcing headless turns to fork into fresh session IDs. Implement direct RPC turn dispatch or spectator mode to preserve single-session continuity across turns when DSH Desktop is open.
 
 
 ### Phase 3: Phase 2 Harness Adapters (Anthropic Claude Code & OpenAI Codex)
@@ -989,4 +1035,4 @@ The implementation of Subagent-Driven Cleanroom Workspaces proceeds across four 
 The Subagent-Driven Cleanroom Workspaces architecture combines the best of both worlds:
 1. **Impenetrable Double-Blind Isolation**: Enforced by physical OS directory separation and kernel `chmod 444` permissions, completely eliminating the brittle software hooks and HTTP daemons of Option 2.
 2. **Autonomous Multi-Agent Velocity**: Driven by a zero-execution coordinator that schedules role subagents without bloating context or burning unnecessary tokens.
-3. **Model & Harness Agnosticism**: Liberated from proprietary single-model dependencies, enabling seamless deployment across **Google Antigravity**, **DeepSeek Harness**, and **Goose**, and unleashing the dramatic cost efficiencies of **DeepSeek-V4 Flash**.
+3. **Model & Harness Agnosticism**: Liberated from proprietary single-model dependencies, enabling seamless deployment across **Google Antigravity** and **DeepSeek Harness**, and unleashing the dramatic cost efficiencies of **DeepSeek-V4 Flash**.

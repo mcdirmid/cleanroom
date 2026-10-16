@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
-CODE_HASH: 7a6428609392
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 5960b952b494
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # uv_node_config_impl implementation component
 
-imports: agent_config, dag_storage, file_paths, tool_provider, uv_manifest_loader
+imports: agent_config, dag_storage, file_paths, uv_manifest_loader
 implements: agent_file_alias, agent_node_config
 
 ## Purpose
@@ -19,7 +19,7 @@ Multi-turn agent execution within workspaces requires binding node-specific mani
 
 **Out of scope:** The uv_node_config_impl implementation component does not parse configuration files, drive agent turns, or manage file modification permissions during runs; these are handled by other components.
 
-**Delegated:** Target manifest retrieval is delegated to uv_manifest_loader; graph storage and feedback messages are delegated to dag_storage; path validation and workspace root resolution are delegated to file_paths; agent step mode permissions are delegated to agent_config; wire parameter conversions are delegated to tool_provider.
+**Delegated:** Target manifest retrieval is delegated to uv_manifest_loader; graph storage and feedback messages are delegated to dag_storage; path validation and workspace root resolution are delegated to file_paths; agent step mode permissions are delegated to agent_config.
 
 ## Types and Behavior
 
@@ -33,7 +33,7 @@ When resolving the parameters of a node from its manifest:
 
 - The direct dependencies and the transitive star dependencies across dependency manifests provide the read-only files, excluding declared silent dependencies and read-write files.
 
-- The declared feedback dependencies provide the blame targets mapped to their owning dependency nodes, the declared verification commands provide the verification checks, and graph storage provides the incoming feedback messages.
+- The declared feedback dependencies provide the blame targets mapped to their owning dependency nodes, the declared verification command provides the verification check executing in a subprocess configured with a dynamic Python path derived from the active workspace root and discovered package directories to resolve constituent library modules, the manifest verification success message provides the node verification success message, and graph storage provides the incoming feedback messages.
 
 When a node declares a guide target, the session config retrieves the guide target's manifest via the manifest loader. Guide markdown content is loaded by reading the guide file resolved across workspace trees using candidate relative paths derived from the guide target manifest's declared source file or the guide target label. An unbound guide file is provided using the relative filename derived from the guide target label.
 
@@ -55,6 +55,6 @@ The alias manager:
 
 - Generates a file alias with a relative path for every accessible workspace file associated with the active nodes.
 
-- Converts wire strings into file aliases by matching relative paths to the corresponding file aliases, producing an unbound file when a relative path is unmapped.
+- Converts path strings into file aliases by matching relative paths to the corresponding file aliases, producing an unbound file when a relative path is unmapped.
 
 - Sanitizes output text by masking occurrences of workspace root path prefixes and execution root path prefixes, replacing each matching host path with a relative workspace path.

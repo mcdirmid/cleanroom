@@ -1,16 +1,16 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T19:43:57Z
 LAST_CHANGED: 2026-10-11T02:45:00Z
 CHANGE: Restate the root assembly structurally and remove the constituent enumeration from prose
-CODE_HASH: 689df5af468d
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: e929743aa7eb
+SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
 -->
 
 # uv_cleanroom_asm assembly component
 
-assembles: control_asm, file_paths_impl, tools_asm, uv_openai_loop_asm, workspace_asm, workspace_tool_impl
+assembles: control_asm, file_paths_impl, storage_asm, tools_asm, uv_openai_loop_asm, workspace_asm
 imports: agent_session, commonmark_ext, filesystem_ext, json_ext, model_config_ext, openai_ext, src_metadata_ext, uv_manifest_ext, uv_target_labels_ext
-implements: agent_config, agent_file_alias, agent_node_config, agent_storage, control_attribution, control_coordinate, control_submit, control_verification, control_work_scheduler, dag_config, dag_storage, dag_subgraph, file_paths, loop, loop_cleaner, loop_conversation, loop_driver, loop_guard, loop_node_cleaner, openai_config, runner_logger, sandbox, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, src_metadata, template_format, tool_coverage, tool_provider, uv_manifest_loader, uv_target, workspace_provision, workspace_registry, workspace_sync, workspace_tool, workspace_work
+implements: agent_config, agent_file_alias, agent_node_config, agent_storage, control_attribution, control_coordinate, control_submit, control_verification, control_work_scheduler, dag_config, dag_storage, dag_subgraph, file_paths, loop, loop_cleaner, loop_conversation, loop_driver, loop_guard, loop_node_cleaner, openai_config, runner_logger, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, src_metadata, template_format, tool_coverage, tool_provider, uv_manifest_loader, uv_target, workspace_provision, workspace_registry, workspace_roles, workspace_scaffold, workspace_sync, workspace_tool, workspace_work
 
 ## Purpose
 

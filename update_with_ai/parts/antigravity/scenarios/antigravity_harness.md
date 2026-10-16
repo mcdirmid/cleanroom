@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T19:15:00Z
 CHANGE: author antigravity_harness scenarios
-CODE_HASH: 9a2a083cf9d8
+CODE_HASH: 9793534a1679
 -->
 
 # antigravity_harness scenarios
@@ -41,3 +41,10 @@ Given: an active role turn currently executing in a role workspace.
 
 1. The harness adapter polls the active turn.
    Observed: returns None while the process continues running, and returns a completed turn result once finished.
+
+## Scenario 6 — Registering Antigravity harness adapter factory
+
+Given: an agent session with an active harness registry.
+
+1. The harness manager initializes.
+   Observed: the Antigravity harness adapter factory is installed in the harness registry under platform name antigravity.

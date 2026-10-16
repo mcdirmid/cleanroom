@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T20:00:00Z
 CHANGE: author dsh_harness interface specification
-CODE_HASH: ab819da24c6b
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: ebe1d59209b4
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # dsh_harness interface component
 
-imports: agent_session, subagent_coordinator
+imports: agent_session, dsh_telemetry, subagent_coordinator, subagent_harness
 
 ## Purpose
 
@@ -18,7 +18,7 @@ Autonomous multi-agent execution requires reliable process management, non-block
 
 **Out of scope:** The dsh_harness interface component does not partition topological waves or evaluate DAG dirtiness; these are handled by other components.
 
-**Delegated:** Session lifecycle scoping is delegated to agent_session; harness adapter protocols and turn outcome types are delegated to subagent_coordinator.
+**Delegated:** Session lifecycle scoping is delegated to agent_session; harness adapter protocols and turn outcome types are delegated to subagent_coordinator; token telemetry extraction, rate card calculation, and desktop session synchronization are delegated to dsh_telemetry; platform harness registration is delegated to subagent_harness.
 
 ## Types and Behavior
 
@@ -28,7 +28,7 @@ An abstract *dsh telemetry parser* extracts model token metrics from DeepSeek Ha
 
 A *dsh harness adapter* realizes the harness adapter protocol for DeepSeek Harness execution sessions.
 
-The *dsh harness manager* of an agent session creates and manages DeepSeek Harness adapters and telemetry parsing services.
+The *dsh harness manager* of an agent session creates and manages DeepSeek Harness adapters, installs the DeepSeek Harness adapter factory into the harness registry, and manages telemetry parsing services.
 
 When executing a role turn:
 

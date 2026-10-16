@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: 892b3b9e39dc
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 633e61195f0f
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for uv_node_config_impl aligned with low-level specifications."""
@@ -193,8 +193,8 @@ class TestUvNodeConfigImpl(unittest.TestCase):
                 sanitized = mgr.sanitize_text(raw_text)
                 self.assertNotIn("/workspace/", sanitized)
 
-    def test_alias_manager_convert(self) -> None:
-        """CUJ: Converting wire path string to FileAlias for bound and unbound files."""
+    def test_alias_manager_to_alias(self) -> None:
+        """CUJ: Converting path string to FileAlias for bound and unbound files."""
         target_node = _make_dag_node("//pkg:target", "lib")
         manifest = TargetManifest(
             label=cast(Any, "//pkg:target"),
@@ -212,19 +212,19 @@ class TestUvNodeConfigImpl(unittest.TestCase):
                 mgr = scope.get_singleton(AliasManager)
 
                 # Unbound file
-                unbound = mgr.convert("unknown/file.txt")
+                unbound = mgr.to_alias("unknown/file.txt")
                 self.assertIsInstance(unbound, FileAlias)
                 self.assertIsInstance(unbound, UnboundFile)
 
                 # Bound file
-                bound = mgr.convert("pkg/target.py")
+                bound = mgr.to_alias("pkg/target.py")
                 self.assertIsInstance(bound, FileAlias)
                 self.assertIsInstance(bound, BoundFile)
                 assert isinstance(bound, BoundFile)
                 self.assertEqual(bound.relative_path, "pkg/target.py")
 
                 # Basename match
-                short_bound = mgr.convert("target.py")
+                short_bound = mgr.to_alias("target.py")
                 self.assertEqual(short_bound, bound)
 
     def test_node_config_file_sets(self) -> None:
@@ -307,6 +307,34 @@ class TestUvNodeConfigImpl(unittest.TestCase):
                 self.assertIn(node, blame)
                 rel_paths = {b.relative_path for b in blame[node]}
                 self.assertIn("pkg/contract.pyi", rel_paths)
+
+    def test_verification_success_message(self) -> None:
+        """CUJ: Propagate verification success message from manifest."""
+        manifest = TargetManifest(
+            label=cast(Any, "//pkg:target"),
+            source_file=cast(Any, RelativePath("pkg/target.py")),
+            verification_success_message="target.py passed static checks.",
+        )
+        self.manifest_loader.manifests["//pkg:target"] = manifest
+
+        with enter_phase("system", registry=self.registry):
+            with enter_phase("agent_session", registry=self.registry) as scope:
+                cfg = scope.get_singleton(NodeConfig)
+                self.assertEqual(
+                    cfg.verification_success_message,
+                    "target.py passed static checks.",
+                )
+
+    def test_command_verification_check_pythonpath(self) -> None:
+        """CUJ: Verification check subprocess includes dynamic PYTHONPATH."""
+        from update_with_ai.parts.uv.lib.uv_node_config_impl import _CommandVerificationCheck
+        check = _CommandVerificationCheck(
+            command='python3 -c "import os; print(os.environ.get(\'PYTHONPATH\', \'\'))"',
+            cwd=tempfile.gettempdir(),
+        )
+        passed, diag = check.verify()
+        self.assertTrue(passed)
+        self.assertTrue(len(str(diag)) > 0)
 
 
 if __name__ == "__main__":

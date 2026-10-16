@@ -1,13 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
 CHANGE: Canonicalize the missing note term and state wire value conversion declaratively
-CODE_HASH: 73c193090cd4
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 15002f30f1d3
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # tool_provider_impl implementation component
 
+imports: agent_file_alias
 implements: tool_provider
 
 ## Purpose
@@ -41,3 +42,5 @@ The identity parameter type converts wire values into identical actual values fo
 The list parameter type converts wire type lists into actual type lists by converting each element with its item parameter type.
 
 The mapping parameter type converts wire type mappings into actual type mappings by converting each key with its key parameter type and each value with its value parameter type.
+
+The alias manager type converts a wire string to a file alias by delegating to the session alias manager to alias.

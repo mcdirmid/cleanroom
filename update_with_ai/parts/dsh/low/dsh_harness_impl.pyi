@@ -1,64 +1,23 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-13T20:00:00Z
 # CHANGE: author dsh_harness_impl implementation low-level specification
-# CODE_HASH: 56b5639a8a6b
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: ab8496699564
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for dsh_harness_impl."""
 
-from typing import Optional
+from typing import Any, Optional
 from framework import operation, override, poly_type, singleton_type
 from support.lib.lifecycle import InTier
 import agent_session
 import dsh_ext
 import dsh_harness
+import dsh_telemetry
 import subagent_coordinator
+import subagent_harness
 import workspace_work
-
-
-@poly_type
-class DshTelemetryParser(dsh_harness.DshTelemetryParser):
-    """Realizes session storage archive and event stream parsing for DeepSeek Harness.
-
-    GROUNDING:
-    - Queries session.v4.jsonl.zstd archives or parses stdout stream events conforming to dsh_ext,
-      aggregates uncached, cached, and completion tokens, falls back to text logs when structured
-      records are absent, and applies model pricing rate cards to produce
-      dsh_harness.DshSessionTokenMetrics records.
-    """
-
-    @operation
-    @override
-    def parse_session_storage(
-        self,
-        sessions_dir: str,
-        workspace_dir: str,
-        model_name: Optional[str] = None,
-    ) -> dsh_harness.DshSessionTokenMetrics:
-        """Queries session storage archives and returns token metrics.
-
-        GROUNDING:
-        - Locates session directories under sessions_dir matching workspace_dir slug according to
-          dsh_ext, decompresses session.v4.jsonl.zstd, aggregates token usage, and computes cost_usd.
-        """
-        ...
-
-    @operation
-    @override
-    def parse_stream_text(
-        self,
-        stream_text: str,
-        model_name: Optional[str] = None,
-    ) -> dsh_harness.DshSessionTokenMetrics:
-        """Parses stdout JSON event streams or log text for token metrics.
-
-        GROUNDING:
-        - Extracts token metrics from JSON run events or stdout strings conforming to dsh_ext
-          and computes cost_usd.
-        """
-        ...
 
 
 @poly_type
@@ -81,8 +40,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         """Dispatches work directive to a DeepSeek Harness role workspace.
 
         GROUNDING:
-        - Executes dsh CLI process bound to dispatch.workspace_dir using headless profile and
-          overlay patches conforming to dsh_ext and returns task handle.
+        - Prepares role-tailored task prompts distinguishing auditor roles from authoring roles,
+          executes dsh CLI process bound to dispatch.workspace_dir using headless profile and
+          overlay patches conforming to dsh_ext, and returns task handle.
         """
         ...
 
@@ -96,8 +56,8 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
         GROUNDING:
         - Awaits process completion without mandatory timeout unless configured, computes buffer
-          differences via workspace_work, parses session telemetry via dsh_harness,
-          and constructs subagent_coordinator.RoleTurnResult.
+          differences via workspace_work, assigns unresolved status when zero targets are submitted or blamed,
+          parses session telemetry via dsh_harness, and constructs subagent_coordinator.RoleTurnResult.
         """
         ...
 
@@ -149,12 +109,24 @@ class DshHarnessManager(
         timeout_seconds: Optional[float] = None,
         max_context_tokens: Optional[int] = None,
         custom_cmd: Optional[str] = None,
+        simulation_mode: bool = False,
         sessions_dir: Optional[str] = None,
+        **kwargs: Any,
     ) -> dsh_harness.DshHarnessAdapter:
         """Constructs a DeepSeek Harness adapter instance.
 
         GROUNDING:
         - Instantiates DshHarnessAdapter with configured model, timeout, and session storage path.
+        """
+        ...
+
+    @operation
+    @override
+    def initialize(self) -> None:
+        """Initializes the manager and installs the adapter factory into the harness registry.
+
+        GROUNDING:
+        - Registers DeepSeek Harness adapter factory into subagent_harness.HarnessRegistry during agent session initialization.
         """
         ...
 

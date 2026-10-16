@@ -110,6 +110,7 @@ def resolve_scope_nodes(
     target_str: str,
     root_dir: str,
     loader: Any,
+    up_to_role: Optional[str] = None,
 ) -> Optional[List[DagNode]]:
     """Resolves a filesystem path or scope string to an ordered list of DagNodes.
 
@@ -221,7 +222,21 @@ def resolve_scope_nodes(
 
     depths = _compute_role_depths(roles_dict)
     ordered_roles = sorted(roles_dict.keys(), key=lambda r: (depths.get(r, 0), r))
-    roles_to_scan = [role_filter] if role_filter else ordered_roles
+    if role_filter:
+        roles_to_scan = [role_filter]
+    elif up_to_role:
+        target_clean = up_to_role.strip().lower()
+        matching_idx = None
+        for idx, r in enumerate(ordered_roles):
+            if r.lower() == target_clean or r.split(":")[-1].strip().lower() == target_clean:
+                matching_idx = idx
+                break
+        if matching_idx is not None:
+            roles_to_scan = ordered_roles[: matching_idx + 1]
+        else:
+            roles_to_scan = ordered_roles
+    else:
+        roles_to_scan = ordered_roles
 
     nodes: List[DagNode] = []
 
@@ -272,18 +287,44 @@ def resolve_scope_nodes(
 def run_cleanroom_target(
     target_str: str,
     action: str = "clean",
-    config: Optional[str] = None,
+    model: Optional[str] = None,
     message: Optional[str] = None,
     workspace_dir: Optional[str] = None,
+    up_to_role: Optional[str] = None,
+    config: Optional[str] = None,
 ) -> int:
-    if config:
-        os.environ["CLEANROOM_MODEL"] = config
+    resolved_model = model or config
+    if not resolved_model or resolved_model == "default":
+        try:
+            curr = os.path.dirname(os.path.realpath(__file__))
+            r_root = (
+                os.path.abspath(workspace_dir)
+                if workspace_dir and os.path.isdir(workspace_dir)
+                else (os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.path.abspath(os.path.join(curr, "../../..")))
+            )
+            import tomllib
+            for cand in (os.path.join(r_root, "model_configs.toml"), os.path.join(os.path.dirname(r_root), "model_configs.toml")):
+                if os.path.isfile(cand):
+                    with open(cand, "rb") as f:
+                        tdata = tomllib.load(f)
+                    val = tdata.get("loop_default") or tdata.get("default")
+                    if isinstance(val, str) and val.strip():
+                        resolved_model = val.strip()
+                        break
+        except Exception:
+            pass
+    if resolved_model:
+        os.environ["CLEANROOM_MODEL"] = resolved_model
 
     if workspace_dir and os.path.isdir(workspace_dir):
         os.chdir(workspace_dir)
 
     curr = os.path.dirname(os.path.realpath(__file__))
-    repo_root = os.path.abspath(os.path.join(curr, "../../.."))
+    repo_root = (
+        os.path.abspath(workspace_dir)
+        if workspace_dir and os.path.isdir(workspace_dir)
+        else (os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.path.abspath(os.path.join(curr, "../../..")))
+    )
 
     assert uv_cleanroom_asm is not None
     uv_cleanroom_asm.__initialize__()
@@ -292,13 +333,15 @@ def run_cleanroom_target(
     storage = get_singleton(dag_storage.DagStorage)
     runner = get_singleton(loop.Loop)
 
-    scope_nodes = resolve_scope_nodes(target_str, repo_root, loader)
+    scope_nodes = resolve_scope_nodes(target_str, repo_root, loader, up_to_role=up_to_role)
 
     if scope_nodes is not None:
         if action == "mark-clean":
             count = 0
             for n in scope_nodes:
                 loader.load_manifest(n)
+                if hasattr(storage, "is_dirty") and not storage.is_dirty(n):
+                    continue
                 if hasattr(storage, "materialize_template"):
                     storage.materialize_template(n)
                 if hasattr(storage, "mark_node_clean"):
@@ -344,6 +387,35 @@ def run_cleanroom_target(
         elif len(scope_nodes) == 1:
             node = scope_nodes[0]
             loader.load_manifest(node)
+        elif action == "clean":
+            openai_cfg = get_singleton(OpenAIConfig)
+            cfg_name = resolved_model or os.environ.get("CLEANROOM_MODEL") or "default"
+            dirty_nodes = []
+            for n in scope_nodes:
+                loader.load_manifest(n)
+                if hasattr(storage, "is_dirty") and storage.is_dirty(n):
+                    dirty_nodes.append(n)
+            if not dirty_nodes:
+                print(f"✔ CLEAN: All {len(scope_nodes)} targets in scope '{target_str}' evaluate clean.")
+                return 0
+            print(f"Cleaning {len(dirty_nodes)} dirty target(s) across {target_str} (config: {cfg_name}, model: {openai_cfg.model_name})...")
+            for n in dirty_nodes:
+                if hasattr(storage, "is_dirty") and not storage.is_dirty(n):
+                    continue
+                try:
+                    res = runner.clean_subgraph(n)
+                    if not res.success:
+                        print(f"Error: {res.summary}", file=sys.stderr)
+                        return 1
+                    print(f"✔ {res.summary}")
+                except KeyboardInterrupt:
+                    print("Interrupted.", file=sys.stderr)
+                    return 130
+                except Exception as e:
+                    print(f"Failed to execute cleaning pass: {e}", file=sys.stderr)
+                    return 1
+            print(f"✔ All targets in scope '{target_str}' converged clean.")
+            return 0
         else:
             print(
                 f"Error: Action '{action}' cannot be run across multiple targets in scope '{target_str}' ({len(scope_nodes)} nodes). Specify a single target.",
@@ -372,7 +444,7 @@ def run_cleanroom_target(
 
     if action == "clean":
         openai_cfg = get_singleton(OpenAIConfig)
-        cfg_name = config or os.environ.get("CLEANROOM_MODEL") or "default"
+        cfg_name = resolved_model or os.environ.get("CLEANROOM_MODEL") or "default"
         print(f"Cleaning target {node.unit_address}#{node.role_address} (config: {cfg_name}, model: {openai_cfg.model_name})...")
         try:
             res = runner.clean_subgraph(node)
@@ -389,12 +461,52 @@ def run_cleanroom_target(
             return 1
 
     elif action == "mark-clean":
-        if hasattr(storage, "mark_subgraph_clean"):
-            storage.mark_subgraph_clean(node)
+        if hasattr(storage, "get_dependencies"):
+            visited: Set[DagNode] = set()
+            order: List[DagNode] = []
+
+            def dfs(n: DagNode) -> None:
+                if n in visited:
+                    return
+                visited.add(n)
+                loader.load_manifest(n)
+                for dep in storage.get_dependencies(n):
+                    dfs(dep.node)
+                order.append(n)
+
+            dfs(node)
+            count = 0
+            for n in order:
+                if hasattr(storage, "is_dirty") and not storage.is_dirty(n):
+                    continue
+                if hasattr(storage, "materialize_template"):
+                    storage.materialize_template(n)
+                if hasattr(storage, "mark_node_clean"):
+                    storage.mark_node_clean(n)
+                elif hasattr(storage, "mark_subgraph_clean"):
+                    storage.mark_subgraph_clean(n)
+                else:
+                    runner.mark_subgraph_clean(n)
+                count += 1
+            if count == 0:
+                print(f"✔ Target is already clean: {node.unit_address}#{node.role_address}")
+            else:
+                print(f"✔ Marked {count} target(s) clean: {node.unit_address}#{node.role_address}")
+            return 0
         else:
-            runner.mark_subgraph_clean(node)
-        print(f"✔ Marked target clean: {node.unit_address}#{node.role_address}")
-        return 0
+            if hasattr(storage, "is_dirty") and not storage.is_dirty(node):
+                print(f"✔ Target is already clean: {node.unit_address}#{node.role_address}")
+                return 0
+            if hasattr(storage, "materialize_template"):
+                storage.materialize_template(node)
+            if hasattr(storage, "mark_node_clean"):
+                storage.mark_node_clean(node)
+            elif hasattr(storage, "mark_subgraph_clean"):
+                storage.mark_subgraph_clean(node)
+            else:
+                runner.mark_subgraph_clean(node)
+            print(f"✔ Marked target clean: {node.unit_address}#{node.role_address}")
+            return 0
 
     elif action == "change":
         desc = message or "Manual change"
@@ -449,10 +561,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Target node or file path (e.g. //parts/agent:agent_config#lib or lib/agent_config.py)",
     )
     parser.add_argument(
-        "--config",
-        "-c",
+        "--model",
         default=None,
-        help="Model configuration target label (e.g. //model_configs:default)",
+        help="Model configuration or profile name (e.g. default, careful, fast)",
     )
     parser.add_argument(
         "--action",
@@ -487,7 +598,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     return run_cleanroom_target(
         target_str=args.target,
         action=args.action,
-        config=args.config,
+        model=args.model,
         message=msg,
         workspace_dir=args.workspace_dir,
     )

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-09T03:03:42Z
 # CHANGE: Rewrote tool_provider_impl tests with recording mock Tool, mock ParameterTypes (incl. one raising ParameterConversionError) and missing-note callback; covers install_tool/installed_tools and every execute_tool postcondition: unknown tool, unknown parameter (+reminder), missing required with/without note (+reminder, note receives present params), default binding, conversion error (+reminder), and successful dispatch with converted bindings returning the tool response.
-# CODE_HASH: 6cf845de04da
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: b4c1e58081f0
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for tool_provider_impl per its grounding specification."""
@@ -15,9 +15,11 @@ import unittest
 from typing import Any, Callable, Dict, List, Mapping, Optional, Set
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib import tool_provider
 from update_with_ai.parts.sandbox.lib.tool_provider_impl import (
+    AliasManagerType,
     ToolManager,
     __initialize__,
 )
@@ -372,6 +374,28 @@ class ToolProviderImplTest(unittest.TestCase):
             self.assertEqual(len(tool.calls), 1)
             self.assertEqual(tool.calls[0], {count: 40, label: "ABC"})
             self.assertEqual(other.calls, [])
+
+    def test_alias_manager_type_converts_via_session_alias_manager(self) -> None:
+        """Scenario 16: AliasManagerType converts wire strings by delegating to AliasManager.to_alias."""
+        class _MockAliasManager:
+            def to_alias(self, path: str) -> agent_file_alias.FileAlias:
+                return agent_file_alias.FileAlias(agent_file_alias.RelativePath(path))
+
+        self.registry.register_instance(
+            _MockAliasManager(),
+            keys=[agent_file_alias.AliasManager],
+            tier=agent_session,
+        )
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            alias_type = scope.get_singleton(tool_provider.AliasManagerType)
+            self.assertIs(alias_type.actual_type, agent_file_alias.FileAlias)
+            self.assertIs(alias_type.wire_type, str)
+            res = alias_type.convert("widget/notes/draft.md")
+            self.assertIsInstance(res, agent_file_alias.FileAlias)
+            self.assertEqual(res.relative_path, "widget/notes/draft.md")
+
+            with self.assertRaises(tool_provider.ParameterConversionError):
+                alias_type.convert(123)  # type: ignore
 
 
 if __name__ == "__main__":

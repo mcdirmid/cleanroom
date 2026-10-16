@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_harness_impl unit tests
-# CODE_HASH: c1212e7ed311
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T11:00:00Z
+# CHANGE: turn down support for goose, supporting only antigravity and dsh
+# CODE_HASH: d2816dd91149
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for subagent_harness_impl."""
@@ -15,6 +15,7 @@ import json
 import os
 import shutil
 import tempfile
+from typing import Any, Optional
 import unittest
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
@@ -24,7 +25,7 @@ from update_with_ai.parts.subagent.lib import (
     subagent_harness,
     subagent_harness_impl,
 )
-from update_with_ai.parts.workspace.lib import workspace_work
+from update_with_ai.parts.tools.lib import workspace_work
 
 
 class FakeWorkspaceWorkManager:
@@ -149,32 +150,50 @@ class SubagentHarnessImplTest(unittest.TestCase):
             self.assertIn("42", str(result.failure_reason))
 
     def test_resolving_platform_command_templates(self) -> None:
-        """Scenario 5: Resolves platform templates for Antigravity, Goose, DSH, and simulation."""
+        """Scenario 5: Installs and resolves harness adapters via dynamic registry."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            resolver = scope.get_singleton(subagent_harness.HarnessResolver)
+            registry = scope.get_singleton(subagent_harness.HarnessRegistry)
 
-            adapter_agy = resolver.resolve_harness("antigravity")
-            self.assertIsInstance(adapter_agy, subagent_harness_impl.CommandHarnessAdapter)
-            assert isinstance(adapter_agy, subagent_harness_impl.CommandHarnessAdapter)
-            self.assertIn("agy", adapter_agy.cmd_template)
+            def mock_factory(
+                model_name: Optional[str] = None,
+                timeout_seconds: Optional[float] = None,
+                max_context_tokens: Optional[int] = None,
+                custom_cmd: Optional[str] = None,
+                simulation_mode: bool = False,
+                **kwargs: Any,
+            ) -> subagent_coordinator.HarnessAdapter:
+                return subagent_harness_impl.CommandHarnessAdapter(
+                    cmd_template=custom_cmd or "mock_agent {prompt_file}",
+                    timeout_seconds=timeout_seconds,
+                    max_context_tokens=max_context_tokens,
+                    model_name=model_name,
+                    simulation_mode=simulation_mode,
+                )
 
-            adapter_goose = resolver.resolve_harness("goose")
-            self.assertIsInstance(adapter_goose, subagent_harness_impl.CommandHarnessAdapter)
-            assert isinstance(adapter_goose, subagent_harness_impl.CommandHarnessAdapter)
-            self.assertIn("goose", adapter_goose.cmd_template)
+            registry.install_harness("mock_platform", mock_factory)
+            self.assertIn("mock_platform", registry.installed_harnesses)
 
-            adapter_dsh = resolver.resolve_harness("dsh")
-            self.assertIsInstance(adapter_dsh, subagent_harness_impl.CommandHarnessAdapter)
-            assert isinstance(adapter_dsh, subagent_harness_impl.CommandHarnessAdapter)
-            self.assertIn("dsh", adapter_dsh.cmd_template)
+            adapter = registry.resolve_harness("mock_platform", model_name="test-model")
+            self.assertIsInstance(adapter, subagent_harness_impl.CommandHarnessAdapter)
+            assert isinstance(adapter, subagent_harness_impl.CommandHarnessAdapter)
+            self.assertEqual(adapter.model_name, "test-model")
 
-            adapter_sim = resolver.resolve_harness("simulation")
+            adapter_sim = registry.resolve_harness("simulation")
             self.assertIsInstance(adapter_sim, subagent_harness_impl.CommandHarnessAdapter)
             assert isinstance(adapter_sim, subagent_harness_impl.CommandHarnessAdapter)
             self.assertTrue(adapter_sim.simulation_mode)
 
-            with self.assertRaises(ValueError):
-                resolver.resolve_harness("nonexistent_platform")
+            adapter_custom = registry.resolve_harness(
+                "any_platform",
+                custom_cmd="custom_cmd {prompt_file}",
+            )
+            self.assertIsInstance(adapter_custom, subagent_harness_impl.CommandHarnessAdapter)
+            assert isinstance(adapter_custom, subagent_harness_impl.CommandHarnessAdapter)
+            self.assertEqual(adapter_custom.cmd_template, "custom_cmd {prompt_file}")
+
+            with self.assertRaises(ValueError) as ctx:
+                registry.resolve_harness("nonexistent_platform")
+            self.assertIn("Unknown platform 'nonexistent_platform'", str(ctx.exception))
 
 
     def test_enforcing_execution_timeouts(self) -> None:
@@ -210,7 +229,7 @@ class SubagentHarnessImplTest(unittest.TestCase):
             handle = adapter.dispatch_role(dispatch)
 
             # Write fake turn log
-            log_path = os.path.join(self.test_dir, f".cleanroom_turn_{handle}.log")
+            log_path = adapter._active_tasks[handle].log_file
             with open(log_path, "w", encoding="utf-8") as lf:
                 lf.write(
                     "[Turn 1] Input tokens: 1000\n"

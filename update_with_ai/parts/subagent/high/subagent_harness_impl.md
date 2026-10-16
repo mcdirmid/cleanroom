@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
-LAST_CHANGED: 2026-10-12T21:00:00Z
-CHANGE: author subagent_harness_impl implementation specification
-CODE_HASH: d219a777ac51
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T11:00:00Z
+CHANGE: turn down support for goose, supporting only antigravity and dsh
+CODE_HASH: 7b309b3f53eb
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # subagent_harness_impl implementation component
@@ -13,7 +13,7 @@ implements: subagent_harness
 
 ## Purpose
 
-The subagent_harness_impl implementation component realizes the command harness adapter and harness resolution services for executing external subagent processes across isolated role workspaces.
+The subagent_harness_impl implementation component realizes the command harness adapter and harness registry services for executing external subagent processes across isolated role workspaces.
 
 Multi-agent coordination requires dispatching autonomous agents into isolated role workspaces, instructing them with role directives, awaiting turn completion, and extracting outcome telemetry without coupling the central scheduler to platform-specific SDKs. Without a generalized process harness contract, each agent platform requires bespoke process management, inconsistent prompt formulation, and duplicate buffer inspection. The subagent_harness_impl implementation component formalizes command template execution, structured role prompt formulation, workspace pending and blame buffer inspection, process lifecycle control, and turn result synthesis.
 
@@ -37,4 +37,4 @@ When realizing subagent dispatch and outcome monitoring:
 
 - The realization returns role turn results reflecting clean execution, blamed feedback, or process failures with captured error diagnostics.
 
-- The harness resolver realization maps platform names including Antigravity, Goose, and DeepSeek Harness to canonical CLI command templates, or enables simulation mode for testing.
+- The harness registry realization maintains a dictionary of installed adapter factories, registers platform adapter factories, and resolves harness adapters by delegating to the registered factory matching the requested platform name, configuring custom command templates, or enabling simulation mode.

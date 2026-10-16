@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T03:36:57Z
 # CHANGE: Add source attribution marking and file-level blame contracts; drop return-type restatements
-# CODE_HASH: 263ee70a3e6f
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: bb10bc3c3889
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for control_attribution."""
@@ -91,6 +91,7 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - WHEN the critique contains newline characters, MUST reject blame.
+        - WHEN the critique exceeds configured maximum feedback character limits, MUST reject blame with an advisory error instructing defect prioritization.
         - WHEN the culprit file cannot be resolved, MUST reject blame.
         - WHEN the caller role is not configured to deliver feedback to the culprit role, MUST reject blame.
         - WHEN blame is accepted, MUST execute build blame targets or mutate in-band metadata to record feedback and dirty status, and MUST synchronize the affected files.

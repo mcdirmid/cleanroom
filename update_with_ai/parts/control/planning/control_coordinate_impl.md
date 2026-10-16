@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T04:27:23Z
 CHANGE: Contract dispatch state transitions for submit, blame, and fail with in-batch dependent failure marks
 CODE_HASH: 53361977594d
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # control_coordinate_impl implementation component
@@ -19,17 +19,18 @@ The implementation maintains session dictionaries mapping dag nodes to their tar
 ### Contracts
 
 - The session coordinator maintains an in-memory dictionary of node target states. [store_node_states]
-- The session coordinator maps file alias strings to registered dag nodes. [map_alias_to_node]
+- The session coordinator maps file alias strings to registered dag nodes via exact matches, path suffixes, and role-compatible source file proxies. [map_alias_to_node]
 - The session coordinator selects the single open node when only one open target remains. [default_single_open_node]
 - The session coordinator selects the open node corresponding to the last modified file. [default_last_modified_file]
 - The session coordinator invokes the work scheduler to discover tasks and populates session nodes. [populate_scheduled_nodes]
 - The session coordinator updates the sequence of active nodes on role config when dispatching get work. [update_active_nodes_on_role_config]
-- The session coordinator delegates verification to the verification evaluator. [delegate_verification]
+- The session coordinator delegates verification to the verification evaluator, falling back to the single open target when unambiguous. [delegate_verification]
 - The session coordinator delegates submission to the submission coordinator. [delegate_submission]
-- The session coordinator delegates attribution to the attribution coordinator. [delegate_attribution]
+- The session coordinator delegates attribution to the attribution coordinator, resolving blame targets against configured upstream blame targets and rejecting self-blame. [delegate_attribution]
 - Dispatching submission delegates validation and resolution to the submission coordinator and updates the target state to clean upon success. [dispatch_submit_updates_clean_state]
-- Dispatching blame delegates defect attribution to the attribution coordinator, updates the target state to attributed, and marks any in-batch dependents as failed. [dispatch_blame_updates_attributed_state]
+- Dispatching blame resolves upstream targets, delegates defect attribution to the attribution coordinator, updates the target state to attributed, and marks any in-batch dependents as failed. [dispatch_blame_updates_attributed_state]
 - Dispatching fail delegates failure logging to the attribution coordinator, updates the target state to failed, and marks any in-batch dependents as failed. [dispatch_fail_updates_failed_state]
+- The session coordinator formats node display aliases as source file paths or configured patterns instead of graph node target addresses. [format_node_display_alias]
 
 ### Woven Contracts
 
@@ -38,6 +39,7 @@ The implementation maintains session dictionaries mapping dag nodes to their tar
 - When check files is called, the coordinator evaluates single or multiple targets via the verification evaluator and returns the combined results. [delegate_verification, control_coordinate: [dispatch_check_files]]
 - When submission is dispatched, the coordinator delegates validation and resolution to the submission coordinator and updates the target state to clean upon success. [delegate_submission, dispatch_submit_updates_clean_state, control_coordinate: [dispatch_submit]]
 - When blame or fail is dispatched, the coordinator delegates to the attribution coordinator, updates the target state to attributed or failed, and marks in-batch dependents as failed. [delegate_attribution, dispatch_blame_updates_attributed_state, dispatch_fail_updates_failed_state, control_coordinate: [dispatch_blame, dispatch_fail]]
+- When formatting node aliases for agent interaction or errors, the coordinator maps nodes to source file aliases or configured role source patterns. [format_node_display_alias, map_alias_to_node]
 
 ## Grounding
 

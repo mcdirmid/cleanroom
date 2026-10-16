@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
-LAST_CHANGED: 2026-10-13T20:00:00Z
-CHANGE: author dsh_workspace_impl implementation specification
-CODE_HASH: ee6cde1551b4
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T17:45:00Z
+CHANGE: specify auditor code inspection and terminal command restrictions in role agent documentation
+CODE_HASH: 658be07fb4e6
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # dsh_workspace_impl implementation component
@@ -27,9 +27,9 @@ The dsh workspace configurer customizes role agent documentation and generates o
 
 When configuring role workspaces:
 
-- The dsh workspace configurer incorporates explicit isolation boundaries, tripwires, and restricted binary directives tailored for DeepSeek Harness into role agent documentation.
+- The dsh workspace configurer incorporates explicit isolation boundaries, tripwires, restricted binary directives, and auditor rules tailored for DeepSeek Harness into role agent documentation, mandating in-workspace code and change header inspection while prohibiting code edits.
 
-- The dsh workspace configurer generates a Cordis patch file in `.cleanroom/dsh_patch.yml` configuring danger-full-access permissions, approval policy never, and requested model providers.
+- The dsh workspace configurer generates a Cordis patch file in `.cleanroom/dsh_patch.yml` configuring danger-full-access permissions, approval policy never, disabled task management plugins, and requested model providers, resolving declarative model profile names against model configuration definitions.
 
 - The dsh workspace configurer verifies that configured instruction files and patch files exist and are readable on disk.
 

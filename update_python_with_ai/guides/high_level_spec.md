@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-07T05:04:27Z
 LAST_CHANGED: 2026-10-04T02:03:40Z
-CHANGE: new file
+CHANGE: Clarify that cleanroom metadata headers are managed automatically by submit
 CODE_HASH: 8954564f670a
 -->
 
@@ -9,7 +9,7 @@ CODE_HASH: 8954564f670a
 
 ## Summary
 
-The artifact is a High-Level Specification (HLS) that defines a software component declaratively through literate prose under `high/<name>.md`. In a multi-node session, multiple high-level specifications are processed together; each target is identified by its file alias relative path, and each target is submitted individually via `submit(target="<target_file>", change_summary="...")` when complete (in single-target sessions, the target parameter may be omitted). The artifact conforms to this guide and the component architecture described in the design documents. Specifications define interface (`high/<name>.md`), implementation (`high/<name>_impl.md`), external boundary (`high/<name>_ext.md`), or assembly (`high/<name>_asm.md`) components without pseudo-code, bolding, nested bullet trees, or artificial parameter flags.
+The artifact is a High-Level Specification (HLS) that defines a software component declaratively through literate prose under `high/<name>.md`. In a multi-node session, multiple high-level specifications are processed together; each target is identified by its file alias relative path, and each target is submitted individually via `submit(target="<target_file>", change_summary="...")` when complete (in single-target sessions, the target parameter may be omitted). Cleanroom metadata headers (enclosed by `<!-- CLEANROOM METADATA` and `-->`) are managed automatically by Cleanroom tooling upon `submit(change_summary=...)`; direct edits to metadata headers are prohibited and rejected by editing tools. The artifact conforms to this guide and the component architecture described in the design documents. Specifications define interface (`high/<name>.md`), implementation (`high/<name>_impl.md`), external boundary (`high/<name>_ext.md`), or assembly (`high/<name>_asm.md`) components without pseudo-code, bolding, nested bullet trees, or artificial parameter flags.
 
 Specifications define domain concepts through a disciplined term ontology where each concept is represented by exactly one canonical term, avoiding synonym drift and avoiding introducing different terms for opposite sides of the same concept. Component visibility and lifetimes are governed by hierarchical lifecycle tiers (the root system tier and subordinate tiers defined by interface components) where services access each other directly without object type containment or factory plumbing. Specifications follow a closed two-section layout: a why-focused `## Purpose` section with an `**Out of scope:**` boundary disclaimer and an optional `**Delegated:**` boundary statement, and either a unified `## Types and Behavior` section expressed in literate prose with semantic italics strictly on term introductions (for interface, implementation, and assembly specifications), or a `## Grounding Gaps Covered` section in plain prose without semantic italics (for external boundary specifications).
 

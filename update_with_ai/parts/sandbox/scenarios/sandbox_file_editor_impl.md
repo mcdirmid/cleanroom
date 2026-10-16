@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:12:00Z
-CHANGE: Author sandbox sandbox_file_editor_impl concrete scenarios
+CHANGE: Reject editing tool replacements that alter the cleanroom metadata header
 CODE_HASH: 6dff0f75ba57
 -->
 
@@ -11,7 +11,7 @@ Scenarios 1 through 7 restate the caller observations of the interface scenarios
 each observation, the realization that produces it. Restating them rather than writing fresh ones is
 what makes realizability structural: an implementation scenario that cannot name a realization for
 its observation is a defect in the implementation rather than a gap in the set. Scenarios 8 through
-12 cover behaviours the interface does not expose to a caller, and each of them is a candidate for
+13 cover behaviours the interface does not expose to a caller, and each of them is a candidate for
 the question of whether it belongs in the interface set instead.
 
 ## Reused from the interface
@@ -263,3 +263,14 @@ as a read-write file holding the single line "value = 1".
    suppression key shared by editing tool responses.
    Realized by: the delta output policy from `agent_config`, the component's own diff delta
    construction in the response, and the constant response suppression key through `tool_provider`.
+
+### Scenario 13 — Refusing an edit that alters the cleanroom metadata header
+
+Given: the agent session declares `widget.py` as a read-write file whose content includes a cleanroom
+metadata header followed by source code.
+
+1. The caller invokes the replace file content tool targeting lines within the cleanroom metadata
+   header.
+   Observed: the tool fails, reminding the agent that cleanroom metadata is managed automatically by
+   submit, and `widget.py` remains unchanged.
+   Realized by: metadata boundary evaluation through `src_metadata`, and the component's own refusal.

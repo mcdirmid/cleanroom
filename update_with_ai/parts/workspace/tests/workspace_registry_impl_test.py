@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-13T01:30:00Z
 # CHANGE: test role metadata workspace discovery without persistent registry file
-# CODE_HASH: 7c3c2b99e31a
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: f06034aa56a6
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for workspace_registry_impl."""
@@ -15,12 +15,17 @@ import tempfile
 import unittest
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib import agent_session
-from update_with_ai.parts.workspace.lib import workspace_registry, workspace_registry_impl
+from update_with_ai.parts.workspace.lib import (
+    workspace_asm,
+    workspace_registry,
+    workspace_registry_impl,
+)
 
 
 class WorkspaceRegistryImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
+        workspace_asm.__initialize__(self.registry)
         self.ws_registry = workspace_registry_impl.WorkspaceRegistry()
         self.registry.register_instance(
             self.ws_registry,
@@ -314,7 +319,6 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
                 json.dump({
                     "role_name": "lib",
                     "dir_scope": "staging",
-                    "main_workspace_root": repo_root,
                     "last_sync_timestamp": "2026-01-02T03:04:05Z",
                 }, f)
 

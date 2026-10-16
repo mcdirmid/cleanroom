@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_tool_impl implementation library
-# CODE_HASH: fada3a6276b7
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T11:00:00Z
+# CHANGE: turn down support for goose, supporting only antigravity and dsh
+# CODE_HASH: e4e71dcaf155
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for subagent_tool_impl."""
@@ -74,7 +74,7 @@ class SubagentToolRunner(
         orch_parser.add_argument(
             "--harness",
             default="antigravity",
-            help="Subagent execution harness (antigravity, goose, dsh, simulation).",
+            help="Subagent execution harness (antigravity, dsh, simulation).",
         )
         orch_parser.add_argument(
             "--model",

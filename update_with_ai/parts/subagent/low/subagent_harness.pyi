@@ -1,15 +1,15 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_harness interface low-level specification
-# CODE_HASH: 70b476bfbf14
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 3bbd2d379c23
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for subagent_harness."""
 
 from dataclasses import dataclass
-from typing import Optional, Protocol, Sequence
+from typing import Any, Mapping, Optional, Protocol, Sequence
 from framework import data_type, operation, poly_type, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
@@ -73,9 +73,49 @@ class CommandHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         ...
 
 
+@poly_type
+class HarnessAdapterFactory(Protocol):
+    """Constructs harness adapters for subagent execution."""
+
+    @operation
+    def __call__(
+        self,
+        model_name: Optional[str] = None,
+        timeout_seconds: Optional[float] = None,
+        max_context_tokens: Optional[int] = None,
+        custom_cmd: Optional[str] = None,
+        simulation_mode: bool = False,
+        **kwargs: Any,
+    ) -> subagent_coordinator.HarnessAdapter:
+        """Constructs a configured harness adapter instance.
+
+        POSTCONDITIONS:
+        - MUST construct and return configured subagent coordinator harness adapter.
+        """
+        ...
+
+
 @singleton_type("agent_session")
-class HarnessResolver(InTier[AgentSessionTier], Protocol):
-    """Resolves harness adapter instances for designated platforms."""
+class HarnessRegistry(InTier[AgentSessionTier], Protocol):
+    """Maintains installed platform harness adapter factories and resolves adapters."""
+
+    @property
+    def installed_harnesses(self) -> Mapping[str, HarnessAdapterFactory]:
+        """Returns mapping of installed platform names to harness adapter factories."""
+        ...
+
+    @operation
+    def install_harness(
+        self,
+        platform_name: str,
+        adapter_factory: HarnessAdapterFactory,
+    ) -> None:
+        """Installs a harness adapter factory for a designated platform name.
+
+        POSTCONDITIONS:
+        - MUST register adapter factory under platform name in installed harnesses mapping.
+        """
+        ...
 
     @operation
     def resolve_harness(
@@ -90,7 +130,11 @@ class HarnessResolver(InTier[AgentSessionTier], Protocol):
         """Resolves a harness adapter for a platform name or custom command template.
 
         POSTCONDITIONS:
-        - MUST return CommandHarnessAdapter configured with canonical platform command template or custom command.
-        - WHEN platform is simulated or simulation_mode is true, MUST return simulated harness adapter.
+        - MUST return CommandHarnessAdapter configured with custom command or simulation mode when requested.
+        - WHEN platform is installed, MUST invoke installed adapter factory and return harness adapter.
+        - WHEN platform is not installed, MUST raise ValueError.
         """
         ...
+
+
+HarnessResolver = HarnessRegistry

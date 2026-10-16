@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
 # CODE_HASH: b6a3b3abdbfc
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom manifest loader implementation low-level specification."""
@@ -51,6 +51,7 @@ class UvManifestLoader(
         - MUST evaluate role source patterns parameterized with unit metadata.
         - MUST evaluate task prompt templates parameterized with unit metadata.
         - MUST evaluate verification check templates parameterized with unit metadata.
+        - MUST evaluate verification success message templates parameterized with unit metadata.
         - MUST cross-product unit dependencies with role dependencies to produce target dependencies.
         - MUST incorporate fixed role node dependencies as declared direct dependencies across unit and role dimensions.
         - MUST resolve bare cross-package unit dependency references to their containing packages within parts workspaces.

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-09T22:20:00Z
 CHANGE: Record change summary during clean status transition without appending dirty change message
 CODE_HASH: 4dd72b475fc6
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # control_submit interface component
@@ -28,6 +28,7 @@ Allowing untested code to enter the repository creates regressions. The submissi
 - A submission coordinator requires a change summary when workspace files were modified. [require_summary_when_modified]
 - A submission coordinator forbids a change summary when workspace files were not modified. [forbid_summary_when_unmodified]
 - A submission coordinator forbids a change summary when resolving an auditor role. [forbid_summary_for_auditors]
+- A submission coordinator rejects submission when session feedback is present and workspace files were not modified. [reject_unmodified_when_feedback_present]
 - A submission coordinator marks the target node status as clean in graph storage with the change summary upon acceptance. [mark_node_clean]
 - A submission coordinator rejects submission of test files in auditor roles. [reject_test_submission_for_auditors]
 - A submission coordinator rejects submission of read-only targets or targets outside directory scope. [reject_invalid_producer_file_submission]
@@ -38,6 +39,7 @@ Allowing untested code to enter the repository creates regressions. The submissi
 
 - When submitting a target node with passing verification, clean in-batch dependencies, and valid change summary, the coordinator marks the target clean with the change summary. [assert_verification_passed, assert_in_batch_dependencies_clean, mark_node_clean]
 - When submitting an auditor node, the coordinator rejects any submission containing a change summary. [forbid_summary_for_auditors]
+- When submitting a target with unresolved session feedback without workspace file modifications, the coordinator rejects the submission requiring file modifications. [reject_unmodified_when_feedback_present]
 - When submitting a file target, the coordinator validates role permissions, enforces change summary consistency, executes submission mutations, and stamps in-band metadata. [reject_test_submission_for_auditors, reject_invalid_producer_file_submission, validate_file_change_summary, execute_file_submission_mutation]
 
 ## Grounding

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
-LAST_CHANGED: 2026-10-12T23:35:00Z
-CHANGE: align AGENTS.md refresh planning with command execution tripwire and impasse fail protocol
-CODE_HASH: ca931ca97306
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T17:45:00Z
+CHANGE: align AGENTS.md refresh planning with in-workspace file inspection and terminal command restrictions
+CODE_HASH: 3483c1084b61
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # workspace_sync_impl implementation component
@@ -17,8 +17,8 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 ### Contracts
 
 - The workspace synchronizer copies newer upstream files from main to workspace setting 0o444 permissions on contracts and updating unmodified writable targets with 0o644 permissions while deleting missing files. [copy_upstream_files_with_perms]
-- The workspace synchronizer synthesizes read-only test stubs from companion specifications, replaces leaked implementation code, and deletes orphaned stubs for stub role dependencies. [sync_stub_role_dependencies]
-- The workspace synchronizer recopies tool runners, project configurations, guides, and AGENTS.md (with boundary rules, contamination tripwires, command execution restrictions, and fail-stop/impasse constraints) from main into the workspace without altering targets. [recopy_system_files_fast]
+- The workspace synchronizer delegates test stub synchronization for stub role dependencies to workspace provisioning. [sync_stub_role_dependencies]
+- The workspace synchronizer recopies project configurations, guides, and linters into the workspace, delegating runner deployment, role guide regeneration, and test stub synchronization to workspace provisioning without altering targets. [recopy_system_files_fast]
 - The workspace synchronizer computes on-disk SHA-256 code hashes and extracts in-band metadata to identify modified files. [evaluate_target_file_modifications]
 - The workspace synchronizer compares main repository code hashes against workspace baselines to detect concurrent edits. [compare_main_and_workspace_hashes]
 - The workspace synchronizer copies validated target files into the canonical repository and updates in-band clean timestamps. [copy_validated_files_to_main]
@@ -27,7 +27,7 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 ### Woven Contracts
 
-- When pulling updates from main, the synchronizer copies upstream files with read-only permissions, synchronizes stub role dependencies, and fast-refreshes system files. [copy_upstream_files_with_perms, sync_stub_role_dependencies, recopy_system_files_fast, workspace_sync: [pull_upstream_contracts, sync_stub_dependencies, refresh_system_files_into_workspace]]
+- When pulling updates from main, the synchronizer copies upstream files with read-only permissions, synchronizes stub role dependencies, and fast-refreshes system files. [copy_upstream_files_with_perms, sync_stub_role_dependencies, recopy_system_files_fast, workspace_sync: [pull_upstream_contracts, sync_stub_dependencies, refresh_system_files_into_workspace], workspace_provision: [synthesize_readonly_test_stubs, copy_file_with_permissions, deploy_runner_executables, write_role_agents_instructions]]
 - When harvesting changes, the synchronizer evaluates target modifications, detects concurrent edits against main, copies validated files, stamps audits, and flushes blame entries. [evaluate_target_file_modifications, compare_main_and_workspace_hashes, copy_validated_files_to_main, stamp_audit_on_targets, process_blame_buffer_entries, workspace_sync: [scan_modified_targets, validate_harvest_baselines, commit_harvested_files, stamp_auditor_role_audits, flush_blame_buffer_entries], src_metadata: [extract_metadata_disk, update_metadata_disk, stamp_audit_entry, append_feedback_entry]]
 
 ## Grounding
@@ -48,6 +48,8 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 - Inspection and mutation of in-band source metadata headers.
   - Grounded: [src_metadata: [source_metadata_service]]
+- Role workspace provisioning, runner deployment, and stub synchronization services.
+  - Grounded: [workspace_provision: [workspace_provisioning_service]]
 - Workspace state and blame buffer file naming conventions.
   - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Filesystem reading, writing, and permission manipulation.

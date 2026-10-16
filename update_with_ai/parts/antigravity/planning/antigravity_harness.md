@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T19:15:00Z
 CHANGE: author antigravity_harness planning specification
-CODE_HASH: 246bfe42f018
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 3c642f6aaee0
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # antigravity_harness interface component
@@ -19,7 +19,7 @@ Autonomous multi-agent execution requires reliable dispatch into isolated role w
 - A transcript token metrics record holds uncached prompt tokens, cached prompt tokens, completion tokens, model name, and monetary expenditure in USD.
 - An abstract transcript telemetry parser parses execution logs and extracts model token consumption.
 - An antigravity harness adapter realizes the harness adapter protocol for Google Antigravity execution sessions.
-- An antigravity harness manager operates in the system tier and manages Antigravity execution adapters and transcript parsing services.
+- An antigravity harness manager operates in the agent session tier, manages Antigravity execution adapters, installs the Antigravity adapter factory into the harness registry, and manages transcript parsing services.
 
 ### Contracts
 
@@ -28,6 +28,7 @@ Autonomous multi-agent execution requires reliable dispatch into isolated role w
 - An antigravity harness adapter extracts token usage metrics from the execution transcript log and applies standard model pricing rate cards. [extract_transcript_telemetry]
 - An antigravity harness adapter inspects role workspace submission outcomes and blame buffers to construct a complete role turn result. [construct_role_turn_result]
 - An antigravity harness adapter interrupts active turns when execution deadlines are exceeded. [interrupt_active_turn]
+- An antigravity harness manager installs the Antigravity adapter factory into the harness registry. [install_antigravity_harness_adapter]
 
 ### Woven Contracts
 
@@ -49,5 +50,7 @@ Autonomous multi-agent execution requires reliable dispatch into isolated role w
   - Grounded: [subagent_coordinator: [subagent_coordinator_service]]
 - Harness adapter execution protocol and turn outcome types.
   - Grounded: [subagent_coordinator: [harness_adapter_protocol]]
+- Subagent harness registry and adapter factory installation.
+  - Grounded: [subagent_harness: [harness_registry_service]]
 - Subagent turn execution, transcript parsing, and rate card calculation logic.
   - Deferred: Realized by the antigravity harness implementation component.

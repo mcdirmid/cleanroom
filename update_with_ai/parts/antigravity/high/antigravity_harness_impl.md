@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T19:15:00Z
 CHANGE: support non-blocking child process polling in antigravity harness realization
-CODE_HASH: 5fd8186862cb
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 965ffd692a7b
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # antigravity_harness_impl implementation component
 
-imports: agent_session, antigravity_ext, antigravity_harness, subagent_coordinator
+imports: agent_session, antigravity_ext, antigravity_harness, subagent_coordinator, subagent_harness
 implements: antigravity_harness
 
 ## Purpose
@@ -19,11 +19,11 @@ Harvesting accurate token telemetry from local execution logs and managing subpr
 
 **Out of scope:** The antigravity_harness_impl implementation component does not schedule multi-wave DAG queues or generate coordinator skills; these are handled by other components.
 
-**Delegated:** Session lifecycle scoping is delegated to agent_session; log format schemas are delegated to antigravity_ext; interface definitions are delegated to antigravity_harness; role dispatch contracts and turn result types are delegated to subagent_coordinator.
+**Delegated:** Session lifecycle scoping is delegated to agent_session; log format schemas are delegated to antigravity_ext; interface definitions are delegated to antigravity_harness; role dispatch contracts and turn result types are delegated to subagent_coordinator; platform harness registration is delegated to subagent_harness.
 
 ## Types and Behavior
 
-The antigravity harness manager realization manages Antigravity execution adapters and transcript parsing services.
+The antigravity harness manager realization manages Antigravity execution adapters and transcript parsing services, and installs the Antigravity adapter factory into the harness registry.
 
 When executing a role turn:
 

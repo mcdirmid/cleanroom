@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-13T20:00:00Z
 # CHANGE: author dsh_harness_impl unit tests
-# CODE_HASH: 38a04972702c
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 245befc36e28
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for dsh_harness_impl."""
@@ -16,19 +16,56 @@ import os
 import shutil
 import tempfile
 import unittest
-from typing import Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib import agent_session
-from update_with_ai.parts.dsh.lib import dsh_harness
+from update_with_ai.parts.dsh.lib import dsh_asm, dsh_harness
 from update_with_ai.parts.dsh.lib.dsh_harness_impl import (
     DshHarnessAdapter,
     DshHarnessManager,
-    DshTelemetryParser,
     __initialize__,
 )
-from update_with_ai.parts.subagent.lib import subagent_coordinator
-from update_with_ai.parts.workspace.lib import workspace_work
+from update_with_ai.parts.subagent.lib import subagent_coordinator, subagent_harness
+from update_with_ai.parts.tools.lib import workspace_work
+from update_with_ai.parts.workspace.lib import workspace_registry
+
+
+class MockHarnessRegistry:
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.installed: dict[str, Any] = {}
+
+    def install_harness(self, platform_name: str, factory: Any) -> None:
+        self.installed[platform_name] = factory
+
+
+class FakeWorkspaceRegistry:
+    tier = agent_session.agent_session
+
+    def resolve_role_definition(
+        self,
+        role_name_or_address: str,
+        repo_root: Optional[str] = None,
+        dir_scope: Optional[str] = None,
+    ) -> workspace_registry.RoleDefinition:
+        clean = role_name_or_address.split(":")[-1].strip().lower()
+        if clean in ("qa", "coverage", "spec_qa"):
+            return workspace_registry.RoleDefinition(
+                role_name=clean,
+                guide_path=f"guides/{clean}.md",
+                writable_file_patterns=[],
+                readonly_file_patterns=[],
+                feedback_role_deps=[],
+            )
+        return workspace_registry.RoleDefinition(
+            role_name=clean,
+            guide_path=f"guides/{clean}.md",
+            writable_file_patterns=[f"{clean}/*"],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+        )
 
 
 class FakeWorkspaceWorkManager:
@@ -62,7 +99,19 @@ class DshHarnessImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.test_dir = tempfile.mkdtemp()
         self.registry = LifecycleRegistry()
-        __initialize__(self.registry)
+        dsh_asm.__initialize__(self.registry)
+        self.mock_harness_registry = MockHarnessRegistry()
+        self.registry.register_instance(
+            self.mock_harness_registry,
+            keys=[subagent_harness.HarnessRegistry],
+            tier=agent_session.agent_session,
+        )
+        self.workspace_reg = FakeWorkspaceRegistry()
+        self.registry.register_instance(
+            self.workspace_reg,
+            keys=[workspace_registry.WorkspaceRegistry],
+            tier=agent_session.agent_session,
+        )
         self.work_mgr = FakeWorkspaceWorkManager()
         self.registry.register_instance(
             self.work_mgr,
@@ -72,61 +121,6 @@ class DshHarnessImplTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         shutil.rmtree(self.test_dir, ignore_errors=True)
-
-    def test_parse_stream_text_json(self) -> None:
-        """Requirement: MUST parse JSON run events and calculate DeepSeek rate card cost."""
-        stream_sample = (
-            '{"type":"session","version":4,"id":"sess-1"}\n'
-            '{"type":"assistant/message","data":{"usage":{"inputTokens":1000,"outputTokens":200,"cacheReadTokens":5000,"totalTokens":6200}}}\n'
-            '{"type":"assistant/message","data":{"usage":{"inputTokens":500,"outputTokens":100,"cacheReadTokens":2000,"totalTokens":2600}}}\n'
-        )
-
-        parser = DshTelemetryParser()
-        metrics = parser.parse_stream_text(
-            stream_text=stream_sample,
-            model_name="DeepSeek-V41-Flash",
-        )
-
-        self.assertEqual(metrics.input_tokens, 1500)
-        self.assertEqual(metrics.cached_tokens, 7000)
-        self.assertEqual(metrics.output_tokens, 300)
-        self.assertEqual(metrics.total_tokens, 8800)
-        # 1500 * 0.00000014 + 7000 * 0.000000014 + 300 * 0.00000028
-        expected_cost = (1500 * 0.00000014) + (7000 * 0.000000014) + (300 * 0.00000028)
-        self.assertAlmostEqual(metrics.cost_usd, expected_cost, places=6)
-        self.assertEqual(metrics.model_name, "DeepSeek-V41-Flash")
-
-    def test_parse_stream_text_regex_fallback(self) -> None:
-        """Requirement: MUST parse token counts from text log and calculate cost."""
-        log_sample = (
-            "Starting agent run...\n"
-            "Input tokens: 2500\n"
-            "Cached tokens: 1000\n"
-            "Output tokens: 500\n"
-            "Finished run cleanly."
-        )
-
-        parser = DshTelemetryParser()
-        metrics = parser.parse_stream_text(
-            stream_text=log_sample,
-            model_name="DeepSeek-V41-Flash",
-        )
-
-        self.assertEqual(metrics.input_tokens, 2500)
-        self.assertEqual(metrics.cached_tokens, 1000)
-        self.assertEqual(metrics.output_tokens, 500)
-        self.assertEqual(metrics.total_tokens, 4000)
-
-    def test_rate_card_cost_local_model(self) -> None:
-        """Requirement: MUST charge $0.00 for local models (Qwen, MLX, etc.)."""
-        stream_sample = '{"type":"assistant/message","data":{"usage":{"inputTokens":10000,"outputTokens":2000,"cacheReadTokens":50000,"totalTokens":62000}}}\n'
-        parser = DshTelemetryParser()
-        metrics = parser.parse_stream_text(
-            stream_text=stream_sample,
-            model_name="Qwen3.6-35B-A3B-oQ6-mtp",
-        )
-        self.assertEqual(metrics.cost_usd, 0.0)
-
     def test_dispatch_and_await_clean_turn_in_simulation(self) -> None:
         """Requirement: MUST execute turn and return clean status when work is completed."""
         with enter_phase(agent_session.agent_session, registry=self.registry):
@@ -212,7 +206,7 @@ class DshHarnessImplTest(unittest.TestCase):
             self.assertIsNotNone(res)
             assert res is not None
             self.assertEqual(res.role, "lib")
-            self.assertEqual(res.status, "clean")
+            self.assertEqual(res.status, "unresolved")
 
     def test_dsh_harness_manager_singleton(self) -> None:
         """Requirement: MUST construct configured DshHarnessAdapter instances from manager."""
@@ -222,9 +216,35 @@ class DshHarnessImplTest(unittest.TestCase):
                 model_name="DeepSeek-V41-Flash",
                 timeout_seconds=120.0,
             )
-            self.assertIsInstance(adapter, DshHarnessAdapter)
             parser = mgr.get_telemetry_parser()
-            self.assertIsInstance(parser, DshTelemetryParser)
+            self.assertIsNotNone(parser)
+
+    def test_format_task_prompt_auditor_versus_author(self) -> None:
+        """Requirement: MUST tailor task prompts distinguishing auditor from author roles."""
+        with enter_phase(agent_session.agent_session, registry=self.registry):
+            adapter = DshHarnessAdapter(simulation_mode=True)
+            auditor_dispatch = subagent_coordinator.RoleDispatch(
+                role_name="qa",
+                workspace_dir=self.test_dir,
+                dir_scope="//pkg",
+                ready_targets=("lib/unit_a.py",),
+                batch_size=3,
+                task_prompt="",
+            )
+            prompt = adapter._format_task_prompt(auditor_dispatch)
+            self.assertIn("Auditor", prompt)
+            self.assertIn("DO NOT EDIT FILES", prompt)
+            self.assertIn("bin/blame", prompt)
+            self.assertNotIn("Edit code or specifications", prompt)
+
+    def test_registering_dsh_harness_factory(self) -> None:
+        """Scenario 7: Installs DeepSeek Harness adapter factory into HarnessRegistry."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            mgr = scope.get_singleton(dsh_harness.DshHarnessManager)
+            self.assertIn("dsh", self.mock_harness_registry.installed)
+            factory = self.mock_harness_registry.installed["dsh"]
+            adapter = factory(model_name="DeepSeek-V41-Flash", simulation_mode=True)
+            self.assertIsInstance(adapter, DshHarnessAdapter)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_coordinator_impl implementation low-level specification
-# CODE_HASH: fa9288c4ff44
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: a6132ac91315
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for subagent_coordinator_impl."""
@@ -80,6 +80,8 @@ class SubagentCoordinator(
         batch_size: Optional[int] = None,
         repo_root: Optional[str] = None,
         model_name: Optional[str] = None,
+        poll_interval: Optional[float] = None,
+        max_unproductive_turns: Optional[int] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure.
 
@@ -87,7 +89,8 @@ class SubagentCoordinator(
         - Resets preexisting role workspace directories for declared roles via workspace_registry
           and filesystem operations.
         - Iterates dynamic process supervision until work queues are clean, a turn fails,
-          or max_waves is exceeded, aggregating TokenUsage into OrchestrationSummary.
+          consecutive unproductive turns exceed the threshold, or max_waves is exceeded,
+          emitting real-time telemetry and aggregating TokenUsage into OrchestrationSummary.
         - Upon clean convergence, deletes provisioned role workspace directories for declared roles in scope.
         """
         ...

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:59:56Z
 # CHANGE: Model node dirtiness from in-band metadata state instead of message presence and keep clear_messages from altering dirtiness
-# CODE_HASH: 3a646427fde9
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: bdc74286bb5d
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for loop_node_cleaner_impl aligned with grounding specifications."""
@@ -43,14 +43,17 @@ from update_with_ai.parts.loop.lib.loop_conversation import (
     ModelRequest,
     ToolCallId,
 )
+from update_with_ai.parts.dag.lib.dag_subgraph import DagSubgraph
+from update_with_ai.parts.loop.lib.loop_cleaner import LoopCleaner
 from update_with_ai.parts.loop.lib.loop_driver import LoopDriver, LoopOutcome
 from update_with_ai.parts.loop.lib.loop_node_cleaner import NodeCleaner
 from update_with_ai.parts.loop.lib.loop_node_cleaner_impl import (
+    LoopCleaner as LoopCleanerImpl,
     NodeCleaner as NodeCleanerImpl,
     __initialize__,
 )
-from update_with_ai.parts.sandbox.lib.sandbox import Sandbox
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from update_with_ai.parts.storage.lib.src_metadata import SourceMetadataCoordinator
+from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system
 
 
 @dataclass(frozen=True)
@@ -135,12 +138,23 @@ class MockStorage:
         return node in self.dirty_nodes
 
 
-class MockSandbox:
+class MockSourceMetadataCoordinator:
     tier = "agent_session"
 
     def __init__(self) -> None:
         self.has_modifications = False
         self.templates_materialized = False
+        self.modified_nodes: Set[DagNode] = set()
+
+    def is_code_modified(self, path: Any) -> bool:
+        if isinstance(path, DagNode):
+            return path in self.modified_nodes
+        return self.has_modifications
+
+    def is_node_modified(self, node: DagNode) -> bool:
+        if self.modified_nodes:
+            return node in self.modified_nodes
+        return self.has_modifications
 
     def materialize_startup_templates(self) -> None:
         self.templates_materialized = True
@@ -262,7 +276,8 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
         self.storage = MockStorage()
-        self.sandbox = MockSandbox()
+        self.src_metadata = MockSourceMetadataCoordinator()
+        self.sandbox = self.src_metadata
         self.history = MockConversation()
         self.runner = MockRunner()
         self.node_cfg = MockNodeConfig()
@@ -277,7 +292,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.role_cfg, keys=[RoleConfig], tier="agent_session"
         )
         self.registry.register_instance(
-            self.sandbox, keys=[Sandbox], tier="agent_session"
+            self.src_metadata, keys=[SourceMetadataCoordinator], tier="agent_session"
         )
         self.registry.register_instance(
             self.history, keys=[Conversation], tier="agent_session"
@@ -310,6 +325,27 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.assertEqual(self.storage.messages.get(node, set()), set())
             self.assertIn(node, self.storage.cleaned_nodes)
             self.assertIsNotNone(self.storage.change_descriptions[node])
+
+    def test_clean_advancement_per_node_modifications(self) -> None:
+        """Scenario 6: In a batch, only modified node receives change summary; unmodified node does not."""
+        node1 = _make_dag_node("//pkg:unit1", "lib")
+        node2 = _make_dag_node("//pkg:unit2", "lib")
+        self.storage.definitions[node1] = NodeDefinition(task_prompt=TaskPrompt("Prompt 1"))
+        self.storage.definitions[node2] = NodeDefinition(task_prompt=TaskPrompt("Prompt 2"))
+        self.storage.seed_dirty_node(node1, _make_change("dirty1"))
+        self.storage.seed_dirty_node(node2, _make_change("dirty2"))
+
+        # Only node1 was modified
+        self.sandbox.modified_nodes = {node1}
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            cont = cleaner.clean([node1, node2])
+            self.assertTrue(cont)
+            self.assertIn(node1, self.storage.cleaned_nodes)
+            self.assertIn(node2, self.storage.cleaned_nodes)
+            self.assertIsNotNone(self.storage.change_descriptions[node1])
+            self.assertIsNone(self.storage.change_descriptions[node2])
 
     def test_clean_blame_delivers_feedback(self) -> None:
         """CUJ: Session outcome signaling blame delivers feedback message to blamed dependency."""
@@ -604,6 +640,103 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.assertEqual(self.runner.captured_role, "lib")
             self.assertEqual(self.runner.captured_nodes, [])
             self.assertEqual(self.runner.captured_custom_role, "custom_role")
+
+    def test_loop_cleaner_success(self) -> None:
+        """CUJ: Iterative topological cleaning over batches to completion."""
+        root = _make_dag_node("//pkg:root")
+        node_b = _make_dag_node("//pkg:dep")
+        subgraph = MockDagSubgraph(batches=[[node_b], [root]])
+        cleaner = MockBatchCleaner(returns_continue=True)
+
+        self.registry.register_instance(subgraph, keys=[DagSubgraph], tier="system")
+
+        with enter_phase("system", registry=self.registry) as scope:
+            loop_cleaner = scope.get_singleton(LoopCleaner)
+            result = loop_cleaner.clean(root, cast(Any, cleaner))
+
+            self.assertTrue(result)
+            self.assertEqual(subgraph.target, root)
+            self.assertEqual(cleaner.cleaned_batches, [[node_b], [root]])
+            self.assertEqual(subgraph.recorded_visits, [[node_b], [root]])
+            self.assertTrue(subgraph.is_complete())
+
+    def test_loop_cleaner_halts_when_cleaner_cannot_continue(self) -> None:
+        """CUJ: Cleaning halts immediately when node cleaner returns False."""
+        root = _make_dag_node("//pkg:root")
+        node_b = _make_dag_node("//pkg:dep")
+        subgraph = MockDagSubgraph(batches=[[node_b], [root]])
+        cleaner = MockBatchCleaner(returns_continue=False)
+
+        self.registry.register_instance(subgraph, keys=[DagSubgraph], tier="system")
+
+        with enter_phase("system", registry=self.registry) as scope:
+            loop_cleaner = scope.get_singleton(LoopCleaner)
+            result = loop_cleaner.clean(root, cast(Any, cleaner))
+
+            self.assertFalse(result)
+            self.assertEqual(cleaner.cleaned_batches, [[node_b]])
+            self.assertFalse(subgraph.is_complete())
+
+    def test_loop_cleaner_already_complete(self) -> None:
+        """CUJ: Cleaning an already complete subgraph executes zero batches."""
+        root = _make_dag_node("//pkg:root")
+        subgraph = MockDagSubgraph(batches=[])
+        cleaner = MockBatchCleaner(returns_continue=True)
+
+        self.registry.register_instance(subgraph, keys=[DagSubgraph], tier="system")
+
+        with enter_phase("system", registry=self.registry) as scope:
+            loop_cleaner = scope.get_singleton(LoopCleaner)
+            result = loop_cleaner.clean(root, cast(Any, cleaner))
+
+            self.assertTrue(result)
+            self.assertEqual(subgraph.target, root)
+            self.assertEqual(len(cleaner.cleaned_batches), 0)
+
+
+class _BoolCallable:
+    def __init__(self, val: bool) -> None:
+        self.val = val
+
+    def __call__(self) -> bool:
+        return self.val
+
+    def __bool__(self) -> bool:
+        return self.val
+
+
+class MockDagSubgraph:
+    tier = "system"
+
+    def __init__(self, batches: List[List[DagNode]]) -> None:
+        self.target: DagNode | None = None
+        self.batches = list(batches)
+        self.recorded_visits: List[List[DagNode]] = []
+
+    def set_target(self, root: DagNode) -> None:
+        self.target = root
+
+    @property
+    def is_complete(self) -> _BoolCallable:
+        return _BoolCallable(len(self.batches) == 0)
+
+    def next_ready_batch(self) -> List[DagNode]:
+        if self.batches:
+            return self.batches.pop(0)
+        return []
+
+    def record_visit(self, batch: Sequence[DagNode]) -> None:
+        self.recorded_visits.append(list(batch))
+
+
+class MockBatchCleaner:
+    def __init__(self, returns_continue: bool = True) -> None:
+        self.returns_continue = returns_continue
+        self.cleaned_batches: List[List[DagNode]] = []
+
+    def clean(self, batch: Sequence[DagNode]) -> bool:
+        self.cleaned_batches.append(list(batch))
+        return self.returns_continue
 
 
 if __name__ == "__main__":

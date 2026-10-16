@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:16:14Z
 CHANGE: Name the session attribution coordinator typing
-CODE_HASH: 9867ad221591
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 8a210cb58237
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # control_attribution interface component
@@ -25,7 +25,7 @@ Defect attribution allows agents encountering irrecoverable upstream flaws to se
 
 - An attribution coordinator asserts that the blame target is a declared upstream dependency. [assert_blame_target_is_upstream]
 - An attribution coordinator asserts that the blame target is configured to receive feedback. [assert_blame_target_receives_feedback]
-- An attribution coordinator asserts that the explanation string contains zero newline characters. [assert_single_paragraph_critique]
+- An attribution coordinator asserts that the explanation string contains zero newline characters and does not exceed configured maximum feedback character limits. [assert_single_paragraph_critique]
 - An attribution coordinator asserts that in-batch dependencies of the source target are clean. [assert_source_dependencies_clean]
 - An attribution coordinator records a feedback message on the culprit node in graph storage. [record_blame_feedback]
 - An attribution coordinator marks the culprit node status as dirty in graph storage. [mark_culprit_dirty]
@@ -33,7 +33,7 @@ Defect attribution allows agents encountering irrecoverable upstream flaws to se
 - An attribution coordinator marks downstream in-batch dependent nodes as failed. [propagate_in_batch_failure]
 - An attribution coordinator records a failure diagnostic on the target node in graph storage. [record_failure_diagnostic]
 - An attribution coordinator preserves dirty status on a failed target node in graph storage. [preserve_target_dirty]
-- An attribution coordinator resolves culprit files, validates critique explanations, and executes blame mutations on disk. [execute_file_blame_mutation]
+- An attribution coordinator resolves culprit files, validates critique formatting and character limits, and executes blame mutations on disk. [execute_file_blame_mutation]
 - An attribution coordinator resolves target files, appends failure feedback, and marks dirty status on disk. [execute_file_failure_mutation]
 
 ### Woven Contracts

@@ -1,14 +1,15 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T23:15:12Z
-# CHANGE: Validate wire value types strictly in parameter converters and raise ParameterConversionError for invalid types
-# CODE_HASH: 9cc8130beb4c
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CHANGE: Reject editing tool replacements that alter the cleanroom metadata header
+# CODE_HASH: e7c5aa5add5b
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 import difflib
 import hashlib
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Mapping, Optional, Sequence, Set, Union, cast
@@ -17,7 +18,7 @@ from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier, agent
 import update_with_ai.parts.agent.lib.agent_config as agent_config
 import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
 import update_with_ai.parts.agent.lib.agent_node_config as agent_node_config
-import update_with_ai.parts.control.lib.src_metadata as src_metadata
+import update_with_ai.parts.storage.lib.src_metadata as src_metadata
 from . import sandbox_file_editor
 from . import tool_provider
 
@@ -82,6 +83,40 @@ def _diff_delta(original: str, updated: str) -> str:
         )
     )
     return "\n".join(delta)
+
+
+def _is_cleanroom_metadata_altered(
+    original_content: str,
+    new_content: str,
+    filename: str,
+) -> bool:
+    is_html = src_metadata._is_html_comment_format(filename)
+    orig_lines = original_content.splitlines()
+    orig_bounds = src_metadata._extract_block_boundaries(orig_lines, is_html)
+    new_lines = new_content.splitlines()
+    new_bounds = src_metadata._extract_block_boundaries(new_lines, is_html)
+
+    if orig_bounds is not None:
+        if new_bounds is None:
+            return True
+        orig_meta = orig_lines[orig_bounds[0] : orig_bounds[1] + 1]
+        new_meta = new_lines[new_bounds[0] : new_bounds[1] + 1]
+        if orig_meta != new_meta:
+            return True
+        if orig_lines[: orig_bounds[0]] != new_lines[: new_bounds[0]]:
+            return True
+    else:
+        if new_bounds is not None:
+            return True
+        for line in new_lines:
+            stripped = line.strip()
+            if (
+                stripped == "# --- CLEANROOM METADATA ---"
+                or stripped == "# --- END CLEANROOM METADATA ---"
+                or (stripped.startswith("<!--") and "CLEANROOM METADATA" in stripped)
+            ):
+                return True
+    return False
 
 
 class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier], Singleton):
@@ -268,11 +303,11 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
 
     @property
     def path_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        alias_type = get_singleton(tool_provider.AliasManagerType)
         return tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
             name=tool_provider.ParameterName("path"),
             description=tool_provider.ParameterDescription("Target read-write file."),
-            parameter_type=alias_mgr,
+            parameter_type=alias_type,
             is_required=False,
             default_value=None,
         )
@@ -524,6 +559,12 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             return fail(
                 "Error: No-op edit; the replacement produces no change to the file content.",
                 "The edit had no effect.",
+            )
+
+        if _is_cleanroom_metadata_altered(content, new_content, disk_path.name):
+            return fail(
+                "Error: CLEANROOM METADATA is managed automatically by submit; do not edit it directly.",
+                "Cleanroom metadata is managed automatically by submit.",
             )
 
         disk_path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
 LAST_CHANGED: 2026-10-07T00:00:00Z
 CHANGE: new file
 CODE_HASH: 4dea3fba3f90
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # uv_manifest_loader_impl implementation component
@@ -39,7 +39,7 @@ The uv manifest loader:
 
 - Incorporates fixed role node dependencies as declared direct dependencies across unit and role dimensions.
 
-- Evaluates role source patterns and task prompt templates parameterized with unit metadata to configure the synthesized target manifests.
+- Evaluates role source patterns, verification success message templates, and task prompt templates parameterized with unit metadata to configure the synthesized target manifests.
 
 - Resolves bare cross-package unit dependency references to the packages containing them within a parts workspace, discovering unit declaration directories from methodology role source patterns rather than hardcoded directory lists, across unit and role dimensions.
 

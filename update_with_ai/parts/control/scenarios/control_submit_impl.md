@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:14:20Z
 CHANGE: Author control control_submit_impl concrete scenarios
 CODE_HASH: 6fa5b1132390
@@ -286,3 +286,18 @@ no change summary, and its verification check is failing with the feedback
    change summary is recorded for it.
    Realized by: `control_verification` failing the precondition, so that the component's own clean
    status transition through `dag_storage` is never reached.
+
+### Scenario 13 — Refusing submission when session feedback is present and files were unmodified
+
+Given: role alpha is not an auditor role; the alpha-role target node for unit widget is dirty and has
+no in-batch dependency; its verification checks are passing; it carries session feedback
+`rename widget field`; its workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` has not
+been modified since the target was last clean.
+
+1. The agent submits the alpha-role target for unit widget with no change summary.
+   Observed: the submission is refused with an explicit error explaining that session feedback is
+   present and workspace files must be modified to address feedback before submitting or fail must
+   be called, and the alpha-role target node for unit widget stays dirty.
+   Realized by: session feedback check through `agent_node_config`, file modification check through
+   `src_metadata`, and the component's own feedback submission gating rule.
+

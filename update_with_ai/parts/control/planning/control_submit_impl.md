@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-09T22:20:00Z
 CHANGE: Record change summary during clean status transition without appending dirty change message
 CODE_HASH: 15b5444ed474
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # control_submit_impl implementation component
@@ -21,19 +21,23 @@ The implementation evaluates verification results from the verification evaluato
 - The submission coordinator queries the verification evaluator for the target's verification status. [query_target_verification]
 - The submission coordinator checks whether the target role is declared as an auditor in role configuration. [check_auditor_role]
 - The submission coordinator inspects whether workspace files were modified during the turn. [inspect_file_modifications]
+- The submission coordinator checks whether session feedback is present when files were unmodified. [check_feedback_modifications]
 - The submission coordinator constructs an error message when verification has failed. [format_verification_error]
-- The submission coordinator constructs an error message when in-batch dependencies remain unsubmitted. [format_dependency_error]
+- The submission coordinator constructs an error message when in-batch dependencies remain unsubmitted, formatting node targets as file aliases. [format_dependency_error]
+- The submission coordinator constructs an error message when session feedback is present without file modifications. [format_feedback_error]
 - The submission coordinator constructs an error message when change summary requirements are violated. [format_summary_error]
 - The submission coordinator invokes graph storage to update node status to clean with change description. [update_storage_clean]
+- The submission coordinator formats accepted submission outcome messages with user-facing file aliases. [format_submission_outcome_alias]
 - The submission coordinator validates file targets against auditor and producer file submission constraints. [validate_file_target_submission_constraints]
 - The submission coordinator updates in-band file metadata headers directly in the canonical repository. [update_canonical_file_metadata]
 
 ### Woven Contracts
 
 - When verification fails or has not run, the coordinator rejects the submission with a verification error. [query_target_verification, format_verification_error]
-- When an in-batch dependency is not clean, the coordinator rejects the submission with a dependency error. [format_dependency_error, control_submit: [assert_in_batch_dependencies_clean]]
+- When an in-batch dependency is not clean, the coordinator rejects the submission with a dependency error formatting node targets as file aliases. [format_dependency_error, control_submit: [assert_in_batch_dependencies_clean]]
+- When session feedback is present and files were unmodified, the coordinator rejects the submission instructing file modifications or failure. [check_feedback_modifications, format_feedback_error, control_submit: [reject_unmodified_when_feedback_present]]
 - When change summary rules fail based on file modifications or auditor role status, the coordinator rejects the submission with a summary error. [check_auditor_role, inspect_file_modifications, format_summary_error, control_submit: [require_summary_when_modified, forbid_summary_when_unmodified, forbid_summary_for_auditors]]
-- When all checks succeed, the coordinator updates node status to clean in graph storage with the change description. [update_storage_clean, control_submit: [mark_node_clean]]
+- When all checks succeed, the coordinator updates node status to clean in graph storage with the change description and constructs an outcome message formatting the target with its file alias. [update_storage_clean, format_submission_outcome_alias, control_submit: [mark_node_clean]]
 - When submitting a file target, the coordinator validates submission constraints, updates in-band headers, and constructs formatted outcome messages. [validate_file_target_submission_constraints, update_canonical_file_metadata, control_submit: [reject_test_submission_for_auditors, reject_invalid_producer_file_submission, validate_file_change_summary, execute_file_submission_mutation], src_metadata: [update_metadata_disk, record_change_status, stamp_audit_entry]]
 
 ## Grounding

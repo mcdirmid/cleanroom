@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-10T19:40:00Z
 LAST_CHANGED: 2026-10-10T21:50:00Z
-CHANGE: incorporate mechanical lint checks, restatement conventions, synthetic vocabulary, thin spec policy, and workflow rules
+CHANGE: Clarify that cleanroom metadata headers are managed automatically by submit
 CODE_HASH: 39a48fd392b1
 -->
 
@@ -9,7 +9,7 @@ CODE_HASH: 39a48fd392b1
 
 ## Summary
 
-The artifact is a scenario file (`scenarios/<name>.md`) restating the caller-observable behaviour of a component as concrete interaction sequences, submitted via `submit(target="<target_file>", change_summary="...")` (in single-target sessions, target may be omitted). Submitting an unchanged file rejects a change summary, whereas modifying content requires one. In-band metadata headers (`LAST_CLEANED`, `LAST_CHANGED`, `CODE_HASH`) are tool-maintained; manual editing corrupts hash validation. Seed files materialize as bootstrap templates containing scaffolding and comments that must be completely replaced. In multi-node sessions, multiple scenario files are processed together by package-relative alias path. The artifact conforms to this guide and `design-docs/concrete_scenario_validation.md`.
+The artifact is a scenario file (`scenarios/<name>.md`) restating the caller-observable behaviour of a component as concrete interaction sequences, submitted via `submit(target="<target_file>", change_summary="...")` (in single-target sessions, target may be omitted). Submitting an unchanged file rejects a change summary, whereas modifying content requires one. In-band metadata headers (`LAST_CLEANED`, `LAST_CHANGED`, `CODE_HASH`) are tool-maintained automatically upon `submit(change_summary=...)`; direct edits to metadata headers are prohibited and rejected by editing tools. Seed files materialize as bootstrap templates containing scaffolding and comments that must be completely replaced. In multi-node sessions, multiple scenario files are processed together by package-relative alias path. The artifact conforms to this guide and `design-docs/concrete_scenario_validation.md`.
 
 A scenario pairs a numbered title with a `Given:` state and numbered steps. The state holds only what is true before the first step; every step is one interaction with the component; an interface step records the observation that must hold afterwards, and an implementation step records that observation immediately followed by its realization beside it as part of the same numbered step. Interface scenarios cover only the component's specification, naming no collaborators or code symbols. Implementation scenarios restate only the interface(s) the component implements under `## Reused from the interface`, token-for-token identical to the interface scenario file with an immediate `Realized by:` line per step, placing additional scenarios under `## Implementation-only`. Interface scenarios are written before implementation scenarios in the same sitting; editing an interface re-dirties its implementation and star dependents. When a specification names a type without operations, unstated preconditions are supplied in `Given:` and marked as inferred; an absent capability or contradictory requirement is blamed on `high/<name>.md`.
 

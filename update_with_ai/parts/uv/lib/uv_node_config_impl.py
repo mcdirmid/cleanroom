@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:10:00Z
 # CHANGE: Resolve declared feedback dependencies into per-node blame targets and read-only files, include the guide target manifest source file in guide candidates, construct workspace paths through the declared frozen constructors, derive role-aware dependency fallbacks, prune uncontracted members and dead override state, and register the alias manager with the realized parameterized key
-# CODE_HASH: 437f6c800c62
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 01341ac51e9b
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 import json
@@ -19,7 +19,6 @@ from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.agent.lib import agent_file_alias, agent_config, agent_node_config
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.core.lib import file_paths
-from update_with_ai.parts.sandbox.lib import tool_provider
 from support.lib.lifecycle import (
     LifecycleRegistry,
     LifecycleResolutionError,
@@ -36,8 +35,34 @@ class _CommandVerificationCheck(agent_node_config.VerificationCheck):
 
     def verify(self) -> Tuple[bool, agent_node_config.VerificationDiagnostic]:
         env = os.environ.copy()
+        ws_root = env.get("BUILD_WORKSPACE_DIRECTORY") or self._cwd or os.getcwd()
         if not env.get("BUILD_WORKSPACE_DIRECTORY"):
-            env["BUILD_WORKSPACE_DIRECTORY"] = self._cwd or os.getcwd()
+            env["BUILD_WORKSPACE_DIRECTORY"] = ws_root
+        pypaths: List[str] = []
+        for root_cand in [ws_root, os.getcwd()]:
+            if root_cand and os.path.isdir(root_cand):
+                try:
+                    for entry in os.listdir(root_cand):
+                        pkg_dir = os.path.join(root_cand, entry)
+                        if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv", "__pycache__")):
+                            sup_lib = os.path.join(pkg_dir, "support", "lib")
+                            if os.path.isdir(sup_lib):
+                                pypaths.append(pkg_dir)
+                                pypaths.append(sup_lib)
+                except OSError:
+                    pass
+        for sp in sys.path:
+            if sp and os.path.isdir(sp) and sp not in pypaths:
+                pypaths.append(sp)
+        if "PYTHONPATH" in env and env["PYTHONPATH"]:
+            pypaths.append(env["PYTHONPATH"])
+        seen_p: Set[str] = set()
+        dedup_pypaths: List[str] = []
+        for p in pypaths:
+            if p and p not in seen_p:
+                seen_p.add(p)
+                dedup_pypaths.append(p)
+        env["PYTHONPATH"] = os.pathsep.join(dedup_pypaths)
         try:
             res = subprocess.run(
                 self._command, shell=True, capture_output=True, text=True,
@@ -252,6 +277,7 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
     guide_target = str(manifest.guide_target) if manifest and manifest.guide_target else None
     guide_file: Optional[agent_file_alias.UnboundFile] = None
     guide: Optional[agent_node_config.NodeGuide] = None
+    resolved_guide_path: Optional[str] = None
     if guide_target:
         guide_paths: List[str] = []
         guide_manifest = _get_manifest(_norm_node(guide_target))
@@ -261,7 +287,12 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
         if not g_fn.endswith(".md"): g_fn += ".md"
         guide_file = agent_file_alias.UnboundFile(relative_path=agent_file_alias.RelativePath(g_fn))
         guide_paths.extend([g_fn, guide_target, f"{guide_target}.md", os.path.basename(guide_target), f"{os.path.basename(guide_target)}.md"])
-        g_text = _read_cand_file(_search_paths(guide_paths, pkg_path))
+        cands = _search_paths(guide_paths, pkg_path)
+        for c in cands:
+            if c and os.path.isfile(c):
+                resolved_guide_path = c
+                break
+        g_text = _read_cand_file(cands)
         if g_text is not None: guide = _parse_guide_markdown(g_text)
 
     deps = list(manifest.dependencies) if manifest else []
@@ -272,6 +303,16 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
 
     blame_targets: Set[agent_file_alias.BoundFile] = set()
     read_only_files: Set[agent_file_alias.ReadOnlyFile] = set()
+    if resolved_guide_path:
+        ws_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()
+        g_rel = os.path.relpath(resolved_guide_path, ws_root) if os.path.isabs(resolved_guide_path) else resolved_guide_path
+        read_only_files.add(
+            agent_file_alias.ReadOnlyFile(
+                relative_path=agent_file_alias.RelativePath(g_rel),
+                workspace_path=_workspace_path(g_rel),
+                owning_node=n,
+            )
+        )
     rw_paths = {rw.workspace_path.path for rw in rw_files}
     referenced_deps = list(dict.fromkeys(deps + [sd for sd in star_deps if sd not in deps] + feedback_deps))
     for dep_label in referenced_deps:
@@ -299,12 +340,18 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
     v_cmd = str(manifest.verification_check).strip() if manifest and manifest.verification_check else ""
     v_checks = (_CommandVerificationCheck(command=v_cmd, cwd=ws_dir),) if v_cmd else ()
 
+    v_success_msg = None
+    if manifest and manifest.verification_success_message:
+        v_success_msg = agent_node_config.VerificationSuccessMessage(
+            str(manifest.verification_success_message)
+        )
+
     return agent_node_config.PerNodeInfo(
         read_only_files=read_only_files, read_write_files=rw_files, templates=templates,
         template_parameters=template_parameters, allows_step_mode=allows_step_mode,
         guide_file=guide_file, guide=guide, blame_targets=blame_targets,
         verification_checks=v_checks, src_file_alias=src_alias,
-        verification_success_message=None, feedback=feedback,
+        verification_success_message=v_success_msg, feedback=feedback,
     )
 
 
@@ -361,7 +408,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     @property
     def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
         self._sync_cache(); infos = self._active_per_node_infos()
-        return infos[0].guide_file if self.is_step_mode and len(infos) == 1 else None
+        return infos[0].guide_file if len(infos) == 1 else None
 
     @property
     def templates(self) -> Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent]:
@@ -450,11 +497,13 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
     @property
     def wire_type(self) -> Type[str]: return str
 
-    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
-        self._sync_cache(); s = str(wire_value)
+    def to_alias(self, path: str) -> agent_file_alias.FileAlias:
+        self._sync_cache(); s = str(path)
         if s in self._aliases: return self._aliases[s]
         matches = self._short_name_to_aliases.get(s)
         return matches[0] if matches and len(matches) == 1 else agent_file_alias.UnboundFile(relative_path=agent_file_alias.RelativePath(s))
+
+    convert = to_alias
 
     def sanitize_text(self, text: agent_file_alias.UnsanitizedText) -> agent_file_alias.SanitizedText:
         self._sync_cache(); res = str(text)
@@ -482,7 +531,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     )
     reg.register_singleton(
         AliasManager,
-        keys=[AliasManager, agent_file_alias.AliasManager, tool_provider.ParameterType[agent_file_alias.FileAlias, str]],
+        keys=[AliasManager, agent_file_alias.AliasManager],
         tier=agent_session,
     )
 

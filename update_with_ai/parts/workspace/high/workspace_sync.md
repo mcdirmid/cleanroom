@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
 LAST_CHANGED: 2026-10-08T18:30:00Z
 CHANGE: document stub role dependencies synchronization in pull and refresh contracts
-CODE_HASH: 7d89c190a155
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 4b7d4b812c10
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # workspace_sync interface component
@@ -20,6 +20,7 @@ Operating across isolated role workspaces requires atomic data movement to preve
 
 **Delegated:** Session lifecycle scoping is delegated to agent_session; workspace file conventions are delegated to cleanroom_files_ext.
 
+
 ## Types and Behavior
 
 A *sync result* record encapsulates the outcome of a synchronization operation: a count of *pulled files*, a count of *harvested files*, a sequence of *stamped audits*, and a sequence of *flushed blames*.
@@ -28,9 +29,10 @@ An agent session's *workspace synchronizer* transfers files and in-band metadata
 
 The workspace synchronizer:
 
-- Pulls updated upstream contracts, guides, and source files from the canonical main repository into a role workspace, preserving read-only permissions on upstream contracts while generating, updating, or purging read-only test stubs for stub role dependencies without copying implementation code.
+- Pulls updated upstream contracts, guides, and source files from the canonical main repository into a role workspace, preserving read-only permissions on upstream contracts while delegating test stub synchronization for stub role dependencies to ensure read-only test stub integrity without copying implementation code.
 
-- Refreshes the non-parts system files, including build macros, guide documents, tools, and linters, keeping role workspaces aligned with the canonical main repository and enforcing test stub integrity.
+- Refreshes the non-parts system files, including build macros, guide documents, tools, and linters, delegating runner tool deployment, role guide regeneration, and test stub synchronization to keep role workspaces aligned with the canonical main repository.
+
 
 - Harvests modified writable files and attested audits from a role workspace back to the canonical main repository, validating in-band code hashes so that modifications are non-empty and non-conflicting before writes are applied.
 

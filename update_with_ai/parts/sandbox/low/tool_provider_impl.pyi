@@ -1,15 +1,16 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T03:48:24Z
 # CHANGE: Realize delegation of tools with argument mappings to by-name execution
-# CODE_HASH: 3bce1dd835fc
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: f235aa3793da
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Tool provider low-level implementation specification."""
 
 from typing import Mapping
 from framework import operation, override, singleton_type
+import agent_file_alias
 import tool_provider
 
 
@@ -92,5 +93,43 @@ class ToolManager(tool_provider.ToolManager):
         - Delegates execution of a tool with argument mappings to execute by name with wire parameter
           bindings, resolving the name against the `_installed_tools` registry and dispatching to
           tool_provider.Tool.execute_tool on the matched tool_provider.Tool.
+        """
+        ...
+
+
+@singleton_type("agent_session")
+class AliasManagerType(tool_provider.AliasManagerType):
+    """Realizes the alias manager parameter type adapter within the agent session tier.
+
+    GROUNDING:
+    - Resolves agent_file_alias.AliasManager from the agent session tier, converts wire strings via
+      agent_file_alias.AliasManager.to_alias, and validates wire value types.
+    """
+
+    @property
+    @override
+    def actual_type(self) -> type[agent_file_alias.FileAlias]:
+        """Data type produced by converter."""
+        ...
+
+    @property
+    @override
+    def wire_type(self) -> type[str]:
+        """Primitive wire type accepted by converter."""
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+        """Converts wire string to file alias using the session alias manager.
+
+        Args:
+            wire_value: The wire string to convert into a file alias.
+
+        Returns:
+            The resolved FileAlias.
+
+        POSTCONDITIONS:
+        - MUST convert wire strings to file aliases via the session alias manager.
         """
         ...

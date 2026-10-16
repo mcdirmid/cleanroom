@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:15Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-13T20:00:00Z
 # CHANGE: author dsh_ext external low-level specification
 # CODE_HASH: 8abe12f364ae

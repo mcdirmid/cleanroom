@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T19:43:56Z
 # LAST_CHANGED: 2026-10-07T00:11:26Z
 # CHANGE: new file
-# CODE_HASH: 5366c48fc075
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: ce67862dd133
+# SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
 # --- END CLEANROOM METADATA ---
 
 """Assembly specification for control_asm."""
@@ -18,7 +18,5 @@ def __initialize__() -> None:
     - control_submit_impl
     - control_verification_impl
     - control_work_scheduler_impl
-    - src_metadata_impl
-    - src_storage_impl
     """
     ...

@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
-LAST_CHANGED: 2026-10-12T23:35:00Z
-CHANGE: add command execution tripwire and impasse fail protocol to AGENTS.md refresh specification
-CODE_HASH: 98e05c8b9745
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T17:45:00Z
+CHANGE: specify in-workspace file inspection and terminal command restrictions in AGENTS.md refresh
+CODE_HASH: 6bc60d056164
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # workspace_sync_impl implementation component
 
-imports: agent_session, workspace_registry, src_metadata, cleanroom_files_ext
+imports: agent_session, workspace_registry, src_metadata, cleanroom_files_ext, workspace_provision
 implements: workspace_sync
 
 ## Purpose
@@ -19,7 +19,7 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 **Out of scope:** The workspace_sync_impl implementation component does not parse AST grammar, compute topological task schedules, or execute test runners; these are handled by other components.
 
-**Delegated:** Role configuration and workspace directory lookups are delegated to workspace_registry; in-band source metadata extraction, audit stamping, code hashing, and feedback appending are delegated to src_metadata; workspace file conventions are delegated to cleanroom_files_ext.
+**Delegated:** Role configuration and workspace directory lookups are delegated to workspace_registry; in-band source metadata extraction, audit stamping, code hashing, and feedback appending are delegated to src_metadata; runner deployment, role guide generation, and test stub synchronization are delegated to workspace_provision; workspace file conventions are delegated to cleanroom_files_ext.
 
 ## Types and Behavior
 
@@ -27,7 +27,7 @@ When pulling changes from the canonical main repository into a role workspace, t
 
 - Identifies the files within the target directory scope, the declared role dependencies, and the stub role dependencies.
 
-- Verifies that the workspace files matching stub role dependencies are valid read-only test stubs that contain no implementation details, and synthesizes read-only test stubs raising `NotImplementedError` from the companion specification files of the main repository when such a file is missing, is outdated against its companion specification, or contains leaked implementation code. Orphaned stubs whose companion specifications no longer exist in the main repository are deleted, and an implementation file matching a stub role dependency is never copied from the canonical main repository into the role workspace.
+- Delegates test stub synchronization to workspace provisioning to verify that the workspace files matching stub role dependencies are valid read-only test stubs that contain no implementation details, synthesizing read-only test stubs raising `NotImplementedError` from companion specification files of the main repository when such a file is missing, is outdated against its companion specification, or contains leaked implementation code, and deleting orphaned stubs whose companion specifications no longer exist in the main repository.
 
 - Copies newer files from the main repository into the role workspace, enforcing read-only permissions on upstream dependencies and read-write permissions on role targets. An existing writable target is pulled from the main repository whenever the local target carries no uncommitted code modification and the main repository version differs in content or metadata, preserving pending local targets and deleted targets that await template regeneration.
 
@@ -35,7 +35,8 @@ When pulling changes from the canonical main repository into a role workspace, t
 
 - Deletes the files within the role workspace scope that no longer exist in the canonical main repository.
 
-When refreshing system files, the workspace synchronizer recopies the tool runners, project configurations, guide files, and linters from the main repository into the role workspace, regenerates `AGENTS.md` with its boundary rules, contamination tripwires, command execution restrictions, and fail-stop/impasse constraints without touching an in-scope source file, and validates that every stub role dependency file remains a read-only test stub.
+When refreshing system files, the workspace synchronizer recopies project configurations, guide files, and linters from the main repository into the role workspace, delegates runner packaging, role guide regeneration, and test stub synchronization to workspace provisioning without touching an in-scope source file, and validates that every stub role dependency file remains a read-only test stub.
+
 
 When harvesting changes from a role workspace back to the canonical main repository, the workspace synchronizer performs two-phase synchronization:
 

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:58:39Z
 # CHANGE: Assert the synthesized promptless pass-through definition is registered as a non-propagating edge where the dependent producer declares it
 # CODE_HASH: 119f04f0bc33
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for uv_manifest_loader_impl aligned with low-level specifications."""
@@ -406,6 +406,35 @@ active_component_types = ["implementation"]
             loader = scope.get_singleton(UvManifestLoader)
             with self.assertRaises(FileNotFoundError):
                 loader.retrieve_manifest(node)
+
+    def test_retrieve_manifest_verification_success_message(self) -> None:
+        """CUJ: Formatting verification_success_message with unit_name and unit_dir."""
+        toml_content = """
+[roles.test]
+src_pattern = "{unit_dir}/tests/{unit_name}_test.py"
+prompt_template = "Test {unit_name}"
+verification_success_message = "{unit_name}_test.py passed static checks in {unit_dir}."
+active_component_types = ["implementation"]
+"""
+        with open(os.path.join(self.test_dir, "cleanroom_python_roles.toml"), "w", encoding="utf-8") as f:
+            f.write(toml_content)
+
+        node = _make_dag_node("//pkg/sub:my_unit", "test")
+        high_dir = os.path.join(self.test_dir, "pkg/sub/high")
+        os.makedirs(high_dir, exist_ok=True)
+        hls_file = os.path.join(high_dir, "my_unit.md")
+        with open(hls_file, "w", encoding="utf-8") as f:
+            f.write("# implementation component\n\n## Summary\n")
+
+        with enter_phase("system", registry=self.registry) as scope:
+            loader = scope.get_singleton(UvManifestLoader)
+            manifest = loader.retrieve_manifest(node)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            self.assertEqual(
+                manifest.verification_success_message,
+                "my_unit_test.py passed static checks in pkg/sub.",
+            )
 
 
 if __name__ == "__main__":

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T03:08:12Z
 # CHANGE: Align alias manager parameter conversion typing and split text sanitization masking contracts
-# CODE_HASH: e491152975f5
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 2926ead6cb59
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Agent file alias low-level interface specification."""
@@ -15,7 +15,6 @@ from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
 import dag_storage
 import file_paths
-import tool_provider
 
 FileContent = NewType("FileContent", str)
 RegexPattern = NewType("RegexPattern", str)
@@ -70,8 +69,8 @@ class UnboundFile(FileAlias):
 
 
 @singleton_type("agent_session")
-class AliasManager(tool_provider.ParameterType[FileAlias, str], InTier[AgentSessionTier], Protocol):
-    """Configured with a workspace root, sanitizes text and converts string parameters to file aliases."""
+class AliasManager(InTier[AgentSessionTier], Protocol):
+    """Configured with a workspace root, sanitizes text and converts string paths to file aliases."""
 
     @property
     def workspace_root(self) -> file_paths.WorkspaceRoot:
@@ -82,33 +81,20 @@ class AliasManager(tool_provider.ParameterType[FileAlias, str], InTier[AgentSess
         """
         ...
 
-    @property
-    @override
-    def actual_type(self) -> Type[FileAlias]:
-        """Data type produced by the converter."""
-        ...
-
-    @property
-    @override
-    def wire_type(self) -> Type[str]:
-        """Primitive wire type accepted by the converter."""
-        ...
-
     @operation
-    @override
-    def convert(self, wire_value: str) -> FileAlias:
-        """Converts a wire type string to a file alias.
+    def to_alias(self, path: str) -> FileAlias:
+        """Converts a path string to a file alias.
 
         Args:
-            wire_value: The wire string to convert into a file alias.
+            path: The path string to convert into a file alias.
 
         Returns:
             The resolved FileAlias (BoundFile if matched, UnboundFile otherwise).
 
         POSTCONDITIONS:
-        - MUST convert wire type strings to file aliases without failure.
-        - WHEN a wire string matches a declared bound file, MUST produce that read-only or read-write file.
-        - WHEN a wire string does not match any declared bound file, MUST produce an unbound file.
+        - MUST convert path strings to file aliases without failure.
+        - WHEN a path string matches a declared bound file, MUST produce that read-only or read-write file.
+        - WHEN a path string does not match any declared bound file, MUST produce an unbound file.
         """
         ...
 

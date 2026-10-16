@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T03:21:35Z
 # CHANGE: Canonicalize change timestamps, split run failure clauses, and fix LoopDriver.run grounding
-# CODE_HASH: d1385fd4b028
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 1613b80f551c
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Loop node cleaner implementation low-level specification."""
@@ -12,13 +12,53 @@ from typing import Sequence
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier, SystemTier
 import dag_storage
+import dag_subgraph
+import loop_cleaner
 import loop_node_cleaner
 import agent_node_config
 import agent_storage
 import loop_conversation
 import loop_driver
 import runner_logger
-import sandbox
+import src_metadata
+
+
+@singleton_type("system")
+class LoopCleaner(loop_cleaner.LoopCleaner, InTier[SystemTier]):
+    """Realizes dependency-first topological cleaning and visit recording using dag subgraph.
+
+    GROUNDING:
+    - Delegates subgraph scoping to the DagSubgraph collaborator, whose set_target computes
+      the dependency-first topological order of reachable dependency nodes while holding the
+      target node in its own internal backing state.
+    - Drives cleaning by repeatedly requesting the next ready batch of dirty nodes from
+      DagSubgraph.next_ready_batch, which consults DagStorage.is_dirty over the stored reachable
+      nodes and returns candidates sharing a role address.
+    - Retrieves target node addresses, role addresses, and dirty status through the DagStorage
+      collaborator, reading the node graph structure and clean status stored for each node.
+    - Submits each dirty batch to NodeCleaner.clean, whose outcome is interpreted as the
+      collaborator's communication of whether processing can continue.
+    - Records the submitted batch for each cleaned batch through DagSubgraph.record_visit, which
+      maintains visit counts in its internal backing state and enforces execution iteration
+      limits across those counts.
+    - Determines conclusion only from DagSubgraph.is_complete, which reports the target subgraph
+      complete exactly when the DagStorage clean status of every reachable node in the target
+      subgraph is clean, rather than from batch selection alone.
+    """
+
+    @operation
+    @override
+    def clean(
+        self, target: dag_storage.DagNode, node_cleaner: loop_node_cleaner.NodeCleaner
+    ) -> bool:
+        """Executes dependency-first topological cleaning for the target subgraph.
+
+        GROUNDING:
+        - Scopes the target on DagSubgraph.set_target, calls next_ready_batch, passes ready batches
+          to NodeCleaner.clean, records visits with DagSubgraph.record_visit, and verifies
+          completeness with DagSubgraph.is_complete.
+        """
+        ...
 
 
 @singleton_type("system")
@@ -31,7 +71,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
       DagStorage state mutations.
     - Holds no internal backing collections of its own, accessing the agent session tier peers
       RoleConfig, Conversation, and LoopDriver and the system tier peers DagStorage, AgentStorage,
-      Sandbox, and RunnerLogger as flat collaborators.
+      SourceMetadataCoordinator, and RunnerLogger as flat collaborators.
     - Establishes every session phase across those peers: RoleConfig.set_role presents the role of
       the dirty nodes, Conversation.initialize seeds the conversation history with the initial task
       messages that direct the agent to call the get work tool, and LoopDriver.run drives the
@@ -40,12 +80,12 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
     - Reports unexpected execution failures through RunnerLogger.consume, retries LoopDriver.run
       exactly once, and propagates the failure when the retried session phase fails.
     - Resolves dirty nodes from the LoopOutcome termination response, consulting
-      Sandbox.has_modifications for workspace file modification status and
+      src_metadata.SourceMetadataCoordinator.is_code_modified for workspace file modification status and
       NodeConfig.blame_targets_by_node for configured blame targets, then mutates clean status and
       feedback messages in the DagStorage collaborator.
     - Marks nodes clean through DagStorage.mark_node_clean, passing a change description when the
-      outcome signals advancement with workspace file modifications and omitting it when no
-      workspace files were modified so the last changed timestamp is preserved.
+      node's workspace files were modified and omitting it when no
+      workspace files were modified for that node so the last changed timestamp is preserved.
     - Routes blame through DagStorage.add_feedback_message, recording a FeedbackMessage addressed
       to the feedback dependency DagNode owning the blamed file, and leaves nodes dirty when the
       blamed file matches no configured blame target.
@@ -75,8 +115,8 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
           RunnerLogger event through RunnerLogger.consume, reruns LoopDriver.run once, and
           propagates the failure when the retried run fails again.
         - Evaluates the termination signal for successful advancement by reading
-          Sandbox.has_modifications, then calls DagStorage.mark_node_clean with the change summary
-          for modified workspaces and without a change summary for unmodified workspaces.
+          src_metadata.SourceMetadataCoordinator.is_code_modified for each node, then calls DagStorage.mark_node_clean with the change summary
+          for modified nodes and without a change summary for unmodified nodes.
         - Resolves a blamed file to its owning node through NodeConfig.blame_targets_by_node and
           records the resulting FeedbackMessage with its target set to that feedback dependency node
           through DagStorage.add_feedback_message.

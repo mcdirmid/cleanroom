@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T03:36:58Z
 # CHANGE: Ground blame resolution in named collaborators and add file-level blame overrides
-# CODE_HASH: 09debe45c944
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 1ef7accee58d
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_attribution_impl."""
@@ -28,7 +28,7 @@ class AttributionCoordinator(
 
     GROUNDING:
     - Realizes blame gating and failure recording by converting blame strings into
-      agent_file_alias.BoundFile values through agent_file_alias.AliasManager.convert, intersecting
+      agent_file_alias.BoundFile values through agent_file_alias.AliasManager.to_alias, intersecting
       those bound files with agent_node_config.NodeConfig.blame_targets_by_node, and verifying
       upstream edges and dependency cleanliness through dag_storage.DagStorage.get_dependencies and
       dag_storage.DagStorage.is_dirty.
@@ -72,6 +72,8 @@ class AttributionCoordinator(
           dag_storage.DagStorage.mark_node_dirty, and mutates the internal session node status
           mapping to record the source node as attributed and each in-batch dependent node as
           failed.
+        - Formats blame targets and in-batch dependencies in rejection and outcome messages as
+          user-facing file aliases rather than raw graph node addresses.
         """
         ...
 
@@ -92,6 +94,8 @@ class AttributionCoordinator(
           reason.
         - Cascades the failure by mutating the internal session node status mapping for every
           supplied in-batch dependent node.
+        - Formats target descriptions in outcome messages as user-facing file aliases rather than
+          raw graph node addresses.
         """
         ...
 
@@ -108,12 +112,12 @@ class AttributionCoordinator(
         """Attributes defect blame to an upstream culprit file.
 
         GROUNDING:
-        - Resolves the culprit file through agent_file_alias.AliasManager.convert and
+        - Resolves the culprit file through agent_file_alias.AliasManager.to_alias and
           agent_file_alias.BoundFile.workspace_path, and rejects the blame when the critique
-          contains newline or carriage return characters or the culprit file cannot be resolved.
+          contains newline or carriage return characters, exceeds configured maximum feedback
+          character limits, or the culprit file cannot be resolved.
         - Writes accepted feedback directly into the canonical repository by calling
-          src_metadata.SourceMetadataCoordinator.append_feedback with the critique and then
-          src_metadata.SourceMetadataCoordinator.mark_dirty with the blame reason.
+          src_metadata.SourceMetadataCoordinator.append_feedback with the critique.
         - Synchronizes the mutated in-band metadata header to disk through
           src_metadata.SourceMetadataCoordinator.update_metadata and constructs the formatted
           acceptance message carried by the attribution outcome.
@@ -151,7 +155,7 @@ class AttributionCoordinator(
         """Matches a blame target value against configured blame targets for a node.
 
         GROUNDING:
-        - Converts the supplied value through agent_file_alias.AliasManager.convert and intersects
+        - Converts the supplied value through agent_file_alias.AliasManager.to_alias and intersects
           the resulting agent_file_alias.FileAlias with the
           agent_node_config.NodeConfig.blame_targets_by_node entries configured for the supplied
           node, returning the matching agent_file_alias.BoundFile.

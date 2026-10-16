@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:11:55Z
 CHANGE: Author sandbox tool_provider_impl concrete scenarios
-CODE_HASH: 38176eb9cbcf
+CODE_HASH: 3743dce620e2
 -->
 
 # Concrete scenarios for `tool_provider_impl` (implementation)
@@ -11,7 +11,7 @@ Scenarios 1 through 11 restate the caller observations of the interface scenario
 each observation, the realization that produces it. Restating them rather than writing fresh ones is
 what makes realizability structural: an implementation scenario that cannot name a realization for
 its observation is a defect in the implementation rather than a gap in the set. Scenarios 12 through
-15 cover behaviours the interface does not expose to a caller, and each of them is a candidate for
+16 cover behaviours the interface does not expose to a caller, and each of them is a candidate for
 the question of whether it belongs in the interface set instead.
 
 ## Reused from the interface
@@ -376,3 +376,12 @@ parameter `height`, and the session records the call to that tool.
    `height`, and no tool is called.
    Realized by: the component's own requirement check, which treats an absent binding as an
    unsupplied argument.
+
+### Scenario 16 — Converting wire strings with alias manager type
+
+Given: the alias manager type is available in an agent session, and the session's alias manager resolves
+the string `widget/notes/draft.md` to a bound file.
+
+1. The caller converts the wire string `widget/notes/draft.md` with the alias manager type.
+   Observed: the conversion produces the bound file resolved by the alias manager without failure.
+   Realized by: the component's own alias manager type adapter, which delegates to the session alias manager to alias.

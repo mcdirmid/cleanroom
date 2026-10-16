@@ -1,35 +1,33 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
-LAST_CHANGED: 2026-10-13T01:25:00Z
-CHANGE: eliminate cleanroom_workspaces.json workspace registry file
-CODE_HASH: 27d72e8bb664
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T18:45:00Z
+CHANGE: Delegate role configuration resolution to workspace_roles
+CODE_HASH: 56307906bfda
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
 
 # workspace_registry_impl implementation component
 
 ## Intent
 
-Reliable multi-role orchestration depends on deterministic workspace naming conventions and clean workspace discovery across platforms. Incomplete role resolution leads to orphaned role trees and race conditions during simultaneous provisioning. The workspace_registry_impl implementation component resolves role definitions dynamically from build files using AST evaluation, normalizes role identifiers, and tracks active role workspaces.
+Reliable multi-role orchestration depends on deterministic workspace naming conventions and clean workspace discovery across platforms. Incomplete role resolution leads to orphaned role trees and race conditions during simultaneous provisioning. The workspace_registry_impl implementation component coordinates role resolution through dedicated role services, normalizes workspace identifiers, and tracks active role workspaces.
 
 ## Factored Contracts
 
 ### Contracts
 
 - The workspace registry searches ancestor directories for Cleanroom configuration files or .git markers (distinguishing canonical repositories from projected role workspaces) to locate the canonical repository root. [search_ancestor_markers]
-- From within an isolated role workspace, the workspace registry inspects role metadata descriptors to resolve the canonical repository root. [inspect_role_metadata_descriptor]
-- From within an isolated role workspace, the workspace registry matches sibling workspace conventions to resolve the canonical repository root. [match_sibling_workspace_conventions]
+- From within an isolated role workspace, the workspace registry matches sibling workspace conventions to resolve the canonical repository root without inspecting host paths from role descriptors. [match_sibling_workspace_conventions]
 - The workspace registry falls back to the ambient process working directory when no repository indicator is present. [fallback_to_ambient_working_directory]
-- The workspace registry parses role configuration declarations from declarative role files or repository build files into role definitions with fail-fast exception signaling. [parse_role_definitions]
-- The workspace registry normalizes role address strings into canonical role names. [normalize_role_identifier]
+- The workspace registry delegates role definition resolution and role listing to role resolution services. [delegate_role_resolution]
 - The workspace registry replaces directory separator characters with underscores to construct workspace folder names. [sanitize_directory_folder_name]
 - The workspace registry records workspace descriptors in active session memory. [record_in_memory_descriptor]
 - The workspace registry discovers active role workspace descriptors from provisioned role metadata descriptors. [discover_active_workspace_descriptors]
 
 ### Woven Contracts
 
-- When discovering repository roots, the registry searches ancestor markers, inspects role metadata descriptors or sibling workspace conventions from within a role workspace, and falls back to ambient working directories if no indicator is present. [search_ancestor_markers, inspect_role_metadata_descriptor, match_sibling_workspace_conventions, fallback_to_ambient_working_directory, workspace_registry: [discover_repo_root]]
-- When resolving or listing role definitions, the registry normalizes identifiers and parses role configuration declarations from declarative role files or repository build files. [normalize_role_identifier, parse_role_definitions, workspace_registry: [resolve_role_definition, list_all_role_definitions]]
+- When discovering repository roots, the registry searches ancestor markers, matches sibling workspace conventions from within a role workspace, and falls back to ambient working directories if no indicator is present. [search_ancestor_markers, match_sibling_workspace_conventions, fallback_to_ambient_working_directory, workspace_registry: [discover_repo_root]]
+- When resolving or listing role definitions, the registry delegates to role resolution services. [delegate_role_resolution, workspace_registry: [resolve_role_definition, list_all_role_definitions]]
 - When computing workspace paths, the registry combines sanitized directory names with parent projects roots. [sanitize_directory_folder_name, workspace_registry: [compute_workspace_directory_path]]
 - When recording or unregistering workspaces, the registry updates the in-memory descriptor collection and synchronizes role metadata. [record_in_memory_descriptor, workspace_registry: [record_workspace_descriptor, unregister_workspace_descriptor]]
 - When loading active workspaces, the registry discovers active descriptors by inspecting role metadata descriptors in provisioned role workspaces. [discover_active_workspace_descriptors, workspace_registry: [load_active_workspace_descriptors]]
@@ -43,6 +41,8 @@ Reliable multi-role orchestration depends on deterministic workspace naming conv
 
 ### Inherited Deferred Requirements
 
+- Role definition resolution and validation.
+  - Grounded: [workspace_roles: [role_resolution_service]]
 - Discovery of repository roots and workspace paths on the filesystem.
   - Grounded: [path_sanitization_mechanics]
 - Discovery and tracking of active role workspaces.

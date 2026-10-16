@@ -6,7 +6,7 @@
 > 
 > The codebase components implementing this architecture (`update_with_ai/parts/antigravity`, `update_with_ai/parts/mcp`, systems MCP runners, lifecycle hooks, and subagent boilerplate) have been decommissioned and removed.
 > 
-> **Superseded By**: Autonomous subagent workflows have been redesigned and superseded by [Subagent-Driven Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md), which drives Option 3's pre-confined workspaces via a zero-execution coordinator across Antigravity, DeepSeek Harness, and Goose.
+> **Superseded By**: Autonomous subagent workflows have been redesigned and superseded by [Subagent-Driven Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md), which drives Option 3's pre-confined workspaces via a zero-execution coordinator across Antigravity and DeepSeek Harness.
 > 
 > Current active cleaning paradigms are documented in [Cleanroom Cleaning Paradigms](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleaning_paradigms.md):
 > - **Option 1 (Production Headless)**: Headless loop driving the OpenAI API (`update_with_ai/parts/loop`, `update_with_ai/parts/openai`).
@@ -140,7 +140,7 @@ The future subagent roadmap articulated here has now been formally specified and
 - **We do NOT resurrect Option 2's in-tree FastMCP server or shell-exec Python wrappers.**
 - **We dispatch subagents into Option 3's pre-confined sibling workspaces.**
 - Subagents execute within `../role_workspaces/<workspace-name>_<role>_<dir>/`, where directory-level physical separation and `chmod 444` provide mathematical blindness naturally, without hooks, sentinels, or background daemons.
-- Coordination is provided by a **Zero-Execution Coordinator** that never edits code or runs tests, supported across **Antigravity**, **DeepSeek Harness (`dsh`)**, and **Goose** with low-cost **DeepSeek-V4 Flash** economics.
+- Coordination is provided by a **Zero-Execution Coordinator** that never edits code or runs tests, supported across **Antigravity** and **DeepSeek Harness (`dsh`)** with low-cost **DeepSeek-V4 Flash** economics.
 
 ---
 

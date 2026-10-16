@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_coordinator interface library
-# CODE_HASH: 2b0536764588
+# CODE_HASH: a5caeb1c0a45
 # --- END CLEANROOM METADATA ---
 
 """Interface specification for subagent_coordinator."""
@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from typing import Optional, Protocol, Sequence
 from support.lib.lifecycle import InTier
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
@@ -149,6 +150,39 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         batch_size: Optional[int] = None,
         repo_root: Optional[str] = None,
         model_name: Optional[str] = None,
+        poll_interval: Optional[float] = None,
+        max_unproductive_turns: Optional[int] = None,
     ) -> OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure."""
         ...
+
+
+def resolve_cleanroom_log_dir(workspace_dir: str) -> str:
+    """Resolves the canonical repository logs directory for a role workspace."""
+    try:
+        from support.lib.lifecycle import get_singleton
+        import importlib
+        ws_reg_mod = importlib.import_module("workspace_registry")
+        reg = get_singleton(ws_reg_mod.WorkspaceRegistry)  # type: ignore
+        main_root = reg.discover_repository_root(workspace_dir)
+        log_dir = os.path.join(main_root, "logs")
+    except Exception:
+        parent = os.path.dirname(os.path.realpath(workspace_dir))
+        if os.path.basename(parent) == "role_workspaces":
+            p_root = os.path.dirname(parent)
+            ws_base = os.path.basename(workspace_dir)
+            main_cand = None
+            for entry in sorted(os.listdir(p_root), key=len, reverse=True):
+                if entry != "role_workspaces" and ws_base.startswith(f"{entry}_"):
+                    cand = os.path.join(p_root, entry)
+                    if os.path.isdir(cand):
+                        main_cand = cand
+                        break
+            if main_cand:
+                log_dir = os.path.join(main_cand, "logs")
+            else:
+                log_dir = os.path.join(workspace_dir, ".cleanroom", "logs")
+        else:
+            log_dir = os.path.join(workspace_dir, ".cleanroom", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    return log_dir

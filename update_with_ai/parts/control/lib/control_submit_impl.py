@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:04:00Z
 # CHANGE: Resolve auditor classification locally through the declared source metadata dependency, honour the declared directory scope default, and resolve unspecified submission targets through the alias manager and bound workspace paths
-# CODE_HASH: fc4f67329e8f
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: be132c0046c4
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -23,7 +23,8 @@ from support.lib.lifecycle import (
 )
 from update_with_ai.parts.agent.lib import agent_file_alias, agent_node_config, agent_session
 from update_with_ai.parts.dag.lib import dag_storage
-from . import control_submit, control_verification, src_metadata
+from update_with_ai.parts.storage.lib import src_metadata
+from . import control_submit, control_verification
 
 
 def _alias_manager_workspace_root() -> Optional[str]:
@@ -40,7 +41,7 @@ def _alias_manager_workspace_root() -> Optional[str]:
 def _alias_manager_bound_path(target: str) -> Optional[str]:
     """Resolves a target string to a declared session bound file workspace path."""
     try:
-        alias = get_singleton(agent_file_alias.AliasManager).convert(target)
+        alias = get_singleton(agent_file_alias.AliasManager).to_alias(target)
     except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
         return None
     if isinstance(alias, agent_file_alias.BoundFile):
@@ -248,6 +249,68 @@ def _resolve_submit_target(
     return None, None
 
 
+def _node_display_alias(node: dag_storage.DagNode) -> str:
+    """Returns a user/agent-facing file alias for a node, avoiding raw Bazel target addresses."""
+    try:
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        if getattr(cfg, "src_file_alias_by_node", None) and node in cfg.src_file_alias_by_node:
+            return str(cfg.src_file_alias_by_node[node])
+        for bt_set in getattr(cfg, "blame_targets_by_node", {}).values():
+            for bt in bt_set:
+                if getattr(bt, "owning_node", None) == node:
+                    return str(getattr(bt, "relative_path", bt))
+        for ro in getattr(cfg, "read_only_files", ()):
+            if getattr(ro, "owning_node", None) == node:
+                return str(getattr(ro, "relative_path", ro))
+        for rw in getattr(cfg, "read_write_files", ()):
+            if getattr(rw, "owning_node", None) == node:
+                return str(getattr(rw, "relative_path", rw))
+    except Exception:
+        pass
+
+    addr = str(node.unit_address).strip()
+    if ":" in addr:
+        pkg, unit_name = addr.split(":", 1)
+        pkg = pkg.lstrip("/").strip()
+    elif "/" in addr:
+        pkg, unit_name = addr.rsplit("/", 1)
+        pkg = pkg.lstrip("/").strip()
+    else:
+        pkg, unit_name = "", addr
+
+    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
+    try:
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        role_defs = getattr(cfg, "role_definitions", {})
+        if role in role_defs:
+            r_def = role_defs[role]
+            src_pat = getattr(r_def, "src_pattern", "") or (
+                r_def.get("src_pattern") if isinstance(r_def, dict) else ""
+            )
+            if src_pat:
+                formatted = src_pat.replace("{unit_dir}", pkg).replace(
+                    "{unit_name}", unit_name
+                ).strip("/")
+                if formatted:
+                    return formatted
+    except Exception:
+        pass
+
+    if role == "test":
+        return f"{pkg}/tests/{unit_name}_test.py" if pkg else f"tests/{unit_name}_test.py"
+    if role == "lib":
+        return f"{pkg}/lib/{unit_name}.py" if pkg else f"lib/{unit_name}.py"
+    if role == "low":
+        return f"{pkg}/low/{unit_name}.pyi" if pkg else f"low/{unit_name}.pyi"
+    if role == "high":
+        return f"{pkg}/high/{unit_name}.md" if pkg else f"high/{unit_name}.md"
+    if role == "planning":
+        return f"{pkg}/planning/{unit_name}.md" if pkg else f"planning/{unit_name}.md"
+    if role == "scenario":
+        return f"{pkg}/scenarios/{unit_name}.md" if pkg else f"scenarios/{unit_name}.md"
+    return f"{pkg}/{unit_name}" if pkg else unit_name
+
+
 def _is_auditor_node(node: dag_storage.DagNode) -> bool:
     """Checks whether the node's role is classified as an auditor role."""
     role_clean = node.role_address.split(":")[-1].strip().lower()
@@ -300,7 +363,7 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
                 if storage.is_dirty(dep):
                     return control_submit.SubmissionOutcome(
                         accepted=False,
-                        message=f"Error: In-batch dependency '{dep.unit_address}:{dep.role_address}' must be submitted before dependent targets.",
+                        message=f"Error: In-batch dependency '{_node_display_alias(dep)}' must be submitted before dependent targets.",
                     )
 
         # 3. Session feedback check
@@ -308,7 +371,7 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
         if getattr(cfg, "feedback", None) and not has_modifications:
             return control_submit.SubmissionOutcome(
                 accepted=False,
-                message="Error: Session feedback is present but no workspace files were modified.",
+                message="Error: Session feedback is present but no workspace files were modified. You must modify workspace files to address feedback before submitting, or call fail if the feedback cannot be resolved.",
             )
 
         # 4. Auditor role check
@@ -340,7 +403,7 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
 
         return control_submit.SubmissionOutcome(
             accepted=True,
-            message=f"Target '{target_node.unit_address}:{target_node.role_address}' submitted successfully.",
+            message=f"Target '{_node_display_alias(target_node)}' submitted successfully.",
         )
 
     def submit_target_file(
@@ -376,8 +439,16 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
             except OSError:
                 pass
 
-        main_root = repo_root or (meta.get("main_workspace_root") or meta.get("repo_root") if meta else None) or ws_root
-        main_root = os.path.realpath(main_root)
+        if repo_root:
+            main_root = os.path.realpath(repo_root)
+        else:
+            try:
+                import importlib
+                ws_reg_mod = importlib.import_module("workspace_registry")
+                ws_reg = get_singleton(ws_reg_mod.WorkspaceRegistry)  # type: ignore
+                main_root = os.path.realpath(ws_reg.discover_repository_root(ws_root))
+            except Exception:
+                main_root = os.path.realpath(ws_root)
 
         cfg = get_singleton(agent_node_config.NodeConfig)
         role_defs = getattr(cfg, "role_definitions", {})

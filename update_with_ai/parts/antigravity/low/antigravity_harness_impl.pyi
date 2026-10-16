@@ -1,20 +1,21 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_harness_impl implementation low-level specification
-# CODE_HASH: 68f98b377fe4
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: c16d9dc0b2cf
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for antigravity_harness_impl."""
 
-from typing import Optional
+from typing import Any, Optional
 from framework import operation, override, poly_type, singleton_type
 from support.lib.lifecycle import InTier
 import agent_session
 import antigravity_ext
 import antigravity_harness
 import subagent_coordinator
+import subagent_harness
 
 
 @poly_type
@@ -126,12 +127,25 @@ class AntigravityHarnessManager(
         self,
         model_name: Optional[str] = None,
         timeout_seconds: Optional[float] = None,
+        max_context_tokens: Optional[int] = None,
         custom_cmd: Optional[str] = None,
+        simulation_mode: bool = False,
+        **kwargs: Any,
     ) -> antigravity_harness.AntigravityHarnessAdapter:
         """Constructs an Antigravity harness adapter instance.
 
         GROUNDING:
         - Instantiates AntigravityHarnessAdapter with configured model and timeout.
+        """
+        ...
+
+    @operation
+    @override
+    def initialize(self) -> None:
+        """Initializes the manager and installs the adapter factory into the harness registry.
+
+        GROUNDING:
+        - Registers Antigravity harness adapter factory into subagent_harness.HarnessRegistry during agent session initialization.
         """
         ...
 

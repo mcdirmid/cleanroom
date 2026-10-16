@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
-# LAST_CHANGED: 2026-10-12T11:59:00Z
-# CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
-# CODE_HASH: cf45569112e7
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T18:30:00Z
+# CHANGE: Update sandbox_run_control_impl low-level realization specification
+# CODE_HASH: 18c14d435487
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Sandbox run control implementation low-level specification."""
@@ -15,14 +15,14 @@ from agent_session import AgentSessionTier
 import agent_file_alias
 import agent_node_config
 import control_coordinate
-import sandbox_run_control
-import tool_provider
 import dag_storage
 import dag_subgraph
 import sandbox_file_editor
 import sandbox_guide_delivery
-import sandbox
+import sandbox_run_control
+import sandbox_submission
 import template_format
+import tool_provider
 
 
 @singleton_type("agent_session")
@@ -111,201 +111,16 @@ class AdvanceTool(
             Response delivering next milestone or failure feedback.
 
         POSTCONDITIONS:
-        - WHEN verification is failing on first step, MUST repeat primer and summary content through guide delivery.
-        - WHEN verification is failing, MUST remind agent to call check files first and specify follow-up execution of check files.
-        - WHEN verification passes and guide steps remain, MUST deliver next step section.
-        - WHEN verification passes, no steps remain, and files were modified, MUST fail reminding agent to call submit with change summary.
-        - WHEN verification passes, no steps remain, and no files were modified, MUST specify follow-up execution of submit without change summary.
+        - WHEN verification has not been evaluated or is failing on first step, MUST repeat primer and summary content through guide delivery.
+        - WHEN verification is failing, MUST fail reminding agent that check files should be called first and specifying follow-up execution of check files.
+        - WHEN verification passes and guide steps remain, MUST deliver next step section through guide delivery.
+        - WHEN verification passes, no steps remain, and workspace files were modified, MUST fail reminding agent to call submit with change summary.
+        - WHEN verification passes, no steps remain, and no workspace files were modified, MUST produce response specifying follow-up execution of submit without change summary.
 
         GROUNDING:
-        - Checks verification status through RunController.update_verification and advances the
-          milestone through sandbox_guide_delivery.GuideDelivery.advance_step, which repeats the
-          recorded primer and reports the failure diagnostics when verification fails.
-        """
-        ...
-
-
-@singleton_type("agent_session")
-class SubmitTool(
-    sandbox_run_control.SubmitTool, InTier[AgentSessionTier]
-):
-    """Realizes node completion verification and clean submission.
-
-    GROUNDING:
-    - Validates verification status, change summaries, and guide milestones, then marks the resolved
-      target clean through dag_storage.DagStorage.mark_node_clean with the supplied change
-      description.
-    - Inspects whether workspace files were modified during the session through the
-      sandbox.Sandbox.has_modifications property before enforcing the change summary requirement.
-    """
-
-    @property
-    @override
-    def change_summary_parameter(
-        self,
-    ) -> tool_provider.ToolParameter[Optional[sandbox_run_control.ChangeSummary], str]:
-        """Parameter describing modifications made during the task.
-
-        GROUNDING:
-        - Declares an optional tool_provider.ToolParameter over the
-          sandbox_run_control.ChangeSummary change description that execute_tool reads from the
-          actual parameter bindings and passes to dag_storage.DagStorage.mark_node_clean.
-        """
-        ...
-
-    @operation
-    @override
-    def execute_tool(
-        self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]
-    ) -> tool_provider.ToolResponse:
-        """Submits an active node as cleanly finished.
-
-        Args:
-            actual_parameter_bindings: Tool parameter bindings.
-
-        Returns:
-            Response confirming task submission.
-
-        POSTCONDITIONS:
-        - WHEN guide step mode is active and guide steps remain, MUST fail specifying advance as follow-up tool call.
-        - WHEN verification is failing, MUST fail specifying follow-up execution of check files.
-        - WHEN session feedback is present and no files were modified, MUST fail.
-        - WHEN target is an auditor node and change summary is provided, MUST fail reminding agent that change summary is prohibited for audit nodes.
-        - WHEN files were modified and change summary is omitted, MUST fail.
-        - WHEN workspace files were not modified and change summary is provided, MUST fail reminding agent that change summaries are not permitted when submitting without workspace file modifications.
-        - MUST mark the resolve target clean in storage via dag_storage with the provided change summary so that the node is no longer dirty.
-        - MUST mark resolve target clean in current turn.
-        - WHEN all active nodes are resolved, MUST produce a terminating response.
-        - WHEN other active nodes remain, MUST produce a non-terminating response.
-
-        GROUNDING:
-        - Resolves the target node through
-          control_coordinate.SessionCoordinator.resolve_default_target or the last path recorded by
-          sandbox_file_editor.EditManager.last_read_or_edited_file, refreshes outdated verification
-          results through RunController.update_verification, delegates the clean transition to
-          dag_storage.DagStorage.mark_node_clean, and checks
-          control_coordinate.SessionCoordinator.open_targets to set the termination state.
-        """
-        ...
-
-
-@singleton_type("agent_session")
-class FailTool(
-    sandbox_run_control.FailTool, InTier[AgentSessionTier]
-):
-    """Realizes task failure termination.
-
-    GROUNDING:
-    - Records the active target as failed through
-      control_coordinate.SessionCoordinator.dispatch_fail.
-    """
-
-    @property
-    @override
-    def explanation_parameter(
-        self,
-    ) -> tool_provider.ToolParameter[sandbox_run_control.FailureExplanation, str]:
-        """Parameter explaining the reason for failure.
-
-        GROUNDING:
-        - Declares a tool_provider.ToolParameter over the
-          sandbox_run_control.FailureExplanation reason that execute_tool reads from the actual
-          parameter bindings and records through
-          control_coordinate.SessionCoordinator.dispatch_fail.
-        """
-        ...
-
-    @operation
-    @override
-    def execute_tool(
-        self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]
-    ) -> tool_provider.ToolResponse:
-        """Fails the active node.
-
-        Args:
-            actual_parameter_bindings: Tool parameter bindings.
-
-        Returns:
-            Response terminating the run in failure.
-
-        POSTCONDITIONS:
-        - MUST mark active node as failed.
-
-        GROUNDING:
-        - Resolves the active node and updates its status to failed through
-          control_coordinate.SessionCoordinator.dispatch_fail.
-        """
-        ...
-
-
-@singleton_type("agent_session")
-class BlameTool(
-    sandbox_run_control.BlameTool, InTier[AgentSessionTier]
-):
-    """Realizes defect attribution to upstream prerequisites.
-
-    GROUNDING:
-    - Attributes failure to the upstream dependency node and records the defect feedback through
-      dag_storage.DagStorage.add_feedback_message.
-    """
-
-    @property
-    @override
-    def blame_target_parameter(
-        self,
-    ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
-        """Parameter identifying the blamed upstream dependency.
-
-        GROUNDING:
-        - Declares a tool_provider.ToolParameter over the agent_file_alias.FileAlias blame target
-          that execute_tool matches against the per-node blame targets exposed by
-          RunController.blame_targets_by_node.
-        """
-        ...
-
-    @property
-    @override
-    def explanation_parameter(
-        self,
-    ) -> tool_provider.ToolParameter[sandbox_run_control.BlameExplanation, str]:
-        """Parameter explaining the defect in the upstream dependency.
-
-        GROUNDING:
-        - Declares a tool_provider.ToolParameter over the
-          sandbox_run_control.BlameExplanation defect text that execute_tool validates as a single
-          paragraph and records through dag_storage.DagStorage.add_feedback_message.
-        """
-        ...
-
-    @operation
-    @override
-    def execute_tool(
-        self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]
-    ) -> tool_provider.ToolResponse:
-        """Attributes failure to an upstream dependency node.
-
-        Args:
-            actual_parameter_bindings: Tool parameter bindings.
-
-        Returns:
-            Response recording blame feedback.
-
-        POSTCONDITIONS:
-        - MUST identify active node attributing blame from specified blame target.
-        - WHEN blame target is omitted in single-target context, MUST default to single configured blame target of active node.
-        - WHEN blame target does not match any configured blame target, MUST fail listing available blame targets.
-        - WHEN explanation contains newline characters, MUST fail reminding agent that explanation must be a single paragraph.
-        - MUST record defect feedback for the blamed target via dag_storage so that the blamed node receives the feedback message.
-        - MUST mark blame target as attributed.
-        - WHEN all active nodes are resolved, MUST produce a terminating response.
-        - WHEN other active nodes remain, MUST produce a non-terminating response.
-
-        GROUNDING:
-        - Resolves the active node for the supplied blame target through
-          control_coordinate.SessionCoordinator.get_node_for_alias, verifies the single-paragraph
-          explanation, adds the defect message through
-          dag_storage.DagStorage.add_feedback_message, and checks
-          control_coordinate.SessionCoordinator.open_targets to set the termination state.
+        - Verifies that verification passes via RunController, advances milestone steps through
+          sandbox_guide_delivery.GuideDelivery.advance_step, inspects modification state via
+          sandbox_file_editor.EditManager.has_modifications, and returns the formatted response.
         """
         ...
 
@@ -322,6 +137,17 @@ class GetWorkTool(
       dag_storage.DagStorage.materialize_template, and prepares the session task primer.
     """
 
+    @property
+    @override
+    def name(self) -> tool_provider.ToolName:
+        """Exposes the constant get work tool identity.
+
+        GROUNDING:
+        - Reports the constant tool name "get_work" under which this tool is registered and invoked
+          through tool_provider.ToolManager.install_tool.
+        """
+        ...
+
     @operation
     @override
     def execute_tool(
@@ -336,20 +162,21 @@ class GetWorkTool(
             Response delivering session task prompt or idle message.
 
         POSTCONDITIONS:
-        - WHEN open active nodes remain, MUST fail reminding agent to resolve open nodes.
-        - WHEN no dirty nodes are ready, MUST produce an idle response.
+        - WHEN open active nodes remain, MUST fail.
+        - WHEN no open active nodes remain, MUST obtain dirty nodes from dag storage and dag subgraph.
+        - WHEN no dirty nodes are ready, MUST produce idle response.
+        - MUST materialize startup templates on disk through dag storage.
+        - WHEN ready dirty nodes are obtained, MUST install blame tool if any active node has configured blame targets in node config.
         - WHEN ready dirty nodes are obtained and guide step mode is inactive, MUST return task primer with guide file attribution.
-        - WHEN ready dirty nodes are obtained and guide step mode is active, MUST return task primer prompting advance.
+        - WHEN ready dirty nodes are obtained and guide step mode is active, MUST install advance tool and return task primer prompting advance.
 
         GROUNDING:
-        - Queries dag_storage.DagStorage for ready dirty nodes, writes starter templates through
-          dag_storage.DagStorage.materialize_template, and prepares the session prompt with
-          agent_node_config.NodeConfig.guide_file attribution.
-        - Renders the task primer content through the template_format.TemplateFormatter.format_template
-          operation, substituting the session template parameters into the primer template text.
-        - Initializes guide delivery through sandbox_guide_delivery.GuideDelivery.initialize and registers
-          the advance tool through tool_provider.ToolManager.install_tool when
-          agent_node_config.NodeConfig.is_step_mode is active.
+        - Queries open targets through control_coordinate.SessionCoordinator.open_targets, obtains
+          next dirty batch via dag_subgraph.DagSubgraph.next_ready_batch, materializes startup
+          templates through dag_storage.DagStorage.materialize_template, builds the task primer
+          formatted by template_format.TemplateFormatter, optionally registers sandbox_submission.BlameTool into
+          tool_provider.ToolManager when blame targets exist, and optionally registers AdvanceTool into
+          tool_provider.ToolManager.
         """
         ...
 
@@ -361,9 +188,9 @@ class RunController(
     """Realizes tool installation and verification check result caching.
 
     GROUNDING:
-    - Installs the session outcome tools through tool_provider.ToolManager.install_tool during agent
-      session entry and maintains cached verification results keyed by the target file hashes
-      computed by sandbox_file_editor.EditManager.file_hash.
+    - Installs the session outcome tools from sandbox_submission alongside check files and get work tools through
+      tool_provider.ToolManager.install_tool during agent session entry and maintains cached verification results
+      keyed by the target file hashes computed by sandbox_file_editor.EditManager.file_hash.
     - Exposes the per-node blame targets declared by
       agent_node_config.NodeConfig.blame_targets_by_node for defect attribution.
     """
@@ -374,7 +201,7 @@ class RunController(
         """Initializes session outcome tools upon agent session entry.
 
         GROUNDING:
-        - Registers the submit, fail, check files, get work, and blame tools through
+        - Registers the submit and fail tools from sandbox_submission alongside check files and get work tools through
           tool_provider.ToolManager.install_tool, and conditionally registers the advance tool when
           agent_node_config.NodeConfig.is_step_mode is active.
         """

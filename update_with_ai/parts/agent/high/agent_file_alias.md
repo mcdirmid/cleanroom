@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T01:39:02Z
 CHANGE: Express alias manager parameter conversion as a delegated capability and restructure the alias operation list
-CODE_HASH: 2ac798ccdaa5
-SPEC_QA_AUDIT: 2026-10-13T20:42:15Z
+CODE_HASH: 6e0724c0c3c9
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # agent_file_alias interface component
 
-imports: agent_session, dag_storage, file_paths, tool_provider
+imports: agent_session, dag_storage, file_paths
 
 ## Purpose
 
@@ -18,7 +18,7 @@ Exposing raw operating system paths directly to language model agents invites ha
 
 **Out of scope:** The agent_file_alias interface component does not read or write file contents on disk, execute tools, or govern node tasks; these are handled by other components.
 
-**Delegated:** The alias manager participates in the parameter conversion contract of tool_provider; workspace path construction is delegated to file_paths; bound file ownership is delegated to dag_storage.
+**Delegated:** Workspace path construction is delegated to file_paths; bound file ownership is delegated to dag_storage.
 
 ## Types and Behavior
 
@@ -30,6 +30,6 @@ A *file alias* represents a session file, hiding physical filesystem details and
 
 A file alias is either a *bound file* or an *unbound file*. A bound file is mapped to a workspace file with a workspace path and an owning node, and is either a *read-only file* or a *read-write file*. An unbound file is not mapped to a workspace file.
 
-An agent session's *alias manager* is configured with the absolute path of a workspace root, and performs the parameter conversion contract of a tool parameter type over file aliases, converting a wire string that names a declared bound file into that bound file and converting any other wire string into an unbound file.
+An agent session's *alias manager* is configured with the absolute path of a workspace root, and resolves a string path into a file alias via *to alias*, converting a string that names a declared bound file into that bound file and converting any other string into an unbound file.
 
 The alias manager also sanitizes text by masking occurrences of relative workspace paths and preceding path prefixes with file alias relative paths, preventing the agent from observing host filesystem structure.

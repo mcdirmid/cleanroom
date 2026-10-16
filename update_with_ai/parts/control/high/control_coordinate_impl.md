@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-09T21:29:23Z
 CHANGE: Synchronize active nodes sequence on role config during get work dispatch
 CODE_HASH: bf3a1567dea3
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # control_coordinate_impl implementation component
@@ -33,10 +33,16 @@ The session coordinator:
 
 - Resolves a default target by selecting the sole open target when exactly one remains, or by selecting the target corresponding to the most recently modified open file when multiple targets are open.
 
+- Resolves file aliases to registered session nodes via exact match, path suffix match, or role-compatible source file proxy match, ensuring file proxies for distinct roles do not cross-match.
+
 - Dispatches get work by invoking the work scheduler with either the provided subgraph or directory scope, registering newly scheduled nodes as open targets, updating the sequence of active nodes on role config, and returning the synthesized work schedule.
 
-- Dispatches check files by evaluating verification for the specified target file when provided, or for all open session targets when no target is specified, returning sanitized diagnostic results and indicating whether cached results were reused.
+- Dispatches check files by evaluating verification for the specified target file when provided, falling back to the single open target if unambiguous, or for all open session targets when no target is specified, returning sanitized diagnostic results and indicating whether cached results were reused.
 
 - Dispatches submit by delegating validation and resolution to the submission coordinator, updating the target state to clean upon success.
 
-- Dispatches blame or fail by delegating defect attribution or failure logging to the attribution coordinator, updating the target state to attributed or failed and marking any in-batch dependents as failed.
+- Dispatches blame by resolving blame targets against upstream configured blame targets or session aliases, guarding against self-blame, registering the attributed upstream node, delegating defect attribution to the attribution coordinator, updating the target state to attributed, and marking any in-batch dependents as failed.
+
+- Dispatches fail by delegating failure logging to the attribution coordinator, updating the target state to failed, and marking any in-batch dependents as failed.
+
+- Formats user-facing node aliases using source file paths or configured file patterns instead of exposing internal graph node target addresses.

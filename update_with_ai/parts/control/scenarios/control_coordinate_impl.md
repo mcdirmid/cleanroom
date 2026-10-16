@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:17:16Z
 CHANGE: Author control control_coordinate_impl concrete scenarios
 CODE_HASH: 53ab7f84c843
@@ -11,7 +11,7 @@ Scenarios 1 through 10 restate the caller observations of the interface scenario
 each observation, the realization that produces it. Restating them rather than writing fresh ones is
 what makes realizability structural: an implementation scenario that cannot name a realization for
 its observation is a defect in the implementation rather than a gap in the set. Scenarios 11 through
-14 cover behaviours the interface does not expose to a caller, and each of them is a candidate for
+16 cover behaviours the interface does not expose to a caller, and each of them is a candidate for
 the question of whether it belongs in the interface set instead.
 
 ## Reused from the interface
@@ -239,3 +239,29 @@ widget has the in-batch dependent beta-role target for unit gadget, and the fail
    Realized by: `control_attribution` for the failure logging on the source target, and the
    component's own propagation of the failed state to the in-batch dependents recorded in its
    registered session nodes, which leaves the node scheduled in a different batch untouched.
+
+### Scenario 15 — Role-compatible file proxy matching
+
+Given: the session tracks the open qa-role target for unit widget with the file alias
+`parts/widget/qa_spec.md`; the session tracks no open lib-role or test-role target for unit widget.
+
+1. The agent asks the session coordinator to look up the node for `parts/widget/lib/widget.py`.
+   Observed: no node is resolved for `parts/widget/lib/widget.py`, so the file proxy for role lib
+   does not mistakenly resolve to the open qa-role target for unit widget.
+   Realized by: the component's own file proxy matching with role-compatibility checking, which
+   rejects candidate nodes whose declared role differs from the file proxy role pattern.
+
+### Scenario 16 — Attributing blame to an upstream dependency by file path
+
+Given: the session tracks the open qa-role target for unit widget with the file alias
+`parts/widget/qa_spec.md`; the upstream blame targets configured for the qa-role target include the
+lib-role node for unit widget at `parts/widget/lib/widget.py`; the critique is `missing boundary check`.
+
+1. The agent asks the session coordinator to dispatch blame specifying `parts/widget/lib/widget.py`
+   as the blame target and `missing boundary check` as the critique.
+   Observed: a control dispatch outcome reporting success, the lib-role node for unit widget is
+   registered as attributed in the session coordinator, the qa-role target is marked attributed,
+   and neither error nor self-blame is produced.
+   Realized by: the blame dispatch, which resolves the blame target alias against the configured
+   upstream blame targets via `control_attribution`, registers the blamed dependency node, and
+   delegates defect attribution to `control_attribution`.

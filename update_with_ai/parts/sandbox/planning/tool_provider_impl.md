@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:10:51Z
 CHANGE: Add default value binding, unknown tool failure, and response return to tool execution contracts
-CODE_HASH: 078e8209cfcd
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: fffd183c8ffa
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # tool_provider_impl implementation component
@@ -25,6 +25,7 @@ To facilitate robust interaction across dynamic agent environments, the implemen
 - Tool execution fails when a parameter binding name does not match known parameters of the tool. [unknown_param_fails]
 - When an unknown parameter name is supplied, failure feedback reminds the agent that only declared parameters of the tool can be provided. [unknown_param_reminder]
 - When a required parameter argument is omitted, failure feedback reminds the agent that required parameters of the tool must be supplied. [omitted_required_reminder]
+- The alias manager type converts a wire string to a file alias by delegating to the session alias manager to alias. [convert_wire_via_to_alias]
 
 ### Woven Contracts
 
@@ -34,6 +35,7 @@ To facilitate robust interaction across dynamic agent environments, the implemen
 - When parameter bindings contain a name that does not match known parameters of the tool, execution fails with feedback citing the unknown parameter and reminding the agent that only declared parameters of the tool can be provided. [unknown_param_fails, unknown_param_reminder, tool_provider: [provide_tool_params, call_by_name, resolve_symbols, call_improper_fails, failed_call_feedback]]
 - When a call omits a required parameter configuring a missing note evaluated against present parameters, execution fails with feedback citing the missing parameter, the evaluated missing note, and reminding the agent that required parameters of the tool must be supplied. [omitted_required_reminder, tool_provider: [check_requirements, call_improper_fails, failed_call_feedback]]
 - When a call omits a required parameter lacking a configured missing note, execution fails with feedback citing the missing parameter and reminding the agent that required parameters of the tool must be supplied. [omitted_required_reminder, tool_provider: [check_requirements, call_improper_fails, failed_call_feedback]]
+- When converting wire strings, the alias manager type delegates to the session alias manager to alias. [convert_wire_via_to_alias, tool_provider: [convert_alias_via_manager]]
 
 ## Grounding
 

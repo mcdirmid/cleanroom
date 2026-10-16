@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:42:12Z
 # CHANGE: Provide dag_storage.DagStorage.add_feedback_message in MockDagStorage and assert FeedbackMessage content/target recording for blame_target and fail_target
-# CODE_HASH: 0bd63efbefd5
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 59dab2d386d0
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for control_attribution_impl."""
@@ -200,6 +200,66 @@ class ControlAttributionImplTest(unittest.TestCase):
                 "Cannot satisfy constraints.", self.storage.dirty_reasons[target]
             )
             self.assertTrue(self.storage.is_dirty(target))
+
+    def test_blame_multiple_upstream_targets(self) -> None:
+        source = dag_storage.DagNode(
+            unit_address=dag_storage.UnitAddress("foo"),
+            role_address=dag_storage.RoleAddress("qa"),
+        )
+        upstream_lib = dag_storage.DagNode(
+            unit_address=dag_storage.UnitAddress("foo"),
+            role_address=dag_storage.RoleAddress("lib"),
+        )
+        upstream_test = dag_storage.DagNode(
+            unit_address=dag_storage.UnitAddress("foo"),
+            role_address=dag_storage.RoleAddress("test"),
+        )
+        self.storage.dependencies[source] = {
+            dag_storage.DagDependency(node=upstream_lib, is_silent=False),
+            dag_storage.DagDependency(node=upstream_test, is_silent=False),
+        }
+        self.storage.mark_node_clean(upstream_lib)
+        self.storage.mark_node_clean(upstream_test)
+
+        with enter_phase(agent_session.agent_session, registry=self.registry):
+            outcome1 = self.coordinator.blame_target(
+                source, upstream_lib, "Lib implementation violates return contract."
+            )
+            self.assertTrue(outcome1.accepted)
+            self.assertTrue(self.storage.is_dirty(upstream_lib))
+            self.assertEqual(1, len(self.storage.feedback_messages[upstream_lib]))
+
+            outcome2 = self.coordinator.blame_target(
+                source, upstream_test, "Test suite asserts uncontracted property."
+            )
+            self.assertTrue(outcome2.accepted)
+            self.assertTrue(self.storage.is_dirty(upstream_test))
+            self.assertEqual(1, len(self.storage.feedback_messages[upstream_test]))
+
+    def test_blame_culprit_file_max_feedback_chars(self) -> None:
+        import json
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_ws:
+            meta_path = os.path.join(tmp_ws, ".cleanroom_role.json")
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump({"role_name": "qa", "max_feedback_chars": 50}, f)
+
+            outcome = self.coordinator.blame_culprit_file(
+                culprit_file="foo.py",
+                critique="A" * 60,
+                workspace_root=tmp_ws,
+            )
+            self.assertFalse(outcome.accepted)
+            self.assertIn(
+                "Error: Critique exceeds maximum length of 50 characters (60 provided)",
+                outcome.message,
+            )
+            self.assertIn(
+                "you might prioritize contract discrepancies to report so the authoring role can make progress.",
+                outcome.message,
+            )
 
 
 if __name__ == "__main__":

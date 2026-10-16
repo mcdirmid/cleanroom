@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Remove the interface-restated edit manager catalog, canonicalize the missing note, and split run-on paragraphs
-CODE_HASH: 7d8c07152f45
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CHANGE: Reject editing tool replacements that alter the cleanroom metadata header
+CODE_HASH: 83639e6c31b2
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # sandbox_file_editor_impl implementation component
@@ -24,6 +24,7 @@ Unchecked writes to source code can introduce partial edits, exceed LLM window c
 ## Types and Behavior
 
 The replace file content tool is installed for the agent session to enable targeted text replacement in declared read-write files.
+The sandbox coordinates workspace state for the active session, exposing whether workspace file modifications occurred during the session by delegating to or reporting the edit manager's file modification state.
 
 The edit manager determines workspace file writes by comparing current workspace file content against its in-band code hash, increments a file update revision whenever workspace files are updated, and computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of that content. The edit manager records the last file read from the file reader or edited by an editing tool as the session's last read or edited file alias.
 
@@ -34,6 +35,8 @@ Editing tool execution fails if:
 - The file alias is not a read-write file, reminding the agent that only declared read-write files can be written.
 
 - The edit produces no change to file content, reminding the agent that the edit had no effect.
+
+- The edit alters the cleanroom metadata header, reminding the agent that cleanroom metadata is managed automatically by submit.
 
 An editing tool that changes file content writes the updated content to the filesystem, records that workspace file writes occurred, and reminds the agent to verify syntax and type correctness before making further writes. Successful editing tool execution includes a diff delta representation in the response content when delta output is configured. Editing tool responses share the constant suppression key `replace_file_content`.
 
@@ -64,6 +67,8 @@ Tool execution:
 - Provides failure feedback indicating the first two matching line numbers to assist in narrowing the replacement region and directs the agent to include more surrounding lines in target content or to specify start line and end line, when target content matches multiple locations in the file and multiple replacements are not permitted.
 
 - Provides failure feedback indicating the line numbers where the target content was located, when target content is not found within the designated line range but exists elsewhere in the file.
+
+- Fails if the replacement alters the cleanroom metadata header, reminding the agent that cleanroom metadata is managed automatically by submit.
 
 - Writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file writes occurred.
 

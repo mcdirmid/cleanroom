@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
-# LAST_CHANGED: 2026-10-13T20:00:00Z
-# CHANGE: author dsh_workspace_impl implementation library
-# CODE_HASH: 32accb7361f1
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T17:45:00Z
+# CHANGE: specify auditor code inspection and terminal command restrictions in role agent documentation
+# CODE_HASH: afa0686fd4f6
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation for dsh_workspace_impl."""
@@ -17,19 +17,36 @@ from support.lib.lifecycle import (
     LifecycleRegistry,
     Singleton,
     get_default_registry,
+    get_singleton,
 )
 from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.workspace.lib import workspace_registry
 from . import dsh_workspace
 
 
-def _format_agents_md(workspace_dir: str, role_name: str) -> str:
+def _format_agents_md(workspace_dir: str, role_name: str, is_auditor: bool = False) -> str:
+    auditor_block = ""
+    if is_auditor:
+        auditor_block = (
+            "AUDITOR ROLE RULE:\n"
+            "DO NOT EDIT FILES. You are an auditor. All code and specification files in this workspace are strictly read-only. Never attempt to edit, write, or modify files.\n"
+            "You MUST read the local files in your workspace (low/*.pyi, tests/*_test.py, and lib/*.py) using your file reading tool to inspect contracts, examine test assertions, review the author's '# CHANGE:' header, and locate defects before blaming.\n"
+            "Your role verifies targets using bin/check_files and resolves each target using either:\n"
+            "- bin/submit <target> (if checks pass)\n"
+            "- bin/blame <culprit_file> \"<actionable critique>\" (if checks fail)\n"
+            "- bin/fail <target> \"<reason>\" (if an impasse is reached)\n\n"
+        )
     confinement_header = (
         "# Cleanroom Role Confinement Rules for DeepSeek Harness\n"
         f"You are operating within the isolated Cleanroom role workspace: {workspace_dir}\n"
         f"Assigned Role: {role_name}\n\n"
+        f"{auditor_block}"
         "ISOLATION BOUNDARY RULES:\n"
         f"1. NEVER access, read, or modify files outside of {workspace_dir}.\n"
-        "2. NEVER traverse directory hierarchies above the workspace root (no `../`).\n\n"
+        "2. NEVER traverse directory hierarchies above the workspace root (no `../`).\n"
+        "3. Reading files WITHIN this workspace directory using file reading tools is 100% permitted and required.\n\n"
+        "METADATA RULE:\n"
+        "DO NOT EDIT METADATA. NEVER edit, add, or delete lines in `# --- CLEANROOM METADATA ---` or `<!-- CLEANROOM METADATA -->` headers. Use only tools to update metadata.\n\n"
         "COMMAND RESTRICTION TRIPWIRE:\n"
         "In the terminal, you are strictly restricted to executing ONLY the following 5 Cleanroom binaries:\n"
         "- bin/get_work\n"
@@ -37,7 +54,10 @@ def _format_agents_md(workspace_dir: str, role_name: str) -> str:
         "- bin/submit\n"
         "- bin/blame\n"
         "- bin/fail\n\n"
-        "Executing any other command or arbitrary shell scripts is strictly prohibited.\n"
+        "Executing any other command or arbitrary shell scripts is strictly prohibited. (Using your native file-viewing tool to read local files in this workspace is NOT a shell command and is fully permitted).\n\n"
+        "MANDATORY TURN RESOLUTION:\n"
+        "Every pending unit MUST be resolved using bin/submit, bin/blame, or bin/fail before concluding the turn.\n"
+        "Stopping with conversational commentary, explaining why output did not change, or complaining without executing bin/blame or bin/fail is strictly prohibited.\n"
     )
     agents_md_path = os.path.join(workspace_dir, "AGENTS.md")
     if os.path.isfile(agents_md_path):
@@ -53,12 +73,73 @@ def _format_agents_md(workspace_dir: str, role_name: str) -> str:
     return confinement_header
 
 
+def _find_model_configs_file(workspace_dir: Optional[str] = None) -> Optional[str]:
+    candidates = []
+    if workspace_dir:
+        candidates.append(workspace_dir)
+        candidates.append(os.path.dirname(workspace_dir))
+        candidates.append(os.path.dirname(os.path.dirname(workspace_dir)))
+    candidates.append(os.getcwd())
+    cur = os.path.dirname(os.path.abspath(__file__))
+    while cur and cur != os.path.dirname(cur):
+        candidates.append(cur)
+        cur = os.path.dirname(cur)
+    for c in candidates:
+        p = os.path.join(c, "model_configs.toml")
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def _resolve_model_from_configs(
+    model_name: Optional[str],
+    workspace_dir: Optional[str] = None,
+) -> tuple[Optional[str], Optional[str]]:
+    if not model_name:
+        return None, None
+    cfg_file = _find_model_configs_file(workspace_dir)
+    if not cfg_file:
+        return model_name, None
+    try:
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib  # type: ignore
+        with open(cfg_file, "rb") as f:
+            data = tomllib.load(f)
+        models_sec = data.get("models", {})
+        clean = model_name.strip()
+        for prefix in ("dsh ", "antigravity ", "models."):
+            if clean.startswith(prefix):
+                clean = clean[len(prefix):].strip()
+        target_cfg = None
+        if isinstance(models_sec, dict):
+            if clean in models_sec:
+                target_cfg = models_sec[clean]
+            else:
+                for k, v in models_sec.items():
+                    if isinstance(v, dict) and (v.get("model") == clean or k.lower() == clean.lower()):
+                        target_cfg = v
+                        break
+        if target_cfg and isinstance(target_cfg, dict):
+            resolved_m = target_cfg.get("model") or clean
+            resolved_p = target_cfg.get("provider")
+            return str(resolved_m), str(resolved_p) if resolved_p else None
+    except Exception:
+        pass
+    return model_name, None
+
+
 def _format_dsh_patch_yml(
     model_name: Optional[str] = None,
     provider: Optional[str] = None,
+    workspace_dir: Optional[str] = None,
 ) -> str:
-    resolved_prov = provider
-    resolved_model = model_name
+    cfg_model, cfg_provider = _resolve_model_from_configs(model_name, workspace_dir)
+    resolved_prov = provider or cfg_provider
+    if resolved_prov and resolved_prov.lower() in ("deepseek", "deepseek-official"):
+        resolved_prov = "deepseek-official"
+    resolved_model = cfg_model or model_name
     if not resolved_prov:
         if resolved_model and any(k in resolved_model.lower() for k in ("qwen", "reap", "gemma", "mlx")):
             resolved_prov = "omlx"
@@ -69,6 +150,30 @@ def _format_dsh_patch_yml(
             resolved_model = "deepseek-flash"
     elif not resolved_model:
         resolved_model = "deepseek-flash" if "deepseek" in resolved_prov.lower() else "Qwen3.6-35B-A3B-oQ6-mtp"
+
+    if resolved_prov == "deepseek-official":
+        if "flash" in resolved_model.lower():
+            resolved_model = "deepseek-flash"
+
+    provider_block = ""
+    reasoning_block = ""
+    if resolved_prov == "omlx":
+        provider_block = (
+            "- id: llm-pi-ai\n"
+            "  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n"
+            "  config:\n"
+            "    providers:\n"
+            "      omlx:\n"
+            "        displayName: oMLX\n"
+            "        apiKeyEnv: OMLX_API_KEY\n"
+            "        api: openai-completions\n"
+            "        baseURL: http://127.0.0.1:8000/v1\n"
+            "        models:\n"
+            f"          - id: {resolved_model}\n"
+            f"            name: {resolved_model}\n"
+        )
+    elif "deepseek" in resolved_prov.lower():
+        reasoning_block = "    reasoningEffort: high\n"
 
     return (
         "# Cordis patch layer generated by Cleanroom for DeepSeek Harness\n"
@@ -84,12 +189,15 @@ def _format_dsh_patch_yml(
         "  name: \"@deepseek-ai/dsh-user-approval\"\n"
         "  config:\n"
         "    policy: never\n"
+        "- id: todo\n"
+        "  disabled: true\n"
+        f"{provider_block}"
         "- id: agent-default-model\n"
         "  name: \"@deepseek-ai/dsh-agent-default-model\"\n"
         "  config:\n"
         f"    provider: {resolved_prov}\n"
         f"    model: {resolved_model}\n"
-        "    reasoningEffort: high\n"
+        f"{reasoning_block}"
     )
 
 
@@ -107,15 +215,27 @@ class DshWorkspaceConfigurer(dsh_workspace.DshWorkspaceConfigurer, Singleton):
     ) -> dsh_workspace.DshWorkspaceConfinementReport:
         """Configures role agent documentation and Cordis overlay patch for DeepSeek Harness."""
         os.makedirs(workspace_dir, exist_ok=True)
+        is_auditor = False
+        try:
+            reg = get_singleton(workspace_registry.WorkspaceRegistry)
+            r_def = reg.resolve_role_definition(role_name)
+            is_auditor = not r_def.writable_file_patterns
+        except Exception:
+            pass
+
         agents_path = os.path.join(workspace_dir, "AGENTS.md")
-        agents_content = _format_agents_md(workspace_dir=workspace_dir, role_name=role_name)
+        agents_content = _format_agents_md(
+            workspace_dir=workspace_dir, role_name=role_name, is_auditor=is_auditor
+        )
         with open(agents_path, "w", encoding="utf-8") as f:
             f.write(agents_content)
 
         cleanroom_dir = os.path.join(workspace_dir, ".cleanroom")
         os.makedirs(cleanroom_dir, exist_ok=True)
         patch_path = os.path.join(cleanroom_dir, "dsh_patch.yml")
-        patch_content = _format_dsh_patch_yml(model_name=model_name, provider=provider)
+        patch_content = _format_dsh_patch_yml(
+            model_name=model_name, provider=provider, workspace_dir=workspace_dir
+        )
         with open(patch_path, "w", encoding="utf-8") as f:
             f.write(patch_content)
 

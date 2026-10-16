@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:04:02Z
 # CHANGE: Schedule directory-scoped dirty nodes from the role configuration node set when storage exposes no enumeration, and tolerate lifecycle resolution failures in role precedence
 # CODE_HASH: d25daba1f784
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -31,6 +31,80 @@ def _extract_unit_info(node: dag_storage.DagNode) -> Tuple[str, str]:
         unit = unit.strip()
         return pkg, unit
     return "", target
+
+
+def _node_display_alias(node: dag_storage.DagNode) -> str:
+    """Returns a user/agent-facing file alias for a node, avoiding raw Bazel target addresses."""
+    try:
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        if getattr(cfg, "src_file_alias_by_node", None) and node in cfg.src_file_alias_by_node:
+            return str(cfg.src_file_alias_by_node[node])
+        for bt_set in getattr(cfg, "blame_targets_by_node", {}).values():
+            for bt in bt_set:
+                if getattr(bt, "owning_node", None) == node:
+                    return str(getattr(bt, "relative_path", bt))
+        for ro in getattr(cfg, "read_only_files", ()):
+            if getattr(ro, "owning_node", None) == node:
+                return str(getattr(ro, "relative_path", ro))
+        for rw in getattr(cfg, "read_write_files", ()):
+            if getattr(rw, "owning_node", None) == node:
+                return str(getattr(rw, "relative_path", rw))
+    except Exception:
+        pass
+
+    addr = str(node.unit_address).strip()
+    if ":" in addr:
+        pkg, unit_name = addr.split(":", 1)
+        pkg = pkg.lstrip("/").strip()
+    elif "/" in addr:
+        pkg, unit_name = addr.rsplit("/", 1)
+        pkg = pkg.lstrip("/").strip()
+    else:
+        pkg, unit_name = "", addr
+
+    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
+    try:
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        role_defs = getattr(cfg, "role_definitions", {})
+        if role in role_defs:
+            r_def = role_defs[role]
+            src_pat = getattr(r_def, "src_pattern", "") or (
+                r_def.get("src_pattern") if isinstance(r_def, dict) else ""
+            )
+            if src_pat:
+                formatted = src_pat.replace("{unit_dir}", pkg).replace(
+                    "{unit_name}", unit_name
+                ).strip("/")
+                if formatted:
+                    return formatted
+    except Exception:
+        pass
+
+    if role == "test":
+        return f"{pkg}/tests/{unit_name}_test.py" if pkg else f"tests/{unit_name}_test.py"
+    if role == "lib":
+        return f"{pkg}/lib/{unit_name}.py" if pkg else f"lib/{unit_name}.py"
+    if role == "low":
+        return f"{pkg}/low/{unit_name}.pyi" if pkg else f"low/{unit_name}.pyi"
+    if role == "high":
+        return f"{pkg}/high/{unit_name}.md" if pkg else f"high/{unit_name}.md"
+    if role == "planning":
+        return f"{pkg}/planning/{unit_name}.md" if pkg else f"planning/{unit_name}.md"
+    if role == "scenario":
+        return f"{pkg}/scenarios/{unit_name}.md" if pkg else f"scenarios/{unit_name}.md"
+    return f"{pkg}/{unit_name}" if pkg else unit_name
+
+
+def _is_auditor_node(node: dag_storage.DagNode) -> bool:
+    """Checks whether the node's role is classified as an auditor role."""
+    try:
+        from update_with_ai.parts.storage.lib import src_metadata
+        role_clean = node.role_address.split(":")[-1].strip().lower()
+        return src_metadata.is_auditor_role(role_clean)
+    except Exception:
+        pass
+    role_name = node.role_address.split(":")[-1].strip().lower()
+    return role_name in ("qa", "coverage", "spec_qa", "auditor", "audit")
 
 
 class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
@@ -172,7 +246,7 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
         for node in candidate_nodes:
             deps = storage.get_dependencies(node)
             dep_paths: List[str] = [
-                f"{dep.node.unit_address}:{dep.node.role_address}"
+                _node_display_alias(dep.node)
                 for dep in deps
             ]
 
@@ -181,12 +255,14 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
                 m for m in msgs if isinstance(m, dag_storage.FeedbackMessage)
             ]
 
-            role_clean = node.role_address.split(":")[-1].strip().lower()
-            prompt = f"Implement task for unit '{node.unit_address}' in role '{role_clean}'."
-            if feedback_msgs:
-                prompt += "\n\n### Open Feedback:\n"
-                for fb in feedback_msgs:
-                    prompt += f"- {fb.content}\n"
+            try:
+                prompt = self.format_task_prompt([node])
+            except (AttributeError, KeyError, LifecycleResolutionError):
+                prompt = f"Implement task for '{_node_display_alias(node)}'."
+                if feedback_msgs:
+                    prompt += "\n\n### Open Feedback:\n"
+                    for fb in feedback_msgs:
+                        prompt += f"- {fb.content}\n"
 
             tasks.append(
                 control_work_scheduler.ScheduledTask(
@@ -291,22 +367,39 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
                     break
 
         is_multi_node = len(nodes) > 1
+        is_auditor_session = any(_is_auditor_node(n) for n in nodes)
 
         mapping_lines: List[str] = []
         for n in nodes:
-            pkg, unit_name = _extract_unit_info(n)
-            default_alias = f"{pkg}/{unit_name}" if pkg else unit_name
-            alias_str = n_cfg.src_file_alias_by_node.get(n) or default_alias
-            grounding_file = self._resolve_grounding_file(n, alias_str, n_cfg)
-            if grounding_file:
-                mapping_lines.append(f"{alias_str} with {grounding_file}")
+            if _is_auditor_node(n):
+                blame_targets = [
+                    getattr(bt, "relative_path", str(bt))
+                    for bt in n_cfg.blame_targets_by_node.get(n, ())
+                ]
+                grounding_file = self._resolve_grounding_file(n, "", n_cfg)
+                if blame_targets:
+                    for bt_path in sorted(blame_targets):
+                        if grounding_file:
+                            mapping_lines.append(f"{bt_path} against {grounding_file}")
+                        else:
+                            mapping_lines.append(bt_path)
+                else:
+                    alias_str = n_cfg.src_file_alias_by_node.get(n) or _node_display_alias(n)
+                    if grounding_file:
+                        mapping_lines.append(f"{alias_str} with {grounding_file}")
+                    else:
+                        mapping_lines.append(alias_str)
             else:
-                mapping_lines.append(alias_str)
+                alias_str = n_cfg.src_file_alias_by_node.get(n) or _node_display_alias(n)
+                grounding_file = self._resolve_grounding_file(n, alias_str, n_cfg)
+                if grounding_file:
+                    mapping_lines.append(f"{alias_str} with {grounding_file}")
+                else:
+                    mapping_lines.append(alias_str)
 
         message_lines: List[str] = []
         for n in nodes:
-            pkg, unit_name = _extract_unit_info(n)
-            default_alias = f"{pkg}/{unit_name}" if pkg else unit_name
+            default_alias = _node_display_alias(n)
             target_name = (
                 n_cfg.src_file_alias_by_node.get(n)
                 or ", ".join(sorted(f.relative_path for f in n_cfg.read_write_files))
@@ -359,26 +452,45 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
             return "\n\n".join(p for p in parts if p).strip()
 
         parts = []
-        if guide_file_alias:
-            parts.append(
-                f"The following files are supposed to be aligned according to guide {guide_file_alias}:\n"
-                + "\n".join(mapping_lines)
-            )
+        if is_auditor_session:
+            if guide_file_alias:
+                parts.append(
+                    f"The following files are supposed to be audited according to guide {guide_file_alias}:\n"
+                    + "\n".join(mapping_lines)
+                )
+            else:
+                parts.append(
+                    "The following files are supposed to be audited:\n"
+                    + "\n".join(mapping_lines)
+                )
         else:
-            parts.append(
-                "The following files are supposed to be aligned:\n"
-                + "\n".join(mapping_lines)
-            )
+            if guide_file_alias:
+                parts.append(
+                    f"The following files are supposed to be aligned according to guide {guide_file_alias}:\n"
+                    + "\n".join(mapping_lines)
+                )
+            else:
+                parts.append(
+                    "The following files are supposed to be aligned:\n"
+                    + "\n".join(mapping_lines)
+                )
 
         if message_lines:
             parts.append("\n".join(message_lines))
 
         if guide_file_alias:
-            parts.append(f"Read {guide_file_alias} for alignment guidance.")
+            parts.append(f"Read {guide_file_alias} for guidance.")
 
-        if is_multi_node:
+        if is_auditor_session:
             parts.append(
-                "When submitting or failing completed units, specify target as <unit_name> (if unique among session units) or <relative_path>/<unit_name> (if ambiguous)."
+                "CRITICAL: All files in this workspace are strictly read-only. Do not edit any files.\n"
+                "Run check_files to verify each target.\n"
+                "If checks pass, run submit() to certify the target.\n"
+                "If checks fail, run blame(target='<culprit_file>', explanation='<critique>') specifying the culprit file and critique."
+            )
+        elif is_multi_node:
+            parts.append(
+                "When submitting or failing completed units, specify target as the file path."
             )
         else:
             parts.append(

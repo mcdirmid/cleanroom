@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T23:43:51Z
-# CHANGE: Cover whitespace fallback unique match replacement and ambiguous match failure guidance when exact matching finds zero occurrences
-# CODE_HASH: 9930eaae853f
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CHANGE: Cover rejection of editing tool replacements that alter the cleanroom metadata header
+# CODE_HASH: ede2270a89f6
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_file_editor_impl per its grounding specification."""
@@ -24,8 +24,11 @@ from update_with_ai.parts.agent.lib import (
     agent_file_alias,
     agent_node_config,
 )
-from update_with_ai.parts.control.lib import src_metadata
-from update_with_ai.parts.sandbox.lib import sandbox_file_editor, tool_provider
+from update_with_ai.parts.storage.lib import src_metadata
+from update_with_ai.parts.sandbox.lib import (
+    sandbox_file_editor,
+    tool_provider,
+)
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor_impl import (
     EditManager,
     ReplaceFileContentTool,
@@ -160,16 +163,36 @@ class MockAliasManager:
     def wire_type(self) -> type[str]:
         return str
 
-    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+    def to_alias(self, path: str) -> agent_file_alias.FileAlias:
         for f in self._known_files:
-            if str(f.relative_path) == wire_value:
+            if str(f.relative_path) == path:
                 return f
-        return agent_file_alias.UnboundFile(agent_file_alias.RelativePath(wire_value))
+        return agent_file_alias.UnboundFile(agent_file_alias.RelativePath(path))
+
+    convert = to_alias
 
     def sanitize_text(
         self, text: agent_file_alias.UnsanitizedText
     ) -> agent_file_alias.SanitizedText:
         return agent_file_alias.SanitizedText(str(text))
+
+
+class MockAliasManagerType:
+    tier = agent_session
+
+    def __init__(self, alias_mgr: MockAliasManager) -> None:
+        self._alias_mgr = alias_mgr
+
+    @property
+    def actual_type(self) -> type[agent_file_alias.FileAlias]:
+        return agent_file_alias.FileAlias
+
+    @property
+    def wire_type(self) -> type[str]:
+        return str
+
+    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+        return self._alias_mgr.to_alias(wire_value)
 
 
 class MockSourceMetadataCoordinator:
@@ -229,8 +252,12 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.mock_alias_manager,
             keys=[
                 agent_file_alias.AliasManager,
-                tool_provider.ParameterType[agent_file_alias.FileAlias, str],
             ],
+            tier=agent_session,
+        )
+        self.registry.register_instance(
+            MockAliasManagerType(self.mock_alias_manager),
+            keys=[tool_provider.AliasManagerType],
             tier=agent_session,
         )
         self.mock_src_metadata = MockSourceMetadataCoordinator()
@@ -437,12 +464,17 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         )
         registry.register_instance(MockAgentConfig(), keys=[agent_config.AgentConfig], tier=system)
         registry.register_instance(MockToolManager(), keys=[tool_provider.ToolManager], tier=agent_session)
+        mock_nested_mgr = MockAliasManager(self.root, known_files={nested})
         registry.register_instance(
-            MockAliasManager(self.root, known_files={nested}),
+            mock_nested_mgr,
             keys=[
                 agent_file_alias.AliasManager,
-                tool_provider.ParameterType[agent_file_alias.FileAlias, str],
             ],
+            tier=agent_session,
+        )
+        registry.register_instance(
+            MockAliasManagerType(mock_nested_mgr),
+            keys=[tool_provider.AliasManagerType],
             tier=agent_session,
         )
         registry.register_instance(
@@ -473,12 +505,17 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         )
         registry.register_instance(MockAgentConfig(), keys=[agent_config.AgentConfig], tier=system)
         registry.register_instance(self.mock_tool_manager, keys=[tool_provider.ToolManager], tier=agent_session)
+        mock_missing_mgr = MockAliasManager(self.root, known_files={missing_rw})
         registry.register_instance(
-            MockAliasManager(self.root, known_files={missing_rw}),
+            mock_missing_mgr,
             keys=[
                 agent_file_alias.AliasManager,
-                tool_provider.ParameterType[agent_file_alias.FileAlias, str],
             ],
+            tier=agent_session,
+        )
+        registry.register_instance(
+            MockAliasManagerType(mock_missing_mgr),
+            keys=[tool_provider.AliasManagerType],
             tier=agent_session,
         )
         registry.register_instance(
@@ -772,8 +809,12 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.mock_alias_manager,
             keys=[
                 agent_file_alias.AliasManager,
-                tool_provider.ParameterType[agent_file_alias.FileAlias, str],
             ],
+            tier=agent_session,
+        )
+        registry.register_instance(
+            MockAliasManagerType(self.mock_alias_manager),
+            keys=[tool_provider.AliasManagerType],
             tier=agent_session,
         )
         registry.register_instance(
@@ -813,6 +854,112 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             self.assertTrue(resp.is_failed)
             self.assertEqual(self._read_rw(), INITIAL_CONTENT)
+
+    def test_replace_alters_cleanroom_metadata_fails(self) -> None:
+        """Postcondition: WHEN the edit alters the cleanroom metadata header, MUST fail reminding the agent that cleanroom metadata is managed automatically by submit."""
+        meta_content = (
+            "# --- CLEANROOM METADATA ---\n"
+            "# LAST_CLEANED: 2026-10-01T00:00:00Z\n"
+            "# LAST_CHANGED: 2026-10-01T00:00:00Z\n"
+            "# CHANGE: initial change\n"
+            "# --- END CLEANROOM METADATA ---\n"
+            "\n"
+            "def foo() -> int:\n"
+            "    return 42\n"
+        )
+        with open(self.rw_host_path, "w", encoding="utf-8") as fh:
+            fh.write(meta_content)
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+
+            # 1. Direct edit targeting CHANGE inside metadata header
+            resp = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    "# CHANGE: initial change",
+                    "# CHANGE: modified change",
+                    path=self.read_write_file,
+                )
+            )
+            self.assertTrue(resp.is_failed)
+            self.assertIn("CLEANROOM METADATA is managed automatically by submit; do not edit it directly", str(resp.content))
+            self.assertIsNotNone(resp.reminder)
+            self.assertEqual(
+                str(resp.reminder),
+                "Cleanroom metadata is managed automatically by submit.",
+            )
+            # File on disk was untouched
+            self.assertEqual(self._read_rw(), meta_content)
+
+            # 2. Direct edit targeting metadata delimiter
+            resp_delim = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    "# --- CLEANROOM METADATA ---",
+                    "# --- MY METADATA ---",
+                    path=self.read_write_file,
+                )
+            )
+            self.assertTrue(resp_delim.is_failed)
+            self.assertIn("CLEANROOM METADATA is managed automatically by submit; do not edit it directly", str(resp_delim.content))
+            self.assertEqual(self._read_rw(), meta_content)
+
+            # 3. Valid edit to code body succeeds without triggering metadata failure
+            resp_body = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    "return 42",
+                    "return 100",
+                    path=self.read_write_file,
+                )
+            )
+            self.assertFalse(resp_body.is_failed)
+            self.assertIn("return 100", self._read_rw())
+
+    def test_replace_alters_markdown_metadata_fails(self) -> None:
+        """Postcondition: WHEN the edit alters the markdown cleanroom metadata header, MUST fail reminding cleanroom metadata is managed automatically by submit."""
+        md_file = _make_read_write_file("spec.md")
+        md_host_path = os.path.join(self.root, "spec.md")
+        md_content = (
+            "<!-- CLEANROOM METADATA\n"
+            "LAST_CLEANED: 2026-10-01T00:00:00Z\n"
+            "CHANGE: spec change\n"
+            "-->\n"
+            "\n"
+            "# Spec Document\n"
+        )
+        with open(md_host_path, "w", encoding="utf-8") as fh:
+            fh.write(md_content)
+
+        registry = LifecycleRegistry()
+        __initialize__(registry)
+        registry.register_instance(
+            MockNodeConfig(read_write_files={md_file}),
+            keys=[agent_node_config.NodeConfig],
+            tier=agent_session,
+        )
+        registry.register_instance(MockAgentConfig(), keys=[agent_config.AgentConfig], tier=system)
+        registry.register_instance(self.mock_tool_manager, keys=[tool_provider.ToolManager], tier=agent_session)
+        mock_mgr = MockAliasManager(self.root, known_files={md_file})
+        registry.register_instance(mock_mgr, keys=[agent_file_alias.AliasManager], tier=agent_session)
+        registry.register_instance(MockAliasManagerType(mock_mgr), keys=[tool_provider.AliasManagerType], tier=agent_session)
+        registry.register_instance(self.mock_src_metadata, keys=[src_metadata.SourceMetadataCoordinator], tier=agent_session)
+
+        with enter_phase(agent_session, registry=registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            resp = replace_tool.execute_tool(
+                self._bindings(
+                    replace_tool,
+                    "CHANGE: spec change",
+                    "CHANGE: altered spec",
+                    path=md_file,
+                )
+            )
+            self.assertTrue(resp.is_failed)
+            self.assertIn("CLEANROOM METADATA is managed automatically by submit; do not edit it directly", str(resp.content))
+            with open(md_host_path, "r", encoding="utf-8") as fh:
+                self.assertEqual(fh.read(), md_content)
 
     def test_replace_invalid_line_bounds_fail(self) -> None:
         """Postcondition: Invalid start_line / end_line combinations MUST fail."""

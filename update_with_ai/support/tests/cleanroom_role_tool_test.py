@@ -20,7 +20,7 @@ for _p in [
     if _p not in sys.path and os.path.isdir(_p):
         sys.path.insert(0, _p)
 
-from update_with_ai.parts.control.lib import src_metadata
+from update_with_ai.parts.storage.lib import src_metadata
 from update_with_ai.parts.workspace.lib import workspace_provision_impl
 from update_with_ai.support.lib import cleanroom_role_tool
 
@@ -43,13 +43,17 @@ class CleanroomRoleToolTest(unittest.TestCase):
 
         from update_with_ai.parts.control.lib import control_asm
         from update_with_ai.parts.core.lib import file_paths_impl
+        from update_with_ai.parts.storage.lib import storage_asm
+        from update_with_ai.parts.tools.lib import tools_asm
         file_paths_impl.__initialize__()
         workspace_asm.__initialize__()
         control_asm.__initialize__()
+        storage_asm.__initialize__()
+        tools_asm.__initialize__()
         self.phase_cm = enter_phase(agent_session.agent_session)
         self.phase_cm.__enter__()
 
-        self.test_dir = tempfile.mkdtemp()
+        self.test_dir = os.path.realpath(tempfile.mkdtemp())
         self.fake_repo = os.path.join(self.test_dir, "fake_repo")
         os.makedirs(self.fake_repo, exist_ok=True)
         with open(os.path.join(self.fake_repo, "cleanroom.toml"), "w", encoding="utf-8") as f:
@@ -57,6 +61,9 @@ class CleanroomRoleToolTest(unittest.TestCase):
         roles_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../update_python_with_ai/cleanroom_roles.toml"))
         if os.path.isfile(roles_src):
             shutil.copyfile(roles_src, os.path.join(self.fake_repo, "cleanroom_roles.toml"))
+            py_dir = os.path.join(self.fake_repo, "update_python_with_ai")
+            os.makedirs(py_dir, exist_ok=True)
+            shutil.copyfile(roles_src, os.path.join(py_dir, "cleanroom_roles.toml"))
         self.orig_cwd = os.getcwd()
 
     def tearDown(self) -> None:
@@ -261,7 +268,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         assert meta_low is not None
         self.assertEqual(len(meta_low.feedback), 1)
         self.assertIn("Contract missing parameter X", meta_low.feedback[0])
-        self.assertIsNotNone(meta_low.dirty)
+        self.assertIsNone(meta_low.dirty)
 
         # Second 2-arg blame
         ret2 = cleanroom_role_tool.main(
@@ -657,7 +664,407 @@ class CleanroomRoleToolTest(unittest.TestCase):
         ret_pass = cleanroom_role_tool.main(["submit", lib_target])
         self.assertEqual(ret_pass, 0)
 
+    def test_cleanroom_help(self) -> None:
+        """Verifies cleanroom --help returns 0 and outputs command overview."""
+        from io import StringIO
+        import contextlib
+        out = StringIO()
+        with contextlib.redirect_stdout(out):
+            ret = cleanroom_role_tool.main(["--help"])
+        self.assertEqual(ret, 0)
+        output = out.getvalue()
+        self.assertIn("orchestrate", output)
+        self.assertIn("work-queue", output)
+        self.assertIn("commission", output)
+
+    def test_work_queue_auto_commissions_missing_workspaces(self) -> None:
+        """Verifies that work-queue auto-commissions missing role workspaces up to target_role."""
+        from update_with_ai.parts.workspace.lib import workspace_registry_impl
+        reg = workspace_registry_impl.WorkspaceRegistry()
+        high_ws = reg.compute_workspace_dir("high", dir_scope="staging", repo_root=self.fake_repo)
+        low_ws = reg.compute_workspace_dir("low", dir_scope="staging", repo_root=self.fake_repo)
+        if os.path.isdir(high_ws):
+            shutil.rmtree(high_ws, ignore_errors=True)
+        if os.path.isdir(low_ws):
+            shutil.rmtree(low_ws, ignore_errors=True)
+
+        self.assertFalse(os.path.isdir(high_ws))
+        self.assertFalse(os.path.isdir(low_ws))
+
+        from io import StringIO
+        import contextlib
+        out = StringIO()
+        with contextlib.redirect_stdout(out):
+            ret = cleanroom_role_tool.main([
+                "work-queue", "staging", "low", "--json", "--repo-root", self.fake_repo
+            ])
+        self.assertEqual(ret, 0)
+        data = json.loads(out.getvalue())
+        self.assertTrue(os.path.isdir(high_ws))
+        self.assertTrue(os.path.isdir(low_ws))
+        self.assertIn("high", data["workspace_dirs"])
+        self.assertIn("low", data["workspace_dirs"])
+        self.assertEqual(data["workspace_dirs"]["high"], high_ws)
+        self.assertEqual(data["workspace_dirs"]["low"], low_ws)
+
+    def test_orchestrate_preflight_auto_commissions(self) -> None:
+        """Verifies that orchestrate pre-flight commissions workspaces when dirty and decommissions when clean."""
+        from update_with_ai.parts.workspace.lib import workspace_registry_impl
+        reg = workspace_registry_impl.WorkspaceRegistry()
+        plan_ws = reg.compute_workspace_dir("planning", dir_scope="staging", repo_root=self.fake_repo)
+        if os.path.isdir(plan_ws):
+            shutil.rmtree(plan_ws, ignore_errors=True)
+
+        self.assertFalse(os.path.isdir(plan_ws))
+
+        # 1. Create dirty unit in staging -> orchestrate commissions workspaces and emits directive
+        high_dir = os.path.join(self.fake_repo, "staging/parts/agent/high")
+        os.makedirs(high_dir, exist_ok=True)
+        high_file = os.path.join(high_dir, "config.md")
+        write_file_with_perms(high_file, "# High spec\n", readonly=False)
+        src_metadata.update_metadata(high_file, last_cleaned="", last_changed="2026-10-15T00:00:00Z")
+
+        from io import StringIO
+        import contextlib
+        out = StringIO()
+        with contextlib.redirect_stdout(out):
+            ret = cleanroom_role_tool.main([
+                "orchestrate", "staging", "planning", "--repo-root", self.fake_repo
+            ])
+        self.assertEqual(ret, 0)
+        output = out.getvalue()
+        self.assertIn("Cleanroom Orchestrate Pre-flight", output)
+        self.assertIn("AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE", output)
+        self.assertTrue(os.path.isdir(plan_ws))
+        self.assertTrue(os.path.isdir(os.path.join(plan_ws, "bin")))
+
+        # 2. When clean -> orchestrate decommissions provisioned workspaces
+        os.remove(high_file)
+        out2 = StringIO()
+        with contextlib.redirect_stdout(out2):
+            ret2 = cleanroom_role_tool.main([
+                "orchestrate", "staging", "planning", "--repo-root", self.fake_repo
+            ])
+        self.assertEqual(ret2, 0)
+        output2 = out2.getvalue()
+        self.assertIn("CLEAN", output2)
+        self.assertIn("Decommissioned", output2)
+        self.assertFalse(os.path.isdir(plan_ws))
+
+    def test_dirty_and_mark_clean_subcommands(self) -> None:
+        """Verifies dirty and mark-clean subcommands on targets."""
+        part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
+        high_dir = os.path.join(part_dir, "high")
+        lib_dir = os.path.join(part_dir, "lib")
+        os.makedirs(high_dir, exist_ok=True)
+        os.makedirs(lib_dir, exist_ok=True)
+
+        hls_file = os.path.join(high_dir, "sample_tool.md")
+        with open(hls_file, "w", encoding="utf-8") as f:
+            f.write("# Sample High Level Spec\n\n```python\n# Component: implementation\n```\n")
+
+        lib_file = os.path.join(lib_dir, "sample_tool.py")
+        with open(lib_file, "w", encoding="utf-8") as f:
+            f.write("# sample implementation\n")
+
+        rel_path = "staging/parts/agent/lib/sample_tool.py"
+
+        # 1. Mark clean via mark-clean subcommand
+        ret_clean = cleanroom_role_tool.main([
+            "mark-clean", rel_path, "--workspace-dir", self.fake_repo
+        ])
+        self.assertEqual(ret_clean, 0)
+        meta = src_metadata.extract_metadata(lib_file)
+        self.assertIsNotNone(meta)
+        assert meta is not None
+        self.assertTrue(bool(meta.last_cleaned))
+
+        # 3. Calling --loop on target invokes loop cleaner (mocked)
+        from unittest.mock import patch, MagicMock
+        mock_res = MagicMock(success=True, summary="Mock cleaning succeeded")
+        with patch("update_with_ai.parts.uv.lib.uv_loop_impl.Loop.clean_subgraph", return_value=mock_res):
+            ret_loop = cleanroom_role_tool.main([
+                rel_path, "--loop", "--workspace-dir", self.fake_repo
+            ])
+            self.assertEqual(ret_loop, 0)
+
+            # 4. Orchestrate with --loop cleans target
+            ret_orch_loop = cleanroom_role_tool.main([
+                "orchestrate", rel_path, "--loop", "--workspace-dir", self.fake_repo
+            ])
+            self.assertEqual(ret_orch_loop, 0)
+
+    def test_feedback_subcommand(self) -> None:
+        """Verifies feedback subcommand supports positional critiques, -m flag, and file targets."""
+        part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
+        low_dir = os.path.join(part_dir, "low")
+        os.makedirs(low_dir, exist_ok=True)
+
+        low_file = os.path.join(low_dir, "feedback_target.pyi")
+        with open(low_file, "w", encoding="utf-8") as f:
+            f.write("def do_something() -> None: ...\n")
+        src_metadata.update_metadata(
+            low_file,
+            last_cleaned="2026-10-04T12:00:00Z",
+            last_changed="2026-10-04T12:00:00Z",
+        )
+
+        rel_path = "staging/parts/agent/low/feedback_target.pyi"
+
+        # 1. Missing critique returns code 2
+        ret_no_critique = cleanroom_role_tool.main([
+            "feedback", rel_path, "--repo-root", self.fake_repo
+        ])
+        self.assertEqual(ret_no_critique, 2)
+
+        # 2. Positional critique updates file metadata
+        ret_pos = cleanroom_role_tool.main([
+            "feedback", rel_path, "Positional critique", "--repo-root", self.fake_repo
+        ])
+        self.assertEqual(ret_pos, 0)
+        meta = src_metadata.extract_metadata(low_file)
+        self.assertIsNotNone(meta)
+        assert meta is not None
+        self.assertEqual(len(meta.feedback), 1)
+        self.assertIn("Positional critique", meta.feedback[0])
+
+        # 3. Flag-based critique (-m) appends to file metadata
+        ret_flag = cleanroom_role_tool.main([
+            "feedback", rel_path, "-m", "Message flag critique", "--repo-root", self.fake_repo
+        ])
+        self.assertEqual(ret_flag, 0)
+        meta2 = src_metadata.extract_metadata(low_file)
+        assert meta2 is not None
+        self.assertEqual(len(meta2.feedback), 2)
+        self.assertIn("Message flag critique", meta2.feedback[1])
+
+    def test_commission_subcommand_model_and_harness(self) -> None:
+        """Verifies commission subcommand initializes workspace with --model and --harness."""
+        ret = cleanroom_role_tool.main([
+            "commission", "lib", "staging",
+            "--model", "deepseek-v41-flash",
+            "--harness", "dsh",
+            "--repo-root", self.fake_repo,
+        ])
+        self.assertEqual(ret, 0)
+        from update_with_ai.parts.workspace.lib import workspace_registry_impl
+        reg = workspace_registry_impl.WorkspaceRegistry()
+        lib_ws = reg.compute_workspace_dir("lib", "staging", repo_root=self.fake_repo)
+        self.assertTrue(os.path.isdir(lib_ws))
+
+        # Check .cleanroom_role.json records model and harness
+        cfg_path = os.path.join(lib_ws, ".cleanroom_role.json")
+        self.assertTrue(os.path.isfile(cfg_path))
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        self.assertEqual(cfg.get("model"), "deepseek-v41-flash")
+        self.assertEqual(cfg.get("harness"), "dsh")
+
+        # Check DSH patch was created
+        dsh_patch = os.path.join(lib_ws, ".cleanroom", "dsh_patch.yml")
+        self.assertTrue(os.path.isfile(dsh_patch))
+
+        # Check AGENTS.md has DSH confinement header
+        agents_md = os.path.join(lib_ws, "AGENTS.md")
+        with open(agents_md, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("Cleanroom Role Confinement Rules for DeepSeek Harness", content)
+
+    def test_scope_hash_role_syntax_across_subcommands(self) -> None:
+        """Verifies scope#role syntax works consistently across commission, work-queue, orchestrate, and decommission."""
+        # 1. commission with staging#lib
+        ret_comm = cleanroom_role_tool.main([
+            "commission", "staging#lib",
+            "--model", "deepseek-v41-flash",
+            "--repo-root", self.fake_repo,
+        ])
+        self.assertEqual(ret_comm, 0)
+        from update_with_ai.parts.workspace.lib import workspace_registry_impl
+        reg = workspace_registry_impl.WorkspaceRegistry()
+        lib_ws = reg.compute_workspace_dir("lib", "staging", repo_root=self.fake_repo)
+        self.assertTrue(os.path.isdir(lib_ws))
+
+        # 2. work-queue with staging#lib
+        ret_wq = cleanroom_role_tool.main([
+            "work-queue", "staging#lib", "--json",
+            "--repo-root", self.fake_repo,
+        ])
+        self.assertEqual(ret_wq, 0)
+
+        # 3. decommission with staging#lib
+        ret_decomm = cleanroom_role_tool.main([
+            "decommission", "staging#lib",
+            "--repo-root", self.fake_repo,
+        ])
+        self.assertEqual(ret_decomm, 0)
+        self.assertFalse(os.path.isdir(lib_ws))
+
+    def test_unit_label_target_syntax_across_subcommands(self) -> None:
+        """Verifies //scope/parts/unit:target#role and path#role work across commission, work-queue, decommission."""
+        from update_with_ai.parts.workspace.lib import workspace_registry_impl
+        reg = workspace_registry_impl.WorkspaceRegistry()
+        lib_ws = reg.compute_workspace_dir("lib", "staging", repo_root=self.fake_repo)
+
+        # 1. Commission via canonical DAG label //staging/parts/agent:config#lib
+        ret_comm = cleanroom_role_tool.main([
+            "commission", "//staging/parts/agent:config#lib",
+            "--model", "deepseek-v41-flash",
+            "--repo-root", self.fake_repo,
+        ])
+        self.assertEqual(ret_comm, 0)
+        self.assertTrue(os.path.isdir(lib_ws))
+
+        # 2. Inspect work-queue via canonical DAG label
+        ret_wq = cleanroom_role_tool.main([
+            "work-queue", "//staging/parts/agent:config#lib", "--json",
+            "--repo-root", self.fake_repo,
+        ])
+        self.assertEqual(ret_wq, 0)
+
+        # 3. Decommission via canonical DAG label
+        ret_decomm = cleanroom_role_tool.main([
+            "decommission", "//staging/parts/agent:config#lib",
+            "--repo-root", self.fake_repo,
+        ])
+        self.assertEqual(ret_decomm, 0)
+        self.assertFalse(os.path.isdir(lib_ws))
+
+        # 4. Commission via path format staging/parts/agent/lib#lib
+        ret_comm_path = cleanroom_role_tool.main([
+            "commission", "staging/parts/agent/lib#lib",
+            "--model", "deepseek-v41-flash",
+            "--repo-root", self.fake_repo,
+        ])
+        self.assertEqual(ret_comm_path, 0)
+        self.assertTrue(os.path.isdir(lib_ws))
+
+        # 5. Decommission via path format
+        ret_decomm_path = cleanroom_role_tool.main([
+            "decommission", "staging/parts/agent/lib#lib",
+            "--repo-root", self.fake_repo,
+        ])
+        self.assertEqual(ret_decomm_path, 0)
+        self.assertFalse(os.path.isdir(lib_ws))
+
+    def test_default_model_resolution_from_model_configs(self) -> None:
+        """Verifies commission resolves harness-specific defaults from model_configs.toml."""
+        # Create model_configs.toml in fake repo with per-harness defaults
+        cfg_path = os.path.join(self.fake_repo, "model_configs.toml")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write(
+                'default = "fallback-default"\n'
+                'loop_default = "qwen-moe-q6"\n'
+                'antigravity_default = "gemini-3.8-flash"\n'
+                'dsh_default = "deepseek-v41-flash"\n\n'
+                '[models.qwen-moe-q6]\nmodel = "Qwen3.6-35B-A3B-oQ6-mtp"\n\n'
+                '[models.gemini-3.8-flash]\nmodel = "gemini-3.8-flash"\n\n'
+                '[models.deepseek-v41-flash]\nmodel = "DeepSeek-V41-Flash"\n'
+            )
+
+        # Direct helper check
+        self.assertEqual(cleanroom_role_tool.resolve_default_model(self.fake_repo, harness="loop"), "qwen-moe-q6")
+        self.assertEqual(cleanroom_role_tool.resolve_default_model(self.fake_repo, harness="antigravity"), "gemini-3.8-flash")
+        self.assertEqual(cleanroom_role_tool.resolve_default_model(self.fake_repo, harness="dsh"), "deepseek-v41-flash")
+        self.assertEqual(cleanroom_role_tool.resolve_default_model(self.fake_repo, harness="other"), "fallback-default")
+
+        # 1. Commission antigravity harness without --model -> binds antigravity_default
+        ret_ag = cleanroom_role_tool.main([
+            "commission", "staging#lib",
+            "--harness", "antigravity",
+            "--repo-root", self.fake_repo,
+        ])
+        self.assertEqual(ret_ag, 0)
+        from update_with_ai.parts.workspace.lib import workspace_registry_impl
+        reg = workspace_registry_impl.WorkspaceRegistry()
+        lib_ws = reg.compute_workspace_dir("lib", "staging", repo_root=self.fake_repo)
+        self.assertTrue(os.path.isdir(lib_ws))
+
+        role_cfg_path = os.path.join(lib_ws, ".cleanroom_role.json")
+        self.assertTrue(os.path.isfile(role_cfg_path))
+        with open(role_cfg_path, "r", encoding="utf-8") as f:
+            role_data = json.load(f)
+        self.assertEqual(role_data.get("model"), "gemini-3.8-flash")
+
+        # 2. Commission dsh harness without --model -> binds dsh_default
+        cleanroom_role_tool.main(["decommission", "staging#lib", "--repo-root", self.fake_repo])
+        ret_dsh = cleanroom_role_tool.main([
+            "commission", "staging#lib",
+            "--harness", "dsh",
+            "--repo-root", self.fake_repo,
+        ])
+        self.assertEqual(ret_dsh, 0)
+        with open(role_cfg_path, "r", encoding="utf-8") as f:
+            role_data_dsh = json.load(f)
+        self.assertEqual(role_data_dsh.get("model"), "deepseek-v41-flash")
+
+    def test_clean_and_orchestrate_harness_resolution_and_defaults(self) -> None:
+        """Verifies clean defaults to --harness loop, orchestrate defaults to antigravity, and --harness loop works across both."""
+        from unittest.mock import patch, MagicMock
+
+        # 1. 'cleanroom clean staging/parts/sandbox#qa' defaults to harness 'loop'
+        with patch.object(cleanroom_role_tool, "run_loop_target", return_value=0) as mock_loop:
+            ret = cleanroom_role_tool.main(["clean", "staging/parts/sandbox#qa", "--repo-root", self.fake_repo])
+            self.assertEqual(ret, 0)
+            mock_loop.assert_called_once()
+            call_kwargs = mock_loop.call_args.kwargs
+            self.assertEqual(call_kwargs.get("target_str"), "staging/parts/sandbox#qa")
+            self.assertEqual(call_kwargs.get("up_to_role"), "qa")
+
+        # 2. 'cleanroom clean staging/parts/sandbox#qa --harness loop' explicitly works
+        with patch.object(cleanroom_role_tool, "run_loop_target", return_value=0) as mock_loop:
+            ret = cleanroom_role_tool.main([
+                "clean", "staging/parts/sandbox#qa", "--harness", "loop", "--repo-root", self.fake_repo
+            ])
+            self.assertEqual(ret, 0)
+            mock_loop.assert_called_once()
+            call_kwargs = mock_loop.call_args.kwargs
+            self.assertEqual(call_kwargs.get("target_str"), "staging/parts/sandbox#qa")
+            self.assertEqual(call_kwargs.get("up_to_role"), "qa")
+
+        # 3. 'cleanroom orchestrate staging/parts/sandbox#qa --harness loop' routes to loop
+        with patch.object(cleanroom_role_tool, "run_loop_target", return_value=0) as mock_loop:
+            ret = cleanroom_role_tool.main([
+                "orchestrate", "staging/parts/sandbox#qa", "--harness", "loop", "--repo-root", self.fake_repo
+            ])
+            self.assertEqual(ret, 0)
+            mock_loop.assert_called_once()
+            call_kwargs = mock_loop.call_args.kwargs
+            self.assertEqual(call_kwargs.get("target_str"), "staging/parts/sandbox#qa")
+            self.assertEqual(call_kwargs.get("up_to_role"), "qa")
+
+        # 4. 'cleanroom orchestrate staging/parts/sandbox#qa --loop' routes to loop (backward compatibility)
+        with patch.object(cleanroom_role_tool, "run_loop_target", return_value=0) as mock_loop:
+            ret = cleanroom_role_tool.main([
+                "orchestrate", "staging/parts/sandbox#qa", "--loop", "--repo-root", self.fake_repo
+            ])
+            self.assertEqual(ret, 0)
+            mock_loop.assert_called_once()
+            call_kwargs = mock_loop.call_args.kwargs
+            self.assertEqual(call_kwargs.get("target_str"), "staging/parts/sandbox#qa")
+            self.assertEqual(call_kwargs.get("up_to_role"), "qa")
+
+        # 5. Direct main_clean entrypoint invokes clean
+        with patch.object(cleanroom_role_tool, "run_loop_target", return_value=0) as mock_loop:
+            ret = cleanroom_role_tool.main_clean(["staging/parts/sandbox#qa", "--repo-root", self.fake_repo])
+            self.assertEqual(ret, 0)
+            mock_loop.assert_called_once()
+
+        # 6. 'cleanroom clean ... --harness dsh' dispatches to dsh headless runner
+        with patch.object(cleanroom_role_tool, "_find_subagent_tool_mod") as mock_find_mod:
+            mock_subagent_mod = MagicMock()
+            mock_subagent_mod.main.return_value = 0
+            mock_find_mod.return_value = mock_subagent_mod
+            ret_dsh = cleanroom_role_tool.main([
+                "clean", "staging#qa", "--harness", "dsh", "--repo-root", self.fake_repo
+            ])
+            self.assertEqual(ret_dsh, 0)
+            mock_subagent_mod.main.assert_called_once()
+            forwarded = mock_subagent_mod.main.call_args[0][0]
+            self.assertIn("--harness", forwarded)
+            self.assertEqual(forwarded[forwarded.index("--harness") + 1], "dsh")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
-LAST_CHANGED: 2026-10-12T11:27:00Z
-CHANGE: Remove max batch size parameter from get work tool
-CODE_HASH: f7d4a1caee9e
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:30:00Z
+CHANGE: Update sandbox_run_control interface component
+CODE_HASH: 9a9b755e4181
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # sandbox_run_control interface component
@@ -12,9 +12,9 @@ imports: tool_provider, agent_file_alias, dag_storage, agent_node_config
 
 ## Purpose
 
-The sandbox_run_control interface component provides explicit agent session outcome controls for successful task completion, upstream defect attribution, and failure termination.
+The sandbox_run_control interface component provides explicit agent session run execution controls, verification checking, milestone progression, and work acquisition.
 
-Autonomous agents require unambiguous control tools to signal when a task is finished, when an irrecoverable error has occurred, or when prerequisites contain defects. Without structured termination tools, agents can loop indefinitely, silently drop errors, or conclude sessions without documenting their changes. The sandbox_run_control interface component establishes a governed termination boundary that verifies session criteria, enforces change documentation when files are modified, and routes diagnostic feedback to responsible dependency nodes.
+Autonomous agents require unambiguous control tools to signal when a task is finished, when an irrecoverable error has occurred, or when prerequisites contain defects. Without structured termination tools, agents can loop indefinitely, silently drop errors, or conclude sessions without documenting their changes. The sandbox_run_control interface component establishes a governed execution boundary that coordinates verification checks, advances step guidance, acquires active dirty work, and installs session outcome tools.
 
 **Out of scope:** The sandbox_run_control interface component does not execute build runners, format source files, inject startup tool calls, or manage filesystem state; these are handled by other components.
 
@@ -22,22 +22,14 @@ Autonomous agents require unambiguous control tools to signal when a task is fin
 
 ## Types and Behavior
 
-A polymorphic *resolve tool* defines a file alias *resolve target* parameter identifying the active node being resolved. A resolve tool produces a terminating response when all active nodes are resolved, or a non-terminating response when other active nodes remain.
-
 An agent session's *run controller* is configured with per-node blame targets and node config verification checks, initializes session tools upon agent session entry, and provides tools for terminating agent sessions and attributing outcomes.
 
-The run controller installs the submit tool, the fail tool, the check files tool, the get work tool, and the blame tool unconditionally, and installs the advance tool when guide step mode is active.
+The run controller installs the submit tool, the fail tool, the check files tool, and the get work tool unconditionally, and installs the advance tool when guide step mode is active. The get work tool installs the blame tool when any active node has configured blame targets.
 
 The run controller exposes the verification checks that validate session criteria, and caches verification evaluation results alongside the edit manager file hashes of target nodes, reusing a cached verification outcome while no workspace file has been updated since that evaluation.
 
 The run controller installs an argument-free *check files tool* named `check_files`. Executing the check files tool updates outdated verification results, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks the last tested file hashes, and fails when verification failed.
 
 The run controller installs an *advance tool* when guide step mode is active. Executing the advance tool coordinates step progression through guide delivery upon passing verification.
-
-The run controller installs a *submit tool* which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, and enforces change documentation. The submit tool accepts a text *change summary* parameter.
-
-The run controller installs a *fail tool* which is a resolve tool that terminates the run in failure. The fail tool accepts a text *explanation* parameter.
-
-The run controller installs a *blame tool* which is a resolve tool that attributes task failure to an upstream dependency node. The blame tool accepts a file alias *blame target* parameter and a text explanation parameter.
 
 The run controller installs an argument-free *get work tool* named `get_work` that retrieves active dirty nodes, materializes startup templates, and delivers the session task prompt, specifying a follow-up execution of the advance tool when guide step mode is active.

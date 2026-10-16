@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_coordinator_impl unit tests
-# CODE_HASH: 730b37f7f3f0
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 3777a0383a21
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for subagent_coordinator_impl."""
@@ -24,10 +24,10 @@ from update_with_ai.parts.subagent.lib.subagent_coordinator_impl import (
     SubagentCoordinator,
     __initialize__,
 )
+from update_with_ai.parts.tools.lib import workspace_work
 from update_with_ai.parts.workspace.lib import (
     workspace_provision,
     workspace_registry,
-    workspace_work,
 )
 
 
@@ -374,7 +374,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
 
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
-            summary = coord.orchestrate("pkg_a", harness)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001)
             self.assertFalse(summary.is_converged)
             self.assertEqual(summary.total_waves, 1)
             self.assertIn("Syntax error in spec", summary.status_message)
@@ -529,6 +529,71 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                 self.assertFalse(os.path.exists(ws_dir))
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    def test_dynamic_polling_with_delayed_worker(self) -> None:
+        """Scenario 4: Continuous non-blocking polling and dynamic supervisor loop."""
+        fake_reg = FakeWorkspaceRegistry([self.spec_role_high])
+        fake_work = FakeWorkspaceWorkManager({
+            "high": (([_make_item("high/unit.md", "high")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        poll_calls = 0
+
+        class PollingHarness(FakeHarnessAdapter):
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+                nonlocal poll_calls
+                poll_calls += 1
+                if poll_calls < 2:
+                    return None
+                fake_work.queue_data["high"] = ((), ())
+                return subagent_coordinator.RoleTurnResult(
+                    role="high",
+                    status="clean",
+                    submitted_targets=("high/unit.md",),
+                )
+
+        harness = PollingHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001)
+            self.assertTrue(summary.is_converged)
+            self.assertGreaterEqual(poll_calls, 2)
+            self.assertEqual(summary.submitted_count, 1)
+
+    def test_orchestrate_halts_upon_consecutive_unproductive_turns(self) -> None:
+        """Scenario 10: Halting orchestration upon consecutive unproductive turn impasse."""
+        fake_reg = FakeWorkspaceRegistry([self.spec_role_high])
+        fake_work = FakeWorkspaceWorkManager({
+            "high": (([_make_item("high/unit.md", "high")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        class UnproductiveHarness(FakeHarnessAdapter):
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+                return subagent_coordinator.RoleTurnResult(
+                    role="high",
+                    status="unresolved",
+                    submitted_targets=(),
+                    blamed_targets=(),
+                )
+
+        harness = UnproductiveHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate(
+                "pkg_a",
+                harness,
+                poll_interval=0.001,
+                max_unproductive_turns=2,
+            )
+            self.assertFalse(summary.is_converged)
+            self.assertIn("made no progress (0 submitted, 0 blamed) for 2 consecutive turns", summary.status_message)
+            self.assertEqual(summary.total_waves, 2)
 
 
 if __name__ == "__main__":

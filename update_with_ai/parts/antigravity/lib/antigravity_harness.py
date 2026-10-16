@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z
 # CHANGE: author antigravity_harness interface library
-# CODE_HASH: 595c8a525235
+# CODE_HASH: 8f1f4068a57b
 # --- END CLEANROOM METADATA ---
 
 """Interface specification for antigravity_harness."""
@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 from support.lib.lifecycle import InTier
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
 from update_with_ai.parts.subagent.lib import subagent_coordinator
@@ -76,9 +76,16 @@ class AntigravityHarnessManager(InTier[AgentSessionTier], Protocol):
         self,
         model_name: Optional[str] = None,
         timeout_seconds: Optional[float] = None,
+        max_context_tokens: Optional[int] = None,
         custom_cmd: Optional[str] = None,
+        simulation_mode: bool = False,
+        **kwargs: Any,
     ) -> AntigravityHarnessAdapter:
         """Constructs an Antigravity harness adapter instance."""
+        ...
+
+    def initialize(self) -> None:
+        """Initializes the manager and installs the adapter factory into the harness registry."""
         ...
 
     def get_transcript_parser(self) -> TranscriptTelemetryParser:

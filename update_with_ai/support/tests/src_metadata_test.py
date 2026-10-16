@@ -3,7 +3,7 @@
 import unittest
 from pathlib import Path
 import tempfile
-from update_with_ai.parts.control.lib.src_metadata import (
+from update_with_ai.parts.storage.lib.src_metadata import (
     FileMetadata,
     append_feedback,
     clear_audits,
@@ -259,9 +259,9 @@ x = 1
             self.assertIsNotNone(meta)
             assert meta is not None
             self.assertEqual(len(meta.feedback), 1)
-            self.assertIn("from user]: First defect", meta.feedback[0])
+            self.assertEqual(meta.feedback[0], "First defect")
 
-            # Append pre-formatted feedback
+            # Append pre-formatted feedback (bracket prefix is cleanly stripped)
             append_feedback(
                 file_path, "[2026-10-02T14:52:10Z from //other:test]: Contract error"
             )
@@ -271,7 +271,7 @@ x = 1
             self.assertEqual(len(meta2.feedback), 2)
             self.assertEqual(
                 meta2.feedback[1],
-                "[2026-10-02T14:52:10Z from //other:test]: Contract error",
+                "Contract error",
             )
 
     def test_extract_audit_tags(self) -> None:

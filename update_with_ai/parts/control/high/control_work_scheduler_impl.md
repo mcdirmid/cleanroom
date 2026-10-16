@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
 CODE_HASH: b50c4ff3475d
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # control_work_scheduler_impl implementation component
@@ -34,3 +34,9 @@ When discovering ready tasks:
 - The work scheduler computes role precedence dynamically by inspecting the declared role dependencies of the role configuration and assigning each role a precedence rank equal to its maximum topological depth from root roles, guaranteeing that upstream phases take precedence over downstream phases regardless of role naming.
 
 - The work scheduler formats a task prompt for each ready node within the requested batch limit, using the configured role prompt template, substituting target unit paths and component names, and collecting the open feedback messages from graph storage into a feedback review section.
+
+- The work scheduler formats dependency paths for scheduled tasks using user-facing file aliases rather than raw graph addresses.
+
+- When formatting task prompts for auditor sessions, the work scheduler lists configured blame targets against grounding specifications, states that all workspace files are read-only, directs running check_files to verify each target, submitting when checks pass, and blaming culprit files with critiques when checks fail.
+
+- When formatting task prompts for multi-node sessions, the work scheduler instructs the agent to specify target parameters using file paths.

@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-11T04:05:48Z
 # CHANGE: Align implementation with every interface operation: file target submission and resolution
-# CODE_HASH: 176934aaf307
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: b844c483848c
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for control_submit_impl."""
@@ -30,10 +30,11 @@ class SubmissionCoordinator(
     GROUNDING:
     - Realizes submission gating by verifying check outcomes from the VerificationEvaluator
       collaborator, validating in-batch dependency cleanliness, enforcing change summary
-      constraints against file modifications and auditor role configurations, and mutating
+      constraints against file modifications and auditor role configurations, requiring file
+      modifications when session feedback is present on the NodeConfig collaborator, and mutating
       node cleanliness in the DagStorage collaborator.
     - Realizes file target submission by resolving the submitted target path from text into an
-      agent_file_alias.FileAlias through agent_file_alias.AliasManager.convert, validating the
+      agent_file_alias.FileAlias through agent_file_alias.AliasManager.to_alias, validating the
       resolved write permission and directory scope constraints, updating in-band metadata
       headers in the canonical repository through the src_metadata.SourceMetadataCoordinator
       collaborator, and reflecting the update back into the role workspace.
@@ -52,8 +53,10 @@ class SubmissionCoordinator(
 
         GROUNDING:
         - Grounded via VerificationEvaluator to ensure checks pass, NodeConfig and RoleConfig
-          to inspect auditor roles, modification tracking to validate change summary necessity,
+          to inspect auditor roles and session feedback, modification tracking to validate change summary necessity,
           and DagStorage to update status to clean with the change description.
+        - Formats target descriptions in accepted outcomes and in-batch dependency errors as
+          user-facing file aliases rather than raw graph node addresses.
         """
         ...
 
@@ -73,7 +76,7 @@ class SubmissionCoordinator(
         - Resolves the submitted target file path and unit name through the implementation's own
           resolution over the supplied repository root, role name, and workspace root, converting
           the target path text into an agent_file_alias.FileAlias through
-          agent_file_alias.AliasManager.convert.
+          agent_file_alias.AliasManager.to_alias.
         - Rejects verification and test file targets for auditor roles and read-only or
           out-of-scope targets for producer roles through the implementation's own write
           permission check and its own directory scope check over

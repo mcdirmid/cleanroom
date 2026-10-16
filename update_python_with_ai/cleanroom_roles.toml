@@ -113,7 +113,7 @@ tools = [
 ]
 active_component_types = ["implementation", "assembly", "interface"]
 verify_template = "uv run python -m update_python_with_ai.support.lib.lib_lint {unit_dir}/lib/{unit_name}.py --pyi {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/lib/{unit_name}.py"
-verification_success_message = "Verification passed: {unit_name}.py compiles correctly and passes all static checks. Call check_file often to verify edits. Note: Unit tests are executed separately by the QA agent in a later session."
+verification_success_message = "{unit_name}.py passed static checks (syntax & types). IMPORTANT: Static verification does NOT run unit tests or verify runtime logic. If this target has unacted feedback, you must resolve the defect against low/*.pyi contracts and tests before submitting."
 
 [roles.test]
 name = "test"
@@ -126,7 +126,7 @@ prompt_template = "Files are aligned according to the guide."
 allows_step_mode = true
 role_deps = []
 star_role_deps = ["low"]
-silent_role_deps = ["lib", "spec_qa"]
+silent_role_deps = ["spec_qa"]
 stub_role_deps = ["lib"]
 silent_cross_role_deps = ["lib"]
 tools = [
@@ -136,7 +136,7 @@ tools = [
 active_component_types = ["implementation"]
 verify_template = "uv run python -m update_python_with_ai.support.lib.test_lint {unit_dir}/tests/{unit_name}_test.py --pyi {unit_dir}/low/{unit_name}.pyi && uv run pyright {unit_dir}/tests/{unit_name}_test.py"
 
-verification_success_message = "Verification passed: {unit_name}.py compiles correctly and passes all static checks. Call check_file often to verify edits. Note: Unit tests are executed separately by the QA agent in a later session."
+verification_success_message = "{unit_name}_test.py passed static checks (syntax & types). IMPORTANT: Static verification does NOT execute test suites. Call check_file often to verify test structure and imports."
 
 [roles.qa]
 name = "qa"

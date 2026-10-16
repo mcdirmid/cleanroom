@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
-LAST_CHANGED: 2026-10-12T21:15:07Z
-CHANGE: Add subagent harness impl scenarios
-CODE_HASH: c33ebe5f2de0
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T11:00:00Z
+CHANGE: turn down support for goose, supporting only antigravity and dsh
+CODE_HASH: 5bdba5493b1b
 -->
 
 # subagent_harness_impl scenarios
@@ -39,13 +39,13 @@ Given: an external subagent process crashes or exits with a non-zero exit code.
    Observed: the turn returns failed status with captured process diagnostic output.
    Realized by: the component's process execution exit code checking and log trailing capture.
 
-### Scenario 5 — Resolving platform command templates
+### Scenario 5 — Installing and resolving platform harness adapters
 
-Given: a consumer requests a harness adapter for a platform name.
+Given: an adapter factory is installed in the harness registry for a platform name.
 
-1. The resolver resolves the platform name.
-   Observed: the corresponding CLI command template is resolved for Antigravity, Goose, or DeepSeek Harness, or simulation mode is enabled.
-   Realized by: the component's platform template dictionary mapping.
+1. The registry resolves the platform name.
+   Observed: the corresponding harness adapter is constructed via the installed adapter factory, or simulation mode is enabled.
+   Realized by: the component's registered adapter factory dictionary lookup and invocation.
 
 ### Scenario 6 — Enforcing execution timeouts when explicitly configured
 

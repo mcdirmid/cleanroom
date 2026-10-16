@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T04:59:25Z
 # CHANGE: Realize the orphan postcondition that a file alias displays itself by its relative path, and drop the dead tier import and scaffold markers
-# CODE_HASH: ebf96e1b0ba3
+# CODE_HASH: b6d1964c53b4
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ from typing import NewType, Protocol, Type
 from dataclasses import dataclass
 import update_with_ai.parts.dag.lib.dag_storage as dag_storage
 import update_with_ai.parts.core.lib.file_paths as file_paths
-import update_with_ai.parts.sandbox.lib.tool_provider as tool_provider
 
 # Requirements specified in agent_file_alias.pyi
 
@@ -54,20 +53,12 @@ class UnboundFile(FileAlias):
     pass
 
 
-class AliasManager(tool_provider.ParameterType[FileAlias, str], Protocol):
+class AliasManager(Protocol):
     @property
     def workspace_root(self) -> file_paths.WorkspaceRoot:
         ...
 
-    @property
-    def actual_type(self) -> Type[FileAlias]:
-        ...
-
-    @property
-    def wire_type(self) -> Type[str]:
-        ...
-
-    def convert(self, wire_value: str) -> FileAlias:
+    def to_alias(self, path: str) -> FileAlias:
         ...
 
     def sanitize_text(self, text: UnsanitizedText) -> SanitizedText:

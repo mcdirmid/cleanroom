@@ -1,23 +1,27 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T06:10:36Z
 # CHANGE: Record the blame explanation as the feedback message content instead of the blamed target label, and present the session role through the contracted role config key so the services that read RoleConfig observe it
-# CODE_HASH: 24247e5ea5df
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: f91876eecc09
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 import os
 import traceback
 from typing import Any, Optional, Sequence, Set, Tuple, cast
+from . import loop_cleaner
 from . import loop_conversation
 from . import loop_driver
 from . import loop_node_cleaner
 from update_with_ai.parts.agent.lib import agent_node_config
 from update_with_ai.parts.agent.lib import agent_storage
 from update_with_ai.parts.core.lib import runner_logger
+from pathlib import Path
+from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.dag.lib import dag_storage
-from update_with_ai.parts.sandbox.lib import sandbox
+from update_with_ai.parts.dag.lib import dag_subgraph
+from update_with_ai.parts.storage.lib import src_metadata
 from support.lib.lifecycle import (
     LifecycleRegistry,
     LifecycleResolutionError,
@@ -374,22 +378,97 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                 storage.clear_messages(node)
             return False
 
-        change_description: Optional[dag_storage.ChangeDescription] = None
-        sandbox_state = session.get_singleton(sandbox.Sandbox)
-        if sandbox_state.has_modifications:
-            change_description = dag_storage.ChangeDescription(
-                "workspace files modified"
-            )
+        meta_mgr: Optional[Any] = None
+        try:
+            meta_mgr = session.get_singleton(src_metadata.SourceMetadataCoordinator)
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            pass
+
+        node_config: Optional[Any] = None
+        try:
+            node_config = session.get_singleton(agent_node_config.NodeConfig)
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            pass
+
+        ws_root = ""
+        try:
+            alias_mgr = session.get_singleton(agent_file_alias.AliasManager)
+            if hasattr(alias_mgr, "workspace_root") and hasattr(alias_mgr.workspace_root, "path"):
+                ws_root = str(alias_mgr.workspace_root.path)
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            pass
+
+        def _is_node_modified(node: dag_storage.DagNode) -> bool:
+            if meta_mgr is None:
+                return False
+            if hasattr(meta_mgr, "is_node_modified"):
+                return bool(meta_mgr.is_node_modified(node))
+            if hasattr(meta_mgr, "modified_nodes") and node in meta_mgr.modified_nodes:
+                return True
+            if node_config is not None:
+                for rw_file in getattr(node_config, "read_write_files", []):
+                    if getattr(rw_file, "owning_node", None) == node:
+                        ws_path = str(rw_file.workspace_path.path)
+                        disk_path = str(Path(ws_root) / ws_path) if ws_root else ws_path
+                        if os.path.isfile(disk_path) and meta_mgr.is_code_modified(disk_path):
+                            return True
+                if hasattr(node_config, "src_file_alias_by_node"):
+                    src_alias = node_config.src_file_alias_by_node.get(node)
+                    if src_alias:
+                        disk_path = str(Path(ws_root) / str(src_alias)) if ws_root else str(src_alias)
+                        if os.path.isfile(disk_path) and meta_mgr.is_code_modified(disk_path):
+                            return True
+            if hasattr(meta_mgr, "has_modifications"):
+                return bool(meta_mgr.has_modifications)
+            try:
+                return bool(meta_mgr.is_code_modified(node))
+            except Exception:
+                return False
+
         for node in nodes:
             storage.clear_messages(node)
+            change_description: Optional[dag_storage.ChangeDescription] = None
+            if _is_node_modified(node):
+                change_description = dag_storage.ChangeDescription(
+                    "workspace files modified"
+                )
             storage.mark_node_clean(node, change_description=change_description)
         return True
+
+
+class LoopCleaner(loop_cleaner.LoopCleaner, Singleton):
+    tier = system
+
+    def __init__(self) -> None:
+        pass
+
+    def clean(
+        self, target: dag_storage.DagNode, node_cleaner: loop_node_cleaner.NodeCleaner
+    ) -> bool:
+        subgraph = get_singleton(dag_subgraph.DagSubgraph)
+        subgraph.set_target(target)
+
+        while not subgraph.is_complete():
+            batch = subgraph.next_ready_batch()
+            if not batch:
+                break
+            should_continue = node_cleaner.clean(batch)
+            subgraph.record_visit(batch)
+            if not should_continue:
+                return False
+
+        return subgraph.is_complete()
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        LoopCleaner,
+        keys=[LoopCleaner, loop_cleaner.LoopCleaner],
+        tier=system,
+    )
     reg.register_singleton(
         _RoleConfig,
         keys=[_RoleConfig, agent_node_config.RoleConfig],

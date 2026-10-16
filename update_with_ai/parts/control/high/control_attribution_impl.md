@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
-CODE_HASH: 138edf641fc1
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 9734df3b3ec6
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # control_attribution_impl implementation component
@@ -37,17 +37,21 @@ When attributing blame to an upstream target:
 
 - The attribution coordinator marks the source target as attributed and marks any in-batch dependent nodes as failed.
 
+- The attribution coordinator formats blame outcomes, available targets, and in-batch dependency errors using user-facing file aliases rather than raw graph node addresses.
+
 When recording task failure:
 
 - The attribution coordinator records the failure explanation on the target node in graph storage.
 
 - The attribution coordinator preserves the dirty status on the target node, marks the node as failed in the active session, and marks in-batch dependent nodes as failed.
 
+- The attribution coordinator formats failure outcomes using user-facing file aliases rather than raw graph node addresses.
+
 When attributing blame to a culprit file:
 
 - The attribution coordinator resolves the culprit file path against the canonical repository and workspace roots.
 
-- The attribution coordinator validates that the critique explanation contains no newline characters, rejecting explanations that contain multiple lines or breaks.
+- The attribution coordinator validates that the critique explanation contains no newline characters, rejecting explanations that contain multiple lines or breaks, and rejects critiques exceeding configured maximum feedback character limits with an advisory instructing defect prioritization.
 
 - The attribution coordinator appends in-band feedback and marks dirty status directly in the canonical repository, constructs an attribution outcome message formatted with the blame critique, and synchronizes the updated files back to the local role workspace.
 

@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-12T11:27:00Z
 CHANGE: Remove max batch size parameter from get work tool
 CODE_HASH: 9a598a65676a
@@ -15,7 +15,7 @@ mode is inactive, and no session tool has been installed yet.
 
 1. The agent enters the agent session.
    Observed: the installed tools include the submit tool, the fail tool, the check files tool named
-   `check_files`, the get work tool, and the blame tool, and the advance tool is not among the
+   `check_files`, and the get work tool, and the blame tool and advance tool are not among the
    installed tools.
 
 2. The agent reads the tool named `check_files` from the installed tools.
@@ -31,7 +31,7 @@ installed yet.
 
 1. The agent enters the agent session.
    Observed: the installed tools include the submit tool, the fail tool, the check files tool named
-   `check_files`, the get work tool, the blame tool, and the advance tool.
+   `check_files`, the get work tool, and the advance tool, and the blame tool is not among the installed tools.
 
 2. The agent reads the tool named `advance` from the installed tools.
    Observed: the advance tool accepts no parameters.
@@ -230,3 +230,10 @@ workspace file has been modified during the session, and no dirty node is ready 
 1. The agent executes the get work tool without arguments.
    Observed: no active node is retrieved, no startup template is materialized, and no session task
    prompt naming a target is delivered.
+
+## Scenario 18 — Installing the blame tool when active nodes have blame targets
+
+Given: the agent enters a session for role alpha in `/ws/alpha_scope_a`, no target is open, guide step mode is inactive, the active dirty node has configured blame targets in node config, and no session tool other than submit, fail, check_files, and get_work has been installed.
+
+1. The agent executes the get work tool without arguments.
+   Observed: the dirty node is retrieved as an active node and the blame tool is installed in the session tools.

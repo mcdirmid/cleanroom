@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z
 # CHANGE: author subagent_coordinator interface low-level specification
-# CODE_HASH: f32373193143
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 6b25eb8873f8
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for subagent_coordinator."""
@@ -193,13 +193,18 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         batch_size: Optional[int] = None,
         repo_root: Optional[str] = None,
         model_name: Optional[str] = None,
+        poll_interval: Optional[float] = None,
+        max_unproductive_turns: Optional[int] = None,
     ) -> OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure.
 
         POSTCONDITIONS:
         - MUST reset preexisting role workspaces for declared roles upon initiating orchestration.
         - MUST iterate through execution waves until all units in scope evaluate clean, a role fails, or max_waves is reached.
+        - MUST periodically poll active workers through harness.poll_role or harness.await_role at a configurable interval defaulting to 10.0 seconds.
         - WHEN a role turn reports status failed, MUST stop execution and return non-converged summary with failure details.
+        - WHEN consecutive unproductive turns for a role on unresolved targets exceed the threshold (defaulting to 2), MUST stop execution and return non-converged summary with impasse details.
+        - MUST emit real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state.
         - WHEN all units evaluate clean across all roles, MUST automatically delete all provisioned role workspaces in scope and return converged summary.
         - MUST aggregate cumulative token usage and monetary expenditure in orchestration summary.
         """

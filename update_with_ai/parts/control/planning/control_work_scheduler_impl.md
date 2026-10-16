@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-07T00:11:26Z
 CHANGE: new file
 CODE_HASH: e7ca026634d8
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # control_work_scheduler_impl implementation component
@@ -26,11 +26,15 @@ Computing role depth dynamically replaces fragile static dictionaries. The imple
 - The work scheduler queries graph storage dependency edges to verify upstream cleanliness. [check_upstream_cleanliness]
 - The work scheduler formats prompt variables for unit directory, unit name, and component type. [substitute_prompt_variables]
 - The work scheduler appends feedback messages into a formatted feedback review section. [append_feedback_section]
+- The work scheduler formats scheduled task dependency paths as user-facing file aliases rather than raw graph addresses. [format_file_alias_dependency_paths]
+- The work scheduler formats auditor task prompts with blame targets against grounding files and read-only directives. [format_auditor_session_instructions]
+- The work scheduler formats multi-node task prompts with instructions to specify targets as file paths. [format_multi_node_file_path_instructions]
 
 ### Woven Contracts
 
 - When sorting candidate tasks, the scheduler builds the role dependency graph, calculates role depth, and orders nodes by ascending depth. [query_role_definitions, build_role_dag, calculate_role_depth, control_work_scheduler: [sort_nodes_by_precedence]]
 - When scheduling by directory, the scheduler scans directory nodes, verifies dirty status, checks that non-silent dependencies are clean, and formats task prompts. [scan_directory_nodes, query_node_status, check_upstream_cleanliness, substitute_prompt_variables, append_feedback_section, control_work_scheduler: [limit_scheduled_batch]]
+- When formatting scheduled tasks and prompts, the scheduler converts dependency paths to file aliases, provides auditor directives for auditor roles, and directs file path targets for multi-node sessions. [format_file_alias_dependency_paths, format_auditor_session_instructions, format_multi_node_file_path_instructions, control_work_scheduler: [format_task_prompt]]
 
 ## Grounding
 

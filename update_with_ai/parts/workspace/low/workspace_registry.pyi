@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
-# LAST_CHANGED: 2026-10-13T01:30:00Z
-# CHANGE: eliminate cleanroom_workspaces.json workspace registry file
-# CODE_HASH: ab44f6b59912
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:45:00Z
+# CHANGE: Delegate role configuration resolution to workspace_roles
+# CODE_HASH: 5f184681fbaf
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level interface specification for workspace_registry."""
@@ -13,62 +13,9 @@ from typing import Optional, Protocol, Sequence
 from framework import data_type, operation, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import workspace_roles
 
-
-@data_type
-@dataclass(frozen=True)
-class RoleDefinition:
-    """Configuration definition for an autonomous development role.
-
-    Args:
-        role_name: Canonical role name.
-        guide_path: Path to companion role guide.
-        writable_file_patterns: Sequence of glob patterns for writable targets.
-        readonly_file_patterns: Sequence of glob patterns for immutable contracts.
-        feedback_role_deps: Sequence of role names receiving feedback.
-        src_pattern: Primary source file path pattern with placeholders.
-        role_deps: Sequence of intra-unit role dependencies.
-        star_role_deps: Sequence of cross-unit star role dependencies.
-        silent_role_deps: Sequence of intra-unit silent role dependencies.
-        stub_role_deps: Sequence of intra-unit stub role dependencies.
-        silent_cross_role_deps: Sequence of cross-unit silent role dependencies.
-        active_component_types: Sequence of component classifications active for role.
-        verify_template: Shell command template for verification.
-        verification_success_message: Success message upon verification passing.
-        persona: Human-readable role persona.
-        workspace_files: Sequence of repository files copied into workspace.
-        tools: Sequence of tool files copied into workspace.
-        derive_build_template: Pre-sync command template for child build files.
-        role_address: Optional full role target address.
-        audit_tag: Optional metadata audit tag.
-        task_prompt: Optional prompt template string.
-        template: Optional path to template file.
-        template_command: Optional shell command template for materializing starter templates.
-    """
-
-    role_name: str
-    guide_path: str
-    writable_file_patterns: Sequence[str]
-    readonly_file_patterns: Sequence[str]
-    feedback_role_deps: Sequence[str]
-    src_pattern: str = ""
-    role_deps: Sequence[str] = ()
-    star_role_deps: Sequence[str] = ()
-    silent_role_deps: Sequence[str] = ()
-    stub_role_deps: Sequence[str] = ()
-    silent_cross_role_deps: Sequence[str] = ()
-    active_component_types: Sequence[str] = ()
-    verify_template: str = ""
-    verification_success_message: str = ""
-    persona: str = ""
-    workspace_files: Sequence[str] = ()
-    tools: Sequence[str] = ()
-    derive_build_template: str = ""
-    role_address: Optional[str] = None
-    audit_tag: Optional[str] = None
-    task_prompt: Optional[str] = None
-    template: str = ""
-    template_command: str = ""
+RoleDefinition = workspace_roles.RoleDefinition
 
 
 @data_type
@@ -87,7 +34,7 @@ class WorkspaceDescriptor:
     workspace_dir: str
     main_repository_root: str
     directory_scope: str
-    role_definition: RoleDefinition
+    role_definition: workspace_roles.RoleDefinition
     last_sync_timestamp: Optional[str] = None
 
 
@@ -114,19 +61,11 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
         role_name_or_address: str,
         repo_root: Optional[str] = None,
         dir_scope: Optional[str] = None,
-    ) -> RoleDefinition:
-        """Resolves a role definition from a role name or qualified role address.
+    ) -> workspace_roles.RoleDefinition:
+        """Resolves a role definition through role resolution services.
 
         POSTCONDITIONS:
-        - MUST resolve role definitions from repository role configuration files or build files.
-        - WHEN role_name_or_address is unqualified and dir_scope is specified, MUST resolve the role definition from the methodology configuration bound to that directory scope or its package hierarchy.
-        - WHEN role_name_or_address is package-qualified, MUST resolve the role definition from the role definitions declared by the addressed package.
-        - WHEN the queried role is undeclared, MUST raise KeyError.
-        - WHEN feedback role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
-        - WHEN star role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
-        - WHEN a dependency is declared as both a role dependency and a silent role dependency, MUST raise ValueError.
-        - WHEN an auditor role is declared as a role dependency, a star role dependency, or a feedback role dependency, MUST raise ValueError.
-        - MUST return a role definition populated from the resolved declaration with its configured guide path, source pattern, and file patterns.
+        - MUST delegate role definition resolution to workspace_roles.RoleResolver.resolve_role_definition.
         """
         ...
 
@@ -135,17 +74,11 @@ class WorkspaceRegistry(InTier[AgentSessionTier], Protocol):
         self,
         repo_root: Optional[str] = None,
         dir_scope: Optional[str] = None,
-    ) -> Sequence[RoleDefinition]:
-        """Loads and resolves all role definitions declared in the repository or bound methodology configuration.
+    ) -> Sequence[workspace_roles.RoleDefinition]:
+        """Loads and resolves all role definitions declared in the repository through role resolution services.
 
         POSTCONDITIONS:
-        - MUST parse role definition declarations from repository role configuration files or build files.
-        - WHEN dir_scope is specified, MUST resolve role definitions from the methodology configuration bound to that directory scope or its package hierarchy.
-        - WHEN feedback role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
-        - WHEN star role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
-        - WHEN a dependency is declared as both a role dependency and a silent role dependency, MUST raise ValueError.
-        - WHEN an auditor role is declared as a role dependency, a star role dependency, or a feedback role dependency, MUST raise ValueError.
-        - MUST return a role definition for every declared role.
+        - MUST delegate role listing to workspace_roles.RoleResolver.list_roles.
         """
         ...
 

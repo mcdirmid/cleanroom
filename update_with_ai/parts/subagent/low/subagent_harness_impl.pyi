@@ -1,14 +1,14 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_harness_impl implementation low-level specification
-# CODE_HASH: 16faf3b6c9ff
-# SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T11:00:00Z
+# CHANGE: turn down support for goose, supporting only antigravity and dsh
+# CODE_HASH: 4bba3c5eea8f
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
 """Low-level implementation specification for subagent_harness_impl."""
 
-from typing import Optional, Sequence
+from typing import Mapping, Optional, Sequence
 from framework import operation, override, poly_type, singleton_type
 from support.lib.lifecycle import InTier
 import agent_session
@@ -87,15 +87,34 @@ class CommandHarnessAdapter(
 
 
 @singleton_type("agent_session")
-class HarnessResolver(
-    subagent_harness.HarnessResolver,
+class HarnessRegistry(
+    subagent_harness.HarnessRegistry,
     InTier[agent_session.AgentSessionTier],
 ):
-    """Realizes harness resolution for external agent platforms.
+    """Realizes harness registry and resolution for external agent platforms.
 
     GROUNDING:
-    - Maps platform names to canonical command templates or produces simulation adapters.
+    - Maintains installed adapter factories by platform name, registers newly installed
+      factories via install_harness, and resolves harness adapters via installed factories,
+      custom command templates, or simulation mode.
     """
+
+    @property
+    def installed_harnesses(self) -> Mapping[str, subagent_harness.HarnessAdapterFactory]: ...
+
+    @operation
+    @override
+    def install_harness(
+        self,
+        platform_name: str,
+        adapter_factory: subagent_harness.HarnessAdapterFactory,
+    ) -> None:
+        """Installs a harness adapter factory for a designated platform name.
+
+        GROUNDING:
+        - Stores adapter factory in internal platform dictionary keyed by normalized platform name.
+        """
+        ...
 
     @operation
     @override
@@ -111,7 +130,10 @@ class HarnessResolver(
         """Resolves a harness adapter for a platform name or custom command template.
 
         GROUNDING:
-        - Resolves platform names (antigravity, goose, dsh) to canonical templates
-          or creates CommandHarnessAdapter configured with custom_cmd or simulation mode.
+        - Resolves platform via registered factory or creates CommandHarnessAdapter configured
+          with custom_cmd or simulation mode.
         """
         ...
+
+
+HarnessResolver = HarnessRegistry

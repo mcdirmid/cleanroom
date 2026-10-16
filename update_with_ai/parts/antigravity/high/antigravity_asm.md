@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T19:43:56Z
 LAST_CHANGED: 2026-10-12T21:45:00Z
 CHANGE: author antigravity_asm assembly specification
-CODE_HASH: 6862895a4652
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: e53d48a58b7f
+SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
 -->
 
 # antigravity_asm assembly component
 
-assembles: antigravity_coordinator_impl, antigravity_harness_impl, antigravity_workspace_impl
+assembles: antigravity_coordinator_impl, antigravity_harness_impl
 imports: agent_session, antigravity_ext, subagent_coordinator, workspace_registry
 implements: antigravity_coordinator, antigravity_harness, antigravity_workspace
 

@@ -1,14 +1,14 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T20:00:00Z
 CHANGE: author dsh_harness_impl implementation specification
-CODE_HASH: 65f6e2f13858
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 6cf08307fe87
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # dsh_harness_impl implementation component
 
-imports: agent_session, dsh_ext, subagent_coordinator, workspace_work
+imports: agent_session, dsh_ext, dsh_telemetry, subagent_coordinator, subagent_harness, workspace_work
 implements: dsh_harness
 
 ## Purpose
@@ -19,7 +19,7 @@ Operating DeepSeek Harness within Cleanroom requires concrete process dispatch v
 
 **Out of scope:** The dsh_harness_impl implementation component does not partition topological waves or evaluate DAG dirtiness; these are handled by other components.
 
-**Delegated:** Session lifecycle scoping is delegated to agent_session; platform conventions are delegated to dsh_ext; harness adapter protocols and turn outcome types are delegated to subagent_coordinator; workspace work queue querying is delegated to workspace_work.
+**Delegated:** Session lifecycle scoping is delegated to agent_session; platform conventions are delegated to dsh_ext; harness adapter protocols and turn outcome types are delegated to subagent_coordinator; workspace work queue querying is delegated to workspace_work; token telemetry extraction and desktop session synchronization are delegated to dsh_telemetry; platform harness registration is delegated to subagent_harness.
 
 ## Types and Behavior
 
@@ -37,12 +37,12 @@ The dsh harness adapter executes DeepSeek Harness turns using configurable comma
 
 When dispatching and awaiting role turns:
 
-- The dsh harness adapter writes task prompts to disk and records initial pending targets before launching the DeepSeek Harness process.
+- The dsh harness adapter writes role-tailored task prompts to disk distinguishing auditor roles from authoring roles, and records initial pending targets before launching the DeepSeek Harness process.
 
 - The dsh harness adapter launches the dsh CLI in the role workspace directory, setting overlay patch parameters and non-interactive permission flags, and tracks running process handles.
 
 - The dsh harness adapter polls and awaits process termination without mandatory execution timeouts, terminating active processes only when an explicit timeout duration expires.
 
-- The dsh harness adapter inspects workspace blame buffers, computes submitted targets by comparing pending work buffers, and parses token metrics into normalized telemetry.
+- The dsh harness adapter inspects workspace blame buffers, computes submitted targets by comparing pending work buffers, records unresolved status when a completed turn produces zero submitted and zero blamed targets, and parses token metrics into normalized telemetry.
 
-The dsh harness manager provides singleton access to the telemetry parser and constructs configured DeepSeek Harness adapters.
+The dsh harness manager provides singleton access to the telemetry parser, constructs configured DeepSeek Harness adapters, and installs the DeepSeek Harness adapter factory into the harness registry.

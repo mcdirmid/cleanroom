@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T11:59:00Z
 # CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
-# CODE_HASH: aecc47b28b90
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: b4b1e2912957
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_run_control_impl per its grounding specification."""
@@ -24,21 +24,18 @@ from update_with_ai.parts.agent.lib import (
 from update_with_ai.parts.control.lib import control_coordinate
 from update_with_ai.parts.dag.lib import dag_storage, dag_subgraph
 from update_with_ai.parts.sandbox.lib import (
-    sandbox,
     sandbox_file_editor,
     sandbox_guide_delivery,
     sandbox_run_control,
+    sandbox_submission,
     template_format,
     tool_provider,
 )
 from update_with_ai.parts.sandbox.lib.sandbox_run_control_impl import (
     AdvanceTool,
-    BlameTool,
     CheckFilesTool,
-    FailTool,
     GetWorkTool,
     RunController,
-    SubmitTool,
     __initialize__,
 )
 
@@ -450,6 +447,60 @@ class MockSessionCoordinator:
         if self.submit_outcome is not None:
             return self.submit_outcome
         target = self.get_node_for_alias(target_alias) if target_alias else self.resolve_default_target()
+
+        is_auditor = False
+        if target is not None and self.node_config is not None:
+            role_clean = str(target.role_address).split(":")[-1].strip().lower()
+            role_def = self.node_config.role_definitions.get(role_clean)
+            if role_def is not None:
+                is_auditor = bool(
+                    getattr(role_def, "is_auditor", False)
+                    or getattr(role_def, "audit_tag", None)
+                    or not getattr(role_def, "src_pattern", "")
+                )
+
+        summary_str = str(change_summary or "").strip()
+        if is_auditor and summary_str:
+            return control_coordinate.ControlDispatchOutcome(
+                success=False,
+                message="Error: Change summary is prohibited for audit nodes.",
+                remaining_open_targets=list(self.open_targets),
+            )
+        if not is_auditor:
+            if has_modifications and not summary_str:
+                return control_coordinate.ControlDispatchOutcome(
+                    success=False,
+                    message="Error: Workspace files were modified, so change_summary must be provided.",
+                    remaining_open_targets=list(self.open_targets),
+                )
+            if not has_modifications and summary_str:
+                return control_coordinate.ControlDispatchOutcome(
+                    success=False,
+                    message="Error: Change summaries are not permitted when submitting without workspace file modifications.",
+                    remaining_open_targets=list(self.open_targets),
+                )
+            if not has_modifications and self.node_config is not None:
+                has_feedback = bool(getattr(self.node_config, "feedback", None))
+                if target is not None and self.storage is not None:
+                    node_msgs = self.storage.get_messages(target)
+                    if any(isinstance(m, dag_storage.FeedbackMessage) for m in node_msgs):
+                        has_feedback = True
+                if (
+                    not has_feedback
+                    and target is not None
+                    and hasattr(self.node_config, "per_node_info_by_node")
+                    and self.node_config.per_node_info_by_node
+                ):
+                    info = self.node_config.per_node_info_by_node.get(target)
+                    if info and getattr(info, "feedback", None):
+                        has_feedback = True
+                if has_feedback:
+                    return control_coordinate.ControlDispatchOutcome(
+                        success=False,
+                        message="Error: Session feedback is present but no workspace files were modified.",
+                        remaining_open_targets=list(self.open_targets),
+                    )
+
         if target:
             self.target_states[target] = control_coordinate.TargetState.CLEAN
             if target in self.open_targets:
@@ -548,12 +599,10 @@ class MockAliasManager:
     def wire_type(self) -> type[str]:
         return str
 
-    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
-        if not isinstance(wire_value, str):
-            raise tool_provider.ParameterConversionError(
-                tool_provider.ConversionErrorMessage("Wire value must be a string")
-            )
-        return agent_file_alias.FileAlias(agent_file_alias.RelativePath(wire_value))
+    def to_alias(self, path: str) -> agent_file_alias.FileAlias:
+        return agent_file_alias.FileAlias(agent_file_alias.RelativePath(path))
+
+    convert = to_alias
 
     def sanitize_text(
         self, text: agent_file_alias.UnsanitizedText
@@ -572,17 +621,36 @@ class MockTemplateFormatter:
         return template_format.FormattedText(str(text))
 
 
-class MockSandbox:
+class MockSubmissionTool:
     tier = agent_session.agent_session
+    description = "Mock submission tool"
+    parameters: Mapping[Any, Any] = {}
 
-    def __init__(self) -> None:
-        self.has_modifications = False
+    def __init__(self, name: str) -> None:
+        self.name = tool_provider.ToolName(name)
+
+    def execute_tool(self, actual_parameter_bindings: Mapping[Any, Any]) -> tool_provider.ToolResponse:
+        return tool_provider.ToolResponse(
+            is_failed=False,
+            is_terminated=False,
+            content=tool_provider.ToolResponseContent("Mock executed"),
+        )
 
 
 class SandboxRunControlImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
+        for name, key in (
+            ("submit", sandbox_submission.SubmitTool),
+            ("fail", sandbox_submission.FailTool),
+            ("blame", sandbox_submission.BlameTool),
+        ):
+            self.registry.register_instance(
+                MockSubmissionTool(name),
+                keys=[key],
+                tier=agent_session.agent_session,
+            )
         self.mock_storage = MockDagStorage()
         self.registry.register_instance(
             self.mock_storage,
@@ -634,18 +702,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
             keys=[control_coordinate.SessionCoordinator],
             tier=agent_session.agent_session,
         )
-        self.mock_sandbox = MockSandbox()
-        self.registry.register_instance(
-            self.mock_sandbox,
-            keys=[sandbox.Sandbox],
-            tier=agent_session.agent_session,
-        )
         self.mock_alias_manager = MockAliasManager()
         self.registry.register_instance(
             self.mock_alias_manager,
             keys=[
                 agent_file_alias.AliasManager,
-                tool_provider.ParameterType[agent_file_alias.FileAlias, str],
             ],
             tier=agent_session.agent_session,
         )
@@ -662,12 +723,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             for cls in [
                 AdvanceTool,
-                BlameTool,
                 CheckFilesTool,
-                FailTool,
                 GetWorkTool,
                 RunController,
-                SubmitTool,
             ]:
                 instance = scope.get_singleton(cls)
                 self.assertIsNotNone(instance)
@@ -876,7 +934,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.mock_storage.mark_node_dirty(node)
         self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
         self.mock_guide_delivery.has_steps_remaining = False
-        self.mock_sandbox.has_modifications = True
         self.mock_edit_manager.has_modifications = True
         self.mock_session_coordinator.verification_result = True
         self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
@@ -893,7 +950,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.mock_storage.mark_node_dirty(node)
         self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
         self.mock_guide_delivery.has_steps_remaining = False
-        self.mock_sandbox.has_modifications = False
         self.mock_edit_manager.has_modifications = False
         self.mock_session_coordinator.verification_result = True
         self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
@@ -906,943 +962,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 response.follow_up_tool_call.tool_name,
                 tool_provider.ToolName("submit"),
             )
-
-    # -------------------------------------------------------------------------
-    # SubmitTool Tests
-    # -------------------------------------------------------------------------
-
-    def test_submit_tool_metadata(self) -> None:
-        """Postcondition: Submit target changes and enforce change summary when modified."""
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            self.assertEqual(tool.name, tool_provider.ToolName("submit"))
-            self.assertTrue(len(tool.description) > 0)
-            self.assertIn(tool.target_parameter.name, tool.parameters)
-            self.assertIn(tool.change_summary_parameter.name, tool.parameters)
-
-    def test_submit_tool_fails_when_guide_steps_remain(self) -> None:
-        """Postcondition: WHEN guide step mode is active and steps remain, MUST fail specifying advance."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_node_config.is_step_mode = True
-        self.mock_guide_delivery.has_steps_remaining = True
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            response = tool.execute_tool({})
-            self.assertTrue(response.is_failed)
-            self.assertIsNotNone(response.follow_up_tool_call)
-            assert response.follow_up_tool_call is not None
-            self.assertEqual(
-                response.follow_up_tool_call.tool_name,
-                tool_provider.ToolName("advance"),
-            )
-
-    def test_submit_tool_fails_when_verification_failing(self) -> None:
-        """Postcondition: WHEN verification is failing, MUST fail specifying follow-up check_files."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.verification_result = False
-        self.mock_session_coordinator.verification_diagnostic = "Syntax error"
-        self.mock_node_config.is_step_mode = False
-        self.mock_node_config.verification_checks = [
-            MockVerificationCheck(passed=False, diagnostic="Syntax error")
-        ]
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            response = tool.execute_tool({})
-            self.assertTrue(response.is_failed)
-            self.assertIsNotNone(response.follow_up_tool_call)
-            assert response.follow_up_tool_call is not None
-            self.assertEqual(
-                response.follow_up_tool_call.tool_name,
-                tool_provider.ToolName("check_files"),
-            )
-
-    def test_submit_tool_fails_when_modified_without_summary(self) -> None:
-        """Postcondition: WHEN files were modified and change summary is omitted, MUST fail."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.verification_result = True
-        self.mock_sandbox.has_modifications = True
-        self.mock_edit_manager.has_modifications = True
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            response = tool.execute_tool({})
-            self.assertTrue(response.is_failed)
-
-    def test_submit_tool_fails_when_unmodified_with_summary(self) -> None:
-        """Postcondition: WHEN workspace files were not modified and change summary is provided, MUST fail reminding agent that change summaries are not permitted when submitting without workspace file modifications."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.verification_result = True
-        self.mock_sandbox.has_modifications = False
-        self.mock_edit_manager.has_modifications = False
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Unneeded summary"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertTrue(response.is_failed)
-            combined = f"{response.content} {response.reminder or ''}".lower()
-            self.assertTrue(
-                "not permitted" in combined
-                or "without" in combined
-                or "modification" in combined
-            )
-
-    def test_submit_tool_fails_auditor_with_summary(self) -> None:
-        """Postcondition: WHEN target is an auditor node and change summary is provided, MUST fail reminding agent that change summary is prohibited for audit nodes."""
-        # The auditor status is resolved from the agent_node_config configuration surface for
-        # the submitted target's role address.
-        node = _make_node("unit1", role="qa")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.verification_result = True
-        self.mock_role_config.role = agent_node_config.RoleName("qa")
-        self.mock_node_config.role_definitions["qa"] = MockRoleDef(
-            is_auditor=True, audit_tag="QA_AUDIT"
-        )
-        self.mock_sandbox.has_modifications = True
-        self.mock_edit_manager.has_modifications = True
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Summary for audit"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertTrue(response.is_failed)
-            combined = f"{response.content} {response.reminder or ''}".lower()
-            self.assertTrue("prohibited" in combined or "audit" in combined)
-
-    def test_submit_tool_fails_when_feedback_present_without_modifications(self) -> None:
-        """Postcondition: WHEN session feedback is present and no files were modified, MUST fail."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.verification_result = True
-        self.mock_sandbox.has_modifications = False
-        self.mock_edit_manager.has_modifications = False
-        self.mock_node_config.feedback = [agent_node_config.NodeFeedback("Fix regression")]
-        self.mock_storage.add_feedback_message(
-            node,
-            dag_storage.FeedbackMessage(
-                content=dag_storage.MessageContent("Fix regression"), target=node
-            ),
-        )
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-            }
-            response = tool.execute_tool(_bindings(bindings))
-            self.assertTrue(response.is_failed)
-
-    def test_submit_tool_failing_when_per_node_configuration_specifies_active_feedback_on_unmodified_target(self) -> None:
-        """Postcondition: SubmitTool failing when per-node configuration specifies active feedback on an unmodified target."""
-        node = _make_node("unit_per_node_feedback")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit_per_node_feedback.py")
-        self.mock_session_coordinator.verification_result = True
-        self.mock_sandbox.has_modifications = False
-        self.mock_edit_manager.has_modifications = False
-        self.mock_node_config.feedback = []
-        self.mock_storage.clear_messages(node)
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        self.mock_node_config.per_node_info_by_node = {
-            node: agent_node_config.PerNodeInfo(
-                read_only_files=set(),
-                read_write_files=set(),
-                templates={},
-                template_parameters={},
-                allows_step_mode=False,
-                guide_file=None,
-                guide=None,
-                blame_targets=set(),
-                verification_checks=[MockVerificationCheck(passed=True)],
-                src_file_alias=None,
-                verification_success_message=None,
-                feedback=[agent_node_config.NodeFeedback("Resolve reviewer defect before submitting")],
-            )
-        }
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            response = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_per_node_feedback.py"),
-            }))
-            self.assertTrue(response.is_failed)
-            self.assertFalse(response.is_terminated)
-            self.assertTrue(len(str(response.content)) > 0)
-            self.assertNotIn(node, self.mock_storage.clean_nodes)
-            self.assertIsNone(self.mock_session_coordinator.dispatched_submit)
-
-    def test_submit_tool_succeeds_when_initial_implementation_without_modifications(self) -> None:
-        """Postcondition: WHEN an initial implementation change is assigned and no files were modified, MUST succeed without change summary."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.verification_result = True
-        self.mock_sandbox.has_modifications = False
-        self.mock_edit_manager.has_modifications = False
-        self.mock_storage.add_message(
-            dag_storage.ChangeMessage(
-                content=dag_storage.MessageContent("Initial implementation required")
-            ),
-            to=node,
-        )
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-            }
-            response = tool.execute_tool(_bindings(bindings))
-            self.assertFalse(response.is_failed)
-            self.assertIn(node, self.mock_storage.clean_nodes)
-
-    def test_submit_tool_differentiating_message_variants_when_enforcing_initial_implementation_modification_constraints(self) -> None:
-        """Postcondition: SubmitTool differentiating message variants (including non-change feedback, empty descriptions, and audit notifications) when enforcing modification constraints."""
-        self.mock_sandbox.has_modifications = False
-        self.mock_edit_manager.has_modifications = False
-        self.mock_session_coordinator.verification_result = True
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-
-            # 1. Initial implementation change message variant: MUST succeed when unmodified without change summary
-            node_init = _make_node("unit_init")
-            self.mock_storage.mark_node_dirty(node_init)
-            self.mock_session_coordinator.register_node(node_init, "pkg/unit_init.py")
-            self.mock_storage.add_message(
-                dag_storage.ChangeMessage(
-                    content=dag_storage.MessageContent("Initial implementation required")
-                ),
-                to=node_init,
-            )
-            resp_init = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_init.py")}))
-            self.assertFalse(resp_init.is_failed)
-            self.assertIn(node_init, self.mock_storage.clean_nodes)
-
-            # 2. Empty description change message variant: MUST succeed when unmodified without change summary
-            node_empty = _make_node("unit_empty")
-            self.mock_storage.mark_node_dirty(node_empty)
-            self.mock_session_coordinator.register_node(node_empty, "pkg/unit_empty.py")
-            self.mock_storage.add_message(
-                dag_storage.ChangeMessage(
-                    content=dag_storage.MessageContent("")
-                ),
-                to=node_empty,
-            )
-            resp_empty = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_empty.py")}))
-            self.assertFalse(resp_empty.is_failed)
-            self.assertIn(node_empty, self.mock_storage.clean_nodes)
-
-            # Whitespace-only description change message variant: MUST also succeed when unmodified without change summary
-            node_ws = _make_node("unit_ws")
-            self.mock_storage.mark_node_dirty(node_ws)
-            self.mock_session_coordinator.register_node(node_ws, "pkg/unit_ws.py")
-            self.mock_storage.add_message(
-                dag_storage.ChangeMessage(
-                    content=dag_storage.MessageContent("   \n\t  ")
-                ),
-                to=node_ws,
-            )
-            resp_ws = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_ws.py")}))
-            self.assertFalse(resp_ws.is_failed)
-            self.assertIn(node_ws, self.mock_storage.clean_nodes)
-
-            # 3. Non-change feedback variant (FeedbackMessage and session feedback): MUST fail when unmodified
-            node_fb = _make_node("unit_fb")
-            self.mock_storage.mark_node_dirty(node_fb)
-            self.mock_session_coordinator.register_node(node_fb, "pkg/unit_fb.py")
-            self.mock_storage.add_feedback_message(
-                node_fb,
-                dag_storage.FeedbackMessage(
-                    content=dag_storage.MessageContent("Downstream defect: regression observed"),
-                    target=node_fb,
-                ),
-            )
-            self.mock_node_config.feedback = [agent_node_config.NodeFeedback("Fix regression")]
-            resp_fb = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_fb.py")}))
-            self.assertTrue(resp_fb.is_failed)
-
-            # 4. Unmodified target while session feedback remains present: MUST fail
-            # Requirement: WHEN session feedback is present and no files were modified, MUST fail.
-            node_fb_active = _make_node("unit_fb_active")
-            self.mock_storage.mark_node_dirty(node_fb_active)
-            self.mock_session_coordinator.register_node(node_fb_active, "pkg/unit_fb_active.py")
-            self.mock_storage.add_message(
-                dag_storage.ChangeMessage(
-                    content=dag_storage.MessageContent("Upstream dependency changed")
-                ),
-                to=node_fb_active,
-            )
-            resp_fb_active = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_fb_active.py")}))
-            self.assertTrue(resp_fb_active.is_failed)
-            self.assertNotIn(node_fb_active, self.mock_storage.clean_nodes)
-
-            # 5. Upstream dependency change variant: MUST succeed when unmodified without change summary
-            self.mock_role_config.role = agent_node_config.RoleName("developer")
-            self.mock_node_config.feedback = []
-            node_dep = _make_node("unit_dep")
-            self.mock_storage.mark_node_dirty(node_dep)
-            self.mock_session_coordinator.register_node(node_dep, "pkg/unit_dep.py")
-            self.mock_storage.add_message(
-                dag_storage.ChangeMessage(
-                    content=dag_storage.MessageContent("Upstream dependency changed")
-                ),
-                to=node_dep,
-            )
-            resp_dep = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_dep.py")}))
-            self.assertFalse(resp_dep.is_failed)
-            self.assertIn(node_dep, self.mock_storage.clean_nodes)
-
-    def test_submit_tool_differentiating_message_variants_in_graph_storage_for_non_auditor_targets_without_active_session_feedback(self) -> None:
-        """Postcondition: SubmitTool differentiating message variants in graph storage (non-change defect feedback and audit messages) for non-auditor targets without active session feedback when evaluating initial implementation modification constraints."""
-        self.mock_sandbox.has_modifications = False
-        self.mock_edit_manager.has_modifications = False
-        self.mock_session_coordinator.verification_result = True
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        self.mock_role_config.role = agent_node_config.RoleName("developer")
-        self.mock_node_config.feedback = []
-
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-
-            # 1. Non-change defect feedback in graph storage for non-auditor target without active session feedback: MUST fail when unmodified
-            node_defect = _make_node("unit_non_auditor_defect", role="developer")
-            self.mock_storage.mark_node_dirty(node_defect)
-            self.mock_session_coordinator.register_node(node_defect, "pkg/unit_non_auditor_defect.py")
-            self.mock_storage.add_feedback_message(
-                node_defect,
-                dag_storage.FeedbackMessage(
-                    content=dag_storage.MessageContent("Downstream defect: regression observed"),
-                    target=node_defect,
-                ),
-            )
-            resp_defect = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_non_auditor_defect.py")}))
-            self.assertTrue(resp_defect.is_failed)
-
-            # 2. Audit message in graph storage for non-auditor target without active session feedback: MUST succeed when unmodified without change summary
-            node_audit = _make_node("unit_non_auditor_audit", role="developer")
-            self.mock_storage.mark_node_dirty(node_audit)
-            self.mock_session_coordinator.register_node(node_audit, "pkg/unit_non_auditor_audit.py")
-            self.mock_storage.add_message(
-                dag_storage.ChangeMessage(
-                    content=dag_storage.MessageContent("Audit notification: verified implementation")
-                ),
-                to=node_audit,
-            )
-            resp_audit = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_non_auditor_audit.py")}))
-            self.assertFalse(resp_audit.is_failed)
-            self.assertIn(node_audit, self.mock_storage.clean_nodes)
-
-            # 3. Initial implementation change message in graph storage for non-auditor target without active session feedback: MUST succeed when unmodified without change summary
-            node_init = _make_node("unit_non_auditor_init", role="developer")
-            self.mock_storage.mark_node_dirty(node_init)
-            self.mock_session_coordinator.register_node(node_init, "pkg/unit_non_auditor_init.py")
-            self.mock_storage.add_message(
-                dag_storage.ChangeMessage(
-                    content=dag_storage.MessageContent("Initial implementation required")
-                ),
-                to=node_init,
-            )
-            resp_init = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_non_auditor_init.py")}))
-            self.assertFalse(resp_init.is_failed)
-            self.assertIn(node_init, self.mock_storage.clean_nodes)
-
-            # 4. Empty description change message in graph storage for non-auditor target without active session feedback: MUST succeed when unmodified without change summary
-            node_empty = _make_node("unit_non_auditor_empty", role="developer")
-            self.mock_storage.mark_node_dirty(node_empty)
-            self.mock_session_coordinator.register_node(node_empty, "pkg/unit_non_auditor_empty.py")
-            self.mock_storage.add_message(
-                dag_storage.ChangeMessage(
-                    content=dag_storage.MessageContent("")
-                ),
-                to=node_empty,
-            )
-            resp_empty = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_non_auditor_empty.py")}))
-            self.assertFalse(resp_empty.is_failed)
-            self.assertIn(node_empty, self.mock_storage.clean_nodes)
-
-            # 5. Upstream dependency change in graph storage for non-auditor target without active session feedback: MUST succeed when unmodified without change summary
-            node_dep = _make_node("unit_non_auditor_dep", role="developer")
-            self.mock_storage.mark_node_dirty(node_dep)
-            self.mock_session_coordinator.register_node(node_dep, "pkg/unit_non_auditor_dep.py")
-            self.mock_storage.add_message(
-                dag_storage.ChangeMessage(
-                    content=dag_storage.MessageContent("Upstream dependency changed")
-                ),
-                to=node_dep,
-            )
-            resp_dep = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit_non_auditor_dep.py")}))
-            self.assertFalse(resp_dep.is_failed)
-            self.assertIn(node_dep, self.mock_storage.clean_nodes)
-
-    def test_submit_tool_succeeds_with_modifications_and_summary(self) -> None:
-        """Postcondition: MUST mark resolve target clean in storage and current turn."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.verification_result = True
-        self.mock_sandbox.has_modifications = True
-        self.mock_edit_manager.has_modifications = True
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Implemented feature"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertFalse(response.is_failed)
-            self.assertTrue(response.is_terminated)
-            self.assertIn(node, self.mock_storage.clean_nodes)
-
-    def test_submit_tool_succeeds_unmodified_without_summary(self) -> None:
-        """Postcondition: WHEN unedited target passes verification, MUST submit without summary."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.verification_result = True
-        self.mock_sandbox.has_modifications = False
-        self.mock_edit_manager.has_modifications = False
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-            }
-            response = tool.execute_tool(_bindings(bindings))
-            self.assertFalse(response.is_failed)
-            self.assertTrue(response.is_terminated)
-            self.assertIn(node, self.mock_storage.clean_nodes)
-
-    def test_submit_tool_terminating_response_when_all_resolved_and_non_terminating_when_open_remain(self) -> None:
-        """Postcondition: WHEN all active nodes resolved MUST terminate, WHEN other open remain MUST not terminate."""
-        node1 = _make_node("unit1")
-        node2 = _make_node("unit2")
-        self.mock_storage.mark_node_dirty(node1)
-        self.mock_storage.mark_node_dirty(node2)
-        self.mock_session_coordinator.register_node(node1, "pkg/unit1.py")
-        self.mock_session_coordinator.register_node(node2, "pkg/unit2.py")
-        self.mock_session_coordinator.verification_result = True
-        self.mock_sandbox.has_modifications = False
-        self.mock_edit_manager.has_modifications = False
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-
-            # Submitting first node leaves node2 open -> non-terminating
-            resp1 = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit1.py")}))
-            self.assertFalse(resp1.is_failed)
-            self.assertFalse(resp1.is_terminated)
-
-            # Submitting second node resolves all nodes -> terminating
-            resp2 = tool.execute_tool(_bindings({tool.target_parameter: _make_file_alias("pkg/unit2.py")}))
-            self.assertFalse(resp2.is_failed)
-            self.assertTrue(resp2.is_terminated)
-
-    def test_submit_tool_validating_auditor_nodes_designated_by_role_address_against_change_summaries(self) -> None:
-        """Postcondition: SubmitTool validating auditor nodes designated by their dag node role address against supplied change summaries."""
-        self.mock_session_coordinator.verification_result = True
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        self.mock_sandbox.has_modifications = True
-        self.mock_edit_manager.has_modifications = True
-
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-
-            # 1. Auditor node designated through the agent_node_config configuration surface for
-            # its role address: supplying a change summary MUST fail with a reminder that change
-            # summaries are prohibited for audit nodes.
-            # Requirement: WHEN target is an auditor node and change summary is provided, MUST fail
-            # reminding agent that change summary is prohibited for audit nodes.
-            node_audit = _make_node("unit_audit", role="qa")
-            self.mock_storage.mark_node_dirty(node_audit)
-            self.mock_session_coordinator.register_node(node_audit, "pkg/unit_audit.py")
-            self.mock_role_config.role = agent_node_config.RoleName("qa")
-            self.mock_node_config.role_definitions["qa"] = MockRoleDef(
-                is_auditor=True, audit_tag="QA_AUDIT"
-            )
-            resp_audit_with_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_audit.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Audit review summary"),
-            }))
-            self.assertTrue(resp_audit_with_sum.is_failed)
-            self.assertIsNotNone(resp_audit_with_sum.reminder)
-            assert resp_audit_with_sum.reminder is not None
-            self.assertTrue(
-                "prohibited" in resp_audit_with_sum.reminder.lower()
-                or "audit" in resp_audit_with_sum.reminder.lower()
-            )
-            self.assertNotIn(node_audit, self.mock_storage.clean_nodes)
-
-            # 2. Non-auditor node with modified workspace files: omitting the change summary MUST
-            # fail and supplying it MUST succeed.
-            # Requirement: WHEN files were modified and change summary is omitted, MUST fail.
-            node_producer = _make_node("unit_producer", role="lib")
-            self.mock_storage.mark_node_dirty(node_producer)
-            self.mock_session_coordinator.register_node(node_producer, "pkg/unit_producer.py")
-            self.mock_role_config.role = agent_node_config.RoleName("lib")
-            resp_producer_no_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_producer.py"),
-            }))
-            self.assertTrue(resp_producer_no_sum.is_failed)
-            resp_producer_with_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_producer.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Feature changes"),
-            }))
-            self.assertFalse(resp_producer_with_sum.is_failed)
-            self.assertIn(node_producer, self.mock_storage.clean_nodes)
-
-    def test_submit_tool_attaching_change_summary_reminders_when_submission_outcomes_fail_due_to_change_summary_requirements(self) -> None:
-        """Postcondition: SubmitTool attaching change summary reminders when submission outcomes fail due to change summary requirements."""
-        self.mock_session_coordinator.verification_result = True
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-
-            # 1. Files modified + change summary omitted: MUST fail attaching change summary reminder
-            node_mod = _make_node("unit_mod")
-            self.mock_storage.mark_node_dirty(node_mod)
-            self.mock_session_coordinator.register_node(node_mod, "pkg/unit_mod.py")
-            self.mock_role_config.role = agent_node_config.RoleName("developer")
-            self.mock_sandbox.has_modifications = True
-            self.mock_edit_manager.has_modifications = True
-            resp_no_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_mod.py"),
-            }))
-            self.assertTrue(resp_no_sum.is_failed)
-            self.assertIsNotNone(resp_no_sum.reminder)
-            assert resp_no_sum.reminder is not None
-            rem_mod = resp_no_sum.reminder.lower()
-            self.assertTrue(
-                "change summary" in rem_mod or "change_summary" in rem_mod,
-                f"Expected change summary reminder, got: {resp_no_sum.reminder}",
-            )
-
-            # 2. Workspace files NOT modified + change summary provided: MUST fail reminding agent that change summaries are not permitted without modifications
-            node_unmod = _make_node("unit_unmod")
-            self.mock_storage.mark_node_dirty(node_unmod)
-            self.mock_session_coordinator.register_node(node_unmod, "pkg/unit_unmod.py")
-            self.mock_role_config.role = agent_node_config.RoleName("developer")
-            self.mock_sandbox.has_modifications = False
-            self.mock_edit_manager.has_modifications = False
-            resp_unmod_with_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_unmod.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Unnecessary summary"),
-            }))
-            self.assertTrue(resp_unmod_with_sum.is_failed)
-            self.assertIsNotNone(resp_unmod_with_sum.reminder)
-            assert resp_unmod_with_sum.reminder is not None
-            rem_unmod = resp_unmod_with_sum.reminder.lower()
-            self.assertTrue(
-                "not permitted" in rem_unmod or "without" in rem_unmod or "workspace file modifications" in rem_unmod,
-                f"Expected reminder that summaries are not permitted without modifications, got: {resp_unmod_with_sum.reminder}",
-            )
-
-            # 3. Auditor node + change summary provided: MUST fail reminding agent that change summary is prohibited for audit nodes
-            # The auditor status is resolved from the agent_node_config configuration surface for the
-            # target role address; modified files are set so that the audit prohibition is the
-            # applicable change summary constraint.
-            node_audit = _make_node("unit_audit_node", role="qa")
-            self.mock_storage.mark_node_dirty(node_audit)
-            self.mock_session_coordinator.register_node(node_audit, "pkg/unit_audit_node.py")
-            self.mock_role_config.role = agent_node_config.RoleName("qa")
-            self.mock_node_config.role_definitions["qa"] = MockRoleDef(
-                is_auditor=True, audit_tag="QA_AUDIT"
-            )
-            self.mock_sandbox.has_modifications = True
-            self.mock_edit_manager.has_modifications = True
-            resp_audit_with_sum = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_audit_node.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Audit change summary"),
-            }))
-            self.assertTrue(resp_audit_with_sum.is_failed)
-            self.assertIsNotNone(resp_audit_with_sum.reminder)
-            assert resp_audit_with_sum.reminder is not None
-            rem_audit = resp_audit_with_sum.reminder.lower()
-            self.assertTrue(
-                "prohibited" in rem_audit or "audit" in rem_audit,
-                f"Expected reminder that change summary is prohibited for audit nodes, got: {resp_audit_with_sum.reminder}",
-            )
-
-    def test_submit_tool_handling_rejected_coordinator_submission_outcomes_reporting_change_summary_requirements(self) -> None:
-        """Postcondition: SubmitTool handling rejected coordinator submission outcomes on dispatched submissions that report change summary requirements, verifying failure responses."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.verification_result = True
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        self.mock_sandbox.has_modifications = True
-        self.mock_edit_manager.has_modifications = True
-
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-
-            # 1. Dispatched submission with modifications and change summary: Coordinator rejects reporting change summary requirements
-            self.mock_session_coordinator.submit_outcome = control_coordinate.ControlDispatchOutcome(
-                success=False,
-                message="Submission rejected by coordinator: change summary does not meet required specifications",
-                remaining_open_targets=[node],
-            )
-            resp_disp_mod = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Implemented feature updates"),
-            }))
-            self.assertTrue(resp_disp_mod.is_failed)
-            self.assertFalse(resp_disp_mod.is_terminated)
-            self.assertTrue(len(str(resp_disp_mod.content)) > 0)
-            self.assertIsNotNone(self.mock_session_coordinator.dispatched_submit)
-            assert self.mock_session_coordinator.dispatched_submit is not None
-            self.assertEqual(self.mock_session_coordinator.dispatched_submit[0], "pkg/unit1.py")
-            self.assertNotIn(node, self.mock_storage.clean_nodes)
-
-            # 2. Dispatched submission without modifications and without change summary: Coordinator rejects reporting change summary requirements
-            self.mock_sandbox.has_modifications = False
-            self.mock_edit_manager.has_modifications = False
-            self.mock_session_coordinator.dispatched_submit = None
-            self.mock_session_coordinator.submit_outcome = control_coordinate.ControlDispatchOutcome(
-                success=False,
-                message="Submission rejected by coordinator: change summary required by repository policy",
-                remaining_open_targets=[node],
-            )
-            resp_disp_unmod = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-            }))
-            self.assertTrue(resp_disp_unmod.is_failed)
-            self.assertFalse(resp_disp_unmod.is_terminated)
-            self.assertTrue(len(str(resp_disp_unmod.content)) > 0)
-            self.assertIsNotNone(self.mock_session_coordinator.dispatched_submit)
-            assert self.mock_session_coordinator.dispatched_submit is not None
-            self.assertEqual(self.mock_session_coordinator.dispatched_submit[0], "pkg/unit1.py")
-            self.assertNotIn(node, self.mock_storage.clean_nodes)
-
-            # 3. Dispatched submission on auditor target without change summary: Coordinator rejects reporting change summary requirements
-            node_audit = _make_node("unit_audit_node", role="qa")
-            self.mock_storage.mark_node_dirty(node_audit)
-            self.mock_session_coordinator.register_node(node_audit, "pkg/unit_audit_node.py")
-            self.mock_role_config.role = agent_node_config.RoleName("qa")
-            self.mock_session_coordinator.dispatched_submit = None
-            self.mock_session_coordinator.submit_outcome = control_coordinate.ControlDispatchOutcome(
-                success=False,
-                message="Submission rejected by coordinator: change summary prohibited for audit nodes",
-                remaining_open_targets=[node_audit],
-            )
-            resp_disp_audit = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_audit_node.py"),
-            }))
-            self.assertTrue(resp_disp_audit.is_failed)
-            self.assertFalse(resp_disp_audit.is_terminated)
-            self.assertTrue(len(str(resp_disp_audit.content)) > 0)
-            self.assertIsNotNone(self.mock_session_coordinator.dispatched_submit)
-            assert self.mock_session_coordinator.dispatched_submit is not None
-            self.assertEqual(self.mock_session_coordinator.dispatched_submit[0], "pkg/unit_audit_node.py")
-            self.assertNotIn(node_audit, self.mock_storage.clean_nodes)
-
-    def test_submit_tool_attaching_change_summary_reminders_when_coordinator_rejection_outcomes_explicitly_report_change_summary_requirements(self) -> None:
-        """Postcondition: SubmitTool attaching change summary reminders when coordinator rejection outcomes explicitly report change_summary requirements."""
-        node = _make_node("unit_csr")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit_csr.py")
-        self.mock_session_coordinator.verification_result = True
-        self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
-        self.mock_sandbox.has_modifications = True
-        self.mock_edit_manager.has_modifications = True
-
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-
-            # 1. Outcome explicitly reports change_summary requirements -> MUST attach change summary reminder
-            self.mock_session_coordinator.submit_outcome = control_coordinate.ControlDispatchOutcome(
-                success=False,
-                message="Submission rejected: change_summary is required when files are modified",
-                remaining_open_targets=[node],
-            )
-            resp = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_csr.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Modified files"),
-            }))
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertTrue(len(str(resp.content)) > 0)
-            self.assertIsNotNone(resp.reminder)
-            assert resp.reminder is not None
-            rem = resp.reminder.lower()
-            self.assertTrue(
-                "change summary" in rem or "change_summary" in rem,
-                f"Expected change summary reminder when coordinator outcome explicitly reports change_summary, got: {resp.reminder}",
-            )
-            self.assertIsNotNone(self.mock_session_coordinator.dispatched_submit)
-            self.assertNotIn(node, self.mock_storage.clean_nodes)
-
-            # 2. Outcome does NOT report change_summary requirements -> does NOT attach reminder
-            self.mock_session_coordinator.submit_outcome = control_coordinate.ControlDispatchOutcome(
-                success=False,
-                message="Submission rejected: internal coordinator error",
-                remaining_open_targets=[node],
-            )
-            resp_no_rem = tool.execute_tool(_bindings({
-                tool.target_parameter: _make_file_alias("pkg/unit_csr.py"),
-                tool.change_summary_parameter: sandbox_run_control.ChangeSummary("Modified files"),
-            }))
-            self.assertTrue(resp_no_rem.is_failed)
-            self.assertFalse(resp_no_rem.is_terminated)
-            self.assertTrue(len(str(resp_no_rem.content)) > 0)
-            self.assertIsNone(resp_no_rem.reminder)
-
-    # -------------------------------------------------------------------------
-    # FailTool Tests
-    # -------------------------------------------------------------------------
-
-    def test_fail_tool_metadata(self) -> None:
-        """Postcondition: Record failure reason and terminate session."""
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(FailTool)
-            self.assertEqual(tool.name, tool_provider.ToolName("fail"))
-            self.assertTrue(len(tool.description) > 0)
-            self.assertIn(tool.target_parameter.name, tool.parameters)
-            self.assertIn(tool.explanation_parameter.name, tool.parameters)
-
-    def test_fail_tool_execution(self) -> None:
-        """Postcondition: MUST mark active node as failed and terminate run."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(FailTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.explanation_parameter: sandbox_run_control.FailureExplanation("Fatal error encountered"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertTrue(response.is_failed)
-            self.assertTrue(response.is_terminated)
-            self.assertEqual(
-                self.mock_session_coordinator.target_states[node],
-                control_coordinate.TargetState.FAILED,
-            )
-
-    # -------------------------------------------------------------------------
-    # BlameTool Tests
-    # -------------------------------------------------------------------------
-
-    def test_blame_tool_metadata(self) -> None:
-        """Postcondition: Attribute defect to upstream contract."""
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(BlameTool)
-            self.assertEqual(tool.name, tool_provider.ToolName("blame"))
-            self.assertTrue(len(tool.description) > 0)
-            self.assertIn(tool.target_parameter.name, tool.parameters)
-            self.assertIn(tool.blame_target_parameter.name, tool.parameters)
-            self.assertIn(tool.explanation_parameter.name, tool.parameters)
-
-    def test_blame_tool_fails_invalid_blame_target(self) -> None:
-        """Postcondition: WHEN blame target does not match configured target, MUST fail listing available targets."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_node_config.blame_targets_by_node = {
-            node: {_make_bound_file("pkg/upstream.py")}
-        }
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(BlameTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.blame_target_parameter: _make_file_alias("pkg/wrong.py"),
-                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Defect"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertTrue(response.is_failed)
-            self.assertIn("pkg/upstream.py", str(response.content))
-
-    def test_blame_tool_fails_multiline_explanation(self) -> None:
-        """Postcondition: WHEN explanation contains newlines, MUST fail reminding it must be single paragraph."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_node_config.blame_targets_by_node = {
-            node: {_make_bound_file("pkg/upstream.py")}
-        }
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(BlameTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.blame_target_parameter: _make_file_alias("pkg/upstream.py"),
-                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Line one\nLine two"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertTrue(response.is_failed)
-
-    def test_blame_tool_succeeds_and_records_defect(self) -> None:
-        """Postcondition: MUST record defect feedback for blamed target via dag_storage and mark attributed."""
-        node = _make_node("unit1")
-        upstream_node = _make_node("upstream_unit")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.register_node(upstream_node, "pkg/upstream.py")
-        bound = _make_bound_file("pkg/upstream.py", owning_node=upstream_node)
-        self.mock_node_config.blame_targets_by_node = {
-            node: {bound}
-        }
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(BlameTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.blame_target_parameter: _make_file_alias("pkg/upstream.py"),
-                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Interface specification is defective"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertFalse(response.is_failed)
-            self.assertEqual(
-                self.mock_session_coordinator.target_states[node],
-                control_coordinate.TargetState.ATTRIBUTED,
-            )
-
-    def test_blame_tool_attributing_defect_feedback_when_blame_target_node_is_not_pre_registered(self) -> None:
-        """Postcondition: BlameTool attributing defect feedback when the blame target node is not pre-registered."""
-        node = _make_node("unit1")
-        upstream_node = _make_node("upstream_unregistered")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        # upstream_node is NOT registered with mock_session_coordinator.register_node
-        bound = _make_bound_file("pkg/upstream_unregistered.py", owning_node=upstream_node)
-        self.mock_node_config.blame_targets_by_node = {
-            node: {bound}
-        }
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(BlameTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.blame_target_parameter: _make_file_alias("pkg/upstream_unregistered.py"),
-                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Interface specification is defective"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertFalse(response.is_failed)
-            self.assertEqual(
-                self.mock_session_coordinator.target_states[node],
-                control_coordinate.TargetState.ATTRIBUTED,
-            )
-            self.assertTrue(
-                any(n == upstream_node for n, _ in self.mock_storage.messages),
-                "Expected defect feedback recorded for unregistered upstream node",
-            )
-
-    def test_blame_tool_defaults_to_single_blame_target(self) -> None:
-        """Postcondition: WHEN blame target is omitted in single-target context, MUST default to configured target."""
-        node = _make_node("unit1")
-        upstream_node = _make_node("upstream_unit")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.register_node(upstream_node, "pkg/upstream.py")
-        bound = _make_bound_file("pkg/upstream.py", owning_node=upstream_node)
-        self.mock_node_config.blame_targets_by_node = {
-            node: {bound}
-        }
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(BlameTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Interface specification is defective"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertFalse(response.is_failed)
-            self.assertEqual(
-                self.mock_session_coordinator.target_states[node],
-                control_coordinate.TargetState.ATTRIBUTED,
-            )
-            self.assertEqual(
-                self.mock_session_coordinator.dispatched_blame,
-                ("pkg/unit1.py", "pkg/upstream.py", "Interface specification is defective"),
-            )
-            self.assertIn(upstream_node, [m[0] for m in self.mock_storage.messages])
-
-    def test_blame_tool_fails_omitted_target_in_multi_target_context(self) -> None:
-        """Postcondition: WHEN blame target is omitted in multi-target context, MUST fail listing available blame targets."""
-        node = _make_node("unit1")
-        upstream1 = _make_node("upstream1")
-        upstream2 = _make_node("upstream2")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.register_node(upstream1, "pkg/upstream1.py")
-        self.mock_session_coordinator.register_node(upstream2, "pkg/upstream2.py")
-        bound1 = _make_bound_file("pkg/upstream1.py", owning_node=upstream1)
-        bound2 = _make_bound_file("pkg/upstream2.py", owning_node=upstream2)
-        self.mock_node_config.blame_targets_by_node = {
-            node: {bound1, bound2}
-        }
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(BlameTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Defect"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertTrue(response.is_failed)
-            content = str(response.content)
-            self.assertTrue("pkg/upstream1.py" in content or "pkg/upstream2.py" in content)
-
-    def test_blame_tool_fails_when_no_active_node_exists(self) -> None:
-        """Postcondition: BlameTool error handling when no active node exists."""
-        self.mock_session_coordinator.open_targets = []
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(BlameTool)
-            bindings = {
-                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Defect"),
-            }
-            response = tool.execute_tool(_bindings(bindings))
-            self.assertTrue(response.is_failed)
-
-    def test_blame_tool_fails_when_active_node_has_no_configured_blame_targets(self) -> None:
-        """Postcondition: BlameTool error handling when an active node has no configured blame targets."""
-        node = _make_node("unit1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_node_config.blame_targets_by_node = {node: set()}
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(BlameTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Defect"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertTrue(response.is_failed)
-
-    def test_blame_tool_fails_when_blame_dispatch_fails(self) -> None:
-        """Postcondition: BlameTool error handling when blame dispatch fails."""
-        node = _make_node("unit1")
-        upstream = _make_node("upstream1")
-        self.mock_storage.mark_node_dirty(node)
-        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.register_node(upstream, "pkg/upstream1.py")
-        bound = _make_bound_file("pkg/upstream1.py", owning_node=upstream)
-        self.mock_node_config.blame_targets_by_node = {node: {bound}}
-        self.mock_session_coordinator.blame_outcome = control_coordinate.ControlDispatchOutcome(
-            success=False, message="Blame dispatch failed", remaining_open_targets=[node]
-        )
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(BlameTool)
-            bindings = {
-                tool.target_parameter: _make_file_alias("pkg/unit1.py"),
-                tool.blame_target_parameter: _make_file_alias("pkg/upstream1.py"),
-                tool.explanation_parameter: sandbox_run_control.BlameExplanation("Defect"),
-            }
-            response = tool.execute_tool(bindings)
-            self.assertTrue(response.is_failed)
-            self.assertIn("Blame dispatch failed", str(response.content))
 
     # -------------------------------------------------------------------------
     # GetWorkTool Tests
@@ -1921,12 +1040,28 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(list(controller.verification_checks), [])
             controller.update_verification()
 
+    def test_get_work_tool_installs_blame_when_blame_targets_exist(self) -> None:
+        """Postcondition: WHEN ready dirty nodes obtained and blame targets exist, MUST install blame tool."""
+        self.mock_session_coordinator.open_targets = []
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_subgraph.ready_batch = [node]
+        self.mock_node_config.is_step_mode = False
+        dep_node = _make_node("dep1", "lib")
+        bound_target = _make_bound_file("dep1.py", owning_node=dep_node)
+        self.mock_node_config.blame_targets_by_node = {node: {bound_target}}
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(GetWorkTool)
+            response = tool.execute_tool({})
+            self.assertFalse(response.is_failed)
+            self.assertIn(tool_provider.ToolName("blame"), self.mock_tool_manager.installed_tools)
+
     def test_run_controller_initialize_registers_session_tools_into_tool_manager(self) -> None:
         """Postcondition: RunController.initialize registers outcome tools into ToolManager, conditionally including advance."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             controller = scope.get_singleton(RunController)
 
-            # Step mode inactive: submit, fail, check_files, get_work, blame installed; advance omitted
+            # Step mode inactive: submit, fail, check_files, get_work installed; blame and advance omitted
             self.mock_node_config.is_step_mode = False
             self.mock_node_config.allows_step_mode = False
             self.mock_tool_manager.installed_tools.clear()
@@ -1936,7 +1071,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn(tool_provider.ToolName("fail"), self.mock_tool_manager.installed_tools)
             self.assertIn(tool_provider.ToolName("check_files"), self.mock_tool_manager.installed_tools)
             self.assertIn(tool_provider.ToolName("get_work"), self.mock_tool_manager.installed_tools)
-            self.assertIn(tool_provider.ToolName("blame"), self.mock_tool_manager.installed_tools)
+            self.assertNotIn(tool_provider.ToolName("blame"), self.mock_tool_manager.installed_tools)
             self.assertNotIn(tool_provider.ToolName("advance"), self.mock_tool_manager.installed_tools)
 
             # Step mode active: advance is conditionally installed
@@ -1953,7 +1088,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn(tool_provider.ToolName("fail"), self.mock_tool_manager.installed_tools)
             self.assertIn(tool_provider.ToolName("check_files"), self.mock_tool_manager.installed_tools)
             self.assertIn(tool_provider.ToolName("get_work"), self.mock_tool_manager.installed_tools)
-            self.assertIn(tool_provider.ToolName("blame"), self.mock_tool_manager.installed_tools)
+            self.assertNotIn(tool_provider.ToolName("blame"), self.mock_tool_manager.installed_tools)
             self.assertIn(tool_provider.ToolName("advance"), self.mock_tool_manager.installed_tools)
 
     def test_run_controller_caching(self) -> None:
@@ -2131,197 +1266,32 @@ class SandboxRunControlImplTest(unittest.TestCase):
     # Tool Parameter Wire Decoding Tests
     # -------------------------------------------------------------------------
 
-    def test_submit_tool_wire_parameter_decoding(self) -> None:
-        """Postcondition: SubmitTool parameter wire decoding converts target and change summary wire values."""
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            target_param = tool.target_parameter
-            self.assertEqual(target_param.parameter_type.wire_type, str)
-            self.assertEqual(target_param.parameter_type.actual_type, agent_file_alias.FileAlias)
-            converted_target = target_param.parameter_type.convert("pkg/unit1.py")
-            self.assertIsInstance(converted_target, agent_file_alias.FileAlias)
-            self.assertEqual(str(converted_target.relative_path), "pkg/unit1.py")
-
-            summary_param = tool.change_summary_parameter
-            self.assertEqual(summary_param.parameter_type.wire_type, str)
-            converted_summary = summary_param.parameter_type.convert("Added feature implementation")
-            self.assertEqual(str(converted_summary), "Added feature implementation")
-
-    def test_fail_tool_wire_parameter_decoding(self) -> None:
-        """Postcondition: FailTool parameter wire decoding converts target and failure explanation wire values."""
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(FailTool)
-            target_param = tool.target_parameter
-            converted_target = target_param.parameter_type.convert("pkg/unit1.py")
-            self.assertIsInstance(converted_target, agent_file_alias.FileAlias)
-            self.assertEqual(str(converted_target.relative_path), "pkg/unit1.py")
-
-            explanation_param = tool.explanation_parameter
-            self.assertEqual(explanation_param.parameter_type.wire_type, str)
-            converted_explanation = explanation_param.parameter_type.convert("Fatal test suite failure")
-            self.assertEqual(str(converted_explanation), "Fatal test suite failure")
-
-    def test_blame_tool_wire_parameter_decoding(self) -> None:
-        """Postcondition: BlameTool parameter wire decoding converts target, blame target, and blame explanation wire values."""
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(BlameTool)
-            target_param = tool.target_parameter
-            converted_target = target_param.parameter_type.convert("pkg/unit1.py")
-            self.assertIsInstance(converted_target, agent_file_alias.FileAlias)
-            self.assertEqual(str(converted_target.relative_path), "pkg/unit1.py")
-
-            blame_target_param = tool.blame_target_parameter
-            self.assertEqual(blame_target_param.parameter_type.wire_type, str)
-            converted_blame = blame_target_param.parameter_type.convert("pkg/upstream.py")
-            self.assertIsInstance(converted_blame, agent_file_alias.FileAlias)
-            self.assertEqual(str(converted_blame.relative_path), "pkg/upstream.py")
-
-            explanation_param = tool.explanation_parameter
-            self.assertEqual(explanation_param.parameter_type.wire_type, str)
-            converted_explanation = explanation_param.parameter_type.convert("Defective contract specification")
-            self.assertEqual(str(converted_explanation), "Defective contract specification")
-
     def test_get_work_tool_is_argument_free(self) -> None:
         """Postcondition: GetWorkTool is an argument-free tool."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             tool = scope.get_singleton(GetWorkTool)
             self.assertEqual(len(tool.parameters), 0)
 
-    def test_optional_change_summary_wire_conversion_returning_empty_bindings_for_blank_wire_inputs(self) -> None:
-        """Postcondition: optional change summary wire conversion returning empty bindings for blank wire inputs."""
+    def test_tool_parameter_actual_type_properties_and_schema(self) -> None:
+        """Postcondition: Tool parameters declare correct actual_type properties."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            param_type = tool.change_summary_parameter.parameter_type
-
-            # Empty string produces empty binding (None)
-            self.assertIsNone(param_type.convert(""))
-
-            # Whitespace strings produce empty binding (None)
-            self.assertIsNone(param_type.convert("   "))
-            self.assertIsNone(param_type.convert("\t\n  \r\n"))
-
-            # None wire input produces empty binding (None)
-            self.assertIsNone(param_type.convert(None))  # type: ignore[arg-type]
-
-            # Non-blank wire inputs produce ChangeSummary instances
-            converted = param_type.convert("Implemented new feature")
-            self.assertEqual(converted, sandbox_run_control.ChangeSummary("Implemented new feature"))
-            self.assertEqual(str(converted), "Implemented new feature")
-
-    def test_tool_parameter_wire_decoding_conversion_error(self) -> None:
-        """Postcondition: WHEN wire value cannot be converted, MUST handle ParameterConversionError."""
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            tool = scope.get_singleton(SubmitTool)
-            target_param = tool.target_parameter
-            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
-                target_param.parameter_type.convert(999)  # type: ignore[arg-type]
-
-    def test_tool_parameter_actual_type_properties_and_optional_wire_value_conversion_across_run_control_tools(self) -> None:
-        """Postcondition: Tool parameter actual type properties and optional wire value conversion across run control tools."""
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            # SubmitTool: parameters actual_type properties + optional wire conversion
-            submit_tool = scope.get_singleton(SubmitTool)
-            self.assertIn(tool_provider.ParameterName("target"), submit_tool.parameters)
-            self.assertIn(tool_provider.ParameterName("change_summary"), submit_tool.parameters)
-            self.assertEqual(submit_tool.target_parameter.name, tool_provider.ParameterName("target"))
-            self.assertTrue(len(str(submit_tool.target_parameter.description)) > 0)
-            self.assertIsInstance(submit_tool.target_parameter.is_required, bool)
-            self.assertEqual(submit_tool.target_parameter.parameter_type.actual_type, agent_file_alias.FileAlias)
-            self.assertEqual(submit_tool.target_parameter.parameter_type.wire_type, str)
-
-            self.assertEqual(submit_tool.change_summary_parameter.name, tool_provider.ParameterName("change_summary"))
-            self.assertTrue(len(str(submit_tool.change_summary_parameter.description)) > 0)
-            self.assertIsInstance(submit_tool.change_summary_parameter.is_required, bool)
-            self.assertEqual(submit_tool.change_summary_parameter.parameter_type.actual_type, sandbox_run_control.ChangeSummary)
-            self.assertEqual(submit_tool.change_summary_parameter.parameter_type.wire_type, str)
-
-            t_alias = submit_tool.target_parameter.parameter_type.convert("pkg/mod.py")
-            self.assertIsInstance(t_alias, agent_file_alias.FileAlias)
-            self.assertEqual(str(t_alias.relative_path), "pkg/mod.py")
-            s_val = submit_tool.change_summary_parameter.parameter_type.convert("Summary text")
-            self.assertEqual(str(s_val), "Summary text")
-            self.assertIsNone(submit_tool.change_summary_parameter.parameter_type.convert(""))
-            self.assertIsNone(submit_tool.change_summary_parameter.parameter_type.convert("   "))
-            self.assertIsNone(submit_tool.change_summary_parameter.parameter_type.convert(None))  # type: ignore[arg-type]
-            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
-                submit_tool.target_parameter.parameter_type.convert(12345)  # type: ignore[arg-type]
-            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
-                submit_tool.change_summary_parameter.parameter_type.convert(12345)  # type: ignore[arg-type]
-
-            # FailTool: parameters actual_type properties + wire conversion
-            fail_tool = scope.get_singleton(FailTool)
-            self.assertIn(tool_provider.ParameterName("target"), fail_tool.parameters)
-            self.assertIn(tool_provider.ParameterName("explanation"), fail_tool.parameters)
-            self.assertEqual(fail_tool.target_parameter.parameter_type.actual_type, agent_file_alias.FileAlias)
-            self.assertEqual(fail_tool.explanation_parameter.name, tool_provider.ParameterName("explanation"))
-            self.assertTrue(len(str(fail_tool.explanation_parameter.description)) > 0)
-            self.assertIsInstance(fail_tool.explanation_parameter.is_required, bool)
-            self.assertEqual(fail_tool.explanation_parameter.parameter_type.actual_type, sandbox_run_control.FailureExplanation)
-            self.assertEqual(fail_tool.explanation_parameter.parameter_type.wire_type, str)
-            f_expl = fail_tool.explanation_parameter.parameter_type.convert("Fatal error")
-            self.assertEqual(str(f_expl), "Fatal error")
-            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
-                fail_tool.explanation_parameter.parameter_type.convert(12345)  # type: ignore[arg-type]
-
-            # BlameTool: parameters actual_type properties + optional wire conversion
-            blame_tool = scope.get_singleton(BlameTool)
-            self.assertIn(tool_provider.ParameterName("target"), blame_tool.parameters)
-            self.assertIn(tool_provider.ParameterName("blame_target"), blame_tool.parameters)
-            self.assertIn(tool_provider.ParameterName("explanation"), blame_tool.parameters)
-            self.assertEqual(blame_tool.target_parameter.parameter_type.actual_type, agent_file_alias.FileAlias)
-            self.assertEqual(blame_tool.blame_target_parameter.name, tool_provider.ParameterName("blame_target"))
-            self.assertTrue(len(str(blame_tool.blame_target_parameter.description)) > 0)
-            self.assertIsInstance(blame_tool.blame_target_parameter.is_required, bool)
-            self.assertEqual(blame_tool.blame_target_parameter.parameter_type.actual_type, agent_file_alias.FileAlias)
-            self.assertEqual(blame_tool.blame_target_parameter.parameter_type.wire_type, str)
-            self.assertEqual(blame_tool.explanation_parameter.name, tool_provider.ParameterName("explanation"))
-            self.assertTrue(len(str(blame_tool.explanation_parameter.description)) > 0)
-            self.assertIsInstance(blame_tool.explanation_parameter.is_required, bool)
-            self.assertEqual(blame_tool.explanation_parameter.parameter_type.actual_type, sandbox_run_control.BlameExplanation)
-            self.assertEqual(blame_tool.explanation_parameter.parameter_type.wire_type, str)
-            b_target = blame_tool.blame_target_parameter.parameter_type.convert("pkg/upstream.py")
-            self.assertIsInstance(b_target, agent_file_alias.FileAlias)
-            b_expl = blame_tool.explanation_parameter.parameter_type.convert("Spec bug")
-            self.assertEqual(str(b_expl), "Spec bug")
-            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
-                blame_tool.blame_target_parameter.parameter_type.convert(999)  # type: ignore[arg-type]
-            with self.assertRaises((tool_provider.ParameterConversionError, ValueError, TypeError)):
-                blame_tool.explanation_parameter.parameter_type.convert(999)  # type: ignore[arg-type]
-
-            # GetWorkTool: parameterless tool schema checks
             gw_tool = scope.get_singleton(GetWorkTool)
             self.assertEqual(len(gw_tool.parameters), 0)
-
-            # CheckFilesTool and AdvanceTool parameter schema checks
             cf_tool = scope.get_singleton(CheckFilesTool)
             self.assertIsInstance(cf_tool.parameters, Mapping)
             adv_tool = scope.get_singleton(AdvanceTool)
             self.assertIsInstance(adv_tool.parameters, Mapping)
 
-            # ToolManager execution with invalid parameter wire value fails gracefully
-            submit_tool = scope.get_singleton(SubmitTool)
-            self.mock_tool_manager.install_tool(submit_tool)
-            err_resp = self.mock_tool_manager.execute_tool(
-                tool_provider.ToolName("submit"),
-                {tool_provider.ParameterName("target"): 12345},  # type: ignore[dict-item]
-            )
-            self.assertTrue(err_resp.is_failed)
-            self.assertIn("Invalid argument", str(err_resp.content))
-
     def test_tool_manager_wire_dispatch_across_run_control_tools(self) -> None:
-        """Postcondition: Dispatch tool execution via wire parameter bindings across all run control tools."""
+        """Postcondition: Dispatch tool execution via wire parameter bindings across run control tools."""
         node = _make_node("unit1")
-        upstream = _make_node("upstream1")
         self.mock_storage.mark_node_dirty(node)
         self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
-        self.mock_session_coordinator.register_node(upstream, "pkg/upstream1.py")
-        bound_upstream = _make_bound_file("pkg/upstream1.py", owning_node=upstream)
-        self.mock_node_config.blame_targets_by_node = {node: {bound_upstream}}
         self.mock_node_config.verification_checks = [MockVerificationCheck(passed=True)]
         self.mock_session_coordinator.verification_result = True
 
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            for cls in [CheckFilesTool, AdvanceTool, SubmitTool, FailTool, BlameTool, GetWorkTool]:
+            for cls in [CheckFilesTool, AdvanceTool, GetWorkTool]:
                 tool = scope.get_singleton(cls)
                 self.mock_tool_manager.install_tool(tool)
 
@@ -2330,38 +1300,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             self.mock_guide_delivery.has_steps_remaining = True
             resp = self.mock_tool_manager.execute_tool(tool_provider.ToolName("advance"), {})
-            self.assertFalse(resp.is_failed)
-
-            self.mock_sandbox.has_modifications = True
-            self.mock_edit_manager.has_modifications = True
-            self.mock_guide_delivery.has_steps_remaining = False
-            resp = self.mock_tool_manager.execute_tool(
-                tool_provider.ToolName("submit"),
-                {
-                    tool_provider.ParameterName("target"): "pkg/unit1.py",
-                    tool_provider.ParameterName("change_summary"): "Wire dispatched submit",
-                },
-            )
-            self.assertFalse(resp.is_failed)
-
-            resp = self.mock_tool_manager.execute_tool(
-                tool_provider.ToolName("fail"),
-                {
-                    tool_provider.ParameterName("target"): "pkg/unit1.py",
-                    tool_provider.ParameterName("explanation"): "Wire dispatched failure",
-                },
-            )
-            self.assertTrue(resp.is_failed)
-            self.assertTrue(resp.is_terminated)
-
-            resp = self.mock_tool_manager.execute_tool(
-                tool_provider.ToolName("blame"),
-                {
-                    tool_provider.ParameterName("target"): "pkg/unit1.py",
-                    tool_provider.ParameterName("blame_target"): "pkg/upstream1.py",
-                    tool_provider.ParameterName("explanation"): "Wire dispatched blame",
-                },
-            )
             self.assertFalse(resp.is_failed)
 
             self.mock_session_coordinator.open_targets = []
@@ -2375,6 +1313,3 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-# Untested requirements:
-# None

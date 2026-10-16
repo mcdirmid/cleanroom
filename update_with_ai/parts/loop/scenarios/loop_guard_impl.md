@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:23:51Z
 CHANGE: Keep the loop_guard realization within its declared imports closure
 CODE_HASH: ae3aecc83cef

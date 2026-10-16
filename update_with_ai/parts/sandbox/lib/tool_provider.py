@@ -1,14 +1,15 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:03:45Z
 # CHANGE: Make the follow-up tool call reasoning text a required member as the grounding specification declares
-# CODE_HASH: beaaf2ba2946
+# CODE_HASH: fa1eb422d183
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
 from typing import Any, Callable, Mapping, NewType, Optional, Protocol, Sequence, Set, Tuple, cast
 from dataclasses import dataclass
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
+import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
 
 # Requirements specified in tool_provider.pyi
 
@@ -108,6 +109,20 @@ class MappingParameterType[KeyActualT, ValActualT, ValWireT](ParameterType[Mappi
             self.key_type.convert(k): self.value_type.convert(v)
             for k, v in wire_value.items()
         }
+
+
+class AliasManagerType(ParameterType[agent_file_alias.FileAlias, str], Protocol):
+    @property
+    def actual_type(self) -> type[agent_file_alias.FileAlias]:
+        ...
+
+    @property
+    def wire_type(self) -> type[str]:
+        ...
+
+    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+        ...
+
 
 
 

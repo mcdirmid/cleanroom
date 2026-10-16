@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:03:50Z
 # CHANGE: Resolve and match both declared path members through the file path manager before reporting access, and use pathlib filesystem operations
-# CODE_HASH: 0662c26aebde
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: d6b9a4867f14
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 import re
@@ -87,11 +87,11 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
 
     @property
     def path_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        alias_type = get_singleton(tool_provider.AliasManagerType)
         return tool_provider.ToolParameter[agent_file_alias.FileAlias, str](
             name=tool_provider.ParameterName("path"),
             description=tool_provider.ParameterDescription("File alias or relative path of the file to view."),
-            parameter_type=alias_mgr,
+            parameter_type=alias_type,
             is_required=True,
             default_value=None,
         )

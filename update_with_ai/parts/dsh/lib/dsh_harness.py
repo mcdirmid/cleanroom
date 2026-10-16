@@ -1,8 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-13T20:00:00Z
 # CHANGE: author dsh_harness interface library
-# CODE_HASH: 0b4425c932e8
+# CODE_HASH: 067fe5b26aea
 # --- END CLEANROOM METADATA ---
 
 """Interface specification for dsh_harness."""
@@ -10,50 +10,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 from update_with_ai.parts.subagent.lib import subagent_coordinator
 
 
-@dataclass(frozen=True)
-class DshSessionTokenMetrics:
-    """Normalized token metrics parsed from DeepSeek Harness session storage or event streams.
-
-    Args:
-        input_tokens: Uncached prompt tokens.
-        cached_tokens: Cached prompt tokens.
-        output_tokens: Generated completion tokens.
-        total_tokens: Sum of input, cached, and output tokens.
-        cost_usd: Monetary expenditure in USD.
-        model_name: Resolved model identifier.
-    """
-
-    input_tokens: int = 0
-    cached_tokens: int = 0
-    output_tokens: int = 0
-    total_tokens: int = 0
-    cost_usd: float = 0.0
-    model_name: str = ""
-
-
-class DshTelemetryParser(Protocol):
-    """Parses DeepSeek Harness session storage archives and event streams for token metrics."""
-
-    def parse_session_storage(
-        self,
-        sessions_dir: str,
-        workspace_dir: str,
-        model_name: Optional[str] = None,
-    ) -> DshSessionTokenMetrics:
-        """Queries session storage archives and returns token metrics."""
-        ...
-
-    def parse_stream_text(
-        self,
-        stream_text: str,
-        model_name: Optional[str] = None,
-    ) -> DshSessionTokenMetrics:
-        """Parses stdout JSON event streams or log text for token metrics."""
-        ...
+from .dsh_telemetry import DshSessionTokenMetrics, DshTelemetryParser
 
 
 class DshHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
@@ -85,9 +46,15 @@ class DshHarnessManager(Protocol):
         timeout_seconds: Optional[float] = None,
         max_context_tokens: Optional[int] = None,
         custom_cmd: Optional[str] = None,
+        simulation_mode: bool = False,
         sessions_dir: Optional[str] = None,
+        **kwargs: Any,
     ) -> DshHarnessAdapter:
         """Constructs a DeepSeek Harness adapter instance."""
+        ...
+
+    def initialize(self) -> None:
+        """Initializes the manager and installs the adapter factory into the harness registry."""
         ...
 
     def get_telemetry_parser(self) -> DshTelemetryParser:

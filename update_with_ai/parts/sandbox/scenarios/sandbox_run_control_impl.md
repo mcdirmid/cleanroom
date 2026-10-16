@@ -1,8 +1,8 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-12T11:27:00Z
 CHANGE: Remove max batch size parameter from get work tool
-CODE_HASH: 477d051b749f
+CODE_HASH: b30fb9cb5f97
 -->
 
 # Concrete scenarios for `sandbox_run_control_impl` (implementation)
@@ -24,13 +24,13 @@ mode is inactive, and no session tool has been installed yet.
 
 1. The agent enters the agent session.
    Observed: the installed tools include the submit tool, the fail tool, the check files tool named
-   `check_files`, the get work tool, and the blame tool, and the advance tool is not among the
+   `check_files`, and the get work tool, and the blame tool and advance tool are not among the
    installed tools.
    Realized by: tool installation and parameter conversion through
    `tool_provider`, the verification checks and per-node blame targets obtained from
    `agent_node_config`, and the component's own session-entry initialization, which installs the
-   submit, fail, check files, get work, and blame tools unconditionally and leaves the advance tool
-   uninstalled while guide step mode is inactive; active target tracking and the current get work
+   submit, fail, check files, and get work tools unconditionally and leaves the advance tool
+   uninstalled while guide step mode is inactive and the blame tool uninstalled until get work is called; active target tracking and the current get work
    turn are delegated to the session coordinator of `control_coordinate`.
 
 2. The agent reads the tool named `check_files` from the installed tools.
@@ -48,7 +48,7 @@ installed yet.
 
 1. The agent enters the agent session.
    Observed: the installed tools include the submit tool, the fail tool, the check files tool named
-   `check_files`, the get work tool, the blame tool, and the advance tool.
+   `check_files`, the get work tool, and the advance tool, and the blame tool is not among the installed tools.
    Realized by: the same unconditional installation through
    `tool_provider` and the same configuration access through `agent_node_config`, plus the
    component's own guide-step-mode branch, which adds the advance tool when guide step mode is
@@ -191,9 +191,9 @@ modified during the session so that it imports no undeclared module.
    Observed: the resolve target is marked clean in the current get work turn, the active node is
    concluded, and the response terminates the session because all active nodes are resolved.
    Realized by: submission gating delegated to the session coordinator of
-   `control_coordinate`, which validates the preconditions and marks the resolve target clean in the
-   current get work turn, the storage writes through `dag_storage`, the modification state from
-   `sandbox`, and the component's own change summary validation and terminating response assembly
+   `control_coordinate`, which validates the preconditions, enforces change summary rules, and marks
+   the resolve target clean in the current get work turn, the storage writes through `dag_storage`,
+   the modification state from `sandbox`, and the component's own terminating response assembly
    formatted through `template_format`.
 
 ### Scenario 10 — Submitting one of several open targets
@@ -219,18 +219,19 @@ is `widget/src/widget.py`, and verification passes for that target.
    summary, after `widget/src/widget.py` was modified during the session.
    Observed: the request fails because change documentation is enforced when workspace files were
    modified, and `widget/src/widget.py` remains open.
-   Realized by: the modification state from `sandbox`, the component's own
-   change summary validation, which requires a change summary once workspace files were modified,
-   and the resolve target tracking of `control_coordinate`, which leaves the target open.
+   Realized by: the modification state from `sandbox`, submission gating
+   delegated to the session coordinator of `control_coordinate`, which requires a change summary once
+   workspace files were modified and rejects the request, and the component's own rejection response
+   with a change summary reminder.
 
 2. The agent executes the submit tool with the resolve target `widget/src/widget.py` and the change
    summary "the widget source now imports no undeclared module", no workspace file having been
    modified during the session.
    Observed: the request fails because a change summary was supplied although no workspace file was
    modified, and `widget/src/widget.py` remains open.
-   Realized by: the same modification state and the same validation, which
-   refuses a change summary when no workspace file was modified, and the resolve target tracking of
-   `control_coordinate`.
+   Realized by: the same modification state, submission gating delegated to
+   the session coordinator of `control_coordinate`, which rejects change summaries when no workspace
+   file was modified, and the component's own rejection response with a change summary reminder.
 
 ### Scenario 12 — Submitting while verification does not pass
 
@@ -514,3 +515,11 @@ has not been evaluated for the current workspace files.
    describing the modifications to workspace files.
    Realized by: the modification state from `sandbox`, which now reports a
    workspace file modification, and the component's own failure response.
+
+### Scenario 23 — Installing the blame tool when active nodes have blame targets
+
+Given: the agent enters a session for role alpha in `/ws/alpha_scope_a`, no target is open, guide step mode is inactive, the active dirty node has configured blame targets in node config, and no session tool other than submit, fail, check_files, and get_work has been installed.
+
+1. The agent executes the get work tool without arguments.
+   Observed: the dirty node is retrieved as an active node and the blame tool is installed in the session tools.
+   Realized by: the component's own get work execution checking node config for blame targets across active nodes and installing `BlameTool` into `tool_provider`.

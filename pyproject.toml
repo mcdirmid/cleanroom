@@ -25,6 +25,8 @@ dependencies = [
 cleanroom = "update_with_ai.support.lib.cleanroom_role_tool:main"
 cleanroom-loop = "update_with_ai.support.lib.cleanroom_uv_runner:main"
 cleanroom_loop = "update_with_ai.support.lib.cleanroom_uv_runner:main"
+clean = "update_with_ai.support.lib.cleanroom_role_tool:main_clean"
+orchestrate = "update_with_ai.support.lib.cleanroom_role_tool:main_orchestrate"
 
 [tool.hatch.build.targets.wheel]
 packages = ["update_with_ai", "update_python_with_ai"]

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T02:45:00Z
 CHANGE: Name the session attribution coordinator and split the multi-concern file attribution bullets
-CODE_HASH: 8351f2584a6f
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: 06c0552dd78a
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # control_attribution interface component
@@ -26,10 +26,10 @@ An *attribution outcome* records the result of an attribution or failure action,
 
 An agent session's *attribution coordinator* manages blame attribution and failure recording.
 
-The attribution coordinator validates that a blamed culprit is an upstream dependency of the source target node configured to receive feedback, and enforces that blame explanations consist of a single continuous paragraph without newline characters.
+The attribution coordinator validates that a blamed culprit is an upstream dependency of the source target node configured to receive feedback, and enforces that blame explanations consist of a single continuous paragraph without newline characters, validating that the critique does not exceed configured maximum feedback character limits and advising prioritization when exceeded.
 
 The attribution coordinator attributes blame by recording a feedback message on the culprit node in graph storage, marking the culprit node status as dirty, and marking in-batch dependent nodes as failed. The attribution coordinator records task failure for a target node by logging the failure explanation, preserving dirty status on the target node, and marking dependent nodes as failed.
 
-The attribution coordinator attributes defect blame to a culprit file in a repository workspace by validating that the critique explanation contains no newline characters, then invoking a build blame target or appending in-band feedback and dirty markers directly to the culprit file in the canonical repository and synchronizing the updated file back to the local role workspace.
+The attribution coordinator attributes defect blame to a culprit file in a repository workspace by validating that the critique explanation contains no newline characters and does not exceed configured maximum feedback character limits, then invoking a build blame target or appending in-band feedback and dirty markers directly to the culprit file in the canonical repository and synchronizing the updated file back to the local role workspace.
 
 The attribution coordinator records task failure for a file target by appending failure diagnostics and marking dirty status in the canonical repository, then synchronizing the updated file back to the local role workspace.

@@ -1,9 +1,9 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:16Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-12T21:00:00Z
 CHANGE: author subagent_coordinator_impl implementation specification
-CODE_HASH: fd14cbf6ce37
-SPEC_QA_AUDIT: 2026-10-13T20:42:16Z
+CODE_HASH: b93703556435
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
 # subagent_coordinator_impl implementation component
@@ -39,7 +39,11 @@ When coordinating multi-agent execution:
 
 - The realization dispatches role directives concurrently for roles possessing ready work, tracking active worker handles without static wave partitioning.
 
-- The realization periodically polls active workers through non-blocking checks on the configured harness adapter, collecting role turn results upon completion.
+- The realization periodically polls active workers through non-blocking checks on the configured harness adapter at a configurable interval (defaulting to 10 seconds), collecting role turn results upon completion.
+
+- The realization tracks consecutive unproductive turns where a role yields zero submitted and zero blamed targets, halting orchestration when unproductive turns exceed a threshold (defaulting to 2).
+
+- The realization emits real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state.
 
 - The realization manages the dynamic supervision loop, continuing until all units evaluate clean, a turn reports failure, or maximum wave iterations are reached.
 

@@ -1,10 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:42:16Z
+# LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:03:55Z
 # CHANGE: Record failure diagnostics and force dirty state through graph storage in fail_target, mark blamed culprits dirty in blame_target, resolve culprit files through the alias manager, and synchronize blamed source metadata headers
-# CODE_HASH: cab1f22dc870
-# COVERAGE_AUDIT: 2026-10-13T20:42:16Z
-# QA_AUDIT: 2026-10-13T20:42:16Z
+# CODE_HASH: 261bdc4ce83d
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations
@@ -24,7 +24,8 @@ from support.lib.lifecycle import (
 )
 from update_with_ai.parts.agent.lib import agent_file_alias, agent_node_config, agent_session
 from update_with_ai.parts.dag.lib import dag_storage
-from . import control_attribution, src_metadata
+from update_with_ai.parts.storage.lib import src_metadata
+from . import control_attribution
 
 
 def _copy_file_with_perms(
@@ -124,7 +125,7 @@ def _parse_unit_from_file_path(file_path: str, repo_root: str) -> Tuple[str, str
 def _resolve_bound_file_path(blame_string: str) -> Optional[str]:
     """Resolves a blame string to its workspace host path through the alias manager."""
     try:
-        alias = get_singleton(agent_file_alias.AliasManager).convert(blame_string)
+        alias = get_singleton(agent_file_alias.AliasManager).to_alias(blame_string)
     except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
         return None
     if isinstance(alias, agent_file_alias.BoundFile):
@@ -133,6 +134,51 @@ def _resolve_bound_file_path(blame_string: str) -> Optional[str]:
             return str(getattr(workspace_path, "path", workspace_path))
         return str(getattr(alias, "relative_path", "")) or None
     return None
+
+
+def _node_display_alias(node: dag_storage.DagNode) -> str:
+    """Returns a user/agent-facing file alias for a node, avoiding raw Bazel target addresses."""
+    try:
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        if getattr(cfg, "src_file_alias_by_node", None) and node in cfg.src_file_alias_by_node:
+            return str(cfg.src_file_alias_by_node[node])
+        for bt_set in getattr(cfg, "blame_targets_by_node", {}).values():
+            for bt in bt_set:
+                if getattr(bt, "owning_node", None) == node:
+                    return str(getattr(bt, "relative_path", bt))
+        for ro in getattr(cfg, "read_only_files", ()):
+            if getattr(ro, "owning_node", None) == node:
+                return str(getattr(ro, "relative_path", ro))
+        for rw in getattr(cfg, "read_write_files", ()):
+            if getattr(rw, "owning_node", None) == node:
+                return str(getattr(rw, "relative_path", rw))
+    except Exception:
+        pass
+
+    addr = str(node.unit_address).strip()
+    if ":" in addr:
+        pkg, unit_name = addr.split(":", 1)
+        pkg = pkg.lstrip("/").strip()
+    elif "/" in addr:
+        pkg, unit_name = addr.rsplit("/", 1)
+        pkg = pkg.lstrip("/").strip()
+    else:
+        pkg, unit_name = "", addr
+
+    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
+    if role == "test":
+        return f"{pkg}/tests/{unit_name}_test.py" if pkg else f"tests/{unit_name}_test.py"
+    if role == "lib":
+        return f"{pkg}/lib/{unit_name}.py" if pkg else f"lib/{unit_name}.py"
+    if role == "low":
+        return f"{pkg}/low/{unit_name}.pyi" if pkg else f"low/{unit_name}.pyi"
+    if role == "high":
+        return f"{pkg}/high/{unit_name}.md" if pkg else f"high/{unit_name}.md"
+    if role == "planning":
+        return f"{pkg}/planning/{unit_name}.md" if pkg else f"planning/{unit_name}.md"
+    if role == "scenario":
+        return f"{pkg}/scenarios/{unit_name}.md" if pkg else f"scenarios/{unit_name}.md"
+    return f"{pkg}/{unit_name}" if pkg else unit_name
 
 
 class AttributionCoordinator(control_attribution.AttributionCoordinator, Singleton):
@@ -147,7 +193,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
         cfg = get_singleton(agent_node_config.NodeConfig)
         targets = list(cfg.blame_targets_by_node.get(node, set()))
         try:
-            alias = get_singleton(agent_file_alias.AliasManager).convert(val_str)
+            alias = get_singleton(agent_file_alias.AliasManager).to_alias(val_str)
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             alias = None
         alias_path = str(getattr(alias, "relative_path", "")) if alias is not None else ""
@@ -202,10 +248,18 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
         deps = storage.get_dependencies(source_node)
         upstream_nodes = {dep.node for dep in deps}
         if blame_target_node not in upstream_nodes:
-            allowed = ", ".join(f"`{n.unit_address}:{n.role_address}`" for n in upstream_nodes)
+            try:
+                cfg = get_singleton(agent_node_config.NodeConfig)
+                targets = list(getattr(cfg, "blame_targets_by_node", {}).get(source_node, set()))
+            except Exception:
+                targets = []
+            if targets:
+                allowed = ", ".join(f"`{getattr(t, 'relative_path', t)}`" for t in targets)
+            else:
+                allowed = ", ".join(f"`{_node_display_alias(n)}`" for n in upstream_nodes)
             return control_attribution.AttributionOutcome(
                 accepted=False,
-                message=f"Error: Target '{blame_target_node.unit_address}:{blame_target_node.role_address}' is not an upstream dependency. Available: {allowed}",
+                message=f"Error: Target '{_node_display_alias(blame_target_node)}' is not an upstream dependency. Available: {allowed}",
                 affected_nodes=[],
             )
 
@@ -236,7 +290,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
                 if storage.is_dirty(dep):
                     return control_attribution.AttributionOutcome(
                         accepted=False,
-                        message=f"Error: In-batch dependency '{dep.unit_address}:{dep.role_address}' must be submitted before dependent targets.",
+                        message=f"Error: In-batch dependency '{_node_display_alias(dep)}' must be submitted before dependent targets.",
                         affected_nodes=[],
                     )
 
@@ -256,7 +310,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
 
         return control_attribution.AttributionOutcome(
             accepted=True,
-            message=f"Defect attributed to upstream dependency '{blame_target_node.unit_address}:{blame_target_node.role_address}'.",
+            message=f"Defect attributed to upstream dependency '{_node_display_alias(blame_target_node)}'.",
             affected_nodes=affected,
         )
 
@@ -285,7 +339,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
 
         return control_attribution.AttributionOutcome(
             accepted=True,
-            message=f"Target '{target_node.unit_address}:{target_node.role_address}' failed: {reason}",
+            message=f"Target '{_node_display_alias(target_node)}' failed: {reason}",
             affected_nodes=affected,
         )
 
@@ -315,8 +369,51 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
             except (json.JSONDecodeError, OSError):
                 pass
 
-        main_root = repo_root or (meta.get("main_workspace_root") or meta.get("repo_root") if meta else None) or ws_root
-        main_root = os.path.realpath(main_root)
+        if repo_root:
+            main_root = os.path.realpath(repo_root)
+        else:
+            try:
+                import importlib
+                ws_reg_mod = importlib.import_module("workspace_registry")
+                ws_reg = get_singleton(ws_reg_mod.WorkspaceRegistry)  # type: ignore
+                main_root = os.path.realpath(ws_reg.discover_repository_root(ws_root))
+            except Exception:
+                main_root = os.path.realpath(ws_root)
+
+        max_feedback_chars = None
+        if meta and meta.get("max_feedback_chars"):
+            try:
+                max_feedback_chars = int(meta["max_feedback_chars"])
+            except (ValueError, TypeError):
+                pass
+        if max_feedback_chars is None:
+            m_cfg_file = os.path.join(main_root, "model_configs.toml")
+            if os.path.isfile(m_cfg_file):
+                try:
+                    with open(m_cfg_file, "rb") as mf:
+                        m_data = tomllib.load(mf)
+                    role_model = meta.get("model") if meta else None
+                    models_sec = m_data.get("models", {})
+                    target_cfg = None
+                    if role_model and role_model in models_sec:
+                        target_cfg = models_sec[role_model]
+                    elif not role_model and m_data.get("default") in models_sec:
+                        target_cfg = models_sec[m_data["default"]]
+                    if target_cfg and "max_feedback_chars" in target_cfg:
+                        max_feedback_chars = int(target_cfg["max_feedback_chars"])
+                except Exception:
+                    pass
+
+        if max_feedback_chars and len(critique) > max_feedback_chars:
+            return control_attribution.AttributionOutcome(
+                accepted=False,
+                message=(
+                    f"Error: Critique exceeds maximum length of {max_feedback_chars} characters "
+                    f"({len(critique)} provided); you might prioritize contract discrepancies "
+                    "to report so the authoring role can make progress."
+                ),
+                affected_nodes=[],
+            )
 
         bound_path = _resolve_bound_file_path(culprit_file)
         if bound_path and os.path.exists(bound_path):
@@ -387,7 +484,6 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
 
         target_to_mutate = main_dep_path if os.path.exists(main_dep_path) else dep_path
         src_metadata.append_feedback(target_to_mutate, critique, sender=caller)
-        src_metadata.mark_dirty(target_to_mutate, f"Blamed by {caller}: {critique}")
         src_metadata.update_metadata(
             target_to_mutate, last_cleaned=src_metadata.current_utc_timestamp()
         )
@@ -420,8 +516,16 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
             except (json.JSONDecodeError, OSError):
                 pass
 
-        main_root = repo_root or (meta.get("main_workspace_root") or meta.get("repo_root") if meta else None) or ws_root
-        main_root = os.path.realpath(main_root)
+        if repo_root:
+            main_root = os.path.realpath(repo_root)
+        else:
+            try:
+                import importlib
+                ws_reg_mod = importlib.import_module("workspace_registry")
+                ws_reg = get_singleton(ws_reg_mod.WorkspaceRegistry)  # type: ignore
+                main_root = os.path.realpath(ws_reg.discover_repository_root(ws_root))
+            except Exception:
+                main_root = os.path.realpath(ws_root)
 
         bound_path = _resolve_bound_file_path(target_file)
         if bound_path and os.path.isfile(bound_path):

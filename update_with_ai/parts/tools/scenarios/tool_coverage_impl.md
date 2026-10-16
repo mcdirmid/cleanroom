@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T04:11:44Z
 CHANGE: Drop the removed agent_session realization from the coverage record scenario
 CODE_HASH: 44a7968742d1

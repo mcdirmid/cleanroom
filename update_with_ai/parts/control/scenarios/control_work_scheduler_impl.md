@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-13T20:42:15Z
+LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:17:15Z
 CHANGE: Author control control_work_scheduler_impl concrete scenarios
 CODE_HASH: ec936d4d43f8
@@ -11,7 +11,7 @@ Scenarios 1 through 7 restate the caller observations of the interface scenarios
 each observation, the realization that produces it. Restating them rather than writing fresh ones is
 what makes realizability structural: an implementation scenario that cannot name a realization for
 its observation is a defect in the implementation rather than a gap in the set. Scenarios 8 through
-12 cover behaviours the interface does not expose to a caller, and each of them is a candidate for
+14 cover behaviours the interface does not expose to a caller, and each of them is a candidate for
 the question of whether it belongs in the interface set instead.
 
 ## Reused from the interface
@@ -217,3 +217,26 @@ recorded on it was addressed by a previous cleaning pass.
    Realized by: the component's own collection of the messages recorded on the node through
    `dag_storage`, which yields no open feedback message and therefore omits the section from the
    formatted prompt.
+
+### Scenario 13 — Formatting an auditor session task prompt
+
+Given: the candidate node being scheduled is the qa-role node for unit widget; the node configuration
+configures the blame target `parts/widget/lib/widget.py` for that node and the grounding file is
+`parts/widget/low/widget.pyi`.
+
+1. The work scheduler formats the task prompt for the qa-role candidate node.
+   Observed: the prompt contains `parts/widget/lib/widget.py against parts/widget/low/widget.pyi`,
+   states that all files in this workspace are strictly read-only, instructs to run check_files to
+   verify, submit to certify, and blame specifying the culprit file and critique when checks fail.
+   Realized by: the component's own task prompt synthesis for auditor nodes, which resolves blame
+   targets against grounding files and injects read-only auditor execution directives.
+
+### Scenario 14 — Formatting multi-node task prompt target instructions
+
+Given: the candidate nodes being scheduled are the alpha-role node for unit widget and the alpha-role
+node for unit gadget; neither node is an auditor role.
+
+1. The work scheduler formats the task prompt for the multi-node batch.
+   Observed: the prompt contains `When submitting or failing completed units, specify target as the file path.`
+   Realized by: the component's own multi-node task prompt synthesis, which instructs file path
+   target specification rather than exposing raw unit addresses.
