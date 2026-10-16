@@ -145,11 +145,11 @@ This section records a hand-executed investigation. It is a demonstration of the
 
 ### 6.1 The Samples
 
-Three scenario files were written by hand: [scenarios/workspace_work.md](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/scenarios/workspace_work.md) with five interface scenarios, [scenarios/workspace_work_impl.md](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/scenarios/workspace_work_impl.md) with ten implementation scenarios, and [scenarios/workspace_registry.md](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/scenarios/workspace_registry.md) with six interface scenarios for the imported component. The implementation file restates the interface scenarios one through five with a realization beside each observation, and adds five scenarios for behaviours the interface does not expose.
+Three scenario files were written by hand: [scenarios/workspace_work.md](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/scenarios/workspace_work.md) with five interface scenarios, [scenarios/workspace_work_impl.md](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/scenarios/workspace_work_impl.md) with ten implementation scenarios, and [scenarios/workspace_registry.md](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/scenarios/workspace_registry.md) with six interface scenarios for the imported component. The implementation file restates the interface scenarios one through five with a realization beside each observation, and adds five scenarios for behaviours the interface does not expose.
 
 ### 6.2 Interface Evaluation
 
-Run against [low/workspace_work.pyi](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/low/workspace_work.pyi).
+Run against [low/workspace_work.pyi](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/low/workspace_work.pyi).
 
 **Supported.** Asking for work yields a ready and blocked partition and a summary, because `evaluate_work` must partition tasks and return the summary. The refusal while a pending target is dirty is contracted, including the `force` condition. Strict removal of a submitted target is contracted by `remove_pending_target`. Resolving the contracts for a target is fully contracted by `resolve_contract_files`.
 
@@ -161,7 +161,7 @@ Run against [low/workspace_work.pyi](file:///Users/seanmcdirmid/projects/cleanro
 
 ### 6.3 Implementation Evaluation
 
-Run against [low/workspace_work_impl.pyi](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/low/workspace_work_impl.pyi).
+Run against [low/workspace_work_impl.pyi](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/low/workspace_work_impl.pyi).
 
 **Realized.** Scheduling through `control_work_scheduler`; in-band metadata checks through `src_metadata`; template materialization through `dag_storage`, at class level and in `compute_role_work_queue`; contract resolution through `workspace_registry`; and pending-buffer reading, writing, and filtering as private mechanics. Removal is realized better than the interface states it: the grounding adds "without wiping non-matching targets", which the interface postcondition omits. The buffer is also the read-after-write case that holds, since every read of pending state is paired with operations that set, clear, and remove entries in the same file.
 
@@ -254,4 +254,4 @@ The same isolation holds one tier up, between the scenario and the translation a
 - [Auditor Roles & Verification Dirtiness Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/auditor_roles_and_dirtiness_architecture.md) — in-band attestations and auditor dirtiness.
 - [In-Band Source Metadata & State Persistence](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/in_band_source_metadata.md) — source hashes and forward dirty evaluation.
 - [spec_qa arbiter guide](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/guides/spec_qa.md) — the existing HLS-to-LLS semantic gate.
-- Working example: [high/workspace_work.md](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/high/workspace_work.md), [high/workspace_work_impl.md](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/high/workspace_work_impl.md), [low/workspace_work.pyi](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/low/workspace_work.pyi), [low/workspace_work_impl.pyi](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/low/workspace_work_impl.pyi).
+- Working example: [high/workspace_work.md](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/high/workspace_work.md), [high/workspace_work_impl.md](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/high/workspace_work_impl.md), [low/workspace_work.pyi](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/low/workspace_work.pyi), [low/workspace_work_impl.pyi](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/low/workspace_work_impl.pyi).

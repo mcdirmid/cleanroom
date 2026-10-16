@@ -8,7 +8,7 @@ Cleanroom software engineering eliminates hallucinations, ambiguity, and impleme
 
 This document describes the complete toolchain architecture implemented in Cleanroom:
 1. **The Modular Coverage Evaluation Engine (`update_with_ai/parts/tools/`)**: Modular single-target test tracing, AST statement normalization, and contiguous span deficit reporting ([`tool_coverage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage.py), [`tool_coverage_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage_impl.py)), executed natively via `bin/check_files` under the `coverage` role.
-2. **The Modular Workspace Orchestration Engine (`update_with_ai/parts/workspace/`)**: Pure Python workspace lifecycle management, convention-based role provisioning, and in-band synchronization (`workspace_tool.py`, `workspace_work_impl.py`, `workspace_registry_impl.py`).
+2. **The Modular Workspace & Tools Engine (`update_with_ai/parts/workspace/` & `update_with_ai/parts/tools/`)**: Pure Python workspace lifecycle management (`workspace_roles`, `workspace_scaffold`, `workspace_stub`, `workspace_provision`, `workspace_registry`, `workspace_sync`), convention-based role provisioning, and in-band work queue evaluation (`workspace_tool.py`, `workspace_work.py`, `workspace_check.py`, `workspace_dirtiness.py`).
 3. **The Specification Linters (`update_python_with_ai/support/lib/`)**: AST-based prose validation (`high_lint.py`), planning canvas structure validation (`spec_lint.py`), and pure interface stub verification (`low_lint.py`).
 4. **The Code & Test Linters (`update_python_with_ai/support/lib/`)**: Concrete implementation compliance (`lib_lint.py`) and requirement comment citation validation (`test_lint.py`).
 5. **Native Type Verification (`uv run pyright`)**: Hermetic, sub-second static type analysis driven by dynamic `PYTHONPATH` construction and package-level `pyproject.toml` configurations.
@@ -55,12 +55,14 @@ Cleanroom establishes a strict architectural boundary between **production domai
 │                                                                                        │
 │  [update_with_ai/parts/*] (Modular 4-Stage Cleanroom Components)                       │
 │  ───────────────────────────────────────────────────────────────                       │
-│  • parts/tools: Statement coverage measurement and span deficit reporting              │
-│    (tool_coverage.py, tool_coverage_impl.py)                                           │
-│  • parts/workspace: Role workspace provisioning, work queue computation, sync         │
-│    (workspace_tool.py, workspace_work_impl.py, workspace_registry_impl.py)             │
-│  • parts/control: In-band metadata persistence, change attribution, and submission     │
-│    (src_metadata.py, control_submit_impl.py, control_coordinate_impl.py)               │
+│  • parts/tools: Statement coverage measurement, workspace tools, work queues, dirtiness │
+│    (tool_coverage.py, workspace_tool.py, workspace_work.py, workspace_check.py)        │
+│  • parts/workspace: Role workspace provisioning, scaffolding, stubs, and synchronization│
+│    (workspace_provision.py, workspace_registry.py, workspace_roles.py, etc.)          │
+│  • parts/storage: In-band metadata persistence, regex stamping, and source file storage │
+│    (src_metadata.py, src_storage_impl.py, storage_asm.py)                              │
+│  • parts/control: Change attribution, submission validation, and coordination          │
+│    (control_submit_impl.py, control_attribution_impl.py)                               │
 │  • parts/uv: Target resolution, manifest loading, and loop execution                   │
 │    (uv_manifest_loader_impl.py, uv_loop_impl.py, uv_target_impl.py)                    │
 │  • parts/systems: Unified system assembly initialization                               │
@@ -77,8 +79,8 @@ Cleanroom establishes a strict architectural boundary between **production domai
 
 Monolithic scripts previously in `support/lib/` have been systematically modularized into canonical `parts/`:
 - `evaluate_coverage.py` $\to$ [`update_with_ai/parts/tools/lib/tool_coverage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage.py)
-- `cleanroom_workspace_tool.py` $\to$ [`update_with_ai/parts/workspace/`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/)
-- `src_metadata.py` $\to$ [`update_with_ai/parts/control/lib/src_metadata.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/lib/src_metadata.py)
+- `cleanroom_workspace_tool.py` $\to$ [`update_with_ai/parts/tools/lib/workspace_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/workspace_tool.py) & [`update_with_ai/parts/workspace/`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/)
+- `src_metadata.py` $\to$ [`update_with_ai/parts/storage/lib/src_metadata.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/storage/lib/src_metadata.py)
 
 ---
 
@@ -218,11 +220,11 @@ To ensure 100% type soundness without hardcoded static path lists:
 | :--- | :--- | :--- | :--- |
 | **AST Linting** | Framework import leakage into library code | **SOLVED** | AST visitor in `lib_lint.py` rejects `import framework`. |
 | **Coverage Engine** | Monolithic coverage script & AST path mismatch | **SOLVED** | Modularized into `parts/tools/lib/tool_coverage.py` with relative workspace AST evaluation. |
-| **Workspace Orchestration** | Monolithic `cleanroom_workspace_tool.py` | **SOLVED** | Modularized into 4-stage Cleanroom parts under `update_with_ai/parts/workspace/`. |
+| **Workspace Orchestration** | Monolithic `cleanroom_workspace_tool.py` | **SOLVED** | Modularized into 4-stage Cleanroom parts under `update_with_ai/parts/workspace/` and `update_with_ai/parts/tools/`. |
 | **Toolchain Runtime** | Multi-second Bazel server overhead | **SOLVED** | Replaced with pure `uv` + Hatchling, reducing verification cycle to sub-100ms. |
 | **Type Checking** | Brittle global `pyrightconfig.json` | **SOLVED** | Permanently deleted `pyrightconfig.json`; verification is driven by package-level `pyproject.toml` and dynamic `PYTHONPATH`. |
 | **Scaffolding vs. Verification** | Accidental file generation during `check_files` | **SOLVED** | Separated `--scaffold` mode (for `get_work`) from strict verification mode in linters. |
-| **Metadata Management** | Procedural `src_metadata.py` in support scripts | **SOLVED** | Canonicalized into `update_with_ai/parts/control/lib/src_metadata.py`. |
+| **Metadata Management** | Procedural `src_metadata.py` in support scripts | **SOLVED** | Canonicalized into `update_with_ai/parts/storage/lib/src_metadata.py`. |
 | **Systems Assembly** | Bazel-bound root assemblies | **SOLVED** | Unified systems assembly under `uv_cleanroom_asm.py` and `uv_openai_loop_asm.py`. |
 
 ---
@@ -239,11 +241,13 @@ All verification is driven by Cleanroom's pure Python CLI:
 ./bin/test update_with_ai/parts/workspace
 
 # Refresh system files across role workspaces:
-bin/cleanroom refresh-sys
+uv run cleanroom refresh-sys
 
 # Inspect work queues across the DAG:
-bin/cleanroom work-queue
+uv run cleanroom work-queue staging
 
-# Run autonomous agent loop against target:
-bin/cleanroom_loop //parts/sandbox:sandbox_file_reader_impl#lib
+# Run autonomous cleaning against target or scope:
+uv run cleanroom clean //staging/parts/sandbox:sandbox_file_reader_impl#lib
+# or via convenient wrapper:
+./bin/clean staging#lib
 ```

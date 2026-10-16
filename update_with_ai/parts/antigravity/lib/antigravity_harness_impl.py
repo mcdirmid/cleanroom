@@ -29,7 +29,7 @@ from update_with_ai.parts.subagent.lib import subagent_coordinator, subagent_har
 from . import antigravity_harness
 
 
-# Rate card per 1,000,000 tokens from design-docs/subagent_driven_cleanroom_workspaces_todo.md Section 5.3
+# Rate card per 1,000,000 tokens from design-docs/todo.md Section 7.2
 PRICING_RATES: Dict[str, Tuple[float, float, float]] = {
     # model_key: (cached_input_per_m, uncached_input_per_m, output_per_m)
     "gemini-3.8-flash": (0.025, 0.10, 0.40),

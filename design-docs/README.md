@@ -43,7 +43,7 @@
 4. **Concrete Scenario Grounding**: Scenarios walk continuous operational journeys through the high-level specification, verifying that every interface operation is grounded and realizable before low-level stubbing.
 5. **Epistemic Feasibility in Planning**: Knowledge provisions and consumer requirements form an acyclic reachability DAG directly in planning specifications, proving capability reachability before low-level stub formalization and implementation.
 6. **Authors Author; Arbiters Lint and Audit**: Authoring models are insulated from interactive linters and type checkers to prevent mechanistic gaming; independent auditor roles (`spec_qa`, `qa`, `coverage`) run automated verification suites internally and deliver diagnostic blame attribution.
-7. **Canonical `parts/` Over `support/lib/`**: All production domain logic, workspace management, statement coverage measurement, and session coordination live in modular Cleanroom parts (`parts/workspace`, `parts/tools`, `parts/control`, `parts/uv`, `parts/systems`), leaving `support/lib/` strictly for foundational metaclasses (`framework.py`, `lifecycle.py`) and procedural AST linters.
+7. **Canonical `parts/` Over `support/lib/`**: All production domain logic, workspace management, statement coverage measurement, CLI tools, persistent storage, and session coordination live in modular Cleanroom parts (`parts/workspace`, `parts/tools`, `parts/storage`, `parts/control`, `parts/subagent`, `parts/dsh`, `parts/uv`, `parts/systems`), leaving `support/lib/` strictly for foundational metaclasses (`framework.py`, `lifecycle.py`) and procedural AST linters.
 
 ---
 
@@ -100,7 +100,7 @@
 
 ## 3. Cleaning Paradigms & Execution Architecture
 
-Cleanroom supports distinct cleaning paradigms, each optimized for different operational environments, along with an archived post-mortem of a decommissioned subagent approach:
+Cleanroom supports distinct cleaning paradigms, each optimized for different operational environments, along with an archived post-mortem of a decommissioned subagent approach. All paradigms, metadata standards, and roadmaps are consolidated in [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md):
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────┐
@@ -112,7 +112,7 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 │  - Native OpenAI API client              - Interactive Antigravity Chat UI               │
 │  - Directed acyclic graph (DAG)          - OS chmod 444 double-blind isolation           │
 │  - Best for: CI/CD & batch cleaning      - Best for: Interactive pair programming        │
-│  - Doc: custom_loop_cleanroom.md         - Doc: subagentless_cleanroom_workspaces.md     │
+│  - Doc: todo.md Section 3                - Doc: todo.md Section 3                        │
 │                                                                                          │
 │                                  ▲                             ▲                         │
 │                                  │                             │ Extended by             │
@@ -121,29 +121,29 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 │                     - In-tree subagents & FastMCP  - Drives Option 3 workspaces          │
 │                     - FAILED & DECOMMISSIONED      - Antigravity, DSH                    │
 │                     - Quota exhaustion ($30-$50)   - Zero-execution coordinator          │
-│                     - Doc: antigravity_failed.md   - DeepSeek-V4 Flash ($0.20/run)       │
-│                                                    - Doc: subagent_driven_workspaces.md  │
+│                     - Doc: todo.md Section 3       - DeepSeek-V4 Flash ($0.20/run) & G3.8│
+│                                                    - Doc: todo.md Section 3              │
 │                                                                                          │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-1. **Option 1: Custom Loop Cleanroom** ([`custom_loop_cleanroom.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/custom_loop_cleanroom.md)):
-   - In-process autonomous runner driving the OpenAI API (`update_with_ai/parts/systems/uv_cleanroom_asm`).
+1. **Option 4: Subagent-Driven Cleanroom Workspaces (Primary Orchestration)**:
+   - Autonomous multi-agent architecture driving pre-confined workspaces via a **Zero-Execution Coordinator**.
+   - Uniform support across **Google Antigravity** and **DeepSeek Harness (`dsh`)** (Goose support turned down and decommissioned).
+   - Built on canonical Cleanroom parts: `update_with_ai/parts/subagent/` (generic DAG coordinator and command harness) and platform parts (`parts/antigravity/` and `parts/dsh/` completed with `dsh_telemetry`).
+   - Detailed technical architecture in [`design.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md) Section 2; operational status in [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md).
+2. **Option 3: Subagentless Cleanroom Workspaces**:
+   - Sibling workspace directories (`../role_workspaces/<workspace-name>_<role>_<dir>`) running independent conversational sessions in Antigravity or any IDE.
+   - Enforces double-blind isolation via OS-level `chmod 444` read-only mounts and orchestrates role coordination via `parts/workspace`, direct CLI mutations (`submit`, `blame`, `fail`), and self-synchronizing `work-queue`.
+   - Detailed technical architecture in [`design.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md) Section 2; operational status in [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md).
+3. **Option 1: Custom Loop Cleanroom**:
+   - In-process autonomous runner driving OpenAI or Gemini APIs (`update_with_ai/parts/systems/uv_cleanroom_asm`).
    - Traverses dependency graph nodes in topological order (`loop_cleaner.py`), running isolated turn loops (`loop_driver.py`) with repetition guards (`loop_guard.py`).
-   - Production engine for headless continuous integration and batch cleaning via `bin/cleanroom-loop` and `parts/cleanroom.toml`.
-2. **Option 3: Subagentless Cleanroom Workspaces** ([`subagentless_cleanroom_workspaces.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)):
-   - Sibling workspace directories (`../role_workspaces/<workspace-name>_<role>_<dir>`) running independent conversational sessions in Antigravity.
-   - Enforces double-blind isolation via OS-level `chmod 444` read-only mounts and orchestrates role coordination via `parts/workspace`, direct CLI mutations (`submit`, `blame`, `fail`), and self-synchronizing `bin/get_work`.
-   - Production architecture for interactive AI pair programming managed via `bin/cleanroom`.
-3. **Option 4: Subagent-Driven Cleanroom Workspaces** ([`subagent_driven_cleanroom_workspaces_todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md)):
-   - Autonomous multi-agent architecture driving Option 3's pre-confined workspaces via a **Zero-Execution Coordinator**.
-   - Uniform support across **Google Antigravity** and **DeepSeek Harness (`dsh`)** (Goose support turned down).
-   - Built on canonical Cleanroom parts: `update_with_ai/parts/subagent/` (generic DAG coordinator and command harness) and platform parts (`parts/antigravity/` and `parts/dsh/` completed).
-   - Leverages **DeepSeek-V4 Flash** (`deepseek-flash`) for 98% token cost reductions and establishes a reproducible framework for side-by-side Gemini vs. DeepSeek model benchmarking.
-4. **Option 2 (Archived Post-Mortem): Antigravity Subagents & MCP Server** ([`antigravity_integration_failed.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)):
+   - Production engine for headless continuous integration and batch cleaning via `uv run cleanroom clean --harness loop`.
+   - Detailed technical architecture in [`design.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md) Section 2; operational status in [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md).
+4. **Option 2 (Archived Post-Mortem): Antigravity FastMCP Subagents**:
    - Detailed analysis of why in-tree subagents communicating with an execution server failed: token cost explosion ($30–$50 per run), multi-agent instruction degradation, and socket execution brittleness. Formally superseded by Option 4.
-5. **Paradigms Comparative Guide** ([`cleaning_paradigms.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleaning_paradigms.md)):
-   - Side-by-side comparative analysis of economics, isolation, and trade-offs across all cleaning options.
+   - Detailed post-mortem in [`design.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md) Section 3.
 
 ---
 
@@ -151,25 +151,17 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 
 ### 4.1 Specification Formats & Verification Pipeline
 - **[High-Level Specification Format (HLS)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/high_level_spec_format.md)** (`high_level_spec_format.md`): Literate prose specifications, italic semantic markers, single-level bullets, and lifecycle tiers.
-- **[Concrete Scenario Validation for HLS Translation](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/concrete_scenario_validation.md)** (`concrete_scenario_validation.md`): Concrete scenario-based evaluation of the HLS-to-LLS translation, with per-action interface requirement support and implementation realization checks, a triage for requirements no walk exercises, and a worked `workspace_work` example whose findings name the translation losses, missing realizations, and ungrounded imports.
+- **[Concrete Scenario Validation for HLS Translation](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/concrete_scenario_validation.md)** (`concrete_scenario_validation.md`): Concrete scenario-based evaluation of the HLS-to-LLS translation, with per-action interface requirement support and implementation realization checks.
 - **[Planning Canvas Specification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/planning_format.md)** (`planning_format.md`): Authoritative specification for Intent separation, factored typing/contracts with slugs, flat woven interactions, epistemic grounding DAG, external boundary specs (`_ext`), and `spec_qa` auditor verification.
 - **[Low-Level Specification Architecture (LLS)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/low_level_spec_format.md)** (`low_level_spec_format.md`): Strong AST types, lifecycle decorators, Design-by-Contract docstrings, and Natural Language Grounding Arguments (`GROUNDING:`).
-- **[Specification Grounding, External Boundaries, & Assembly Pipeline](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/specification_grounding_boundaries_and_assembly_architecture.md)** (`specification_grounding_boundaries_and_assembly_architecture.md`): Grounding external files via `cleanroom_files_ext`, swatting residual `MODULE.bazel` markers, streamlining the mechanical assembly (`_asm`) lifecycle, and enforcing implementation (`_impl`) import accountability.
-- **[Auditor Roles & Verification Dirtiness Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/auditor_roles_and_dirtiness_architecture.md)** (`auditor_roles_and_dirtiness_architecture.md`): In-band verification attestations (`<ROLE>_AUDIT:`), resolving the 0-byte paradox, and formalizing auditor dirty predicates.
 - **[Toolchain & Verification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md)** (`toolchain_and_verification.md`): Deterministic linters, modular test coverage engine (`update_with_ai/parts/tools/lib/tool_coverage.py`), and native Pyright static type checking.
-- **[Grounded Specification Language & Neural Compilation Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/grounded_specification_language_and_neural_compilation.md)** (`grounded_specification_language_and_neural_compilation.md`): Declarative, non-procedural specification programming language whose static type system guarantees closed-world grounding, compiled via deterministic AST-to-prose transpilation and double-blind, statistically independent neural agents.
-
-### 4.2 Execution & Cleaning Paradigms
-- **[Subagent-Driven Cleanroom Workspaces (TODO)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagent_driven_cleanroom_workspaces_todo.md)** (`subagent_driven_cleanroom_workspaces_todo.md`): Authoritative design for multi-harness autonomous subagent orchestration across Antigravity and DeepSeek Harness with DeepSeek-V4 Flash economics.
-- **[Subagentless Cleanroom Workspaces](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/subagentless_cleanroom_workspaces.md)** (`subagentless_cleanroom_workspaces.md`): Primary interactive architecture with convention-driven zero-sync isolated role workspaces, pathless descriptors, direct Python CLI mutations, and self-synchronizing global DAG work queues.
-- **[Custom Loop Cleanroom](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/custom_loop_cleanroom.md)** (`custom_loop_cleanroom.md`): Headless in-process autonomous runner driving the OpenAI API via `parts/systems/uv_cleanroom_asm`.
-- **[Archived Post-Mortem: Antigravity Subagents](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration_failed.md)** (`antigravity_integration_failed.md`): Comprehensive post-mortem on why in-tree subagents failed (superseded by `subagent_driven_cleanroom_workspaces_todo.md`).
-- **[Cleaning Paradigms Comparative Overview](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cleaning_paradigms.md)** (`cleaning_paradigms.md`): Architectural comparison across all cleaning paradigms.
-
-### 4.3 Packaging, Workspaces, & Shared Infrastructure
-- **[Packaging, Distribution, & uv Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/packaging_and_distribution_architecture.md)** (`packaging_and_distribution_architecture.md`): Authoritative architecture for Hatchling wheel packaging, uv toolchain, PEP 621 pyproject.toml configuration, zero-install uvx CLI execution, hierarchical cleanroom.toml discovery, and complete Bazel retirement.
-- **[In-Band Source Metadata & State Persistence](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/in_band_source_metadata.md)** (`in_band_source_metadata.md`): Completed production architecture eliminating `.update_with_ai.textproto` in favor of comment-embedded timestamps, single-entry change summaries, unacted feedback sections, dynamic forward dirty evaluation, and canonicalization into `parts/control/lib/src_metadata.py`.
 - **[Markdown Template Format & System Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/template_format.md)** (`template_format.md`): CommonMark HTML comment template directives (`<!-- if -->`, `<!-- for -->`, `<var>`).
 
-### 4.4 Research & Academic Publications
+### 4.2 Master Architecture, Technical Design & Roadmap
+- **[Cleanroom System Architecture & Technical Design](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md)** (`design.md`): Authoritative technical design specification covering execution paradigms (Options 1, 3, 4 and Option 2 post-mortem), physical sibling workspaces (`chmod 444`), in-band source metadata schema, logless auditor roles, specification grounding, native Python packaging (`pyproject.toml` + `uv`), and multi-harness telemetry.
+- **[Cleanroom Architecture, Execution Paradigms, Progress & Master Roadmap](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md)** (`todo.md`): Operational master document covering system execution status, completed milestones, verification metrics, quick CLI reference, and prioritized forward development roadmap.
+
+### 4.3 Research & Foundational Specification Language
+- **[Grounded Specification Language & Neural Compilation Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/grounded_specification_language_and_neural_compilation.md)** (`grounded_specification_language_and_neural_compilation.md`): Declarative, non-procedural specification programming language whose static type system guarantees closed-world grounding, compiled via deterministic AST-to-prose transpilation and double-blind, statistically independent neural agents.
 - **[Paper Submission Design Document](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md)** (`paper_submission_design_doc.md`): Authoritative research paper design, specification calculus, information-flow isolation invariants, multi-gate verification pipeline, non-functional auditing matrix with hidden benchmark firewall, and 7-RQ experimental evaluation plan.
+
