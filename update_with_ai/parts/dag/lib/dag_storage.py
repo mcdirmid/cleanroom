@@ -10,8 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import NewType, Optional, Protocol, Set
 
-# Requirements specified in dag_storage.pyi
-
+# Contract: Strong type aliases for unit address, role address, message content, and change description.
 UnitAddress = NewType("UnitAddress", str)
 
 RoleAddress = NewType("RoleAddress", str)
@@ -21,6 +20,7 @@ MessageContent = NewType("MessageContent", str)
 ChangeDescription = NewType("ChangeDescription", str)
 
 
+# Contract: DagNode identifies a discrete unit of work in the graph.
 @dataclass(frozen=True)
 class DagNode:
     """Identifies a discrete unit of work in the graph.
@@ -34,6 +34,7 @@ class DagNode:
     role_address: RoleAddress
 
 
+# Contract: DagDependency defines dependency relationship referring to an upstream node.
 @dataclass(frozen=True)
 class DagDependency:
     """A dependency relationship referring to an upstream node in the graph.
@@ -47,6 +48,7 @@ class DagDependency:
     is_silent: bool = False
 
 
+# Contract: DagMessage sum-type base of the message variants recorded for a node.
 @dataclass(frozen=True, init=False)
 class DagMessage:
     """Explains why a node requires cleaning.
@@ -56,6 +58,7 @@ class DagMessage:
     """
 
 
+# Contract: ChangeMessage informs of changes made to upstream dependencies.
 @dataclass(frozen=True)
 class ChangeMessage(DagMessage):
     """Informs of changes made to upstream dependencies.
@@ -67,6 +70,7 @@ class ChangeMessage(DagMessage):
     content: MessageContent = MessageContent("")
 
 
+# Contract: FeedbackMessage informs of defects detected by downstream dependents blaming a target node.
 @dataclass(frozen=True)
 class FeedbackMessage(DagMessage):
     """Informs of defects detected by downstream dependents blaming a target node.
@@ -80,6 +84,7 @@ class FeedbackMessage(DagMessage):
     target: Optional[DagNode] = None
 
 
+# Contract: DagStorage stores node graph structure, node status, and messages for dag nodes.
 class DagStorage(Protocol):
     """Stores node graph structure, node status, and messages for dag nodes.
 

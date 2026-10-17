@@ -36,6 +36,7 @@ class LoopGuard(loop_guard.LoopGuard, Singleton):
         self._last_edit: Optional[Tuple[str, Any, Any]] = None
         self._edit_count: int = 0
 
+    # Contract: LoopGuard._edit_location - reads file identity and line range from edit tool parameter bindings.
     def _edit_location(
         self,
         tool_name: tool_provider.ToolName,
@@ -57,6 +58,7 @@ class LoopGuard(loop_guard.LoopGuard, Singleton):
             return None
         return (str(tool_name), str(target_file), (start_line, end_line))
 
+    # Contract: LoopGuard.evaluate - tracks consecutive identical tool executions and consecutive edits, producing LoopReminder at warning threshold (2) or LoopFailure at fatal threshold (3).
     def evaluate(
         self,
         tool_name: tool_provider.ToolName,
@@ -126,6 +128,7 @@ class LoopGuard(loop_guard.LoopGuard, Singleton):
             )
         return None
 
+    # Contract: LoopGuard.reset - reinitializes consecutive tool call counter, edit counter, and recorded signatures upon forward progress.
     def reset(self) -> None:
         self._consecutive_count = 0
         self._last_call = None

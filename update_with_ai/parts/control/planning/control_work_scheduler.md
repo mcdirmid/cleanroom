@@ -31,6 +31,7 @@ Multi-stage Cleanroom pipelines require progressive execution where upstream art
 - A work scheduler sorts ready nodes by dynamic role precedence rank. [sort_nodes_by_precedence]
 - A work scheduler truncates ready nodes to a requested batch size limit. [limit_scheduled_batch]
 - A work scheduler formats the role prompt template with unit and component names. [format_task_prompt]
+- A work scheduler derives companion grounding specifications based on upstream role dependencies to package role instructions into task prompts. [derive_grounding_files]
 - A work scheduler retrieves unresolved defect feedback messages from graph storage for each task. [retrieve_task_feedback]
 
 ### Woven Contracts

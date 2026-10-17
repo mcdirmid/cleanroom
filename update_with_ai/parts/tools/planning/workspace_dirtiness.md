@@ -20,10 +20,10 @@ Determining whether a unit in a Cleanroom pipeline needs rebuilding or verificat
 
 ### Contracts
 
-- The workspace dirtiness evaluator evaluates whether a unit is dirty given its role, directory scope, and companion definitions, returning whether the unit is dirty, the list of dirtiness reasons, associated dependency files, and companion contract files. [evaluate_unit_dirtiness]
+- The workspace dirtiness evaluator evaluates whether a unit is dirty given its role, directory scope, and companion definitions, automatically inspecting companion interface contracts for units ending in _impl, walking upstream role ancestry when a component type is unmapped, and returning whether the unit is dirty, the list of dirtiness reasons, associated dependency files, and companion contract files. [evaluate_unit_dirtiness]
 - The workspace dirtiness evaluator treats feedback role dependencies and star role dependencies as implicit role dependencies for dirty tracking. [evaluate_implicit_and_star_dirtiness]
 - The workspace dirtiness evaluator inspects in-band metadata across every feedback role target configured for an active auditor role, marking the unit dirty when an audit attribute is missing, unparseable, or stale compared to forward contracts. [evaluate_auditor_target_dirtiness]
-- The workspace dirtiness evaluator resolves companion upstream specification contracts and interface definitions of target units from role definitions, avoiding peer implementation code leakage. [resolve_companion_contract_files]
+- The workspace dirtiness evaluator resolves companion upstream specification contracts and interface definitions of target units from role definitions, automatically expanding companion interface contracts for units ending in _impl and avoiding peer implementation code leakage. [resolve_companion_contract_files]
 - The workspace dirtiness evaluator extracts cross-unit dependencies for a designated unit across declared parts in repository scope. [extract_cross_unit_dependencies]
 
 ### Woven Contracts

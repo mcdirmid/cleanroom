@@ -26,7 +26,7 @@ An agent session's *workspace stub synthesizer* provides test stub generation an
 
 The workspace stub synthesizer:
 
-- Synthesizes read-only test stubs raising `NotImplementedError` from companion `.pyi` specifications into destination Python files, preserving class, function, and method signatures while replacing bodies.
+- Synthesizes read-only test stubs raising `NotImplementedError` from companion `.pyi` specifications into destination Python files, preserving class, function, and method signatures while replacing bodies, rewriting top-level imports to point to local workspace library stubs, and injecting missing method definitions derived from upstream interfaces.
 
 - Synchronizes read-only test stubs for role workspaces declaring stub role dependencies, updating stubs when companion specifications change and purging orphaned stubs.
 

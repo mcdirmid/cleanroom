@@ -13,6 +13,7 @@ from typing import Optional, Protocol, Sequence, Tuple
 from framework import data_type, operation, singleton_type
 from support.lib.lifecycle import InTier
 from agent_session import AgentSessionTier
+import cleanroom_files_ext
 import dag_storage
 
 
@@ -67,6 +68,7 @@ class SubmissionCoordinator(InTier[AgentSessionTier], Protocol):
         """Submits a file target after validating gating rules and updating metadata.
 
         POSTCONDITIONS:
+        - When executed in an isolated workspace, MUST discover role context and directory scope from workspace manifest metadata designated by cleanroom_files_ext if omitted.
         - When auditor role attempts to submit a verification or test file, MUST reject submission.
         - When producer role attempts to submit a read-only target, MUST reject submission.
         - When producer role attempts to submit a file target outside the directory scope, MUST reject submission.

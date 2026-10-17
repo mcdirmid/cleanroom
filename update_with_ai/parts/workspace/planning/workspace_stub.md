@@ -20,7 +20,7 @@ Test authoring subagents require concrete Python module files to import when wri
 
 ### Contracts
 
-- The workspace stub synthesizer generates read-only test stubs from companion typing specifications, preserving class, function, and method signatures while raising NotImplementedError. [generate_readonly_test_stub]
+- The workspace stub synthesizer generates read-only test stubs from companion typing specifications, preserving class, function, and method signatures while raising NotImplementedError, rewriting imports to isolate test dependencies, and injecting missing interface methods. [generate_readonly_test_stub]
 - The workspace stub synthesizer synchronizes read-only test stubs for role workspaces declaring stub role dependencies, updating stubs when companion specifications change and purging orphaned stubs. [sync_all_stub_deps]
 - The workspace stub synthesizer determines whether a relative file path matches any declared role in a role's stub role dependencies. [is_stub_dep_file]
 - The workspace stub synthesizer checks whether an existing file on disk is a valid cleanroom test stub. [is_valid_test_stub]

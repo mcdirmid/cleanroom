@@ -16,7 +16,7 @@ Given: an active role workspace with ready tasks in repository scope.
 
 ## Scenario 2 — Running verification checks on specified targets
 
-Given: an active role workspace with a valid target file passing lint rules.
+Given: an active role workspace with a valid target file passing lint rules and requiring PYTHONPATH configuration.
 
 1. The caller executes `run_check_files`.
-   Observed: returns exit code 0 when all checks pass.
+   Observed: configures PYTHONPATH to include package root and constituent support libraries, executes checks, and returns exit code 0 when all checks pass.

@@ -24,14 +24,14 @@ Determining whether a unit in a Cleanroom pipeline needs rebuilding or verificat
 
 An agent session's *workspace dirtiness evaluator* analyzes units within a directory scope to determine whether their forward artifacts require update.
 
-The workspace dirtiness evaluator:
+- Evaluates whether a unit is dirty given its role, directory scope, and companion definitions, automatically inspecting and including companion interface contracts without the _impl suffix for any unit ending in _impl, and returning whether the unit is dirty, the list of dirtiness reasons, associated dependency files, and companion contract files.
 
-- Evaluates whether a unit is dirty given its role, directory scope, and companion definitions, returning whether the unit is dirty, the list of dirtiness reasons, associated dependency files, and companion contract files.
+- When a component type is unmapped in an immediate upstream role, walks the upstream role dependency ancestry until a role mapping that component type is reached for dirtiness propagation.
 
 - Treats feedback role dependencies and star role dependencies as implicit role dependencies for dirty tracking, evaluating a target as dirty when an upstream dependency or any star role dependency changes.
 
 - Inspects in-band metadata across every feedback role target configured for an active auditor role, marking the unit dirty when an audit attribute is missing, unparseable, or stale compared to forward contracts.
 
-- Resolves the companion upstream specification contracts and interface definitions of target units from role definitions, guiding downstream implementation and verification without leaking peer implementation code.
+- Resolves the companion upstream specification contracts and interface definitions of target units from role definitions, automatically expanding companion interface contracts for units ending in _impl and guiding downstream implementation and verification without leaking peer implementation code.
 
 - Extracts cross-unit dependencies for a designated unit across declared parts in repository scope.

@@ -9,13 +9,23 @@ from __future__ import annotations
 from typing import Optional, Protocol, Sequence
 
 
+# Contract: WorkspacePendingManager protocol tracks active pending tasks and buffer persistence within role workspaces.
 class WorkspacePendingManager(Protocol):
     """Tracks active pending tasks and buffer persistence within role workspaces."""
 
+    # Contract: Reads target paths from local pending work buffer.
     def get_pending_work(self, workspace_dir: str) -> Sequence[str]: ...
+
+    # Contract: Removes local pending work buffer file if present.
     def clear_pending_work(self, workspace_dir: str) -> None: ...
+
+    # Contract: Records pending target paths into local buffer file.
     def set_pending_work(self, workspace_dir: str, targets: Sequence[str]) -> None: ...
+
+    # Contract: Removes a submitted target from local pending work buffer.
     def remove_pending_target(self, workspace_dir: str, submitted_target: str) -> None: ...
+
+    # Contract: Checks whether a pending target file is still dirty across local workspace and main repository.
     def is_pending_target_dirty(
         self,
         target_path: str,
@@ -23,3 +33,4 @@ class WorkspacePendingManager(Protocol):
         main_root: Optional[str] = None,
         role_name: Optional[str] = None,
     ) -> bool: ...
+

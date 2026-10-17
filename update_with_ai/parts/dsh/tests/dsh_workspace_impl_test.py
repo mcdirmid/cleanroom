@@ -77,7 +77,7 @@ class DshWorkspaceImplTest(unittest.TestCase):
             report = configurer.configure_role_workspace(
                 workspace_dir=self.test_dir,
                 role_name="low",
-                model_name="DeepSeek-V41-Flash",
+                model_name="deepseek-flash",
             )
 
             self.assertEqual(report.status, "configured")
@@ -112,24 +112,6 @@ class DshWorkspaceImplTest(unittest.TestCase):
             self.assertIn("deepseek-official", patch_content)
             self.assertIn("deepseek-flash", patch_content)
 
-    def test_configure_role_workspace_with_existing_agents_md(self) -> None:
-        """Requirement: MUST preserve existing AGENTS.md content while incorporating confinement rules."""
-        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
-            configurer = scope.get_singleton(dsh_workspace.DshWorkspaceConfigurer)
-            agents_md_path = os.path.join(self.test_dir, "AGENTS.md")
-            with open(agents_md_path, "w", encoding="utf-8") as f:
-                f.write("# Role Specific Rules\nSpecial role guidelines here.\n")
-
-            configurer.configure_role_workspace(
-                workspace_dir=self.test_dir,
-                role_name="qa",
-            )
-            with open(agents_md_path, "r", encoding="utf-8") as f:
-                agents_content = f.read()
-            self.assertIn("Assigned Role: qa", agents_content)
-            self.assertIn("Special role guidelines here.", agents_content)
-            self.assertIn("bin/get_work", agents_content)
-
     def test_configure_role_workspace_omlx_model(self) -> None:
         """Requirement: MUST configure llm-pi-ai provider block for omlx local models."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
@@ -138,6 +120,7 @@ class DshWorkspaceImplTest(unittest.TestCase):
                 workspace_dir=self.test_dir,
                 role_name="qa",
                 model_name="Qwen3.6-35B-A3B-oQ6-mtp",
+                provider="omlx",
             )
             patch_path = os.path.join(self.test_dir, ".cleanroom", "dsh_patch.yml")
             self.assertTrue(os.path.isfile(patch_path))

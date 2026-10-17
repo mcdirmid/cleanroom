@@ -22,13 +22,16 @@ class ToolManager(tool_provider.ToolManager, Singleton):
     def __init__(self) -> None:
         self._installed_tools: Dict[tool_provider.ToolName, tool_provider.Tool] = {}
 
+    # Contract: ToolManager.installed_tools - exposes installed tools dictionary.
     @property
     def installed_tools(self) -> Mapping[tool_provider.ToolName, tool_provider.Tool]:
         return dict(self._installed_tools)
 
+    # Contract: ToolManager.install_tool - installs tool under tool.name.
     def install_tool(self, tool: tool_provider.Tool) -> None:
         self._installed_tools[tool.name] = tool
 
+    # Contract: ToolManager.execute_tool - validates tool name, parameters, missing required parameters, converts wire types, binds defaults, and dispatches to tool.execute_tool.
     def execute_tool(
         self,
         name: tool_provider.ToolName,
@@ -107,14 +110,17 @@ class ToolManager(tool_provider.ToolManager, Singleton):
 class AliasManagerType(tool_provider.AliasManagerType, Singleton):
     tier = agent_session
 
+    # Contract: ParameterType.actual_type - returns FileAlias type.
     @property
     def actual_type(self) -> type[agent_file_alias.FileAlias]:
         return agent_file_alias.FileAlias
 
+    # Contract: ParameterType.wire_type - returns str wire type.
     @property
     def wire_type(self) -> type[str]:
         return str
 
+    # Contract: AliasManagerType.convert - converts wire string to FileAlias via AliasManager.
     def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
         if not isinstance(wire_value, str):
             raise tool_provider.ParameterConversionError(

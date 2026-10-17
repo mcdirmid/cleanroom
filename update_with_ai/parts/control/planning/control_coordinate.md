@@ -24,9 +24,9 @@ Autonomous tools require a consistent state coordinator so that nodes being work
 
 ### Contracts
 
-- A session coordinator registers active targets and tracks their associated target states. [track_target_states]
+- A session coordinator registers active targets and tracks their associated target states, excluding ephemeral root session targets from persistent registration. [track_target_states]
 - A session coordinator resolves the default target when omitted based on open target count or last touched file. [resolve_default_target_contract]
-- A session coordinator dispatches work discovery using subgraph or directory parameters. [dispatch_get_work]
+- A session coordinator dispatches work discovery using subgraph or directory parameters, materializing starter templates for newly dirtied scheduled task nodes whose target files do not exist on disk. [dispatch_get_work]
 - A session coordinator dispatches verification evaluation for a specific target or all open targets. [dispatch_check_files]
 - A session coordinator dispatches target submission through the submission coordinator. [dispatch_submit]
 - A session coordinator dispatches defect attribution through the attribution coordinator. [dispatch_blame]

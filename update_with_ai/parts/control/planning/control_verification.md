@@ -25,6 +25,7 @@ In iterative agent coding workflows, build and test executions produce verbose o
 
 - A verification evaluator evaluates configured verification checks for a specified target node. [evaluate_target_checks]
 - A verification evaluator evaluates verification checks across all open session targets. [evaluate_all_checks]
+- A verification evaluator executes verification checks polymorphically, supporting verification objects providing a verify method and command objects specifying a shell command string with a bounded timeout. [execute_polymorphic_check]
 - A verification evaluator strips build system progress indicators from diagnostic text. [filter_progress_noise]
 - A verification evaluator strips target load banners from diagnostic text. [filter_banner_noise]
 - A verification evaluator strips elapsed timing statistics from diagnostic text. [filter_timing_noise]

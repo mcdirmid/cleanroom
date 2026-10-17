@@ -20,7 +20,7 @@ Given: a provisioned role workspace directory for role_a.
 Given: a provisioned role workspace directory for role_a with model and provider specifications.
 
 1. The configurer generates the overlay patch.
-   Observed: a Cordis patch file in `.cleanroom/dsh_patch.yml` is generated configuring danger-full-access permissions, approval policy never, disabled task management plugins, and model routing resolving declarative model profile names against model configuration definitions.
+   Observed: a Cordis patch file in `.cleanroom/dsh_patch.yml` is generated configuring danger-full-access permissions, approval policy never, high reasoning effort for DeepSeek providers, disabled task management plugins, and model routing resolving declarative model profile names (stripping model namespace prefixes) against model configuration definitions discovered in workspace ancestors, working directories, or repository hierarchy.
    Realized by: the component's patch generator writing `.cleanroom/dsh_patch.yml`.
 
 ### Scenario 3 — Emitting confinement report

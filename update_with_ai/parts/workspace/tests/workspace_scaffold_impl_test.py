@@ -66,7 +66,7 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
             exe_file = os.path.join(tmp_dir, "exec.sh")
             self.scaffolder.write_file_with_permissions(exe_file, "#!/bin/sh\n", executable=True)
             mode = stat.S_IMODE(os.stat(exe_file).st_mode)
-            self.assertEqual(mode, 0o555)
+            self.assertEqual(mode, 0o755)
 
     def test_deploy_runner_zipapps(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

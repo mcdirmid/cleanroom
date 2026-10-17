@@ -24,7 +24,7 @@ Autonomous agents require unambiguous control tools to signal when a task is fin
 
 A polymorphic *resolve tool* defines a file alias *resolve target* parameter identifying the active node being resolved. A resolve tool produces a terminating response when all active nodes are resolved, or a non-terminating response when other active nodes remain.
 
-The *submit tool* is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, and enforces change documentation. The submit tool accepts a text *change summary* parameter.
+The *submit tool* is a resolve tool that concludes active nodes upon passing verification, resolves submitted target arguments supplied as canonical target strings or workspace-relative file paths against declared role targets, marks the resolve target clean in the current get work turn, and enforces change documentation. The submit tool accepts a text *change summary* parameter.
 
 The *fail tool* is a resolve tool that terminates the run in failure. The fail tool accepts a text *explanation* parameter.
 

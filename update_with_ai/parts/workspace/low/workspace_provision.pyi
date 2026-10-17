@@ -43,6 +43,7 @@ class WorkspaceProvisioner(InTier[AgentSessionTier], Protocol):
         - MUST write cleanroom_files_ext.ROLE_DESCRIPTOR_FILE role configuration in the workspace root without exposing host repository paths.
         - WHEN model is specified, MUST record model execution parameters in cleanroom_files_ext.ROLE_DESCRIPTOR_FILE.
         - MUST synthesize role-tailored AGENTS.md instructions in the workspace root.
+        - MUST configure test runner isolation in workspace configuration files restricting test discovery exclusively to the local workspace.
         - MUST record the created workspace descriptor in the persistent registry.
         - MUST return a workspace descriptor for the newly created workspace directory.
         """
@@ -59,7 +60,7 @@ class WorkspaceProvisioner(InTier[AgentSessionTier], Protocol):
         """Copies a file and applies exact read-only, writable, or executable permissions.
 
         POSTCONDITIONS:
-        - MUST copy content from src to dst.
+        - MUST copy content from src to dst using buffered chunk streaming.
         - WHEN readonly is true, MUST set permissions to 0o444.
         - WHEN executable is true and readonly is true, MUST set permissions to 0o555.
         - WHEN executable is true and readonly is false, MUST set permissions to 0o755.

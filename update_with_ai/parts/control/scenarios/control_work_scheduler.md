@@ -45,10 +45,10 @@ contract declares the widget field twice`.
 
 1. The agent asks for work in the target subgraph.
    Observed: a work schedule holding one scheduled task for the alpha-role node for unit widget
-   whose task prompt is `clean the widget unit of parts/widget/widget_spec.md`, whose declared
-   upstream dependency paths are `parts/gadget/gadget_spec.md` and
-   `parts/sprocket/sprocket_spec.md`, and which carries the unaddressed feedback message `the
-   gadget contract declares the widget field twice`.
+   whose task prompt is `clean the widget unit of parts/widget/widget_spec.md`, which incorporates
+   derived companion grounding specifications, whose declared upstream dependency paths are
+   `parts/gadget/gadget_spec.md` and `parts/sprocket/sprocket_spec.md`, and which carries the
+   unaddressed feedback message `the gadget contract declares the widget field twice`.
 
 ## Scenario 4 — A candidate held back by a dirty non-silent dependency
 

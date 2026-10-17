@@ -53,6 +53,7 @@ class TranscriptTelemetryParser(Protocol):
 
         POSTCONDITIONS:
         - MUST parse transcript log and return transcript token metrics.
+        - WHEN transcript lines are not valid JSON objects, MUST fall back to regular expression scraping for token metrics.
         - MUST calculate cost_usd using rate card for model_name.
         """
         ...
@@ -77,6 +78,7 @@ class AntigravityHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
 
         POSTCONDITIONS:
         - MUST await turn completion and return role turn result with telemetry.
+        - MUST extract submitted targets including completion tags parsed from standard output.
         """
         ...
 

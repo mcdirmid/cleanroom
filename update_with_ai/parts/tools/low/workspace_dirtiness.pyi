@@ -51,6 +51,8 @@ class WorkspaceDirtinessEvaluator(InTier[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - MUST evaluate auditor units across all configured feedback role targets and audit tags.
         - MUST evaluate producer units across implicit role dependencies and star role dependencies.
+        - FOR any unit ending in _impl, MUST automatically inspect and include the companion interface contract without the _impl suffix.
+        - WHEN a component type is unmapped in an immediate upstream role, MUST traverse upstream role dependency ancestry until a role mapping that component type is reached.
         - WHEN any star role dependency is modified after target's last cleaned timestamp, MUST mark dirty.
         - MUST return UnitDirtinessResult with is_dirty and dirtiness_reasons.
         """
@@ -68,6 +70,7 @@ class WorkspaceDirtinessEvaluator(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST resolve role definition and upstream dependency roles.
+        - FOR any unit ending in _impl, MUST automatically include companion interface contracts without the _impl suffix.
         - MUST expand star-role specification contracts for active role.
         - MUST filter out silent cross-role dependencies and suppress peer implementation files.
         - MUST return sequence of existing readable contract file paths.

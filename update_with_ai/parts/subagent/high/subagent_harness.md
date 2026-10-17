@@ -32,7 +32,7 @@ When dispatching and awaiting role turns:
 
 - The command harness adapter spawns external subagent processes matching configured command templates within the designated role workspace directory, configuring context token compaction limits in the process environment, and tracking active task handles.
 
-- The command harness adapter provides non-blocking polling and awaiting of process completion without mandatory execution timeouts, terminating stalled processes only when an explicit timeout limit is configured, inspecting the workspace blame buffer for attributed defects, checking remaining pending targets to identify submitted files, and extracting token usage telemetry from execution logs.
+- The command harness adapter provides non-blocking polling and awaiting of process completion without mandatory execution timeouts, terminating stalled processes only when an explicit timeout limit is configured, inspecting the workspace blame buffer for attributed defects, checking remaining pending targets to identify submitted files, and extracting token usage telemetry from execution logs (parsing token metrics via pattern matching on unstructured process logs and computing monetary costs using standard rate multipliers, and on non-zero process exits inspecting the tail of the process log for failure diagnostics).
 
 - The command harness adapter produces role turn results carrying turn status (clean, blamed, or failed), submitted target sequences, blamed target sequences, failure diagnostics, token usage telemetry, and elapsed wall-clock duration.
 

@@ -31,7 +31,7 @@ The workspace synchronizer:
 
 - Pulls updated upstream contracts, guides, and source files from the canonical main repository into a role workspace, preserving read-only permissions on upstream contracts while delegating test stub synchronization for stub role dependencies to ensure read-only test stub integrity without copying implementation code.
 
-- Refreshes the non-parts system files, including build macros, guide documents, tools, and linters, delegating runner tool deployment, role guide regeneration, and test stub synchronization to keep role workspaces aligned with the canonical main repository.
+- Refreshes the non-parts system files, including build macros, guide documents, tools, and linters, delegating runner tool deployment, role guide regeneration, and test stub synchronization, while scoping tool configurations to the role workspace boundaries to keep role workspaces aligned and hermetic.
 
 
 - Harvests modified writable files and attested audits from a role workspace back to the canonical main repository, validating in-band code hashes so that modifications are non-empty and non-conflicting before writes are applied.

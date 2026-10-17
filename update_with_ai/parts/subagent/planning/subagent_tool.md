@@ -21,7 +21,7 @@ Multi-agent coordination requires command-line entrypoints for triggering dynami
 ### Contracts
 
 - The subagent tool runner dispatches CLI arguments for orchestration subcommands and executes the selected action. [dispatch_subagent_subcommand]
-- The subagent tool runner coordinates multi-agent workspace orchestration up to an optional target role boundary through a designated harness adapter with configurable batch sizes, execution timeouts, and conversation token limits until DAG convergence or failure. [execute_orchestrate_command]
+- The subagent tool runner coordinates multi-agent workspace orchestration up to an optional target role boundary through a designated harness adapter with configurable batch sizes, execution timeouts, conversation token limits, and maximum unproductive turn limits until DAG convergence or failure. [execute_orchestrate_command]
 
 ### Woven Contracts
 

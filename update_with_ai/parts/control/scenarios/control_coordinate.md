@@ -20,6 +20,12 @@ beta-role node for unit widget is dirty with the file alias `parts/widget/widget
    the alpha-role target for unit widget with the file alias `parts/widget/widget_spec.md` and the
    beta-role target for unit widget with the file alias `parts/widget/widget_contract.md`.
 
+2. The agent checks disk for the scheduled task node whose file was missing.
+   Observed: the target file is materialized from its starter template.
+
+3. The agent encounters an ephemeral root session target `//session:target`.
+   Observed: the session target is excluded from persistent node registration.
+
 ## Scenario 2 — Resolving a default target when the parameter is omitted
 
 Given: the session tracks the open alpha-role target for unit widget with the file alias

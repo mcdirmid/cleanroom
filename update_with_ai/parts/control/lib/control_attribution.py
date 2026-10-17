@@ -30,6 +30,7 @@ class AttributionOutcome:
 class AttributionCoordinator(Protocol):
     """Routes defect feedback to culprits and records failure states."""
 
+    # Contract: Attributes defect to upstream dependency; rejects if not upstream, role disallowed, has newlines, or in-batch dependencies not clean; records feedback, marks dirty and failed.
     def blame_target(
         self,
         source_node: dag_storage.DagNode,
@@ -39,6 +40,7 @@ class AttributionCoordinator(Protocol):
         in_batch_dependents: Optional[Sequence[dag_storage.DagNode]] = None,
     ) -> AttributionOutcome: ...
 
+    # Contract: Records task failure diagnostic for target node, preserves dirty status, and marks in-batch dependent nodes as failed.
     def fail_target(
         self,
         target_node: dag_storage.DagNode,
@@ -46,6 +48,7 @@ class AttributionCoordinator(Protocol):
         in_batch_dependents: Optional[Sequence[dag_storage.DagNode]] = None,
     ) -> AttributionOutcome: ...
 
+    # Contract: Attributes defect blame to upstream culprit file; rejects if has newlines, exceeds limit, unresolved, or role disallowed; mutates metadata and synchronizes affected files.
     def blame_culprit_file(
         self,
         culprit_file: str,
@@ -55,6 +58,7 @@ class AttributionCoordinator(Protocol):
         caller_role: Optional[str] = None,
     ) -> AttributionOutcome: ...
 
+    # Contract: Records task failure for target file; appends diagnostic, marks dirty, and synchronizes affected files.
     def fail_target_file(
         self,
         target_file: str,
@@ -63,6 +67,7 @@ class AttributionCoordinator(Protocol):
         workspace_root: Optional[str] = None,
     ) -> AttributionOutcome: ...
 
+    # Contract: Matches a blame target value against configured blame targets for a node.
     def match_blame_target(
         self, node: dag_storage.DagNode, val: Any, val_str: str
     ) -> Optional[agent_file_alias.BoundFile]: ...

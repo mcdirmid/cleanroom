@@ -30,6 +30,7 @@ from update_with_ai.parts.agent.lib import agent_session
 from . import dsh_telemetry
 
 
+# Contract: Computes monetary token expenditure based on model rate cards.
 def _compute_dsh_rate_card_cost(
     input_tokens: int,
     cached_tokens: int,
@@ -63,6 +64,7 @@ def _compute_dsh_rate_card_cost(
 _notified_desktop_sessions: Set[str] = set()
 
 
+# Contract: Notifies live DeepSeek Harness Desktop application over local RPC bridge.
 def _notify_desktop_session(
     sessions_dir: str,
     workspace_dir: str,
@@ -142,6 +144,7 @@ def _notify_desktop_session(
         return False
 
 
+# Contract: Synchronizes sessions into DeepSeekHarness Desktop App workspace and session storage.
 def _sync_desktop_session(
     sessions_dir: Optional[str],
     workspace_dir: str,
@@ -257,11 +260,13 @@ def _sync_desktop_session(
         pass
 
 
+# Contract: Realizes event stream and session storage archive parsing for DeepSeek Harness in agent_session tier.
 class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
     """Realizes event stream and session storage archive parsing for DeepSeek Harness."""
 
     tier = agent_session.agent_session
 
+    # Contract: MUST parse token counts from JSON stream events or fallback log text and calculate cost_usd.
     def parse_stream_text(
         self,
         stream_text: str,
@@ -323,6 +328,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
             model_name=model_name or "",
         )
 
+    # Contract: MUST locate session archives under sessions_dir matching workspace_dir and extract token usage with rate card cost.
     def parse_session_storage(
         self,
         sessions_dir: str,
@@ -338,16 +344,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
         if not os.path.isdir(target_dir):
             target_dir = os.path.join(sessions_dir, f"-{slug}-")
             if not os.path.isdir(target_dir):
-                # Search directory names containing the basename of the workspace
-                ws_base = os.path.basename(workspace_dir.rstrip("/"))
-                matches = [
-                    d for d in os.listdir(sessions_dir)
-                    if os.path.isdir(os.path.join(sessions_dir, d)) and ws_base in d
-                ]
-                if matches:
-                    target_dir = os.path.join(sessions_dir, sorted(matches)[-1])
-                else:
-                    return dsh_telemetry.DshSessionTokenMetrics(model_name=model_name or "")
+                return dsh_telemetry.DshSessionTokenMetrics(model_name=model_name or "")
 
         # Find newest session subdirectory
         subdirs = [
@@ -387,6 +384,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
 
         return dsh_telemetry.DshSessionTokenMetrics(model_name=model_name or "")
 
+    # Contract: MUST update desktop storage files and send RPC notifications when sessions_dir is valid.
     def sync_desktop_session(
         self,
         sessions_dir: Optional[str],

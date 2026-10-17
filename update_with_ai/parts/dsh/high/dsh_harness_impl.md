@@ -37,12 +37,12 @@ The dsh harness adapter executes DeepSeek Harness turns using configurable comma
 
 When dispatching and awaiting role turns:
 
-- The dsh harness adapter writes role-tailored task prompts to disk distinguishing auditor roles from authoring roles, and records initial pending targets before launching the DeepSeek Harness process.
+- The dsh harness adapter writes role-tailored task prompts to disk distinguishing auditor roles from authoring roles, tests non-blocking file locks on session locks when adopting previously recorded session identifiers to prevent adoption collisions, and records initial pending targets seeded from ready targets before launching the DeepSeek Harness process.
 
-- The dsh harness adapter launches the dsh CLI in the role workspace directory, setting overlay patch parameters and non-interactive permission flags, and tracks running process handles.
+- The dsh harness adapter launches the dsh CLI in the role workspace directory, setting overlay patch parameters, session resumption arguments when available, and non-interactive permission flags, and tracks running process handles.
 
 - The dsh harness adapter polls and awaits process termination without mandatory execution timeouts, terminating active processes only when an explicit timeout duration expires.
 
-- The dsh harness adapter inspects workspace blame buffers, computes submitted targets by comparing pending work buffers, records unresolved status when a completed turn produces zero submitted and zero blamed targets, and parses token metrics into normalized telemetry.
+- The dsh harness adapter inspects workspace blame buffers and turn execution logs for attributed defects, computes submitted targets by comparing pending work buffers or action records, scrapes active session identifiers from event logs and saves them into role workspace files for turn continuity, records unresolved status when a completed turn produces zero submitted and zero blamed targets, and parses token metrics into normalized telemetry.
 
 The dsh harness manager provides singleton access to the telemetry parser, constructs configured DeepSeek Harness adapters, and installs the DeepSeek Harness adapter factory into the harness registry.

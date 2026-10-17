@@ -13,11 +13,14 @@ from typing import List, Optional, Protocol
 from . import workspace_roles
 
 
+# Contract: WorkspaceScaffolder protocol scaffolds runner tools, metadata, instructions, and target skeletons.
 class WorkspaceScaffolder(Protocol):
     """Service scaffolding runner tools, metadata, instructions, and target skeletons."""
 
+    # Contract: Packages executable runner tools into the specified bin directory with 0o755 permissions.
     def deploy_runner_zipapps(self, bin_dir: str) -> None: ...
 
+    # Contract: Writes role configuration metadata (.cleanroom_role.json) in the workspace root with 0o644 permissions.
     def write_role_metadata(
         self,
         workspace_dir: str,
@@ -29,6 +32,7 @@ class WorkspaceScaffolder(Protocol):
         max_feedback_chars: Optional[int] = None,
     ) -> None: ...
 
+    # Contract: Synthesizes role-tailored AGENTS.md instructions in the workspace root with 0o644 permissions.
     def write_role_agents_guide(
         self,
         workspace_dir: str,
@@ -36,6 +40,7 @@ class WorkspaceScaffolder(Protocol):
         dir_scope: str,
     ) -> None: ...
 
+    # Contract: Creates starter skeletons for declared writable targets absent from disk.
     def create_missing_target_skeletons(
         self,
         workspace_dir: str,
@@ -44,6 +49,7 @@ class WorkspaceScaffolder(Protocol):
         role_def: workspace_roles.RoleDefinition,
     ) -> List[str]: ...
 
+    # Contract: Writes text content to destination file and applies exact permissions.
     def write_file_with_permissions(
         self,
         dst: str,

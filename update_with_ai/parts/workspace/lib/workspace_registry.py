@@ -16,6 +16,7 @@ from . import workspace_roles
 RoleDefinition = workspace_roles.RoleDefinition
 
 
+# Contract: WorkspaceDescriptor data structure identifies an active role workspace and its metadata.
 @dataclass(frozen=True)
 class WorkspaceDescriptor:
     """Descriptor identifying an active role workspace.
@@ -35,13 +36,16 @@ class WorkspaceDescriptor:
     last_sync_timestamp: Optional[str] = None
 
 
+# Contract: WorkspaceRegistry protocol resolves role specifications and tracks commissioned workspaces.
 class WorkspaceRegistry(Protocol):
     """Registry resolving role specifications and tracking commissioned workspaces."""
 
+    # Contract: Discovers canonical repository root from filesystem environment or current working directory.
     def discover_repository_root(self, start_dir: Optional[str] = None) -> str:
         """Discovers the canonical repository root from the filesystem environment or the current working directory."""
         ...
 
+    # Contract: Resolves role definition through workspace_roles.RoleResolver.
     def resolve_role_definition(
         self,
         role_name_or_address: str,
@@ -51,6 +55,7 @@ class WorkspaceRegistry(Protocol):
         """Resolves a role definition from a role name or qualified role address."""
         ...
 
+    # Contract: Loads and resolves all role definitions declared in the repository through RoleResolver.
     def list_roles(
         self,
         repo_root: Optional[str] = None,
@@ -59,6 +64,7 @@ class WorkspaceRegistry(Protocol):
         """Loads and resolves all role definitions declared in the repository or bound methodology configuration."""
         ...
 
+    # Contract: Computes sanitized role workspace directory path from role name and directory scope.
     def compute_workspace_dir(
         self,
         role_name: str,
@@ -69,18 +75,21 @@ class WorkspaceRegistry(Protocol):
         """Computes a sanitized role workspace directory path from a role name and directory scope."""
         ...
 
+    # Contract: Records active workspace descriptor into active session memory.
     def record_workspace(
         self, descriptor: WorkspaceDescriptor, repo_root: Optional[str] = None
     ) -> None:
         """Records an active workspace descriptor into active session memory."""
         ...
 
+    # Contract: Removes workspace descriptor from active session memory and reports removal status.
     def unregister_workspace(
         self, workspace_dir: str, repo_root: Optional[str] = None
     ) -> bool:
         """Removes a workspace descriptor from active session memory."""
         ...
 
+    # Contract: Loads active workspace descriptors from active session memory and provisioned role workspaces.
     def load_active_workspaces(
         self, repo_root: Optional[str] = None
     ) -> Sequence[WorkspaceDescriptor]:

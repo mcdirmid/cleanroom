@@ -40,7 +40,7 @@ By providing dedicated tools for verification inspection, milestone advancement,
 - The advance tool coordinates step progression through guide delivery upon passing verification. [advance_tool_coordinates_step_progression]
 - The get work tool retrieves active dirty nodes. [get_work_retrieves_dirty_nodes]
 - The get work tool materializes startup templates. [get_work_materializes_templates]
-- The get work tool delivers the session task prompt. [get_work_delivers_task_prompt]
+- The get work tool delivers the session task prompt, resolving the primary guide file from provisioned read-only documentation when omitted from node configuration. [get_work_delivers_task_prompt]
 - The get work tool specifies a follow-up execution of the advance tool when the guide is in step mode. [get_work_specifies_advance_followup_in_step_mode]
 
 ### Woven Contracts

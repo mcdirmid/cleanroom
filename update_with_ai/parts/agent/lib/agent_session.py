@@ -8,13 +8,10 @@
 from __future__ import annotations
 from support.lib.lifecycle import ChildTierOf, LifecycleTier, SystemTier, system
 
-# Requirements specified in agent_session.pyi
-
-
+# Contract: Lifecycle tier bounding execution, conversation, and ephemeral state of an agent under the system lifecycle tier.
 class AgentSessionTier(ChildTierOf[SystemTier]):
     """Lifecycle tier bounding the execution, conversation, and ephemeral state of an agent under the system lifecycle tier."""
 
 
-# Runtime instance of the AgentSessionTier tier; the single runtime value an
-# interface component may define (see support/lib/lifecycle.pyi).
+# Contract: Runtime instance of the AgentSessionTier tier; single runtime value defined for the interface tier.
 agent_session: LifecycleTier = system.create_child('agent_session')

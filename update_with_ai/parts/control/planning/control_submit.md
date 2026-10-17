@@ -32,6 +32,7 @@ Allowing untested code to enter the repository creates regressions. The submissi
 - A submission coordinator marks the target node status as clean in graph storage with the change summary upon acceptance. [mark_node_clean]
 - A submission coordinator rejects submission of test files in auditor roles. [reject_test_submission_for_auditors]
 - A submission coordinator rejects submission of read-only targets or targets outside directory scope. [reject_invalid_producer_file_submission]
+- A submission coordinator discovers role context and directory scope from workspace manifest metadata designated by cleanroom_files_ext when executed within an isolated role workspace. [discover_workspace_context]
 - A submission coordinator validates file modification hash against change summary presence. [validate_file_change_summary]
 - A submission coordinator executes build submission targets or updates in-band source metadata directly. [execute_file_submission_mutation]
 
@@ -52,6 +53,8 @@ Allowing untested code to enter the repository creates regressions. The submissi
 
 ### Knowledge Requirements
 
+- Layout conventions and descriptor constants for Cleanroom workspace files.
+  - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Evaluation of verification check results for candidate targets.
   - Deferred: Delegated to VerificationEvaluator in implementation.
 - Inspection of auditor role declarations in role configuration.

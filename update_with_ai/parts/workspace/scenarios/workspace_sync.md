@@ -63,7 +63,8 @@ changed the tool runner, the project configuration, and the guide file
 
 1. The synchronizer refreshes the non-parts system files for alpha.
    Observed: the workspace tool runner, project configuration, and guide hold the canonical
-   content, and the locally modified alpha source for widget is untouched.
+   content, workspace-level tool configurations are scoped to workspace boundaries, and the locally
+   modified alpha source for widget is untouched.
 
 ## Scenario 6 — Harvesting validated targets and an auditor audit
 

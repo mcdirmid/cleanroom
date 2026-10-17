@@ -88,3 +88,10 @@ Given: the agent has entered the session for role alpha in `/ws/alpha_scope_a`, 
 
 1. The agent executes the submit tool with the resolve target `widget/src/widget.py`.
    Observed: the request fails with the message explaining that workspace files must be modified to address feedback or fail must be called, accompanied by a reminder to modify workspace files to address feedback or call fail, and without a change summary reminder.
+
+## Scenario 8 — Submitting with workspace-relative file path suffix
+
+Given: the agent has entered the session for role alpha in `/ws/alpha_scope_a`, the open target is declared as `//update_with_ai/parts/widget#alpha` with workspace-relative path `parts/widget/widget_spec.md`, and verification passes for that target.
+
+1. The agent executes the submit tool specifying the target argument `parts/widget/widget_spec.md`.
+   Observed: the target argument is resolved against declared role targets, and the submission is accepted.

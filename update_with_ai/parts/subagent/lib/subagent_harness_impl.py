@@ -30,6 +30,7 @@ from update_with_ai.parts.tools.lib import workspace_work
 from . import subagent_coordinator, subagent_harness
 
 
+# Contract: inspect workspace blame buffer for reported defects (await_role)
 def _read_blame_buffer(workspace_dir: str) -> List[str]:
     """Reads blamed culprit files from the workspace blame buffer."""
     p = os.path.join(workspace_dir, ".cleanroom_blame_buffer.json")
@@ -56,6 +57,7 @@ def _read_blame_buffer(workspace_dir: str) -> List[str]:
     return []
 
 
+# Contract: extract token usage metrics and return synthesized RoleTurnResult (await_role)
 def _parse_token_usage_from_log(log_path: str) -> subagent_coordinator.TokenUsage:
     """Parses token telemetry and computes rate-card monetary costs."""
     if not os.path.isfile(log_path):
@@ -132,6 +134,7 @@ class CommandHarnessAdapter(
         self._active_tasks: Dict[str, _ActiveTask] = {}
         self._task_counter = 0
 
+    # Contract: format instructional task prompt detailing role, directory scope, targets, verification commands, and submit or blame actions
     def format_task_prompt(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
         """Constructs instructional task prompt for the role subagent."""
         targets_str = (
@@ -158,6 +161,9 @@ class CommandHarnessAdapter(
             f"   `bin/fail <target_file> --reason \"...\"`\n"
         )
 
+    # Contract: record initial pending targets from workspace pending work buffer
+    # Contract: spawn subagent process matching configured command template within workspace directory
+    # Contract: return unique task handle tracking the running turn
     def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
         """Dispatches work directive to a subagent bound to the role workspace."""
         self._task_counter += 1
@@ -217,6 +223,11 @@ class CommandHarnessAdapter(
         )
         return handle
 
+    # Contract: await process completion without mandatory timeout unless explicit limit configured
+    # Contract: when process times out, terminate process and return failed result
+    # Contract: inspect workspace blame buffer for reported defects
+    # Contract: determine submitted targets by set difference with remaining pending items
+    # Contract: extract token usage metrics and return synthesized RoleTurnResult
     def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
         """Awaits subagent turn completion and returns outcome result."""
         task = self._active_tasks.pop(task_handle, None)
@@ -259,6 +270,8 @@ class CommandHarnessAdapter(
                 status = "failed"
                 failure_reason = f"Process exited with non-zero status {task.proc.returncode}.\n{tail_msg}".strip()
 
+            # Note: await_role primarily relies on blame buffer and pending work difference per contract.
+
         blamed = _read_blame_buffer(task.dispatch.workspace_dir)
         if blamed and status != "failed":
             status = "blamed"
@@ -279,6 +292,8 @@ class CommandHarnessAdapter(
             wall_clock_seconds=elapsed,
         )
 
+    # Contract: when subagent process has terminated, return role turn result
+    # Contract: when subagent process is still running, return None without blocking or termination
     def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
         """Polls subagent turn execution without blocking."""
         task = self._active_tasks.get(task_handle)
@@ -302,6 +317,7 @@ class CommandHarnessAdapter(
 
         return self.await_role(task_handle)
 
+    # Contract: terminate active subagent process associated with task handle
     def interrupt_role(self, task_handle: str) -> None:
         """Aborts active subagent task execution upon timeout or loop limit."""
         task = self._active_tasks.get(task_handle)
@@ -324,10 +340,12 @@ class HarnessRegistry(
     def __init__(self) -> None:
         self._installed_harnesses: Dict[str, subagent_harness.HarnessAdapterFactory] = {}
 
+    # Contract: return mapping of installed platform names to harness adapter factories
     @property
     def installed_harnesses(self) -> Mapping[str, subagent_harness.HarnessAdapterFactory]:
         return dict(self._installed_harnesses)
 
+    # Contract: register adapter factory under platform name in installed harnesses mapping
     def install_harness(
         self,
         platform_name: str,
@@ -336,6 +354,9 @@ class HarnessRegistry(
         """Installs a harness adapter factory for a designated platform name."""
         self._installed_harnesses[platform_name.lower()] = adapter_factory
 
+    # Contract: return CommandHarnessAdapter configured with custom command or simulation mode when requested
+    # Contract: when platform is installed, invoke installed adapter factory and return harness adapter
+    # Contract: when platform is not installed, raise ValueError
     def resolve_harness(
         self,
         platform_name: str,

@@ -41,7 +41,7 @@ Resolving dirty nodes results in:
 
 - Marking each node clean in graph storage with the change summary from the outcome when workspace file modifications occurred for that node, and marking the node clean without advancing its change timestamp when no workspace files were modified for that node.
 
-- Recording a feedback message containing the blame explanation and addressed strictly to the declared feedback dependency node that owns the blamed file when the outcome signals blame attributed to a configured blame target of the dirty nodes, leaving the nodes dirty when the blamed file does not match a configured blame target.
+- Recording a feedback message containing the blame explanation and addressed strictly to the declared feedback dependency node that owns the blamed file when the outcome signals blame attributed to a configured blame target of the dirty nodes (extracting blame targets and explanations from conversational response text and matching configured targets by unit address, address suffix, or file path and stem), leaving the nodes dirty when the blamed file does not match a configured blame target.
 
 - Leaving the nodes dirty without updating clean state when the outcome signals run failure, communicating that processing cannot continue.
 

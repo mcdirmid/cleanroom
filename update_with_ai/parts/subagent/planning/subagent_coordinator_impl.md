@@ -21,12 +21,12 @@ The subagent_coordinator_impl implementation component realizes zero-execution m
 ### Contracts
 
 - The realization resets preexisting role workspaces for declared roles upon initiating orchestration. [reset_preexisting_role_workspaces]
-- The realization resolves subagent batch sizes and conversation token limits from declarative model configurations matching designated model names or identifiers. [resolve_model_execution_parameters]
+- The realization resolves subagent batch sizes, conversation token limits, and maximum unproductive turns thresholds from declarative model configurations matching designated model names or identifiers. [resolve_model_execution_parameters]
 - The realization discovers commissioned workspaces and queries work queues via the work manager. [query_workspace_work_queues]
 - The realization commissions absent role workspaces on demand via the workspace provisioner when ready tasks are identified, recording effective batch size limits into role descriptors. [commission_absent_workspaces]
 - The realization dispatches role directives concurrently for roles possessing ready work, tracking active worker handles without static wave partitioning. [dispatch_concurrent_role_workers]
 - The realization periodically polls active workers through non-blocking checks on the configured harness adapter at a configurable interval (defaulting to 10 seconds), collecting role turn results upon completion. [poll_active_role_workers]
-- The realization tracks consecutive unproductive turns where a role yields zero submitted and zero blamed targets, halting orchestration when unproductive turns exceed a threshold. [detect_unproductive_turn_impasse]
+- The realization tracks consecutive unproductive turns where a role yields zero submitted and zero blamed targets, halting orchestration when unproductive turns exceed a threshold (defaulting to 5). [detect_unproductive_turn_impasse]
 - The realization emits real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state. [emit_realtime_orchestration_telemetry]
 - The realization manages the dynamic supervision loop, continuing until all units evaluate clean, a turn reports failure, or maximum wave iterations are reached. [drive_convergence_loop]
 - The realization automatically deletes all provisioned role workspaces in scope upon achieving clean convergence. [delete_role_workspaces_on_convergence]

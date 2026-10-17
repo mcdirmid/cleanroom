@@ -21,10 +21,12 @@ class DagConfig(Protocol):
 
     @property
     def node_visit_limit(self) -> NodeVisitLimit:
+        # Contract: MUST enforce the node visit limit when a subgraph records the visits of a cleaned batch.
         """Bound on the number of visits any node receives across dependency graph cleaning, enforced when a subgraph records the visits of a cleaned batch."""
         ...
 
     @property
     def batch_size(self) -> BatchSize:
+        # Contract: Bound on the number of dirty nodes of the same role address collected into a single cleaning batch.
         """Bound on the number of dirty nodes of the same role address collected into a single cleaning batch."""
         ...

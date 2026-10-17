@@ -16,9 +16,11 @@ from support.lib.lifecycle import InTier
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
 
 
+# Contract: WorkspaceCommandHandler protocol coordinates substantive domain operations for Cleanroom role workspaces.
 class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
     """Executes substantive domain operations for Cleanroom role workspaces."""
 
+    # Contract: Evaluates dirty work in local workspace and prints ready tasks, respecting batch_size and max_feedback_chars.
     def run_get_work(
         self,
         dir_scope: Optional[str] = None,
@@ -29,6 +31,7 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         """Evaluates dirty work in local workspace and prints ready tasks."""
         ...
 
+    # Contract: Executes role-specific verification checks, linters, and type checking for targets.
     def run_check_files(
         self,
         target: Optional[str] = None,
@@ -37,6 +40,7 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         """Executes role-specific verification checks, linters, and type checking for targets."""
         ...
 
+    # Contract: Verifies and submits target to canonical main repository, recording in cleanroom log and clearing pending work.
     def run_submit(
         self,
         target: str,
@@ -47,6 +51,7 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         """Verifies and submits target to canonical main repository."""
         ...
 
+    # Contract: Attributes defect critique to culprit target in main repository, recording in cleanroom log and clearing pending work.
     def run_blame(
         self,
         culprit_file: str,
@@ -56,6 +61,7 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         """Attributes defect critique to culprit target in main repository."""
         ...
 
+    # Contract: Marks target dirty and records failure feedback diagnostics.
     def run_fail(
         self,
         file_path: str,
@@ -65,6 +71,7 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         """Marks target dirty and records failure feedback diagnostics."""
         ...
 
+    # Contract: Evaluates statement test coverage across target implementation and test.
     def run_coverage(
         self,
         target: Optional[str] = None,
@@ -79,6 +86,7 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         """Evaluates statement test coverage across target implementation and test."""
         ...
 
+    # Contract: Commissions an isolated role workspace or all workspaces in a directory scope.
     def run_commission(
         self,
         role_name: Optional[str] = None,
@@ -92,6 +100,7 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         """Commissions an isolated role workspace or all workspaces in a directory scope."""
         ...
 
+    # Contract: Refreshes system files, bin tools, configs, and guides across role workspaces.
     def run_refresh_sys(
         self,
         role_name: Optional[str] = None,
@@ -100,3 +109,4 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
     ) -> int:
         """Refreshes system files, bin tools, configs, and guides across role workspaces."""
         ...
+

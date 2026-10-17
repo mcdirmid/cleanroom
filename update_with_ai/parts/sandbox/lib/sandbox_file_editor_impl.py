@@ -58,6 +58,7 @@ def _target_content_missing_message(
     )
 
 
+# Fallback whitespace-stripped line matching heuristic when exact string match fails.
 def _stripped_match_offsets(
     window_lines: Sequence[str], target_lines: Sequence[str]
 ) -> List[int]:
@@ -72,6 +73,7 @@ def _stripped_match_offsets(
     return offsets
 
 
+# Generation of unified diff for edit response display.
 def _diff_delta(original: str, updated: str) -> str:
     delta = list(
         difflib.unified_diff(
@@ -85,6 +87,7 @@ def _diff_delta(original: str, updated: str) -> str:
     return "\n".join(delta)
 
 
+# Verification that cleanroom metadata block remains unaltered by replacements.
 def _is_cleanroom_metadata_altered(
     original_content: str,
     new_content: str,
@@ -127,6 +130,7 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier], Sin
         self._last_read_or_edited_file: Optional[agent_file_alias.FileAlias] = None
         self._writes_occurred = False
 
+    # Contract: EditManager.has_modifications - exposes whether workspace file contents differ from their in-band code hash.
     @property
     def has_modifications(self) -> bool:
         meta_mgr = get_singleton(src_metadata.SourceMetadataCoordinator)
@@ -139,17 +143,21 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier], Sin
                 return True
         return False
 
+    # Contract: EditManager.file_update_revision - tracks sequential updates made to workspace files.
     @property
     def file_update_revision(self) -> sandbox_file_editor.FileUpdateRevision:
         return self._file_update_revision
 
+    # Contract: EditManager.last_read_or_edited_file - returns the most recently read or edited file alias across the session.
     @property
     def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
         return self._last_read_or_edited_file
 
+    # Contract: EditManager.record_file_read - records that a file was read, updating last_read_or_edited_file.
     def record_file_read(self, file: agent_file_alias.FileAlias) -> None:
         self._last_read_or_edited_file = file
 
+    # Contract: EditManager.record_file_edit - records that a file was edited, updating last_read_or_edited_file and incrementing revision.
     def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None:
         self._last_read_or_edited_file = file
         self._writes_occurred = True
@@ -157,6 +165,7 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier], Sin
             int(self._file_update_revision) + 1
         )
 
+    # Contract: EditManager.file_hash - computes an MD5 file hash from read-write file content.
     def file_hash(self, file: agent_file_alias.FileAlias) -> sandbox_file_editor.FileHash:
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         node_cfg = get_singleton(agent_node_config.NodeConfig)
@@ -176,6 +185,7 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier], Sin
         content = disk_path.read_text(encoding="utf-8") if disk_path.is_file() else ""
         return sandbox_file_editor.FileHash(hashlib.md5(content.encode("utf-8")).hexdigest())
 
+    # Contract: EditManager.can_write - validates modification access for a read-write file against declared read-write files.
     def can_write(
         self, path: Union[agent_file_alias.RelativePath, agent_file_alias.FileAlias]
     ) -> tool_provider.ToolResponse:
@@ -199,7 +209,6 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier], Sin
                 f"Error: File '{relative}' is not a declared read-write file.",
                 "Only declared read-write files can be written.",
             )
-        self.record_file_edit(matching_rw)
         return tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
@@ -297,10 +306,12 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
     def __init__(self) -> None:
         pass
 
+    # Contract: ReplaceFileContentTool.initialize - installs tool into session environment via ToolManager.
     def initialize(self) -> None:
         tool_mgr = get_singleton(tool_provider.ToolManager)
         tool_mgr.install_tool(self)
 
+    # Contract: ReplaceFileContentTool.path_parameter - parameter identifying the target read-write file.
     @property
     def path_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         alias_type = get_singleton(tool_provider.AliasManagerType)
@@ -312,6 +323,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             default_value=None,
         )
 
+    # Contract: ReplaceFileContentTool.target_content_parameter - parameter specifying target content to replace.
     @property
     def target_content_parameter(self) -> tool_provider.ToolParameter[sandbox_file_editor.TargetContent, str]:
         return tool_provider.ToolParameter[sandbox_file_editor.TargetContent, str](
@@ -323,6 +335,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             missing_message=_target_content_missing_message,
         )
 
+    # Contract: ReplaceFileContentTool.replacement_content_parameter - parameter specifying replacement content.
     @property
     def replacement_content_parameter(self) -> tool_provider.ToolParameter[sandbox_file_editor.ReplacementContent, str]:
         return tool_provider.ToolParameter[sandbox_file_editor.ReplacementContent, str](
@@ -333,6 +346,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             default_value=None,
         )
 
+    # Contract: ReplaceFileContentTool.start_line_parameter - parameter specifying start line of search window.
     @property
     def start_line_parameter(self) -> tool_provider.ToolParameter[Optional[sandbox_file_editor.LineNumber], int]:
         return tool_provider.ToolParameter[Optional[sandbox_file_editor.LineNumber], int](
@@ -343,6 +357,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             default_value=None,
         )
 
+    # Contract: ReplaceFileContentTool.end_line_parameter - parameter specifying end line of search window.
     @property
     def end_line_parameter(self) -> tool_provider.ToolParameter[Optional[sandbox_file_editor.LineNumber], int]:
         return tool_provider.ToolParameter[Optional[sandbox_file_editor.LineNumber], int](
@@ -353,6 +368,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             default_value=None,
         )
 
+    # Contract: ReplaceFileContentTool.allow_multiple_parameter - parameter specifying whether to replace multiple occurrences.
     @property
     def allow_multiple_parameter(self) -> tool_provider.ToolParameter[sandbox_file_editor.AllowMultiple, bool]:
         return tool_provider.ToolParameter[sandbox_file_editor.AllowMultiple, bool](
@@ -363,14 +379,17 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             default_value=sandbox_file_editor.AllowMultiple(False),
         )
 
+    # Contract: Tool.name - returns tool identifier "replace_file_content".
     @property
     def name(self) -> tool_provider.ToolName:
         return tool_provider.ToolName("replace_file_content")
 
+    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return tool_provider.ToolDescription("Replaces target content in a read-write file.")
 
+    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         return {
@@ -382,6 +401,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
             self.allow_multiple_parameter.name: self.allow_multiple_parameter,
         }
 
+    # Contract: ReplaceFileContentTool.execute_tool - replaces target content with replacement content in bounded line range.
     def execute_tool(
         self,
         actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
@@ -490,6 +510,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
 
         exact_count = window_text.count(target_content)
         stripped_offsets: List[int] = []
+        # Fallback whitespace-stripped line matching heuristic when exact string match fails.
         if exact_count == 0 and not allow_multiple:
             stripped_offsets = _stripped_match_offsets(window_lines, target_lines)
             if len(stripped_offsets) > 1:
@@ -561,6 +582,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
                 "The edit had no effect.",
             )
 
+        # Rejecting replacements that alter the cleanroom metadata header.
         if _is_cleanroom_metadata_altered(content, new_content, disk_path.name):
             return fail(
                 "Error: CLEANROOM METADATA is managed automatically by submit; do not edit it directly.",
@@ -573,6 +595,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[
         edit_mgr.record_file_edit(target_rw_file)
 
         body = f"Successfully updated {target_file.relative_path}."
+        # Appending unified diff output based on AgentConfig.edit_delta_output.
         if get_singleton(agent_config.AgentConfig).edit_delta_output:
             body = f"{body}\n\n{_diff_delta(content, new_content)}"
         return tool_provider.ToolResponse(

@@ -91,7 +91,8 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - WHEN the critique contains newline characters, MUST reject blame.
-        - WHEN the critique exceeds configured maximum feedback character limits, MUST reject blame with an advisory error instructing defect prioritization.
+        - WHEN the critique exceeds configured maximum feedback character limits (defaulting to 2000 characters when unconfigured), MUST reject blame with an advisory error instructing defect prioritization.
+        - MUST resolve the culprit file via alias resolution, exact path match, or normalized relative path suffix matching.
         - WHEN the culprit file cannot be resolved, MUST reject blame.
         - WHEN the caller role is not configured to deliver feedback to the culprit role, MUST reject blame.
         - WHEN blame is accepted, MUST execute build blame targets or mutate in-band metadata to record feedback and dirty status, and MUST synchronize the affected files.
@@ -119,5 +120,9 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
     def match_blame_target(
         self, node: dag_storage.DagNode, val: Any, val_str: str
     ) -> Optional[agent_file_alias.BoundFile]:
-        """Matches a blame target value against configured blame targets for a node."""
+        """Matches a blame target value against configured blame targets for a node.
+
+        POSTCONDITIONS:
+        - MUST resolve blame target values via alias resolution, exact path match, or normalized relative path suffix matching.
+        """
         ...

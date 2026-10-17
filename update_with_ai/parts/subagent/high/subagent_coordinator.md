@@ -38,7 +38,7 @@ When coordinating multi-agent execution:
 
 - The subagent coordinator resets preexisting role workspaces upon initiating orchestration to ensure clean initial state.
 
-- The subagent coordinator dynamically resolves subagent batch sizes and conversation token limits from declarative model configurations matching designated model names or identifiers.
+- The subagent coordinator dynamically resolves subagent batch sizes, conversation token limits, and maximum unproductive turn thresholds from declarative model configurations matching designated model names or identifiers.
 
 - The subagent coordinator evaluates DAG work queues across declared roles, dynamically identifying roles with ready work up to an optional target role boundary without static role hardcoding.
 
@@ -48,7 +48,7 @@ When coordinating multi-agent execution:
 
 - The subagent coordinator periodically polls active workers through the harness adapter at a configurable polling interval (defaulting to 10 seconds), reaping completed turns and propagating blame defects into the build graph.
 
-- The subagent coordinator tracks consecutive unproductive turns yielding zero submitted and zero blamed targets, halting orchestration when unproductive turns on unresolved targets exceed a threshold (defaulting to 2).
+- The subagent coordinator tracks consecutive unproductive turns yielding zero submitted and zero blamed targets, halting orchestration when unproductive turns on unresolved targets exceed a threshold configured per model or globally (defaulting to 5).
 
 - The subagent coordinator emits real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state.
 
@@ -57,3 +57,5 @@ When coordinating multi-agent execution:
 - The subagent coordinator automatically deletes all provisioned role workspaces in scope upon achieving clean convergence.
 
 - The subagent coordinator aggregates cumulative token consumption into monetary expenditures across all dispatched roles.
+
+- Canonical log directory discovery resolves the canonical logs directory for a role workspace by querying the workspace registry for the repository root or traversing parent directories to locate the root logs directory.

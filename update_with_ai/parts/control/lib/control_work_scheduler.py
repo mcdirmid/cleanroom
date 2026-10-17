@@ -38,6 +38,7 @@ class WorkSchedule:
 class WorkScheduler(Protocol):
     """Schedules ready dirty nodes across subgraph or directory scope."""
 
+    # Contract: Discovers ready dirty tasks across subgraph or directory scope, sorts by dynamic role precedence, and limits to max_batch_size.
     def schedule_work(
         self,
         subgraph: Optional[dag_subgraph.DagSubgraph] = None,
@@ -45,10 +46,12 @@ class WorkScheduler(Protocol):
         max_batch_size: Optional[int] = None,
     ) -> WorkSchedule: ...
 
+    # Contract: Computes topological depth for roles based on role dependencies matching longest path from root roles.
     def compute_role_precedence(
         self, role_dependencies: Mapping[str, Sequence[str]]
     ) -> Mapping[str, int]: ...
 
+    # Contract: Formats aggregated synthesized task prompt for candidate nodes with defect feedback and role directives.
     def format_task_prompt(
         self, nodes: Sequence[dag_storage.DagNode]
     ) -> str: ...

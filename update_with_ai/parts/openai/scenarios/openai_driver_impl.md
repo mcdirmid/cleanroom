@@ -196,7 +196,8 @@ carrying an invocation of the tool `read_file` whose arguments are unclosed.
    generation resumes with a continuation turn.
    Realized by: the component's own truncation handling for an invocation that is not a replace
    file content invocation, the argument repair of `json_ext`, and its own dispatch of a tool
-   failure response carrying the suppression key that `tool_provider` supplies.
+   failure response carrying the suppression key resolved from dedicated categories or derived from
+   target file argument basenames or tool names.
 
 2. A model completion then fails with an incomplete tool call error.
    Observed: an actionable recovery notice directing smaller edits is appended to the conversation,

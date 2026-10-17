@@ -63,7 +63,7 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - WHEN verification checks fail and no_verify is False, MUST reject submission and return non-zero exit code.
-        - WHEN submission is accepted, MUST append submission message to cleanroom_files_ext.CLEANROOM_LOG_FILE in directory containing parts.
+        - WHEN submission is accepted, MUST append submission message to cleanroom_files_ext.CLEANROOM_LOG_FILE both in the canonical repository and the local workspace root.
         - WHEN submission is accepted, MUST clear target from pending work.
         """
         ...
@@ -78,7 +78,7 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         """Attributes defect critique to culprit target in main repository.
 
         POSTCONDITIONS:
-        - WHEN critique is accepted, MUST append blame message to cleanroom_files_ext.CLEANROOM_LOG_FILE in directory containing parts.
+        - WHEN critique is accepted, MUST append blame message to cleanroom_files_ext.CLEANROOM_LOG_FILE both in the canonical repository and the local workspace root.
         - WHEN critique is accepted, MUST clear target from pending work.
         """
         ...

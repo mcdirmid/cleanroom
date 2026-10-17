@@ -28,6 +28,7 @@ from support.lib.lifecycle import (
 )
 
 
+# Contract: session verification checks evaluated during session advancement
 class _CommandVerificationCheck(agent_node_config.VerificationCheck):
     def __init__(self, command: str, cwd: Optional[str] = None) -> None:
         self._command = command
@@ -88,6 +89,7 @@ def _safe_get_singleton(cls: Any) -> Any:
         return None
 
 
+# Contract: parse markdown sections into NodeGuide summaries, step sections, and verification failure instructions
 def _parse_guide_markdown(content: str) -> agent_node_config.NodeGuide:
     lines = content.splitlines()
     preamble_lines, summary_lines, sections = [], [], []
@@ -160,9 +162,16 @@ def _search_paths(rel_paths: Sequence[str], pkg_path: str = "") -> List[str]:
         if not rp:
             continue
         bfn = os.path.basename(rp)
-        for c in [rp, os.path.join("update_python_with_ai/guides", bfn)]:
+        for c in [rp, os.path.join("guides", bfn)]:
             add(c)
-            if ws_root: add(os.path.join(ws_root, c))
+            if ws_root:
+                add(os.path.join(ws_root, c))
+                try:
+                    for entry in os.listdir(ws_root):
+                        sub_guides = os.path.join(ws_root, entry, "guides", bfn)
+                        add(sub_guides)
+                except OSError:
+                    pass
         for pv in pvs:
             if pv:
                 for c in [os.path.join(pv, rp), os.path.join(pv, "guides", bfn)]:
@@ -238,6 +247,7 @@ def _dependency_source_paths(dep_label: str, dep_manifest: Optional[Any]) -> Lis
     return []
 
 
+# Contract: mapping each active node to its per node info (PerNodeInfo)
 def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo:
     storage = _safe_get_singleton(dag_storage.DagStorage)
     msgs = storage.get_messages(n) if storage else ()
@@ -379,25 +389,30 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         role_cfg = _safe_get_singleton(agent_node_config.RoleConfig)
         return [self._per_node_cache[n] for n in role_cfg.nodes if n in self._per_node_cache] if role_cfg else list(self._per_node_cache.values())
 
+    # Contract: mapping each active node to its per node info
     @property
     def per_node_info_by_node(self) -> Mapping[dag_storage.DagNode, agent_node_config.PerNodeInfo]:
         self._sync_cache(); return dict(self._per_node_cache)
 
+    # Contract: aggregate read-only files across active nodes, excluding read-write files
     @property
     def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
         self._sync_cache(); rw_paths = {rw.workspace_path.path for rw in self.read_write_files}
         return {ro for pni in self._active_per_node_infos() for ro in pni.read_only_files
                 if ro.workspace_path.path not in rw_paths and not (self.is_step_mode and self.guide_file and ro.relative_path == self.guide_file.relative_path)}
 
+    # Contract: aggregate read-write files and templates across active nodes
     @property
     def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
         self._sync_cache(); return {f for pni in self._active_per_node_infos() for f in pni.read_write_files}
 
+    # Contract: check step mode eligibility on the single active node manifest
     @property
     def allows_step_mode(self) -> bool:
         self._sync_cache(); infos = self._active_per_node_infos()
         return infos[0].allows_step_mode if len(infos) == 1 else (True if not infos else False)
 
+    # Contract: activate step mode when permitted by agent config with single-node session lacking feedback
     @property
     def is_step_mode(self) -> bool:
         self._sync_cache(); infos = self._active_per_node_infos()
@@ -405,45 +420,55 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         m_cfg = _safe_get_singleton(agent_config.AgentConfig)
         return bool(m_cfg and m_cfg.is_step_mode and self.allows_step_mode and not self.feedback)
 
+    # Contract: unbound guide file configured when guide step mode is active
     @property
     def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
         self._sync_cache(); infos = self._active_per_node_infos()
         return infos[0].guide_file if len(infos) == 1 else None
 
+    # Contract: templates mapping read-write files to initial file content across active nodes
     @property
     def templates(self) -> Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent]:
         self._sync_cache(); return {k: v for pni in self._active_per_node_infos() for k, v in pni.templates.items()}
 
+    # Contract: parameter bindings for template evaluation across active nodes
     @property
     def template_parameters(self) -> Mapping[agent_node_config.TemplateParamKey, Any]:
         self._sync_cache(); return {k: v for pni in self._active_per_node_infos() for k, v in pni.template_parameters.items()}
 
+    # Contract: structured instructional text for guide step mode
     @property
     def guide(self) -> Optional[agent_node_config.NodeGuide]:
         self._sync_cache(); infos = self._active_per_node_infos()
         return infos[0].guide if len(infos) == 1 else None
 
+    # Contract: bound files owned by upstream dependency nodes mapped by session node
     @property
     def blame_targets_by_node(self) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
         self._sync_cache(); return {n: set(pni.blame_targets) for n, pni in self._per_node_cache.items()}
 
+    # Contract: aggregate verification checks across active nodes
     @property
     def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
         self._sync_cache(); return [c for pni in self._active_per_node_infos() for c in pni.verification_checks]
 
+    # Contract: session verification checks mapped by session node
     @property
     def verification_checks_by_node(self) -> Mapping[dag_storage.DagNode, Sequence[agent_node_config.VerificationCheck]]:
         self._sync_cache(); return {n: tuple(pni.verification_checks) for n, pni in self._per_node_cache.items()}
 
+    # Contract: relative path of declared source file alias mapped by session node
     @property
     def src_file_alias_by_node(self) -> Mapping[dag_storage.DagNode, agent_file_alias.RelativePath]:
         self._sync_cache(); return {n: pni.src_file_alias for n, pni in self._per_node_cache.items() if pni.src_file_alias is not None}
 
+    # Contract: informative verification feedback when configured
     @property
     def verification_success_message(self) -> Optional[agent_node_config.VerificationSuccessMessage]:
         self._sync_cache(); infos = self._active_per_node_infos()
         return infos[0].verification_success_message if len(infos) == 1 else None
 
+    # Contract: combine feedback messages from graph storage across active nodes
     @property
     def feedback(self) -> Sequence[agent_node_config.NodeFeedback]:
         self._sync_cache(); return tuple(fb for pni in self._active_per_node_infos() for fb in pni.feedback)
@@ -497,14 +522,14 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
     @property
     def wire_type(self) -> Type[str]: return str
 
+    # Contract: convert path string to file alias (BoundFile if matched, UnboundFile otherwise)
     def to_alias(self, path: str) -> agent_file_alias.FileAlias:
         self._sync_cache(); s = str(path)
         if s in self._aliases: return self._aliases[s]
         matches = self._short_name_to_aliases.get(s)
         return matches[0] if matches and len(matches) == 1 else agent_file_alias.UnboundFile(relative_path=agent_file_alias.RelativePath(s))
 
-    convert = to_alias
-
+    # Contract: sanitize output text by masking paths with relative aliases
     def sanitize_text(self, text: agent_file_alias.UnsanitizedText) -> agent_file_alias.SanitizedText:
         self._sync_cache(); res = str(text)
         for pat, rel in self._masking_patterns: res = pat.sub(rel, res)
@@ -516,6 +541,7 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
             if self._workspace_root.path in res: res = res.replace(self._workspace_root.path, "")
         return agent_file_alias.SanitizedText(_EXECROOT_PATTERN.sub("", _WORKSPACE_PATTERN.sub("", res)))
 
+    # Contract: configured absolute workspace root path
     @property
     def workspace_root(self) -> file_paths.WorkspaceRoot: return self._workspace_root
 

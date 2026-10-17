@@ -37,29 +37,15 @@ def _ensure_command_handler_registered() -> None:
     try:
         get_singleton(workspace_commands.WorkspaceCommandHandler)
     except (KeyError, LifecycleResolutionError):
-        for k, m in list(sys.modules.items()):
-            if (k.endswith(".parts.tools.lib.tools_asm") or k == "parts.tools.lib.tools_asm") and hasattr(m, "__initialize__"):
-                m.__initialize__()
-                break
-        else:
-            try:
-                import importlib
-                for p in sys.path:
-                    cand = os.path.join(p, "parts", "tools", "lib", "tools_asm.py")
-                    if os.path.isfile(cand):
-                        pkg = os.path.basename(p)
-                        mod_name = f"{pkg}.parts.tools.lib.tools_asm" if pkg else "parts.tools.lib.tools_asm"
-                        try:
-                            mod = importlib.import_module(mod_name)
-                            if hasattr(mod, "__initialize__"):
-                                mod.__initialize__()
-                            break
-                        except ImportError:
-                            pass
-            except (ImportError, AttributeError, OSError):
-                pass
+        try:
+            from . import tools_asm
+            if hasattr(tools_asm, "__initialize__"):
+                tools_asm.__initialize__()
+        except ImportError:
+            pass
 
 
+# Contract: Manages entry and initialization within the agent_session lifecycle phase scope.
 @contextmanager
 def _session_context():
     active = get_active_scope()
@@ -72,6 +58,7 @@ def _session_context():
         yield
 
 
+# Contract: Realizes workspace_tool.WorkspaceToolRunner singleton.
 class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
     """Realizes command-line subagent tool execution for role workspaces."""
 
@@ -80,6 +67,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
     def __init__(self) -> None:
         pass
 
+    # Contract: Delegates get_work evaluation to WorkspaceCommandHandler.run_get_work.
     def run_get_work(
         self,
         dir_scope: Optional[str] = None,
@@ -97,6 +85,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 batch_size=batch_size,
             )
 
+    # Contract: Delegates verification and linting to WorkspaceCommandHandler.run_check_files.
     def run_check_files(
         self,
         target: Optional[str] = None,
@@ -110,6 +99,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 repo_root=repo_root,
             )
 
+    # Contract: Delegates submission to WorkspaceCommandHandler.run_submit.
     def run_submit(
         self,
         target: str,
@@ -127,6 +117,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 no_verify=no_verify,
             )
 
+    # Contract: Delegates blame attribution to WorkspaceCommandHandler.run_blame.
     def run_blame(
         self,
         culprit_file: str,
@@ -142,6 +133,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 repo_root=repo_root,
             )
 
+    # Contract: Delegates failure recording to WorkspaceCommandHandler.run_fail.
     def run_fail(
         self,
         file_path: str,
@@ -157,6 +149,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 repo_root=repo_root,
             )
 
+    # Contract: Delegates statement coverage evaluation to WorkspaceCommandHandler.run_coverage.
     def run_coverage(
         self,
         target: Optional[str] = None,
@@ -182,6 +175,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 repo_root=repo_root,
             )
 
+    # Contract: Delegates workspace commissioning to WorkspaceCommandHandler.run_commission.
     def run_commission(
         self,
         role_name: Optional[str] = None,
@@ -205,6 +199,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 model=model,
             )
 
+    # Contract: Delegates system file refreshing to WorkspaceCommandHandler.run_refresh_sys.
     def run_refresh_sys(
         self,
         role_name: Optional[str] = None,
@@ -220,6 +215,7 @@ class WorkspaceToolRunner(workspace_tool.WorkspaceToolRunner, Singleton):
                 repo_root=repo_root,
             )
 
+    # Contract: Parses CLI arguments and dispatches command execution within agent session lifecycle tier.
     def execute_command(self, argv: Sequence[str]) -> int:
         """Dispatches CLI subcommand execution."""
         parser = argparse.ArgumentParser(

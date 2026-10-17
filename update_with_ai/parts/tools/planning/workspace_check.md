@@ -21,7 +21,7 @@ Operating command-line subagents in isolated workspaces requires structured comm
 ### Contracts
 
 - The workspace checker evaluates dirty work in the local role workspace, presenting bounded batches of ready targets and throttling unacted feedback reasons. [run_workspace_get_work]
-- The workspace checker executes role-specific verification checks, linters, and type checking for specified or pending target files, regenerating missing targets from starter templates. [run_workspace_check_files]
+- The workspace checker executes role-specific verification checks, linters, and type checking for specified or pending target files, configuring PYTHONPATH in the execution environment to include the package root and constituent support libraries, and regenerating missing targets from starter templates. [run_workspace_check_files]
 
 ### Woven Contracts
 

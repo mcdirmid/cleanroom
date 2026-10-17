@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence, Tuple
 
 
+# Contract: UnitDirtinessResult represents evaluation result for unit dirtiness.
 @dataclass(frozen=True)
 class UnitDirtinessResult:
     """Evaluation result for unit dirtiness.
@@ -27,9 +28,11 @@ class UnitDirtinessResult:
     contract_files: Sequence[str] = ()
 
 
+# Contract: WorkspaceDirtinessEvaluator protocol evaluates unit dirtiness, resolves companion contracts, and extracts cross-unit dependencies.
 class WorkspaceDirtinessEvaluator(Protocol):
     """Evaluates unit dirtiness, resolves companion contracts, and extracts cross-unit dependencies."""
 
+    # Contract: Evaluates whether a unit is dirty in directory scope and returns dirty status and reasons.
     def evaluate_unit_dirty(
         self,
         ws_root: str,
@@ -39,6 +42,7 @@ class WorkspaceDirtinessEvaluator(Protocol):
         repo_root: Optional[str] = None,
     ) -> UnitDirtinessResult: ...
 
+    # Contract: Discovers existing companion specification contracts and interface definitions for target.
     def resolve_contract_files(
         self,
         target_file: str,
@@ -47,9 +51,11 @@ class WorkspaceDirtinessEvaluator(Protocol):
         role_name: Optional[str] = None,
     ) -> Sequence[str]: ...
 
+    # Contract: Resolves declared cross-unit dependencies of a unit to (part_dir, unit_name) pairs.
     def extract_cross_unit_dependencies(
         self,
         repo_root: str,
         part_dir: str,
         unit_name: str,
     ) -> Sequence[Tuple[str, str]]: ...
+

@@ -22,9 +22,11 @@ from update_with_ai.parts.agent.lib import agent_session
 from . import workspace_roles, workspace_scaffold
 
 
+# Contract: Metadata file name matching cleanroom_files_ext.ROLE_DESCRIPTOR_FILE.
 ROLE_CONFIG_FILE = ".cleanroom_role.json"
 
 
+# Contract: Writes a text file and sets exact permissions, handling existing read-only files cleanly.
 def write_file_with_perms(
     dst: str, content: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -37,13 +39,17 @@ def write_file_with_perms(
             pass
     with open(dst, "w", encoding="utf-8") as f:
         f.write(content)
-    mode = 0o555 if executable else (0o444 if readonly else 0o644)
+    if executable:
+        mode = 0o555 if readonly else 0o755
+    else:
+        mode = 0o444 if readonly else 0o644
     try:
         os.chmod(dst, mode)
     except OSError:
         pass
 
 
+# Contract: Finds companion .pyi specification file for a unit stem in a part directory.
 def _find_spec_pyi(
     part_path: str, stem: str, main_root: Optional[str] = None
 ) -> Optional[str]:
@@ -70,6 +76,7 @@ def _find_spec_pyi(
     return None
 
 
+# Contract: Reports whether a relative path matches any configured glob pattern.
 def _matches_any_pattern(rel_path: str, patterns: Sequence[str]) -> bool:
     """Reports whether a relative path matches any configured glob pattern."""
     normalized = rel_path.replace("\\", "/")
@@ -83,6 +90,7 @@ def _matches_any_pattern(rel_path: str, patterns: Sequence[str]) -> bool:
     )
 
 
+# Contract: Traverses synchronized scope discovering declared unit directories and stems from low/grounding/high specs.
 def _declared_units(repo_root: str, scope_dir: str) -> List[Tuple[str, str]]:
     """Returns declared (unit_dir, unit_name) pairs beneath a synchronized scope."""
     units: List[Tuple[str, str]] = []
@@ -127,6 +135,7 @@ def _declared_units(repo_root: str, scope_dir: str) -> List[Tuple[str, str]]:
     return units
 
 
+# Contract: Synthesizes starter skeleton content for a declared writable target file from template or spec.
 def _missing_target_skeleton(
     repo_root: str,
     rel_path: str,
@@ -151,13 +160,25 @@ def _missing_target_skeleton(
     if pyi_path is None or not os.path.isfile(pyi_path):
         return None
     try:
+        generate_lib_skeleton = None
         try:
-            from update_python_with_ai.support.lib.lib_lint import generate_lib_skeleton
+            from support.lib.lib_lint import generate_lib_skeleton
         except ImportError:
-            try:
-                from support.lib.lib_lint import generate_lib_skeleton
-            except ImportError:
-                from update_with_ai.support.lib.lib_lint import generate_lib_skeleton
+            pass
+        if generate_lib_skeleton is None:
+            import importlib
+            for entry in os.listdir(repo_root):
+                pkg_dir = os.path.join(repo_root, entry)
+                if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
+                    try:
+                        mod = importlib.import_module(f"{entry}.support.lib.lib_lint")
+                        generate_lib_skeleton = getattr(mod, "generate_lib_skeleton", None)
+                        if generate_lib_skeleton is not None:
+                            break
+                    except ImportError:
+                        pass
+        if generate_lib_skeleton is None:
+            return None
         segments = unit_dir.replace("\\", "/").split("/")
         base_pkg = ""
         if "parts" in segments and segments.index("parts") > 0:
@@ -167,6 +188,7 @@ def _missing_target_skeleton(
         return None
 
 
+# Contract: Creates missing starter skeletons matching writable target patterns absent from disk.
 def _create_missing_target_skeletons(
     workspace_dir: str,
     repo_root: str,
@@ -198,6 +220,7 @@ def _create_missing_target_skeletons(
     return created
 
 
+# Contract: Packages self-contained executable runner zipapps into bin_dir with 0o755 permissions and removes stale coverage script.
 def package_runner_zipapps(bin_dir: str) -> None:
     """Packages runner zipapps into bin_dir with executable permissions."""
     os.makedirs(bin_dir, exist_ok=True)
@@ -210,6 +233,7 @@ def package_runner_zipapps(bin_dir: str) -> None:
         "fail": "fail",
     }
     cov_path = os.path.join(bin_dir, "coverage")
+    # Contract: Removes stale coverage script if present in bin_dir.
     if os.path.isfile(cov_path):
         try:
             os.remove(cov_path)
@@ -298,6 +322,7 @@ if __name__ == "__main__":
             pass
 
 
+# Contract: Writes role configuration metadata (.cleanroom_role.json) with 0o644 permissions.
 def write_role_metadata(
     workspace_dir: str,
     role_name: str,
@@ -330,6 +355,7 @@ def write_role_metadata(
         pass
 
 
+# Contract: Synthesizes role-tailored AGENTS.md instructions with boundary rules, tripwires, fail-stop, and workflow.
 def write_role_agents_md(
     workspace_dir: str,
     role_def: workspace_roles.RoleDefinition,
@@ -467,6 +493,7 @@ If you determine that success is not possible (e.g. unreachable code under test,
         pass
 
 
+# Contract: Realizes workspace_scaffold.WorkspaceScaffolder singleton.
 class WorkspaceScaffolder(
     workspace_scaffold.WorkspaceScaffolder,
     Singleton,
@@ -475,9 +502,11 @@ class WorkspaceScaffolder(
 
     tier = agent_session.agent_session
 
+    # Contract: Packages runner zipapps into bin_dir with executable permissions.
     def deploy_runner_zipapps(self, bin_dir: str) -> None:
         package_runner_zipapps(bin_dir)
 
+    # Contract: Writes role configuration metadata (.cleanroom_role.json) in workspace root.
     def write_role_metadata(
         self,
         workspace_dir: str,
@@ -498,6 +527,7 @@ class WorkspaceScaffolder(
             max_feedback_chars=max_feedback_chars,
         )
 
+    # Contract: Synthesizes role-tailored AGENTS.md instructions in workspace root.
     def write_role_agents_guide(
         self,
         workspace_dir: str,
@@ -506,6 +536,7 @@ class WorkspaceScaffolder(
     ) -> None:
         write_role_agents_md(workspace_dir, role_def, dir_scope)
 
+    # Contract: Creates starter skeletons for declared writable targets absent from disk.
     def create_missing_target_skeletons(
         self,
         workspace_dir: str,
@@ -517,6 +548,7 @@ class WorkspaceScaffolder(
             workspace_dir, repo_root, dir_scope, role_def
         )
 
+    # Contract: Writes text content to destination file and applies exact permissions.
     def write_file_with_permissions(
         self,
         dst: str,

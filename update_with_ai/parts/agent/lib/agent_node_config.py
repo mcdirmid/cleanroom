@@ -50,6 +50,7 @@ class NodeGuide:
 
 
 class VerificationCheck(Protocol):
+    # Contract: MUST communicate whether verification passed, and diagnostic feedback describing failure.
     def verify(self) -> Tuple[bool, VerificationDiagnostic]:
         ...
 
@@ -71,14 +72,17 @@ class PerNodeInfo:
 
 
 class RoleConfig(Protocol):
+    # Contract: The role of the agent session.
     @property
     def role(self) -> RoleName:
         ...
 
+    # Contract: Sequence of nodes currently being cleaned in the agent session.
     @property
     def nodes(self) -> Sequence[dag_storage.DagNode]:
         ...
 
+    # Contract: Execution version that increments whenever the cleaned nodes change.
     @property
     def version(self) -> ExecutionVersion:
         ...
@@ -86,6 +90,7 @@ class RoleConfig(Protocol):
     def set_role(self, role: RoleName) -> None:
         ...
 
+    # Contract: Configures nodes to clean and MUST increment execution version.
     def set_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
         ...
 

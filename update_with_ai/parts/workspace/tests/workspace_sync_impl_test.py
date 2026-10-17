@@ -455,7 +455,7 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             # Set up files in main
             with open(os.path.join(main_root, "pyproject.toml"), "w", encoding="utf-8") as f:
                 f.write("[project]\nname = 'test'\n")
-            with open(os.path.join(main_root, "cleanroom_python_roles.toml"), "w", encoding="utf-8") as f:
+            with open(os.path.join(main_root, "cleanroom_roles.toml"), "w", encoding="utf-8") as f:
                 f.write(
                     "[methodology]\nname = 'python'\n\n"
                     "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
@@ -477,7 +477,7 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             )
             self.assertGreater(refreshed, 0)
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, "pyproject.toml")))
-            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "cleanroom_python_roles.toml")))
+            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "cleanroom_roles.toml")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "notes.txt")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "pyrightconfig.json")))
             agents_md = os.path.join(ws_dir, "AGENTS.md")

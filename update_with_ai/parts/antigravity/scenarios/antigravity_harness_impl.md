@@ -21,7 +21,7 @@ Given: an execution transcript log containing Gemini model interaction events.
 
 1. The harness adapter parses the transcript log.
    Observed: uncached prompt tokens, cached prompt tokens, completion tokens, and financial expenditure in USD are computed.
-   Realized by: the component's transcript parser reading JSONL lines and calculating costs via model rate cards.
+   Realized by: the component's transcript parser reading JSONL lines (falling back to regex scraping from raw lines) and calculating costs via model rate cards.
 
 ### Scenario 3 — Constructing role turn result
 
@@ -29,7 +29,7 @@ Given: an executed turn where the agent submitted target_a and blamed culprit_b.
 
 1. The harness adapter awaits role completion.
    Observed: a role turn result reports completed status with submitted targets, blamed targets, and token telemetry.
-   Realized by: the component's turn result collation inspecting the workspace submission records and blame buffers.
+   Realized by: the component's turn result collation inspecting the workspace submission records (and stdout completion tags) and blame buffers.
 
 ### Scenario 4 — Interrupting runaway turns
 

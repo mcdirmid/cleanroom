@@ -49,7 +49,9 @@ class CommandHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         - WHEN process times out, MUST terminate process and return failed result.
         - MUST inspect workspace blame buffer for reported defects.
         - MUST determine submitted targets by set difference with remaining pending items.
-        - MUST extract token usage metrics and return synthesized RoleTurnResult.
+        - MUST extract token usage metrics and compute rate-card costs from execution logs.
+        - WHEN a process exits with non-zero status, MUST capture failure diagnostics from the tail of the log.
+        - MUST return synthesized RoleTurnResult.
         """
         ...
 

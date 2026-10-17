@@ -148,3 +148,10 @@ gadget and widget are dirty; the node visit limit for the system is two.
 5. The caller records the visit for the same batch a third time.
    Observed: the recording fails explicitly, because a node of the batch exceeds the visit limit of
    two.
+
+## Scenario 9 — Breaking ties between nodes of identical role tier depth with colon-qualified role addresses
+
+Given: role `//my/scope:alpha` and role `//my/scope:beta` both have role tier depth zero; node `//my/pkg:widget#//my/scope:alpha` and node `//my/pkg:widget#//my/scope:beta` have no dependency ordering relative to each other.
+
+1. The caller computes topological order.
+   Observed: `//my/pkg:widget#//my/scope:alpha` precedes `//my/pkg:widget#//my/scope:beta` based on alphabetical comparison of the unqualified role names `alpha` vs `beta` extracted after the final colon delimiter.

@@ -135,13 +135,8 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
                 continue
             if os.path.isdir(os.path.join(root, entry, "parts")):
                 roots.append(f"{entry}/parts")
-        for fallback in (
-            "parts",
-            "staging/parts",
-            "update_python_with_ai/parts",
-            "update_with_ai/parts",
-        ):
-            roots.append(fallback)
+        if os.path.isdir(os.path.join(root, "parts")):
+            roots.append("parts")
         return list(dict.fromkeys(roots))
 
     def _find_parts_root(self, root: str, pkg_dir: str) -> Optional[str]:
@@ -265,6 +260,19 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
             pass
         return info
 
+    # Contract: retrieve target manifests from workspace directories for graph nodes
+    # Contract: anchor relative package directories to workspace root
+    # Contract: search package directories upwards for scope configuration files to discover methodology bindings
+    # Contract: load role definitions using uv manifest ext
+    # Contract: evaluate role source patterns parameterized with unit metadata
+    # Contract: evaluate task prompt templates parameterized with unit metadata
+    # Contract: evaluate verification check templates parameterized with unit metadata
+    # Contract: evaluate verification success message templates parameterized with unit metadata
+    # Contract: cross-product unit dependencies with role dependencies to produce target dependencies
+    # Contract: incorporate fixed role node dependencies as declared direct dependencies
+    # Contract: resolve bare cross-package unit dependency references to their containing packages within parts workspaces
+    # Contract: forward constituent unit dependencies and role dependencies for inactive pass-through nodes
+    # Contract: synthesize promptless pass-through node definitions when unit component type is not active for a role
     def retrieve_manifest(
         self, node: dag_storage.DagNode
     ) -> Optional[uv_manifest_loader.TargetManifest]:
@@ -451,6 +459,7 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
             role_address=dag_storage.RoleAddress(role_address),
         )
 
+    # Contract: synthesize fallback node definitions for referenced targets lacking manifests
     def _synthesize_dependency_definition(
         self, storage: Any, node: dag_storage.DagNode
     ) -> None:
@@ -464,6 +473,13 @@ class UvManifestLoader(uv_manifest_loader.UvManifestLoader, Singleton):
                 ),
             )
 
+    # Contract: populate agent storage with node definitions carrying task prompts
+    # Contract: record declared primary source file paths in agent storage without duplicating package path segments
+    # Contract: record silent source file paths in agent storage without duplicating package path segments
+    # Contract: register declared direct dependencies in agent storage
+    # Contract: register declared feedback dependencies in agent storage
+    # Contract: register declared silent dependencies as non-propagating dependencies in agent storage
+    # Contract: synthesize fallback node definitions for referenced targets lacking manifests
     def load_manifest(self, node: dag_storage.DagNode) -> None:
         manifest = self.retrieve_manifest(node)
         if not manifest:

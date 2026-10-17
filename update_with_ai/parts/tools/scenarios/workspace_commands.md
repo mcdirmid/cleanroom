@@ -29,7 +29,7 @@ Given: an active role workspace with a missing target file for a role declaring 
 Given: an active role workspace with a modified target passing verification.
 
 1. The caller executes `run_submit` with a producer change summary.
-   Observed: the handler validates the submission, appends a record to the cleanroom log, clears the target from pending work, and returns exit code 0.
+   Observed: the handler validates the submission, appends a record to the cleanroom log in both the canonical repository and local workspace, clears the target from pending work, and returns exit code 0.
 
 2. The caller executes `run_submit` when verification checks fail.
    Observed: the handler rejects submission and returns a non-zero exit code.
@@ -39,7 +39,7 @@ Given: an active role workspace with a modified target passing verification.
 Given: an active role workspace with a pending culprit target.
 
 1. The caller executes `run_blame` with a valid single-paragraph critique.
-   Observed: the handler delegates blame attribution, appends a blame record to the cleanroom log, clears pending work, and returns exit code 0.
+   Observed: the handler delegates blame attribution, appends a blame record to the cleanroom log in both the canonical repository and local workspace, clears pending work, and returns exit code 0.
 
 2. The caller executes `run_fail` with a failure diagnostic.
    Observed: the handler records the failure diagnostic, clears pending work, and returns exit code 0.

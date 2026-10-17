@@ -43,26 +43,34 @@ from . import subagent_coordinator
 def _resolve_model_parameters(
     repo_root: str,
     model_name: Optional[str] = None,
-) -> Tuple[Optional[int], Optional[int]]:
-    """Resolves (subagent_batch_size, conversation_max_tokens) from model_configs.toml."""
+) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+    """Resolves (subagent_batch_size, conversation_max_tokens, max_unproductive_turns) from model_configs.toml."""
     if tomllib is None:
-        return None, None
+        return None, None, None
     cfg_path = os.path.join(repo_root, "model_configs.toml")
     if not os.path.isfile(cfg_path):
-        return None, None
+        return None, None, None
     try:
         with open(cfg_path, "rb") as f:
             cfg = tomllib.load(f)
     except Exception:
-        return None, None
+        return None, None, None
+
+    global_unproductive: Optional[int] = None
+    u_top = cfg.get("max_unproductive_turns")
+    if u_top is not None:
+        try:
+            global_unproductive = int(u_top)
+        except (ValueError, TypeError):
+            pass
 
     models_dict = cfg.get("models", {})
     if not isinstance(models_dict, dict):
-        return None, None
+        return None, None, global_unproductive
 
     target = model_name or cfg.get("default")
     if not target or not isinstance(target, str):
-        return None, None
+        return None, None, global_unproductive
 
     target_clean = target.strip().lower()
     matched_data = None
@@ -76,18 +84,16 @@ def _resolve_model_parameters(
         for k, v in models_dict.items():
             if not isinstance(v, dict):
                 continue
-            m_field = str(v.get("model", "")).lower()
+            m_field = str(v.get("model", "")).lower().strip()
             if (
-                target_clean == m_field
-                or target_clean in m_field
-                or m_field in target_clean
+                (m_field and (target_clean == m_field or target_clean in m_field or m_field in target_clean))
                 or target_clean in k.lower()
             ):
                 matched_data = v
                 break
 
     if matched_data is None:
-        return None, None
+        return None, None, global_unproductive
 
     resolved_batch: Optional[int] = None
     b_val = matched_data.get("subagent_batch_size") or matched_data.get("batch_size")
@@ -105,7 +111,15 @@ def _resolve_model_parameters(
         except (ValueError, TypeError):
             pass
 
-    return resolved_batch, resolved_tokens
+    resolved_unproductive = global_unproductive
+    u_val = matched_data.get("max_unproductive_turns")
+    if u_val is not None:
+        try:
+            resolved_unproductive = int(u_val)
+        except (ValueError, TypeError):
+            pass
+
+    return resolved_batch, resolved_tokens, resolved_unproductive
 
 
 def _persist_batch_size(ws_dir: str, batch_size: int) -> None:
@@ -132,6 +146,11 @@ class SubagentCoordinator(
 
     tier = agent_session.agent_session
 
+    # Contract: discover ready dirty roles unblocked by upstream prerequisites across directory scope
+    # Contract: commission absent workspace directory via WorkspaceProvisioner
+    # Contract: separate sequential specification roles into single-role waves
+    # Contract: combine independent unblocked implementation roles into parallel waves
+    # Contract: return sequence of execution waves containing role dispatch directives
     def compute_execution_waves(
         self,
         dir_scope: str,
@@ -241,6 +260,9 @@ class SubagentCoordinator(
 
         return tuple(waves)
 
+    # Contract: dispatch each role directive through harness.dispatch_role
+    # Contract: await completion of each dispatched role through harness.await_role
+    # Contract: return sequence of role turn results
     def run_wave(
         self,
         wave: Sequence[subagent_coordinator.RoleDispatch],
@@ -259,6 +281,14 @@ class SubagentCoordinator(
 
         return tuple(results)
 
+    # Contract: reset preexisting role workspaces for declared roles upon initiating orchestration
+    # Contract: iterate through execution waves until all units in scope evaluate clean, role fails, or max_waves reached
+    # Contract: periodically poll active workers through harness.poll_role or harness.await_role at configurable interval (default 10s)
+    # Contract: when role turn reports status failed, stop execution and return non-converged summary with failure details
+    # Contract: when consecutive unproductive turns exceed threshold (default 2), stop execution and return non-converged summary
+    # Contract: emit real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state
+    # Contract: when all units evaluate clean across all roles, automatically delete all provisioned role workspaces in scope and return converged summary
+    # Contract: aggregate cumulative token usage and monetary expenditure in orchestration summary
     def orchestrate(
         self,
         dir_scope: str,
@@ -276,14 +306,17 @@ class SubagentCoordinator(
         work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
         root = repo_root or reg.discover_repository_root()
 
-        effective_max_unproductive = max_unproductive_turns if max_unproductive_turns is not None else 2
+        # Resolve model parameters from model_configs.toml
+        resolved_batch, _, resolved_unproductive = _resolve_model_parameters(root, model_name=model_name)
+        effective_batch_size = batch_size if batch_size is not None else resolved_batch
+        effective_max_unproductive = (
+            max_unproductive_turns
+            if max_unproductive_turns is not None
+            else (resolved_unproductive if resolved_unproductive is not None else 5)
+        )
         unproductive_turns: Dict[str, int] = {}
 
         print(f"[ORCHESTRATE] Starting orchestration: scope='{dir_scope}', max_waves={max_waves}", flush=True)
-
-        # Resolve model parameters from model_configs.toml
-        resolved_batch, _ = _resolve_model_parameters(root, model_name=model_name)
-        effective_batch_size = batch_size if batch_size is not None else resolved_batch
 
         # Reset preexisting role workspaces for declared roles in scope to ensure clean initial state
         all_scope_roles = reg.list_roles(repo_root=root, dir_scope=dir_scope)
@@ -306,12 +339,6 @@ class SubagentCoordinator(
             if matching_idx is not None:
                 roles_to_evaluate = roles_to_evaluate[: matching_idx + 1]
 
-        # Check if run_wave has been monkeypatched (e.g. in test fixtures)
-        is_run_wave_custom = (
-            getattr(self.run_wave, "__func__", self.run_wave)
-            != SubagentCoordinator.run_wave
-        )
-
         wave_count = 0
         submitted_count = 0
         blamed_count = 0
@@ -320,98 +347,7 @@ class SubagentCoordinator(
         cumulative_output = 0
         cumulative_cost = 0.0
         failure_msg: Optional[str] = None
-
-        if is_run_wave_custom:
-            while wave_count < max_waves:
-                waves = self.compute_execution_waves(
-                    dir_scope=dir_scope,
-                    target_role=target_role,
-                    repo_root=root,
-                    batch_size=effective_batch_size,
-                )
-                if not waves:
-                    all_clean = True
-                    blocked_count = 0
-                    for r_entry in roles_to_evaluate:
-                        r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
-                        ready, blocked = work_mgr.compute_role_work_queue(
-                            r_name, dir_scope=dir_scope, repo_root=root
-                        )
-                        if ready or blocked:
-                            all_clean = False
-                            blocked_count += len(blocked)
-
-                    if all_clean:
-                        for r_entry in all_scope_roles:
-                            r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
-                            ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
-                            if os.path.isdir(ws_dir):
-                                shutil.rmtree(ws_dir, ignore_errors=True)
-
-                        total_tokens = cumulative_input + cumulative_cached + cumulative_output
-                        telemetry = subagent_coordinator.TokenUsage(
-                            input_tokens=cumulative_input,
-                            cached_tokens=cumulative_cached,
-                            output_tokens=cumulative_output,
-                            total_tokens=total_tokens,
-                            cost_usd=cumulative_cost,
-                        )
-                        return subagent_coordinator.OrchestrationSummary(
-                            is_converged=True,
-                            total_waves=wave_count,
-                            submitted_count=submitted_count,
-                            blamed_count=blamed_count,
-                            total_telemetry=telemetry,
-                            status_message="All units converged cleanly across all roles.",
-                        )
-                    else:
-                        total_tokens = cumulative_input + cumulative_cached + cumulative_output
-                        telemetry = subagent_coordinator.TokenUsage(
-                            input_tokens=cumulative_input,
-                            cached_tokens=cumulative_cached,
-                            output_tokens=cumulative_output,
-                            total_tokens=total_tokens,
-                            cost_usd=cumulative_cost,
-                        )
-                        return subagent_coordinator.OrchestrationSummary(
-                            is_converged=False,
-                            total_waves=wave_count,
-                            submitted_count=submitted_count,
-                            blamed_count=blamed_count,
-                            total_telemetry=telemetry,
-                            status_message=f"Orchestration deadlocked: {blocked_count} units blocked on unresolved prerequisites.",
-                        )
-
-                for wave in waves:
-                    wave_count += 1
-                    results = self.run_wave(wave, harness)
-                    for res in results:
-                        submitted_count += len(res.submitted_targets)
-                        blamed_count += len(res.blamed_targets)
-                        if res.telemetry:
-                            cumulative_input += res.telemetry.input_tokens
-                            cumulative_cached += res.telemetry.cached_tokens
-                            cumulative_output += res.telemetry.output_tokens
-                            cumulative_cost += res.telemetry.cost_usd
-                        if res.status == "failed":
-                            failure_msg = res.failure_reason or f"Role {res.role} failed execution."
-                            break
-                        if len(res.submitted_targets) == 0 and len(res.blamed_targets) == 0:
-                            unproductive_turns[res.role] = unproductive_turns.get(res.role, 0) + 1
-                            if unproductive_turns[res.role] >= effective_max_unproductive:
-                                failure_msg = (
-                                    f"Role '{res.role}' made no progress (0 submitted, 0 blamed) "
-                                    f"for {unproductive_turns[res.role]} consecutive turns."
-                                )
-                                break
-                        else:
-                            unproductive_turns[res.role] = 0
-                    if failure_msg is not None or wave_count >= max_waves:
-                        break
-
-                if failure_msg is not None:
-                    break
-        else:
+        if True:
             # Continuous dynamic queue-driven process supervision loop
             active_workers: Dict[str, str] = {}  # role_name -> task_handle
             queue_dirty = True
@@ -606,6 +542,10 @@ class SubagentCoordinator(
             total_telemetry=telemetry,
             status_message=f"Maximum wave limit ({max_waves}) reached before convergence.",
         )
+
+    def resolve_cleanroom_log_dir(self, workspace_dir: str) -> str:
+        """Resolves the canonical repository logs directory for a role workspace."""
+        return subagent_coordinator.resolve_cleanroom_log_dir(workspace_dir)
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

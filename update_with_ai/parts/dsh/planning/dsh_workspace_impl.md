@@ -21,7 +21,7 @@ Provisioning physical Cleanroom role workspaces for DeepSeek Harness execution r
 ### Contracts
 
 - The realization incorporates explicit isolation boundaries, tripwires, restricted binary directives, and auditor rules into role agent documentation within target role workspaces, mandating in-workspace code and change header inspection while prohibiting code edits. [customize_role_agent_documentation]
-- The realization generates a Cordis overlay patch file configuring danger-full-access permissions, approval policy never, disabled task management plugins, and active model providers, resolving declarative model profile names against model configuration definitions. [write_cordis_overlay_patch]
+- The realization generates a Cordis overlay patch file configuring danger-full-access permissions, approval policy never, high reasoning effort for DeepSeek providers, disabled task management plugins, and active model providers, resolving declarative model profile names (stripping model namespace prefixes) against model configuration definitions discovered in workspace ancestors, working directories, or repository hierarchy. [write_cordis_overlay_patch]
 - The realization verifies that configured instruction files and patch files exist and are readable on disk. [verify_configured_files]
 - The realization constructs a confinement report with directory path, role name, created file list, and success status. [construct_confinement_report]
 

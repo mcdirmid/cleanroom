@@ -39,6 +39,9 @@ By tracking file modifications, revision numbers, and the most recently accessed
 - The edit manager provides a can write operation validating write access for a read-write file. [can_write_validates_access]
 - The replace file content tool is installed for the agent session. [install_replace_file_content_tool]
 - The replace file content tool replaces target content with replacement content within the bounded line range. [replace_content_in_line_range]
+- The replace file content tool falls back to whitespace-normalized line matching when exact character-sequence matching fails and matches uniquely within the target line range. [whitespace_normalized_matching]
+- The replace file content tool rejects replacements that alter, corrupt, or delete in-band metadata header blocks. [reject_metadata_tampering]
+- The replace file content tool appends a unified diff to the tool response when edit delta output is configured. [append_edit_delta_diff]
 - The replace file content tool replaces multiple occurrences when multiple replacements are permitted. [replace_multiple_when_permitted]
 - Workspace file writes occurred is true when file contents differ from their in-band code hash. [writes_occurred_true_on_diff]
 - Workspace file writes occurred is false when file contents match their in-band code hash. [writes_occurred_false_on_match]
@@ -47,7 +50,7 @@ By tracking file modifications, revision numbers, and the most recently accessed
 
 - Recording file reads updates the tracked last read or edited file in the session. [record_read_supplied, track_last_read_or_edited, record_file_read_op]
 - Recording file edits updates the tracked last read or edited file in the session. [record_edit_supplied, track_last_read_or_edited, record_file_edit_op]
-- The replace file content tool is installed for the agent session to replace target content within the designated line range or across multiple occurrences when allowed. [install_replace_file_content_tool, replace_content_in_line_range, replace_multiple_when_permitted, tool_provider: [call_by_name, call_with_python_bindings]]
+- The replace file content tool is installed for the agent session to replace target content within the designated line range, applying whitespace-tolerant fallback or delta formatting while guarding in-band metadata. [install_replace_file_content_tool, replace_content_in_line_range, whitespace_normalized_matching, reject_metadata_tampering, append_edit_delta_diff, replace_multiple_when_permitted, tool_provider: [call_by_name, call_with_python_bindings]]
 - Workspace file writes status reflects whether current workspace file contents differ from their in-band code hash. [edit_mgr_tracks_session_edits, expose_workspace_writes_occurred, writes_occurred_true_on_diff, writes_occurred_false_on_match]
 
 ## Grounding

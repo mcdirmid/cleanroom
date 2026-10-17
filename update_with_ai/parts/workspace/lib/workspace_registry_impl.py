@@ -27,6 +27,7 @@ from update_with_ai.parts.core.lib import file_paths
 from . import workspace_registry, workspace_roles
 
 
+# Contract: Resolves FilePathManager singleton from lifecycle registry.
 def _file_path_manager() -> Optional[file_paths.FilePathManager]:
     """Resolves the host file path manager singleton when it is active in scope."""
     try:
@@ -35,6 +36,7 @@ def _file_path_manager() -> Optional[file_paths.FilePathManager]:
         return None
 
 
+# Contract: Promotes host path to absolute path representation using FilePathManager.create_absolute_path.
 def _create_absolute_path(path: str) -> str:
     """Promotes a host directory onto the absolute path representation."""
     absolute = os.path.abspath(path)
@@ -44,6 +46,7 @@ def _create_absolute_path(path: str) -> str:
     return str(manager.create_absolute_path(file_paths.PathString(absolute)).path)
 
 
+# Contract: Combines workspace-relative path under absolute parent root using FilePathManager.
 def _create_workspace_path_under(parent_root: str, relative_name: str) -> str:
     """Combines a workspace-relative name beneath an absolute parent root directory."""
     manager = _file_path_manager()
@@ -54,11 +57,13 @@ def _create_workspace_path_under(parent_root: str, relative_name: str) -> str:
     return str(manager.resolve_path(root, relative).path)
 
 
+# Contract: Sanitizes folder name replacing directory delimiters with underscores.
 def _sanitize_directory_folder_name(folder_name: str) -> str:
     """Replaces directory delimiter characters with underscores within a folder name."""
     return folder_name.replace("/", "_").replace("\\", "_")
 
 
+# Contract: Matches sibling workspace conventions by resolving parent projects root from role_workspaces container and identifying sibling repository root.
 def _match_sibling_workspace_conventions(workspace_dir: str) -> Optional[str]:
     """Adopts the main repository root carried by sibling role workspaces."""
     parent = os.path.dirname(workspace_dir)
@@ -83,6 +88,7 @@ def _match_sibling_workspace_conventions(workspace_dir: str) -> Optional[str]:
     return None
 
 
+# Contract: Searches ancestor directories for repository configuration markers or .git.
 def _search_ancestor_markers(start_dir: str) -> Optional[str]:
     """Searches ancestor directories for repository markers."""
     curr = start_dir
@@ -113,40 +119,13 @@ def _search_ancestor_markers(start_dir: str) -> Optional[str]:
     return topmost
 
 
+# Contract: Falls back to ambient working directory when ancestor search yields no markers.
 def _fallback_to_ambient_working_directory() -> str:
     """Falls back to the ambient working directory environment when no marker is found."""
-    mod_dir = os.path.dirname(os.path.realpath(__file__))
-    curr = mod_dir
-    while curr and curr != os.path.dirname(curr):
-        if os.path.exists(os.path.join(curr, ".git")):
-            return curr
-        curr = os.path.dirname(curr)
-
-    topmost: Optional[str] = None
-    curr = mod_dir
-    while curr and curr != os.path.dirname(curr):
-        if (
-            any(
-                os.path.exists(os.path.join(curr, marker))
-                for marker in (
-                    "cleanroom.toml",
-                    "cleanroom_roles.toml",
-                    "cleanroom_python_roles.toml",
-                    "pyproject.toml",
-                )
-            )
-            and not os.path.exists(
-                os.path.join(curr, ".cleanroom_role.json")
-            )
-        ):
-            topmost = curr
-        curr = os.path.dirname(curr)
-    if topmost:
-        return topmost
-
     return os.path.abspath(os.getcwd())
 
 
+# Contract: Realizes workspace_registry.WorkspaceRegistry singleton.
 class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
     """Realizes role configuration resolution and active workspace tracking."""
 
@@ -155,8 +134,10 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
     def __init__(self) -> None:
         self._workspaces: Dict[str, workspace_registry.WorkspaceDescriptor] = {}
 
+    # Contract: Discovers canonical repository root by searching ancestor directories and matching sibling conventions.
     def discover_repository_root(self, start_dir: Optional[str] = None) -> str:
         """Discovers the canonical repository root by searching ancestor directories."""
+        # Contract: Resolves canonical repository root from filesystem environment.
         env_main = os.environ.get("CLEANROOM_MAIN_ROOT")
         if env_main and os.path.isdir(env_main):
             return _create_absolute_path(os.path.realpath(env_main))
@@ -180,6 +161,7 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
 
         return _create_absolute_path(_fallback_to_ambient_working_directory())
 
+    # Contract: Delegates role definition resolution to workspace_roles.RoleResolver.
     def resolve_role_definition(
         self,
         role_name_or_address: str,
@@ -192,6 +174,7 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
             role_name_or_address, repo_root=repo_root, dir_scope=dir_scope
         )
 
+    # Contract: Delegates role listing to workspace_roles.RoleResolver.list_roles.
     def list_roles(
         self,
         repo_root: Optional[str] = None,
@@ -201,6 +184,7 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
         resolver = get_singleton(workspace_roles.RoleResolver)
         return resolver.list_roles(repo_root=repo_root, dir_scope=dir_scope)
 
+    # Contract: Computes sanitized path for role workspace directory under role_workspaces container.
     def compute_workspace_dir(
         self,
         role_name: str,
@@ -225,6 +209,7 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
             os.path.join(parent_dir, "role_workspaces"), folder_name
         )
 
+    # Contract: Loads active workspace descriptors from session memory and scanned role_workspaces metadata.
     def load_active_workspaces(
         self, repo_root: Optional[str] = None
     ) -> Sequence[workspace_registry.WorkspaceDescriptor]:
@@ -268,10 +253,10 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
                                 item_repo = os.path.abspath(repo)
                                 if target_repo is not None and item_repo != target_repo:
                                     continue
-                                role_identifier = rdata.get("role_name") or rdata.get("role", "")
+                                role_identifier = rdata.get("role_name", "")
                                 if not role_identifier:
                                     continue
-                                dir_scope = rdata.get("parts_dir") or rdata.get("dir_scope", "")
+                                dir_scope = rdata.get("dir_scope", "")
                                 try:
                                     r_def = self.resolve_role_definition(
                                         role_identifier,
@@ -298,6 +283,7 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
 
         return tuple(descriptors)
 
+    # Contract: Records active workspace descriptor into active session memory keyed by workspace_dir.
     def record_workspace(
         self,
         descriptor: workspace_registry.WorkspaceDescriptor,
@@ -306,6 +292,7 @@ class WorkspaceRegistry(workspace_registry.WorkspaceRegistry, Singleton):
         """Records an active workspace descriptor into active session memory."""
         self._workspaces[descriptor.workspace_dir] = descriptor
 
+    # Contract: Removes workspace descriptor from active session memory and returns whether entry was removed.
     def unregister_workspace(
         self, workspace_dir: str, repo_root: Optional[str] = None
     ) -> bool:

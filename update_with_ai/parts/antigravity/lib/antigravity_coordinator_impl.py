@@ -28,12 +28,14 @@ from update_with_ai.parts.workspace.lib import workspace_registry
 from . import antigravity_coordinator, antigravity_workspace
 
 
+# Contract: Coordinator skill identifier name and description.
 COORDINATOR_SKILL_NAME = "cleanroom_coordinator"
 COORDINATOR_SKILL_DESC = (
     "Autonomous zero-execution Cleanroom coordinator for multi-agent role scheduling and DAG convergence."
 )
 
 
+# Contract: Renders zero-execution coordinator skill markdown with YAML frontmatter prohibiting workspace inheritance.
 def _render_coordinator_skill_markdown(dir_scope: str = "") -> str:
     """Renders the complete Markdown document for the Cleanroom coordinator skill."""
     scope_hint = f" {dir_scope}" if dir_scope else ""
@@ -52,7 +54,7 @@ Your sole responsibility is coordinating multi-agent DAG convergence across comm
 1. **NO CODE CUSTODY**: Never open, read, or edit implementation source files (`lib/*.py`, `tests/*_test.py`, `high/*.md`, etc.).
 2. **NO TEST EXECUTION**: Never run test suites (`pytest`, `pyright`, etc.) in the coordinator session.
 3. **NO EXPLORATORY SEARCHING**: Never run `find`, `grep`, `git diff`, or directory tree walks.
-4. **WORKSPACE COMMISSIONING**: Ensure all role workspaces are commissioned for the active scope before dispatching turns (`bin/cleanroom commission <role> <scope>`).
+5. **WORKSPACE COMMISSIONING**: Ensure all role workspaces are commissioned for the active scope before dispatching turns (`bin/cleanroom commission <role> <scope>`).
 5. **QUEUE EVALUATION ONLY**: Inspect the DAG work queue for ready nodes `(unit, role)` by running:
    ```bash
    bin/cleanroom work-queue{scope_hint} --json
@@ -67,6 +69,7 @@ Your sole responsibility is coordinating multi-agent DAG convergence across comm
 """
 
 
+# Contract: AntigravityCoordinatorGenerator realizes skill artifact generation, tool parameter formatting, and wake notification parsing in the agent session tier.
 class AntigravityCoordinatorGenerator(
     Singleton,
     antigravity_coordinator.AntigravityCoordinatorGenerator,
@@ -78,6 +81,7 @@ class AntigravityCoordinatorGenerator(
     def __init__(self) -> None:
         pass
 
+    # Contract: AntigravityCoordinatorGenerator.generate_coordinator_skill - generates zero-execution coordinator skill document.
     def generate_coordinator_skill(
         self,
         dir_scope: str = "",
@@ -94,6 +98,7 @@ class AntigravityCoordinatorGenerator(
             content=content,
         )
 
+    # Contract: AntigravityCoordinatorGenerator.format_dispatch_directive - formats role dispatch directive into subagent dispatch spec with workspace path pinned.
     def format_dispatch_directive(
         self,
         dispatch: subagent_coordinator.RoleDispatch,
@@ -125,11 +130,13 @@ class AntigravityCoordinatorGenerator(
             model=model,
         )
 
+    # Contract: AntigravityCoordinatorGenerator.parse_wake_notification - parses completion message text into structured wake notification.
     def parse_wake_notification(
         self,
         message_text: str,
     ) -> antigravity_coordinator.WakeNotificationMessage:
         """Parses completion message text into a structured wake notification."""
+
         if not message_text or not message_text.strip():
             return antigravity_coordinator.WakeNotificationMessage(
                 action="idle",
@@ -219,6 +226,7 @@ class AntigravityCoordinatorGenerator(
         )
 
 
+# Contract: Renders Markdown content for workspace-local Antigravity isolation rules and in-band tool invariants.
 def _render_isolation_rule_content(role_name: str, dir_scope: str) -> str:
     """Renders the Markdown content for workspace-local Antigravity isolation rules."""
     return f"""# Cleanroom Role Workspace Confinement Rules: {role_name}
@@ -238,6 +246,7 @@ def _render_isolation_rule_content(role_name: str, dir_scope: str) -> str:
 """
 
 
+# Contract: AntigravityWorkspaceConfigurer realizes Antigravity-specific isolation rules and workspace confinement in the agent session tier.
 class AntigravityWorkspaceConfigurer(
     Singleton,
     antigravity_workspace.AntigravityWorkspaceConfigurer,
@@ -249,6 +258,7 @@ class AntigravityWorkspaceConfigurer(
     def __init__(self) -> None:
         pass
 
+    # Contract: AntigravityWorkspaceConfigurer.configure_workspace - establishes Antigravity isolation rules and returns confinement report.
     def configure_workspace(
         self,
         workspace_dir: str,
@@ -275,6 +285,7 @@ class AntigravityWorkspaceConfigurer(
             role_name=role_name,
             is_confined=True,
         )
+
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

@@ -108,3 +108,13 @@ as a read-only file, and declares no file named `sprocket.py`.
 
 3. The caller asks whether `sprocket.py` can be written.
    Observed: write access is refused for `sprocket.py`.
+
+## Scenario 8 — Guarding metadata header, whitespace tolerance, and edit delta
+
+Given: the agent session declares `widget.py` as a read-write file starting with the metadata header `# --- CLEANROOM METADATA ---` and containing the line `    value = 1  `, with edit delta output configured.
+
+1. The caller attempts to replace content that alters `# --- CLEANROOM METADATA ---`.
+   Observed: the tool refuses the edit explicitly, preserving the metadata block unaltered.
+
+2. The caller invokes the replace file content tool with target content `value = 1` matching with normalized whitespace.
+   Observed: the tool succeeds via whitespace-tolerant line matching and appends a unified diff to the response output.

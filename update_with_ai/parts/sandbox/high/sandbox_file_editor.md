@@ -24,7 +24,7 @@ Autonomous agents require structured mechanisms to update code and configuration
 
 An *editing tool* is a tool that writes to a read-write file.
 
-An agent session's *replace file content tool* is an editing tool that replaces target content with replacement content in a read-write file within a line range bounded by a start line and an end line, or across multiple occurrences when multiple replacements are permitted.
+An agent session's *replace file content tool* is an editing tool that replaces target content with replacement content in a read-write file within a line range bounded by a start line and an end line, attempting whitespace-normalized line matching when exact character-sequence matching fails and matches uniquely within the target line range, rejecting any modification that alters or removes in-band metadata header blocks, appending a unified diff to tool response output when edit delta formatting is enabled, or operating across multiple occurrences when multiple replacements are permitted.
 
 An agent session's *edit manager* tracks the edits an agent session makes to workspace files, and exposes whether workspace file writes occurred during the session by comparing workspace file content against its in-band code hash.
 

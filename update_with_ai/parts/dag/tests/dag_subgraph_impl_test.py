@@ -378,6 +378,18 @@ class DagSubgraphImplTest(unittest.TestCase):
             self.assertIn(dirty_dep, batch)
             self.assertNotIn(clean_dep, batch)
 
+    def test_topological_sort_ties_broken_by_unqualified_role_name(self) -> None:
+        """Scenario 9: MUST evaluate alphabetical role precedence on unqualified role identifier extracted following final colon delimiter."""
+        target = _make_node("target_unit", "//roles:root")
+        node_alpha = _make_node("same_unit", "//my/scope:alpha")
+        node_beta = _make_node("same_unit", "//different/scope:beta")
+        self.storage.set_dependencies(target, {_make_dep(node_beta), _make_dep(node_alpha)})
+        with enter_phase(system, registry=self.registry) as scope:
+            subgraph = scope.get_singleton(DagSubgraph)
+            subgraph.set_target(target)
+            order = list(subgraph._topological_order)
+            self.assertLess(order.index(node_alpha), order.index(node_beta))
+
 
 if __name__ == "__main__":
     unittest.main()

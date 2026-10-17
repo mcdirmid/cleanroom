@@ -16,8 +16,10 @@ CONSTITUENTS = (
     loop_node_cleaner_impl,
 )
 
+# Contract: Aggregates loop guard repetition tracking, subgraph iteration, and node cleaning orchestration into the loop subsystem assembly.
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     for mod in CONSTITUENTS:
         mod.__initialize__(registry)
 
 _initialize_ = __initialize__
+

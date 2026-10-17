@@ -185,8 +185,11 @@ def write_file_with_perms(
 
 
 def copy_file_with_perms(src: str, dst: str, readonly: bool = False, executable: bool = False) -> None:
-    assert workspace_commands_impl is not None
-    workspace_commands_impl.copy_file_with_perms(src, dst, readonly=readonly, executable=executable)
+    from support.lib.lifecycle import get_singleton
+    from update_with_ai.parts.workspace.lib import workspace_provision
+    get_singleton(workspace_provision.WorkspaceProvisioner).copy_file_with_permissions(
+        src, dst, readonly=readonly, executable=executable
+    )
 
 
 def compute_role_work_queue(role_name: str, dir_scope: str, repo_root: str | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -228,8 +231,12 @@ def get_current_role_metadata(workspace_dir: str | None = None) -> dict[str, Any
 
 
 def is_auditor_role(role_name: str, repo_root: str | None = None, dir_scope: str | None = None) -> bool:
-    assert workspace_commands_impl is not None
-    return workspace_commands_impl.is_auditor_role(role_name, repo_root=repo_root)
+    clean_r = role_name.split(":")[-1].strip().lower()
+    from support.lib.lifecycle import get_singleton
+    from update_with_ai.parts.workspace.lib import workspace_registry
+    reg = get_singleton(workspace_registry.WorkspaceRegistry)
+    r_def = reg.resolve_role_definition(clean_r, repo_root=repo_root)
+    return bool(r_def.audit_tag or not r_def.src_pattern)
 
 
 def resolve_cleanroom_log_path(role_name: str, repo_root: str | None = None, dir_scope: str | None = None) -> str:

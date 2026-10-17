@@ -32,6 +32,6 @@ When configuring a role workspace:
 
 - The dsh workspace configurer embeds command execution constraints in role agent documentation restricting shell usage strictly to the five prescribed workspace binaries.
 
-- The dsh workspace configurer generates a targeted Cordis overlay patch file configuring model routing, resolving declared model configuration profiles to their underlying model identifiers, and unattended execution permissions.
+- The dsh workspace configurer generates a targeted Cordis overlay patch file configuring model routing, resolving declared model configuration profiles against model configuration definitions discovered across workspace ancestors or repository root (stripping model prefixes), setting high reasoning effort for DeepSeek providers, disabling task management plugins, and unattended execution permissions.
 
 - The dsh workspace configurer returns a dsh confinement report documenting all configured boundary files.

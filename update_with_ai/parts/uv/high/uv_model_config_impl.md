@@ -25,7 +25,7 @@ Executing autonomous agent workflows under the native UV runtime requires loadin
 
 The openai config, agent config, and dag config resolve the active model configuration name from the `--config` command-line argument, the `CLEANROOM_MODEL` environment variable, the `MODEL_CONFIG_TARGET` environment variable, or the default selection declared in the workspace configuration file.
 
-The openai config, agent config, and dag config load execution parameters and authentication credentials for language model agent runs from a declarative TOML configuration file in the repository root (such as `model_configs.toml`) or user configuration directory.
+The openai config, agent config, and dag config load execution parameters and authentication credentials for language model agent runs from a declarative TOML configuration file, discovered hierarchically by searching candidate configuration filenames (`model_configs.toml`, `cleanroom_models.toml`, `cleanroom.toml`) from the current directory upward, with fallback to user configuration paths (`~/.config/cleanroom/models.toml`, `~/.cleanroom/models.toml`).
 
 The openai config provides model execution settings including target model name, base url, timeout duration, sampling temperature, and token generation limits when constrained. Authentication credentials are bound from designated environment variables specified in the configuration, defaulting to ambient process environment variables.
 

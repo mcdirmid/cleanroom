@@ -74,6 +74,7 @@ class WorkspaceSynchronizer(InTier[AgentSessionTier], Protocol):
           role workspace.
         - MUST leave writable targets unmodified.
         - MUST enforce read-only test stub integrity for stub role dependencies.
+        - MUST scope workspace tool configurations to the role workspace boundaries.
         - MUST return the count of refreshed files.
         """
         ...

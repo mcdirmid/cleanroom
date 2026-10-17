@@ -22,7 +22,7 @@ By reading target configuration from environment variables or command-line argum
 - The configuration resolves the active model configuration name from the CLEANROOM_MODEL environment variable. [resolve_config_from_cleanroom_model_env]
 - The configuration resolves the active model configuration name from the MODEL_CONFIG_TARGET environment variable. [resolve_config_from_model_config_target_env]
 - The configuration resolves the active model configuration name from the default entry of the configuration file. [resolve_config_from_file_default]
-- The configuration loads execution parameters from the named entry in the declarative TOML configuration file. [load_params_from_toml]
+- The configuration loads execution parameters from the named entry in the declarative TOML configuration file discovered hierarchically across candidate filenames and user configuration paths. [load_params_from_toml]
 - The configuration loads authentication credentials from the named entry in the declarative TOML configuration file. [load_credentials_from_toml]
 - Execution parameters fall back to ambient environment variables when the configuration file or named entry is absent. [fallback_params_to_env]
 - Authentication credentials fall back to ambient environment variables when the configuration file or named entry is absent. [fallback_credentials_to_env]

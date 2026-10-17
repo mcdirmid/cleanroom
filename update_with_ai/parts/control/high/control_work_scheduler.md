@@ -34,4 +34,4 @@ The work scheduler orders candidate nodes by role tier depth, so that upstream r
 
 The work scheduler evaluates the readiness of a candidate node by checking that every direct non-silent upstream dependency in graph storage is clean.
 
-The work scheduler synthesizes scheduled tasks by loading role guides, formatting task instructions, listing declared dependency paths, and appending the unaddressed feedback messages recorded on the target node.
+The work scheduler synthesizes scheduled tasks by loading role guides, formatting task instructions, listing declared dependency paths, deriving companion grounding specifications based on upstream role dependencies, and appending the unaddressed feedback messages recorded on the target node.

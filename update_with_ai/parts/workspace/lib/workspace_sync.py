@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
 
 
+# Contract: SyncResult data type represents the outcome of a synchronization operation.
 @dataclass(frozen=True)
 class SyncResult:
     """Outcome of a synchronization operation.
@@ -30,9 +31,11 @@ class SyncResult:
     flushed_blames: Sequence[str]
 
 
+# Contract: WorkspaceSynchronizer coordinates bi-directional synchronization and blame flushing.
 class WorkspaceSynchronizer(Protocol):
     """Coordinates bi-directional synchronization and blame flushing."""
 
+    # Contract: Pulls updated upstream contracts and source files into role workspace.
     def pull(
         self,
         workspace_dir: str,
@@ -42,6 +45,7 @@ class WorkspaceSynchronizer(Protocol):
         silent: bool = False,
     ) -> int: ...
 
+    # Contract: Refreshes non-parts system files into role workspace.
     def refresh_system_files(
         self,
         workspace_dir: str,
@@ -51,6 +55,7 @@ class WorkspaceSynchronizer(Protocol):
         silent: bool = False,
     ) -> int: ...
 
+    # Contract: Harvests modified targets, stamps audits, and flushes blame back to main.
     def harvest(
         self,
         workspace_dir: str,
@@ -59,6 +64,7 @@ class WorkspaceSynchronizer(Protocol):
         dir_scope: str,
     ) -> SyncResult: ...
 
+    # Contract: Flushes buffered blame feedback entries from workspace into main.
     def flush_blame_buffer(
         self, workspace_dir: str, main_root: str
     ) -> Sequence[str]: ...

@@ -25,6 +25,6 @@ Multi-agent coordination requires command-line entrypoints for triggering wave d
 
 The subagent tool runner realization implements command execution, command-line argument parsing, and diagnostic formatting for subagent orchestration.
 
-The realization parses command-line arguments for the orchestrate command, including directory scope, optional target role boundary, harness platform, model identifier, maximum waves, batch size constraints, execution timeout limits, and conversation token limits.
+The realization parses command-line arguments, prepending the default orchestrate subcommand when omitted from arguments, including directory scope, optional target role boundary, harness platform, model identifier, maximum waves, batch size constraints, execution timeout limits, conversation token limits, and maximum unproductive turn limits. A module entrypoint runs the tool runner within an agent session phase.
 
-The realization resolves the execution harness adapter through the harness resolver with configured timeout and token limits, dispatches dynamic supervision to the coordinator until convergence, and prints execution metrics.
+The realization resolves the execution harness adapter through the harness resolver with configured timeout and token limits, dispatches dynamic supervision with optional unproductive turn limits to the coordinator until convergence, and prints execution metrics.

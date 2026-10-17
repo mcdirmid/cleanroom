@@ -26,7 +26,7 @@ A *verification result* reports whether verification checks succeeded or failed,
 
 An agent session's *verification evaluator* coordinates verification execution for active targets.
 
-The verification evaluator evaluates the configured verification checks of a specified target node, or of every active target in the session.
+The verification evaluator evaluates the configured verification checks of a specified target node, or of every active target in the session. Verification checks may be realized polymorphically either as callable verification objects providing a verify method or as command objects specifying a shell command string executed with a bounded timeout.
 
 The verification evaluator filters diagnostic text by stripping build system progress lines, target load banners, and elapsed timing statistics, preserving actionable diagnostic error and warning messages.
 

@@ -20,6 +20,8 @@ Decentralized dirty tracking and feedback distribution require uniform metadata 
 
 - A file metadata record encapsulates a last cleaned timestamp when clean, a last changed timestamp when modified, a change summary, unacted feedback items, role audit timestamps, a dirty reason when dirtiness is attributed, and a code hash when computed.
 - A source metadata coordinator operates within the system lifecycle tier.
+- In-band metadata headers format Python headers as line comments delimited by `# --- CLEANROOM METADATA ---` and `# --- END CLEANROOM METADATA ---`, and Markdown headers as HTML comments delimited by `<!-- CLEANROOM METADATA` and `-->`.
+- Module-level procedural facade functions delegate operations directly to the active source metadata coordinator singleton.
 
 ### Contracts
 
@@ -37,12 +39,14 @@ Decentralized dirty tracking and feedback distribution require uniform metadata 
 - A source metadata coordinator stamps role audits with current UTC timestamp while advancing last cleaned timestamp. [stamp_audit_entry]
 - A source metadata coordinator clears all role audit entries from file metadata. [clear_audits_entries]
 - A source metadata coordinator deletes last cleaned timestamps from file metadata. [delete_last_cleaned_entry]
+- Module-level procedural facade functions delegate metadata queries and mutations to the coordinator singleton. [delegate_procedural_facades]
 
 ### Woven Contracts
 
 - When evaluating whether a file has modifications, the coordinator extracts on-disk metadata and compares computed code hash against recorded code hash. [extract_metadata_disk, compute_code_hash_value, evaluate_code_modified]
 - When marking a file clean, the coordinator advances last cleaned timestamp to now, preserves or initializes last changed timestamp, and clears unacted feedback. [mark_clean_status, update_metadata_disk]
 - When recording a change, the coordinator updates last cleaned timestamp, sets last changed timestamp to now, updates change summary, stamps new code hash, and clears unacted feedback. [record_change_status, compute_code_hash_value, update_metadata_disk]
+- Calling a module-level procedural facade function resolves the active coordinator singleton and forwards invocation arguments. [delegate_procedural_facades]
 
 ## Grounding
 

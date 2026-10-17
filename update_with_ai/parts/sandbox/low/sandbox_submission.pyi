@@ -87,6 +87,7 @@ class SubmitTool(ResolveTool, InTier[AgentSessionTier], Protocol):
             Response confirming task submission.
 
         POSTCONDITIONS:
+        - MUST resolve submitted target arguments supplied as canonical target strings or workspace-relative file paths against declared role targets.
         - WHEN verification passes, MUST conclude active node.
         - MUST mark the resolve target clean in the current turn.
         - WHEN workspace files were modified, MUST enforce change documentation.

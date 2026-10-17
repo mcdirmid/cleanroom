@@ -61,10 +61,8 @@ cross-role dependency, and the unit widget depends on the unit gadget.
    specification contracts for gadget and exclude the peer gamma-role implementation file for
    gadget.
 
-2. The agent asks which contracts govern the alpha-role target for widget.
-   Observed: the answer includes the upstream specification contracts for widget and the
-   interface definitions the target depends on, and every returned path is an existing readable
-   file.
+2. The agent asks which contracts govern the alpha-role target for widget_impl.
+   Observed: the answer includes the upstream specification contracts for widget_impl and the companion interface contracts without the _impl suffix, and every returned path is an existing readable file.
 
 ## Scenario 5 — Asking as a role that does not exist
 

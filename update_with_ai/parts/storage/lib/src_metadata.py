@@ -13,13 +13,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 
+# Contract: Helper computing auditor tag dynamically: uppercase role name + _AUDIT.
 def get_audit_tag(role_name: str) -> str:
     """Computes auditor tag dynamically: uppercase role name + _AUDIT."""
     clean = role_name.split(":")[-1].strip().upper()
     return clean if clean.endswith("_AUDIT") else f"{clean}_AUDIT"
 
 
-def _load_role_definitions_from_roles_toml() -> Dict[str, Any]:
+def _load_role_definitions() -> Dict[str, Any]:
     bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()
     search_roots = [bwd]
     cur = bwd
@@ -32,27 +33,58 @@ def _load_role_definitions_from_roles_toml() -> Dict[str, Any]:
         cur = os.path.dirname(cur)
     import tomllib
     for root in search_roots:
-        for fname in (
-            "cleanroom_roles.toml",
-            "cleanroom_python_roles.toml",
-            os.path.join("update_python_with_ai", "cleanroom_roles.toml"),
-        ):
-            cand = os.path.join(root, fname)
-            if os.path.isfile(cand):
-                try:
-                    with open(cand, "rb") as f:
-                        data = tomllib.load(f)
-                        roles = data.get("roles", {})
-                        if roles:
-                            return roles
-                except Exception:
-                    pass
+        cand = os.path.join(root, "cleanroom_roles.toml")
+        if os.path.isfile(cand):
+            try:
+                with open(cand, "rb") as f:
+                    roles = tomllib.load(f).get("roles", {})
+                    if roles:
+                        return roles
+            except Exception:
+                pass
+        c_cand = os.path.join(root, "cleanroom.toml")
+        if os.path.isfile(c_cand):
+            try:
+                with open(c_cand, "rb") as f:
+                    c_data = tomllib.load(f)
+                meth = c_data.get("methodology")
+                if meth and isinstance(meth, str):
+                    pkg = meth.lstrip("/").split(":")[0]
+                    r_cand = os.path.join(root, pkg, "cleanroom_roles.toml")
+                    if os.path.isfile(r_cand):
+                        with open(r_cand, "rb") as f:
+                            roles = tomllib.load(f).get("roles", {})
+                            if roles:
+                                return roles
+            except Exception:
+                pass
+        try:
+            for entry in os.listdir(root):
+                sub = os.path.join(root, entry)
+                if os.path.isdir(sub) and not entry.startswith((".", "bazel-", "venv")):
+                    sub_cand = os.path.join(sub, "cleanroom_roles.toml")
+                    if os.path.isfile(sub_cand):
+                        with open(sub_cand, "rb") as f:
+                            roles = tomllib.load(f).get("roles", {})
+                            if roles:
+                                return roles
+        except Exception:
+            pass
     return {}
 
 
+# Contract: Checks whether a role is an auditor dynamically via workspace registry, node config, or methodology.
 def is_auditor_role(role_name: str) -> bool:
     """Checks whether a role is an auditor dynamically without hardcoded role names."""
     clean = role_name.split(":")[-1].strip().lower()
+    try:
+        from support.lib.lifecycle import get_singleton
+        from update_with_ai.parts.workspace.lib import workspace_registry
+        reg = get_singleton(workspace_registry.WorkspaceRegistry)
+        r_def = reg.resolve_role_definition(clean)
+        return not r_def.writable_file_patterns or bool(getattr(r_def, "audit_tag", None))
+    except Exception:
+        pass
     try:
         from support.lib.lifecycle import get_singleton
         from update_with_ai.parts.agent.lib import agent_node_config
@@ -67,15 +99,14 @@ def is_auditor_role(role_name: str) -> bool:
             )
     except Exception:
         pass
-    role_defs = _load_role_definitions_from_roles_toml()
+    role_defs = _load_role_definitions()
     if clean in role_defs:
         r_def = role_defs[clean]
         return bool(r_def.get("audit_tag") or not r_def.get("src_pattern"))
-    if clean in ("auditor", "audit") or clean.endswith(("_audit", "_auditor")):
-        return True
-    return False
+    return clean in ("auditor", "audit") or clean.endswith(("_audit", "_auditor"))
 
 
+# Contract: FileMetadata encapsulates in-band source file metadata attributes.
 @dataclass(frozen=True)
 class FileMetadata:
     """Encapsulates in-band source file metadata attributes."""
@@ -89,6 +120,7 @@ class FileMetadata:
     code_hash: Optional[str] = None
 
 
+# Contract: SourceMetadataCoordinator protocol for parsing, hashing, and mutating in-band source metadata.
 class SourceMetadataCoordinator(Protocol):
     """Protocol for parsing, hashing, and mutating in-band source metadata."""
 

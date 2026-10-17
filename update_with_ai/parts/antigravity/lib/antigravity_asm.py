@@ -20,6 +20,7 @@ CONSTITUENTS = (
 )
 
 
+# Contract: Initializes the antigravity assembly component and its constituents (antigravity_coordinator_impl, antigravity_harness_impl).
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Initializes the antigravity assembly component and its constituents."""
     for constituent in CONSTITUENTS:
@@ -27,3 +28,4 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
 
 
 _initialize_ = __initialize__
+

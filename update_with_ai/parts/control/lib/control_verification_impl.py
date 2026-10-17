@@ -74,6 +74,7 @@ class VerificationEvaluator(control_verification.VerificationEvaluator, Singleto
             control_verification.VerificationResult
         ] = None
 
+    # Contract: Strips build system noise lines from diagnostic text using compiled regex patterns.
     def clean_diagnostic_noise(self, text: str) -> str:
         """Strips build system noise lines from diagnostic text."""
         lines = text.splitlines()
@@ -101,6 +102,7 @@ class VerificationEvaluator(control_verification.VerificationEvaluator, Singleto
             digests.extend(_compute_path_hash(_bound_file_path(f)) for f in files)
         return ":".join(digests)
 
+    # Contract: Evaluates checks for target or all open targets, checks cache, runs verify or command subprocess, scrubs noise, and updates memoized result.
     def evaluate_verification(
         self, target: Optional[dag_storage.DagNode] = None
     ) -> control_verification.VerificationResult:
@@ -157,6 +159,7 @@ class VerificationEvaluator(control_verification.VerificationEvaluator, Singleto
                 elif diagnostic_str:
                     outputs.append(self.clean_diagnostic_noise(diagnostic_str))
             else:
+                # Fallback shell command execution via subprocess.run when check object lacks verify() method.
                 command = getattr(check, "command", None)
                 if command:
                     try:

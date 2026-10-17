@@ -25,9 +25,11 @@ from support.lib.lifecycle import (
 from update_with_ai.parts.agent.lib import agent_session
 from . import workspace_registry, workspace_roles
 
+# Contract: Caches parsed role definitions keyed by file path and modified timestamp.
 _ROLE_CACHE: Dict[str, Tuple[float, Dict[str, workspace_roles.RoleDefinition]]] = {}
 
 
+# Contract: Discovers repository root from argument, registry, or ambient environment.
 def _discover_root(repo_root: Optional[str] = None) -> str:
     """Discovers repository root directory from argument, registry, or ambient environment."""
     if repo_root and os.path.isdir(repo_root):
@@ -43,6 +45,7 @@ def _discover_root(repo_root: Optional[str] = None) -> str:
     return os.path.abspath(os.getcwd())
 
 
+# Contract: Decomposes source path pattern into directory, stem suffix, and extension.
 def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     """Decomposes a source path pattern into its directory, stem suffix, and extension."""
     if not pat:
@@ -57,10 +60,12 @@ def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     return d, suffix, ext
 
 
+# Contract: Builds role definition records from raw attributes, enforcing dependency constraints and postconditions.
 def _build_role_definitions(
     raw_roles: Dict[str, Dict[str, Any]],
 ) -> Dict[str, workspace_roles.RoleDefinition]:
     """Builds role definition records from raw role declaration attributes."""
+    # Contract: Identifies auditor roles based on missing src_pattern or explicit audit_tag.
     auditor_roles = {
         r.split(":")[-1]
         for r, kwargs in raw_roles.items()
@@ -79,6 +84,7 @@ def _build_role_definitions(
         fb_deps_clean = {d.split(":")[-1] for d in raw_fb_deps}
         silent_deps_clean = {d.split(":")[-1] for d in raw_silent_deps}
 
+        # Contract: Postcondition - WHEN feedback role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
         redundant_fb = role_deps_clean & fb_deps_clean
         if redundant_fb:
             raise ValueError(
@@ -86,6 +92,7 @@ def _build_role_definitions(
                 "feedback_role_deps are implicitly role_deps."
             )
 
+        # Contract: Postcondition - WHEN star role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
         redundant_star = role_deps_clean & star_deps_clean
         if redundant_star:
             raise ValueError(
@@ -93,12 +100,14 @@ def _build_role_definitions(
                 "star_role_deps are implicitly role_deps."
             )
 
+        # Contract: Postcondition - WHEN a dependency is declared as both a role dependency and a silent role dependency, MUST raise ValueError.
         conflicting_silent = silent_deps_clean & (role_deps_clean | star_deps_clean | fb_deps_clean)
         if conflicting_silent:
             raise ValueError(
                 f"Role '{rname}' declares dependency {sorted(conflicting_silent)} as both a role dependency and a silent role dependency."
             )
 
+        # Contract: Postcondition - WHEN an auditor role is declared as a role dependency, a star role dependency, or a feedback role dependency, MUST raise ValueError.
         auditor_in_role = role_deps_clean & auditor_roles
         if auditor_in_role:
             raise ValueError(
@@ -120,6 +129,7 @@ def _build_role_definitions(
                 "Auditor roles can only be silent_role_deps."
             )
 
+        # Contract: Derives writable and readonly file patterns from source pattern and dependencies.
         pat = rkwargs.get("src_pattern", "")
         d, sfx, ext = _parse_pat_to_glob(pat)
         writable = [f"{d}/*{sfx}{ext}"] if pat else []
@@ -136,6 +146,7 @@ def _build_role_definitions(
         if rkwargs.get("guide"):
             readonly.append("guides/*.md")
 
+        # Contract: Resolves guide path from configured guide label.
         guide_label = str(rkwargs.get("guide") or "")
         if guide_label.startswith("//"):
             guide_clean = guide_label.lstrip("/")
@@ -147,7 +158,7 @@ def _build_role_definitions(
         elif guide_label.endswith(".md"):
             guide_path = guide_label
         elif guide_label:
-            guide_path = f"update_python_with_ai/guides/{guide_label.lstrip(':')}.md"
+            guide_path = f"{guide_label.lstrip(':')}.md"
         else:
             guide_path = ""
 
@@ -181,6 +192,7 @@ def _build_role_definitions(
     return role_defs
 
 
+# Contract: Parses role declarations from a TOML role configuration file.
 def _load_roles_from_toml_file(
     toml_path: str,
 ) -> Dict[str, workspace_roles.RoleDefinition]:
@@ -195,6 +207,7 @@ def _load_roles_from_toml_file(
     return _build_role_definitions(raw_roles)
 
 
+# Contract: Evaluates define_role invocations and assignments from build file AST.
 def _load_roles_from_build_file(
     build_file_path: str,
 ) -> Dict[str, workspace_roles.RoleDefinition]:
@@ -257,6 +270,7 @@ def _load_roles_from_build_file(
     return _build_role_definitions(raw_roles)
 
 
+# Contract: Normalizes role identifier removing colon prefixes and leading slashes.
 def _normalize_role_identifier(role_name_or_address: str) -> str:
     """Normalizes a role name or package-qualified role address into a canonical role name."""
     cleaned = role_name_or_address.strip()
@@ -265,6 +279,7 @@ def _normalize_role_identifier(role_name_or_address: str) -> str:
     return cleaned.strip("/").lower()
 
 
+# Contract: Discovers methodology binding from cleanroom.toml within dir_scope or upward package hierarchy.
 def _find_methodology_for_scope(root: str, dir_scope: str) -> Optional[str]:
     """Finds methodology binding from cleanroom.toml within dir_scope or upward."""
     if not dir_scope:
@@ -321,6 +336,7 @@ def _find_methodology_for_scope(root: str, dir_scope: str) -> Optional[str]:
     return None
 
 
+# Contract: Loads role definitions from bound methodology package or path.
 def _load_roles_from_methodology(
     root: str, methodology: str
 ) -> Optional[Dict[str, workspace_roles.RoleDefinition]]:
@@ -351,22 +367,26 @@ def _load_roles_from_methodology(
         try:
             import importlib.resources
             files = importlib.resources.files(pkg_name)
-            cand = str(files.joinpath("cleanroom_roles.toml"))
-            if os.path.isfile(cand):
-                return _load_roles_from_toml_file(cand)
+            for cand_name in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
+                cand = str(files.joinpath(cand_name))
+                if os.path.isfile(cand):
+                    return _load_roles_from_toml_file(cand)
         except (ImportError, TypeError, OSError):
             pass
-        cand = os.path.join(root, methodology, "cleanroom_roles.toml")
-        if os.path.isfile(cand):
-            return _load_roles_from_toml_file(cand)
+        for cand_name in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
+            cand = os.path.join(root, methodology, cand_name)
+            if os.path.isfile(cand):
+                return _load_roles_from_toml_file(cand)
     return None
 
 
+# Contract: Realizes workspace_roles.RoleResolver singleton.
 class RoleResolver(workspace_roles.RoleResolver, Singleton):
     """Realizes role configuration resolution and constraint verification."""
 
     tier = agent_session.agent_session
 
+    # Contract: Parses role declarations from repository role configuration files or build files.
     def _get_roles(
         self, repo_root: Optional[str] = None
     ) -> Dict[str, workspace_roles.RoleDefinition]:
@@ -436,9 +456,10 @@ class RoleResolver(workspace_roles.RoleResolver, Singleton):
                     pass
 
         raise FileNotFoundError(
-            f"Cleanroom role definitions file (cleanroom_roles.toml or cleanroom_python_roles.toml) not found under: '{root}'"
+            f"Cleanroom role definitions file (cleanroom_roles.toml) not found under: '{root}'"
         )
 
+    # Contract: Constructs role definition carrying its resolved qualified role address.
     def _with_role_address(
         self, base: workspace_roles.RoleDefinition, role_address: str
     ) -> workspace_roles.RoleDefinition:
@@ -469,6 +490,7 @@ class RoleResolver(workspace_roles.RoleResolver, Singleton):
             template_command=base.template_command,
         )
 
+    # Contract: Resolves role configuration matching declared roles or addressed packages.
     def resolve_role_definition(
         self,
         role_name_or_address: str,
@@ -479,6 +501,7 @@ class RoleResolver(workspace_roles.RoleResolver, Singleton):
         root = _discover_root(repo_root)
 
         clean_addr = role_name_or_address.strip()
+        # Contract: Package-qualified role address resolution from addressed package.
         if (
             clean_addr.startswith("//")
             or clean_addr.startswith("./")
@@ -493,6 +516,7 @@ class RoleResolver(workspace_roles.RoleResolver, Singleton):
 
         clean = _normalize_role_identifier(role_name_or_address)
 
+        # Contract: Resolves role definition from methodology bound to dir_scope when specified.
         if dir_scope:
             meth = _find_methodology_for_scope(root, dir_scope)
             if meth:
@@ -501,6 +525,7 @@ class RoleResolver(workspace_roles.RoleResolver, Singleton):
                     return scope_roles[clean]
 
         roles = self._get_roles(repo_root)
+        # Contract: Postcondition - WHEN the queried role is undeclared, MUST raise KeyError.
         if clean not in roles:
             raise KeyError(
                 f"Unknown cleanroom role: '{clean}'. Declared roles: {sorted(roles.keys())}"
@@ -510,6 +535,7 @@ class RoleResolver(workspace_roles.RoleResolver, Singleton):
             return self._with_role_address(base, role_name_or_address)
         return base
 
+    # Contract: Loads and resolves all role definitions declared in repository or bound methodology.
     def list_roles(
         self,
         repo_root: Optional[str] = None,

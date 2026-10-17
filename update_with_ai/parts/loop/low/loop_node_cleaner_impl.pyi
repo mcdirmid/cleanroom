@@ -86,7 +86,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
     - Marks nodes clean through DagStorage.mark_node_clean, passing a change description when the
       node's workspace files were modified and omitting it when no
       workspace files were modified for that node so the last changed timestamp is preserved.
-    - Routes blame through DagStorage.add_feedback_message, recording a FeedbackMessage addressed
+    - Routes blame through DagStorage.add_feedback_message by extracting blame targets and explanations from outcome response text lines and matching blamed targets against NodeConfig.blame_targets_by_node by canonical address, address suffix, or file path, recording a FeedbackMessage addressed
       to the feedback dependency DagNode owning the blamed file, and leaves nodes dirty when the
       blamed file matches no configured blame target.
     - Short-circuits promptless batches before any session phase, reading AgentStorage.get_task_prompt
@@ -142,6 +142,8 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
         - WHEN the outcome signals successful advancement with workspace file modifications, MUST mark the nodes clean in graph storage with the change summary.
         - WHEN no workspace files were modified, MUST mark the nodes clean without advancing change timestamps.
         - WHEN the outcome signals blame attributed to a configured blame target, MUST produce feedback messages addressed strictly to the declared feedback dependency node owning the blamed file.
+        - WHEN the outcome signals blame through conversational text lines, MUST extract the blamed target and explanation.
+        - WHEN matching a blamed target against configured blame targets, MUST match by unit address, address suffix, or file path with extension normalization.
         - WHEN the blamed file matches no configured blame target, MUST produce no feedback message and leave the nodes dirty.
         - WHEN the outcome signals run failure, MUST produce no propagating messages.
         - WHEN the outcome signals run failure, MUST leave the nodes dirty.

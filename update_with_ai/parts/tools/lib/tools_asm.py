@@ -28,6 +28,7 @@ CONSTITUENTS = (
     workspace_work_impl,
 )
 
+# Contract: Assembles tool and inspection services into the tools package on the system lifecycle tier by delegating to constituents.
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Initializes the tools assembly component on the system lifecycle tier by delegating to its constituents."""
     reg = get_default_registry() if registry is None else registry

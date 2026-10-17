@@ -16,6 +16,7 @@ from . import workspace_registry
 class WorkspaceProvisioner(Protocol):
     """Service commissioning and decommissioning isolated role workspaces."""
 
+    # Contract: MUST commission an isolated role workspace with permission boundaries, runner tools, and AGENTS.md.
     def commission(
         self,
         role_name: str,
@@ -26,6 +27,7 @@ class WorkspaceProvisioner(Protocol):
         model: Optional[str] = None,
     ) -> workspace_registry.WorkspaceDescriptor: ...
 
+    # Contract: MUST copy file applying exact read-only (0o444), writable (0o644), or executable (0o755/0o555) permissions.
     def copy_file_with_permissions(
         self,
         src: str,
@@ -34,6 +36,7 @@ class WorkspaceProvisioner(Protocol):
         executable: bool = False,
     ) -> None: ...
 
+    # Contract: MUST write content with exact permissions (0o444, 0o644, 0o755, or 0o555).
     def write_file_with_permissions(
         self,
         dst: str,
@@ -42,8 +45,10 @@ class WorkspaceProvisioner(Protocol):
         executable: bool = False,
     ) -> None: ...
 
+    # Contract: MUST package executable runner zipapps into bin_dir with 0o755 permissions and remove stale coverage script.
     def deploy_runner_zipapps(self, bin_dir: str) -> None: ...
 
+    # Contract: MUST synthesize role-tailored AGENTS.md instructions in the workspace root with 0o644 permissions.
     def write_role_agents_guide(
         self,
         workspace_dir: str,
@@ -52,6 +57,7 @@ class WorkspaceProvisioner(Protocol):
         repo_root: Optional[str] = None,
     ) -> None: ...
 
+    # Contract: MUST synthesize read-only test stubs for stub role dependencies and delete orphaned stubs.
     def sync_test_stubs(
         self,
         workspace_dir: str,

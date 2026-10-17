@@ -11,11 +11,15 @@ from . import loop_conversation
 from update_with_ai.parts.sandbox.lib import tool_provider
 
 
+# Contract: LoopOutcome represents the final result of an agent run carrying termination outcome and conversation state.
 @dataclass(frozen=True)
 class LoopOutcome:
     response: tool_provider.ToolResponse
     conversation: loop_conversation.ModelRequest
 
 
+# Contract: LoopDriver coordinates the turn loop, model request dispatch, and tool execution for an agent session.
 class LoopDriver(Protocol):
+    # Contract: LoopDriver.run - drives iterative turns until tool termination or conversation limit exhaustion.
     def run(self) -> LoopOutcome: ...
+

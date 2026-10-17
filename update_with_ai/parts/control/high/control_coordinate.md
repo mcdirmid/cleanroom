@@ -28,9 +28,9 @@ A *control dispatch outcome* reports the unified result of a control action, car
 
 An agent session's *session coordinator* maintains active targets and dispatches control operations.
 
-The session coordinator tracks the active targets of the session with their target states and associated file aliases, and resolves a default target node when a target parameter is omitted, selecting the single open target or the most recently accessed open file.
+The session coordinator tracks the active targets of the session with their target states and associated file aliases, excluding ephemeral root session targets (such as //session:target) from persistent graph registration, and resolves a default target node when a target parameter is omitted, selecting the single open target or the most recently accessed open file.
 
-The session coordinator dispatches work scheduling across either an execution subgraph or a directory scope, populating the active targets of the session.
+The session coordinator dispatches work scheduling across either an execution subgraph or a directory scope, materializing starter templates through graph storage for newly dirtied scheduled task nodes whose target files do not exist on disk, and populating the active targets of the session.
 
 The session coordinator dispatches verification checking, evaluating a specific target file when a target path is supplied or every open target when no target is supplied.
 

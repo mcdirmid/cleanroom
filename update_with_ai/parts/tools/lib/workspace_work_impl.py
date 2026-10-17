@@ -36,10 +36,9 @@ from . import (
     workspace_work,
 )
 
-PENDING_WORK_FILE = ".cleanroom_pending_work.json"
-_UNIT_PART_MAP_CACHE: Dict[str, Dict[str, str]] = {}
 
 
+# Contract: Classifies unit type by suffix (_ext, _asm, _impl, interface).
 def _classify_unit_type(unit_name: str) -> str:
     if unit_name.endswith("_ext"):
         return "external"
@@ -50,6 +49,7 @@ def _classify_unit_type(unit_name: str) -> str:
     return "interface"
 
 
+# Contract: Checks whether role is an auditor role based on audit_tag or absence of src_pattern.
 def _is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     clean_r = role_name.split(":")[-1].strip().lower()
     reg = get_singleton(workspace_registry.WorkspaceRegistry)
@@ -57,6 +57,7 @@ def _is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     return bool(r_def.audit_tag or not r_def.src_pattern)
 
 
+# Contract: Parses high-level markdown specifications to extract unit names and dependencies.
 def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
     high_dir = os.path.join(repo_root, part_dir, "high")
     if os.path.isdir(high_dir):
@@ -105,12 +106,6 @@ def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
         parts_p = os.path.join(repo_root, "parts")
         if os.path.isdir(parts_p):
             return [os.path.join("parts", d) for d in sorted(os.listdir(parts_p)) if os.path.isdir(os.path.join(parts_p, d)) and not d.startswith(".")]
-        for entry in sorted(os.listdir(repo_root)):
-            cand = os.path.join(repo_root, entry, "parts")
-            if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv")):
-                dir_scope = entry
-                break
-    if not dir_scope:
         return []
     scope_p = os.path.join(repo_root, dir_scope)
     parts_p = os.path.join(scope_p, "parts")
@@ -119,6 +114,7 @@ def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
     return [dir_scope] if os.path.isdir(scope_p) else []
 
 
+# Contract: Parses a dependency label into (package_dir, unit_name).
 def _parse_dependency_label(raw: str, default_pkg: str) -> Tuple[str, str]:
     """Parses a dependency label into (package_dir, unit_name)."""
     if raw.startswith("//"):
@@ -128,6 +124,7 @@ def _parse_dependency_label(raw: str, default_pkg: str) -> Tuple[str, str]:
     return default_pkg, raw.lstrip(":").strip()
 
 
+# Contract: Parses pattern format string into directory name, prefix, and suffix.
 def _parse_pattern_info(src_pattern: str) -> Tuple[str, str, str]:
     if not src_pattern:
         return "", "", ""
@@ -142,6 +139,7 @@ def _parse_pattern_info(src_pattern: str) -> Tuple[str, str, str]:
     return dir_name, prefix, suffix
 
 
+# Contract: Materializes starter template using dag_storage.DagStorage.materialize_template.
 def _materialize_starter_template(target_path: str, role_name_or_address: str, workspace_dir: str) -> None:
     storage = None
     try:
@@ -153,17 +151,11 @@ def _materialize_starter_template(target_path: str, role_name_or_address: str, w
             unit_address=dag_storage.UnitAddress(target_path),
             role_address=dag_storage.RoleAddress(role_name_or_address),
         )
-        old_bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-        try:
-            os.environ["BUILD_WORKSPACE_DIRECTORY"] = workspace_dir
-            storage.materialize_template(node)
-        finally:
-            if old_bwd is not None:
-                os.environ["BUILD_WORKSPACE_DIRECTORY"] = old_bwd
-            elif "BUILD_WORKSPACE_DIRECTORY" in os.environ:
-                del os.environ["BUILD_WORKSPACE_DIRECTORY"]
+        storage.materialize_template(node)
 
 
+
+# Contract: Discovers all dirty units in scope by evaluating each unit against role definitions.
 def _find_all_dirty_in_scope(
     repo_root: str, dir_scope: str = "", role_filter: Optional[str] = None
 ) -> List[Dict[str, Any]]:
@@ -211,6 +203,7 @@ def _find_all_dirty_in_scope(
     return dirty_units
 
 
+# Contract: Sorts candidate units topologically according to module dependencies.
 def _topological_sort_units(
     units_list: List[Dict[str, Any]],
     module_deps: Dict[str, List[str]],
@@ -239,6 +232,7 @@ def _topological_sort_units(
     return order
 
 
+# Contract: Traverses upstream role dependency chain including role_deps, feedback_role_deps, and star_role_deps.
 def _get_role_upstream_chain(
     role_name: str, repo_root: Optional[str] = None
 ) -> List[str]:
@@ -261,6 +255,8 @@ def _get_role_upstream_chain(
     return order
 
 
+
+# Contract: WorkspaceWorkManager realizes work discovery across directory scopes and pending buffer tracking in agent_session tier.
 class WorkspaceWorkManager(
     workspace_work.WorkspaceWorkManager,
     Singleton,
@@ -278,18 +274,23 @@ class WorkspaceWorkManager(
     def _dirtiness(self) -> workspace_dirtiness.WorkspaceDirtinessEvaluator:
         return get_singleton(workspace_dirtiness.WorkspaceDirtinessEvaluator)
 
+    # Contract: Delegates reading pending target paths to WorkspacePendingManager.
     def get_pending_work(self, workspace_dir: str) -> Sequence[str]:
         return self._pending().get_pending_work(workspace_dir)
 
+    # Contract: Delegates recording pending target paths to WorkspacePendingManager.
     def set_pending_work(self, workspace_dir: str, targets: Sequence[str]) -> None:
         self._pending().set_pending_work(workspace_dir, targets)
 
+    # Contract: Delegates removing local pending work buffer to WorkspacePendingManager.
     def clear_pending_work(self, workspace_dir: str) -> None:
         self._pending().clear_pending_work(workspace_dir)
 
+    # Contract: Delegates removing submitted target from pending buffer to WorkspacePendingManager.
     def remove_pending_target(self, workspace_dir: str, submitted_target: str) -> None:
         self._pending().remove_pending_target(workspace_dir, submitted_target)
 
+    # Contract: Delegates checking if pending target is dirty to WorkspacePendingManager.
     def is_pending_target_dirty(
         self,
         target_path: str,
@@ -299,6 +300,7 @@ class WorkspaceWorkManager(
     ) -> bool:
         return self._pending().is_pending_target_dirty(target_path, workspace_dir, main_root, role_name)
 
+    # Contract: Evaluates unit dirtiness using WorkspaceDirtinessEvaluator.
     def _eval_unit_dirty(
         self,
         ws_root: str,
@@ -310,12 +312,14 @@ class WorkspaceWorkManager(
         res = self._dirtiness().evaluate_unit_dirty(ws_root, part_dir, unit_name, eval_role, repo_root)
         return res.is_dirty
 
+    # Contract: Computes ready and blocked dirty units directly from build manifests and metadata.
     def compute_role_work_queue(
         self,
         role_name: str,
         dir_scope: str,
         repo_root: str,
     ) -> Tuple[Sequence[workspace_work.WorkQueueItem], Sequence[workspace_work.WorkQueueItem]]:
+
         clean_role = role_name.split(":")[-1].strip().lower()
         part_dirs = _find_part_dirs_in_scope(repo_root, dir_scope)
         all_units: Dict[str, str] = {}
@@ -426,6 +430,7 @@ class WorkspaceWorkManager(
                         continue
                     star_cand = star_pat.format(unit_dir=dep_pkg, unit_name=dep_u)
                     cand = star_cand
+                    # Fallback from implementation unit to interface unit (_impl suffix stripping) if star dependency candidate file is missing.
                     if not os.path.isfile(os.path.join(repo_root, star_cand)) and dep_u.endswith("_impl"):
                         iface_cand = star_pat.format(unit_dir=dep_pkg, unit_name=dep_u[:-5])
                         if os.path.isfile(os.path.join(repo_root, iface_cand)):
@@ -468,6 +473,7 @@ class WorkspaceWorkManager(
         blocked_items = [_to_queue_item(item, False) for item in blocked_candidates]
         return ready_items, blocked_items
 
+    # Contract: Evaluates dirty units in scope, manages pending work buffer, and returns WorkQueueSummary.
     def evaluate_work(
         self,
         dir_scope: str,
@@ -572,6 +578,7 @@ class WorkspaceWorkManager(
             remaining_ready_count=remaining_count,
         )
 
+    # Contract: Delegates companion specification contracts resolution to WorkspaceDirtinessEvaluator.
     def resolve_contract_files(
         self,
         target_path: str,
@@ -581,6 +588,7 @@ class WorkspaceWorkManager(
         return self._dirtiness().resolve_contract_files(
             target_path, workspace_dir, role_name=role_name
         )
+
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

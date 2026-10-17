@@ -16,13 +16,10 @@ from . import runner_logger
 
 # Requirements specified in runner_logger_impl.pyi
 
+# Contract: MUST default the transcript log file destination to 'agent_loop.log'.
 _DEFAULT_LOG_PATH = "agent_loop.log"
-_LOG_PATH_ENV_VARS = (
-    "RUNNER_LOG_FILE",
-    "AGENT_LOOP_LOG",
-    "TRANSCRIPT_LOG",
-    "RUNNER_LOG",
-)
+# Contract: MUST resolve the transcript log file destination from configured environment variables when present.
+_LOG_PATH_ENV_VAR = "RUNNER_LOG_FILE"
 
 
 class RunnerLogger(runner_logger.RunnerLogger, Singleton):
@@ -30,24 +27,22 @@ class RunnerLogger(runner_logger.RunnerLogger, Singleton):
 
     tier = system
 
-    def __init__(self, log_path: Optional[str] = None) -> None:
-        if log_path is None:
-            log_path = _DEFAULT_LOG_PATH
-            for env_var in _LOG_PATH_ENV_VARS:
-                configured = os.environ.get(env_var)
-                if configured:
-                    log_path = configured
-                    break
+    def __init__(self) -> None:
+        # Contract: MUST default destination to 'agent_loop.log' unless configured via environment variables.
+        log_path = os.environ.get(_LOG_PATH_ENV_VAR) or _DEFAULT_LOG_PATH
         self._log_path = log_path
-        # Truncate the transcript log file at opening so each run starts fresh.
+        # Contract: MUST truncate the transcript log file at opening.
         with open(self._log_path, "w", encoding="utf-8"):
             pass
 
     def consume(self, event: runner_logger.RunnerLogEvent) -> None:
+        # Contract: MUST present single-line event summaries on standard output lines without timestamps or event names.
         sys.stdout.write(f"{event.summary}\n")
         sys.stdout.flush()
+        # Contract: MUST append verbose records to transcript log entries.
         with open(self._log_path, "a", encoding="utf-8") as transcript:
             transcript.write(f"{event.transcript}\n")
+            # Contract: MUST flush transcript log entries immediately after each write to guarantee unbuffered persistence.
             transcript.flush()
 
 

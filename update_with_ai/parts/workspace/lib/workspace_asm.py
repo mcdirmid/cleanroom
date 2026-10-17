@@ -17,6 +17,7 @@ from . import (
     workspace_sync_impl,
 )
 
+# Contract: Declares assembly constituents for the workspace tier.
 CONSTITUENTS = (
     workspace_roles_impl,
     workspace_registry_impl,
@@ -27,6 +28,7 @@ CONSTITUENTS = (
 )
 
 
+# Contract: Initializes workspace assembly component and delegates registration to all constituent modules.
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Initializes the workspace assembly component and its constituents."""
     for constituent in CONSTITUENTS:

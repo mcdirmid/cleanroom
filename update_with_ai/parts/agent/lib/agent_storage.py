@@ -20,11 +20,14 @@ class NodeDefinition:
 
 
 class AgentStorage(dag_storage.DagStorage, Protocol):
+    # Contract: Provides the node definition encapsulating execution config and task prompt for a declared node.
     def get_node_definition(self, node: dag_storage.DagNode) -> NodeDefinition:
         ...
 
+    # Contract: Provides the task prompt instruction describing work required to clean a declared node.
     def get_task_prompt(self, node: dag_storage.DagNode) -> TaskPrompt:
         ...
 
+    # Contract: Evaluates whether a node is dirty from in-band metadata and change state of non-silent dependencies.
     def is_dirty(self, node: dag_storage.DagNode) -> bool:
         ...

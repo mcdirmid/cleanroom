@@ -170,14 +170,6 @@ def _resolve_submit_target(
     role_name: str,
     dir_scope: str = "",
 ) -> Tuple[Optional[str], Optional[str]]:
-    if not dir_scope and repo_root:
-        try:
-            for entry in os.listdir(repo_root):
-                if os.path.isdir(os.path.join(repo_root, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
-                    dir_scope = entry
-                    break
-        except OSError:
-            pass
     target_str = target.strip()
     cand_path = _resolve_target_path(target_str, repo_root)
     if os.path.isfile(cand_path):
@@ -325,6 +317,7 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
     def __init__(self) -> None:
         pass
 
+    # Contract: Resolves a target specification to a canonical or workspace file path and unit name.
     def resolve_submit_target(
         self,
         target: str,
@@ -334,11 +327,13 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
     ) -> tuple[str | None, str | None]:
         return _resolve_submit_target(target, repo_root, role_name, dir_scope)
 
+    # Contract: Parses part directory, unit name, and role name from file path.
     def parse_unit_from_file_path(
         self, file_path: str, repo_root: str
     ) -> tuple[str, str, str]:
         return _parse_unit_from_file_path(file_path, repo_root)
 
+    # Contract: Validates verification passes, in-batch dependencies clean, session feedback resolved, and change summary matches role and modifications; commits clean state.
     def submit_target(
         self,
         target_node: dag_storage.DagNode,
@@ -406,6 +401,7 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
             message=f"Target '{_node_display_alias(target_node)}' submitted successfully.",
         )
 
+    # Contract: Submits file target; validates role targets, write permissions, scope, and modification/summary rules; updates in-band metadata and reflects to workspace.
     def submit_target_file(
         self,
         target: str,
@@ -420,6 +416,7 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
         )
         meta: Optional[Dict[str, Any]] = None
         meta_p = os.path.join(ws_root, ".cleanroom_role.json")
+        # Reads .cleanroom_role.json from ws_root to inspect role_name, dir_scope, or parts_dir.
         if os.path.isfile(meta_p):
             try:
                 with open(meta_p, "r", encoding="utf-8") as f:
@@ -430,14 +427,6 @@ class SubmissionCoordinator(control_submit.SubmissionCoordinator, Singleton):
         r_name = role_name or (meta.get("role_name") or meta.get("role") if meta else "") or ""
         clean_role = r_name.split(":")[-1].strip().lower()
         d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
-        if not d_scope:
-            try:
-                for entry in os.listdir(ws_root):
-                    if os.path.isdir(os.path.join(ws_root, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
-                        d_scope = entry
-                        break
-            except OSError:
-                pass
 
         if repo_root:
             main_root = os.path.realpath(repo_root)

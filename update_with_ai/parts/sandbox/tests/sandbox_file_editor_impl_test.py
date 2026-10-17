@@ -415,12 +415,11 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIsNone(edit_manager.last_read_or_edited_file)
 
     def test_can_write_permits_declared_file(self) -> None:
-        """Postcondition: WHEN a declared read-write file is supplied, MUST record edit and confirm access."""
+        """Postcondition: WHEN a declared read-write file is supplied, MUST confirm access."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             edit_manager = scope.get_singleton(EditManager)
             resp_alias = edit_manager.can_write(self.read_write_file)
             self.assertFalse(resp_alias.is_failed)
-            self.assertEqual(edit_manager.last_read_or_edited_file, self.read_write_file)
             resp_path = edit_manager.can_write(agent_file_alias.RelativePath("read_write.py"))
             self.assertFalse(resp_path.is_failed)
 

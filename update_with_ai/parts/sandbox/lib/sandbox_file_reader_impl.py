@@ -28,16 +28,19 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
     def __init__(self) -> None:
         pass
 
+    # Contract: Exposes declared read-only files from session NodeConfig.
     @property
     def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
         cfg = get_singleton(agent_node_config.NodeConfig)
         return set(cfg.read_only_files)
 
+    # Contract: Exposes declared read-write files from session NodeConfig.
     @property
     def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
         cfg = get_singleton(agent_node_config.NodeConfig)
         return set(cfg.read_write_files)
 
+    # Contract: Validates read access; confirms access for declared files, rejects undeclared files with listing.
     def can_read(self, path: Union[agent_file_alias.RelativePath, agent_file_alias.FileAlias]) -> tool_provider.ToolResponse:
         rel_path = str(path.relative_path) if isinstance(path, agent_file_alias.FileAlias) else str(path)
         all_declared = self.read_only_files | self.read_write_files
@@ -73,18 +76,22 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
     def __init__(self) -> None:
         pass
 
+    # Contract: Installs view_file tool into session ToolManager.
     def initialize(self) -> None:
         tool_mgr = get_singleton(tool_provider.ToolManager)
         tool_mgr.install_tool(self)
 
+    # Contract: Returns 'view_file'.
     @property
     def name(self) -> tool_provider.ToolName:
         return tool_provider.ToolName("view_file")
 
+    # Contract: Describes viewing workspace file content with line numbers.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return tool_provider.ToolDescription("Views workspace file content with line numbers using the file alias short name.")
 
+    # Contract: Specifies file alias path parameter.
     @property
     def path_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         alias_type = get_singleton(tool_provider.AliasManagerType)
@@ -96,11 +103,13 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
             default_value=None,
         )
 
+    # Contract: Returns mapping containing strictly path parameter.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         param = self.path_parameter
         return {param.name: param}
 
+    # Contract: Reads file content with right-aligned line numbers; filters META paragraphs and formats templates for RO markdown; records file read.
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
         read_mgr = get_singleton(sandbox_file_reader.ReadManager)
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
@@ -197,14 +206,17 @@ class RegexPatternParameterType(tool_provider.ParameterType[agent_file_alias.Reg
     def __init__(self) -> None:
         pass
 
+    # Contract: Returns RegexPattern actual type.
     @property
     def actual_type(self) -> Type[agent_file_alias.RegexPattern]:
         return cast(Type[agent_file_alias.RegexPattern], agent_file_alias.RegexPattern)
 
+    # Contract: Returns str wire type.
     @property
     def wire_type(self) -> Type[str]:
         return str
 
+    # Contract: Compiles regex pattern from wire string or raises ParameterConversionError.
     def convert(self, wire_value: str) -> agent_file_alias.RegexPattern:
         try:
             re.compile(wire_value)
@@ -223,14 +235,17 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
     def __init__(self) -> None:
         pass
 
+    # Contract: Returns 'search_files'.
     @property
     def name(self) -> tool_provider.ToolName:
         return tool_provider.ToolName("search_files")
 
+    # Contract: Describes searching regex patterns across session files.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return tool_provider.ToolDescription("Searches regex pattern matches across session files.")
 
+    # Contract: Specifies regex pattern parameter.
     @property
     def regex_pattern_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.RegexPattern, str]:
         param_type = get_singleton(RegexPatternParameterType)
@@ -242,11 +257,13 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
             default_value=None,
         )
 
+    # Contract: Returns mapping containing strictly regex pattern parameter.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         param = self.regex_pattern_parameter
         return {param.name: param}
 
+    # Contract: Searches regex pattern matches across read-only (with sanitized lines) and read-write files (details hidden).
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
         pat = actual_parameter_bindings.get(self.regex_pattern_parameter)
         try:

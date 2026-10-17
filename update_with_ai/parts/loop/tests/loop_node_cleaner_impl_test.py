@@ -147,7 +147,7 @@ class MockSourceMetadataCoordinator:
         self.modified_nodes: Set[DagNode] = set()
 
     def is_code_modified(self, path: Any) -> bool:
-        if isinstance(path, DagNode):
+        if isinstance(path, DagNode) and self.modified_nodes:
             return path in self.modified_nodes
         return self.has_modifications
 

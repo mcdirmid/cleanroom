@@ -181,7 +181,8 @@ class NodeConfig(
         - MUST map each active node to its verification checks.
 
         GROUNDING:
-        - Maps each active DagNode to its declared verification check commands from per_node_info_by_node.
+        - Maps each active DagNode to its declared verification check commands from per_node_info_by_node,
+          configuring subprocess execution environments with dynamic PYTHONPATH injection derived from workspace root and package directories.
         """
         ...
 

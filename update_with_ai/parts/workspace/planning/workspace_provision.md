@@ -24,15 +24,16 @@ Uncontrolled read-write access across an entire codebase leads to accidental cro
 - The workspace provisioner creates directory structures for commissioned role workspaces. [create_workspace_directories]
 - The workspace provisioner copies writable target files into role workspaces with read-write permissions. [copy_writable_targets]
 - The workspace provisioner copies upstream contract dependencies into role workspaces with read-only permissions. [copy_readonly_contracts]
-- The workspace provisioner copies and writes files across role workspaces, applying explicit read-only, writable, or executable permissions. [copy_file_with_permissions]
+- The workspace provisioner streams file copies using buffered chunks while strictly preserving POSIX mode bits including read-only and executable flags. [copy_file_with_permissions]
 - The workspace provisioner synthesizes and synchronizes read-only test stubs with NotImplementedError from companion specifications for stub role dependencies, updating stubs when companion specifications change and purging orphaned stubs. [synthesize_readonly_test_stubs]
 - The workspace provisioner packages executable runner tools into the workspace bin directory with execute permissions. [deploy_runner_executables]
 - The workspace provisioner writes role configuration into cleanroom_files_ext.ROLE_DESCRIPTOR_FILE in the workspace root. [write_role_configuration]
+- The workspace provisioner configures test runner isolation to restrict test discovery to the local workspace. [configure_test_runner_isolation]
 - The workspace provisioner synthesizes role-tailored AGENTS.md instructions in the workspace root. [write_role_agents_instructions]
 
 ### Woven Contracts
 
-- When commissioning a workspace, the provisioner resolves the role definition, creates directory structures, copies files with appropriate permissions, synthesizes stub dependencies, deploys runner tools, writes configuration, and registers the workspace. [create_workspace_directories, copy_writable_targets, copy_readonly_contracts, copy_file_with_permissions, synthesize_readonly_test_stubs, deploy_runner_executables, write_role_configuration, write_role_agents_instructions, commission_role_workspace, workspace_registry: [resolve_role_definition, compute_workspace_directory_path, record_workspace_descriptor]]
+- When commissioning a workspace, the provisioner resolves the role definition, creates directory structures, copies files with appropriate permissions using buffered streaming, configures test runner isolation, synthesizes stub dependencies, deploys runner tools, writes configuration, and registers the workspace. [create_workspace_directories, copy_writable_targets, copy_readonly_contracts, copy_file_with_permissions, configure_test_runner_isolation, synthesize_readonly_test_stubs, deploy_runner_executables, write_role_configuration, write_role_agents_instructions, commission_role_workspace, workspace_registry: [resolve_role_definition, compute_workspace_directory_path, record_workspace_descriptor]]
 
 
 ## Grounding

@@ -89,3 +89,10 @@ is empty.
 1. The provisioner commissions the zeta workspace for scope_a.
    Observed: commissioning fails explicitly naming zeta, no file is written under
    `/ws/zeta_scope_a`, and the persistent registry holds no descriptor for it.
+
+## Scenario 8 — Commissioning configures isolated test runner discovery
+
+Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a`.
+
+1. The provisioner commissions the alpha workspace.
+   Observed: test runner configuration in the workspace root restricts test discovery paths strictly to the local workspace `tests/` directory.

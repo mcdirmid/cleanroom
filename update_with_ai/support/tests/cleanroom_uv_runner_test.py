@@ -153,6 +153,11 @@ class CleanroomUvRunnerTest(unittest.TestCase):
             orig_cwd = os.getcwd()
             try:
                 os.chdir(tmp_dir)
+                cleanroom_uv_runner.run_cleanroom_target(
+                    target_str="pkg/parts/sample/high",
+                    action="mark-clean",
+                    workspace_dir=tmp_dir,
+                )
                 # First mark-clean marks the uncleaned node clean
                 ret1 = cleanroom_uv_runner.run_cleanroom_target(
                     target_str="pkg/parts/sample/lib",

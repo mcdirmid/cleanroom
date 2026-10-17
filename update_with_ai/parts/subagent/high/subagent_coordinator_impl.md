@@ -29,7 +29,7 @@ When coordinating multi-agent execution:
 
 - The realization resets preexisting role workspaces for declared roles upon initiating orchestration.
 
-- The realization resolves subagent batch sizes and conversation token limits from declarative model configurations matching designated model names or identifiers.
+- The realization resolves subagent batch sizes, conversation token limits, and maximum unproductive turn thresholds from declarative model configurations matching designated model names or identifiers.
 
 - The realization queries commissioned workspaces and evaluates unblocked dirty role work queues.
 
@@ -41,7 +41,7 @@ When coordinating multi-agent execution:
 
 - The realization periodically polls active workers through non-blocking checks on the configured harness adapter at a configurable interval (defaulting to 10 seconds), collecting role turn results upon completion.
 
-- The realization tracks consecutive unproductive turns where a role yields zero submitted and zero blamed targets, halting orchestration when unproductive turns exceed a threshold (defaulting to 2).
+- The realization tracks consecutive unproductive turns where a role yields zero submitted and zero blamed targets, halting orchestration when unproductive turns exceed a threshold configured per model or globally (defaulting to 5).
 
 - The realization emits real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state.
 

@@ -118,8 +118,10 @@ sprocket; and the session blames the widget source file.
    message.
    Realized by: role configuration lookups through `agent_node_config` for the declared blame targets
    and feedback dependencies of the dirty nodes; the blame attribution in the outcome from
-   `loop_driver`; and the component's own feedback delivery through `dag_storage`, addressed strictly
-   to the declared feedback dependency node that owns the blamed file.
+   `loop_driver`, with conversational blame target and explanation extracted from response text and
+   matched against configured targets by unit address or file path; and the component's own feedback
+   delivery through `dag_storage`, addressed strictly to the declared feedback dependency node that
+   owns the blamed file.
 
 ### Scenario 8 — A blamed file that matches no configured blame target leaves the node dirty
 

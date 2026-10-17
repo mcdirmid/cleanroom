@@ -26,6 +26,7 @@ class UvTarget(uv_target.UvTarget, Singleton):
     def __init__(self) -> None:
         pass
 
+    # Contract: strip repository qualifiers and expand omitted target names into canonical nodes
     def _normalize_label(self, raw_label: str) -> str:
         label = raw_label.strip()
         if not label:
@@ -46,6 +47,7 @@ class UvTarget(uv_target.UvTarget, Singleton):
             label = f"{label}:{target_name}"
         return label
 
+    # Contract: strip repository qualifiers and expand omitted target names into canonical DagNode coordinates
     def normalize_target(
         self, target_identifier: uv_target.TargetIdentifier
     ) -> dag_storage.DagNode:
@@ -63,56 +65,61 @@ class UvTarget(uv_target.UvTarget, Singleton):
             unit_name = filename.rsplit(".", 1)[0]
             inferred_role = None
 
-            import tomllib
-            bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()
-            cur = bwd
-            toml_paths = []
-            while cur and cur != os.path.dirname(cur):
-                toml_paths.append(os.path.join(cur, "cleanroom_roles.toml"))
-                cur = os.path.dirname(cur)
-            for entry in ("update_python_with_ai", "update_with_ai"):
-                toml_paths.append(os.path.join(bwd, entry, "cleanroom_roles.toml"))
+            roles_dict: dict[str, str] = {}
+            try:
+                from update_with_ai.parts.workspace.lib import workspace_roles
+                from support.lib.lifecycle import get_singleton
+                resolver = get_singleton(workspace_roles.RoleResolver)
+                for r_def in resolver.list_roles():
+                    if r_def.src_pattern:
+                        roles_dict[r_def.role_name] = r_def.src_pattern
+            except Exception:
+                pass
 
-            for t_path in toml_paths:
-                if os.path.isfile(t_path):
+            if not roles_dict:
+                import tomllib
+                bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()
+                cur = bwd
+                toml_paths = []
+                while cur and cur != os.path.dirname(cur):
+                    toml_paths.append(os.path.join(cur, "cleanroom_roles.toml"))
+                    toml_paths.append(os.path.join(cur, "cleanroom.toml"))
                     try:
-                        with open(t_path, "rb") as f:
-                            data = tomllib.load(f)
-                        roles = data.get("roles", {})
-                        for r_name, r_cfg in roles.items():
-                            pat = r_cfg.get("src_pattern", "")
-                            if pat:
-                                parts = pat.replace("\\", "/").split("/")
-                                d = parts[1] if len(parts) > 1 else ""
-                                f_pat = parts[-1]
-                                if d == folder:
-                                    inferred_role = r_name
-                                    if "{unit_name}" in f_pat:
-                                        _, sfx = f_pat.split("{unit_name}", 1)
-                                        sfx_stem = os.path.splitext(sfx)[0]
-                                        if sfx_stem and unit_name.endswith(sfx_stem):
-                                            unit_name = unit_name[:-len(sfx_stem)]
-                                    break
-                        if inferred_role:
-                            break
-                    except (tomllib.TOMLDecodeError, OSError):
+                        for entry in os.listdir(cur):
+                            sub = os.path.join(cur, entry)
+                            if os.path.isdir(sub) and not entry.startswith((".", "bazel-", "venv", "staging")):
+                                toml_paths.append(os.path.join(sub, "cleanroom_roles.toml"))
+                    except OSError:
                         pass
+                    cur = os.path.dirname(cur)
 
-            if not inferred_role:
-                folder_role_map = {
-                    "high": "high",
-                    "planning": "planning",
-                    "scenarios": "scenario",
-                    "scenario": "scenario",
-                    "low": "low",
-                    "lib": "lib",
-                    "tests": "test",
-                    "test": "test",
-                }
-                if folder in folder_role_map:
-                    inferred_role = folder_role_map[folder]
-                    if folder in ("tests", "test") and unit_name.endswith("_test"):
-                        unit_name = unit_name[:-5]
+                for t_path in toml_paths:
+                    if os.path.isfile(t_path):
+                        try:
+                            with open(t_path, "rb") as f:
+                                data = tomllib.load(f)
+                            roles = data.get("roles", {})
+                            for r_name, r_cfg in roles.items():
+                                pat = r_cfg.get("src_pattern", "")
+                                if pat:
+                                    roles_dict[r_name] = pat
+                            if roles_dict:
+                                break
+                        except (tomllib.TOMLDecodeError, OSError):
+                            pass
+
+            for r_name, pat in roles_dict.items():
+                parts = pat.replace("\\", "/").split("/")
+                d = parts[1] if len(parts) > 1 else ""
+                f_pat = parts[-1]
+                if d == folder:
+                    inferred_role = r_name
+                    if "{unit_name}" in f_pat:
+                        _, sfx = f_pat.split("{unit_name}", 1)
+                        sfx_stem = os.path.splitext(sfx)[0]
+                        if sfx_stem and unit_name.endswith(sfx_stem):
+                            unit_name = unit_name[:-len(sfx_stem)]
+                    break
 
             if inferred_role:
                 pkg_dir = "/".join(path_parts[:-2])
@@ -126,6 +133,7 @@ class UvTarget(uv_target.UvTarget, Singleton):
         )
         return dag_storage.DagNode(unit_address=norm_unit, role_address=norm_role)
 
+    # Contract: derive node directories by extracting package directory paths relative to a workspace root
     def extract_node_dir(self, node: dag_storage.DagNode) -> uv_target.NodeDirectory:
         unit = node.unit_address
         if unit.startswith("//"):

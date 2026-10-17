@@ -37,6 +37,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
     def __init__(self) -> None:
         pass
 
+    # Contract: WHEN the supplied line numbers are empty, MUST return an empty string; group contiguous runs into 'start-end' and join with commas.
     def format_ranges(self, lines: Sequence[int]) -> str:
         """Formats a sorted sequence of line numbers into compact comma-separated ranges."""
         sorted_lines = sorted(lines)
@@ -54,6 +55,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
         ranges.append(f"{start}" if start == end else f"{start}-{end}")
         return ", ".join(ranges)
 
+    # Contract: WHEN the supplied line numbers are empty, MUST return an empty list; group contiguous runs into single (start, end) tuples.
     def group_into_spans(self, lines: Sequence[int]) -> List[Tuple[int, int]]:
         """Groups sorted line numbers into contiguous (start, end) span tuples."""
         sorted_lines = sorted(lines)
@@ -71,6 +73,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
         spans.append((start, end))
         return spans
 
+    # Contract: MUST strip leading '//' target prefixes and package specifiers; MUST strip '.py' file extensions from query string.
     def normalize_target_query(self, raw_query: str) -> str:
         """Normalizes query string by stripping Bazel target or path prefixes."""
         q = raw_query.strip()
@@ -84,6 +87,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
             q = q[:-3]
         return q
 
+    # Contract: WHEN no missing spans remain, MUST return "All statements covered."; present each uncovered statement span with source lines, clamped by max_spans.
     def format_spans_report(
         self, cov: tool_coverage.ModuleCoverage, max_spans: Optional[int] = None
     ) -> str:
@@ -121,6 +125,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
                 )
         return "\n".join(lines)
 
+    # Contract: Report unit test failure if test failed; report 100% success if no statements missed; report deficit metrics with ranges, spans, and agent guidance against threshold.
     def format_coverage_report(
         self,
         cov: tool_coverage.ModuleCoverage,
@@ -164,6 +169,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
             f"================================================================================\n"
         )
 
+    # Contract: MUST pair each discovered implementation source file with its companion test file.
     def get_available_targets(
         self, repo_root: Path | str
     ) -> Dict[str, Tuple[Path, Path]]:
@@ -191,6 +197,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
                     mapping[base_name] = (impl_path, test_file)
         return mapping
 
+    # Contract: MUST exclude docstring expression lines, function/class signature continuation lines, and pragma exclusion annotations with statement bodies.
     def get_non_executable_lines(self, file_path: Path | str) -> Set[int]:
         """Analyzes AST to identify lines that are not executable statements."""
         path = Path(file_path)
@@ -247,6 +254,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
                     non_exec.add(ln)
         return non_exec
 
+    # Contract: Extract candidate executable lines; determine covered statements by tracing unit test suite; report missed statements, missing ranges, and missing spans; set test_passed=False on errors.
     def measure_single_target_coverage(
         self, impl_path: Path | str, test_path: Path | str
     ) -> tool_coverage.ModuleCoverage:
@@ -264,8 +272,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
         exec_lines = raw_exec - non_exec
 
         module_base = ipath.stem
-        lib_mod_name = f"lib.{module_base}"
-        test_mod_name = f"tests.{tpath.stem}"
+        test_mod_name = tpath.stem
 
         for m in list(sys.modules.keys()):
             if (
@@ -273,30 +280,8 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
                 or m.endswith(f".{module_base}")
                 or m == tpath.stem
                 or m.endswith(f".{tpath.stem}")
-                or m.startswith(lib_mod_name)
-                or m.startswith(test_mod_name)
             ):
                 del sys.modules[m]
-
-        if "lib" not in sys.modules or not getattr(sys.modules["lib"], "__path__", None):
-            lib_pkg = types.ModuleType("lib")
-            lib_pkg.__path__ = [str(ipath.parent)]
-            sys.modules["lib"] = lib_pkg
-        else:
-            lib_dir_str = str(ipath.parent)
-            if lib_dir_str not in sys.modules["lib"].__path__:
-                sys.modules["lib"].__path__.insert(0, lib_dir_str)
-
-        if "tests" not in sys.modules or not getattr(
-            sys.modules["tests"], "__path__", None
-        ):
-            tests_pkg = types.ModuleType("tests")
-            tests_pkg.__path__ = [str(tpath.parent)]
-            sys.modules["tests"] = tests_pkg
-        else:
-            test_dir_str = str(tpath.parent)
-            if test_dir_str not in sys.modules["tests"].__path__:
-                sys.modules["tests"].__path__.insert(0, test_dir_str)
 
         tracer = trace.Trace(count=1, trace=0)
 
@@ -391,6 +376,7 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
             test_passed=True,
         )
 
+    # Contract: Resolve target if test_path omitted; evaluate coverage pct against threshold; write formatted report to update_log when specified.
     def evaluate_coverage(
         self,
         target_or_impl: str,
@@ -428,12 +414,8 @@ class CoverageEvaluator(tool_coverage.CoverageEvaluator, Singleton):
             report = self.format_coverage_report(
                 cov, threshold, max_spans=max_spans
             )
-            if cov.test_passed and cov.missed == 0:
-                with open(log_p, "w", encoding="utf-8") as f:
-                    pass
-            else:
-                with open(log_p, "w", encoding="utf-8") as f:
-                    f.write(report)
+            with open(log_p, "w", encoding="utf-8") as f:
+                f.write(report)
 
         return cov
 

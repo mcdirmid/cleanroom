@@ -25,10 +25,10 @@ Operating DeepSeek Harness within Cleanroom requires concrete process dispatch v
 - The telemetry parser realization parses JSON stream events or queries session storage archives to retrieve input tokens, output tokens, and cache read tokens. [query_dsh_telemetry_metrics]
 - The telemetry parser realization applies pricing rates for the active model family to calculate USD expenditures. [apply_dsh_pricing_rates]
 - The telemetry parser realization parses token metrics from stdout log text when structured records are absent. [parse_log_text_fallback]
-- The harness adapter realization writes role-tailored task prompts distinguishing auditor roles from authoring roles and captures initial pending targets before spawning the dsh CLI. [prepare_task_prompt_and_pending_targets]
-- The harness adapter realization launches the dsh subprocess in the role workspace directory, setting overlay patch parameters and non-interactive permission flags, and tracks execution handles. [spawn_dsh_subprocess]
+- The harness adapter realization writes role-tailored task prompts distinguishing auditor roles from authoring roles, tests non-blocking file locks on session locks when adopting persisted sessions, and captures initial pending targets seeded from ready targets before spawning the dsh CLI. [prepare_task_prompt_and_pending_targets]
+- The harness adapter realization launches the dsh subprocess in the role workspace directory, setting overlay patch parameters, session resumption flags, and non-interactive permission flags, and tracks execution handles. [spawn_dsh_subprocess]
 - The harness adapter realization polls and awaits process termination without mandatory execution timeouts, terminating active subprocesses only when an explicit timeout duration expires. [poll_and_await_dsh_subprocess]
-- The harness adapter realization compares pending work buffers and inspects the blame buffer to identify submitted and blamed targets, returning unresolved status when zero targets are submitted or blamed. [compute_buffer_differences]
+- The harness adapter realization compares pending work buffers, scrapes active session identifiers from event logs into workspace files for turn continuity, and inspects blame buffers and turn logs to identify submitted and blamed targets, returning unresolved status when zero targets are submitted or blamed. [compute_buffer_differences]
 - The harness manager realization provides singleton access to the telemetry parser, constructs configured harness adapter instances, and installs the DeepSeek Harness adapter factory into the harness registry. [manage_dsh_harness_adapters]
 
 ### Woven Contracts

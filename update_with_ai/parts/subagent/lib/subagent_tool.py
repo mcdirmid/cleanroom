@@ -14,13 +14,16 @@ from support.lib.lifecycle import InTier
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
 
 
+# Contract: SubagentToolRunner dispatches commands and executes subagent orchestration.
 class SubagentToolRunner(InTier[AgentSessionTier], Protocol):
     """Command dispatch and execution runner for subagent orchestration."""
 
+    # Contract: SubagentToolRunner.execute_command - parses CLI argument sequence and executes selected action.
     def execute_command(self, argv: Sequence[str]) -> int:
         """Dispatches and executes subagent commands matching an argument sequence."""
         ...
 
+    # Contract: SubagentToolRunner.run_orchestrate - orchestrates multi-agent execution across topological waves until convergence.
     def run_orchestrate(
         self,
         dir_scope: str,
@@ -35,3 +38,4 @@ class SubagentToolRunner(InTier[AgentSessionTier], Protocol):
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence."""
         ...
+

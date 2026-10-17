@@ -23,6 +23,7 @@ from update_with_ai.parts.subagent.lib import subagent_coordinator
 from update_with_ai.parts.subagent.lib.subagent_coordinator_impl import (
     SubagentCoordinator,
     __initialize__,
+    _resolve_model_parameters,
 )
 from update_with_ai.parts.tools.lib import workspace_work
 from update_with_ai.parts.workspace.lib import (
@@ -329,24 +330,23 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
         self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
-        harness = FakeHarnessAdapter()
+        class ConvergenceHarness(FakeHarnessAdapter):
+            def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
+                fake_work.queue_data["lib"] = ((), ())
+                return super().dispatch_role(dispatch)
+
+        harness = ConvergenceHarness({
+            "handle_lib": subagent_coordinator.RoleTurnResult(
+                role="lib",
+                status="clean",
+                submitted_targets=("lib/unit.py",),
+                telemetry=subagent_coordinator.TokenUsage(100, 20, 50, 170, 0.005),
+            ),
+        })
 
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
-
-            # In round 1, lib has work; after wave 1, work queue clears
-            def mock_run_wave(wave, h):
-                fake_work.queue_data["lib"] = ((), ())
-                return (subagent_coordinator.RoleTurnResult(
-                    role="lib",
-                    status="clean",
-                    submitted_targets=("lib/unit.py",),
-                    telemetry=subagent_coordinator.TokenUsage(100, 20, 50, 170, 0.005),
-                ),)
-
-            coord.run_wave = mock_run_wave  # type: ignore
-
-            summary = coord.orchestrate("pkg_a", harness)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001)
             self.assertTrue(summary.is_converged)
             self.assertEqual(summary.total_waves, 1)
             self.assertEqual(summary.submitted_count, 1)
@@ -389,7 +389,12 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
         self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
-        harness = FakeHarnessAdapter({
+        class AggregationHarness(FakeHarnessAdapter):
+            def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
+                fake_work.queue_data[dispatch.role_name] = ((), ())
+                return super().dispatch_role(dispatch)
+
+        harness = AggregationHarness({
             "handle_lib": subagent_coordinator.RoleTurnResult(
                 role="lib",
                 status="clean",
@@ -406,18 +411,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
 
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
-
-            def mock_run_wave(wave, h):
-                fake_work.queue_data["lib"] = ((), ())
-                fake_work.queue_data["test"] = ((), ())
-                return (
-                    h.await_role("handle_lib"),
-                    h.await_role("handle_test"),
-                )
-
-            coord.run_wave = mock_run_wave  # type: ignore
-
-            summary = coord.orchestrate("pkg_a", harness)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001)
             self.assertTrue(summary.is_converged)
             self.assertEqual(summary.total_telemetry.input_tokens, 3000)
             self.assertEqual(summary.total_telemetry.cached_tokens, 1500)
@@ -506,7 +500,13 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
             self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
-            harness = FakeHarnessAdapter({
+            class CleanupHarness(FakeHarnessAdapter):
+                def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
+                    os.makedirs(ws_dir, exist_ok=True)
+                    fake_work.queue_data["high"] = ((), ())
+                    return "h_high"
+
+            harness = CleanupHarness({
                 "h_high": subagent_coordinator.RoleTurnResult(
                     role="high",
                     status="clean",
@@ -516,15 +516,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
 
             with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
                 coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
-
-                def mock_run_wave(wave, h):
-                    os.makedirs(ws_dir, exist_ok=True)
-                    fake_work.queue_data["high"] = ((), ())
-                    return (h.await_role("h_high"),)
-
-                coord.run_wave = mock_run_wave  # type: ignore
-
-                summary = coord.orchestrate("pkg_a", harness)
+                summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001)
                 self.assertTrue(summary.is_converged)
                 self.assertFalse(os.path.exists(ws_dir))
         finally:
@@ -595,6 +587,59 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.assertIn("made no progress (0 submitted, 0 blamed) for 2 consecutive turns", summary.status_message)
             self.assertEqual(summary.total_waves, 2)
 
+    def test_orchestrate_unproductive_turns_defaults_to_five(self) -> None:
+        """Scenario 10: Unconfigured max_unproductive_turns defaults to 5 turns before halting."""
+        fake_reg = FakeWorkspaceRegistry([self.spec_role_high])
+        fake_work = FakeWorkspaceWorkManager({
+            "high": (([_make_item("high/unit.md", "high")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        class UnproductiveHarness(FakeHarnessAdapter):
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+                return subagent_coordinator.RoleTurnResult(
+                    role="high",
+                    status="unresolved",
+                    submitted_targets=(),
+                    blamed_targets=(),
+                )
+
+        harness = UnproductiveHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate(
+                "pkg_a",
+                harness,
+                poll_interval=0.001,
+            )
+            self.assertFalse(summary.is_converged)
+            self.assertIn("made no progress (0 submitted, 0 blamed) for 5 consecutive turns", summary.status_message)
+            self.assertEqual(summary.total_waves, 5)
+
+    def test_resolve_model_parameters_extracts_unproductive_turns(self) -> None:
+        """Requirement: MUST resolve batch size, timeout, and max unproductive turns from model configuration."""
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            cfg_file = os.path.join(tmp_dir, "model_configs.toml")
+            with open(cfg_file, "w", encoding="utf-8") as f:
+                f.write('max_unproductive_turns = 7\n\n[models.moe_model]\nbatch_size = 4\nconversation_max_tokens = 45000\nmax_unproductive_turns = 12\n')
+
+            batch, tokens, unprod = _resolve_model_parameters(tmp_dir, "moe_model")
+            self.assertEqual(batch, 4)
+            self.assertEqual(tokens, 45000)
+            self.assertEqual(unprod, 12)
+
+            # Test top-level fallback
+            batch2, tokens2, unprod2 = _resolve_model_parameters(tmp_dir, "unknown_model")
+            self.assertIsNone(batch2)
+            self.assertIsNone(tokens2)
+            self.assertEqual(unprod2, 7)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
+

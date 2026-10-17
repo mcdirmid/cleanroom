@@ -22,9 +22,9 @@ Harvesting accurate token telemetry from local execution logs and managing subpr
 
 - The realization launches the Antigravity subagent process using configured CLI arguments with working directory bound to the role workspace. [launch_subagent_process]
 - The realization polls active subprocess status non-blockingly and reaps completed turns. [poll_active_process]
-- The realization streams and parses JSONL lines from the transcript log file. [parse_transcript_jsonl_lines]
+- The realization streams and parses JSONL lines from the transcript log file, falling back to regex scraping of token metrics from raw lines when JSON decoding fails. [parse_transcript_jsonl_lines]
 - The realization applies model-specific pricing formulas for Gemini Flash and Gemini Pro to tally monetary costs. [calculate_model_rate_costs]
-- The realization reads submitted target lists and blame buffer records to build role turn results. [gather_role_turn_results]
+- The realization reads submitted target lists (including completion tags extracted from standard output) and blame buffer records to build role turn results. [gather_role_turn_results]
 - The realization sends termination signals to active subprocesses upon timeout. [terminate_subagent_process]
 - The realization installs the Antigravity adapter factory into the harness registry. [register_antigravity_harness_factory]
 

@@ -45,6 +45,7 @@ class WorkspaceChecker(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - When a target file for a regenerable role is missing or deleted, MUST regenerate it from starter template.
+        - MUST configure PYTHONPATH in the execution environment to include the target package root and constituent support libraries.
         - WHEN verification checks pass on a target carrying unacted feedback, MUST surface the unacted feedback items with an explicit reminder that static checks do not verify runtime behavior or feedback resolution.
         - MUST execute verification checks and return exit code.
         """

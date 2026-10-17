@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
 
 
+# Contract: RoleDefinition defines the immutable configuration schema for an autonomous development role.
 @dataclass(frozen=True)
 class RoleDefinition:
     """Configuration definition for an autonomous development role.
@@ -68,9 +69,11 @@ class RoleDefinition:
     template_command: str = ""
 
 
+# Contract: RoleResolver protocol loads role configurations and validates declaration rules.
 class RoleResolver(Protocol):
     """Resolver loading role configurations and validating declaration rules."""
 
+    # Contract: Resolves role definition from role name or qualified address, validating dependency constraints.
     def resolve_role_definition(
         self,
         role_name_or_address: str,
@@ -80,6 +83,7 @@ class RoleResolver(Protocol):
         """Resolves a role definition from a role name or qualified role address."""
         ...
 
+    # Contract: Loads and resolves all role definitions declared in repository or bound methodology.
     def list_roles(
         self,
         repo_root: Optional[str] = None,

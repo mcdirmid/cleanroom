@@ -27,13 +27,13 @@ Given: an execution log containing plain text token printouts without JSON envel
    Observed: regex pattern matching extracts input, cached, and output token counts, calculating total tokens and monetary cost.
    Realized by: the component's regex pattern matching fallback inspecting log lines.
 
-### Scenario 3 — Parsing compressed session storage archives
+### Scenario 3 — Parsing compressed or uncompressed session storage archives
 
-Given: a DeepSeek Harness session storage directory containing a compressed `session.v4.jsonl.zstd` archive for a workspace.
+Given: a DeepSeek Harness session storage directory containing a compressed `session.v4.jsonl.zstd` archive or uncompressed `session.v4.jsonl` for a workspace.
 
 1. The telemetry parser parses session storage for the workspace.
-   Observed: the archive is located and decompressed, and the session token metrics are extracted.
-   Realized by: the component's session archive locator invoking zstd decompression and parsing session records.
+   Observed: the archive is located and decompressed (or read directly if uncompressed), and the session token metrics are extracted.
+   Realized by: the component's session archive locator invoking zstd decompression or plain jsonl reading and parsing session records.
 
 ### Scenario 4 — Synchronizing session into desktop storage
 

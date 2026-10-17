@@ -19,13 +19,13 @@ EventTranscript = NewType('EventTranscript', str)
 
 @dataclass(frozen=True)
 class RunnerLogEvent:
-    # TODO_RunnerLogEvent_body
+    # Contract: encapsulates observable execution event fields (event_name, summary, transcript)
     event_name: EventName
     summary: EventSummary
     transcript: EventTranscript
 
 
 class RunnerLogger(Protocol):
+    # Contract: consume execution log event, writing single-line summary to stdout and verbose transcript to file
     def consume(self, event: RunnerLogEvent) -> None:
-        # TODO_consume_body
         ...

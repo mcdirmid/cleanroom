@@ -26,12 +26,12 @@ Complex software development methodologies partition work into specialized roles
 ### Contracts
 
 - A subagent coordinator resets preexisting role workspaces upon initiating orchestration to ensure clean initial state. [reset_preexisting_role_workspaces]
-- A subagent coordinator dynamically resolves subagent batch sizes and conversation token limits from declarative model configurations matching designated model names or identifiers. [resolve_model_execution_parameters]
+- A subagent coordinator dynamically resolves subagent batch sizes, conversation token limits, and maximum unproductive turns thresholds from declarative model configurations matching designated model names or identifiers. [resolve_model_execution_parameters]
 - A subagent coordinator evaluates DAG work queues across declared roles, dynamically identifying roles with ready work up to an optional target role boundary without static role hardcoding. [evaluate_ready_work_queues]
 - A subagent coordinator ensures absent role workspaces are commissioned via workspace provisioning on demand before dispatching directives, persisting effective batch size bounds into workspace configurations. [commission_absent_workspaces]
 - A subagent coordinator dispatches role directives to unblocked ready roles concurrently, tracking active worker handles without static wave partitioning. [dispatch_concurrent_role_workers]
 - A subagent coordinator periodically polls active workers through the harness adapter at a configurable polling interval (defaulting to 10 seconds), reaping completed turns and propagating blame defects into the build graph. [poll_active_role_workers]
-- A subagent coordinator tracks consecutive unproductive turns yielding zero submitted and zero blamed targets, halting orchestration when unproductive turns on unresolved targets exceed a threshold. [detect_unproductive_turn_impasse]
+- A subagent coordinator tracks consecutive unproductive turns yielding zero submitted and zero blamed targets, halting orchestration when unproductive turns on unresolved targets exceed a threshold (defaulting to 5). [detect_unproductive_turn_impasse]
 - A subagent coordinator emits real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state. [emit_realtime_orchestration_telemetry]
 - A subagent coordinator drives the supervision loop until all units in scope evaluate clean, a role reports failure, or maximum wave limits are reached. [orchestrate_pipeline_convergence]
 - A subagent coordinator automatically deletes all provisioned role workspaces in scope upon achieving clean convergence. [delete_role_workspaces_on_convergence]

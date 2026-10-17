@@ -22,7 +22,7 @@ Coordinating multi-node agent workflows requires inspecting graph progress, iden
 
 A *role tier depth* is a role's position in the declared role dependency order, where a role with no role dependency has a depth of zero and any other role has a depth one greater than the deepest role it depends on. A role tier depth makes upstream roles precede downstream roles without naming any role.
 
-A system's *dag subgraph* models an active execution subgraph rooted at a target node in dag storage, and maintains the reachable nodes of that subgraph in dependency-first topological order. Nodes that no dependency orders relative to one another are ordered by role tier depth first and by unit address second.
+A system's *dag subgraph* models an active execution subgraph rooted at a target node in dag storage, and maintains the reachable nodes of that subgraph in dependency-first topological order. Role addresses follow the canonical syntax `//<scope>/parts/<part>:<role>` or unqualified `:role`. Nodes that no dependency orders relative to one another are ordered by role tier depth first, evaluating alphabetical role precedence using the unqualified role identifier following the final colon delimiter, and by unit address second.
 
 The dag subgraph also reports whether the target subgraph is *complete*, which holds if, but only if, every reachable node in the target subgraph is clean in dag storage.
 

@@ -64,6 +64,7 @@ class WorkScheduler(InTier[AgentSessionTier], Protocol):
         - When subgraph is provided, MUST query subgraph for ready candidates.
         - When dir_scope is provided, MUST scan directory for dirty nodes with clean deps.
         - MUST sort candidate tasks using dynamic role precedence from role dependency depth.
+        - MUST derive companion grounding specifications based on upstream role dependencies and package them into synthesized task instructions.
         - MUST limit returned tasks to max_batch_size when specified.
         """
         ...

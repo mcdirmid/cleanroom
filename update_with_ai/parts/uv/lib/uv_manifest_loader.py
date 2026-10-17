@@ -15,6 +15,7 @@ TargetLabel = NewType("TargetLabel", str)
 VerificationCommand = NewType("VerificationCommand", str)
 
 
+# Contract: build artifact carrying node references and file paths for a workspace target
 @dataclass(frozen=True)
 class TargetManifest:
     label: TargetLabel
@@ -33,8 +34,10 @@ class TargetManifest:
 
 
 class UvManifestLoader(Protocol):
+    # Contract: retrieve target manifest for a node
     def retrieve_manifest(
         self, node: dag_storage.DagNode
     ) -> Optional[TargetManifest]: ...
 
+    # Contract: resolve manifests into target nodes, definitions, and prompts
     def load_manifest(self, node: dag_storage.DagNode) -> None: ...

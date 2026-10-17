@@ -35,6 +35,7 @@ def _format_node(node: dag_storage.DagNode) -> str:
 CLEANROOM_LOG_FILE = ".cleanroom.log"
 
 
+# Contract: resolves cleanroom log path in the directory containing the parts
 def _cleanroom_log_path() -> Optional[str]:
     """Resolves the cleanroom log path in the directory containing the parts."""
     root = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
@@ -76,6 +77,11 @@ class Loop(loop.Loop, Singleton):
     def _get_manifest_loader(self) -> uv_manifest_loader.UvManifestLoader:
         return get_singleton(uv_manifest_loader.UvManifestLoader)
 
+    # Contract: resolve target labels against workspace directories to populate graph storage when executing a cleaning pass
+    # Contract: when node cleaning fails, halt immediately with failing build result
+    # Contract: when any reachable node remains dirty after cleaning, halt immediately with failing build result
+    # Contract: when unexpected failure occurs during cleaning, halt immediately with failing build result
+    # Contract: stream telemetry capturing execution events, pass duration, and build outcome to stdout and transcript files
     def clean_subgraph(self, target: dag_storage.DagNode) -> loop.BuildResult:
         root = target
         start_time = time.time()
@@ -154,6 +160,9 @@ class Loop(loop.Loop, Singleton):
         )
         return loop.BuildResult(success=success, summary=loop.BuildSummary(summary))
 
+    # Contract: materialize missing source files across target subgraph from declared templates
+    # Contract: stamp node metadata headers with current timestamp as last cleaned timestamp
+    # Contract: clear unacted feedback across target subgraph
     def mark_subgraph_clean(self, target: dag_storage.DagNode) -> None:
         storage = get_singleton(dag_storage.DagStorage)
         manifest_loader = self._get_manifest_loader()
@@ -173,6 +182,7 @@ class Loop(loop.Loop, Singleton):
             storage.materialize_template(node)
             storage.mark_node_clean(node)
 
+    # Contract: delete last cleaned timestamp from target node source file metadata header
     def mark_dirty(
         self,
         target: dag_storage.DagNode,
@@ -186,6 +196,8 @@ class Loop(loop.Loop, Singleton):
         )
         storage.mark_node_dirty(target, reason=reason)
 
+    # Contract: inject caller-supplied feedback into target node source file metadata in graph storage
+    # Contract: append feedback entry to cleanroom log file in directory containing parts
     def inject_feedback(
         self, target: dag_storage.DagNode, message: dag_storage.FeedbackMessage
     ) -> None:
@@ -193,6 +205,10 @@ class Loop(loop.Loop, Singleton):
         storage.add_feedback_message(target, message)
         _append_cleanroom_log(str(message.content))
 
+    # Contract: record caller-supplied change message against target node in graph storage
+    # Contract: append change message to cleanroom log file in directory containing parts
+    # Contract: clear last cleaned timestamp of target node in graph storage
+    # Contract: update change description of target node in graph storage to dynamically invalidate downstream dependencies
     def record_change(
         self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None:

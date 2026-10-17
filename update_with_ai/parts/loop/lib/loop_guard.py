@@ -14,17 +14,21 @@ LoopFeedback = NewType("LoopFeedback", str)
 FailureExplanation = NewType("FailureExplanation", str)
 
 
+# Contract: LoopReminder - diagnostic feedback warning an agent of detected repetition.
 @dataclass(frozen=True)
 class LoopReminder:
     feedback: LoopFeedback
 
 
+# Contract: LoopFailure - outcome signaling that an agent session has failed due to unresolvable repetition.
 @dataclass(frozen=True)
 class LoopFailure:
     explanation: FailureExplanation
 
 
+# Contract: LoopGuard protocol - session service tracking repetitive tool executions and edit oscillations across turns.
 class LoopGuard(Protocol):
+    # Contract: LoopGuard.evaluate - evaluates tool invocation against repetition warning and fatal thresholds.
     def evaluate(
         self,
         tool_name: tool_provider.ToolName,
@@ -33,4 +37,5 @@ class LoopGuard(Protocol):
         ],
     ) -> Optional[Union[LoopReminder, LoopFailure]]: ...
 
+    # Contract: LoopGuard.reset - clears repetition tracking when a tool execution demonstrates forward progress.
     def reset(self) -> None: ...

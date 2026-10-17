@@ -33,7 +33,7 @@ When repairing a truncated invocation:
 
 - A replace file content invocation providing a target file, target content, and partial replacement content deletes any trailing incomplete line without a terminating newline, replacing it with a sentinel that raises a non implemented error carrying an incrementing session truncation identifier matching the indentation of the deleted line, or appends the sentinel on the next line matching the last line's indentation when the last line is complete. The loop driver then executes the tool to persist the partial modifications and returns an actionable notice directing the model to resume implementation targeting the sentinel.
 
-- Any other tool invocation terminates by appending a tool failure response carrying the suppression key of the tool, then resuming generation with a continuation turn.
+- Any other tool invocation terminates by appending a tool failure response carrying the suppression key of the tool (resolved from dedicated suppression categories, or derived from the basename of the target file path in the tool arguments, or defaulting to the tool name), then resuming generation with a continuation turn.
 
 When a model completion response fails with an incomplete tool call error, the loop driver appends an actionable recovery notice directing smaller edits and continues the turn loop, halting with an unexpected failure when consecutive truncation failures repeat.
 

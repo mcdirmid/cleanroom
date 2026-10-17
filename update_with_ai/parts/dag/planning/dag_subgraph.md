@@ -20,13 +20,14 @@ By calculating dependency-first topological ordering, evaluating subgraph comple
 
 - A role tier depth is a role's position in the declared role dependency order, where a role with no role dependency has a depth of zero and any other role has a depth one greater than the deepest role it depends on.
 - A role tier depth makes upstream roles precede downstream roles without naming any role.
+- A role address follows the canonical syntax `//<scope>/parts/<part>:<role>` or unqualified `:role`.
 
 ### Contracts
 
 - A caller supplies a target node in dag storage when setting a target node. [set_target_node_supplied]
 - The dag subgraph collects reachable dependency nodes from the target node in dag storage. [collect_reachable_dependencies]
 - The dag subgraph computes the dependency-first topological order of reachable dependency nodes. [compute_topological_order]
-- Nodes that no dependency orders relative to one another are ordered by role tier depth first. [order_ties_by_role_tier_depth]
+- Nodes that no dependency orders relative to one another are ordered by role tier depth first, evaluating alphabetical role precedence on the unqualified role identifier following the final colon delimiter. [order_ties_by_role_tier_depth]
 - Nodes that no dependency orders relative to one another are ordered by unit address second. [order_ties_by_unit_address]
 - The dag subgraph reports whether the target subgraph is complete. [report_subgraph_complete]
 - The target subgraph is complete if, but only if, all reachable nodes in the target subgraph are clean in dag storage. [subgraph_complete_when_all_clean]

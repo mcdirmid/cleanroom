@@ -33,7 +33,7 @@ When realizing subagent dispatch and outcome monitoring:
 
 - The realization interpolates command templates with workspace directory, role name, and task prompt variables, configuring context token compaction limits in the subprocess environment, spawning subprocesses within the target workspace directory, and recording active process handles.
 
-- The realization polls and awaits subprocess termination without enforcing mandatory timeouts, killing delinquent processes only when an explicit timeout limit is configured, reading blame records from the workspace blame buffer, determining submitted targets by set difference with remaining pending items, parsing token metrics from process log files, and computing financial costs.
+- The realization polls and awaits subprocess termination without enforcing mandatory timeouts, killing delinquent processes only when an explicit timeout limit is configured, reading blame records from the workspace blame buffer, determining submitted targets by set difference with remaining pending items, parsing token metrics from process log files using regex patterns and rate multipliers, inspecting the tail of the log file for failure diagnostics on non-zero exit codes, and computing financial costs.
 
 - The realization returns role turn results reflecting clean execution, blamed feedback, or process failures with captured error diagnostics.
 

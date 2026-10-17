@@ -42,7 +42,7 @@ class DshWorkspaceConfigurer(
         GROUNDING:
         - Incorporates explicit isolation boundaries, tripwires, restricted binary
           directives, and auditor rules (mandating in-workspace code and change header inspection while prohibiting code edits) tailored for DeepSeek Harness into AGENTS.md,
-          writes Cordis patch into .cleanroom/dsh_patch.yml conforming to dsh_ext (resolving declared model profile names against model configuration definitions), verifies configured
+          writes Cordis patch into .cleanroom/dsh_patch.yml conforming to dsh_ext (resolving declared model profile names stripping model namespace prefixes against model configuration definitions discovered in workspace ancestors or repository root, setting high reasoning effort for DeepSeek providers, and disabling the todo plugin), verifies configured
           files exist, and returns a populated dsh_workspace.DshWorkspaceConfinementReport.
         """
         ...

@@ -101,7 +101,7 @@ class AntigravityCoordinatorGenerator(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST format role dispatch directive into subagent dispatch specification with workspace path pinned.
-        - MUST set TypeName to cleanroom_role_agent and Role to dispatch.role_name.
+        - MUST set TypeName to cleanroom_worker and Role to dispatch.role_name.
         """
         ...
 

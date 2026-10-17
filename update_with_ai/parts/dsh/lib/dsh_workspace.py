@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
 
 
+# Contract: DshWorkspaceConfinementReport data type holding workspace path, role name, configured file paths, and status.
 @dataclass(frozen=True)
 class DshWorkspaceConfinementReport:
     """Confinement report for a configured DeepSeek Harness role workspace.
@@ -30,9 +31,11 @@ class DshWorkspaceConfinementReport:
     status: str = "configured"
 
 
+# Contract: DshWorkspaceConfigurer protocol defining configure_role_workspace.
 class DshWorkspaceConfigurer(Protocol):
     """Establishes DeepSeek Harness boundary hints and Cordis overlay patches in role workspaces."""
 
+    # Contract: MUST configure role agent documentation and Cordis overlay patch, and return report.
     def configure_role_workspace(
         self,
         workspace_dir: str,

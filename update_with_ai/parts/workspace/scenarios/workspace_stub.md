@@ -12,7 +12,7 @@ CODE_HASH: 3e93b1a5ea7e
 Given: a .pyi typing specification defining a class with typed methods.
 
 1. The caller requests stub generation for the specification to a destination Python file.
-   Observed: a read-only Python module is generated containing method stubs that raise NotImplementedError with exact parameter signatures and stripped return types.
+   Observed: a read-only Python module is generated containing method stubs that raise NotImplementedError with exact parameter signatures, rewritten imports pointing to local workspace library stubs, and injected missing interface method signatures.
 
 ## Scenario 2 — Synchronizing stub role dependencies
 

@@ -36,8 +36,8 @@ When executing a role turn:
 
 - The antigravity harness adapter polls active role turns non-blockingly to determine whether turn execution has concluded.
 
-- The antigravity harness adapter extracts token usage metrics from the execution transcript log and applies standard model pricing rate cards.
+- The antigravity harness adapter extracts token usage metrics from the execution transcript log (parsing JSON objects or matching token metric patterns on raw transcript lines) and applies standard model pricing rate cards.
 
-- The antigravity harness adapter inspects role workspace submission outcomes and blame buffers to construct a complete role turn result.
+- The antigravity harness adapter inspects role workspace submission outcomes (including completion tags extracted from standard output) and blame buffers to construct a complete role turn result.
 
 - The antigravity harness adapter interrupts active turns when execution deadlines are exceeded.

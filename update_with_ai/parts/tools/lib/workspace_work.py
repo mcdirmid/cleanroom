@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
 
 
+# Contract: WorkQueueItem represents a unit task in the work queue.
 @dataclass(frozen=True)
 class WorkQueueItem:
     """A task item in the work queue.
@@ -35,6 +36,7 @@ class WorkQueueItem:
     contract_files: Sequence[str] = ()
 
 
+# Contract: WorkQueueSummary provides summary of ready and blocked work items in a directory scope.
 @dataclass(frozen=True)
 class WorkQueueSummary:
     """Overall summary of work items in a directory scope.
@@ -52,17 +54,23 @@ class WorkQueueSummary:
     remaining_ready_count: int = 0
 
 
+# Contract: WorkspaceWorkManager protocol evaluates dirtiness and task readiness across directory scopes.
 class WorkspaceWorkManager(Protocol):
     """Evaluates dirtiness and task readiness across directory scopes."""
 
+    # Contract: Reads target paths from local pending work buffer.
     def get_pending_work(self, workspace_dir: str) -> Sequence[str]: ...
 
+    # Contract: Removes local pending work buffer file if present.
     def clear_pending_work(self, workspace_dir: str) -> None: ...
 
+    # Contract: Records pending target paths into local buffer file.
     def set_pending_work(self, workspace_dir: str, targets: Sequence[str]) -> None: ...
 
+    # Contract: Removes a submitted target from local pending work buffer.
     def remove_pending_target(self, workspace_dir: str, submitted_target: str) -> None: ...
 
+    # Contract: Checks whether a pending target file is still dirty across local and main workspaces.
     def is_pending_target_dirty(
         self,
         target_path: str,
@@ -71,6 +79,7 @@ class WorkspaceWorkManager(Protocol):
         role_name: Optional[str] = None,
     ) -> bool: ...
 
+    # Contract: Computes ready and blocked dirty units directly from build manifests and metadata.
     def compute_role_work_queue(
         self,
         role_name: str,
@@ -78,6 +87,7 @@ class WorkspaceWorkManager(Protocol):
         repo_root: str,
     ) -> tuple[Sequence[WorkQueueItem], Sequence[WorkQueueItem]]: ...
 
+    # Contract: Evaluates dirty units in scope and returns work queue summary, scheduling via dynamic role precedence.
     def evaluate_work(
         self,
         dir_scope: str,
@@ -87,9 +97,11 @@ class WorkspaceWorkManager(Protocol):
         batch_size: Optional[int] = None,
     ) -> WorkQueueSummary: ...
 
+    # Contract: Resolves companion specification contracts and interface definitions for target.
     def resolve_contract_files(
         self,
         target_path: str,
         workspace_dir: str,
         role_name: Optional[str] = None,
     ) -> Sequence[str]: ...
+

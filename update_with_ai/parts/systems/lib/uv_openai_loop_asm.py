@@ -18,6 +18,7 @@ from update_with_ai.parts.uv.lib import uv_asm
 from update_with_ai.parts.uv.lib import uv_loop_impl
 from update_with_ai.parts.uv.lib import uv_model_config_impl
 
+# Contract: Declared constituents forming the complete Cleanroom UV OpenAI loop root system assembly.
 CONSTITUENTS = (
     dag_asm,
     loop_asm,
@@ -30,6 +31,8 @@ CONSTITUENTS = (
     uv_model_config_impl,
 )
 
+
+# Contract: Aggregates declared constituents into the complete Cleanroom UV OpenAI loop root system assembly.
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     for mod in CONSTITUENTS:
         mod.__initialize__(registry)

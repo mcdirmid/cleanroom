@@ -28,9 +28,11 @@ from update_with_ai.parts.storage.lib import src_metadata
 from update_with_ai.parts.workspace.lib import workspace_registry
 from . import workspace_dirtiness
 
+# Contract: Cache mapping unit names to their part directory within a repo root.
 _UNIT_PART_MAP_CACHE: Dict[str, Dict[str, str]] = {}
 
 
+# Contract: Classifies unit type by suffix (_ext, _asm, _impl, interface).
 def _classify_unit_type(unit_name: str) -> str:
     if unit_name.endswith("_ext"):
         return "external"
@@ -41,6 +43,7 @@ def _classify_unit_type(unit_name: str) -> str:
     return "interface"
 
 
+# Contract: Checks whether role is an auditor role based on audit_tag or absence of src_pattern.
 def _is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     clean_r = role_name.split(":")[-1].strip().lower()
     reg = get_singleton(workspace_registry.WorkspaceRegistry)
@@ -48,6 +51,7 @@ def _is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     return bool(r_def.audit_tag or not r_def.src_pattern)
 
 
+# Contract: Parses high-level markdown specifications to extract unit names and dependencies.
 def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
     high_dir = os.path.join(repo_root, part_dir, "high")
     if os.path.isdir(high_dir):
@@ -91,6 +95,7 @@ def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
     return {}
 
 
+# Contract: Discovers part directories within repository or directory scope.
 def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
     if not dir_scope:
         parts_p = os.path.join(repo_root, "parts")
@@ -100,12 +105,6 @@ def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
                 for d in sorted(os.listdir(parts_p))
                 if os.path.isdir(os.path.join(parts_p, d)) and not d.startswith(".")
             ]
-        for entry in sorted(os.listdir(repo_root)):
-            cand = os.path.join(repo_root, entry, "parts")
-            if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv")):
-                dir_scope = entry
-                break
-    if not dir_scope:
         return []
     scope_p = os.path.join(repo_root, dir_scope)
     parts_p = os.path.join(scope_p, "parts")
@@ -118,6 +117,7 @@ def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
     return [dir_scope] if os.path.isdir(scope_p) else []
 
 
+# Contract: Checks if a relative path matches any glob pattern.
 def _matches_any_pattern(rel_path: str, patterns: Sequence[str]) -> bool:
     normalized = rel_path.replace("\\", "/")
     fname = os.path.basename(normalized)
@@ -129,6 +129,7 @@ def _matches_any_pattern(rel_path: str, patterns: Sequence[str]) -> bool:
     )
 
 
+# Contract: Builds or retrieves cached map of unit names to part directories.
 def _unit_part_map(repo_root: str) -> Dict[str, str]:
     cached = _UNIT_PART_MAP_CACHE.get(repo_root)
     if cached is not None:
@@ -142,6 +143,7 @@ def _unit_part_map(repo_root: str) -> Dict[str, str]:
     return mapping
 
 
+# Contract: Parses a dependency label into (package_dir, unit_name).
 def _parse_dependency_label(raw: str, default_pkg: str) -> Tuple[str, str]:
     if raw.startswith("//"):
         label = raw.lstrip("/")
@@ -150,6 +152,7 @@ def _parse_dependency_label(raw: str, default_pkg: str) -> Tuple[str, str]:
     return default_pkg, raw.lstrip(":").strip()
 
 
+# Contract: Resolves declared cross-unit dependencies of a unit into (part_dir, unit_name) pairs.
 def _cross_unit_dependencies(
     repo_root: str, part_dir: str, unit_name: str
 ) -> List[Tuple[str, str]]:
@@ -171,6 +174,7 @@ def _cross_unit_dependencies(
     return deps
 
 
+# Contract: Parses pattern format string into directory name, prefix, and suffix.
 def _parse_pattern_info(src_pattern: str) -> Tuple[str, str, str]:
     if not src_pattern:
         return "", "", ""
@@ -185,6 +189,7 @@ def _parse_pattern_info(src_pattern: str) -> Tuple[str, str, str]:
     return dir_name, prefix, suffix
 
 
+# Contract: Discovers role matching a file path based on directory and file patterns.
 def _resolve_file_role(file_path: str, repo_root: Optional[str] = None) -> str:
     norm = file_path.replace("\\", "/")
     fname, parent = os.path.basename(norm), os.path.basename(os.path.dirname(norm))
@@ -201,6 +206,7 @@ def _resolve_file_role(file_path: str, repo_root: Optional[str] = None) -> str:
     raise ValueError(f"Unrecognized role for file path: {file_path}")
 
 
+# Contract: Resolves part directory, unit name, and role name from file path.
 def _parse_unit_from_file_path(file_path: str, repo_root: str) -> Tuple[str, str, str]:
     norm_path, norm_root = os.path.realpath(file_path), os.path.realpath(repo_root)
     rel = (
@@ -220,6 +226,9 @@ def _parse_unit_from_file_path(file_path: str, repo_root: str) -> Tuple[str, str
     return os.path.dirname(os.path.dirname(rel)), unit_name, role_name
 
 
+
+# Contract: Discovers existing companion specification contracts and interface definitions for target.
+# Suffix heuristic stripping '_impl' to expand interface companion contracts for implementation units.
 def _get_unit_contract_files(
     target_file: str,
     ws_root: str,
@@ -303,18 +312,12 @@ def _get_unit_contract_files(
     return existing
 
 
+# Contract: Resolves file path across workspace root and main root.
 def _resolve_scope_file(
     rel_path: str,
     ws_root: str,
     main_root: str,
-    curr_ws: Optional[str] = None,
-    curr_role: Optional[str] = None,
-    target_role: Optional[str] = None,
 ) -> Optional[str]:
-    if curr_ws and curr_role and target_role and curr_role == target_role:
-        local_p = os.path.join(curr_ws, rel_path)
-        if os.path.isfile(local_p):
-            return local_p
     for root in (ws_root, main_root) if main_root != ws_root else (ws_root,):
         cand = os.path.join(root, rel_path)
         if os.path.isfile(cand):
@@ -322,6 +325,7 @@ def _resolve_scope_file(
     return None
 
 
+# Contract: Checks if file's LAST_CHANGED timestamp in metadata is after reference timestamp.
 def _is_modified_after(file_path: str, ref_timestamp: str) -> Optional[str]:
     d_meta = src_metadata.extract_metadata(file_path)
     if d_meta and d_meta.last_changed and ref_timestamp < d_meta.last_changed:
@@ -329,6 +333,7 @@ def _is_modified_after(file_path: str, ref_timestamp: str) -> Optional[str]:
     return None
 
 
+# Contract: Traverses upstream role dependency chain.
 def _get_role_upstream_chain(
     role_name: str, repo_root: Optional[str] = None
 ) -> List[str]:
@@ -355,6 +360,7 @@ def _get_role_upstream_chain(
     return [r for r in order if r != clean_r]
 
 
+# Contract: Evaluates whether a unit is dirty across auditor and producer role specifications.
 def _eval_unit_dirty_internal(
     ws_root: str,
     part_dir: str,
@@ -372,18 +378,6 @@ def _eval_unit_dirty_internal(
         return {"is_dirty": False, "reasons": []}
 
     reasons: List[str] = []
-    curr_ws = os.getcwd()
-    curr_role = ""
-    meta_p = os.path.join(curr_ws, ".cleanroom_role.json")
-    if os.path.isfile(meta_p):
-        try:
-            with open(meta_p, "r", encoding="utf-8") as f:
-                meta_data = json.load(f)
-            curr_role = str(
-                meta_data.get("role_name") or meta_data.get("role") or ""
-            ).split(":")[-1].strip().lower()
-        except (OSError, json.JSONDecodeError):
-            pass
 
     if _is_auditor_role(clean_role, repo_root=main_root):
         audit_tag = role_def.audit_tag or f"{clean_role.upper()}_AUDIT"
@@ -410,7 +404,7 @@ def _eval_unit_dirty_internal(
                 continue
             audited_targets_count += 1
             fb_rel = fb_pat.format(unit_dir=part_dir, unit_name=unit_name)
-            fb_full = _resolve_scope_file(fb_rel, ws_root, main_root, curr_ws, curr_role, clean_role)
+            fb_full = _resolve_scope_file(fb_rel, ws_root, main_root)
             if not fb_full:
                 reasons.append(f"Audited target {fb_rel} does not exist")
                 continue
@@ -440,7 +434,7 @@ def _eval_unit_dirty_internal(
                     if not c_def.src_pattern:
                         continue
                     c_rel = c_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)
-                    c_full = _resolve_scope_file(c_rel, ws_root, main_root, curr_ws, curr_role, clean_role)
+                    c_full = _resolve_scope_file(c_rel, ws_root, main_root)
                     if c_full:
                         last_ch = _is_modified_after(c_full, audit_ts)
                         if last_ch:
@@ -457,7 +451,7 @@ def _eval_unit_dirty_internal(
     if not active_pat:
         return {"is_dirty": False, "reasons": []}
     target_rel = active_pat.format(unit_dir=part_dir, unit_name=unit_name)
-    full_path = _resolve_scope_file(target_rel, ws_root, main_root, curr_ws, curr_role, clean_role)
+    full_path = _resolve_scope_file(target_rel, ws_root, main_root)
     if not full_path:
         return {
             "is_dirty": True,
@@ -509,7 +503,7 @@ def _eval_unit_dirty_internal(
         if not d_pat:
             continue
         d_rel = d_pat.format(unit_dir=part_dir, unit_name=unit_name)
-        d_full = _resolve_scope_file(d_rel, ws_root, main_root, curr_ws, curr_role, clean_role)
+        d_full = _resolve_scope_file(d_rel, ws_root, main_root)
         if d_full:
             last_ch = _is_modified_after(d_full, meta.last_cleaned)
             if last_ch:
@@ -519,7 +513,7 @@ def _eval_unit_dirty_internal(
         if is_impl:
             d_iface_rel = d_pat.format(unit_dir=part_dir, unit_name=interface_stem)
             if d_iface_rel != d_rel:
-                d_iface_full = _resolve_scope_file(d_iface_rel, ws_root, main_root, curr_ws, curr_role, clean_role)
+                d_iface_full = _resolve_scope_file(d_iface_rel, ws_root, main_root)
                 if d_iface_full:
                     last_ch = _is_modified_after(d_iface_full, meta.last_cleaned)
                     if last_ch:
@@ -543,7 +537,7 @@ def _eval_unit_dirty_internal(
             if is_impl:
                 s_iface_rel = star_pat.format(unit_dir=part_dir, unit_name=interface_stem)
                 if s_iface_rel != target_rel:
-                    s_iface_full = _resolve_scope_file(s_iface_rel, ws_root, main_root, curr_ws, curr_role, clean_role)
+                    s_iface_full = _resolve_scope_file(s_iface_rel, ws_root, main_root)
                     if s_iface_full:
                         last_ch = _is_modified_after(s_iface_full, meta.last_cleaned)
                         if last_ch:
@@ -559,7 +553,7 @@ def _eval_unit_dirty_internal(
                     s_dep_rel = star_pat.format(unit_dir=dep_pkg, unit_name=cand_u)
                     if s_dep_rel == target_rel:
                         continue
-                    s_dep_full = _resolve_scope_file(s_dep_rel, ws_root, main_root, curr_ws, curr_role, clean_role)
+                    s_dep_full = _resolve_scope_file(s_dep_rel, ws_root, main_root)
                     if s_dep_full:
                         last_ch = _is_modified_after(s_dep_full, meta.last_cleaned)
                         if last_ch:
@@ -570,9 +564,11 @@ def _eval_unit_dirty_internal(
     return {"is_dirty": bool(reasons), "reasons": reasons}
 
 
+# Contract: Realizes workspace_dirtiness.WorkspaceDirtinessEvaluator in agent_session tier.
 class WorkspaceDirtinessEvaluator:
     """Evaluates unit dirtiness, resolves companion contracts, and extracts cross-unit dependencies."""
 
+    # Contract: Evaluates whether a unit is dirty in directory scope and returns dirty status and reasons.
     def evaluate_unit_dirty(
         self,
         ws_root: str,
@@ -589,6 +585,7 @@ class WorkspaceDirtinessEvaluator:
             dirtiness_reasons=tuple(res.get("reasons", ())),
         )
 
+    # Contract: Discovers existing companion specification contracts and interface definitions for target.
     def resolve_contract_files(
         self,
         target_file: str,
@@ -600,6 +597,7 @@ class WorkspaceDirtinessEvaluator:
             target_file, ws_root, main_root, role_name
         )
 
+    # Contract: Resolves declared cross-unit dependencies of a unit to (part_dir, unit_name) pairs.
     def extract_cross_unit_dependencies(
         self,
         repo_root: str,
@@ -607,6 +605,7 @@ class WorkspaceDirtinessEvaluator:
         unit_name: str,
     ) -> Sequence[Tuple[str, str]]:
         return _cross_unit_dependencies(repo_root, part_dir, unit_name)
+
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

@@ -24,6 +24,6 @@ Multi-agent coordination requires command-line entrypoints for triggering dynami
 
 An agent session's *subagent tool runner* provides command dispatch and execution for subagent orchestration.
 
-The subagent tool runner dispatches and executes orchestration commands matching an argument sequence, returning an integer exit code.
+The subagent tool runner dispatches and executes orchestration commands matching an argument sequence (prepending the orchestrate command when omitted), returning an integer exit code. A module entrypoint executes command dispatch within an agent session phase.
 
-The subagent tool runner orchestrates multi-agent execution across dynamic queue-driven process supervision for a directory scope and optional target role boundary through a designated harness adapter with configurable batch sizes, execution timeouts, and conversation token limits until DAG convergence or failure, rendering cumulative telemetry and financial expenditures.
+The subagent tool runner orchestrates multi-agent execution across dynamic queue-driven process supervision for a directory scope and optional target role boundary through a designated harness adapter with configurable batch sizes, execution timeouts, conversation token limits, and maximum unproductive turn limits until DAG convergence or failure, rendering cumulative telemetry and financial expenditures.

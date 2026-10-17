@@ -13,11 +13,14 @@ from . import (
     src_storage_impl,
 )
 
+# Contract: Constituent modules for the storage assembly.
 CONSTITUENTS = (
     src_metadata_impl,
     src_storage_impl,
 )
 
+
+# Contract: Initializes the storage assembly component by delegating to its constituents.
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Initializes the storage assembly component by delegating to its constituents."""
     reg = get_default_registry() if registry is None else registry

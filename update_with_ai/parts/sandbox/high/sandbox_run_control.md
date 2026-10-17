@@ -32,4 +32,4 @@ The run controller installs an argument-free *check files tool* named `check_fil
 
 The run controller installs an *advance tool* when guide step mode is active. Executing the advance tool coordinates step progression through guide delivery upon passing verification.
 
-The run controller installs an argument-free *get work tool* named `get_work` that retrieves active dirty nodes, materializes startup templates, and delivers the session task prompt, specifying a follow-up execution of the advance tool when guide step mode is active.
+The run controller installs an argument-free *get work tool* named `get_work` that retrieves active dirty nodes, materializes startup templates, delivers the session task prompt, resolves the primary guide file from provisioned read-only documentation when not explicitly declared on node configuration, and specifies a follow-up execution of the advance tool when guide step mode is active.

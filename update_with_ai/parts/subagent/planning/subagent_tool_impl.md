@@ -20,8 +20,8 @@ Multi-agent coordination requires command-line entrypoints for triggering wave d
 
 ### Contracts
 
-- The realization constructs argument parsers for the orchestrate command supporting scope, target role, harness adapter, model, max waves, batch size, timeout, and max context tokens options. [construct_orchestrate_cli_parser]
-- In orchestrate, the runner resolves the command harness adapter with timeout and token limit options, coordinates dynamic queue-driven supervision via the coordinator, and renders summary metrics. [realize_orchestrate]
+- The realization constructs argument parsers for the orchestrate command supporting scope, target role, harness adapter, model, max waves, batch size, timeout, max context tokens, and max unproductive turns options. [construct_orchestrate_cli_parser]
+- In orchestrate, the runner resolves the command harness adapter with timeout and token limit options, coordinates dynamic queue-driven supervision with optional unproductive turn limits via the coordinator, and renders summary metrics. [realize_orchestrate]
 
 ### Woven Contracts
 

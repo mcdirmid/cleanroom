@@ -28,7 +28,7 @@ class DagSubgraph(InTier[SystemTier], Protocol):
         POSTCONDITIONS:
         - MUST collect reachable dependency nodes from the target node in graph storage.
         - MUST compute the dependency-first topological order of reachable dependency nodes.
-        - MUST order nodes that no dependency orders relative to one another by role tier depth first.
+        - MUST order nodes that no dependency orders relative to one another by role tier depth first, evaluating alphabetical role precedence on the unqualified role identifier extracted following the final colon delimiter of the role address.
         - MUST order nodes that no dependency orders relative to one another by unit address second.
         """
         ...

@@ -43,7 +43,7 @@ class DshTelemetryParser(
 
         GROUNDING:
         - Locates session directories under sessions_dir matching workspace_dir slug,
-          decompresses session.v4.jsonl.zstd, aggregates token usage, and computes cost_usd
+          decompresses session.v4.jsonl.zstd (or reads uncompressed session.v4.jsonl when present), aggregates token usage, and computes cost_usd
           (dsh_telemetry_mechanics).
         """
         ...

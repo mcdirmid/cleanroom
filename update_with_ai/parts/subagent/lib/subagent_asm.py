@@ -22,6 +22,7 @@ CONSTITUENTS = (
 )
 
 
+# Contract: initializes subagent assembly component and its constituents (subagent_coordinator_impl, subagent_harness_impl, subagent_tool_impl)
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Initializes the subagent assembly component and its constituents."""
     for constituent in CONSTITUENTS:

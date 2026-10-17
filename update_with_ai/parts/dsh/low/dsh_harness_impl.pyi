@@ -41,6 +41,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
         GROUNDING:
         - Prepares role-tailored task prompts distinguishing auditor roles from authoring roles,
+          records initial pending targets seeded from ready targets via workspace_work,
+          tests non-blocking file locks on session.lock when resuming saved session IDs from
+          .cleanroom/dsh_session_id.txt conforming to dsh_ext to prevent session adoption collisions,
           executes dsh CLI process bound to dispatch.workspace_dir using headless profile and
           overlay patches conforming to dsh_ext, and returns task handle.
         """
@@ -56,7 +59,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
         GROUNDING:
         - Awaits process completion without mandatory timeout unless configured, computes buffer
-          differences via workspace_work, assigns unresolved status when zero targets are submitted or blamed,
+          differences seeded from ready targets via workspace_work, inspects blame buffers and
+          turn logs for attributed defects, scrapes active session identifiers from event logs and
+          saves to .cleanroom/dsh_session_id.txt, assigns unresolved status when zero targets are submitted or blamed,
           parses session telemetry via dsh_harness, and constructs subagent_coordinator.RoleTurnResult.
         """
         ...

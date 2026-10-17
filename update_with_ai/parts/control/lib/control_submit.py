@@ -27,6 +27,7 @@ class SubmissionOutcome:
 class SubmissionCoordinator(Protocol):
     """Validates submission gating rules and resolves clean nodes."""
 
+    # Contract: Submits target node after validating gating rules; rejects on failed verification, uncleaned in-batch dependency, summary/modification mismatch, or unaddressed feedback; marks node clean in graph storage.
     def submit_target(
         self,
         target_node: dag_storage.DagNode,
@@ -35,6 +36,7 @@ class SubmissionCoordinator(Protocol):
         in_batch_dependencies: Optional[Sequence[dag_storage.DagNode]] = None,
     ) -> SubmissionOutcome: ...
 
+    # Contract: Submits file target after validating file gating rules (auditor verification targets, producer write permissions and directory scope, modification/summary consistency) and updates metadata.
     def submit_target_file(
         self,
         target: str,
@@ -44,6 +46,7 @@ class SubmissionCoordinator(Protocol):
         role_name: Optional[str] = None,
     ) -> SubmissionOutcome: ...
 
+    # Contract: Resolves target specification to canonical or workspace file path and unit name.
     def resolve_submit_target(
         self,
         target: str,
@@ -52,6 +55,7 @@ class SubmissionCoordinator(Protocol):
         dir_scope: str = "staging",
     ) -> Tuple[Optional[str], Optional[str]]: ...
 
+    # Contract: Parses part directory, unit name, and role name from file path.
     def parse_unit_from_file_path(
         self, file_path: str, repo_root: str
     ) -> Tuple[str, str, str]: ...

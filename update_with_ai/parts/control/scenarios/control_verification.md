@@ -22,6 +22,9 @@ exit code 1 while writing the output `Build loading: 4 packages`, `--- Running w
    `warning: widget/src/widget.py line 9: unused widget import` only, and reporting that the result
    was not reused from cache.
 
+2. The agent evaluates a verification check realized as a command object specifying a shell command string.
+   Observed: the shell command executes with a bounded timeout, returning sanitized diagnostic output and pass/fail status.
+
 ## Scenario 2 — Reusing a cached result while the target files are unchanged
 
 Given: a previous evaluation of the alpha-role target node for unit widget failed with the

@@ -26,94 +26,94 @@ FileHash = NewType('FileHash', str)
 AllowMultiple = NewType('AllowMultiple', bool)
 
 class EditingTool(tool_provider.Tool, Protocol):
+    # Contract: Name of the editing tool.
     @property
     def name(self) -> tool_provider.ToolName:
-        # TODO_name_body
         ...
 
+    # Contract: Description of the editing tool.
     @property
     def description(self) -> tool_provider.ToolDescription:
-        # TODO_description_body
         ...
 
+    # Contract: Parameter mapping accepted by editing tool.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
-        # TODO_parameters_body
         ...
 
+    # Contract: Executes editing tool with actual parameter bindings.
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
-        # TODO_execute_tool_body
         ...
 
 
 class EditManager(Protocol):
+    # Contract: Exposes whether workspace file modifications occurred during the session.
     @property
     def has_modifications(self) -> bool:
-        # TODO_has_modifications_body
         ...
 
+    # Contract: Exposes sequential update revision for workspace files.
     @property
     def file_update_revision(self) -> FileUpdateRevision:
-        # TODO_file_update_revision_body
         ...
 
+    # Contract: Tracks last file read or edited across the session.
     @property
     def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
-        # TODO_last_read_or_edited_file_body
         ...
 
+    # Contract: Records file read event, updating last read or edited file.
     def record_file_read(self, file: agent_file_alias.FileAlias) -> None:
-        # TODO_record_file_read_body
         ...
 
+    # Contract: Records file edit event, updating last read or edited file and advancing revision.
     def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None:
-        # TODO_record_file_edit_body
         ...
 
+    # Contract: Computes file hash from content.
     def file_hash(self, file: agent_file_alias.FileAlias) -> FileHash:
-        # TODO_file_hash_body
         ...
 
+    # Contract: Validates write access for read-write files.
     def can_write(self, path: Union[agent_file_alias.RelativePath, agent_file_alias.FileAlias]) -> tool_provider.ToolResponse:
-        # TODO_can_write_body
         ...
 
 
 class ReplaceFileContentTool(EditingTool, Protocol):
+    # Contract: Installs replace file content tool into session ToolManager.
     def initialize(self) -> None:
-        # TODO_initialize_body
         ...
 
+    # Contract: Parameter identifying target read-write file.
     @property
     def path_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
-        # TODO_path_parameter_body
         ...
 
+    # Contract: Parameter specifying target content to replace.
     @property
     def target_content_parameter(self) -> tool_provider.ToolParameter[TargetContent, str]:
-        # TODO_target_content_parameter_body
         ...
 
+    # Contract: Parameter specifying replacement content.
     @property
     def replacement_content_parameter(self) -> tool_provider.ToolParameter[ReplacementContent, str]:
-        # TODO_replacement_content_parameter_body
         ...
 
+    # Contract: Parameter specifying starting line index of search window.
     @property
     def start_line_parameter(self) -> tool_provider.ToolParameter[Optional[LineNumber], int]:
-        # TODO_start_line_parameter_body
         ...
 
+    # Contract: Parameter specifying ending line index of search window.
     @property
     def end_line_parameter(self) -> tool_provider.ToolParameter[Optional[LineNumber], int]:
-        # TODO_end_line_parameter_body
         ...
 
+    # Contract: Parameter specifying whether to allow replacing multiple occurrences.
     @property
     def allow_multiple_parameter(self) -> tool_provider.ToolParameter[AllowMultiple, bool]:
-        # TODO_allow_multiple_parameter_body
         ...
 
+    # Contract: Replaces target content with replacement content within bounded range.
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
-        # TODO_execute_tool_body
         ...

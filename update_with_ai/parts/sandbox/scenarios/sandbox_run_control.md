@@ -237,3 +237,10 @@ Given: the agent enters a session for role alpha in `/ws/alpha_scope_a`, no targ
 
 1. The agent executes the get work tool without arguments.
    Observed: the dirty node is retrieved as an active node and the blame tool is installed in the session tools.
+
+## Scenario 19 — Guide delivery fallback from read-only documentation
+
+Given: the agent enters a session for role alpha in `/ws/alpha_scope_a`, the active dirty node has no `guide_file` configured in node config, but `read_only_files` includes `/repo/guides/alpha_guide.md`.
+
+1. The agent executes the get work tool without arguments.
+   Observed: the dirty node is retrieved as an active node, and the delivered task prompt references `alpha_guide.md` as the resolved guide.

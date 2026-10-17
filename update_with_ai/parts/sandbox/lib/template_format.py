@@ -17,7 +17,9 @@ TemplateKey = NewType('TemplateKey', str)
 
 FormattedText = NewType('FormattedText', str)
 
+# Contract: TemplateFormatter protocol - formats template documents using supplied parameter bindings.
 class TemplateFormatter(Protocol):
+    # Contract: TemplateFormatter.format_template - formats template text with placeholders, conditionals, and loops using supplied parameters.
     def format_template(self, text: TemplateText, parameters: Mapping[TemplateKey, Any]) -> FormattedText:
         # TODO_format_template_body
         ...

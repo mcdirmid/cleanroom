@@ -24,6 +24,8 @@ The `dsh_ext` external component specifies DeepSeek Harness CLI options, role ag
 
 - File Path: `<workspace_dir>/.cleanroom/dsh_patch.yml`
 - Overrides `@deepseek-ai/dsh-agent-default-model` to route model requests (`provider: deepseek-official` or `provider: omlx`).
+- Configures `reasoningEffort: high` when targeting DeepSeek providers.
+- Disables `@deepseek-ai/todo` plugin (`disabled: true`) for headless operation.
 - Overrides `@deepseek-ai/dsh-user-approval` with `policy: never` and `@deepseek-ai/dsh-permission-presets` with `defaultPreset: danger-full-access` for unattended execution.
 
 **Role Agent Documentation Format (`AGENTS.md`)**
@@ -35,7 +37,9 @@ The `dsh_ext` external component specifies DeepSeek Harness CLI options, role ag
 
 **Session Storage and Telemetry Schema**
 
-- Storage Directory: `~/Library/Application Support/dsh-desktop/harness/sessions/<dir-slug>/<session-id>/session.v4.jsonl.zstd`
+- Storage Directory: `~/Library/Application Support/dsh-desktop/harness/sessions/<dir-slug>/<session-id>/session.v4.jsonl.zstd` (with uncompressed `session.v4.jsonl` fallback)
+- Concurrency Lock: `session.lock` inside the active session directory verified non-blockingly via file locking.
+- Active Session ID: `<workspace_dir>/.cleanroom/dsh_session_id.txt` for persisting active session ID across turns.
 - Structured JSON run event usage fields:
   - `usage.inputTokens`: INTEGER (uncached prompt tokens)
   - `usage.cacheReadTokens`: INTEGER (cached prompt tokens)

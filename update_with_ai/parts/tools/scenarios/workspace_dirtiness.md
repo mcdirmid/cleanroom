@@ -23,3 +23,13 @@ Given: an auditor role unit whose audited target is missing an in-band audit cer
 
 1. The caller evaluates unit dirtiness via `evaluate_unit_dirty`.
    Observed: returns dirty status `True` with reasons indicating uncertified target status.
+
+## Scenario 3 — Companion interface pairing and multi-tier role ancestry inheritance
+
+Given: an implementation unit ending in `_impl` whose immediate upstream role lacks active component type mapping, but whose ancestor role does.
+
+1. The caller evaluates unit dirtiness via `evaluate_unit_dirty`.
+   Observed: traverses upstream role ancestry to inspect the ancestor contract, pairs the companion interface contract, and reports dirtiness accordingly.
+
+2. The caller resolves companion specification contracts via `resolve_contract_files`.
+   Observed: returns the companion interface contract without the `_impl` suffix.

@@ -12,13 +12,16 @@ from __future__ import annotations
 from typing import Optional, Protocol, Sequence
 
 
+# Contract: WorkspaceToolRunner protocol coordinates command-line subagent tool execution for role workspaces.
 class WorkspaceToolRunner(Protocol):
     """Coordinates command-line subagent tool execution for role workspaces."""
 
+    # Contract: Parses arguments and dispatches command execution, returning exit code.
     def execute_command(self, argv: Sequence[str]) -> int:
         """Parses arguments and dispatches command execution, returning exit code."""
         ...
 
+    # Contract: Evaluates dirty work in local workspace and prints ready tasks, respecting batch_size and max_feedback_chars.
     def run_get_work(
         self,
         dir_scope: Optional[str] = None,
@@ -29,6 +32,7 @@ class WorkspaceToolRunner(Protocol):
         """Evaluates dirty work in local workspace and prints ready tasks."""
         ...
 
+    # Contract: Executes role-specific verification checks, linters, and type checking for targets.
     def run_check_files(
         self,
         target: Optional[str] = None,
@@ -42,6 +46,7 @@ class WorkspaceToolRunner(Protocol):
         """
         ...
 
+    # Contract: Verifies and submits target to canonical main repository, updating in-band header and clearing pending work.
     def run_submit(
         self,
         target: str,
@@ -58,6 +63,7 @@ class WorkspaceToolRunner(Protocol):
         """
         ...
 
+    # Contract: Attributes defect critique to culprit target in main repository, appending blame to log and clearing pending.
     def run_blame(
         self,
         culprit_file: str,
@@ -72,6 +78,7 @@ class WorkspaceToolRunner(Protocol):
         """
         ...
 
+    # Contract: Marks target dirty and records failure feedback diagnostics.
     def run_fail(
         self,
         file_path: str,
@@ -81,6 +88,7 @@ class WorkspaceToolRunner(Protocol):
         """Marks target dirty and records failure feedback diagnostics."""
         ...
 
+    # Contract: Evaluates statement test coverage across target implementation and test.
     def run_coverage(
         self,
         target: Optional[str] = None,
@@ -95,6 +103,7 @@ class WorkspaceToolRunner(Protocol):
         """Evaluates statement test coverage across target implementation and test."""
         ...
 
+    # Contract: Commissions an isolated role workspace or all workspaces in a directory scope.
     def run_commission(
         self,
         role_name: Optional[str] = None,
@@ -106,6 +115,7 @@ class WorkspaceToolRunner(Protocol):
         """Commissions an isolated role workspace or all workspaces in a directory scope."""
         ...
 
+    # Contract: Refreshes system files, bin tools, configs, and guides across role workspaces.
     def run_refresh_sys(
         self,
         role_name: Optional[str] = None,

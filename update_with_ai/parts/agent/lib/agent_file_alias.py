@@ -27,6 +27,7 @@ SanitizedText = NewType('SanitizedText', str)
 class FileAlias:
     relative_path: RelativePath
 
+    # Contract: MUST display itself by its relative path when converted to a string.
     def __str__(self) -> str:
         """Displays the file alias by its relative path in the agent session."""
         return str(self.relative_path)
@@ -54,12 +55,15 @@ class UnboundFile(FileAlias):
 
 
 class AliasManager(Protocol):
+    # Contract: The workspace root directory for the agent session.
     @property
     def workspace_root(self) -> file_paths.WorkspaceRoot:
         ...
 
+    # Contract: MUST convert path strings to file aliases (BoundFile if matched, UnboundFile otherwise).
     def to_alias(self, path: str) -> FileAlias:
         ...
 
+    # Contract: MUST sanitize text by masking occurrences of relative workspace paths with file alias relative paths.
     def sanitize_text(self, text: UnsanitizedText) -> SanitizedText:
         ...

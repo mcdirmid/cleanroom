@@ -29,7 +29,7 @@ from update_with_ai.parts.subagent.lib import subagent_coordinator, subagent_har
 from . import antigravity_harness
 
 
-# Rate card per 1,000,000 tokens from design-docs/todo.md Section 7.2
+# Contract: Standardized token rate card for Gemini Flash and Pro models.
 PRICING_RATES: Dict[str, Tuple[float, float, float]] = {
     # model_key: (cached_input_per_m, uncached_input_per_m, output_per_m)
     "gemini-3.8-flash": (0.025, 0.10, 0.40),
@@ -40,6 +40,7 @@ PRICING_RATES: Dict[str, Tuple[float, float, float]] = {
 }
 
 
+# Contract: Reads blamed culprit target paths from the workspace blame buffer file.
 def _read_blame_buffer(workspace_dir: str) -> List[str]:
     """Reads blamed culprit target paths from the workspace blame buffer."""
     buf_path = os.path.join(workspace_dir, ".cleanroom_blame_buffer.json")
@@ -66,6 +67,7 @@ def _read_blame_buffer(workspace_dir: str) -> List[str]:
     return []
 
 
+# Contract: Resolves pricing rate card for model identifier.
 def _resolve_pricing_rates(model_name: Optional[str] = None) -> Tuple[float, float, float]:
     """Resolves (cached_per_m, input_per_m, output_per_m) for model name."""
     if not model_name:
@@ -78,9 +80,11 @@ def _resolve_pricing_rates(model_name: Optional[str] = None) -> Tuple[float, flo
     return PRICING_RATES.get(lower, PRICING_RATES["default"])
 
 
+# Contract: TranscriptTelemetryParser realizes JSONL transcript parsing and Gemini pricing calculation.
 class TranscriptTelemetryParser(antigravity_harness.TranscriptTelemetryParser):
     """Realizes JSONL transcript parsing and Gemini pricing calculation."""
 
+    # Contract: TranscriptTelemetryParser.parse_transcript_file - parses transcript log and calculates cost_usd using rate card.
     def parse_transcript_file(
         self,
         transcript_path: str,
@@ -120,7 +124,6 @@ class TranscriptTelemetryParser(antigravity_harness.TranscriptTelemetryParser):
                             if m_name and not resolved_model:
                                 resolved_model = str(m_name)
                     except json.JSONDecodeError:
-                        # Fallback regex parsing on line
                         for m in re.finditer(r"(?:input_tokens|Input tokens)[:=]\s*(\d+)", line_s, re.IGNORECASE):
                             input_tokens += int(m.group(1))
                         for m in re.finditer(r"(?:cached_tokens|Cached tokens)[:=]\s*(\d+)", line_s, re.IGNORECASE):
@@ -133,6 +136,7 @@ class TranscriptTelemetryParser(antigravity_harness.TranscriptTelemetryParser):
         if not resolved_model:
             resolved_model = model_name or "gemini-flash"
 
+        # Contract: Calculate cost_usd using rate card for resolved model.
         cached_per_m, input_per_m, output_per_m = _resolve_pricing_rates(resolved_model)
         cost_usd = (
             (input_tokens * (input_per_m / 1_000_000.0))
@@ -151,6 +155,8 @@ class TranscriptTelemetryParser(antigravity_harness.TranscriptTelemetryParser):
         )
 
 
+
+# Contract: AntigravityHarnessAdapter realizes subagent execution in Antigravity role workspaces.
 class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
     """Realizes subagent execution in Antigravity role workspaces."""
 
@@ -168,6 +174,7 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
         self._tasks: Dict[str, Dict[str, Any]] = {}
         self._handle_counter = 0
 
+    # Contract: AntigravityHarnessAdapter.dispatch_role - initiates subagent turn in designated workspace and returns task handle.
     def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
         """Dispatches work directive to an Antigravity role workspace."""
         self._handle_counter += 1
@@ -210,6 +217,7 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
         }
         return handle
 
+    # Contract: AntigravityHarnessAdapter.poll_role - polls subagent turn execution non-blockingly without waiting for completion.
     def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
         """Polls subagent turn execution non-blockingly without waiting for completion."""
         task = self._tasks.get(task_handle)
@@ -240,6 +248,7 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
 
         return self.await_role(task_handle)
 
+    # Contract: AntigravityHarnessAdapter.await_role - awaits process completion, parses transcript telemetry, and returns RoleTurnResult.
     def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
         """Awaits subagent turn completion and returns outcome result."""
         task = self._tasks.get(task_handle)
@@ -269,15 +278,14 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
 
         elapsed = time.time() - start_time
 
-        # Check for blamed culprit targets in workspace blame buffer
+        # Contract: Reads blamed culprit targets from workspace blame buffer.
         blamed = _read_blame_buffer(dispatch.workspace_dir)
 
-        # Look for submitted targets in stdout or ready_targets
         submitted: List[str] = []
         for m in re.finditer(r"\[SUBMITTED\]\s*([a-zA-Z0-9_\-/\.]+)", stdout_txt):
             submitted.append(m.group(1))
 
-        # Check for transcript log
+        # Contract: Parse transcript telemetry from .cleanroom/transcript.jsonl.
         transcript_path = os.path.join(dispatch.workspace_dir, ".cleanroom", "transcript.jsonl")
         metrics = self.transcript_parser.parse_transcript_file(transcript_path, self.model_name)
         telemetry = subagent_coordinator.TokenUsage(
@@ -306,6 +314,7 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
             wall_clock_seconds=elapsed,
         )
 
+    # Contract: AntigravityHarnessAdapter.interrupt_role - aborts active subagent task execution upon timeout or limit.
     def interrupt_role(self, task_handle: str) -> None:
         """Aborts active subagent task execution upon timeout or limit."""
         task = self._tasks.get(task_handle)
@@ -319,6 +328,7 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
                 pass
 
 
+# Contract: AntigravityHarnessManager realizes management of Antigravity execution adapters and transcript parsing in the agent session tier.
 class AntigravityHarnessManager(
     Singleton,
     antigravity_harness.AntigravityHarnessManager,
@@ -330,6 +340,7 @@ class AntigravityHarnessManager(
     def __init__(self) -> None:
         self._parser = TranscriptTelemetryParser()
 
+    # Contract: AntigravityHarnessManager.initialize - installs antigravity harness adapter factory into subagent harness registry.
     def initialize(self) -> None:
         """Initializes the manager and installs the adapter factory into the harness registry."""
         try:
@@ -338,6 +349,7 @@ class AntigravityHarnessManager(
         except Exception:
             pass
 
+    # Contract: AntigravityHarnessManager.create_harness_adapter - constructs and returns configured Antigravity harness adapter instance.
     def create_harness_adapter(
         self,
         model_name: Optional[str] = None,
@@ -358,9 +370,11 @@ class AntigravityHarnessManager(
             transcript_parser=self._parser,
         )
 
+    # Contract: AntigravityHarnessManager.get_transcript_parser - returns transcript telemetry parser instance.
     def get_transcript_parser(self) -> antigravity_harness.TranscriptTelemetryParser:
         """Returns the transcript telemetry parser service."""
         return self._parser
+
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

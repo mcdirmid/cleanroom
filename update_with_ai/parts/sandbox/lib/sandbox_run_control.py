@@ -25,11 +25,14 @@ from .sandbox_submission import (
 # Requirements specified in sandbox_run_control.pyi
 
 
+# Contract: CheckFilesTool protocol - inspects verification checks across active files.
 class CheckFilesTool(tool_provider.Tool, Protocol):
+    # Contract: Tool.name - returns 'check_files'.
     @property
     def name(self) -> tool_provider.ToolName:
         ...
 
+    # Contract: CheckFilesTool.execute_tool - evaluates verification checks and presents aggregated outcomes.
     def execute_tool(
         self,
         actual_parameter_bindings: Mapping[
@@ -39,11 +42,14 @@ class CheckFilesTool(tool_provider.Tool, Protocol):
         ...
 
 
+# Contract: AdvanceTool protocol - advances progressive guide steps upon passing verification.
 class AdvanceTool(tool_provider.Tool, Protocol):
+    # Contract: Tool.name - returns 'advance'.
     @property
     def name(self) -> tool_provider.ToolName:
         ...
 
+    # Contract: AdvanceTool.execute_tool - executes guide milestone advancement.
     def execute_tool(
         self,
         actual_parameter_bindings: Mapping[
@@ -53,7 +59,9 @@ class AdvanceTool(tool_provider.Tool, Protocol):
         ...
 
 
+# Contract: GetWorkTool protocol - retrieves active dirty nodes for processing and materializes startup templates.
 class GetWorkTool(tool_provider.Tool, Protocol):
+    # Contract: GetWorkTool.execute_tool - acquires dirty nodes for execution, formats task primer, and installs relevant tools.
     def execute_tool(
         self,
         actual_parameter_bindings: Mapping[
@@ -63,19 +71,24 @@ class GetWorkTool(tool_provider.Tool, Protocol):
         ...
 
 
+# Contract: RunController protocol - coordinates session termination tools and verification caching.
 class RunController(Protocol):
+    # Contract: RunController.initialize - initializes session outcome tools upon agent session entry.
     def initialize(self) -> None:
         ...
 
+    # Contract: RunController.verification_checks - exposes verification checks validating session criteria.
     @property
     def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
         ...
 
+    # Contract: RunController.blame_targets_by_node - exposes per-node blame targets eligible for defect attribution.
     @property
     def blame_targets_by_node(
         self,
     ) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
         ...
 
+    # Contract: RunController.update_verification - updates and caches verification results if outdated.
     def update_verification(self) -> None:
         ...

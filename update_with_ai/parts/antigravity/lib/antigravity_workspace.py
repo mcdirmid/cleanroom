@@ -15,6 +15,7 @@ from support.lib.lifecycle import InTier
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
 
 
+# Contract: WorkspaceConfinementReport captures the configured isolation state of a role workspace.
 @dataclass(frozen=True)
 class WorkspaceConfinementReport:
     """Captures the configured isolation state of a role workspace.
@@ -32,9 +33,11 @@ class WorkspaceConfinementReport:
     is_confined: bool
 
 
+# Contract: AntigravityWorkspaceConfigurer configures Antigravity-specific isolation rules and workspace confinement.
 class AntigravityWorkspaceConfigurer(InTier[AgentSessionTier], Protocol):
     """Configures Antigravity-specific isolation rules and workspace confinement."""
 
+    # Contract: AntigravityWorkspaceConfigurer.configure_workspace - writes workspace-local isolation rules and returns a confinement report.
     def configure_workspace(
         self,
         workspace_dir: str,
@@ -44,3 +47,4 @@ class AntigravityWorkspaceConfigurer(InTier[AgentSessionTier], Protocol):
     ) -> WorkspaceConfinementReport:
         """Establishes Antigravity isolation rules and returns a confinement report."""
         ...
+

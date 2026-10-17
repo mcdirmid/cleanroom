@@ -27,6 +27,7 @@ from update_with_ai.parts.dag.lib import dag_config
 from update_with_ai.parts.openai.lib import openai_config
 
 
+# Contract: resolve active model configuration name in precedence order (--config, CLEANROOM_MODEL, MODEL_CONFIG_TARGET, default)
 def _resolve_config_name() -> str:
     """Resolves the active model config name from CLI, environment, or default."""
     args = sys.argv[1:] if len(sys.argv) > 1 else []
@@ -65,6 +66,7 @@ def _is_valid_model_config_file(path: str) -> bool:
     return True
 
 
+# Contract: discover TOML configuration file in workspace
 def _find_toml_config_file() -> Optional[str]:
     """Finds a candidate TOML configuration file across workspace and home directories."""
     if "CLEANROOM_MODEL_CONFIG_FILE" in os.environ:
@@ -247,26 +249,32 @@ class AgentConfig(agent_config.AgentConfig, Singleton):
     def __init__(self) -> None:
         self._cfg = _get_config_data()
 
+    # Contract: read maximum conversation turn limit decoded from TOML configuration or environment defaults
     @property
     def conversation_limit(self) -> agent_config.ConversationLimit:
         return agent_config.ConversationLimit(self._cfg.conversation_limit)
 
+    # Contract: read follow-up injection preference from TOML configuration or default to true
     @property
     def inject_followups(self) -> bool:
         return self._cfg.inject_followups
 
+    # Contract: read step mode permission from TOML configuration or default to true
     @property
     def is_step_mode(self) -> bool:
         return self._cfg.is_step_mode
 
+    # Contract: read startup file reading setting from TOML configuration or default to true
     @property
     def is_startup_reads(self) -> bool:
         return self._cfg.is_startup_reads
 
+    # Contract: read delta editing output preference from TOML configuration or default to true
     @property
     def edit_delta_output(self) -> bool:
         return self._cfg.edit_delta_output
 
+    # Contract: read trailing character retention limit from TOML configuration or defaults
     @property
     def supersede_arg_keep(self) -> agent_config.SupersedeArgKeepLimit:
         return agent_config.SupersedeArgKeepLimit(self._cfg.supersede_arg_keep)
@@ -278,10 +286,12 @@ class DagConfig(dag_config.DagConfig, Singleton):
     def __init__(self) -> None:
         self._cfg = _get_config_data()
 
+    # Contract: read maximum node visit cap from TOML configuration or defaults
     @property
     def node_visit_limit(self) -> dag_config.NodeVisitLimit:
         return dag_config.NodeVisitLimit(self._cfg.node_visit_limit)
 
+    # Contract: read maximum role batch size from TOML configuration or defaults
     @property
     def batch_size(self) -> dag_config.BatchSize:
         return dag_config.BatchSize(self._cfg.batch_size)
@@ -293,10 +303,12 @@ class OpenAIConfig(openai_config.OpenAIConfig, Singleton):
     def __init__(self) -> None:
         self._cfg = _get_config_data()
 
+    # Contract: resolve model identifier string from CLI, environment, or default TOML entry
     @property
     def model_name(self) -> openai_config.ModelName:
         return openai_config.ModelName(self._cfg.model_name)
 
+    # Contract: resolve API endpoint base URL when custom routing applies
     @property
     def base_url(self) -> Optional[openai_config.BaseUrl]:
         return (
@@ -305,6 +317,7 @@ class OpenAIConfig(openai_config.OpenAIConfig, Singleton):
             else None
         )
 
+    # Contract: extract API authentication key from designated environment variable
     @property
     def api_key(self) -> Optional[openai_config.ApiKey]:
         return (
@@ -313,14 +326,17 @@ class OpenAIConfig(openai_config.OpenAIConfig, Singleton):
             else None
         )
 
+    # Contract: read request timeout duration in seconds from TOML configuration
     @property
     def timeout(self) -> openai_config.TimeoutSeconds:
         return openai_config.TimeoutSeconds(self._cfg.timeout)
 
+    # Contract: read sampling temperature setting from TOML configuration
     @property
     def temperature(self) -> openai_config.Temperature:
         return openai_config.Temperature(self._cfg.temperature)
 
+    # Contract: read maximum token generation ceiling from TOML configuration when specified
     @property
     def max_tokens(self) -> Optional[openai_config.MaxTokens]:
         return (

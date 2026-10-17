@@ -43,32 +43,7 @@ from . import (
     workspace_pending,
 )
 
-AUDIT_BUFFER_FILE = ".cleanroom_audit_buffer.json"
-BLAME_BUFFER_FILE = ".cleanroom_blame_buffer.json"
-PENDING_WORK_FILE = ".cleanroom_pending_work.json"
-
-
-def is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
-    clean_r = role_name.split(":")[-1].strip().lower()
-    reg = get_singleton(workspace_registry.WorkspaceRegistry)
-    r_def = reg.resolve_role_definition(clean_r, repo_root=repo_root)
-    return bool(r_def.audit_tag or not r_def.src_pattern)
-
-
-def copy_file_with_perms(
-    src: str,
-    dst: str,
-    readonly: bool = False,
-    executable: bool = False,
-) -> None:
-    """Copies file content and applies exact permissions, delegating to WorkspaceProvisioner."""
-    get_singleton(workspace_provision.WorkspaceProvisioner).copy_file_with_permissions(
-        src, dst, readonly=readonly, executable=executable
-    )
-
-
-
-
+# Contract: Discovers root of commissioned role workspace or repo root by checking for .cleanroom_role.json.
 def find_workspace_root() -> str:
     """Discovers root of commissioned role workspace or repo root."""
     curr = os.getcwd()
@@ -79,6 +54,7 @@ def find_workspace_root() -> str:
     return os.getcwd()
 
 
+# Contract: Loads .cleanroom_role.json from current workspace if present.
 def get_current_role_metadata() -> Optional[Dict[str, Any]]:
     """Loads .cleanroom_role.json from current workspace if present."""
     ws_root = find_workspace_root()
@@ -92,6 +68,7 @@ def get_current_role_metadata() -> Optional[Dict[str, Any]]:
     return None
 
 
+# Contract: Resolves main repository root from explicit repo_root or workspace_registry.discover_repository_root.
 def _resolve_main_root(
     ws_root: str, meta: Optional[Dict[str, Any]], repo_root: Optional[str] = None
 ) -> str:
@@ -101,8 +78,7 @@ def _resolve_main_root(
     return os.path.realpath(reg.discover_repository_root(ws_root))
 
 
-
-
+# Contract: Resolves path to .cleanroom.log in the directory containing parts.
 def resolve_cleanroom_log_path(
     target_or_path: str, repo_root: Optional[str] = None
 ) -> str:
@@ -132,6 +108,7 @@ def resolve_cleanroom_log_path(
     return os.path.join(root, ".cleanroom.log")
 
 
+# Contract: Appends action record message to .cleanroom.log in directory containing parts.
 def append_cleanroom_log(
     target_or_path: str,
     message: str,
@@ -145,23 +122,16 @@ def append_cleanroom_log(
     return log_path
 
 
-
-
 def _find_agent_node_config_module() -> Any:
     for k, m in list(sys.modules.items()):
-        if k.endswith(".parts.agent.lib.agent_node_config") or k == "parts.agent.lib.agent_node_config":
+        if k == "agent_node_config" or k.endswith(".agent_node_config"):
             if hasattr(m, "NodeConfig"):
                 return m
-    for mod_path in (
-        "update_with_ai.parts.agent.lib.agent_node_config",
-        "update_python_with_ai.parts.agent.lib.agent_node_config",
-        "parts.agent.lib.agent_node_config",
-    ):
-        try:
-            import importlib
-            return importlib.import_module(mod_path)
-        except ImportError:
-            pass
+    try:
+        import importlib
+        return importlib.import_module("agent_node_config")
+    except ImportError:
+        pass
     return None
 
 
@@ -218,6 +188,8 @@ def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
             setattr(cfg, "role_definitions", role_defs)
 
 
+
+# Contract: Realizes substantive domain operations for Cleanroom role workspaces in agent_session tier.
 class WorkspaceCommandHandler(workspace_commands.WorkspaceCommandHandler, Singleton):
     """Realizes substantive domain operations for Cleanroom role workspaces."""
 
@@ -229,6 +201,7 @@ class WorkspaceCommandHandler(workspace_commands.WorkspaceCommandHandler, Single
     def _checker(self) -> workspace_check.WorkspaceChecker:
         return get_singleton(workspace_check.WorkspaceChecker)
 
+    # Contract: Delegates work discovery directly to WorkspaceChecker.run_get_work.
     def run_get_work(
         self,
         dir_scope: Optional[str] = None,
@@ -243,6 +216,7 @@ class WorkspaceCommandHandler(workspace_commands.WorkspaceCommandHandler, Single
             batch_size=batch_size,
         )
 
+    # Contract: Delegates file verification directly to WorkspaceChecker.run_check_files.
     def run_check_files(
         self,
         target: Optional[str] = None,
@@ -253,7 +227,7 @@ class WorkspaceCommandHandler(workspace_commands.WorkspaceCommandHandler, Single
             repo_root=repo_root,
         )
 
-
+    # Contract: Validates target, executes verification unless bypassed, delegates to SubmissionCoordinator, logs to cleanroom log, and removes from pending work.
     def run_submit(
         self,
         target: str,
@@ -299,6 +273,7 @@ class WorkspaceCommandHandler(workspace_commands.WorkspaceCommandHandler, Single
             return 0
         return 1
 
+    # Contract: Delegates blame attribution to AttributionCoordinator, logs to cleanroom log, and removes from pending work.
     def run_blame(
         self,
         culprit_file: str,
@@ -339,6 +314,7 @@ class WorkspaceCommandHandler(workspace_commands.WorkspaceCommandHandler, Single
             return 0
         return 1
 
+    # Contract: Delegates failure marking to AttributionCoordinator and removes from pending work.
     def run_fail(
         self,
         file_path: str,
@@ -368,6 +344,7 @@ class WorkspaceCommandHandler(workspace_commands.WorkspaceCommandHandler, Single
             return 0
         return 1
 
+    # Contract: Evaluates statement test coverage via CoverageEvaluator using workspace files.
     def run_coverage(
         self,
         target: Optional[str] = None,
@@ -422,6 +399,7 @@ class WorkspaceCommandHandler(workspace_commands.WorkspaceCommandHandler, Single
             return 1
         return 0
 
+    # Contract: Commissions an isolated role workspace or all workspaces in a directory scope.
     def run_commission(
         self,
         role_name: Optional[str] = None,
@@ -483,6 +461,7 @@ class WorkspaceCommandHandler(workspace_commands.WorkspaceCommandHandler, Single
         print(f"✔ Commissioned workspace for role '{role_name}' at: {desc.workspace_dir}")
         return 0
 
+    # Contract: Refreshes system files, bin tools, configs, and guides across role workspaces via WorkspaceSynchronizer.
     def run_refresh_sys(
         self,
         role_name: Optional[str] = None,
@@ -519,6 +498,7 @@ class WorkspaceCommandHandler(workspace_commands.WorkspaceCommandHandler, Single
                     )
         print(f"Refreshed system files across {count} role workspace(s).")
         return 0
+
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

@@ -32,3 +32,7 @@ Grounding gaps covered include:
 - Pending work sequence schema: Defines `.cleanroom_pending_work.json`, tracking pending target strings queued for execution within a workspace session.
 
 - Blame buffer schema: Defines `.cleanroom_blame_buffer.json`, buffering unacted diagnostic feedback messages and critiques for synchronization across workspaces.
+
+- Audit buffer schema: Defines `.cleanroom_audit_buffer.json`, buffering uncommitted audit records and verification timestamps for multi-workspace synchronization.
+
+- In-band metadata headers schema: Defines comment conventions and serialization format for in-band metadata blocks embedded directly into Python source files (`# --- CLEANROOM METADATA ---` through `# --- END CLEANROOM METADATA ---`) and Markdown specifications (`<!-- CLEANROOM METADATA` through `-->`), specifying lifecycle timestamps (`LAST_CLEANED`, `LAST_CHANGED`, audit timestamps), change descriptions (`CHANGE`), and content hashes (`CODE_HASH`).

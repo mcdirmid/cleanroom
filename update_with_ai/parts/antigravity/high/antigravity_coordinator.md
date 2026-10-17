@@ -22,7 +22,7 @@ Coordinating multi-agent workflows inside an interactive desktop IDE requires sp
 
 ## Types and Behavior
 
-A *subagent dispatch specification* captures the parameters required to invoke an Antigravity subagent, including the subagent type name, role identifier, task prompt, pinned workspace directory, and model tier.
+A *subagent dispatch specification* captures the parameters required to invoke an Antigravity subagent, including the subagent type name (cleanroom_worker), role identifier, task prompt, pinned workspace directory, and model tier.
 
 A *coordinator skill document* encapsulates the generated YAML frontmatter and instructional markdown content of the Cleanroom coordinator skill.
 

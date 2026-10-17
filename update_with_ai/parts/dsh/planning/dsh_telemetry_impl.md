@@ -20,7 +20,7 @@ Harvesting token telemetry requires parsing JSON stream events from headless dsh
 
 ### Contracts
 
-- The telemetry parser realization parses JSON stream events or queries session storage archives to retrieve input tokens, output tokens, and cache read tokens. [query_dsh_telemetry_metrics]
+- The telemetry parser realization parses JSON stream events or queries session storage archives (decompressing session.v4.jsonl.zstd or reading uncompressed session.v4.jsonl) to retrieve input tokens, output tokens, and cache read tokens. [query_dsh_telemetry_metrics]
 - The telemetry parser realization applies pricing rates for the active model family to calculate USD expenditures. [apply_dsh_pricing_rates]
 - The telemetry parser realization parses token metrics from stdout log text when structured records are absent. [parse_log_text_fallback]
 - The telemetry parser realization synchronizes workspace and session records into Desktop files and invokes Desktop RPC endpoints. [sync_desktop_sessions]

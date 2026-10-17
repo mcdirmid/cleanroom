@@ -31,10 +31,10 @@ Given: scope_a has unblocked roles across multiple development stages.
    Observed: the coordinator executes supervision only up to the target role, ignoring downstream stages.
    Realized by: the component's orchestrate CLI parsing extracting the target role argument and passing it to the coordinator.
 
-### Scenario 4 — Configuring batch size, execution timeout, and context token limits
+### Scenario 4 — Configuring batch size, execution timeout, context token, and unproductive turn limits
 
 Given: scope_a has unblocked roles and ready work targets.
 
-1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, and `--max-context-tokens 100000`.
-   Observed: the coordinator and harness adapter receive the configured batch size, timeout, and context compaction limits.
-   Realized by: the component's CLI options parsing `--batch-size`, `--timeout`, and `--max-context-tokens` and propagating them to harness resolution and coordinator options.
+1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, `--max-context-tokens 100000`, and `--max-unproductive-turns 8`.
+   Observed: the coordinator and harness adapter receive the configured batch size, timeout, context compaction, and unproductive turn limits.
+   Realized by: the component's CLI options parsing `--batch-size`, `--timeout`, `--max-context-tokens`, and `--max-unproductive-turns` and propagating them to harness resolution and coordinator options.

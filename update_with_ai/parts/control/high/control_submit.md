@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # control_submit interface component
 
-imports: agent_session, dag_storage
+imports: agent_session, dag_storage, cleanroom_files_ext
 
 ## Purpose
 
@@ -18,7 +18,7 @@ Premature or undocumented task completion introduces regressions into software b
 
 **Out of scope:** The control_submit interface component does not edit file contents, interact with git remotes, or schedule subsequent turns; these are handled by other components.
 
-**Delegated:** Graph storage mutations are delegated to dag_storage; session lifecycle scoping is delegated to agent_session.
+**Delegated:** Graph storage mutations are delegated to dag_storage; workspace file conventions are delegated to cleanroom_files_ext; session lifecycle scoping is delegated to agent_session.
 
 ## Types and Behavior
 
@@ -38,6 +38,6 @@ The submission coordinator:
 
 - Resolves accepted targets by marking the target node status as clean in graph storage with the change summary.
 
-- Submits an auditor file target in a repository workspace by validating the target against test file submission prohibitions and updating in-band audit tags in the canonical repository.
+- Submits an auditor file target in a repository workspace by validating the target against test file submission prohibitions, discovering role context and directory scope from workspace manifest metadata when executed in an isolated workspace, and updating in-band audit tags in the canonical repository.
 
-- Submits a producer file target in a repository workspace by validating the target against read-only permissions and directory scope patterns, requiring a change summary exactly when source code was modified, and updating in-band change metadata in the canonical repository.
+- Submits a producer file target in a repository workspace by validating the target against read-only permissions and directory scope patterns, discovering role context and directory scope from workspace manifest metadata when executed in an isolated workspace, requiring a change summary exactly when source code was modified, and updating in-band change metadata in the canonical repository.

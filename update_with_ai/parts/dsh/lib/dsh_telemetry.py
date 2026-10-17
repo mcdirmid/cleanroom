@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Optional, Protocol
 
 
+# Contract: DshSessionTokenMetrics data type representing normalized token counts and cost.
 @dataclass(frozen=True)
 class DshSessionTokenMetrics:
     """Normalized token metrics parsed from DeepSeek Harness session storage or event streams.
@@ -34,9 +35,11 @@ class DshSessionTokenMetrics:
     model_name: str = ""
 
 
+# Contract: DshTelemetryParser protocol for parsing session storage, streams, and desktop synchronization.
 class DshTelemetryParser(Protocol):
     """Parses DeepSeek Harness session storage archives and event streams for token metrics."""
 
+    # Contract: MUST locate session archives under sessions_dir matching workspace_dir and extract token usage with rate card cost.
     def parse_session_storage(
         self,
         sessions_dir: str,
@@ -44,12 +47,14 @@ class DshTelemetryParser(Protocol):
         model_name: Optional[str] = None,
     ) -> DshSessionTokenMetrics: ...
 
+    # Contract: MUST parse token counts from JSON stream events or log text and calculate cost_usd.
     def parse_stream_text(
         self,
         stream_text: str,
         model_name: Optional[str] = None,
     ) -> DshSessionTokenMetrics: ...
 
+    # Contract: MUST update desktop storage files and send RPC notifications when sessions_dir is valid.
     def sync_desktop_session(
         self,
         sessions_dir: Optional[str],

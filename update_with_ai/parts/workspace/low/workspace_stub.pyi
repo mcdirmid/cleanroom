@@ -34,6 +34,7 @@ class WorkspaceStubSynthesizer(InTier[AgentSessionTier], Protocol):
         - MUST parse pyi_path into an AST and extract class, method, and function signatures.
         - MUST write a read-only test stub file at out_path with permissions set to 0o444.
         - MUST replace function and method bodies with NotImplementedError.
+        - MUST rewrite imports and inject missing interface method signatures from upstream specifications.
         """
         ...
 

@@ -102,6 +102,12 @@ role workspace copy is `/ws/alpha_scope_a/parts/gadget/gadget_spec.md`; the crit
    Observed: the attribution is refused with an explicit error, and neither the canonical
    repository file nor any local role workspace file is modified.
 
+3. The agent blames the culprit file using a normalized relative path suffix `parts/gadget/gadget_spec.md` with that critique.
+   Observed: an accepted attribution outcome resolving the culprit file against registered blame targets.
+
+4. The agent blames the culprit file with a critique exceeding the configured maximum character limit of 2000 characters.
+   Observed: the attribution is refused with an advisory error instructing defect prioritization.
+
 ## Scenario 7 — Recording task failure for a file target
 
 Given: the agent is cleaning the read-write file `/ws/alpha_scope_a/parts/widget/widget_spec.md` as

@@ -14,68 +14,68 @@ from . import tool_provider
 # Requirements specified in sandbox_file_reader.pyi
 
 class ReadManager(Protocol):
+    # Contract: Exposes declared read-only files from session configuration.
     @property
     def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
-        # TODO_read_only_files_body
         ...
 
+    # Contract: Exposes declared read-write files from session configuration.
     @property
     def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
-        # TODO_read_write_files_body
         ...
 
+    # Contract: Validates read access; confirms access for declared files, rejects undeclared files with listing.
     def can_read(self, path: Union[agent_file_alias.RelativePath, agent_file_alias.FileAlias]) -> tool_provider.ToolResponse:
-        # TODO_can_read_body
         ...
 
 
 class ViewFileTool(tool_provider.Tool, Protocol):
+    # Contract: Path parameter identifying file alias to view.
     @property
     def path_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
-        # TODO_path_parameter_body
         ...
 
+    # Contract: Returns 'view_file'.
     @property
     def name(self) -> tool_provider.ToolName:
-        # TODO_name_body
         ...
 
+    # Contract: Describes viewing workspace file content with line numbers.
     @property
     def description(self) -> tool_provider.ToolDescription:
-        # TODO_description_body
         ...
 
+    # Contract: Parameters mapping containing strictly the path parameter.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
-        # TODO_parameters_body
         ...
 
+    # Contract: Retrieves and formats file content with line numbers for specified file alias.
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
-        # TODO_execute_tool_body
         ...
 
 
 class SearchTool(tool_provider.Tool, Protocol):
+    # Contract: Parameter specifying regex pattern to search.
     @property
     def regex_pattern_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.RegexPattern, str]:
-        # TODO_regex_pattern_parameter_body
         ...
 
+    # Contract: Returns 'search_files'.
     @property
     def name(self) -> tool_provider.ToolName:
-        # TODO_name_body
         ...
 
+    # Contract: Describes searching regex patterns across session files.
     @property
     def description(self) -> tool_provider.ToolDescription:
-        # TODO_description_body
         ...
 
+    # Contract: Parameters mapping containing strictly the regex pattern parameter.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
-        # TODO_parameters_body
         ...
 
+    # Contract: Discovers regex pattern matches across read-only and read-write files.
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
-        # TODO_execute_tool_body
         ...

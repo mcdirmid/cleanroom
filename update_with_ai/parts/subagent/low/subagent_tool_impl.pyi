@@ -36,7 +36,7 @@ class SubagentToolRunner(
         """Dispatches and executes subagent commands matching an argument sequence.
 
         GROUNDING:
-        - Parses argv using argparse for the orchestrate subcommand and executes run_orchestrate.
+        - Parses argv using argparse for the orchestrate subcommand, prepending default orchestrate when omitted, and executes run_orchestrate.
         """
         ...
 
@@ -53,12 +53,13 @@ class SubagentToolRunner(
         timeout: Optional[float] = None,
         max_context_tokens: Optional[int] = None,
         repo_root: Optional[str] = None,
+        max_unproductive_turns: Optional[int] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence.
 
         GROUNDING:
         - Resolves harness adapter via subagent_harness.HarnessResolver.resolve_harness,
-          delegates multi-agent orchestration to subagent_coordinator.SubagentCoordinator.orchestrate,
+          delegates multi-agent orchestration with optional unproductive turn limits to subagent_coordinator.SubagentCoordinator.orchestrate,
           and renders summary telemetry.
         """
         ...

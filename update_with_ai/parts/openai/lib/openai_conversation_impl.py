@@ -19,8 +19,10 @@ from support.lib.lifecycle import (
     get_default_registry,
 )
 
+# Contract: Buffer limit of up to three most recent responses sharing suppression keys.
 _SUPPRESSION_BUFFER_LIMIT = 3
 
+# Contract: File path parameter names preserved in superseded tool calls.
 _PATH_PARAM_NAMES = frozenset(
     {
         "path",
@@ -36,6 +38,7 @@ _PATH_PARAM_NAMES = frozenset(
 )
 
 
+# Contract: Identifies file path parameters to preserve in superseded tool calls.
 def _is_path_param(name: str) -> bool:
     normalized = name.lower().replace("-", "_")
     return (
@@ -45,6 +48,7 @@ def _is_path_param(name: str) -> bool:
     )
 
 
+# Contract: Conversation realizes OpenAI provider role schema formatting, stubbing, and synthetic call injection in the agent session tier.
 class Conversation(loop_conversation.Conversation, Singleton):
     tier = agent_session
 
@@ -52,6 +56,7 @@ class Conversation(loop_conversation.Conversation, Singleton):
         self._messages: List[loop_conversation.ConversationMessage] = []
         self._suppression_keys: List[Optional[tool_provider.SuppressionKey]] = []
 
+    # Contract: Conversation.initialize - initializes conversation history, pairing unprompted responses with synthetic calls.
     def initialize(
         self, initial_messages: Sequence[loop_conversation.ConversationMessage] = ()
     ) -> None:
@@ -76,6 +81,7 @@ class Conversation(loop_conversation.Conversation, Singleton):
                             TypeError,
                         ):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
                             pass
+                    # Contract: Precede unprompted tool responses with synthetic assistant tool invocations.
                     self._messages.append(
                         loop_conversation.ConversationMessage(
                             role=loop_conversation.MessageRole("assistant"),
@@ -91,10 +97,12 @@ class Conversation(loop_conversation.Conversation, Singleton):
             self._messages.append(msg)
             self._suppression_keys.append(None)
 
+    # Contract: Conversation.append_message - appends conversation message directly to in-memory history.
     def append_message(self, message: loop_conversation.ConversationMessage) -> None:
         self._messages.append(message)
         self._suppression_keys.append(None)
 
+    # Contract: Conversation.append_tool_response - appends tool response, replacing preceding suppressed responses with stubs beyond buffer limit.
     def append_tool_response(
         self,
         tool_response: tool_provider.ToolResponse,
@@ -119,6 +127,7 @@ class Conversation(loop_conversation.Conversation, Singleton):
                     TypeError,
                 ):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
                     pass
+            # Contract: Precede unprompted tool responses with synthetic assistant tool invocations.
             self._messages.append(
                 loop_conversation.ConversationMessage(
                     role=loop_conversation.MessageRole("assistant"),
@@ -132,6 +141,8 @@ class Conversation(loop_conversation.Conversation, Singleton):
             )
             self._suppression_keys.append(None)
 
+
+        # Contract: MUST retain reminders on stubs and inherit them when omitted.
         effective_reminder = tool_response.reminder
         if tool_response.suppression_key is not None:
             if effective_reminder is None:
@@ -143,6 +154,7 @@ class Conversation(loop_conversation.Conversation, Singleton):
                         effective_reminder = self._messages[i].reminder
                         break
 
+            # Contract: MUST retain a buffer of up to three most recent responses sharing suppression keys.
             matching_indices = [
                 i
                 for i in range(len(self._messages))
@@ -154,6 +166,7 @@ class Conversation(loop_conversation.Conversation, Singleton):
             num_to_stub = max(0, len(matching_indices) - keep_preceding)
             indices_to_stub = matching_indices[:num_to_stub]
 
+            # Contract: MUST replace preceding responses beyond the buffer limit with stubs.
             for old_idx in indices_to_stub:
                 old_msg = self._messages[old_idx]
                 self._messages[old_idx] = loop_conversation.ConversationMessage(
@@ -181,11 +194,13 @@ class Conversation(loop_conversation.Conversation, Singleton):
                                     if isinstance(parsed, dict):
                                         elided: dict[str, Any] = {}
                                         for k, v in parsed.items():
+                                            # Contract: MUST preserve file path parameters and non-string arguments in superseded tool calls.
                                             if _is_path_param(k) or not isinstance(
                                                 v, str
                                             ):
                                                 elided[k] = v
                                             else:
+                                                # Contract: MUST replace other string arguments with a stub marker in superseded tool calls.
                                                 elided[k] = "[STUB]"
                                         new_tool_args = (
                                             loop_conversation.SerializedArguments(
@@ -219,6 +234,7 @@ class Conversation(loop_conversation.Conversation, Singleton):
                             )
                             break
 
+        # Contract: Append tool response with effective reminder; preserve responses with unmatched suppression keys intact.
         self._messages.append(
             loop_conversation.ConversationMessage(
                 role=loop_conversation.MessageRole("tool"),
@@ -232,6 +248,7 @@ class Conversation(loop_conversation.Conversation, Singleton):
         )
         self._suppression_keys.append(tool_response.suppression_key)
 
+    # Contract: Conversation.get_model_request - assembles model request formatted according to OpenAI role schemas, including active reminders.
     def get_model_request(self) -> loop_conversation.ModelRequest:
         formatted: List[loop_conversation.ConversationMessage] = []
         last_idx = len(self._messages) - 1
@@ -254,6 +271,7 @@ class Conversation(loop_conversation.Conversation, Singleton):
                 )
             )
         return loop_conversation.ModelRequest(messages=formatted)
+
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

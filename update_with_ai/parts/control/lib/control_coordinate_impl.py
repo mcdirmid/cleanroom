@@ -213,6 +213,7 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
             self._alias_to_node[unit_addr] = n
             self._alias_to_node[str(n.unit_address)] = n
 
+    # Contract: Sequence of nodes currently in OPEN state.
     @property
     def open_targets(self) -> Sequence[dag_storage.DagNode]:
         """Sequence of nodes currently in OPEN state."""
@@ -233,12 +234,14 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
     ) -> None:
         self._node_states[node] = state
 
+    # Contract: Registers a target node with an alias and initial state in the session.
     def register_node(
         self,
         node: dag_storage.DagNode,
         alias: str,
         state: control_coordinate.TargetState = control_coordinate.TargetState.OPEN,
     ) -> None:
+        # Explicitly filters out synthetic '//session:target' nodes when registering a node.
         self._nodes = [n for n in self._nodes if n.unit_address != "//session:target"]
         if node not in self._nodes:
             self._nodes.append(node)
@@ -250,6 +253,7 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
             self._alias_to_node[raw] = node
         self._node_to_alias[node] = normalized
 
+    # Contract: Resolves a DagNode instance from a string alias; falls back to normalized suffix and file proxy matching.
     def get_node_for_alias(self, alias: str) -> Optional[dag_storage.DagNode]:
         cand = alias.strip()
         if not cand:
@@ -336,6 +340,7 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
 
         return None
 
+    # Contract: Resolves the primary alias string corresponding to a DagNode.
     def get_alias_for_node(self, node: dag_storage.DagNode) -> str:
         alias = self._node_to_alias.get(node)
         if alias:
@@ -364,11 +369,13 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
                     dependents.append(other)
         return dependents
 
+    # Contract: Resets session node tracking to the supplied nodes.
     def reset_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
         """Resets session node tracking to the supplied nodes."""
         self._node_states.clear()
         self._populate_node_aliases(nodes)
 
+    # Contract: Resolves default target node; selects sole open target, or disambiguates by last_accessed_file or workspace file mtime.
     def resolve_default_target(
         self, last_accessed_file: Optional[Any] = None
     ) -> Optional[dag_storage.DagNode]:
@@ -425,6 +432,7 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
                 latest_node = node
         return latest_node
 
+    # Contract: Dispatches work discovery to WorkScheduler, registers discovered nodes as open targets, and updates active session nodes in RoleConfig.
     def dispatch_get_work(
         self,
         subgraph: Optional[dag_subgraph.DagSubgraph] = None,
@@ -442,6 +450,7 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         tasks = list(schedule.tasks)
         storage = get_singleton(dag_storage.DagStorage)
 
+        # Materializes template files for each scheduled task node when missing on disk.
         for task in tasks:
             if hasattr(storage, "materialize_template"):
                 storage.materialize_template(task.node)
@@ -449,6 +458,7 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         role_cfg.set_nodes([task.node for task in tasks])
         return control_work_scheduler.WorkSchedule(tasks=tasks)
 
+    # Contract: Dispatches verification check evaluation for a target or all open targets through VerificationEvaluator.
     def dispatch_check_files(
         self, target_alias: Optional[str] = None
     ) -> control_verification.VerificationResult:
@@ -476,6 +486,7 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
             is_cached=all_cached,
         )
 
+    # Contract: Dispatches submission gating for target through SubmissionCoordinator and marks target CLEAN on acceptance.
     def dispatch_submit(
         self,
         target_alias: Optional[str] = None,
@@ -518,6 +529,7 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
             remaining_open_targets=self._open_nodes(),
         )
 
+    # Contract: Dispatches upstream defect attribution via AttributionCoordinator.blame_target, marks source ATTRIBUTED and dependents FAILED.
     def dispatch_blame(
         self,
         source_alias: Optional[str] = None,
@@ -525,31 +537,6 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
         explanation: str = "",
     ) -> control_coordinate.ControlDispatchOutcome:
         attrib_coord = get_singleton(control_attribution.AttributionCoordinator)
-
-        # Disambiguate if blame target was passed as source alias or vice versa
-        if len(self._open_nodes()) == 1:
-            single_open = self._open_nodes()[0]
-            if blame_target_alias is None and source_alias:
-                try:
-                    if (
-                        attrib_coord.match_blame_target(single_open, None, source_alias)
-                        is not None
-                    ):
-                        blame_target_alias = source_alias
-                        source_alias = None
-                except Exception:
-                    pass
-            elif blame_target_alias and source_alias == blame_target_alias:
-                try:
-                    if (
-                        attrib_coord.match_blame_target(
-                            single_open, None, blame_target_alias
-                        )
-                        is not None
-                    ):
-                        source_alias = None
-                except Exception:
-                    pass
 
         source_node = (
             self.get_node_for_alias(source_alias)
@@ -621,6 +608,7 @@ class SessionCoordinator(control_coordinate.SessionCoordinator, Singleton):
             remaining_open_targets=self._open_nodes(),
         )
 
+    # Contract: Dispatches failure recording for target via AttributionCoordinator.fail_target and marks affected nodes FAILED.
     def dispatch_fail(
         self,
         target_alias: Optional[str] = None,

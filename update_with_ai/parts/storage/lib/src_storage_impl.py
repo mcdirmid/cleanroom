@@ -104,6 +104,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
     def get_node_definition(
         self, node: dag_storage.DagNode
     ) -> agent_storage.NodeDefinition:
+        # Contract: Reads NodeDefinition recorded in private _node_definitions mapping for node.
         self._ensure_manifest_loaded(node)
         if node in self._node_definitions:
             return self._node_definitions[node]
@@ -114,6 +115,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
     def store_node_definition(
         self, node: dag_storage.DagNode, definition: agent_storage.NodeDefinition
     ) -> None:
+        # Contract: MUST record the node definition mapped to the node in storage.
         self._node_definitions[node] = definition
 
     def get_task_prompt(
@@ -455,6 +457,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                 src_metadata.mark_clean(src_path)
 
     def materialize_template(self, node: dag_storage.DagNode) -> None:
+        # Contract: WHEN the declared source file already exists, MUST preserve the existing file content without overwriting.
         src_path = self._resolve_source_path(node)
         if src_path is None or src_path.is_file():
             return
@@ -710,11 +713,31 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
                 if isinstance(v, str):
                     tmpl_content = tmpl_content.replace(f"<{k}>", v)
 
+        # Contract: Write template content with missing parent directories created.
         src_path.parent.mkdir(parents=True, exist_ok=True)
         src_path.write_text(tmpl_content, encoding="utf-8")
 
     def delete_last_cleaned(self, node: dag_storage.DagNode) -> None:
-        self.mark_node_dirty(node)
+        # Contract: MUST delete last cleaned timestamp from source file metadata header and mark node dirty.
+        role_name = node.role_address.split(":")[-1]
+        if _is_auditor_role(role_name):
+            for fb_dep in self.get_feedback_dependencies(node):
+                fb_src = self._resolve_source_path(fb_dep)
+                if fb_src is not None and fb_src.is_file():
+                    meta = src_metadata.extract_metadata(fb_src)
+                    if meta and meta.audits and role_name in meta.audits:
+                        new_audits = {k: v for k, v in meta.audits.items() if k != role_name}
+                        src_metadata.update_metadata(fb_src, audits=new_audits)
+            return
+
+        src_path = self._resolve_source_path(node)
+        if src_path is not None and src_path.is_file():
+            src_metadata.delete_last_cleaned(src_path)
+            return
+
+        self._messages.setdefault(node, set()).add(
+            dag_storage.ChangeMessage(content=dag_storage.MessageContent("dirty"))
+        )
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

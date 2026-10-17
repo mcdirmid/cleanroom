@@ -149,6 +149,9 @@ it has not been modified since its target was last clean; the current UTC timest
    `/repo/parts/gadget/gadget_spec.md` records last cleaned `2026-01-12T00:00:00Z` and no change
    summary.
 
+5. The agent submits `/ws/alpha_scope_a/parts/widget/widget_spec.md` without specifying role_name.
+   Observed: the submission coordinator discovers the role name and directory scope from the workspace's `.cleanroom_role.json` manifest.
+
 ## Scenario 8 — Submitting a target with session feedback when files were not modified
 
 Given: role alpha is not an auditor role; the alpha-role target node for unit widget is dirty, has

@@ -290,6 +290,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
             "session phase failed without an outcome"
         )  # pragma: no cover
 
+    # Contract: NodeCleaner._resolve_promptless - resolves promptless nodes without an agent session phase, marking clean with change summary when incoming messages indicate upstream changes, or clean without changes otherwise.
     def _resolve_promptless(self, nodes: Sequence[dag_storage.DagNode]) -> None:
         storage = _get_storage()
         has_changes = any(
@@ -311,6 +312,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
             else:
                 storage.mark_node_clean(node)
 
+    # Contract: NodeCleaner.clean - cleans dirty nodes within an agent session phase or short-circuits promptless nodes.
     def clean(self, nodes: Sequence[dag_storage.DagNode]) -> bool:
         storage = _get_storage()
 
@@ -319,10 +321,12 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
         if first is not None:
             has_prompt = bool(str(storage.get_task_prompt(first)))
         if not has_prompt:
+            # Contract: WHEN dirty nodes define no task prompt, MUST resolve the nodes without establishing an agent session phase.
             self._resolve_promptless(nodes)
             return True
 
         def setup_session(session: LifecycleScope) -> None:
+            # Contract: MUST present the role of the dirty nodes to session services through the role config.
             # Present the role through the contracted role config key so the services that
             # read RoleConfig observe it (a private implementation key would not be the one
             # session services resolve).
@@ -332,6 +336,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                     agent_node_config.RoleName(str(nodes[0].role_address))
                 )
 
+        # Contract: MUST drive the agent turns of the session phase with single retry, and evaluate outcome.
         # The phase stays open for the session run and for evaluating its outcome:
         # NodeConfig, Sandbox, Conversation, and LoopDriver are all contracted to the
         # agent session tier and are only reachable while the phase is active.
@@ -339,6 +344,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
             outcome = self._run_with_retry(nodes, session)
             return self._evaluate_outcome(storage, nodes, outcome, session)
 
+    # Contract: MUST resolve dirty nodes by evaluating the loop driver outcome.
     def _evaluate_outcome(
         self,
         storage: agent_storage.AgentStorage,
@@ -349,6 +355,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
         response = outcome.response
         response_content = str(response.content) if response is not None else ""
 
+        # Contract: WHEN the outcome signals blame attributed to a configured blame target, produce feedback messages addressed strictly to the declared feedback dependency node owning the blamed file.
         blame_info = _extract_blame(response_content)
         if blame_info is not None:
             raw_target, raw_explanation = blame_info
@@ -364,6 +371,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                     )
                     if bound_file is None:
                         continue
+                    # Contract: Route feedback strictly to the declared feedback dependency node owning the blamed file.
                     storage.add_feedback_message(
                         bound_file.owning_node,
                         dag_storage.FeedbackMessage(
@@ -373,6 +381,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                     )
             return True
 
+        # Contract: WHEN the outcome signals run failure, MUST produce no propagating messages, leave nodes dirty, and signal that processing cannot continue.
         if response is not None and response.is_failed:
             for node in nodes:
                 storage.clear_messages(node)
@@ -399,12 +408,9 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
             pass
 
         def _is_node_modified(node: dag_storage.DagNode) -> bool:
+            # Contract: Consult SourceMetadataCoordinator for workspace file modification status.
             if meta_mgr is None:
                 return False
-            if hasattr(meta_mgr, "is_node_modified"):
-                return bool(meta_mgr.is_node_modified(node))
-            if hasattr(meta_mgr, "modified_nodes") and node in meta_mgr.modified_nodes:
-                return True
             if node_config is not None:
                 for rw_file in getattr(node_config, "read_write_files", []):
                     if getattr(rw_file, "owning_node", None) == node:
@@ -412,19 +418,12 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                         disk_path = str(Path(ws_root) / ws_path) if ws_root else ws_path
                         if os.path.isfile(disk_path) and meta_mgr.is_code_modified(disk_path):
                             return True
-                if hasattr(node_config, "src_file_alias_by_node"):
-                    src_alias = node_config.src_file_alias_by_node.get(node)
-                    if src_alias:
-                        disk_path = str(Path(ws_root) / str(src_alias)) if ws_root else str(src_alias)
-                        if os.path.isfile(disk_path) and meta_mgr.is_code_modified(disk_path):
-                            return True
-            if hasattr(meta_mgr, "has_modifications"):
-                return bool(meta_mgr.has_modifications)
             try:
                 return bool(meta_mgr.is_code_modified(node))
             except Exception:
                 return False
 
+        # Contract: WHEN the outcome signals successful advancement with workspace file modifications, mark clean with change summary; when unmodified, mark clean without change summary.
         for node in nodes:
             storage.clear_messages(node)
             change_description: Optional[dag_storage.ChangeDescription] = None
@@ -436,12 +435,14 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
         return True
 
 
+# Contract: LoopCleaner realizes dependency-first topological cleaning and visit recording using DagSubgraph.
 class LoopCleaner(loop_cleaner.LoopCleaner, Singleton):
     tier = system
 
     def __init__(self) -> None:
         pass
 
+    # Contract: LoopCleaner.clean - scopes the target on DagSubgraph.set_target, calls next_ready_batch, passes ready batches to NodeCleaner.clean, records visits with DagSubgraph.record_visit, and verifies completeness with DagSubgraph.is_complete.
     def clean(
         self, target: dag_storage.DagNode, node_cleaner: loop_node_cleaner.NodeCleaner
     ) -> bool:

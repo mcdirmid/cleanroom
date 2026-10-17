@@ -24,11 +24,14 @@ from update_with_ai.parts.storage.lib import src_metadata
 from . import workspace_provision, workspace_registry, workspace_sync
 
 
+# Contract: Blame buffer file matching cleanroom_files_ext.BLAME_BUFFER_FILE.
 BLAME_BUFFER_FILE = ".cleanroom_blame_buffer.json"
 AUDIT_BUFFER_FILE = ".cleanroom_audit_buffer.json"
+# Contract: Role descriptor file matching cleanroom_files_ext.ROLE_DESCRIPTOR_FILE.
 ROLE_CONFIG_FILE = ".cleanroom_role.json"
 
 
+# Contract: Writes text file and sets exact permissions, delegating to WorkspaceProvisioner.
 def write_file_with_perms(
     dst: str, content: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -38,7 +41,7 @@ def write_file_with_perms(
     )
 
 
-
+# Contract: Decomposes source path pattern into directory, stem suffix, and extension.
 def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     """Decomposes a source path pattern into its directory, stem suffix, and extension."""
     if not pat:
@@ -53,6 +56,7 @@ def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     return d, suffix, ext
 
 
+# Contract: Checks whether rel_path matches any role in stub_role_deps.
 def _is_stub_dep_file(
     rel_path: str,
     role_def: workspace_registry.RoleDefinition,
@@ -88,6 +92,7 @@ def _is_stub_dep_file(
     return False
 
 
+# Contract: Copies file and applies exact permissions, delegating to WorkspaceProvisioner.
 def copy_file_with_perms(
     src: str, dst: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -97,6 +102,7 @@ def copy_file_with_perms(
     )
 
 
+# Contract: Finds relative file paths matching glob patterns within root_dir.
 def _find_matching_files(root_dir: str, patterns: Sequence[str]) -> List[str]:
     """Finds relative file paths matching glob patterns within root_dir."""
     results: List[str] = []
@@ -117,6 +123,7 @@ def _find_matching_files(root_dir: str, patterns: Sequence[str]) -> List[str]:
     return results
 
 
+# Contract: Realizes workspace_sync.WorkspaceSynchronizer singleton.
 class WorkspaceSynchronizer(
     workspace_sync.WorkspaceSynchronizer,
     Singleton,
@@ -128,6 +135,7 @@ class WorkspaceSynchronizer(
     def __init__(self) -> None:
         pass
 
+    # Contract: Pulls updated upstream contracts and source files into role workspace, enforcing 0o444 permissions.
     def pull(
         self,
         workspace_dir: str,
@@ -276,6 +284,7 @@ class WorkspaceSynchronizer(
 
         return pulled_count
 
+    # Contract: Refreshes non-parts system files into role workspace without altering writable targets.
     def refresh_system_files(
         self,
         workspace_dir: str,
@@ -311,7 +320,6 @@ class WorkspaceSynchronizer(
             "pyproject.toml",
             "cleanroom.toml",
             "cleanroom_roles.toml",
-            "cleanroom_python_roles.toml",
             "model_configs.toml",
             "uv.lock",
         ):
@@ -423,6 +431,7 @@ class WorkspaceSynchronizer(
 
         return refreshed_count
 
+    # Contract: Flushes buffered blame feedback entries from workspace into main repository.
     def flush_blame_buffer(
         self, workspace_dir: str, main_root: str
     ) -> Sequence[str]:
@@ -449,17 +458,6 @@ class WorkspaceSynchronizer(
             dirty_reason = entry.get("dirty_reason")
 
             target_path = os.path.join(main_root, target)
-            if not os.path.isfile(target_path):
-                # Search within subdirectories of main_root
-                found = None
-                for r, _, files in os.walk(main_root):
-                    if os.path.basename(target) in files:
-                        cand = os.path.join(r, os.path.basename(target))
-                        if cand.endswith(target):
-                            found = cand
-                            break
-                if found:
-                    target_path = found
 
             if os.path.isfile(target_path):
                 if dirty_reason:
@@ -474,6 +472,7 @@ class WorkspaceSynchronizer(
 
         return flushed
 
+    # Contract: Harvests modified targets, stamps audits, and flushes blame back to main.
     def harvest(
         self,
         workspace_dir: str,
@@ -540,6 +539,7 @@ class WorkspaceSynchronizer(
                         if os.path.isfile(main_f)
                         else None
                     )
+                    # Contract: Postcondition - MUST validate canonical main target baselines against workspace baseline hashes before committing harvested files.
                     if baseline_hash and main_hash and baseline_hash != main_hash:
                         raise RuntimeError(
                             f"Conflict detected during harvest: canonical '{rel}' was modified concurrently with local uncommitted edits."

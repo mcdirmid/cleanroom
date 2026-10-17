@@ -57,7 +57,10 @@ def copy_file_with_perms(
             os.chmod(dst, 0o644)
         except OSError:
             pass
-    shutil.copy2(src, dst)
+    with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
+        while chunk := fsrc.read(1024 * 1024):
+            fdst.write(chunk)
+    shutil.copystat(src, dst)
     if executable:
         mode = 0o555 if readonly else 0o755
     else:
@@ -277,6 +280,7 @@ class WorkspaceProvisioner(
             try:
                 with open(ws_pyproject, "r", encoding="utf-8") as f:
                     ptext = f.read()
+                # Contract: MUST configure type-checking to cover the workspace without directory exclusions.
                 ptext = re.sub(
                     r'\[tool\.pyright\][^\[]*include\s*=\s*\[[^\]]*\]',
                     '[tool.pyright]\ninclude = ["."]',

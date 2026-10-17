@@ -24,59 +24,13 @@ from update_with_ai.parts.storage.lib import src_metadata
 from update_with_ai.parts.workspace.lib import workspace_registry
 from . import workspace_pending, workspace_work
 
+# Contract: Relative filename for pending work tracking buffer.
 PENDING_WORK_FILE = ".cleanroom_pending_work.json"
 
 
-def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> list[str]:
-    if not dir_scope:
-        parts_p = os.path.join(repo_root, "parts")
-        if os.path.isdir(parts_p):
-            return [
-                os.path.join("parts", d)
-                for d in sorted(os.listdir(parts_p))
-                if os.path.isdir(os.path.join(parts_p, d)) and not d.startswith(".")
-            ]
-        for entry in sorted(os.listdir(repo_root)):
-            cand = os.path.join(repo_root, entry, "parts")
-            if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv")):
-                dir_scope = entry
-                break
-    if not dir_scope:
-        return []
-    scope_p = os.path.join(repo_root, dir_scope)
-    if not os.path.isdir(scope_p):
-        return []
-    parts_p = os.path.join(scope_p, "parts")
-    if os.path.isdir(parts_p):
-        return [
-            os.path.join(dir_scope, "parts", d)
-            for d in sorted(os.listdir(parts_p))
-            if os.path.isdir(os.path.join(parts_p, d)) and not d.startswith(".")
-        ]
-    return [dir_scope]
 
 
-def check_pending_work_clean(
-    workspace_dir: str,
-    role_name: str,
-    manager: Optional[workspace_pending.WorkspacePendingManager] = None,
-) -> None:
-    mgr = manager or get_singleton(workspace_pending.WorkspacePendingManager)
-    pending = mgr.get_pending_work(workspace_dir)
-    if pending:
-        still_dirty = [
-            pt
-            for pt in pending
-            if mgr.is_pending_target_dirty(pt, workspace_dir, role_name=role_name)
-        ]
-        if still_dirty:
-            raise RuntimeError(
-                f"Pending dirty work remains in workspace: {', '.join(still_dirty)}"
-            )
-        mgr.clear_pending_work(workspace_dir)
-
-
-
+# Contract: Parses pattern format string into directory name, prefix, and suffix.
 def _parse_pattern_info(src_pattern: str) -> tuple[str, str, str]:
     if not src_pattern:
         return "", "", ""
@@ -97,6 +51,7 @@ def _parse_pattern_info(src_pattern: str) -> tuple[str, str, str]:
     return dir_name, prefix, suffix
 
 
+# Contract: Discovers role matching a file path based on directory and file patterns.
 def _resolve_file_role(file_path: str, repo_root: Optional[str] = None) -> str:
     norm = file_path.replace("\\", "/")
     fname = os.path.basename(norm)
@@ -114,6 +69,7 @@ def _resolve_file_role(file_path: str, repo_root: Optional[str] = None) -> str:
     raise ValueError(f"Unrecognized role for file path: {file_path}")
 
 
+# Contract: Resolves part directory, unit name, and role name from file path.
 def _parse_unit_from_file_path(file_path: str, repo_root: str) -> tuple[str, str, str]:
     norm_path = os.path.realpath(file_path)
     norm_root = os.path.realpath(repo_root)
@@ -136,6 +92,7 @@ def _parse_unit_from_file_path(file_path: str, repo_root: str) -> tuple[str, str
     return part_dir, unit_name, role_name
 
 
+# Contract: Materializes starter template via graph storage for missing target file.
 def materialize_starter_template(
     target_path: str,
     role_name: str,
@@ -152,19 +109,12 @@ def materialize_starter_template(
             unit_address=dag_storage.UnitAddress(target_path),
             role_address=dag_storage.RoleAddress(role_name),
         )
-        old_bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-        try:
-            os.environ["BUILD_WORKSPACE_DIRECTORY"] = workspace_dir
-            storage.materialize_template(node)
-            return True
-        finally:
-            if old_bwd is not None:
-                os.environ["BUILD_WORKSPACE_DIRECTORY"] = old_bwd
-            elif "BUILD_WORKSPACE_DIRECTORY" in os.environ:
-                del os.environ["BUILD_WORKSPACE_DIRECTORY"]
+        storage.materialize_template(node)
+        return True
     return False
 
 
+# Contract: Realizes pending buffer tracking, target removal, and dirty checks in agent_session tier.
 class WorkspacePendingManager(workspace_pending.WorkspacePendingManager, Singleton):
     """Realizes pending buffer tracking, target removal, and dirty checks."""
 
@@ -173,6 +123,8 @@ class WorkspacePendingManager(workspace_pending.WorkspacePendingManager, Singlet
     def __init__(self) -> None:
         pass
 
+
+    # Contract: Reads target paths from local pending work buffer.
     def get_pending_work(self, workspace_dir: str) -> Sequence[str]:
         p = os.path.join(workspace_dir, PENDING_WORK_FILE)
         if not os.path.isfile(p):
@@ -188,6 +140,7 @@ class WorkspacePendingManager(workspace_pending.WorkspacePendingManager, Singlet
             return ()
         return ()
 
+    # Contract: Records pending target paths into local buffer file.
     def set_pending_work(self, workspace_dir: str, targets: Sequence[str]) -> None:
         p = os.path.join(workspace_dir, PENDING_WORK_FILE)
         if not targets:
@@ -217,6 +170,7 @@ class WorkspacePendingManager(workspace_pending.WorkspacePendingManager, Singlet
         except OSError:
             pass
 
+    # Contract: Removes local pending work buffer file if present.
     def clear_pending_work(self, workspace_dir: str) -> None:
         p = os.path.join(workspace_dir, PENDING_WORK_FILE)
         if os.path.isfile(p):
@@ -225,6 +179,7 @@ class WorkspacePendingManager(workspace_pending.WorkspacePendingManager, Singlet
             except OSError:
                 pass
 
+    # Contract: Removes a submitted target from local pending work buffer.
     def remove_pending_target(self, workspace_dir: str, submitted_target: str) -> None:
         targets = list(self.get_pending_work(workspace_dir))
         if not targets:
@@ -249,6 +204,7 @@ class WorkspacePendingManager(workspace_pending.WorkspacePendingManager, Singlet
             remaining.append(t)
         self.set_pending_work(workspace_dir, remaining)
 
+    # Contract: Checks whether a pending target file is still dirty across local workspace and main repository.
     def is_pending_target_dirty(
         self,
         target_path: str,
@@ -272,23 +228,6 @@ class WorkspacePendingManager(workspace_pending.WorkspacePendingManager, Singlet
         except (LifecycleResolutionError, LookupError):
             pass
         role_def = reg.resolve_role_definition(eval_role, repo_root=m_root) if reg and eval_role else None
-
-        if not unit_name and role_def and role_def.src_pattern:
-            d_name, pfx, sfx = _parse_pattern_info(role_def.src_pattern)
-            sfx_no_ext = os.path.splitext(sfx)[0] if sfx else ""
-            stem = os.path.splitext(os.path.basename(target_path))[0]
-            if sfx_no_ext and stem.endswith(sfx_no_ext):
-                stem = stem[:-len(sfx_no_ext)]
-            if pfx and stem.startswith(pfx):
-                stem = stem[len(pfx):]
-            unit_name = stem
-            part_dirs = [d for d in os.listdir(os.path.join(m_root, "parts")) if os.path.isdir(os.path.join(m_root, "parts", d))] if os.path.isdir(os.path.join(m_root, "parts")) else []
-            for pd in part_dirs:
-                cand_rel = role_def.src_pattern.format(unit_dir=os.path.join("parts", pd), unit_name=unit_name)
-                part_dir = os.path.join("parts", pd)
-                target_path = cand_rel
-                full_ws = os.path.join(workspace_dir, cand_rel)
-                break
 
         is_auditor = bool(role_def and (role_def.audit_tag or not role_def.src_pattern)) if role_def else False
         if not is_auditor:
@@ -330,6 +269,7 @@ class WorkspacePendingManager(workspace_pending.WorkspacePendingManager, Singlet
         except (LifecycleResolutionError, LookupError):
             pass
         return False
+
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

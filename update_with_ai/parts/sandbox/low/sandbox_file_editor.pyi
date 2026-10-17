@@ -200,6 +200,9 @@ class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST replace target content with replacement content within the bounded line range.
+        - WHEN exact character-sequence matching fails, MAY attempt whitespace-normalized line matching if uniquely matched.
+        - WHEN replacement would alter, corrupt, or delete in-band metadata header blocks, MUST reject the edit.
+        - WHEN edit delta output is configured, MUST append a unified diff to the response output.
         - WHEN multiple replacements are permitted, MUST replace multiple occurrences.
         """
         ...

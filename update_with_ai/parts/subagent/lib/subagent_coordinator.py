@@ -16,6 +16,7 @@ from support.lib.lifecycle import InTier
 from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
 
 
+# Contract: normalized token telemetry for an execution turn or cumulative session
 @dataclass(frozen=True)
 class TokenUsage:
     """Normalized token telemetry for an execution turn or cumulative session.
@@ -35,6 +36,7 @@ class TokenUsage:
     cost_usd: float = 0.0
 
 
+# Contract: directive dispatching work to an isolated role workspace
 @dataclass(frozen=True)
 class RoleDispatch:
     """Directive dispatching work to an isolated role workspace.
@@ -56,6 +58,7 @@ class RoleDispatch:
     task_prompt: str = ""
 
 
+# Contract: outcome of an autonomous subagent execution turn
 @dataclass(frozen=True)
 class RoleTurnResult:
     """Outcome of an autonomous subagent execution turn.
@@ -79,6 +82,7 @@ class RoleTurnResult:
     wall_clock_seconds: float = 0.0
 
 
+# Contract: outcome of iterative workspace orchestration across execution waves
 @dataclass(frozen=True)
 class OrchestrationSummary:
     """Outcome of iterative workspace orchestration across execution waves.
@@ -103,18 +107,22 @@ class OrchestrationSummary:
 class HarnessAdapter(Protocol):
     """Abstract interface implemented by external agent execution harnesses."""
 
+    # Contract: dispatch work directive to a subagent bound to role workspace
     def dispatch_role(self, dispatch: RoleDispatch) -> str:
         """Dispatches work directive to a subagent bound to the role workspace."""
         ...
 
+    # Contract: await subagent turn completion and return outcome result
     def await_role(self, task_handle: str) -> RoleTurnResult:
         """Awaits subagent turn completion and returns outcome result."""
         ...
 
+    # Contract: poll subagent turn execution without blocking
     def poll_role(self, task_handle: str) -> Optional[RoleTurnResult]:
         """Polls subagent turn execution without blocking."""
         ...
 
+    # Contract: abort active subagent task execution upon timeout or loop limit
     def interrupt_role(self, task_handle: str) -> None:
         """Aborts active subagent task execution upon timeout or loop limit."""
         ...
@@ -123,6 +131,7 @@ class HarnessAdapter(Protocol):
 class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
     """Zero-execution coordinator scheduling subagents across role workspaces."""
 
+    # Contract: evaluate DAG queues and group unblocked ready roles into execution waves
     def compute_execution_waves(
         self,
         dir_scope: str,
@@ -133,6 +142,7 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         """Evaluates DAG queues and groups unblocked ready roles into execution waves."""
         ...
 
+    # Contract: dispatch all roles in an execution wave through harness and await results
     def run_wave(
         self,
         wave: Sequence[RoleDispatch],
@@ -141,6 +151,7 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         """Dispatches all roles in an execution wave through the harness and awaits results."""
         ...
 
+    # Contract: orchestrate iterative multi-agent execution until DAG convergence or failure
     def orchestrate(
         self,
         dir_scope: str,

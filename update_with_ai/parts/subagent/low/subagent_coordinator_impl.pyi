@@ -88,9 +88,22 @@ class SubagentCoordinator(
         GROUNDING:
         - Resets preexisting role workspace directories for declared roles via workspace_registry
           and filesystem operations.
+        - Resolves subagent batch size, token limits, and maximum unproductive turn thresholds from model configurations and persists
+          effective batch sizes into role workspaces.
         - Iterates dynamic process supervision until work queues are clean, a turn fails,
           consecutive unproductive turns exceed the threshold, or max_waves is exceeded,
           emitting real-time telemetry and aggregating TokenUsage into OrchestrationSummary.
         - Upon clean convergence, deletes provisioned role workspace directories for declared roles in scope.
+        """
+        ...
+
+    @operation
+    @override
+    def resolve_cleanroom_log_dir(self, workspace_dir: str) -> str:
+        """Resolves the canonical repository logs directory for a role workspace.
+
+        GROUNDING:
+        - Queries workspace_registry.WorkspaceRegistry to discover repository root, falling
+          back to traversing parent directory structure, and returns logs directory path.
         """
         ...

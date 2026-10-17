@@ -246,6 +246,38 @@ class DshHarnessImplTest(unittest.TestCase):
             adapter = factory(model_name="DeepSeek-V41-Flash", simulation_mode=True)
             self.assertIsInstance(adapter, DshHarnessAdapter)
 
+    def test_await_role_recovers_targets_from_log_lines(self) -> None:
+        """Requirement: MUST inspect turn log files for submitted and blamed targets when blame buffer is absent."""
+        with enter_phase(agent_session.agent_session, registry=self.registry):
+            adapter = DshHarnessAdapter(
+                model_name="DeepSeek-V41-Flash",
+                simulation_mode=True,
+            )
+
+            # Do not set pending work beforehand; dispatch_role will seed from ready_targets
+            dispatch = subagent_coordinator.RoleDispatch(
+                role_name="qa",
+                workspace_dir=self.test_dir,
+                dir_scope="//pkg",
+                ready_targets=("lib/unit_a.py",),
+                batch_size=3,
+                task_prompt="",
+            )
+
+            handle = adapter.dispatch_role(dispatch)
+            task = adapter._tasks[handle]
+
+            # Write log lines with [BLAME] and [AUDIT]
+            with open(task.log_file, "w", encoding="utf-8") as f:
+                f.write("[AUDIT] //pkg/parts/foo:unit_a: QA_AUDIT\n")
+                f.write("[BLAME] //pkg/parts/foo:unit_b: feedback message\n")
+
+            result = adapter.await_role(handle)
+            self.assertEqual(result.role, "qa")
+            self.assertIn("//pkg/parts/foo:unit_a", result.submitted_targets)
+            self.assertIn("//pkg/parts/foo:unit_b", result.blamed_targets)
+
 
 if __name__ == "__main__":
     unittest.main()
+

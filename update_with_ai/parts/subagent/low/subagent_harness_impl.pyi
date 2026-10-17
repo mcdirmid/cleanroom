@@ -59,8 +59,9 @@ class CommandHarnessAdapter(
 
         GROUNDING:
         - Awaits process completion without mandatory timeout unless configured, reads blame records,
-          computes submitted targets via pending work buffer difference, parses token metrics,
-          and constructs RoleTurnResult.
+          computes submitted targets via pending work buffer difference, parses token metrics from
+          process logs via regex patterns and rate multipliers, inspects log tail on non-zero exit for
+          failure diagnostics, and constructs RoleTurnResult.
         """
         ...
 

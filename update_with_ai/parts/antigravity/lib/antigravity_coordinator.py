@@ -16,6 +16,7 @@ from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
 from update_with_ai.parts.subagent.lib import subagent_coordinator
 
 
+# Contract: SubagentDispatchSpec defines the subagent dispatch payload for Antigravity invocation.
 @dataclass(frozen=True)
 class SubagentDispatchSpec:
     """Subagent dispatch payload for Antigravity invocation.
@@ -35,6 +36,7 @@ class SubagentDispatchSpec:
     model: Optional[str] = None
 
 
+# Contract: CoordinatorSkillDocument captures coordinator skill artifact metadata and content.
 @dataclass(frozen=True)
 class CoordinatorSkillDocument:
     """Coordinator skill artifact metadata and content.
@@ -52,6 +54,7 @@ class CoordinatorSkillDocument:
     content: str
 
 
+# Contract: WakeNotificationMessage captures parsed completion message from a role subagent turn.
 @dataclass(frozen=True)
 class WakeNotificationMessage:
     """Parsed completion message from a role subagent turn.
@@ -71,9 +74,11 @@ class WakeNotificationMessage:
     failure_reason: Optional[str] = None
 
 
+# Contract: AntigravityCoordinatorGenerator generates coordinator skills and formats Antigravity subagent dispatch directives.
 class AntigravityCoordinatorGenerator(InTier[AgentSessionTier], Protocol):
     """Generates coordinator skills and formats Antigravity subagent dispatch directives."""
 
+    # Contract: AntigravityCoordinatorGenerator.generate_coordinator_skill - generates zero-execution coordinator skill document.
     def generate_coordinator_skill(
         self,
         dir_scope: str = "",
@@ -81,6 +86,7 @@ class AntigravityCoordinatorGenerator(InTier[AgentSessionTier], Protocol):
         """Generates the zero-execution coordinator skill document."""
         ...
 
+    # Contract: AntigravityCoordinatorGenerator.format_dispatch_directive - formats role dispatch directive into subagent dispatch spec with workspace path pinned.
     def format_dispatch_directive(
         self,
         dispatch: subagent_coordinator.RoleDispatch,
@@ -89,9 +95,11 @@ class AntigravityCoordinatorGenerator(InTier[AgentSessionTier], Protocol):
         """Formats a role dispatch directive into an Antigravity tool specification."""
         ...
 
+    # Contract: AntigravityCoordinatorGenerator.parse_wake_notification - parses completion message text into structured wake notification.
     def parse_wake_notification(
         self,
         message_text: str,
     ) -> WakeNotificationMessage:
         """Parses completion message text into a structured wake notification."""
         ...
+

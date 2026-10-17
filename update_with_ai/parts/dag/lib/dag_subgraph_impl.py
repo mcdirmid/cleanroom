@@ -34,17 +34,18 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
     tier = system
 
     def __init__(self) -> None:
-        self._target: Optional[DagNode] = None
         self._topological_order: List[DagNode] = []
         self._visit_counts: Dict[DagNode, int] = {}
 
     @staticmethod
     def _role_name(role_address: str) -> str:
+        # Contract: Reduces a fully qualified role address to its bare role name for precedence comparison.
         """Reduces a fully qualified role address to its bare role name."""
         return role_address.split(":")[-1].strip().lower()
 
     @staticmethod
     def _role_depths(role_dependencies: Dict[str, Set[str]]) -> Dict[str, int]:
+        # Contract: MUST dynamically prioritize upstream roles before downstream roles based on role dependency depth.
         """Ranks roles by dependency depth so that upstream roles precede downstream roles."""
         depths: Dict[str, int] = {}
         resolving: Set[str] = set()
@@ -69,6 +70,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
         return depths
 
     def _collect_reachable(self, target: DagNode, storage: DagStorage) -> Set[DagNode]:
+        # Contract: MUST collect reachable dependency nodes from the target node in graph storage.
         """Walks upstream dependencies from the target node into a complete reachable set."""
         reachable: Set[DagNode] = {target}
         pending: List[DagNode] = [target]
@@ -83,6 +85,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
     def _subgraph_dependencies(
         self, node: DagNode, storage: DagStorage, subgraph: Set[DagNode]
     ) -> List[DagNode]:
+        # Contract: Identifies dependencies of a node that belong to the active target subgraph.
         """The dependencies of a node that lie inside the active target subgraph."""
         return [
             dependency.node
@@ -92,8 +95,8 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
 
     def set_target(self, target: DagNode) -> None:
         """Sets the active execution subgraph target node."""
-        self._target = target
         storage = get_singleton(DagStorage)
+        # Contract: MUST collect reachable dependency nodes from the target node in graph storage.
         reachable = self._collect_reachable(target, storage)
 
         role_dependencies: Dict[str, Set[str]] = {
@@ -106,6 +109,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
                 if dependency_role != role:
                     role_dependencies[role].add(dependency_role)
 
+        # Contract: MUST dynamically prioritize upstream roles before downstream roles based on role dependency depth.
         depths = self._role_depths(role_dependencies)
 
         blocking: Dict[DagNode, Set[DagNode]] = {}
@@ -118,14 +122,16 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
             for dependency_node in node_dependencies:
                 dependents[dependency_node].add(node)
 
+        # Contract: MUST compute the dependency-first topological order of reachable dependency nodes.
         ready: List[DagNode] = [node for node in reachable if not blocking[node]]
         order: List[DagNode] = []
         while ready:
+            # Contract: MUST break topological sorting ties by role tier depth first, unit address second, unqualified role name third.
             ready.sort(
                 key=lambda node: (
                     depths.get(self._role_name(str(node.role_address)), 0),
                     str(node.unit_address),
-                    str(node.role_address),
+                    self._role_name(str(node.role_address)),
                 )
             )
             chosen = ready.pop(0)
@@ -139,6 +145,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
 
     def is_complete(self) -> bool:
         """Reports whether every reachable node in the target subgraph is clean."""
+        # Contract: MUST return true if, but only if, all reachable nodes in the target subgraph are clean in graph storage.
         storage = get_singleton(DagStorage)
         return not any(storage.is_dirty(node) for node in self._topological_order)
 
@@ -146,9 +153,11 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
         """Provides the next ready batch of dirty nodes to clean."""
         storage = get_singleton(DagStorage)
         config = get_singleton(dag_config.DagConfig)
+        # Contract: MUST bound batch size to the limit obtained from configuration.
         batch_limit = int(config.batch_size)
         subgraph = set(self._topological_order)
 
+        # Contract: MUST start from the earliest ready dirty node in topological order whose dependencies are clean.
         start_index: Optional[int] = None
         for index, node in enumerate(self._topological_order):
             if not storage.is_dirty(node):
@@ -158,13 +167,16 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
                 start_index = index
                 break
 
+        # Contract: WHEN no dirty node in target subgraph has all of its dependencies clean, MUST return an empty sequence.
         if start_index is None:
             return []
 
+        # Contract: MUST ensure selected dirty nodes share the same role address.
         role_address = self._topological_order[start_index].role_address
         batch: List[DagNode] = []
         collected: Set[DagNode] = set()
 
+        # Contract: MUST select dirty nodes that are contiguous in topological order.
         for index in range(start_index, len(self._topological_order)):
             if len(batch) >= batch_limit:
                 break
@@ -174,6 +186,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
             if node.role_address != role_address:
                 break
             dependencies = self._subgraph_dependencies(node, storage, subgraph)
+            # Contract: WHEN a node's dependencies are neither clean nor already collected in same batch, MUST end batch before that node.
             if not all(
                 not storage.is_dirty(dependency) or dependency in collected
                 for dependency in dependencies
@@ -189,8 +202,10 @@ class DagSubgraph(dag_subgraph.DagSubgraph, InTier[SystemTier], Singleton):
         config = get_singleton(dag_config.DagConfig)
         visit_limit = int(config.node_visit_limit)
         for node in batch:
+            # Contract: MUST advance the visit count for each node in the batch.
             visits = self._visit_counts.get(node, 0) + 1
             self._visit_counts[node] = visits
+            # Contract: WHEN any node in the batch exceeds node visit limit, MUST raise an unexpected failure (RuntimeError).
             if visits > visit_limit:
                 raise RuntimeError(
                     f"Node visit limit exceeded ({visit_limit}) for node '{node.unit_address}:{node.role_address}'"

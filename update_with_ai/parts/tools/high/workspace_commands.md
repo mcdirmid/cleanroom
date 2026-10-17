@@ -30,9 +30,9 @@ The command handler:
 
 - Executes role-specific verification checks, linters, and type checking for specified or pending target files, regenerating missing target files from starter templates before verification for roles with source patterns and upstream dependencies, surfacing unacted feedback warnings when targets carrying unaddressed feedback pass static verification, and returning the verification exit code.
 
-- Submits target files to the canonical main repository, rejecting failing targets unless bypassed, enforcing producer change summaries, attesting auditor stamps, appending submission records to the cleanroom log, and clearing the target from pending work buffers on success.
+- Submits target files to the canonical main repository, rejecting failing targets unless bypassed, enforcing producer change summaries, attesting auditor stamps, appending submission records to the cleanroom log both in the canonical repository and the local role workspace, and clearing the target from pending work buffers on success.
 
-- Attributes defect blame or failure diagnostics to culprit targets, propagating single-paragraph critique feedback, appending blame records to the cleanroom log, and clearing the target from pending work buffers on success.
+- Attributes defect blame or failure diagnostics to culprit targets, propagating single-paragraph critique feedback, appending blame records to the cleanroom log both in the canonical repository and the local role workspace, and clearing the target from pending work buffers on success.
 
 - Evaluates statement test coverage across implementation and test pairs against target thresholds, formatting span diagnostics and returning an integer exit code.
 

@@ -35,6 +35,7 @@ class FakeCoordinator:
     def __init__(self, converged: bool = True) -> None:
         self.converged = converged
         self.last_target_role: Optional[str] = None
+        self.last_max_unproductive_turns: Optional[int] = None
 
     def compute_execution_waves(
         self,
@@ -57,8 +58,10 @@ class FakeCoordinator:
         batch_size: Optional[int] = None,
         repo_root: Optional[str] = None,
         model_name: Optional[str] = None,
+        max_unproductive_turns: Optional[int] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         self.last_target_role = target_role
+        self.last_max_unproductive_turns = max_unproductive_turns
         return subagent_coordinator.OrchestrationSummary(
             is_converged=self.converged,
             total_waves=3,
@@ -163,6 +166,15 @@ class SubagentToolImplTest(unittest.TestCase):
             self.assertEqual(status, 0)
             self.assertEqual(self.fake_coord.last_target_role, "qa")
 
+    def test_execute_command_orchestrate_with_max_unproductive_turns(self) -> None:
+        """Scenario 4: Verifies execute_command parses --max-unproductive-turns argument."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(subagent_tool.SubagentToolRunner)
+            status = runner.execute_command(["orchestrate", "staging", "--max-unproductive-turns", "8", "--simulation"])
+            self.assertEqual(status, 0)
+            self.assertEqual(self.fake_coord.last_max_unproductive_turns, 8)
+
 
 if __name__ == "__main__":
     unittest.main()
+

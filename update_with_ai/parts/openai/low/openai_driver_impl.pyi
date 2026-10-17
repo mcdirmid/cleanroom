@@ -109,7 +109,7 @@ class LoopDriver(
         - WHEN a truncated replace file content invocation is repaired, MUST return an actionable
           notice directing the model to resume implementation targeting the sentinel.
         - WHEN the truncated invocation is any other tool, MUST terminate it by appending a tool
-          failure response with the tool suppression key.
+          failure response with the tool suppression key resolved from dedicated categories, target file argument basenames, or tool names.
         - WHEN a truncated tool invocation is handled, MUST resume generation with a continuation
           turn.
         - WHEN a model completion response fails with an incomplete tool call error, MUST append an

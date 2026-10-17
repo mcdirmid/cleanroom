@@ -26,7 +26,7 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 - The workspace work manager clears the pending work buffer file designated by cleanroom_files_ext when no pending targets remain dirty. [clear_pending_work_buffer]
 - The workspace work manager invokes directory-scoped work discovery to compute ready and blocked units. [discover_directory_scope_work]
 - The workspace work manager bounds presented ready items when a batch size is specified, recording the remaining unpresented count. [bound_ready_items_by_batch_size]
-- The workspace work manager resolves companion upstream specification contract files and interface definitions for target units dynamically from workspace_registry. [resolve_unit_contract_files]
+- The workspace work manager resolves companion upstream specification contract files and interface definitions for target units dynamically from workspace_registry, automatically expanding companion interface contracts for units ending in _impl. [resolve_unit_contract_files]
 - The workspace work manager filters cross-unit dependencies based on star_role_deps and silent_cross_role_deps from workspace_registry. [filter_role_dependencies]
 - The workspace work manager enforces fail-loud role resolution without synthetic fallbacks. [enforce_strict_role_resolution]
 - The workspace work manager materializes starter templates via graph storage for missing ready target files. [materialize_ready_target_templates]

@@ -41,18 +41,22 @@ class CheckFilesTool(sandbox_run_control.CheckFilesTool, InTier[AgentSessionTier
         self._description = tool_provider.ToolDescription("Inspects verification checks across active files.")
         self._parameters: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {}
 
+    # Contract: Tool.name - returns 'check_files'.
     @property
     def name(self) -> tool_provider.ToolName:
         return self._name
 
+    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
+    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         return self._parameters
 
+    # Contract: CheckFilesTool.execute_tool - evaluates verification checks across open targets and modified files, returning cached status, failure feedback, or passing result.
     def execute_tool(
         self,
         actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
@@ -114,18 +118,22 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, InTier[AgentSessionTier], Sin
         self._description = tool_provider.ToolDescription("Advances progressive guide steps upon passing verification.")
         self._parameters: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {}
 
+    # Contract: Tool.name - returns 'advance'.
     @property
     def name(self) -> tool_provider.ToolName:
         return self._name
 
+    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
+    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         return self._parameters
 
+    # Contract: AdvanceTool.execute_tool - advances progressive guide steps upon passing verification, prompting check_files on failure or submit on completion.
     def execute_tool(
         self,
         actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
@@ -204,18 +212,22 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, InTier[AgentSessionTier], Sin
         self._description = tool_provider.ToolDescription("Retrieves active dirty nodes for processing.")
         self._parameters: Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {}
 
+    # Contract: Tool.name - returns 'get_work'.
     @property
     def name(self) -> tool_provider.ToolName:
         return self._name
 
+    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
+    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         return self._parameters
 
+    # Contract: GetWorkTool.execute_tool - acquires dirty nodes for execution, prepares session task prompt, materializes templates, and registers BlameTool/AdvanceTool as needed.
     def execute_tool(
         self,
         actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
@@ -264,6 +276,7 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, InTier[AgentSessionTier], Sin
 
         guide_file = node_cfg.guide_file
         guide_alias = str(guide_file.relative_path) if guide_file is not None else ""
+        # Fallback scan over read_only_files for an .md file to infer guide_alias when guide_file is not set.
         if not guide_alias:
             for read_only_file in node_cfg.read_only_files:
                 candidate_alias = str(getattr(read_only_file, "relative_path", read_only_file))
@@ -320,6 +333,7 @@ class RunController(sandbox_run_control.RunController, InTier[AgentSessionTier],
         self._passed: bool = True
         self._diagnostic_output: str = ""
 
+    # Contract: RunController.initialize - registers session outcome tools, check_files, get_work, and conditionally advance tool.
     def initialize(self) -> None:
         tool_mgr = get_singleton(tool_provider.ToolManager)
         tool_mgr.install_tool(get_singleton(sandbox_submission.SubmitTool))
@@ -330,11 +344,13 @@ class RunController(sandbox_run_control.RunController, InTier[AgentSessionTier],
         if node_cfg.is_step_mode:
             tool_mgr.install_tool(get_singleton(sandbox_run_control.AdvanceTool))
 
+    # Contract: RunController.verification_checks - exposes session verification checks.
     @property
     def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
         cfg = get_singleton(agent_node_config.NodeConfig)
         return cfg.verification_checks
 
+    # Contract: RunController.blame_targets_by_node - exposes per-node blame targets eligible for defect attribution.
     @property
     def blame_targets_by_node(self) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
         node_cfg = get_singleton(agent_node_config.NodeConfig)
@@ -343,6 +359,7 @@ class RunController(sandbox_run_control.RunController, InTier[AgentSessionTier],
             for node, bound_files in node_cfg.blame_targets_by_node.items()
         }
 
+    # Contract: RunController.update_verification - updates and caches verification results alongside target file hashes sequentially when outdated.
     def update_verification(self) -> None:
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         node_cfg = get_singleton(agent_node_config.NodeConfig)
@@ -350,21 +367,6 @@ class RunController(sandbox_run_control.RunController, InTier[AgentSessionTier],
         target_files: Set[agent_file_alias.FileAlias] = set(node_cfg.read_write_files)
         if not target_files:
             target_files = set(node_cfg.read_only_files)
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        src_file_alias = getattr(node_cfg, "src_file_alias", None)
-        if src_file_alias:
-            target_files.add(alias_mgr.to_alias(str(src_file_alias)))
-        if hasattr(node_cfg, "src_file_alias_by_node"):
-            for rel in node_cfg.src_file_alias_by_node.values():
-                target_files.add(alias_mgr.to_alias(str(rel)))
-        if hasattr(node_cfg, "per_node_info_by_node") and node_cfg.per_node_info_by_node:
-            for info in node_cfg.per_node_info_by_node.values():
-                if getattr(info, "src_file_alias", None):
-                    target_files.add(alias_mgr.to_alias(str(info.src_file_alias)))
-                if getattr(info, "read_write_files", None):
-                    target_files.update(info.read_write_files)
-        if edit_mgr.last_read_or_edited_file is not None:
-            target_files.add(edit_mgr.last_read_or_edited_file)
 
         current_hashes: dict[agent_file_alias.FileAlias, sandbox_file_editor.FileHash] = {}
         if target_files:

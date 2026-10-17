@@ -114,3 +114,16 @@ file records code hash `a1b2c3d4e5f6`.
 3. The caller asks whether the widget file has code modifications.
    Observed: code modifications, because the code body `widget contract statement` no longer hashes
    to `a1b2c3d4e5f6`.
+
+## Scenario 7 — Extracting and rewriting in-band metadata across Python and Markdown formats via module facades
+
+Given: a Python file with `# --- CLEANROOM METADATA ---` line comments and a Markdown file with `<!-- CLEANROOM METADATA` HTML comments.
+
+1. The caller invokes the module-level procedural facade `extract_metadata` on the Python file.
+   Observed: a populated FileMetadata record corresponding to the in-band Python metadata block.
+
+2. The caller invokes the module-level procedural facade `extract_metadata` on the Markdown file.
+   Observed: a populated FileMetadata record corresponding to the in-band HTML metadata block.
+
+3. The caller invokes the module-level procedural facade `mark_clean` on both files.
+   Observed: both files on disk record updated last cleaned timestamps preserving their format-specific comment delimiter styles.

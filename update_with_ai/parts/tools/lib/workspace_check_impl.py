@@ -39,6 +39,7 @@ from . import (
 )
 
 
+# Contract: Checks whether role is an auditor role based on audit_tag or absence of src_pattern.
 def is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     clean_r = role_name.split(":")[-1].strip().lower()
     reg = get_singleton(workspace_registry.WorkspaceRegistry)
@@ -46,6 +47,7 @@ def is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     return bool(r_def.audit_tag or not r_def.src_pattern)
 
 
+# Contract: Helper to copy file with exact permissions via WorkspaceProvisioner.
 def copy_file_with_perms(
     src: str,
     dst: str,
@@ -58,6 +60,7 @@ def copy_file_with_perms(
     )
 
 
+# Contract: Extracts unacted feedback lines from a target file's in-band cleanroom metadata header.
 def _extract_unacted_feedback(file_path: str) -> List[str]:
     """Extracts unacted feedback lines from a target file's cleanroom metadata header."""
     if not file_path or not os.path.isfile(file_path):
@@ -93,6 +96,7 @@ def _extract_unacted_feedback(file_path: str) -> List[str]:
     return feedback_items
 
 
+# Contract: Discovers root of commissioned role workspace or repo root by checking for .cleanroom_role.json.
 def find_workspace_root() -> str:
     """Discovers root of commissioned role workspace or repo root."""
     curr = os.getcwd()
@@ -103,6 +107,7 @@ def find_workspace_root() -> str:
     return os.getcwd()
 
 
+# Contract: Loads .cleanroom_role.json from current workspace if present.
 def get_current_role_metadata() -> Optional[Dict[str, Any]]:
     """Loads .cleanroom_role.json from current workspace if present."""
     ws_root = find_workspace_root()
@@ -116,6 +121,7 @@ def get_current_role_metadata() -> Optional[Dict[str, Any]]:
     return None
 
 
+# Contract: Resolves main repository root from explicit repo_root or workspace_registry.discover_repository_root.
 def _resolve_main_root(
     ws_root: str, meta: Optional[Dict[str, Any]], repo_root: Optional[str] = None
 ) -> str:
@@ -125,6 +131,7 @@ def _resolve_main_root(
     return os.path.realpath(reg.discover_repository_root(ws_root))
 
 
+# Contract: Computes ready and blocked dirty work items for a role using WorkspaceWorkManager.
 def compute_role_work_queue(
     role_name: str,
     dir_scope: str,
@@ -157,19 +164,14 @@ def compute_role_work_queue(
 
 def _find_agent_node_config_module() -> Any:
     for k, m in list(sys.modules.items()):
-        if k.endswith(".parts.agent.lib.agent_node_config") or k == "parts.agent.lib.agent_node_config":
+        if k == "agent_node_config" or k.endswith(".agent_node_config"):
             if hasattr(m, "NodeConfig"):
                 return m
-    for mod_path in (
-        "update_with_ai.parts.agent.lib.agent_node_config",
-        "update_python_with_ai.parts.agent.lib.agent_node_config",
-        "parts.agent.lib.agent_node_config",
-    ):
-        try:
-            import importlib
-            return importlib.import_module(mod_path)
-        except ImportError:
-            pass
+    try:
+        import importlib
+        return importlib.import_module("agent_node_config")
+    except ImportError:
+        pass
     return None
 
 
@@ -226,13 +228,16 @@ def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
             setattr(cfg, "role_definitions", role_defs)
 
 
+# Contract: Realizes work discovery and file verification for role workspaces in agent_session tier.
 class WorkspaceChecker(workspace_check.WorkspaceChecker, Singleton):
     """Executes work discovery and file verification for role workspaces."""
 
     tier = agent_session.agent_session
 
+    # Contract: Evaluates dirty work in local workspace and prints ready tasks, synchronizing from main repository and respecting batch_size and max_feedback_chars.
     def run_get_work(
         self,
+
         dir_scope: Optional[str] = None,
         repo_root: Optional[str] = None,
         force: bool = False,
@@ -465,6 +470,7 @@ class WorkspaceChecker(workspace_check.WorkspaceChecker, Singleton):
             )
         return 1 if ready_items else 0
 
+    # Contract: Executes role-specific verification checks, linters, and type checking for targets, regenerating if missing.
     def run_check_files(
         self,
         target: Optional[str] = None,
@@ -539,12 +545,6 @@ class WorkspaceChecker(workspace_check.WorkspaceChecker, Singleton):
                 failed_count += 1
                 continue
 
-            if ws_root != main_root and target_path.startswith(main_root):
-                rel = os.path.relpath(target_path, main_root)
-                ws_file = os.path.join(ws_root, rel)
-                if not os.path.isfile(ws_file):
-                    copy_file_with_perms(target_path, ws_file, readonly=False)
-                target_path = ws_file
 
             ref_root = ws_root if target_path.startswith(ws_root) else main_root
             part_dir, u_name, _ = submit_coord.parse_unit_from_file_path(
@@ -567,6 +567,7 @@ class WorkspaceChecker(workspace_check.WorkspaceChecker, Singleton):
                 env["BUILD_WORKSPACE_DIRECTORY"] = ws_root
                 if "UV_PROJECT" not in env and main_root:
                     env["UV_PROJECT"] = main_root
+                # Dynamic PYTHONPATH assembly scanning for directory entries containing support/lib.
                 pypaths = [ws_root, main_root]
                 for root_cand in (main_root, ws_root):
                     if not root_cand or not os.path.isdir(root_cand):
@@ -589,6 +590,7 @@ class WorkspaceChecker(workspace_check.WorkspaceChecker, Singleton):
                     pypaths.append(env["PYTHONPATH"])
                 env["PYTHONPATH"] = os.pathsep.join(pypaths)
                 env["PATH"] = os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
+
 
                 res = subprocess.run(
                     formatted_cmd,

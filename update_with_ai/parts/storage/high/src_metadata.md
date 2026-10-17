@@ -26,6 +26,8 @@ The source metadata coordinator extracts file metadata from source content strin
 
 The source metadata coordinator computes a deterministic code hash over the code body, and evaluates whether a file has code modifications by comparing its on-disk code hash with its recorded in-band code hash.
 
-The source metadata coordinator rewrites metadata comment headers in content strings and updates files on disk in place.
+The source metadata coordinator rewrites metadata comment headers in content strings and updates files on disk in place. In-band metadata headers adhere to format-specific commenting conventions: Python source files (`.py`, `.pyi`) format headers as line comments delimited by `# --- CLEANROOM METADATA ---` and `# --- END CLEANROOM METADATA ---` positioned immediately beneath optional shebang and encoding lines; Markdown specifications (`.md`) format headers as HTML comments delimited by `<!-- CLEANROOM METADATA` and `-->` positioned at document start or beneath frontmatter.
 
 The source metadata coordinator updates lifecycle status by marking files clean, marking files dirty, recording change summaries, appending unacted feedback items, stamping role audits, clearing role audits, and deleting last cleaned timestamps.
+
+The component also exposes module-level procedural facade functions for metadata extraction, code body isolation, code hashing, modification checks, and lifecycle updates, delegating each operation to the active source metadata coordinator singleton.

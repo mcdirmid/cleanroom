@@ -11,9 +11,7 @@ from typing import Protocol, Sequence
 
 from .dag_storage import DagNode
 
-# Requirements specified in dag_subgraph.pyi
-
-
+# Contract: DagSubgraph protocol modeling an active execution subgraph rooted at a target node.
 class DagSubgraph(Protocol):
     """System service modeling an active execution subgraph rooted at a target node."""
 

@@ -38,8 +38,8 @@ class TranscriptTelemetryParser(antigravity_harness.TranscriptTelemetryParser):
         """Parses a transcript log file and returns token metrics.
 
         GROUNDING:
-        - Reads lines from transcript_path according to antigravity_ext, sums token counts,
-          and computes cost_usd using standardized rate cards.
+        - Reads lines from transcript_path according to antigravity_ext, sums token counts
+          from JSON objects or regex pattern scraping fallbacks, and computes cost_usd using standardized rate cards.
         """
         ...
 
@@ -77,7 +77,7 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
 
         GROUNDING:
         - Awaits process completion, parses transcript telemetry via antigravity_harness,
-          and constructs subagent_coordinator.RoleTurnResult.
+          extracts submitted targets including stdout completion tags, and constructs subagent_coordinator.RoleTurnResult.
         """
         ...
 

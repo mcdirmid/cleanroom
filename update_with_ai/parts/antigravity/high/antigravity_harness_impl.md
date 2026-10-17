@@ -31,10 +31,10 @@ When executing a role turn:
 
 - The realization polls running child processes non-blockingly to determine turn completion.
 
-- The realization parses JSONL event lines from the transcript log to extract model token usage.
+- The realization parses JSONL event lines or extracts token metric patterns from raw transcript lines to determine model token usage.
 
 - The realization computes monetary costs using standard rate cards for Gemini Flash and Gemini Pro models.
 
-- The realization collects submitted targets, blamed targets, and execution status into role turn results.
+- The realization collects submitted targets (extracting submission completion tags from process standard output), blamed targets from blame buffers, and execution status into role turn results.
 
 - The realization terminates active child processes when execution limits are exceeded.

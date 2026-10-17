@@ -26,6 +26,7 @@ CONSTITUENTS = (
     tool_provider_impl,
 )
 
+# Contract: sandbox_asm.__initialize__ - aggregates file inspection, guarded editing, execution control, guide delivery, and tool dispatch constituents into sandbox subsystem assembly.
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     for mod in CONSTITUENTS:
         mod.__initialize__(registry)

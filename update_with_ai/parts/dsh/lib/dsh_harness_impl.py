@@ -15,6 +15,7 @@ from dataclasses import dataclass
 import fcntl
 import json
 import os
+import re
 import subprocess
 import time
 from typing import Any, Dict, List, Optional, Sequence
@@ -32,6 +33,7 @@ from update_with_ai.parts.workspace.lib import workspace_registry
 from . import dsh_harness, dsh_telemetry, dsh_workspace
 
 
+# Contract: Reads blamed culprit files from workspace blame buffer (.cleanroom_blame_buffer.json).
 def _read_blame_buffer(workspace_dir: str) -> List[str]:
     """Reads blamed culprit files from the workspace blame buffer."""
     p = os.path.join(workspace_dir, ".cleanroom_blame_buffer.json")
@@ -58,6 +60,7 @@ def _read_blame_buffer(workspace_dir: str) -> List[str]:
     return []
 
 
+# Contract: Internal state tracking for active DeepSeek Harness tasks.
 @dataclass
 class _ActiveDshTask:
     handle: str
@@ -69,6 +72,7 @@ class _ActiveDshTask:
     log_file: str
 
 
+# Contract: Realizes subagent execution in DeepSeek Harness role workspaces conforming to dsh_ext.
 class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
     """Realizes subagent execution in DeepSeek Harness role workspaces."""
 
@@ -104,6 +108,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             dsh_asm.__initialize__()
             return get_singleton(dsh_telemetry.DshTelemetryParser)
 
+    # Contract: Prepares role-tailored task prompts distinguishing auditor roles from authoring roles.
     def _format_task_prompt(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
         targets_str = (
             "\n".join(f"- {t}" for t in dispatch.ready_targets)
@@ -153,11 +158,15 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             "6. If an unrecoverable failure occurs, signal it using `bin/fail`.\n"
         )
 
+    # Contract: Dispatches work directive to a DeepSeek Harness role workspace.
     def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
         """Dispatches work directive to a DeepSeek Harness role workspace."""
         task_handle = f"dsh_{dispatch.role_name}_{int(time.time() * 1000)}"
         work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
         pending_before = list(work_mgr.get_pending_work(dispatch.workspace_dir))
+        if not pending_before:
+            pending_before = list(dispatch.ready_targets)
+            work_mgr.set_pending_work(dispatch.workspace_dir, pending_before)
 
         log_dir = subagent_coordinator.resolve_cleanroom_log_dir(dispatch.workspace_dir)
         prompt_text = self._format_task_prompt(dispatch)
@@ -190,7 +199,6 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                     with open(session_file, "r", encoding="utf-8") as sf:
                         saved_sid = sf.read().strip()
                     if saved_sid:
-                        # Verify that session.lock is not held by another process (e.g. DSH Desktop)
                         encoded_ws = "--" + os.path.realpath(dispatch.workspace_dir).strip("/").replace("/", "-") + "--"
                         lock_path = os.path.join(self._sessions_dir, encoded_ws, saved_sid, "session.lock")
                         is_locked = False
@@ -221,7 +229,6 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             env = os.environ.copy()
             env["DSH_HOME"] = os.environ.get("DSH_HOME") or os.path.dirname(self._sessions_dir)
             env["DSH_PERMISSION_MODE"] = "danger-full-access"
-            env.setdefault("OMLX_API_KEY", "abcd")
 
             proc = subprocess.Popen(
                 cmd,
@@ -257,6 +264,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         )
         return task_handle
 
+    # Contract: MUST await turn completion, compute buffer differences via workspace_work, assign unresolved status when zero targets submitted/blamed, parse telemetry, and return RoleTurnResult.
     def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
         """Awaits DeepSeek Harness subagent turn completion and returns outcome result."""
         task = self._tasks.get(task_handle)
@@ -292,10 +300,35 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                     wall_clock_seconds=time.time() - task.start_time,
                 )
 
-        blamed = _read_blame_buffer(task.dispatch.workspace_dir)
+        blamed = list(_read_blame_buffer(task.dispatch.workspace_dir))
+        if not blamed and os.path.isfile(task.log_file):
+            try:
+                with open(task.log_file, "r", encoding="utf-8", errors="replace") as lf:
+                    for line in lf:
+                        m = re.search(r"\[BLAME\]\s*([^\r\n]+?)(?::\s+|$)", line)
+                        if m:
+                            culprit = m.group(1).strip()
+                            if culprit and culprit not in blamed:
+                                blamed.append(culprit)
+            except OSError:
+                pass
+
         work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
         pending_after = work_mgr.get_pending_work(task.dispatch.workspace_dir)
-        submitted = tuple(t for t in task.pending_before if t not in pending_after)
+        submitted_list = [t for t in task.pending_before if t not in pending_after]
+        if not submitted_list and os.path.isfile(task.log_file):
+            try:
+                with open(task.log_file, "r", encoding="utf-8", errors="replace") as lf:
+                    for line in lf:
+                        for pfx in (r"\[SUBMITTED\]\s*([^\r\n]+?)(?::\s+|$)", r"\[AUDIT\]\s*([^\r\n]+?)(?::\s+|$)"):
+                            m = re.search(pfx, line)
+                            if m:
+                                target = m.group(1).strip()
+                                if target and target not in submitted_list:
+                                    submitted_list.append(target)
+            except OSError:
+                pass
+        submitted = tuple(submitted_list)
 
         if blamed:
             status = "blamed"
@@ -329,7 +362,6 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             cost_usd=metrics.cost_usd,
         )
 
-        # Persist session ID if not already saved
         session_file = os.path.join(task.dispatch.workspace_dir, ".cleanroom", "dsh_session_id.txt")
         if not os.path.isfile(session_file) and os.path.isfile(task.log_file):
             try:
@@ -365,6 +397,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             wall_clock_seconds=wall_clock,
         )
 
+    # Contract: MUST return role turn result when terminated, or None when still running without blocking.
     def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
         """Polls DeepSeek Harness subagent turn execution without blocking."""
         task = self._tasks.get(task_handle)
@@ -399,6 +432,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
         return self.await_role(task_handle)
 
+    # Contract: MUST terminate active DeepSeek Harness subagent process associated with task handle.
     def interrupt_role(self, task_handle: str) -> None:
         """Aborts active DeepSeek Harness subagent task execution upon timeout or limit."""
         task = self._tasks.get(task_handle)
@@ -409,11 +443,13 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                 pass
 
 
+# Contract: Realizes management of DeepSeek Harness execution adapters and telemetry parsing in agent_session tier.
 class DshHarnessManager(dsh_harness.DshHarnessManager, Singleton):
     """Realizes management of DeepSeek Harness execution adapters and telemetry parsing."""
 
     tier = agent_session.agent_session
 
+    # Contract: MUST install DeepSeek Harness adapter factory into subagent harness registry under 'dsh'.
     def initialize(self) -> None:
         """Initializes the manager and installs the adapter factory into the harness registry."""
         try:
@@ -422,6 +458,7 @@ class DshHarnessManager(dsh_harness.DshHarnessManager, Singleton):
         except Exception:
             pass
 
+    # Contract: MUST construct and return configured DeepSeek Harness adapter instance.
     def create_harness_adapter(
         self,
         model_name: Optional[str] = None,
@@ -443,6 +480,7 @@ class DshHarnessManager(dsh_harness.DshHarnessManager, Singleton):
             parser=self.get_telemetry_parser(),
         )
 
+    # Contract: MUST return DeepSeek Harness telemetry parser instance.
     def get_telemetry_parser(self) -> dsh_telemetry.DshTelemetryParser:
         """Returns the DeepSeek Harness telemetry parser service."""
         try:

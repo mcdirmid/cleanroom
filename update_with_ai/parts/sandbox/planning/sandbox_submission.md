@@ -28,6 +28,7 @@ By providing dedicated tools for clean submission, failure attribution, and defe
 - A resolve tool produces a terminating response when all active nodes are resolved. [resolve_tool_terminates_when_all_resolved]
 - A resolve tool produces a non-terminating response when other active nodes remain. [resolve_tool_lists_remaining_nodes]
 - The submit tool concludes active nodes upon passing verification. [submit_concludes_nodes_on_pass]
+- The submit tool resolves submitted target arguments supplied as canonical target strings or workspace-relative file paths against declared role targets. [submit_resolves_target_arguments]
 - The submit tool marks the resolve target clean in the current get work turn. [submit_marks_target_clean]
 - The submit tool enforces change documentation. [submit_enforces_change_documentation]
 - The fail tool terminates the run in failure. [fail_terminates_run_in_failure]

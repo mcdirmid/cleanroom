@@ -155,32 +155,38 @@ class SubmitTool(
             self._change_summary_parameter.name: self._change_summary_parameter,
         }
 
+    # Contract: Tool.name - returns 'submit'.
     @property
     def name(self) -> tool_provider.ToolName:
         return self._name
 
+    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
+    # Contract: ResolveTool.target_parameter - parameter identifying active node being resolved.
     @property
     def target_parameter(
         self,
     ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         return self._target_parameter
 
+    # Contract: SubmitTool.change_summary_parameter - parameter describing modifications made during the task.
     @property
     def change_summary_parameter(
         self,
     ) -> tool_provider.ToolParameter[Optional[sandbox_submission.ChangeSummary], str]:
         return self._change_summary_parameter
 
+    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(
         self,
     ) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         return self._parameters
 
+    # Contract: SubmitTool.execute_tool - validates verification status and guide milestones, then dispatches target submission.
     def execute_tool(
         self,
         actual_parameter_bindings: Mapping[
@@ -250,6 +256,7 @@ class SubmitTool(
             if def_node is not None:
                 target_to_check = coord.get_alias_for_node(def_node)
 
+        # File alias suffix matching and probing has_modifications attribute on SourceMetadataCoordinator.
         if target_to_check:
             matched = False
             for rw_file in getattr(node_cfg, "read_write_files", []):
@@ -390,32 +397,38 @@ class FailTool(
             self._explanation_parameter.name: self._explanation_parameter,
         }
 
+    # Contract: Tool.name - returns 'fail'.
     @property
     def name(self) -> tool_provider.ToolName:
         return self._name
 
+    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
+    # Contract: ResolveTool.target_parameter - parameter identifying active node being resolved.
     @property
     def target_parameter(
         self,
     ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         return self._target_parameter
 
+    # Contract: FailTool.explanation_parameter - parameter explaining reason for failure.
     @property
     def explanation_parameter(
         self,
     ) -> tool_provider.ToolParameter[sandbox_submission.FailureExplanation, str]:
         return self._explanation_parameter
 
+    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(
         self,
     ) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         return self._parameters
 
+    # Contract: FailTool.execute_tool - marks active node as failed and terminates run in failure.
     def execute_tool(
         self,
         actual_parameter_bindings: Mapping[
@@ -443,6 +456,7 @@ class FailTool(
         )
 
 
+# Contract: _match_blame_target - matches candidate blame target against bound files using relative path, suffix, or basename.
 def _match_blame_target(
     cand: str, targets: Iterable[agent_file_alias.BoundFile]
 ) -> Optional[agent_file_alias.BoundFile]:
@@ -517,38 +531,45 @@ class BlameTool(
             self._explanation_parameter.name: self._explanation_parameter,
         }
 
+    # Contract: Tool.name - returns 'blame'.
     @property
     def name(self) -> tool_provider.ToolName:
         return self._name
 
+    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
+    # Contract: ResolveTool.target_parameter - parameter identifying active node attributing blame.
     @property
     def target_parameter(
         self,
     ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         return self._target_parameter
 
+    # Contract: BlameTool.blame_target_parameter - parameter identifying blamed upstream dependency.
     @property
     def blame_target_parameter(
         self,
     ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, str]:
         return self._blame_target_parameter
 
+    # Contract: BlameTool.explanation_parameter - parameter explaining defect in upstream dependency.
     @property
     def explanation_parameter(
         self,
     ) -> tool_provider.ToolParameter[sandbox_submission.BlameExplanation, str]:
         return self._explanation_parameter
 
+    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(
         self,
     ) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         return self._parameters
 
+    # Contract: BlameTool.execute_tool - validates single paragraph explanation, resolves blame target, records defect feedback, and attributes failure.
     def execute_tool(
         self,
         actual_parameter_bindings: Mapping[

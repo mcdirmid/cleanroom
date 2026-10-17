@@ -37,12 +37,14 @@ type WireType = str | int | float | bool | Mapping[str, WireType] | Sequence[Wir
 
 SomeParameterActualType = NewType('SomeParameterActualType', object)
 
+# Contract: ParameterConversionError - raised when wire value conversion to an actual type fails.
 @dataclass(frozen=True)
 class ParameterConversionError(ValueError):
     # TODO_ParameterConversionError_body
     message: ConversionErrorMessage
 
 
+# Contract: ParameterType protocol - converts wire type values to actual type values.
 class ParameterType[ActualT, WireT](Protocol):
     @property
     def actual_type(self) -> type[ActualT]:
@@ -59,6 +61,7 @@ class ParameterType[ActualT, WireT](Protocol):
         ...
 
 
+# Contract: IdentityParameterType - parameter type where actual and wire types are identical.
 @dataclass(frozen=True)
 class IdentityParameterType[T](ParameterType[T, T]):
     target_type: type[T]
@@ -75,6 +78,7 @@ class IdentityParameterType[T](ParameterType[T, T]):
         return wire_value
 
 
+# Contract: ListParameterType - parameter type converting a wire list to an actual list.
 @dataclass(frozen=True)
 class ListParameterType[ItemActualT, ItemWireT](ParameterType[Sequence[ItemActualT], Sequence[ItemWireT]]):
     item_type: ParameterType[ItemActualT, ItemWireT]
@@ -91,6 +95,7 @@ class ListParameterType[ItemActualT, ItemWireT](ParameterType[Sequence[ItemActua
         return [self.item_type.convert(item) for item in wire_value]
 
 
+# Contract: MappingParameterType - parameter type converting a wire mapping to an actual mapping.
 @dataclass(frozen=True)
 class MappingParameterType[KeyActualT, ValActualT, ValWireT](ParameterType[Mapping[KeyActualT, ValActualT], Mapping[str, ValWireT]]):
     key_type: ParameterType[KeyActualT, str]
@@ -111,6 +116,7 @@ class MappingParameterType[KeyActualT, ValActualT, ValWireT](ParameterType[Mappi
         }
 
 
+# Contract: AliasManagerType protocol - adapts session alias manager to provide file alias parameter conversion.
 class AliasManagerType(ParameterType[agent_file_alias.FileAlias, str], Protocol):
     @property
     def actual_type(self) -> type[agent_file_alias.FileAlias]:
@@ -126,6 +132,7 @@ class AliasManagerType(ParameterType[agent_file_alias.FileAlias, str], Protocol)
 
 
 
+# Contract: Tool protocol - polymorphic service defining an executable action available to an agent.
 class Tool(Protocol):
     @property
     def name(self) -> ToolName:
@@ -147,6 +154,7 @@ class Tool(Protocol):
         ...
 
 
+# Contract: ToolParameter - describes an input parameter accepted by a tool.
 @dataclass(frozen=True)
 class ToolParameter[ActualT, WireT]:
     # TODO_ToolParameter_body
@@ -158,6 +166,7 @@ class ToolParameter[ActualT, WireT]:
     missing_message: Optional[Callable[[Set[ParameterName]], MissingMessage]] = None
 
 
+# Contract: FollowUpToolCall - specifies a follow-up tool call.
 @dataclass(frozen=True)
 class FollowUpToolCall:
     # TODO_FollowUpToolCall_body
@@ -166,6 +175,7 @@ class FollowUpToolCall:
     reasoning_text: ReasoningText
 
 
+# Contract: ToolResponse - communicates tool execution results to the agent.
 @dataclass(frozen=True)
 class ToolResponse:
     # TODO_ToolResponse_body
@@ -177,6 +187,7 @@ class ToolResponse:
     follow_up_tool_call: Optional[FollowUpToolCall] = None
 
 
+# Contract: ToolManager protocol - session service that maintains and executes tools.
 class ToolManager(Protocol):
     @property
     def installed_tools(self) -> Mapping[ToolName, Tool]:

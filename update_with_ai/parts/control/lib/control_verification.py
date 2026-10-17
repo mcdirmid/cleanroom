@@ -29,8 +29,10 @@ class VerificationResult:
 class VerificationEvaluator(Protocol):
     """Evaluates verification checks and filters compiler diagnostic noise."""
 
+    # Contract: Evaluates configured verification checks for target or all open targets, memoizes by target file hashes, and cleans diagnostic noise.
     def evaluate_verification(
         self, target: Optional[dag_storage.DagNode] = None
     ) -> VerificationResult: ...
 
+    # Contract: Strips build progress indicators, load banners, and elapsed timing statistics from diagnostic text.
     def clean_diagnostic_noise(self, text: str) -> str: ...

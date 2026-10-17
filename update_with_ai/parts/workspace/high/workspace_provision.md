@@ -30,10 +30,10 @@ The workspace provisioner:
 
 - Copies the declared writable files of the role with read-write permissions, and copies upstream contract dependencies with read-only permissions, preventing in-place clobbering of upstream specifications.
 
-- Copies and writes files across role workspaces, applying explicit read-only, writable, or executable permissions.
+- Copies and writes files across role workspaces using buffered chunk streaming while strictly preserving POSIX mode bits (including read-only and executable flags).
 
 - Synthesizes read-only test stubs that raise `NotImplementedError` from companion specifications into the workspace for roles declaring stub dependencies, rather than copying real implementations, preventing implementation leakage, and synchronizes or purges test stubs to keep role workspaces aligned with companion specifications.
 
 - Deploys executable runner tools into the `bin/` directory of the workspace, packaging the work, submit, blame, fail, and coverage runners as executable scripts with execution permissions.
 
-- Writes workspace role configuration into a hidden role descriptor file recording role identity and optional model profile settings without exposing host repository paths, and synthesizes a role-tailored `AGENTS.md` guide file establishing agent constraints and tool invocation workflows.
+- Writes workspace role configuration into a hidden role descriptor file recording role identity and optional model profile settings without exposing host repository paths, configures test runner isolation to restrict test discovery to the local workspace, and synthesizes a role-tailored `AGENTS.md` guide file establishing agent constraints and tool invocation workflows.

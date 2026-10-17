@@ -1282,7 +1282,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
         tc_replace = DummyToolCall(
             id="c2",
-            name="replace",
+            name="replace_file_content",
             arguments=json.dumps({"file": "a.py", "target": "1", "rep": "2"}),
         )
         tc_advance = DummyToolCall(id="c3", name="advance", arguments="{}")
@@ -1298,7 +1298,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         self.tool_mgr.responses["view_file"] = ToolResponse(
             is_failed=False, is_terminated=False, content=ToolResponseContent("read")
         )
-        self.tool_mgr.responses["replace"] = ToolResponse(
+        self.tool_mgr.responses["replace_file_content"] = ToolResponse(
             is_failed=False,
             is_terminated=False,
             content=ToolResponseContent("replaced"),

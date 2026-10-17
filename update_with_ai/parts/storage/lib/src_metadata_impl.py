@@ -40,6 +40,7 @@ class SourceMetadataCoordinator(
     def extract_metadata_from_text(
         self, content: str, filename_or_ext: str
     ) -> Optional[src_metadata.FileMetadata]:
+        # Contract: When content contains valid metadata block, MUST return populated FileMetadata; else None.
         is_html = _is_html_comment_format(filename_or_ext)
         lines = content.splitlines()
         bounds = _extract_block_boundaries(lines, is_html)
@@ -51,19 +52,18 @@ class SourceMetadataCoordinator(
     def extract_metadata(
         self, file_path: Path | str
     ) -> Optional[src_metadata.FileMetadata]:
+        # Contract: When file exists and contains metadata block, MUST return populated FileMetadata; else None.
         p = Path(file_path)
         if not p.is_file():
             return None
         try:
             content = p.read_text(encoding="utf-8")
             return self.extract_metadata_from_text(content, p.name)
-        except OSError as e:
-            sys.stderr.write(
-                f"Warning: Failed reading metadata from '{file_path}': {e}\n"
-            )
+        except OSError:
             return None
 
     def extract_code_body(self, content: str, filename_or_ext: str) -> str:
+        # Contract: MUST return content lines outside metadata comment header boundaries.
         is_html = _is_html_comment_format(filename_or_ext)
         lines = content.splitlines()
         bounds = _extract_block_boundaries(lines, is_html)
@@ -75,23 +75,23 @@ class SourceMetadataCoordinator(
         return "\n".join(body_lines).strip()
 
     def compute_code_hash(self, content: str, filename_or_ext: str) -> str:
+        # Contract: MUST return first twelve characters of SHA-256 digest of code body.
         body = self.extract_code_body(content, filename_or_ext)
         return hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
 
     def compute_file_code_hash(self, file_path: Path | str) -> Optional[str]:
+        # Contract: When file exists on disk, MUST return twelve-character code hash; else None.
         p = Path(file_path)
         if not p.is_file():
             return None
         try:
             content = p.read_text(encoding="utf-8")
             return self.compute_code_hash(content, p.name)
-        except OSError as e:
-            sys.stderr.write(
-                f"Warning: Failed reading '{file_path}' for code hash: {e}\n"
-            )
+        except OSError:
             return None
 
     def is_code_modified(self, file_path: Path | str) -> bool:
+        # Contract: When file does not exist or has no recorded code hash, MUST return True; when on-disk hash differs, MUST return True; when matches, MUST return False.
         p = Path(file_path)
         if not p.is_file():
             return True
@@ -311,11 +311,13 @@ class SourceMetadataCoordinator(
     def append_feedback(
         self, file_path: Path | str, explanation: str, sender: str = "user"
     ) -> None:
+        # Contract: MUST append formatted feedback entry and advance last cleaned timestamp to now.
         now = src_metadata.current_utc_timestamp()
         clean_entry = re.sub(r"^\[.*?\]:\s*", "", explanation.strip())
         self.update_metadata(file_path, append_feedback=clean_entry, last_cleaned=now)
 
     def stamp_audit(self, file_path: Path | str, role_name: str) -> None:
+        # Contract: MUST record role audit timestamp as now and advance last cleaned timestamp to now.
         now = src_metadata.current_utc_timestamp()
         self.update_metadata(
             file_path,
@@ -324,11 +326,8 @@ class SourceMetadataCoordinator(
         )
 
     def clear_audits(self, file_path: Path | str) -> None:
+        # Contract: MUST rewrite file clearing all audit tags.
         self.update_metadata(file_path, clear_audits=True)
-
-
-# Backwards compatibility alias
-_DefaultSourceMetadataCoordinator = SourceMetadataCoordinator
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -340,7 +339,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         keys=[
             src_metadata.SourceMetadataCoordinator,
             SourceMetadataCoordinator,
-            _DefaultSourceMetadataCoordinator,
         ],
         tier=system,
     )

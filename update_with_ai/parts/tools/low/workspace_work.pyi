@@ -169,6 +169,7 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
         - WHEN the target role is undeclared, MUST raise KeyError without substituting a fallback role.
         - WHEN the target path matches no configured file pattern of the target role, MUST raise ValueError.
         - MUST discover low-level spec contracts, interface protocols, and definitions for target unit.
+        - FOR any unit ending in _impl, MUST automatically include companion interface contracts without the _impl suffix.
         - MUST filter cross-unit dependencies of the target against configured star role dependencies and silent cross-role dependencies.
         - WHEN a cross-unit dependency is declared as a star role dependency, MUST expand that dependency's specification contracts into the resolved contract files.
         - WHEN a cross-unit dependency is declared as a silent cross-role dependency, MUST suppress the peer implementation files matching that dependency from the resolved contract files.

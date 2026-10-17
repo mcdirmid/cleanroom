@@ -63,7 +63,11 @@ class SessionCoordinator(InTier[AgentSessionTier], Protocol):
         alias: str,
         state: TargetState = TargetState.OPEN,
     ) -> None:
-        """Registers a target node in the session."""
+        """Registers a target node in the session.
+
+        POSTCONDITIONS:
+        - MUST exclude ephemeral root session targets (such as //session:target) from registered session nodes.
+        """
         ...
 
     @operation
@@ -104,7 +108,12 @@ class SessionCoordinator(InTier[AgentSessionTier], Protocol):
         dir_scope: Optional[str] = None,
         max_batch_size: Optional[int] = None,
     ) -> control_work_scheduler.WorkSchedule:
-        """Dispatches work discovery and registers discovered nodes as open targets."""
+        """Dispatches work discovery and registers discovered nodes as open targets.
+
+        POSTCONDITIONS:
+        - MUST dispatch work discovery to work scheduler and register discovered nodes as open targets.
+        - MUST materialize starter templates through graph storage for scheduled task nodes whose target files do not exist on disk.
+        """
         ...
 
     @operation

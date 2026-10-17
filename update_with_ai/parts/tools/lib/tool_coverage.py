@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Sequence, Set, Tuple
 
 
+# Contract: ModuleCoverage encapsulates test coverage metrics for a single library module.
 @dataclass(frozen=True)
 class ModuleCoverage:
     """Encapsulates test coverage metrics for a single library module.
@@ -47,33 +48,43 @@ class ModuleCoverage:
     test_error: Optional[str] = None
 
 
+# Contract: CoverageEvaluator protocol coordinates statement coverage measurement and report generation.
 class CoverageEvaluator(Protocol):
     """Protocol for single-target statement test coverage evaluation and report generation."""
 
+    # Contract: Formats missing statement line numbers into compact comma-separated range strings.
     def format_ranges(self, lines: Sequence[int]) -> str: ...
 
+    # Contract: Groups sorted missing statement line numbers into contiguous span tuples.
     def group_into_spans(self, lines: Sequence[int]) -> List[Tuple[int, int]]: ...
 
+    # Contract: Normalizes a target query string by stripping package target or path prefixes.
     def normalize_target_query(self, raw_query: str) -> str: ...
 
+    # Contract: Formats source snippet reports for uncovered statement spans with presentation span clamping.
     def format_spans_report(
         self, cov: ModuleCoverage, max_spans: Optional[int] = None
     ) -> str: ...
 
+    # Contract: Formats structured coverage reports with agent guidance and deficit metrics.
     def format_coverage_report(
         self, cov: ModuleCoverage, threshold: float, max_spans: Optional[int] = None
     ) -> str: ...
 
+    # Contract: Discovers available implementation and test file pairs across repository part packages.
     def get_available_targets(
         self, repo_root: Path | str
     ) -> Dict[str, Tuple[Path, Path]]: ...
 
+    # Contract: Extracts candidate executable lines from an implementation source file by filtering non-executable lines.
     def get_non_executable_lines(self, file_path: Path | str) -> Set[int]: ...
 
+    # Contract: Measures single-target statement coverage by executing the companion test suite under execution tracing.
     def measure_single_target_coverage(
         self, impl_path: Path | str, test_path: Path | str
     ) -> ModuleCoverage: ...
 
+    # Contract: Evaluates module coverage against a percentage threshold and updates coverage log files.
     def evaluate_coverage(
         self,
         target_or_impl: str,
@@ -83,3 +94,4 @@ class CoverageEvaluator(Protocol):
         update_log: Optional[Path | str] = None,
         max_spans: Optional[int] = None,
     ) -> ModuleCoverage: ...
+

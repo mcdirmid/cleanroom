@@ -12,16 +12,16 @@ CODE_HASH: 7f0712377f91
 Given: a role dispatch directive for role_a with prompt and ready targets in workspace_dir_a.
 
 1. The harness adapter dispatches the turn.
-   Observed: a role-tailored task prompt file is written and a DeepSeek Harness subagent process is launched with handle `dsh-task-1-role_a`.
-   Realized by: the component's process launcher writing the role-tailored prompt file and executing the dsh headless command with overlay patch parameters.
+   Observed: a role-tailored task prompt file is written, lock availability is verified to adopt persisted sessions safely, and a DeepSeek Harness subagent process is launched with handle `dsh-task-1-role_a`.
+   Realized by: the component's process launcher writing the role-tailored prompt file, verifying non-blocking session locks, and executing the dsh headless command with overlay patch parameters and session resumption flags.
 
 ### Scenario 2 — Awaiting successful turn and extracting token telemetry
 
 Given: an active turn for role_a completes with zero exit code and recorded session telemetry.
 
 1. The harness adapter awaits turn completion.
-   Observed: a role turn result is returned with clean status, submitted targets, and token telemetry reflecting input and output tokens.
-   Realized by: telemetry extraction delegated to dsh_telemetry, querying event streams or session storage archives for token counts.
+   Observed: a role turn result is returned with clean status, submitted targets, scraped and persisted session identifier for continuity, and token telemetry reflecting input and output tokens.
+   Realized by: telemetry extraction delegated to dsh_telemetry, session id extraction and file persistence, querying event streams or session storage archives for token counts.
 
 ### Scenario 3 — Handling blamed targets from blame buffer
 

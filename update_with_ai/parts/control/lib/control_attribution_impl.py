@@ -186,6 +186,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
 
     tier = agent_session.agent_session
 
+    # Contract: Converts value through AliasManager.to_alias and intersects resulting alias with blame_targets_by_node for the supplied node.
     def match_blame_target(
         self, node: dag_storage.DagNode, val: Any, val_str: str
     ) -> Optional[agent_file_alias.BoundFile]:
@@ -205,6 +206,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
                 return bound
             if alias_path and bound_path == alias_path:
                 return bound
+        # Suffix-matching and basename-matching when alias intersection fails.
         if val_str:
             norm_v = val_str.lstrip("/")
             suffix_matches = [
@@ -225,6 +227,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
                 return base_matches[0]
         return None
 
+    # Contract: Rejects if newline in explanation, not upstream dependency, role not configured for feedback, or in-batch dependencies not clean; on acceptance, records feedback, marks culprit dirty, and marks dependents failed.
     def blame_target(
         self,
         source_node: dag_storage.DagNode,
@@ -314,6 +317,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
             affected_nodes=affected,
         )
 
+    # Contract: Records failure diagnostic on target node, preserves dirty status in graph storage, and marks in-batch dependent nodes as failed.
     def fail_target(
         self,
         target_node: dag_storage.DagNode,
@@ -343,6 +347,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
             affected_nodes=affected,
         )
 
+    # Contract: Rejects if critique has newlines, exceeds max length, culprit unresolved, or caller role not allowed; on acceptance, records feedback in metadata, updates metadata, and syncs workspace copy.
     def blame_culprit_file(
         self,
         culprit_file: str,
@@ -362,6 +367,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
         ws_root = os.path.realpath(workspace_root or os.getcwd())
         meta: Optional[Dict[str, Any]] = None
         meta_p = os.path.join(ws_root, ".cleanroom_role.json")
+        # Reads .cleanroom_role.json from ws_root to discover max_feedback_chars and model parameters.
         if os.path.isfile(meta_p):
             try:
                 with open(meta_p, "r", encoding="utf-8") as f:
@@ -386,6 +392,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
                 max_feedback_chars = int(meta["max_feedback_chars"])
             except (ValueError, TypeError):
                 pass
+        # Parses model_configs.toml to extract max_feedback_chars threshold.
         if max_feedback_chars is None:
             m_cfg_file = os.path.join(main_root, "model_configs.toml")
             if os.path.isfile(m_cfg_file):
@@ -429,6 +436,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
                 affected_nodes=[],
             )
 
+        # Falls back to environment variables CLEANROOM_ROLE, USER, or 'cleanroom' for caller identity.
         caller = caller_role or (meta.get("role_name") or meta.get("role") if meta else "") or os.environ.get("CLEANROOM_ROLE") or os.environ.get("USER") or "cleanroom"
 
         ref_root = main_root if dep_path.startswith(main_root) else ws_root
@@ -441,6 +449,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
             role_defs = getattr(cfg, "role_definitions", {})
         except (LifecycleResolutionError, KeyError, AttributeError, RuntimeError):
             role_defs = {}
+        # Fallback filesystem search for cleanroom_roles.toml or cleanroom_python_roles.toml when NodeConfig is unregistered.
         if not role_defs:
             roles_toml = None
             for cand in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
@@ -498,6 +507,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
             affected_nodes=[],
         )
 
+    # Contract: Resolves target file; appends feedback diagnostic, marks dirty in metadata, and synchronizes workspace copy.
     def fail_target_file(
         self,
         target_file: str,
@@ -509,6 +519,7 @@ class AttributionCoordinator(control_attribution.AttributionCoordinator, Singlet
         ws_root = os.path.realpath(workspace_root or os.getcwd())
         meta: Optional[Dict[str, Any]] = None
         meta_p = os.path.join(ws_root, ".cleanroom_role.json")
+        # Reads .cleanroom_role.json from ws_root to inspect role context.
         if os.path.isfile(meta_p):
             try:
                 with open(meta_p, "r", encoding="utf-8") as f:

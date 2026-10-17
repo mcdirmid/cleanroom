@@ -115,6 +115,7 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
     def __init__(self) -> None:
         pass
 
+    # Contract: Computes topological depth rank for roles based on role dependencies matching longest path from root roles.
     def compute_role_precedence(
         self, role_dependencies: Mapping[str, Sequence[str]]
     ) -> Mapping[str, int]:
@@ -167,17 +168,15 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
             pass
         if not role_deps:
             try:
-                for cand in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
-                    if os.path.isfile(cand):
-                        with open(cand, "rb") as f:
-                            data = tomllib.load(f)
-                            for r_name, r_cfg in data.get("roles", {}).items():
-                                rd = list(r_cfg.get("role_deps", ()))
-                                rd += list(r_cfg.get("feedback_role_deps", ()))
-                                rd += list(r_cfg.get("silent_role_deps", ()))
-                                rd += [s for s in r_cfg.get("star_role_deps", ()) if s.split(":")[-1] != r_name]
-                                role_deps[r_name] = rd
-            except (OSError, tomllib.TOMLDecodeError):
+                from update_with_ai.parts.workspace.lib import workspace_registry
+                reg = get_singleton(workspace_registry.WorkspaceRegistry)
+                for r in reg.list_roles():
+                    rd = [d.split(":")[-1] for d in r.role_deps]
+                    rd += [d.split(":")[-1] for d in r.feedback_role_deps]
+                    rd += [d.split(":")[-1] for d in r.silent_role_deps]
+                    rd += [s.split(":")[-1] for s in r.star_role_deps if s.split(":")[-1] != r.role_name]
+                    role_deps[r.role_name] = rd
+            except (LifecycleResolutionError, LookupError, ImportError, AttributeError):
                 pass
         if not role_deps:
             return 999
@@ -215,6 +214,7 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
                 candidates.append(node)
         return candidates
 
+    # Contract: Discovers ready dirty tasks across subgraph or directory scope, sorts by dynamic role precedence, limits to max_batch_size, and formats prompts.
     def schedule_work(
         self,
         subgraph: Optional[dag_subgraph.DagSubgraph] = None,
@@ -275,6 +275,7 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
 
         return control_work_scheduler.WorkSchedule(tasks=tasks)
 
+    # Heuristic path prefix/suffix replacements to locate companion grounding specifications.
     def _resolve_grounding_file(
         self,
         node: dag_storage.DagNode,
@@ -353,6 +354,7 @@ class WorkScheduler(control_work_scheduler.WorkScheduler, Singleton):
 
         return ""
 
+    # Contract: Formats aggregated synthesized task prompt for candidate nodes with defect feedback, grounding files, and role directives.
     def format_task_prompt(self, nodes: Sequence[dag_storage.DagNode]) -> str:
         n_cfg = get_singleton(agent_node_config.NodeConfig)
         storage = get_singleton(dag_storage.DagStorage)

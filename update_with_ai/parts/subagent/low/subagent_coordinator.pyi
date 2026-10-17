@@ -203,9 +203,21 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         - MUST iterate through execution waves until all units in scope evaluate clean, a role fails, or max_waves is reached.
         - MUST periodically poll active workers through harness.poll_role or harness.await_role at a configurable interval defaulting to 10.0 seconds.
         - WHEN a role turn reports status failed, MUST stop execution and return non-converged summary with failure details.
-        - WHEN consecutive unproductive turns for a role on unresolved targets exceed the threshold (defaulting to 2), MUST stop execution and return non-converged summary with impasse details.
+        - WHEN consecutive unproductive turns for a role on unresolved targets exceed the threshold (defaulting to 5), MUST stop execution and return non-converged summary with impasse details.
         - MUST emit real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state.
         - WHEN all units evaluate clean across all roles, MUST automatically delete all provisioned role workspaces in scope and return converged summary.
+        - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive turns thresholds from model configurations.
+        - MUST persist effective batch size bounds into provisioned role workspace configurations.
         - MUST aggregate cumulative token usage and monetary expenditure in orchestration summary.
+        """
+        ...
+
+    @operation
+    def resolve_cleanroom_log_dir(self, workspace_dir: str) -> str:
+        """Resolves the canonical repository logs directory for a role workspace.
+
+        POSTCONDITIONS:
+        - MUST discover repository root via workspace registry or parent traversal.
+        - MUST return path to logs directory.
         """
         ...

@@ -15,6 +15,7 @@ from . import (
     dsh_harness_impl,
 )
 
+# Contract: Constituent modules for the dsh assembly.
 CONSTITUENTS = (
     dsh_workspace_impl,
     dsh_telemetry_impl,
@@ -22,6 +23,7 @@ CONSTITUENTS = (
 )
 
 
+# Contract: Initializes the dsh assembly component and its constituents.
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Initializes the dsh assembly component and its constituents."""
     for constituent in CONSTITUENTS:

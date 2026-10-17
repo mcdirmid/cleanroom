@@ -27,6 +27,7 @@ from update_with_ai.parts.agent.lib import agent_session
 from . import subagent_coordinator, subagent_harness, subagent_tool
 
 
+# Contract: SubagentToolRunner realizes command dispatch and execution runner for subagent orchestration in the agent session tier.
 class SubagentToolRunner(
     subagent_tool.SubagentToolRunner,
     Singleton,
@@ -35,6 +36,7 @@ class SubagentToolRunner(
 
     tier = agent_session.agent_session
 
+    # Contract: SubagentToolRunner.execute_command - parses CLI argument sequence and executes selected action.
     def execute_command(self, argv: Sequence[str]) -> int:
         """Dispatches and executes subagent commands matching an argument sequence."""
         parser = argparse.ArgumentParser(
@@ -106,6 +108,12 @@ class SubagentToolRunner(
             help="Context token compaction limit for subagent processes.",
         )
         orch_parser.add_argument(
+            "--max-unproductive-turns",
+            type=int,
+            default=None,
+            help="Maximum consecutive unproductive turns before halting execution (default: resolved from model configuration or 5).",
+        )
+        orch_parser.add_argument(
             "--repo-root",
             default=None,
             help="Repository root directory.",
@@ -118,7 +126,6 @@ class SubagentToolRunner(
             help="Run in simulation mode without external subprocesses.",
         )
 
-        # Allow passing args without explicit 'orchestrate' subcommand keyword
         args_list = list(argv)
         if not args_list or args_list[0] != "orchestrate":
             args_list = ["orchestrate"] + args_list
@@ -139,11 +146,13 @@ class SubagentToolRunner(
                 timeout=parsed.timeout,
                 max_context_tokens=parsed.max_context_tokens,
                 repo_root=parsed.repo_root,
+                max_unproductive_turns=parsed.max_unproductive_turns,
             )
 
         parser.print_help()
         return 1
 
+    # Contract: SubagentToolRunner.run_orchestrate - orchestrates multi-agent execution across topological waves until convergence.
     def run_orchestrate(
         self,
         dir_scope: str,
@@ -155,6 +164,7 @@ class SubagentToolRunner(
         timeout: Optional[float] = None,
         max_context_tokens: Optional[int] = None,
         repo_root: Optional[str] = None,
+        max_unproductive_turns: Optional[int] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence."""
         resolver = get_singleton(subagent_harness.HarnessResolver)
@@ -177,6 +187,7 @@ class SubagentToolRunner(
             batch_size=batch_size,
             repo_root=repo_root,
             model_name=model,
+            max_unproductive_turns=max_unproductive_turns,
         )
 
         print("\n=== Cleanroom Orchestration Summary ===")
@@ -206,6 +217,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             subagent_asm.__initialize__()
             runner = get_singleton(subagent_tool.SubagentToolRunner)
         return runner.execute_command(raw_args)
+
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

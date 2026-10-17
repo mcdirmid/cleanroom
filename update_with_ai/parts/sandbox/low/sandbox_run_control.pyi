@@ -108,7 +108,7 @@ class GetWorkTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - MUST retrieve active dirty nodes.
         - MUST materialize startup templates.
-        - MUST deliver the session task prompt.
+        - MUST deliver the session task prompt, resolving the primary guide file from provisioned read-only documentation when omitted from node configuration.
         - WHEN in guide step mode, MUST specify follow-up execution of advance tool.
         """
         ...

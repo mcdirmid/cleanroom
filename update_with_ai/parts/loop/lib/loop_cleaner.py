@@ -11,7 +11,9 @@ from . import loop_node_cleaner
 from update_with_ai.parts.dag.lib import dag_storage
 
 
+# Contract: LoopCleaner coordinates topological graph cleaning across graph storage.
 class LoopCleaner(Protocol):
+    # Contract: LoopCleaner.clean - cleans dirty nodes rooted at the target node in dependency-first topological order.
     def clean(
         self, target: dag_storage.DagNode, node_cleaner: loop_node_cleaner.NodeCleaner
     ) -> bool: ...

@@ -57,6 +57,23 @@ The `cleanroom_files_ext` external component specifies the filesystem schema, st
 - `BLAME_BUFFER_FILE: str = ".cleanroom_blame_buffer.json"`:
   Buffered feedback critiques file holding serialized diagnostic feedback records for multi-workspace synchronization.
 
+- `AUDIT_BUFFER_FILE: str = ".cleanroom_audit_buffer.json"`:
+  Buffered audit entries file holding staged audit records and verification timestamps for multi-workspace synchronization.
+
+**In-Band Metadata Format Specification**
+
+Cleanroom source artifacts embed in-band lifecycle metadata in standardized comment blocks:
+- Python Files (`.py`, `.pyi`): Line comment block delimited by `# --- CLEANROOM METADATA ---` and `# --- END CLEANROOM METADATA ---`. Positioned immediately beneath optional shebang and encoding lines.
+- Markdown Files (`.md`): HTML comment block delimited by `<!-- CLEANROOM METADATA` and `-->`. Positioned at document top or immediately beneath YAML frontmatter.
+- Fields:
+  - `LAST_CLEANED: str`: ISO-8601 UTC timestamp of last verified clean state.
+  - `LAST_CHANGED: str`: ISO-8601 UTC timestamp of last intentional semantic modification.
+  - `CHANGE: str`: Single-line summary of intentional modification.
+  - `CODE_HASH: str`: Hexadecimal SHA-256 (truncated to 12 characters) computed over code content outside the metadata block.
+  - `COVERAGE_AUDIT: Optional[str]`: ISO-8601 UTC timestamp of coverage verification.
+  - `QA_AUDIT: Optional[str]`: ISO-8601 UTC timestamp of QA verification.
+  - `SPEC_QA_AUDIT: Optional[str]`: ISO-8601 UTC timestamp of Spec QA verification.
+
 ## Build Dependencies
 
 (none)

@@ -23,6 +23,7 @@ from update_with_ai.parts.agent.lib import agent_session
 from . import workspace_registry, workspace_stub
 
 
+# Contract: Writes a text file and sets exact permissions, handling existing read-only files cleanly.
 def write_file_with_perms(
     dst: str, content: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -42,6 +43,7 @@ def write_file_with_perms(
         pass
 
 
+# Contract: Copies a file and applies exact read-only or read-write permissions.
 def copy_file_with_perms(
     src: str, dst: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -63,6 +65,7 @@ def copy_file_with_perms(
         pass
 
 
+# Contract: Decomposes a source path pattern into its directory, stem suffix, and extension.
 def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     """Decomposes a source path pattern into its directory, stem suffix, and extension."""
     if not pat:
@@ -77,6 +80,7 @@ def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     return d, suffix, ext
 
 
+# Contract: Checks whether rel_path matches any role in stub_role_deps.
 def _is_stub_dep_file(
     rel_path: str,
     role_def: workspace_registry.RoleDefinition,
@@ -112,6 +116,7 @@ def _is_stub_dep_file(
     return False
 
 
+# Contract: Maps module name -> (part_name, base_dir) across specified parts directories.
 def _get_part_module_map(
     repo_root: str,
     parts_bases: Sequence[str],
@@ -153,6 +158,7 @@ def _get_part_module_map(
     return mapping
 
 
+# Contract: Finds companion .pyi specification file for a unit stem in a part directory.
 def _find_spec_pyi(
     part_path: str, stem: str, main_root: Optional[str] = None
 ) -> Optional[str]:
@@ -179,6 +185,7 @@ def _find_spec_pyi(
     return None
 
 
+# Contract: Checks whether file_path is already a valid cleanroom test stub (contains marker).
 def _is_valid_test_stub(file_path: str) -> bool:
     """Checks whether file_path is already a valid cleanroom test stub."""
     if not os.path.isfile(file_path):
@@ -191,6 +198,7 @@ def _is_valid_test_stub(file_path: str) -> bool:
         return False
 
 
+# Contract: Generates a read-only dependency stub from a .pyi specification.
 def _generate_readonly_test_stub(
     pyi_path: Optional[str],
     stem: str,
@@ -200,7 +208,7 @@ def _generate_readonly_test_stub(
 ) -> None:
     """Generates a read-only dependency stub from a .pyi specification."""
     parts_split = out_path.split(os.sep)
-    current_base = "update_with_ai"
+    current_base = ""
     current_part = ""
     if "parts" in parts_split:
         idx = parts_split.index("parts")
@@ -212,14 +220,30 @@ def _generate_readonly_test_stub(
     skeleton: Optional[str] = None
     if pyi_path and os.path.isfile(pyi_path):
         try:
+            generate_lib_skeleton = None
             try:
-                from update_python_with_ai.support.lib.lib_lint import generate_lib_skeleton
+                from support.lib.lib_lint import generate_lib_skeleton
             except ImportError:
+                pass
+            if generate_lib_skeleton is None:
+                root_cand = out_path.split(f"{os.sep}parts{os.sep}")[0] if f"{os.sep}parts{os.sep}" in out_path else os.getcwd()
+                root_cand = os.path.dirname(root_cand) if os.path.basename(root_cand) else root_cand
+                import importlib
                 try:
-                    from support.lib.lib_lint import generate_lib_skeleton
-                except ImportError:
-                    from update_with_ai.support.lib.lib_lint import generate_lib_skeleton
-            skeleton = generate_lib_skeleton(pyi_path, stem, parts_base=current_base)
+                    for entry in os.listdir(root_cand):
+                        pkg_dir = os.path.join(root_cand, entry)
+                        if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
+                            try:
+                                mod = importlib.import_module(f"{entry}.support.lib.lib_lint")
+                                generate_lib_skeleton = getattr(mod, "generate_lib_skeleton", None)
+                                if generate_lib_skeleton is not None:
+                                    break
+                            except ImportError:
+                                pass
+                except OSError:
+                    pass
+            if generate_lib_skeleton is not None:
+                skeleton = generate_lib_skeleton(pyi_path, stem, parts_base=current_base or None)
         except (ImportError, OSError, SyntaxError, RuntimeError, ValueError):
             skeleton = None
 
@@ -253,9 +277,14 @@ def _generate_readonly_test_stub(
         if f"{os.sep}parts{os.sep}" in out_path:
             root_dir = out_path.split(f"{os.sep}parts{os.sep}")[0]
             root_parent = os.path.dirname(root_dir)
-            part_map = _get_part_module_map(
-                root_parent, [current_base, "update_with_ai", "update_python_with_ai"]
-            )
+            cand_bases = [current_base] if current_base else []
+            try:
+                for entry in os.listdir(root_parent):
+                    if os.path.isdir(os.path.join(root_parent, entry, "parts")) and entry not in cand_bases:
+                        cand_bases.append(entry)
+            except OSError:
+                pass
+            part_map = _get_part_module_map(root_parent, cand_bases)
         else:
             part_map = {}
 
@@ -340,6 +369,7 @@ def _generate_readonly_test_stub(
     write_file_with_perms(out_path, "\n".join(stub_lines) + "\n", readonly=True)
 
 
+# Contract: Synchronizes read-only test stubs for all stub_role_deps of a role.
 def _sync_all_stub_deps(
     ws_scope_dir: str,
     main_scope_dir: str,
@@ -352,9 +382,14 @@ def _sync_all_stub_deps(
     if not role_def.stub_role_deps or not os.path.isdir(main_scope_dir):
         return 0
     if part_map is None:
-        part_map = _get_part_module_map(
-            main_root, [dir_scope, "update_with_ai", "update_python_with_ai"]
-        )
+        cand_bases = [dir_scope] if dir_scope else []
+        try:
+            for entry in os.listdir(main_root):
+                if os.path.isdir(os.path.join(main_root, entry, "parts")) and entry not in cand_bases:
+                    cand_bases.append(entry)
+        except OSError:
+            pass
+        part_map = _get_part_module_map(main_root, cand_bases)
 
     synced_count = 0
     registry = get_singleton(workspace_registry.WorkspaceRegistry)
@@ -373,11 +408,14 @@ def _sync_all_stub_deps(
         main_parts_dir = os.path.join(main_scope_dir, "parts")
         ws_parts_dir = os.path.join(ws_scope_dir, "parts")
         if not os.path.isdir(main_parts_dir):
-            for cand in ("update_with_ai", "update_python_with_ai"):
-                cand_p = os.path.join(main_root, cand, "parts")
-                if os.path.isdir(cand_p):
-                    main_parts_dir = cand_p
-                    break
+            try:
+                for entry in os.listdir(main_root):
+                    cand_p = os.path.join(main_root, entry, "parts")
+                    if os.path.isdir(cand_p) and not entry.startswith((".", "bazel-", "venv")):
+                        main_parts_dir = cand_p
+                        break
+            except OSError:
+                pass
         if not os.path.isdir(main_parts_dir):
             continue
 
@@ -459,6 +497,7 @@ def _sync_all_stub_deps(
     return synced_count
 
 
+# Contract: Realizes workspace_stub.WorkspaceStubSynthesizer singleton.
 class WorkspaceStubSynthesizer(workspace_stub.WorkspaceStubSynthesizer, Singleton):
     """Realizes AST-based test stub synthesis and dependency synchronization."""
 
@@ -467,6 +506,7 @@ class WorkspaceStubSynthesizer(workspace_stub.WorkspaceStubSynthesizer, Singleto
     def __init__(self) -> None:
         pass
 
+    # Contract: Generates read-only test stub from .pyi specification raising NotImplementedError.
     def generate_readonly_test_stub(
         self,
         pyi_path: Optional[str],
@@ -480,6 +520,7 @@ class WorkspaceStubSynthesizer(workspace_stub.WorkspaceStubSynthesizer, Singleto
             pyi_path, stem, out_path, dep_dir=dep_dir or "lib", part_map=part_map
         )
 
+    # Contract: Synchronizes read-only test stubs for all stub_role_deps of a role.
     def sync_all_stub_deps(
         self,
         workspace_dir: str,
@@ -498,6 +539,7 @@ class WorkspaceStubSynthesizer(workspace_stub.WorkspaceStubSynthesizer, Singleto
             dir_scope,
         )
 
+    # Contract: Checks whether rel_path corresponds to any declared role in stub_role_deps.
     def is_stub_dep_file(
         self,
         rel_path: str,
@@ -507,6 +549,7 @@ class WorkspaceStubSynthesizer(workspace_stub.WorkspaceStubSynthesizer, Singleto
         """Checks whether rel_path corresponds to any declared role in stub_role_deps."""
         return _is_stub_dep_file(rel_path, role_def, repo_root=repo_root)
 
+    # Contract: Checks whether file_path is already a valid cleanroom test stub.
     def is_valid_test_stub(self, file_path: str) -> bool:
         """Checks whether file_path is already a valid cleanroom test stub."""
         return _is_valid_test_stub(file_path)

@@ -5,6 +5,7 @@ default = "qwen-moe-q6"
 loop_default = "qwen-moe-q6"
 antigravity_default = "gemini-3.8-flash"
 dsh_default = "deepseek-v41-flash"
+max_unproductive_turns = 5
 
 [models.qwen-moe-q4]
 model = "stamsam-Qwen3.6-35B-A3B-Q4"
@@ -15,6 +16,7 @@ timeout_seconds = 100.0
 api_key_env = "OPENAI_API_KEY"
 max_tokens = 2048
 max_feedback_chars = 600
+max_unproductive_turns = 10
 
 [models.coder-next-reap]
 model = "Coder-Next-REAP-48B-A3B-Q4"
@@ -25,6 +27,7 @@ timeout_seconds = 100.0
 api_key_env = "OPENAI_API_KEY"
 max_tokens = 2048
 max_feedback_chars = 600
+max_unproductive_turns = 10
 
 [models.coder-next]
 model = "Qwen3-Coder-Next-4bit"
@@ -35,6 +38,7 @@ timeout_seconds = 100.0
 api_key_env = "OPENAI_API_KEY"
 max_tokens = 2048
 max_feedback_chars = 600
+max_unproductive_turns = 10
 
 [models.qwen-dense-q4]
 model = "Qwen3.8-27B-MLX-oQ4e-mtp"
@@ -45,6 +49,7 @@ timeout_seconds = 100.0
 api_key_env = "OPENAI_API_KEY"
 max_tokens = 2048
 max_feedback_chars = 600
+max_unproductive_turns = 10
 
 [models.qwen-moe-q6]
 model = "Qwen3.6-35B-A3B-oQ6-mtp"
@@ -58,10 +63,11 @@ batch_size = 1
 subagent_batch_size = 3
 conversation_max_tokens = 100000
 max_feedback_chars = 600
+max_unproductive_turns = 10
 
 
 [models.deepseek-v41-flash]
-model = "DeepSeek-V41-Flash"
+model = "deepseek-flash"
 provider = "deepseek"
 base_url = "https://api.deepseek.com/v1"
 max_iterations = 100
@@ -72,6 +78,7 @@ max_tokens = 8192
 subagent_batch_size = 10
 conversation_max_tokens = 256000
 max_feedback_chars = 4000
+max_unproductive_turns = 5
 
 [models.qwen-flash-next-q2]
 model = "Qwen3.8-Flash-Next-MLX-oQ2"
@@ -83,6 +90,7 @@ api_key_env = "OPENAI_API_KEY"
 max_tokens = 4096
 batch_size = 2
 max_feedback_chars = 400
+max_unproductive_turns = 10
 
 [models.gemini-3.8-flash]
 model = "gemini-3.8-flash"
@@ -94,6 +102,7 @@ max_tokens = 8192
 subagent_batch_size = 5
 conversation_max_tokens = 256000
 max_feedback_chars = 4000
+max_unproductive_turns = 5
 
 [models.qwen38-27b-q4-mtp]
 model = "Qwen38-27B-Q4-MTP"
@@ -107,6 +116,7 @@ batch_size = 1
 subagent_batch_size = 3
 conversation_max_tokens = 100000
 max_feedback_chars = 600
+max_unproductive_turns = 10
 
 
 

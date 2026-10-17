@@ -32,7 +32,7 @@ The workspace work manager:
 
 - Evaluates dirty targets and topological readiness across a specified directory scope, discovering ready and blocked work items by role tier depth without requiring a subgraph, bounding presented ready items when a batch size is specified, treating feedback role dependencies and star role dependencies as implicit role dependencies for dirty tracking, evaluating a target as dirty when any star role dependency changes, and materializing starter templates through graph storage for missing ready target files.
 
-- Resolves the companion upstream specification contracts and interface definitions of target units from role definitions, guiding agent implementation and verification.
+- Resolves the companion upstream specification contracts and interface definitions of target units from role definitions, automatically inspecting and including companion interface contracts without the _impl suffix for any unit ending in _impl, guiding agent implementation and verification.
 
 - Filters cross-unit dependencies by configured star-role dependencies and silent cross-role dependencies, suppressing the peer implementation files that match a silent cross-role dependency and expanding star-role specification contracts.
 

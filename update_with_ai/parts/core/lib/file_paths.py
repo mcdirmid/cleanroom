@@ -9,13 +9,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import NewType, Protocol
 
-# Requirements specified in file_paths.pyi
-
+# Contract: PathString and ValidationMessage type aliases.
 PathString = NewType("PathString", str)
 
 ValidationMessage = NewType("ValidationMessage", str)
 
 
+# Contract: HostPath record encapsulating a path string.
 @dataclass(frozen=True)
 class HostPath:
     """A host path record encapsulating a path string naming a file or directory on the host filesystem without guaranteeing whether the path string is absolute or relative.
@@ -30,6 +30,7 @@ class HostPath:
     path: PathString
 
 
+# Contract: AbsolutePath representing a path location from filesystem root.
 @dataclass(frozen=True)
 class AbsolutePath(HostPath):
     """A host path whose path string names a location from the filesystem root.
@@ -41,6 +42,7 @@ class AbsolutePath(HostPath):
     pass
 
 
+# Contract: WorkspacePath representing a relative workspace location.
 @dataclass(frozen=True)
 class WorkspacePath(HostPath):
     """A host path whose path string names a location relative to the root of a workspace without a leading path separator.
@@ -52,6 +54,7 @@ class WorkspacePath(HostPath):
     pass
 
 
+# Contract: WorkspaceRoot representing the absolute root directory of a workspace.
 @dataclass(frozen=True)
 class WorkspaceRoot(AbsolutePath):
     """An absolute path representing the root directory of a workspace.
@@ -63,6 +66,7 @@ class WorkspaceRoot(AbsolutePath):
     pass
 
 
+# Contract: PathValidationError indicating an invalid path string.
 @dataclass(frozen=True)
 class PathValidationError(ValueError):
     """Indicates that a path string is invalid for the target path type.
@@ -74,6 +78,7 @@ class PathValidationError(ValueError):
     message: ValidationMessage
 
 
+# Contract: FilePathManager protocol validating and resolving path representations.
 class FilePathManager(Protocol):
     """Validates and resolves path representations."""
 

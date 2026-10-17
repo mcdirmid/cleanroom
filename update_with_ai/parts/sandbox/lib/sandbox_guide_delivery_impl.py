@@ -24,6 +24,7 @@ from . import tool_provider
 # Requirements specified in sandbox_guide_delivery_impl.pyi
 
 
+# Contract: GuideDelivery.parse_guide / _parse_guide_markdown - extracts guide summary, sequential step sections (excluding summary, lint checks, verification failure), and verification failure instructions.
 def _parse_guide_markdown(content: str) -> agent_node_config.NodeGuide:
     lines = content.splitlines()
     preamble_lines: List[str] = []
@@ -77,30 +78,36 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, InTier[AgentSessionTie
         self._current_step: int = 0
         self._primer: Optional[sandbox_guide_delivery.InitialPrimer] = None
 
+    # Contract: GuideDelivery.initialize - obtains configured guide from NodeConfig.guide and sets active step offset to 0.
     def initialize(self) -> None:
         node_cfg = get_singleton(agent_node_config.NodeConfig)
         self._guide = node_cfg.guide
         self._current_step = 0
 
+    # Contract: GuideDelivery.guide - exposes the configured node guide when present.
     @property
     def guide(self) -> Optional[agent_node_config.NodeGuide]:
         return self._guide
 
+    # Contract: GuideDelivery.has_steps_remaining - indicates whether progressive steps remain to be completed.
     @property
     def has_steps_remaining(self) -> bool:
         if self._guide is None:
             return False
         return self._current_step < len(self._guide.sections)
 
+    # Contract: GuideDelivery.parse_guide - parses markdown file content into structured NodeGuide.
     def parse_guide(self, content: agent_file_alias.FileContent) -> agent_node_config.NodeGuide:
         guide = _parse_guide_markdown(str(content))
         self._guide = guide
         self._current_step = 0
         return guide
 
+    # Contract: GuideDelivery.record_initial_primer - records the initial primer as the first instructional content of the session.
     def record_initial_primer(self, primer: sandbox_guide_delivery.InitialPrimer) -> None:
         self._primer = primer
 
+    # Contract: GuideDelivery.advance_step - advances or preserves current milestone based on verification results.
     def advance_step(
         self,
         verification_passed: bool,

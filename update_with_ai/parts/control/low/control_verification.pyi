@@ -53,6 +53,7 @@ class VerificationEvaluator(InTier[AgentSessionTier], Protocol):
         - WHEN check execution produces diagnostic output, MUST sanitize the output by
           removing build progress lines, load banners, and elapsed timing statistics before
           reporting the outcome.
+        - MUST execute verification checks polymorphically, supporting verification objects providing a verify method and command objects declaring a shell command string executed with a bounded timeout.
         - WHEN a configured verification check fails, MUST report a failing verification result.
         - WHEN all configured verification checks succeed, MUST report a passing verification result.
         """

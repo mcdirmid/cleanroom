@@ -29,23 +29,28 @@ class FilePathManager(file_paths.FilePathManager, Singleton):
         pass
 
     def create_host_path(self, path: file_paths.PathString) -> file_paths.HostPath:
+        # Contract: WHEN the supplied path string is empty, MUST raise PathValidationError("Path cannot be empty").
         if not path:
             raise file_paths.PathValidationError(
                 message=file_paths.ValidationMessage(_EMPTY_PATH_MESSAGE)
             )
+        # Contract: MUST encapsulate the supplied path string in the produced host path.
         return file_paths.HostPath(path=file_paths.PathString(path))
 
     def create_absolute_path(self, path: file_paths.PathString) -> file_paths.AbsolutePath:
+        # Contract: WHEN the supplied path string is empty, MUST raise PathValidationError("Path cannot be empty").
         if not path:
             raise file_paths.PathValidationError(
                 message=file_paths.ValidationMessage(_EMPTY_PATH_MESSAGE)
             )
+        # Contract: WHEN the supplied path string is not absolute, MUST raise PathValidationError("Path is not absolute: {path}").
         if not os.path.isabs(path):
             raise file_paths.PathValidationError(
                 message=file_paths.ValidationMessage(
                     _NOT_ABSOLUTE_MESSAGE.format(path=path)
                 )
             )
+        # Contract: MUST encapsulate normalized absolute path in AbsolutePath record.
         return file_paths.AbsolutePath(
             path=file_paths.PathString(os.path.normpath(path))
         )
@@ -53,22 +58,26 @@ class FilePathManager(file_paths.FilePathManager, Singleton):
     def create_workspace_path(
         self, path: file_paths.PathString
     ) -> file_paths.WorkspacePath:
+        # Contract: WHEN the supplied path string is empty, MUST raise PathValidationError("Path cannot be empty").
         if not path:
             raise file_paths.PathValidationError(
                 message=file_paths.ValidationMessage(_EMPTY_PATH_MESSAGE)
             )
+        # Contract: WHEN the supplied path string has leading path separators, MUST raise PathValidationError("Workspace path must be relative, got absolute: {path}").
         if path.startswith(("/", "\\")):
             raise file_paths.PathValidationError(
                 message=file_paths.ValidationMessage(
                     _NOT_RELATIVE_MESSAGE.format(path=path)
                 )
             )
+        # Contract: WHEN the supplied path string is an absolute path string, MUST raise PathValidationError.
         if os.path.isabs(path):
             raise file_paths.PathValidationError(
                 message=file_paths.ValidationMessage(
                     _NOT_RELATIVE_MESSAGE.format(path=path)
                 )
             )
+        # Contract: MUST encapsulate normalized relative workspace path in WorkspacePath record.
         return file_paths.WorkspacePath(
             path=file_paths.PathString(os.path.normpath(path))
         )
@@ -76,6 +85,7 @@ class FilePathManager(file_paths.FilePathManager, Singleton):
     def resolve_path(
         self, root: file_paths.AbsolutePath, relative: file_paths.WorkspacePath
     ) -> file_paths.AbsolutePath:
+        # Contract: MUST produce combined absolute path formed by joining workspace root with relative workspace path.
         combined = os.path.join(root.path, relative.path)
         return file_paths.AbsolutePath(
             path=file_paths.PathString(os.path.normpath(combined))

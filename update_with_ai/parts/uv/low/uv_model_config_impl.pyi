@@ -21,7 +21,7 @@ class AgentConfig(agent_config.AgentConfig, InTier[SystemTier]):
     """Loads agent execution parameters from TOML configuration or environment defaults.
 
     GROUNDING:
-    - Realizes agent_config by loading execution limits, step mode flags, and delta editing options via filesystem_ext.
+    - Realizes agent_config by loading execution limits, step mode flags, and delta editing options via filesystem_ext from TOML configuration discovered hierarchically across candidate filenames and user configuration paths.
     - Resolves the active model configuration name in precedence order from the "--config" command-line argument, the CLEANROOM_MODEL environment variable, the MODEL_CONFIG_TARGET environment variable, and the default entry of the workspace configuration file, and selects the configuration entry named by that resolution as the source of every agent_config.AgentConfig property value realized here.
     """
 
@@ -91,7 +91,7 @@ class DagConfig(dag_config.DagConfig, InTier[SystemTier]):
     """Loads DAG traversal limits from TOML configuration or environment defaults.
 
     GROUNDING:
-    - Realizes dag_config by loading traversal visit bounds and batch size caps via filesystem_ext.
+    - Realizes dag_config by loading traversal visit bounds and batch size caps via filesystem_ext from TOML configuration discovered hierarchically across candidate filenames and user configuration paths.
     - Selects the configuration entry named by the active model configuration name, resolved in precedence order from the "--config" command-line argument, the CLEANROOM_MODEL environment variable, the MODEL_CONFIG_TARGET environment variable, and the default entry of the workspace configuration file, as the source of every dag_config.DagConfig property value realized here.
     """
 
@@ -121,7 +121,7 @@ class OpenAIConfig(openai_config.OpenAIConfig, InTier[SystemTier]):
     """Loads OpenAI connection and hyperparameter settings from TOML configuration or environment variables.
 
     GROUNDING:
-    - Realizes openai_config by extracting API endpoint parameters, timeouts, and authentication keys via filesystem_ext.
+    - Realizes openai_config by extracting API endpoint parameters, timeouts, and authentication keys via filesystem_ext from TOML configuration discovered hierarchically across candidate filenames and user configuration paths.
     - Resolves the active model configuration name in precedence order from the "--config" command-line argument, the CLEANROOM_MODEL environment variable, the MODEL_CONFIG_TARGET environment variable, and the default entry of the workspace configuration file, loading that entry from the declarative TOML configuration file on the host path read with the filesystem_ext Path.read_text operation, and exposes the resolved configuration through openai_config.OpenAIConfig.model_name and the remaining openai_config.OpenAIConfig properties.
     """
 
