@@ -8,20 +8,20 @@
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry
-from . import sandbox_file_editor_impl
-from . import sandbox_file_reader_impl
-from . import sandbox_guide_delivery_impl
-from . import sandbox_run_control_impl
-from . import sandbox_submission_impl
+from . import file_editor_impl
+from . import file_reader_impl
+from . import guide_delivery_impl
+from . import run_control_impl
+from . import submission_impl
 from . import template_format_impl
 from . import tool_provider_impl
 
 CONSTITUENTS = (
-    sandbox_file_editor_impl,
-    sandbox_file_reader_impl,
-    sandbox_guide_delivery_impl,
-    sandbox_run_control_impl,
-    sandbox_submission_impl,
+    file_editor_impl,
+    file_reader_impl,
+    guide_delivery_impl,
+    run_control_impl,
+    submission_impl,
     template_format_impl,
     tool_provider_impl,
 )

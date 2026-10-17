@@ -39,6 +39,6 @@ Accurate accounting of token consumption and live session visibility across auto
 ### Knowledge Requirements
 
 - Agent session lifecycle tier management.
-  - Grounded: [agent_session: [agent_session_tier_provision]]
+  - Grounded: [session: [agent_session_tier_provision]]
 - DeepSeek Harness session storage parsing and desktop sync mechanics.
   - Deferred: Provided by dsh telemetry implementation.

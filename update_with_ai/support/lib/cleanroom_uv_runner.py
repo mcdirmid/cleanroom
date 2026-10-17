@@ -9,7 +9,7 @@ import sys
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
-    from update_with_ai.parts.uv.lib.uv_manifest_loader import UvManifestLoader
+    from update_with_ai.parts.uv.lib.manifest_loader import UvManifestLoader
     from update_with_ai.parts.dag.lib.dag_storage import DagNode
 
 
@@ -36,7 +36,7 @@ _setup_python_path()
 
 from support.lib.lifecycle import get_singleton
 
-uv_cleanroom_asm = None
+cleanroom_asm = None
 import importlib
 _curr = os.path.dirname(os.path.realpath(__file__))
 _repo = os.path.abspath(os.path.join(_curr, "../../.."))
@@ -44,9 +44,9 @@ for entry in os.listdir(_repo):
     if not entry.startswith((".", "bazel-", "venv")):
         if os.path.isdir(os.path.join(_repo, entry, "support", "lib")):
             try:
-                uv_cleanroom_asm = importlib.import_module(f"{entry}.parts.systems.lib.uv_cleanroom_asm")
-                uv_target = importlib.import_module(f"{entry}.parts.uv.lib.uv_target")
-                uv_manifest_loader = importlib.import_module(f"{entry}.parts.uv.lib.uv_manifest_loader")
+                cleanroom_asm = importlib.import_module(f"{entry}.parts.systems.lib.cleanroom_asm")
+                target = importlib.import_module(f"{entry}.parts.uv.lib.target")
+                manifest_loader = importlib.import_module(f"{entry}.parts.uv.lib.manifest_loader")
                 dag_storage = importlib.import_module(f"{entry}.parts.dag.lib.dag_storage")
                 loop = importlib.import_module(f"{entry}.parts.loop.lib.loop")
                 openai_config = importlib.import_module(f"{entry}.parts.openai.lib.openai_config")
@@ -54,24 +54,24 @@ for entry in os.listdir(_repo):
                 break
             except ImportError:
                 pass
-if uv_cleanroom_asm is None:
+if cleanroom_asm is None:
     try:
-        from update_with_ai.parts.systems.lib import uv_cleanroom_asm
-        from update_with_ai.parts.uv.lib import uv_target, uv_manifest_loader
+        from update_with_ai.parts.systems.lib import cleanroom_asm
+        from update_with_ai.parts.uv.lib import target, manifest_loader
         from update_with_ai.parts.dag.lib import dag_storage
         from update_with_ai.parts.loop.lib import loop
         from update_with_ai.parts.openai.lib.openai_config import OpenAIConfig
     except ImportError:
         try:
-            uv_cleanroom_asm = importlib.import_module("parts.systems.lib.uv_cleanroom_asm")
-            uv_target = importlib.import_module("parts.uv.lib.uv_target")
-            uv_manifest_loader = importlib.import_module("parts.uv.lib.uv_manifest_loader")
+            cleanroom_asm = importlib.import_module("parts.systems.lib.cleanroom_asm")
+            target = importlib.import_module("parts.uv.lib.target")
+            manifest_loader = importlib.import_module("parts.uv.lib.manifest_loader")
             dag_storage = importlib.import_module("parts.dag.lib.dag_storage")
             loop = importlib.import_module("parts.loop.lib.loop")
             _openai_cfg_mod = importlib.import_module("parts.openai.lib.openai_config")
             OpenAIConfig = _openai_cfg_mod.OpenAIConfig
         except ImportError:
-            raise ImportError("Failed to locate uv_cleanroom_asm across discovered Cleanroom roots")
+            raise ImportError("Failed to locate cleanroom_asm across discovered Cleanroom roots")
 
 def _compute_role_depths(roles_map: Dict[str, Dict[str, Any]]) -> Dict[str, int]:
     """Ranks roles by dependency depth so that upstream roles precede downstream roles."""
@@ -326,10 +326,10 @@ def run_cleanroom_target(
         else (os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.path.abspath(os.path.join(curr, "../../..")))
     )
 
-    assert uv_cleanroom_asm is not None
-    uv_cleanroom_asm.__initialize__()
+    assert cleanroom_asm is not None
+    cleanroom_asm.__initialize__()
 
-    loader = get_singleton(uv_manifest_loader.UvManifestLoader)
+    loader = get_singleton(manifest_loader.UvManifestLoader)
     storage = get_singleton(dag_storage.DagStorage)
     runner = get_singleton(loop.Loop)
 
@@ -423,8 +423,8 @@ def run_cleanroom_target(
             )
             return 2
     else:
-        target_util = get_singleton(uv_target.UvTarget)
-        node = target_util.normalize_target(uv_target.TargetIdentifier(target_str))
+        target_util = get_singleton(target.UvTarget)
+        node = target_util.normalize_target(target.TargetIdentifier(target_str))
         if not node.role_address:
             # Default role to 'lib' if unspecified
             node = dag_storage.DagNode(

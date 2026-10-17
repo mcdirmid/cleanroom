@@ -14,8 +14,8 @@ def __initialize__() -> None:
 
     CONSTITUENTS:
     - file_paths_impl
-    - uv_manifest_loader_impl
-    - uv_node_config_impl
-    - uv_target_impl
+    - manifest_loader_impl
+    - node_config_impl
+    - target_impl
     """
     ...

@@ -8,9 +8,9 @@ SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
 
 # uv_asm assembly component
 
-assembles: file_paths_impl, uv_manifest_loader_impl, uv_node_config_impl, uv_target_impl
-imports: agent_config, filesystem_ext, src_metadata_ext, tool_provider, uv_manifest_ext, uv_target_labels_ext
-implements: agent_file_alias, agent_node_config, file_paths, uv_manifest_loader, uv_target
+assembles: file_paths_impl, manifest_loader_impl, node_config_impl, target_impl
+imports: agent_config, filesystem_ext, src_metadata_ext, tool_provider, manifest_ext, target_labels_ext
+implements: file_alias, node_config, file_paths, manifest_loader, target
 
 ## Purpose
 

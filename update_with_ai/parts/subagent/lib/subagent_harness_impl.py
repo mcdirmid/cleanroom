@@ -25,8 +25,8 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
-from update_with_ai.parts.agent.lib import agent_session
-from update_with_ai.parts.tools.lib import workspace_work
+from update_with_ai.parts.agent.lib import session as agent_session
+from update_with_ai.parts.workspace_cli.lib import work
 from . import subagent_coordinator, subagent_harness
 
 
@@ -169,7 +169,7 @@ class CommandHarnessAdapter(
         self._task_counter += 1
         handle = f"task_{dispatch.role_name}_{self._task_counter}_{int(time.time())}"
 
-        work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
+        work_mgr = get_singleton(work.WorkspaceWorkManager)
         pre_pending = list(work_mgr.get_pending_work(dispatch.workspace_dir))
         if not pre_pending:
             pre_pending = list(dispatch.ready_targets)
@@ -276,7 +276,7 @@ class CommandHarnessAdapter(
         if blamed and status != "failed":
             status = "blamed"
 
-        work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
+        work_mgr = get_singleton(work.WorkspaceWorkManager)
         post_pending = set(work_mgr.get_pending_work(task.dispatch.workspace_dir))
         submitted = [t for t in task.pre_pending if t not in post_pending]
 

@@ -13,10 +13,10 @@ def __initialize__() -> None:
     """Initializes the control assembly component.
 
     CONSTITUENTS:
-    - control_attribution_impl
-    - control_coordinate_impl
-    - control_submit_impl
-    - control_verification_impl
-    - control_work_scheduler_impl
+    - attribution_impl
+    - coordinate_impl
+    - submit_impl
+    - verification_impl
+    - work_scheduler_impl
     """
     ...

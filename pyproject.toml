@@ -50,7 +50,7 @@ pythonpath = [
     "update_python_with_ai",
 ]
 python_files = ["*_test.py", "test_*.py"]
-addopts = ["--ignore=update_with_ai/parts/sandbox/tests/sandbox_run_control_impl_test.py"]
+addopts = []
 
 [tool.pyright]
 exclude = [

@@ -8,8 +8,8 @@
 from __future__ import annotations
 from typing import Any, Callable, Mapping, NewType, Optional, Protocol, Sequence, Set, Tuple, cast
 from dataclasses import dataclass
-from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
-import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+import update_with_ai.parts.agent.lib.file_alias as file_alias
 
 # Requirements specified in tool_provider.pyi
 
@@ -117,16 +117,16 @@ class MappingParameterType[KeyActualT, ValActualT, ValWireT](ParameterType[Mappi
 
 
 # Contract: AliasManagerType protocol - adapts session alias manager to provide file alias parameter conversion.
-class AliasManagerType(ParameterType[agent_file_alias.FileAlias, str], Protocol):
+class AliasManagerType(ParameterType[file_alias.FileAlias, str], Protocol):
     @property
-    def actual_type(self) -> type[agent_file_alias.FileAlias]:
+    def actual_type(self) -> type[file_alias.FileAlias]:
         ...
 
     @property
     def wire_type(self) -> type[str]:
         ...
 
-    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+    def convert(self, wire_value: str) -> file_alias.FileAlias:
         ...
 
 

@@ -19,13 +19,13 @@ from typing import Any, Optional
 import unittest
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
-from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.subagent.lib import (
     subagent_coordinator,
     subagent_harness,
     subagent_harness_impl,
 )
-from update_with_ai.parts.tools.lib import workspace_work
+from update_with_ai.parts.workspace_cli.lib import work
 
 
 class FakeWorkspaceWorkManager:
@@ -63,7 +63,7 @@ class SubagentHarnessImplTest(unittest.TestCase):
         self.work_mgr = FakeWorkspaceWorkManager()
         self.registry.register_instance(
             self.work_mgr,
-            keys=[workspace_work.WorkspaceWorkManager],
+            keys=[work.WorkspaceWorkManager],
             tier=agent_session.agent_session,
         )
 

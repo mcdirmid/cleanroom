@@ -38,6 +38,6 @@ Autonomous agents operating within shared project environments can inadvertently
 ### Knowledge Requirements
 
 - Agent session lifecycle tier management.
-  - Grounded: [agent_session: [agent_session_tier_provision]]
+  - Grounded: [session: [agent_session_tier_provision]]
 - Workspace isolation rule writing and confinement reporting logic.
   - Deferred: Realized by the antigravity workspace implementation component.

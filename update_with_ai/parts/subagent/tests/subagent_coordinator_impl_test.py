@@ -18,17 +18,17 @@ import unittest
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
-from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.subagent.lib import subagent_coordinator
 from update_with_ai.parts.subagent.lib.subagent_coordinator_impl import (
     SubagentCoordinator,
     __initialize__,
     _resolve_model_parameters,
 )
-from update_with_ai.parts.tools.lib import workspace_work
+from update_with_ai.parts.workspace_cli.lib import work
 from update_with_ai.parts.workspace.lib import (
-    workspace_provision,
-    workspace_registry,
+    provision,
+    role_registry,
 )
 
 
@@ -46,17 +46,17 @@ class FakeWorkspaceProvisioner:
         dir_scope: str,
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
-    ) -> workspace_registry.WorkspaceDescriptor:
+    ) -> role_registry.WorkspaceDescriptor:
         self.commissioned.append((role_name, dir_scope))
         ws_dir = custom_dest or f"/repo/cleanroom/.workspaces/{role_name}_{dir_scope}"
-        r_def = workspace_registry.RoleDefinition(
+        r_def = role_registry.RoleDefinition(
             role_name=role_name,
             guide_path=f"guides/{role_name}.md",
             writable_file_patterns=[],
             readonly_file_patterns=[],
             feedback_role_deps=[],
         )
-        return workspace_registry.WorkspaceDescriptor(
+        return role_registry.WorkspaceDescriptor(
             workspace_dir=ws_dir,
             main_repository_root="/repo/cleanroom",
             role_definition=r_def,
@@ -69,7 +69,7 @@ class FakeWorkspaceRegistry:
 
     tier = agent_session.agent_session
 
-    def __init__(self, roles: Sequence[workspace_registry.RoleDefinition], base_dir: Optional[str] = None) -> None:
+    def __init__(self, roles: Sequence[role_registry.RoleDefinition], base_dir: Optional[str] = None) -> None:
         self.roles = list(roles)
         self.role_map = {r.role_name: r for r in self.roles}
         self.base_dir = base_dir
@@ -82,7 +82,7 @@ class FakeWorkspaceRegistry:
         role_name_or_address: str,
         repo_root: Optional[str] = None,
         dir_scope: Optional[str] = None,
-    ) -> workspace_registry.RoleDefinition:
+    ) -> role_registry.RoleDefinition:
         clean = role_name_or_address.split(":")[-1].strip().lower()
         if clean in self.role_map:
             return self.role_map[clean]
@@ -92,7 +92,7 @@ class FakeWorkspaceRegistry:
         self,
         repo_root: Optional[str] = None,
         dir_scope: Optional[str] = None,
-    ) -> Sequence[workspace_registry.RoleDefinition]:
+    ) -> Sequence[role_registry.RoleDefinition]:
         return list(self.roles)
 
     def compute_workspace_dir(
@@ -108,13 +108,13 @@ class FakeWorkspaceRegistry:
             return os.path.join(self.base_dir, f"{role_name}_{dir_scope}")
         return f"/repo/cleanroom/.workspaces/{role_name}_{dir_scope}"
 
-    def record_workspace(self, descriptor: workspace_registry.WorkspaceDescriptor, repo_root: Optional[str] = None) -> None:
+    def record_workspace(self, descriptor: role_registry.WorkspaceDescriptor, repo_root: Optional[str] = None) -> None:
         pass
 
     def unregister_workspace(self, workspace_dir: str, repo_root: Optional[str] = None) -> bool:
         return True
 
-    def load_active_workspaces(self, repo_root: Optional[str] = None) -> Sequence[workspace_registry.WorkspaceDescriptor]:
+    def load_active_workspaces(self, repo_root: Optional[str] = None) -> Sequence[role_registry.WorkspaceDescriptor]:
         return ()
 
 
@@ -125,7 +125,7 @@ class FakeWorkspaceWorkManager:
 
     def __init__(
         self,
-        queue_data: Optional[Dict[str, Tuple[Sequence[workspace_work.WorkQueueItem], Sequence[workspace_work.WorkQueueItem]]]] = None,
+        queue_data: Optional[Dict[str, Tuple[Sequence[work.WorkQueueItem], Sequence[work.WorkQueueItem]]]] = None,
     ) -> None:
         self.queue_data = queue_data or {}
         self.pending: Dict[str, List[str]] = {}
@@ -135,7 +135,7 @@ class FakeWorkspaceWorkManager:
         role_name: str,
         dir_scope: str,
         repo_root: str,
-    ) -> Tuple[Sequence[workspace_work.WorkQueueItem], Sequence[workspace_work.WorkQueueItem]]:
+    ) -> Tuple[Sequence[work.WorkQueueItem], Sequence[work.WorkQueueItem]]:
         return self.queue_data.get(role_name, ((), ()))
 
     def get_pending_work(self, workspace_dir: str) -> Sequence[str]:
@@ -185,8 +185,8 @@ class FakeHarnessAdapter:
         self.interrupted.append(task_handle)
 
 
-def _make_item(target_file: str, role_name: str, is_ready: bool = True) -> workspace_work.WorkQueueItem:
-    return workspace_work.WorkQueueItem(
+def _make_item(target_file: str, role_name: str, is_ready: bool = True) -> work.WorkQueueItem:
+    return work.WorkQueueItem(
         target_file=target_file,
         role_name=role_name,
         dirtiness_reasons=("modified",),
@@ -207,11 +207,11 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         self.fake_provisioner = FakeWorkspaceProvisioner()
         self.registry.register_instance(
             self.fake_provisioner,
-            keys=[workspace_provision.WorkspaceProvisioner],
+            keys=[provision.WorkspaceProvisioner],
             tier=agent_session.agent_session,
         )
 
-        self.spec_role_high = workspace_registry.RoleDefinition(
+        self.spec_role_high = role_registry.RoleDefinition(
             role_name="high",
             guide_path="guides/high.md",
             writable_file_patterns=["high/*.md"],
@@ -222,7 +222,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             stub_role_deps=[],
             src_pattern="{unit_dir}/high/{unit_name}.md",
         )
-        self.spec_role_low = workspace_registry.RoleDefinition(
+        self.spec_role_low = role_registry.RoleDefinition(
             role_name="low",
             guide_path="guides/low.md",
             writable_file_patterns=["low/*.pyi"],
@@ -233,7 +233,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             stub_role_deps=[],
             src_pattern="{unit_dir}/low/{unit_name}.pyi",
         )
-        self.impl_role_lib = workspace_registry.RoleDefinition(
+        self.impl_role_lib = role_registry.RoleDefinition(
             role_name="lib",
             guide_path="guides/lib.md",
             writable_file_patterns=["lib/*.py"],
@@ -244,7 +244,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             stub_role_deps=["low"],
             src_pattern="{unit_dir}/lib/{unit_name}.py",
         )
-        self.impl_role_test = workspace_registry.RoleDefinition(
+        self.impl_role_test = role_registry.RoleDefinition(
             role_name="test",
             guide_path="guides/test.md",
             writable_file_patterns=["tests/*.py"],
@@ -268,8 +268,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             "high": (([_make_item("high/unit.md", "high")], ())),
             "low": (((), ([_make_item("low/unit.pyi", "low", is_ready=False)]))),
         })
-        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
@@ -289,8 +289,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             "high": (([_make_item("high/unit.md", "high")], ())),
             "low": (([_make_item("low/unit.pyi", "low")], ())),
         })
-        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
@@ -310,8 +310,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             "lib": (([_make_item("lib/unit.py", "lib")], ())),
             "test": (([_make_item("tests/unit_test.py", "test")], ())),
         })
-        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
@@ -327,8 +327,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         fake_work = FakeWorkspaceWorkManager({
             "lib": (([_make_item("lib/unit.py", "lib")], ())),
         })
-        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         class ConvergenceHarness(FakeHarnessAdapter):
             def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
@@ -361,8 +361,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             "high": (([_make_item("high/unit.md", "high")], ())),
             "low": (([_make_item("low/unit.pyi", "low")], ())),
         })
-        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         harness = FakeHarnessAdapter({
             "handle_high": subagent_coordinator.RoleTurnResult(
@@ -386,8 +386,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             "lib": (([_make_item("lib/unit.py", "lib")], ())),
             "test": (([_make_item("tests/unit_test.py", "test")], ())),
         })
-        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         class AggregationHarness(FakeHarnessAdapter):
             def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
@@ -420,13 +420,13 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.assertAlmostEqual(summary.total_telemetry.cost_usd, 0.045)
 
     def test_auto_commissioning_absent_role_workspaces_before_dispatch(self) -> None:
-        """Scenario 7: Commissions absent role workspace via workspace_provision before dispatch."""
+        """Scenario 7: Commissions absent role workspace via provision before dispatch."""
         fake_reg = FakeWorkspaceRegistry([self.spec_role_high])
         fake_work = FakeWorkspaceWorkManager({
             "high": (([_make_item("high/unit.md", "high")], ())),
         })
-        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
@@ -448,8 +448,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             "lib": (([_make_item("lib/unit.py", "lib")], ())),
             "test": (([_make_item("tests/unit_test.py", "test")], ())),
         })
-        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
@@ -475,8 +475,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             fake_work = FakeWorkspaceWorkManager({
                 "high": ((), ()),
             })
-            self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-            self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+            self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+            self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
             harness = FakeHarnessAdapter({})
 
@@ -497,8 +497,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             fake_work = FakeWorkspaceWorkManager({
                 "high": (([_make_item("high/unit.md", "high")], ())),
             })
-            self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-            self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+            self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+            self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
             class CleanupHarness(FakeHarnessAdapter):
                 def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
@@ -528,8 +528,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         fake_work = FakeWorkspaceWorkManager({
             "high": (([_make_item("high/unit.md", "high")], ())),
         })
-        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         poll_calls = 0
 
@@ -561,8 +561,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         fake_work = FakeWorkspaceWorkManager({
             "high": (([_make_item("high/unit.md", "high")], ())),
         })
-        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         class UnproductiveHarness(FakeHarnessAdapter):
             def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
@@ -593,8 +593,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         fake_work = FakeWorkspaceWorkManager({
             "high": (([_make_item("high/unit.md", "high")], ())),
         })
-        self.registry.register_instance(fake_reg, keys=[workspace_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(fake_work, keys=[workspace_work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         class UnproductiveHarness(FakeHarnessAdapter):
             def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:

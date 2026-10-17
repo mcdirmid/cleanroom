@@ -11,7 +11,7 @@
 from typing import Any, Mapping, NewType, Protocol
 from framework import operation, singleton_type
 from support.lib.lifecycle import InTier
-from agent_session import AgentSessionTier
+from session import AgentSessionTier
 
 TemplateText = NewType("TemplateText", str)
 TemplateKey = NewType("TemplateKey", str)

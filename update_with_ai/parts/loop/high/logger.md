@@ -1,0 +1,23 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Introduce runner logger as a named service and declare its system lifecycle tier
+CODE_HASH: c2968b6f7d4c
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->
+
+# logger interface component
+
+## Purpose
+
+The logger interface component captures observable execution events during runner passes, providing concise terminal output and unbuffered audit transcripts.
+
+Running multi-turn agent passes without observable logging hides failures and complicates debugging. The logger interface component consumes structured execution events across the system, formatting compact single-line summaries for live operator visibility while recording detailed unbuffered transcripts to disk for auditing and replay.
+
+**Out of scope:** The logger interface component does not orchestrate agent turn loops, format model request payloads, or evaluate build graph state; these are handled by other components.
+
+## Types and Behavior
+
+A *runner log event* is a record of an observable execution event that provides an *event name*, a single-line *summary*, and a verbose *transcript representation*.
+
+A system's *runner logger* consumes runner log events, writing compact single-line summaries to standard output and full verbose records to a transcript log file.

@@ -8,9 +8,9 @@ SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
 
 # control_asm assembly component
 
-assembles: control_attribution_impl, control_coordinate_impl, control_submit_impl, control_verification_impl, control_work_scheduler_impl
-imports: agent_config, agent_file_alias, agent_node_config, agent_session, dag_storage, dag_subgraph, src_metadata
-implements: control_attribution, control_coordinate, control_submit, control_verification, control_work_scheduler
+assembles: attribution_impl, coordinate_impl, submit_impl, verification_impl, work_scheduler_impl
+imports: agent_config, file_alias, node_config, session, dag_storage, subgraph, src_metadata
+implements: attribution, coordinate, submit, verification, work_scheduler
 
 ## Purpose
 

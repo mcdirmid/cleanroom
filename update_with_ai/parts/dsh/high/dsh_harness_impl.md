@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # dsh_harness_impl implementation component
 
-imports: agent_session, dsh_ext, dsh_telemetry, subagent_coordinator, subagent_harness, workspace_work
+imports: session, dsh_ext, dsh_telemetry, subagent_coordinator, subagent_harness, work
 implements: dsh_harness
 
 ## Purpose
@@ -19,7 +19,7 @@ Operating DeepSeek Harness within Cleanroom requires concrete process dispatch v
 
 **Out of scope:** The dsh_harness_impl implementation component does not partition topological waves or evaluate DAG dirtiness; these are handled by other components.
 
-**Delegated:** Session lifecycle scoping is delegated to agent_session; platform conventions are delegated to dsh_ext; harness adapter protocols and turn outcome types are delegated to subagent_coordinator; workspace work queue querying is delegated to workspace_work; token telemetry extraction and desktop session synchronization are delegated to dsh_telemetry; platform harness registration is delegated to subagent_harness.
+**Delegated:** Session lifecycle scoping is delegated to agent_session; platform conventions are delegated to dsh_ext; harness adapter protocols and turn outcome types are delegated to subagent_coordinator; workspace work queue querying is delegated to work; token telemetry extraction and desktop session synchronization are delegated to dsh_telemetry; platform harness registration is delegated to subagent_harness.
 
 ## Types and Behavior
 

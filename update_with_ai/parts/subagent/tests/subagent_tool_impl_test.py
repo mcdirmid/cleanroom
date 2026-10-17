@@ -15,7 +15,7 @@ import unittest
 from typing import Optional
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
-from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.subagent.lib import (
     subagent_coordinator,
     subagent_harness,

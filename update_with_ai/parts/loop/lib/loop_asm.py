@@ -8,12 +8,12 @@
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry
-from . import loop_guard_impl
-from . import loop_node_cleaner_impl
+from . import guard_impl
+from . import node_cleaner_impl
 
 CONSTITUENTS = (
-    loop_guard_impl,
-    loop_node_cleaner_impl,
+    guard_impl,
+    node_cleaner_impl,
 )
 
 # Contract: Aggregates loop guard repetition tracking, subgraph iteration, and node cleaning orchestration into the loop subsystem assembly.

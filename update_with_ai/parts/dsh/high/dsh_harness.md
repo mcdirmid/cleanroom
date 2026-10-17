@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # dsh_harness interface component
 
-imports: agent_session, dsh_telemetry, subagent_coordinator, subagent_harness
+imports: session, dsh_telemetry, subagent_coordinator, subagent_harness
 
 ## Purpose
 

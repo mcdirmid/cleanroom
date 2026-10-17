@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
 from framework import data_type, operation, singleton_type
 from support.lib.lifecycle import InTier
-from agent_session import AgentSessionTier
+from session import AgentSessionTier
 import subagent_coordinator
 
 

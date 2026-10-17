@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # subagent_tool_impl implementation component
 
-imports: agent_session, subagent_coordinator, subagent_harness, subagent_tool
+imports: session, subagent_coordinator, subagent_harness, subagent_tool
 implements: subagent_tool
 
 ## Purpose

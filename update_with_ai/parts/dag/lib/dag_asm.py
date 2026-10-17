@@ -8,11 +8,11 @@
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry, get_default_registry
-from . import dag_subgraph_impl
+from . import subgraph_impl
 
 # Contract: Declared constituents forming the dag subsystem assembly.
 CONSTITUENTS = (
-    dag_subgraph_impl,
+    subgraph_impl,
 )
 
 

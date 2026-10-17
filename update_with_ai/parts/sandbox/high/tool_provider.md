@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # tool_provider interface component
 
-imports: agent_session, agent_file_alias
+imports: session, file_alias
 
 ## Purpose
 

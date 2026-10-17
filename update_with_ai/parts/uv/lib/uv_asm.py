@@ -9,15 +9,15 @@ from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry, get_default_registry
 from update_with_ai.parts.core.lib import file_paths_impl
-from . import uv_manifest_loader_impl
-from . import uv_node_config_impl
-from . import uv_target_impl
+from . import manifest_loader_impl
+from . import node_config_impl
+from . import target_impl
 
 CONSTITUENTS = (
     file_paths_impl,
-    uv_manifest_loader_impl,
-    uv_node_config_impl,
-    uv_target_impl,
+    manifest_loader_impl,
+    node_config_impl,
+    target_impl,
 )
 
 

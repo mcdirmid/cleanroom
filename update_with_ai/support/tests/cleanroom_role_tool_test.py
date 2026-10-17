@@ -20,13 +20,13 @@ for _p in [
     if _p not in sys.path and os.path.isdir(_p):
         sys.path.insert(0, _p)
 
-from update_with_ai.parts.storage.lib import src_metadata
-from update_with_ai.parts.workspace.lib import workspace_provision_impl
+from update_with_ai.parts.metadata.lib import src_metadata
+from update_with_ai.parts.workspace.lib import provision_impl
 from update_with_ai.support.lib import cleanroom_role_tool
 
 
 def commission_workspace(role_name: str, dir_scope: str = "staging", repo_root: str | None = None) -> str:
-    prov = workspace_provision_impl.WorkspaceProvisioner()
+    prov = provision_impl.WorkspaceProvisioner()
     desc = prov.commission(role_name, dir_scope, repo_root=repo_root)
     return desc.workspace_dir
 
@@ -39,17 +39,17 @@ class CleanroomRoleToolTest(unittest.TestCase):
     def setUp(self) -> None:
         from update_with_ai.parts.workspace.lib import workspace_asm
         from support.lib.lifecycle import enter_phase
-        from update_with_ai.parts.agent.lib import agent_session
+        from update_with_ai.parts.agent.lib import session as agent_session
 
         from update_with_ai.parts.control.lib import control_asm
         from update_with_ai.parts.core.lib import file_paths_impl
-        from update_with_ai.parts.storage.lib import storage_asm
-        from update_with_ai.parts.tools.lib import tools_asm
+        from update_with_ai.parts.metadata.lib import metadata_asm
+        from update_with_ai.parts.workspace_cli.lib import workspace_cli_asm
         file_paths_impl.__initialize__()
         workspace_asm.__initialize__()
         control_asm.__initialize__()
-        storage_asm.__initialize__()
-        tools_asm.__initialize__()
+        metadata_asm.__initialize__()
+        workspace_cli_asm.__initialize__()
         self.phase_cm = enter_phase(agent_session.agent_session)
         self.phase_cm.__enter__()
 
@@ -679,8 +679,8 @@ class CleanroomRoleToolTest(unittest.TestCase):
 
     def test_work_queue_auto_commissions_missing_workspaces(self) -> None:
         """Verifies that work-queue auto-commissions missing role workspaces up to target_role."""
-        from update_with_ai.parts.workspace.lib import workspace_registry_impl
-        reg = workspace_registry_impl.WorkspaceRegistry()
+        from update_with_ai.parts.workspace.lib import role_registry_impl
+        reg = role_registry_impl.WorkspaceRegistry()
         high_ws = reg.compute_workspace_dir("high", dir_scope="staging", repo_root=self.fake_repo)
         low_ws = reg.compute_workspace_dir("low", dir_scope="staging", repo_root=self.fake_repo)
         if os.path.isdir(high_ws):
@@ -709,8 +709,8 @@ class CleanroomRoleToolTest(unittest.TestCase):
 
     def test_orchestrate_preflight_auto_commissions(self) -> None:
         """Verifies that orchestrate pre-flight commissions workspaces when dirty and decommissions when clean."""
-        from update_with_ai.parts.workspace.lib import workspace_registry_impl
-        reg = workspace_registry_impl.WorkspaceRegistry()
+        from update_with_ai.parts.workspace.lib import role_registry_impl
+        reg = role_registry_impl.WorkspaceRegistry()
         plan_ws = reg.compute_workspace_dir("planning", dir_scope="staging", repo_root=self.fake_repo)
         if os.path.isdir(plan_ws):
             shutil.rmtree(plan_ws, ignore_errors=True)
@@ -782,7 +782,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         # 3. Calling --loop on target invokes loop cleaner (mocked)
         from unittest.mock import patch, MagicMock
         mock_res = MagicMock(success=True, summary="Mock cleaning succeeded")
-        with patch("update_with_ai.parts.uv.lib.uv_loop_impl.Loop.clean_subgraph", return_value=mock_res):
+        with patch("update_with_ai.parts.uv.lib.loop_impl.Loop.clean_subgraph", return_value=mock_res):
             ret_loop = cleanroom_role_tool.main([
                 rel_path, "--loop", "--workspace-dir", self.fake_repo
             ])
@@ -847,8 +847,8 @@ class CleanroomRoleToolTest(unittest.TestCase):
             "--repo-root", self.fake_repo,
         ])
         self.assertEqual(ret, 0)
-        from update_with_ai.parts.workspace.lib import workspace_registry_impl
-        reg = workspace_registry_impl.WorkspaceRegistry()
+        from update_with_ai.parts.workspace.lib import role_registry_impl
+        reg = role_registry_impl.WorkspaceRegistry()
         lib_ws = reg.compute_workspace_dir("lib", "staging", repo_root=self.fake_repo)
         self.assertTrue(os.path.isdir(lib_ws))
 
@@ -879,8 +879,8 @@ class CleanroomRoleToolTest(unittest.TestCase):
             "--repo-root", self.fake_repo,
         ])
         self.assertEqual(ret_comm, 0)
-        from update_with_ai.parts.workspace.lib import workspace_registry_impl
-        reg = workspace_registry_impl.WorkspaceRegistry()
+        from update_with_ai.parts.workspace.lib import role_registry_impl
+        reg = role_registry_impl.WorkspaceRegistry()
         lib_ws = reg.compute_workspace_dir("lib", "staging", repo_root=self.fake_repo)
         self.assertTrue(os.path.isdir(lib_ws))
 
@@ -901,8 +901,8 @@ class CleanroomRoleToolTest(unittest.TestCase):
 
     def test_unit_label_target_syntax_across_subcommands(self) -> None:
         """Verifies //scope/parts/unit:target#role and path#role work across commission, work-queue, decommission."""
-        from update_with_ai.parts.workspace.lib import workspace_registry_impl
-        reg = workspace_registry_impl.WorkspaceRegistry()
+        from update_with_ai.parts.workspace.lib import role_registry_impl
+        reg = role_registry_impl.WorkspaceRegistry()
         lib_ws = reg.compute_workspace_dir("lib", "staging", repo_root=self.fake_repo)
 
         # 1. Commission via canonical DAG label //staging/parts/agent:config#lib
@@ -974,8 +974,8 @@ class CleanroomRoleToolTest(unittest.TestCase):
             "--repo-root", self.fake_repo,
         ])
         self.assertEqual(ret_ag, 0)
-        from update_with_ai.parts.workspace.lib import workspace_registry_impl
-        reg = workspace_registry_impl.WorkspaceRegistry()
+        from update_with_ai.parts.workspace.lib import role_registry_impl
+        reg = role_registry_impl.WorkspaceRegistry()
         lib_ws = reg.compute_workspace_dir("lib", "staging", repo_root=self.fake_repo)
         self.assertTrue(os.path.isdir(lib_ws))
 

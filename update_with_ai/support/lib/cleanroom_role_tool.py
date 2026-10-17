@@ -71,9 +71,9 @@ for _r in _get_roots():
     except OSError:
         pass
 
-workspace_tool_impl = None
-workspace_commands_impl = None
-workspace_pending_impl = None
+cli_tool_impl = None
+commands_impl = None
+pending_impl = None
 
 for _r in _get_roots():
     if not os.path.isdir(_r):
@@ -84,69 +84,69 @@ for _r in _get_roots():
                 continue
             if not _entry.startswith((".", "bazel-", "venv")):
                 for _sub in ("tools", "workspace"):
-                    if workspace_tool_impl is None:
-                        _cand_tool = os.path.join(_r, _entry, "parts", _sub, "lib", "workspace_tool_impl.py")
+                    if cli_tool_impl is None:
+                        _cand_tool = os.path.join(_r, _entry, "parts", _sub, "lib", "cli_tool_impl.py")
                         if os.path.isfile(_cand_tool) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
                             try:
-                                workspace_tool_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.workspace_tool_impl")
+                                cli_tool_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.cli_tool_impl")
                             except ImportError:
                                 pass
-                    if workspace_commands_impl is None:
-                        _cand_cmds = os.path.join(_r, _entry, "parts", _sub, "lib", "workspace_commands_impl.py")
+                    if commands_impl is None:
+                        _cand_cmds = os.path.join(_r, _entry, "parts", _sub, "lib", "commands_impl.py")
                         if os.path.isfile(_cand_cmds) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
                             try:
-                                workspace_commands_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.workspace_commands_impl")
+                                commands_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.commands_impl")
                             except ImportError:
                                 pass
-                    if workspace_pending_impl is None:
-                        _cand_pend = os.path.join(_r, _entry, "parts", _sub, "lib", "workspace_pending_impl.py")
+                    if pending_impl is None:
+                        _cand_pend = os.path.join(_r, _entry, "parts", _sub, "lib", "pending_impl.py")
                         if os.path.isfile(_cand_pend) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
                             try:
-                                workspace_pending_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.workspace_pending_impl")
+                                pending_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.pending_impl")
                             except ImportError:
                                 pass
-                if workspace_tool_impl is not None and workspace_commands_impl is not None and workspace_pending_impl is not None:
+                if cli_tool_impl is not None and commands_impl is not None and pending_impl is not None:
                     break
     except OSError:
         pass
-    if workspace_tool_impl is not None and workspace_commands_impl is not None and workspace_pending_impl is not None:
+    if cli_tool_impl is not None and commands_impl is not None and pending_impl is not None:
         break
 
-if workspace_tool_impl is None:
+if cli_tool_impl is None:
     try:
-        from update_with_ai.parts.tools.lib import workspace_tool_impl
+        from update_with_ai.parts.workspace_cli.lib import cli_tool_impl
     except ImportError:
         try:
-            workspace_tool_impl = importlib.import_module("update_with_ai.parts.workspace.lib.workspace_tool_impl")
+            cli_tool_impl = importlib.import_module("update_with_ai.parts.workspace.lib.cli_tool_impl")
         except ImportError:
             try:
-                workspace_tool_impl = importlib.import_module("parts.tools.lib.workspace_tool_impl")
+                cli_tool_impl = importlib.import_module("parts.workspace_cli.lib.cli_tool_impl")
             except ImportError:
                 try:
-                    workspace_tool_impl = importlib.import_module("parts.workspace.lib.workspace_tool_impl")
+                    cli_tool_impl = importlib.import_module("parts.workspace.lib.cli_tool_impl")
                 except ImportError:
                     pass
 
-if workspace_commands_impl is None:
+if commands_impl is None:
     try:
-        from update_with_ai.parts.tools.lib import workspace_commands_impl
+        from update_with_ai.parts.workspace_cli.lib import commands_impl
     except ImportError:
         try:
-            workspace_commands_impl = importlib.import_module("parts.tools.lib.workspace_commands_impl")
+            commands_impl = importlib.import_module("parts.workspace_cli.lib.commands_impl")
         except ImportError:
             pass
 
-if workspace_pending_impl is None:
+if pending_impl is None:
     try:
-        from update_with_ai.parts.tools.lib import workspace_pending_impl
+        from update_with_ai.parts.workspace_cli.lib import pending_impl
     except ImportError:
         try:
-            workspace_pending_impl = importlib.import_module("parts.tools.lib.workspace_pending_impl")
+            pending_impl = importlib.import_module("parts.workspace_cli.lib.pending_impl")
         except ImportError:
             pass
 
-if workspace_tool_impl is None:
-    raise ImportError("Failed to locate workspace_tool_impl module across discovered Cleanroom roots")
+if cli_tool_impl is None:
+    raise ImportError("Failed to locate cli_tool_impl module across discovered Cleanroom roots")
 
 cleanroom_uv_runner = None
 try:
@@ -160,9 +160,9 @@ except ImportError:
         except ImportError:
             pass
 
-AUDIT_BUFFER_FILE = getattr(workspace_commands_impl, "AUDIT_BUFFER_FILE", ".cleanroom_audit_buffer.json")
-BLAME_BUFFER_FILE = getattr(workspace_commands_impl, "BLAME_BUFFER_FILE", ".cleanroom_blame_buffer.json")
-PENDING_WORK_FILE = getattr(workspace_commands_impl, "PENDING_WORK_FILE", ".cleanroom_pending_work.json")
+AUDIT_BUFFER_FILE = getattr(commands_impl, "AUDIT_BUFFER_FILE", ".cleanroom_audit_buffer.json")
+BLAME_BUFFER_FILE = getattr(commands_impl, "BLAME_BUFFER_FILE", ".cleanroom_blame_buffer.json")
+PENDING_WORK_FILE = getattr(commands_impl, "PENDING_WORK_FILE", ".cleanroom_pending_work.json")
 
 
 def write_file_with_perms(
@@ -186,8 +186,8 @@ def write_file_with_perms(
 
 def copy_file_with_perms(src: str, dst: str, readonly: bool = False, executable: bool = False) -> None:
     from support.lib.lifecycle import get_singleton
-    from update_with_ai.parts.workspace.lib import workspace_provision
-    get_singleton(workspace_provision.WorkspaceProvisioner).copy_file_with_permissions(
+    from update_with_ai.parts.workspace.lib import provision
+    get_singleton(provision.WorkspaceProvisioner).copy_file_with_permissions(
         src, dst, readonly=readonly, executable=executable
     )
 
@@ -195,8 +195,8 @@ def copy_file_with_perms(src: str, dst: str, readonly: bool = False, executable:
 def compute_role_work_queue(role_name: str, dir_scope: str, repo_root: str | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     root = repo_root or find_workspace_root()
     from support.lib.lifecycle import get_singleton
-    from update_with_ai.parts.tools.lib import workspace_work
-    work = get_singleton(workspace_work.WorkspaceWorkManager)
+    from update_with_ai.parts.workspace_cli.lib import work
+    work = get_singleton(work.WorkspaceWorkManager)
     ready, blocked = work.compute_role_work_queue(role_name, dir_scope=dir_scope, repo_root=root)
 
     def _to_dict(it: Any) -> dict[str, Any]:
@@ -221,38 +221,38 @@ def compute_role_work_queue(role_name: str, dir_scope: str, repo_root: str | Non
 
 
 def find_workspace_root() -> str:
-    assert workspace_commands_impl is not None
-    return workspace_commands_impl.find_workspace_root()
+    assert commands_impl is not None
+    return commands_impl.find_workspace_root()
 
 
 def get_current_role_metadata(workspace_dir: str | None = None) -> dict[str, Any]:
-    assert workspace_commands_impl is not None
-    return workspace_commands_impl.get_current_role_metadata() or {}
+    assert commands_impl is not None
+    return commands_impl.get_current_role_metadata() or {}
 
 
 def is_auditor_role(role_name: str, repo_root: str | None = None, dir_scope: str | None = None) -> bool:
     clean_r = role_name.split(":")[-1].strip().lower()
     from support.lib.lifecycle import get_singleton
-    from update_with_ai.parts.workspace.lib import workspace_registry
-    reg = get_singleton(workspace_registry.WorkspaceRegistry)
+    from update_with_ai.parts.workspace.lib import role_registry
+    reg = get_singleton(role_registry.WorkspaceRegistry)
     r_def = reg.resolve_role_definition(clean_r, repo_root=repo_root)
     return bool(r_def.audit_tag or not r_def.src_pattern)
 
 
 def resolve_cleanroom_log_path(role_name: str, repo_root: str | None = None, dir_scope: str | None = None) -> str:
-    assert workspace_commands_impl is not None
-    return workspace_commands_impl.resolve_cleanroom_log_path(role_name, repo_root=repo_root)
+    assert commands_impl is not None
+    return commands_impl.resolve_cleanroom_log_path(role_name, repo_root=repo_root)
 
 
 def append_cleanroom_log(role_name: str, line: str, repo_root: str | None = None, dir_scope: str | None = None) -> None:
-    assert workspace_commands_impl is not None
-    workspace_commands_impl.append_cleanroom_log(role_name, line, repo_root=repo_root)
+    assert commands_impl is not None
+    commands_impl.append_cleanroom_log(role_name, line, repo_root=repo_root)
 
 
 def _get_pending_manager():
-    from update_with_ai.parts.tools.lib import workspace_pending
+    from update_with_ai.parts.workspace_cli.lib import pending
     from support.lib.lifecycle import get_singleton
-    return get_singleton(workspace_pending.WorkspacePendingManager)
+    return get_singleton(pending.WorkspacePendingManager)
 
 
 def get_pending_work(workspace_dir: str) -> list[str]:
@@ -592,14 +592,14 @@ def run_work_queue(argv: list[str]) -> int:
 
     root = parsed.repo_root or find_workspace_root()
     from support.lib.lifecycle import enter_phase, get_singleton
-    from update_with_ai.parts.agent.lib import agent_session
-    from update_with_ai.parts.workspace.lib import workspace_registry, workspace_provision
-    from update_with_ai.parts.tools.lib import workspace_work
+    from update_with_ai.parts.agent.lib import session as agent_session
+    from update_with_ai.parts.workspace.lib import role_registry, provision
+    from update_with_ai.parts.workspace_cli.lib import work
 
     with enter_phase(agent_session.agent_session):
-        reg = get_singleton(workspace_registry.WorkspaceRegistry)
-        work = get_singleton(workspace_work.WorkspaceWorkManager)
-        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        work = get_singleton(work.WorkspaceWorkManager)
+        prov = get_singleton(provision.WorkspaceProvisioner)
 
         declared_roles = reg.list_roles(root, dir_scope=scope)
         if not declared_roles:
@@ -951,12 +951,12 @@ def run_feedback_cli(argv: list[str], prog: str = "cleanroom feedback") -> int:
     is_role_ws = os.path.isfile(".cleanroom_role.json")
     is_target_label = target.startswith("//") or (":" in target and not os.path.exists(target))
 
-    if (is_role_ws or not is_target_label) and workspace_tool_impl is not None:
+    if (is_role_ws or not is_target_label) and cli_tool_impl is not None:
         cmd_args = ["blame", target, critique]
         if parsed.repo_root:
             cmd_args.extend(["--repo-root", parsed.repo_root])
         try:
-            ret = workspace_tool_impl.main(cmd_args)
+            ret = cli_tool_impl.main(cmd_args)
             if ret == 0 or is_role_ws:
                 return ret
         except Exception:
@@ -1155,14 +1155,14 @@ def run_orchestrate(
 
     root = parsed.repo_root or find_workspace_root()
     from support.lib.lifecycle import enter_phase, get_singleton
-    from update_with_ai.parts.agent.lib import agent_session
-    from update_with_ai.parts.workspace.lib import workspace_registry, workspace_provision
-    from update_with_ai.parts.tools.lib import workspace_work
+    from update_with_ai.parts.agent.lib import session as agent_session
+    from update_with_ai.parts.workspace.lib import role_registry, provision
+    from update_with_ai.parts.workspace_cli.lib import work
 
     with enter_phase(agent_session.agent_session):
-        reg = get_singleton(workspace_registry.WorkspaceRegistry)
-        work = get_singleton(workspace_work.WorkspaceWorkManager)
-        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        work = get_singleton(work.WorkspaceWorkManager)
+        prov = get_singleton(provision.WorkspaceProvisioner)
 
         declared_roles = reg.list_roles(root, dir_scope=scope)
         if not declared_roles:
@@ -1384,12 +1384,12 @@ def run_commission_cli(argv: list[str]) -> int:
         return 1
 
     from support.lib.lifecycle import enter_phase, get_singleton
-    from update_with_ai.parts.agent.lib import agent_session
-    from update_with_ai.parts.workspace.lib import workspace_registry, workspace_provision
+    from update_with_ai.parts.agent.lib import session as agent_session
+    from update_with_ai.parts.workspace.lib import role_registry, provision
 
     with enter_phase(agent_session.agent_session):
-        prov = get_singleton(workspace_provision.WorkspaceProvisioner)
-        reg = get_singleton(workspace_registry.WorkspaceRegistry)
+        prov = get_singleton(provision.WorkspaceProvisioner)
+        reg = get_singleton(role_registry.WorkspaceRegistry)
 
         if all_roles:
             declared = reg.list_roles(root, dir_scope=dir_scope)
@@ -1465,11 +1465,11 @@ def decommission_workspaces(
     """Decommissions and deletes role workspaces for a scope (and optional role boundary)."""
     root = repo_root or find_workspace_root()
     from support.lib.lifecycle import enter_phase, get_singleton
-    from update_with_ai.parts.agent.lib import agent_session
-    from update_with_ai.parts.workspace.lib import workspace_registry
+    from update_with_ai.parts.agent.lib import session as agent_session
+    from update_with_ai.parts.workspace.lib import role_registry
 
     with enter_phase(agent_session.agent_session):
-        reg = get_singleton(workspace_registry.WorkspaceRegistry)
+        reg = get_singleton(role_registry.WorkspaceRegistry)
         declared_roles = reg.list_roles(root, dir_scope=dir_scope)
         if target_role:
             target_clean = target_role.split(":")[-1].strip().lower()
@@ -1623,12 +1623,12 @@ options:
 
 def main(argv: list[str] | None = None) -> int:
     asm_modules = (
-        "parts.systems.lib.uv_cleanroom_asm",
+        "parts.systems.lib.cleanroom_asm",
         "parts.core.lib.file_paths_impl",
         "parts.control.lib.control_asm",
-        "parts.storage.lib.storage_asm",
-        "parts.tools.lib.tools_asm",
-        "parts.tools.lib.workspace_tool_impl",
+        "parts.metadata.lib.metadata_asm",
+        "parts.workspace_cli.lib.workspace_cli_asm",
+        "parts.workspace_cli.lib.cli_tool_impl",
         "parts.workspace.lib.workspace_asm",
         "parts.subagent.lib.subagent_asm",
         "parts.subagent.lib.subagent_tool_impl",
@@ -1653,12 +1653,12 @@ def main(argv: list[str] | None = None) -> int:
                 if not _entry.startswith((".", "bazel-", "venv")):
                     if os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
                         for sub in (
-                            "systems.lib.uv_cleanroom_asm",
+                            "systems.lib.cleanroom_asm",
                             "core.lib.file_paths_impl",
                             "control.lib.control_asm",
-                            "storage.lib.storage_asm",
-                            "tools.lib.tools_asm",
-                            "tools.lib.workspace_tool_impl",
+                            "storage.lib.metadata_asm",
+                            "tools.lib.workspace_cli_asm",
+                            "tools.lib.cli_tool_impl",
                             "workspace.lib.workspace_asm",
                             "subagent.lib.subagent_asm",
                             "subagent.lib.subagent_tool_impl",
@@ -1726,8 +1726,8 @@ def main(argv: list[str] | None = None) -> int:
     if any(a.startswith("--harness") for a in args_list):
         return run_clean_cli(args_list)
 
-    assert workspace_tool_impl is not None
-    return workspace_tool_impl.main(argv)
+    assert cli_tool_impl is not None
+    return cli_tool_impl.main(argv)
 
 
 if __name__ == "__main__":

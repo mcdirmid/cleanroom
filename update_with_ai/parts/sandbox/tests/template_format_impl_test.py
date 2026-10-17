@@ -15,7 +15,7 @@ import unittest
 from typing import Any, Dict, List, Mapping
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.agent.lib.agent_session import agent_session
+from update_with_ai.parts.agent.lib.session import session as agent_session
 from update_with_ai.parts.sandbox.lib import template_format
 from update_with_ai.parts.sandbox.lib.template_format_impl import (
     TemplateFormatter,

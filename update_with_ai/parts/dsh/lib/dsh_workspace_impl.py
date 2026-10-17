@@ -19,8 +19,8 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
-from update_with_ai.parts.agent.lib import agent_session
-from update_with_ai.parts.workspace.lib import workspace_registry
+from update_with_ai.parts.agent.lib import session as agent_session
+from update_with_ai.parts.workspace.lib import role_registry
 from . import dsh_workspace
 
 
@@ -205,7 +205,7 @@ class DshWorkspaceConfigurer(dsh_workspace.DshWorkspaceConfigurer, Singleton):
         os.makedirs(workspace_dir, exist_ok=True)
         is_auditor = False
         try:
-            reg = get_singleton(workspace_registry.WorkspaceRegistry)
+            reg = get_singleton(role_registry.WorkspaceRegistry)
             r_def = reg.resolve_role_definition(role_name)
             is_auditor = not r_def.writable_file_patterns
         except Exception:

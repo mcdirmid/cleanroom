@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # tool_provider_impl implementation component
 
-imports: agent_file_alias
+imports: file_alias
 implements: tool_provider
 
 ## Purpose

@@ -16,7 +16,6 @@ According to the high-level specifications in [`update_with_ai/parts/core/high/`
 - [`cleanroom_files_ext.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/core/high/cleanroom_files_ext.md): Specifies the external structural conventions of Cleanroom repositories, including package directory patterns (`parts/`), role directory mappings (`high/`, `low/`, `lib/`, `tests/`, `guides/`), and component naming schemes (`*_impl.md`, `*_ext.md`).
 - [`commonmark_ext.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/core/high/commonmark_ext.md): Provides CommonMark-compliant markdown parsing and extraction knowledge for extracting sections, code blocks, lists, and metadata comments.
 - [`filesystem_ext.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/core/high/filesystem_ext.md): Encapsulates atomic filesystem operations, directory creation, safe file reading, and durable file writing.
-- [`runner_logger.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/core/high/runner_logger.md) & [`runner_logger_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/core/high/runner_logger_impl.md): Provides execution event logging. It formats compact single-line summaries for live terminal visibility while immediately flushing verbose event records to an unbuffered disk transcript log (defaulting to `agent_loop.log`) to preserve audit history across process crashes.
 
 ## How It Is Used by Other Parts
 
@@ -25,10 +24,10 @@ As the foundation library of Cleanroom, `core` is imported and leveraged by near
 - **`agent`**: Uses `file_paths` to anchor file aliases to workspace roots.
 - **`control`**: Uses `file_paths` and `topological_order_ext` to compute role tier depths and schedule task queues deterministically.
 - **`dag`**: Uses `topological_order_ext` to index subgraphs in dependency-first order.
-- **`storage`**: Uses `file_paths`, `cleanroom_files_ext`, and `filesystem_ext` to resolve declared source files, locate metadata comment blocks, and write updated files atomically.
+- **`metadata`**: Uses `file_paths`, `cleanroom_files_ext`, and `filesystem_ext` to resolve declared source files, locate metadata comment blocks, and write updated files atomically.
 - **`sandbox`**: Uses `file_paths`, `filesystem_ext`, and `commonmark_ext` to load step guides and format templates.
-- **`loop` & `openai`**: Use `json_ext` to salvage truncated model tool calls and `runner_logger` to emit turn summaries and unbuffered transcripts.
-- **`tools`**: Uses `cleanroom_files_ext` and `file_paths` to resolve workspace paths and file conventions.
+- **`loop` & `openai`**: Use `json_ext` to salvage truncated model tool calls.
+- **`workspace_cli`**: Uses `cleanroom_files_ext` and `file_paths` to resolve workspace paths and file conventions.
 - **`uv`**: Uses `cleanroom_files_ext`, `file_paths`, and `topological_order_ext` to parse target labels, resolve package directories, and order manifest dependencies.
 - **`workspace`**: Uses `file_paths`, `filesystem_ext`, and `cleanroom_files_ext` during role workspace provisioning, scaffolding, and file synchronization.
-- **`systems`**: Aggregates `core` services (`file_paths_impl`, `runner_logger_impl`, etc.) into the master assemblies.
+- **`systems`**: Aggregates `core` services (`file_paths_impl`, etc.) into the master assemblies.

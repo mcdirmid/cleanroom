@@ -26,7 +26,7 @@ from support.lib.lifecycle import (
     Singleton,
     get_default_registry,
 )
-from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.agent.lib import session as agent_session
 from . import dsh_telemetry
 
 

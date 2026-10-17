@@ -3,7 +3,7 @@
 import unittest
 from pathlib import Path
 import tempfile
-from update_with_ai.parts.storage.lib.src_metadata import (
+from update_with_ai.parts.metadata.lib.src_metadata import (
     FileMetadata,
     append_feedback,
     clear_audits,

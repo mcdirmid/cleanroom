@@ -11,7 +11,7 @@
 from typing import Optional, Protocol, Sequence
 from framework import operation, singleton_type
 from support.lib.lifecycle import InTier
-from agent_session import AgentSessionTier
+from session import AgentSessionTier
 
 
 @singleton_type("agent_session")

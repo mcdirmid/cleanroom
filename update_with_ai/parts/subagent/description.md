@@ -28,6 +28,6 @@ According to the high-level specifications in [`update_with_ai/parts/subagent/hi
 
 - **`antigravity`**: Registers the `AntigravityHarnessAdapter` into `subagent_harness`'s `HarnessRegistry`, conforming to `HarnessAdapter` and producing `RoleTurnResult` instances.
 - **`dsh`**: Registers the `DshHarnessAdapter` into `subagent_harness`'s `HarnessRegistry`, conforming to `HarnessAdapter` and producing `RoleTurnResult` instances.
-- **`workspace`**: `subagent_coordinator` commands `workspace_provision` and `workspace_sync` to scaffold role workspaces, pull upstream contracts, harvest modified files, and flush blame feedback between turns.
-- **`tools`**: `subagent_harness` inspects `workspace_pending` and `workspace_work` buffers (`pending_work.json`, `blame.json`) to determine submitted and blamed targets.
+- **`workspace`**: `subagent_coordinator` commands `provision` and `sync` to scaffold role workspaces, pull upstream contracts, harvest modified files, and flush blame feedback between turns.
+- **`tools`**: `subagent_harness` inspects `pending` and `work` buffers (`pending_work.json`, `blame.json`) to determine submitted and blamed targets.
 - **Top-Level CLI & Support (`cleanroom_role_tool`)**: Dispatches the `orchestrate` CLI entrypoint directly to `subagent_tool`.

@@ -31,11 +31,11 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
-from update_with_ai.parts.agent.lib import agent_session
-from update_with_ai.parts.tools.lib import workspace_work
+from update_with_ai.parts.agent.lib import session as agent_session
+from update_with_ai.parts.workspace_cli.lib import work
 from update_with_ai.parts.workspace.lib import (
-    workspace_provision,
-    workspace_registry,
+    provision,
+    role_registry,
 )
 from . import subagent_coordinator
 
@@ -159,8 +159,8 @@ class SubagentCoordinator(
         batch_size: Optional[int] = None,
     ) -> Sequence[Sequence[subagent_coordinator.RoleDispatch]]:
         """Evaluates DAG queues and groups unblocked ready roles into execution waves."""
-        reg = get_singleton(workspace_registry.WorkspaceRegistry)
-        work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        work_mgr = get_singleton(work.WorkspaceWorkManager)
 
         root = repo_root or reg.discover_repository_root()
         all_roles = reg.list_roles(repo_root=root, dir_scope=dir_scope)
@@ -176,7 +176,7 @@ class SubagentCoordinator(
                 all_roles = all_roles[: matching_idx + 1]
 
         ready_dispatches: Dict[str, subagent_coordinator.RoleDispatch] = {}
-        role_definitions: Dict[str, workspace_registry.RoleDefinition] = {}
+        role_definitions: Dict[str, role_registry.RoleDefinition] = {}
 
         for r_entry in all_roles:
             role = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
@@ -194,7 +194,7 @@ class SubagentCoordinator(
                     role, dir_scope=dir_scope, repo_root=root
                 )
                 if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
-                    prov = get_singleton(workspace_provision.WorkspaceProvisioner)
+                    prov = get_singleton(provision.WorkspaceProvisioner)
                     prov.commission(role, dir_scope=dir_scope, repo_root=root)
 
 
@@ -302,8 +302,8 @@ class SubagentCoordinator(
         max_unproductive_turns: Optional[int] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure."""
-        reg = get_singleton(workspace_registry.WorkspaceRegistry)
-        work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        work_mgr = get_singleton(work.WorkspaceWorkManager)
         root = repo_root or reg.discover_repository_root()
 
         # Resolve model parameters from model_configs.toml
@@ -482,7 +482,7 @@ class SubagentCoordinator(
 
                             ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
                             if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
-                                prov = get_singleton(workspace_provision.WorkspaceProvisioner)
+                                prov = get_singleton(provision.WorkspaceProvisioner)
                                 prov.commission(r_name, dir_scope=dir_scope, repo_root=root)
 
                             if effective_batch_size is not None:

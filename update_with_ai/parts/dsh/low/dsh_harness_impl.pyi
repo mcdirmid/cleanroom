@@ -11,13 +11,13 @@
 from typing import Any, Optional
 from framework import operation, override, poly_type, singleton_type
 from support.lib.lifecycle import InTier
-import agent_session
+import session as agent_session
 import dsh_ext
 import dsh_harness
 import dsh_telemetry
 import subagent_coordinator
 import subagent_harness
-import workspace_work
+import work
 
 
 @poly_type
@@ -26,7 +26,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
     GROUNDING:
     - Launches dsh headless CLI processes bound to dispatch.workspace_dir with Cordis overlay
-      patches, tracks initial pending targets via workspace_work.WorkspaceWorkManager,
+      patches, tracks initial pending targets via work.WorkspaceWorkManager,
       awaits completion, extracts token telemetry via DshTelemetryParser, inspects blame buffers,
       and returns subagent_coordinator.RoleTurnResult objects.
     """
@@ -41,7 +41,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
         GROUNDING:
         - Prepares role-tailored task prompts distinguishing auditor roles from authoring roles,
-          records initial pending targets seeded from ready targets via workspace_work,
+          records initial pending targets seeded from ready targets via work,
           tests non-blocking file locks on session.lock when resuming saved session IDs from
           .cleanroom/dsh_session_id.txt conforming to dsh_ext to prevent session adoption collisions,
           executes dsh CLI process bound to dispatch.workspace_dir using headless profile and
@@ -59,7 +59,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
         GROUNDING:
         - Awaits process completion without mandatory timeout unless configured, computes buffer
-          differences seeded from ready targets via workspace_work, inspects blame buffers and
+          differences seeded from ready targets via work, inspects blame buffers and
           turn logs for attributed defects, scrapes active session identifiers from event logs and
           saves to .cleanroom/dsh_session_id.txt, assigns unresolved status when zero targets are submitted or blamed,
           parses session telemetry via dsh_harness, and constructs subagent_coordinator.RoleTurnResult.

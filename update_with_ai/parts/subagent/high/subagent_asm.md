@@ -9,7 +9,7 @@ SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
 # subagent_asm assembly component
 
 assembles: subagent_coordinator_impl, subagent_harness_impl, subagent_tool_impl
-imports: agent_session
+imports: session
 implements: subagent_coordinator, subagent_harness, subagent_tool
 
 ## Purpose

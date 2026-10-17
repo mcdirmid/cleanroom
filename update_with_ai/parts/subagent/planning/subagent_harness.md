@@ -48,7 +48,7 @@ Multi-agent coordination requires dispatching autonomous agents into isolated ro
 ### Knowledge Requirements
 
 - Agent session lifecycle tier management.
-  - Grounded: [agent_session: [agent_session_tier_provision]]
+  - Grounded: [session: [agent_session_tier_provision]]
 - Coordinator harness adapter protocols and turn result types.
   - Grounded: [subagent_coordinator: [subagent_coordinator_service]]
 - Cleanroom file conventions and buffer file names.

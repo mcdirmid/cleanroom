@@ -21,7 +21,7 @@ Given: scope_a has dirty roles across multiple levels where some roles have unsa
 
 1. The coordinator evaluates work queues for all roles.
    Observed: roles with blocked prerequisites report empty queues, while unblocked roles with ready targets are identified for execution.
-   Realized by: the component's dynamic queue query querying `workspace_work` across declared roles without hardcoded topology logic.
+   Realized by: the component's dynamic queue query querying `work` across declared roles without hardcoded topology logic.
 
 ### Scenario 3 — Dispatching concurrent worker processes for unblocked roles
 
@@ -29,7 +29,7 @@ Given: scope_a has unblocked roles role_a and role_b each with available work ta
 
 1. The coordinator dispatches workers.
    Observed: role workspaces are provisioned and concurrent subagent processes are launched for role_a and role_b simultaneously.
-   Realized by: the component's concurrent worker dispatch commissioning workspaces via `workspace_provision` and invoking `spawn_role` on `subagent_harness`.
+   Realized by: the component's concurrent worker dispatch commissioning workspaces via `provision` and invoking `spawn_role` on `subagent_harness`.
 
 ### Scenario 4 — Continuous non-blocking polling and dynamic supervisor loop
 
@@ -45,7 +45,7 @@ Given: role_a completes and submits changes that unblock ready targets in downst
 
 1. The coordinator continues dynamic supervision.
    Observed: the coordinator provisions role_c workspace and launches a worker process for role_c.
-   Realized by: the component's continuous loop re-evaluating `workspace_work.compute_role_work_queue` and launching workers for newly unblocked roles.
+   Realized by: the component's continuous loop re-evaluating `work.compute_role_work_queue` and launching workers for newly unblocked roles.
 
 ### Scenario 6 — Early termination upon role worker failure
 

@@ -9,22 +9,22 @@ from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry
 from . import (
-    workspace_provision_impl,
-    workspace_registry_impl,
-    workspace_roles_impl,
-    workspace_scaffold_impl,
-    workspace_stub_impl,
-    workspace_sync_impl,
+    provision_impl,
+    role_registry_impl,
+    roles_impl,
+    scaffold_impl,
+    stub_impl,
+    sync_impl,
 )
 
 # Contract: Declares assembly constituents for the workspace tier.
 CONSTITUENTS = (
-    workspace_roles_impl,
-    workspace_registry_impl,
-    workspace_scaffold_impl,
-    workspace_provision_impl,
-    workspace_stub_impl,
-    workspace_sync_impl,
+    roles_impl,
+    role_registry_impl,
+    scaffold_impl,
+    provision_impl,
+    stub_impl,
+    sync_impl,
 )
 
 

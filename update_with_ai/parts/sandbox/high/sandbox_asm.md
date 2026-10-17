@@ -1,16 +1,16 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T19:43:57Z
 LAST_CHANGED: 2026-10-14T18:30:00Z
-CHANGE: Assemble sandbox_submission_impl and implement sandbox_submission
+CHANGE: Assemble submission_impl and implement submission
 CODE_HASH: a85a5a45ff31
 SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
 -->
 
 # sandbox_asm assembly component
 
-assembles: sandbox_file_editor_impl, sandbox_file_reader_impl, sandbox_guide_delivery_impl, sandbox_run_control_impl, sandbox_submission_impl, template_format_impl, tool_provider_impl
-imports: agent_config, agent_file_alias, agent_node_config, agent_session, commonmark_ext, dag_storage, dag_subgraph, file_paths, filesystem_ext
-implements: sandbox_file_reader, sandbox_file_editor, sandbox_run_control, sandbox_submission, sandbox_guide_delivery, tool_provider, template_format
+assembles: file_editor_impl, file_reader_impl, guide_delivery_impl, run_control_impl, submission_impl, template_format_impl, tool_provider_impl
+imports: agent_config, file_alias, node_config, session, commonmark_ext, dag_storage, subgraph, file_paths, filesystem_ext
+implements: file_reader, file_editor, run_control, submission, guide_delivery, tool_provider, template_format
 
 ## Purpose
 

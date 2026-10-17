@@ -1,0 +1,56 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T17:45:00Z
+CHANGE: align AGENTS.md refresh planning with in-workspace file inspection and terminal command restrictions
+CODE_HASH: 3483c1084b61
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->
+
+# sync_impl implementation component
+
+## Intent
+
+Distributing work across disjoint workspaces introduces data synchronization races and the threat of overwriting verified code with stale payloads. The sync_impl implementation component provides guarded two-phase synchronization: in the first phase, source files are parsed and compared against recorded in-band hashes to detect modifications and merge collisions; in the second phase, validated changes and audit tags are written atomically to the canonical repository. Furthermore, blame feedback accumulated in local buffers is translated into in-band comment entries on culprit files, and system files are refreshed without disturbing working tree targets.
+
+## Factored Contracts
+
+### Contracts
+
+- The workspace synchronizer copies newer upstream files from main to workspace setting 0o444 permissions on contracts and updating unmodified writable targets with 0o644 permissions while deleting missing files. [copy_upstream_files_with_perms]
+- The workspace synchronizer delegates test stub synchronization for stub role dependencies to workspace provisioning. [sync_stub_role_dependencies]
+- The workspace synchronizer recopies project configurations, guides, and linters into the workspace, delegating runner deployment, role guide regeneration, and test stub synchronization to workspace provisioning without altering targets. [recopy_system_files_fast]
+- The workspace synchronizer computes on-disk SHA-256 code hashes and extracts in-band metadata to identify modified files. [evaluate_target_file_modifications]
+- The workspace synchronizer compares main repository code hashes against workspace baselines to detect concurrent edits. [compare_main_and_workspace_hashes]
+- The workspace synchronizer copies validated target files into the canonical repository and updates in-band clean timestamps. [copy_validated_files_to_main]
+- The workspace synchronizer calls stamp_audit and update_metadata on audited target files for auditor roles. [stamp_audit_on_targets]
+- The workspace synchronizer parses the local blame buffer file and appends unacted feedback to culprit files in main. [process_blame_buffer_entries]
+
+### Woven Contracts
+
+- When pulling updates from main, the synchronizer copies upstream files with read-only permissions, synchronizes stub role dependencies, and fast-refreshes system files. [copy_upstream_files_with_perms, sync_stub_role_dependencies, recopy_system_files_fast, sync: [pull_upstream_contracts, sync_stub_dependencies, refresh_system_files_into_workspace], provision: [synthesize_readonly_test_stubs, copy_file_with_permissions, deploy_runner_executables, write_role_agents_instructions]]
+- When harvesting changes, the synchronizer evaluates target modifications, detects concurrent edits against main, copies validated files, stamps audits, and flushes blame entries. [evaluate_target_file_modifications, compare_main_and_workspace_hashes, copy_validated_files_to_main, stamp_audit_on_targets, process_blame_buffer_entries, sync: [scan_modified_targets, validate_harvest_baselines, commit_harvested_files, stamp_auditor_role_audits, flush_blame_buffer_entries], src_metadata: [extract_metadata_disk, update_metadata_disk, stamp_audit_entry, append_feedback_entry]]
+
+## Grounding
+
+### Knowledge Provisions
+
+- Inbound file transfer and permission-preserving update algorithms. [workspace_pull_algorithms]
+- Two-phase validation, atomic harvest commit, and blame translation logic. [workspace_harvest_algorithms]
+
+### Inherited Deferred Requirements
+
+- Copying files across workspaces with permission preservation.
+  - Grounded: [workspace_pull_algorithms]
+- Two-phase conflict detection and atomic file replacement on disk.
+  - Grounded: [workspace_harvest_algorithms]
+
+### Knowledge Requirements
+
+- Inspection and mutation of in-band source metadata headers.
+  - Grounded: [src_metadata: [source_metadata_service]]
+- Role workspace provisioning, runner deployment, and stub synchronization services.
+  - Grounded: [provision: [workspace_provisioning_service]]
+- Workspace state and blame buffer file naming conventions.
+  - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
+- Filesystem reading, writing, and permission manipulation.
+  - Grounded: [workspace_pull_algorithms, workspace_harvest_algorithms]

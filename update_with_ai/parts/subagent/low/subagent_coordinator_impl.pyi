@@ -11,11 +11,11 @@
 from typing import Optional, Sequence
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
-import agent_session
+import session as agent_session
 import subagent_coordinator
-import workspace_provision
-import workspace_registry
-import workspace_work
+import provision
+import role_registry
+import work
 
 
 @singleton_type("agent_session")
@@ -27,9 +27,9 @@ class SubagentCoordinator(
 
     GROUNDING:
     - Realizes workspace coordination by querying commissioned role workspaces via
-      workspace_registry.WorkspaceRegistry, evaluating dirty role work queues via
-      workspace_work.WorkspaceWorkManager, commissioning absent workspaces via
-      workspace_provision.WorkspaceProvisioner, grouping roles into topological waves,
+      role_registry.WorkspaceRegistry, evaluating dirty role work queues via
+      work.WorkspaceWorkManager, commissioning absent workspaces via
+      provision.WorkspaceProvisioner, grouping roles into topological waves,
       dispatching role directives through subagent_coordinator.HarnessAdapter,
       and aggregating token usage telemetry into standardized monetary expenditures.
     """
@@ -46,9 +46,9 @@ class SubagentCoordinator(
         """Evaluates DAG queues and groups unblocked ready roles into execution waves.
 
         GROUNDING:
-        - Inspects commissioned workspaces via workspace_registry.WorkspaceRegistry.list_roles,
-          queries ready tasks via workspace_work.WorkspaceWorkManager.compute_role_work_queue,
-          commissions absent workspaces via workspace_provision.WorkspaceProvisioner.commission,
+        - Inspects commissioned workspaces via role_registry.WorkspaceRegistry.list_roles,
+          queries ready tasks via work.WorkspaceWorkManager.compute_role_work_queue,
+          commissions absent workspaces via provision.WorkspaceProvisioner.commission,
           partitions sequential specification roles into single-role waves, combines unblocked
           implementation roles into parallel waves, and constructs RoleDispatch directives.
         """
@@ -86,7 +86,7 @@ class SubagentCoordinator(
         """Orchestrates iterative multi-agent execution until DAG convergence or failure.
 
         GROUNDING:
-        - Resets preexisting role workspace directories for declared roles via workspace_registry
+        - Resets preexisting role workspace directories for declared roles via role_registry
           and filesystem operations.
         - Resolves subagent batch size, token limits, and maximum unproductive turn thresholds from model configurations and persists
           effective batch sizes into role workspaces.
@@ -103,7 +103,7 @@ class SubagentCoordinator(
         """Resolves the canonical repository logs directory for a role workspace.
 
         GROUNDING:
-        - Queries workspace_registry.WorkspaceRegistry to discover repository root, falling
+        - Queries role_registry.WorkspaceRegistry to discover repository root, falling
           back to traversing parent directory structure, and returns logs directory path.
         """
         ...

@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # subagent_coordinator_impl implementation component
 
-imports: agent_session, subagent_coordinator, workspace_provision, workspace_registry, workspace_work
+imports: session, subagent_coordinator, provision, role_registry, work
 implements: subagent_coordinator
 
 ## Purpose
@@ -19,7 +19,7 @@ Complex software development methodologies partition work into specialized roles
 
 **Out of scope:** The subagent_coordinator_impl implementation component does not directly execute subagent processes or mutate workspace files; these are handled by other components.
 
-**Delegated:** Session lifecycle scoping is delegated to agent_session; workspace role discovery and root resolution are delegated to workspace_registry; queue evaluation and pending target tracking are delegated to workspace_work; role workspace provisioning is delegated to workspace_provision.
+**Delegated:** Session lifecycle scoping is delegated to agent_session; workspace role discovery and root resolution are delegated to role_registry; queue evaluation and pending target tracking are delegated to work; role workspace provisioning is delegated to provision.
 
 ## Types and Behavior
 

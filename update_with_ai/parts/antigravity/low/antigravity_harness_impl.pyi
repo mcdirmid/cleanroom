@@ -11,7 +11,7 @@
 from typing import Any, Optional
 from framework import operation, override, poly_type, singleton_type
 from support.lib.lifecycle import InTier
-import agent_session
+import session as agent_session
 import antigravity_ext
 import antigravity_harness
 import subagent_coordinator

@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
 from support.lib.lifecycle import InTier
-from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
 from update_with_ai.parts.subagent.lib import subagent_coordinator
 
 

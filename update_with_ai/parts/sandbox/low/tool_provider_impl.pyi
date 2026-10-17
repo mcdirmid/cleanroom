@@ -10,7 +10,7 @@
 
 from typing import Mapping
 from framework import operation, override, singleton_type
-import agent_file_alias
+import file_alias
 import tool_provider
 
 
@@ -102,13 +102,13 @@ class AliasManagerType(tool_provider.AliasManagerType):
     """Realizes the alias manager parameter type adapter within the agent session tier.
 
     GROUNDING:
-    - Resolves agent_file_alias.AliasManager from the agent session tier, converts wire strings via
-      agent_file_alias.AliasManager.to_alias, and validates wire value types.
+    - Resolves file_alias.AliasManager from the agent session tier, converts wire strings via
+      file_alias.AliasManager.to_alias, and validates wire value types.
     """
 
     @property
     @override
-    def actual_type(self) -> type[agent_file_alias.FileAlias]:
+    def actual_type(self) -> type[file_alias.FileAlias]:
         """Data type produced by converter."""
         ...
 
@@ -120,7 +120,7 @@ class AliasManagerType(tool_provider.AliasManagerType):
 
     @operation
     @override
-    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+    def convert(self, wire_value: str) -> file_alias.FileAlias:
         """Converts wire string to file alias using the session alias manager.
 
         Args:

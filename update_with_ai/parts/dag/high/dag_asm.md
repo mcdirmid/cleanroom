@@ -8,9 +8,9 @@ SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
 
 # dag_asm assembly component
 
-assembles: dag_subgraph_impl
+assembles: subgraph_impl
 imports: dag_config, dag_storage
-implements: dag_subgraph
+implements: subgraph
 
 ## Purpose
 

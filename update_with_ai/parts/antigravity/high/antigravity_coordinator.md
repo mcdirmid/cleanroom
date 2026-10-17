@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # antigravity_coordinator interface component
 
-imports: agent_session, subagent_coordinator
+imports: session, subagent_coordinator
 
 ## Purpose
 

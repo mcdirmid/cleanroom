@@ -16,7 +16,7 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
-from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier, agent_session
+from update_with_ai.parts.agent.lib.session import AgentSessionTier, agent_session
 from . import template_format
 
 # Requirements specified in template_format_impl.pyi

@@ -11,7 +11,7 @@
 from typing import Mapping, Optional, Sequence
 from framework import operation, override, poly_type, singleton_type
 from support.lib.lifecycle import InTier
-import agent_session
+import session as agent_session
 import subagent_coordinator
 import subagent_harness
 

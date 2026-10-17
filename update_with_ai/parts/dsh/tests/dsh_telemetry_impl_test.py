@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.dsh.lib import dsh_telemetry, dsh_telemetry_impl
 
 

@@ -19,7 +19,7 @@ import unittest
 from typing import Any, Dict, List, Optional, Sequence
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.dsh.lib import dsh_asm, dsh_harness
 from update_with_ai.parts.dsh.lib.dsh_harness_impl import (
     DshHarnessAdapter,
@@ -27,8 +27,8 @@ from update_with_ai.parts.dsh.lib.dsh_harness_impl import (
     __initialize__,
 )
 from update_with_ai.parts.subagent.lib import subagent_coordinator, subagent_harness
-from update_with_ai.parts.tools.lib import workspace_work
-from update_with_ai.parts.workspace.lib import workspace_registry
+from update_with_ai.parts.workspace_cli.lib import work
+from update_with_ai.parts.workspace.lib import role_registry
 
 
 class MockHarnessRegistry:
@@ -49,17 +49,17 @@ class FakeWorkspaceRegistry:
         role_name_or_address: str,
         repo_root: Optional[str] = None,
         dir_scope: Optional[str] = None,
-    ) -> workspace_registry.RoleDefinition:
+    ) -> role_registry.RoleDefinition:
         clean = role_name_or_address.split(":")[-1].strip().lower()
         if clean in ("qa", "coverage", "spec_qa"):
-            return workspace_registry.RoleDefinition(
+            return role_registry.RoleDefinition(
                 role_name=clean,
                 guide_path=f"guides/{clean}.md",
                 writable_file_patterns=[],
                 readonly_file_patterns=[],
                 feedback_role_deps=[],
             )
-        return workspace_registry.RoleDefinition(
+        return role_registry.RoleDefinition(
             role_name=clean,
             guide_path=f"guides/{clean}.md",
             writable_file_patterns=[f"{clean}/*"],
@@ -109,13 +109,13 @@ class DshHarnessImplTest(unittest.TestCase):
         self.workspace_reg = FakeWorkspaceRegistry()
         self.registry.register_instance(
             self.workspace_reg,
-            keys=[workspace_registry.WorkspaceRegistry],
+            keys=[role_registry.WorkspaceRegistry],
             tier=agent_session.agent_session,
         )
         self.work_mgr = FakeWorkspaceWorkManager()
         self.registry.register_instance(
             self.work_mgr,
-            keys=[workspace_work.WorkspaceWorkManager],
+            keys=[work.WorkspaceWorkManager],
             tier=agent_session.agent_session,
         )
 

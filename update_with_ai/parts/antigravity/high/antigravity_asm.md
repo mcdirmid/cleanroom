@@ -9,7 +9,7 @@ SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
 # antigravity_asm assembly component
 
 assembles: antigravity_coordinator_impl, antigravity_harness_impl
-imports: agent_session, antigravity_ext, subagent_coordinator, workspace_registry
+imports: session, antigravity_ext, subagent_coordinator, role_registry
 implements: antigravity_coordinator, antigravity_harness, antigravity_workspace
 
 ## Purpose

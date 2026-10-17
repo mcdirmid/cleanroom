@@ -1,0 +1,743 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:59:56Z
+# CHANGE: Model node dirtiness from in-band metadata state instead of message presence and keep clear_messages from altering dirtiness
+# CODE_HASH: bdc74286bb5d
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
+
+"""Unit tests for node_cleaner_impl aligned with grounding specifications."""
+
+from dataclasses import dataclass
+import unittest
+from typing import Any, List, Optional, Sequence, Set, cast
+
+from update_with_ai.parts.agent.lib.node_config import (
+    ExecutionVersion,
+    NodeConfig,
+    RoleConfig,
+    RoleName,
+)
+from update_with_ai.parts.agent.lib.node_storage import (
+    AgentStorage,
+    NodeDefinition,
+    TaskPrompt,
+)
+from update_with_ai.parts.loop.lib import logger
+from update_with_ai.parts.dag.lib.dag_storage import (
+    ChangeMessage,
+    DagDependency,
+    DagMessage,
+    DagNode,
+    FeedbackMessage,
+    MessageContent,
+    RoleAddress,
+    UnitAddress,
+)
+from update_with_ai.parts.loop.lib.conversation import (
+    Conversation,
+    ConversationContent,
+    ConversationMessage,
+    MessageRole,
+    ModelRequest,
+    ToolCallId,
+)
+from update_with_ai.parts.dag.lib.subgraph import DagSubgraph
+from update_with_ai.parts.loop.lib.cleaner import LoopCleaner
+from update_with_ai.parts.loop.lib.driver import LoopDriver, LoopOutcome
+from update_with_ai.parts.loop.lib.node_cleaner import NodeCleaner
+from update_with_ai.parts.loop.lib.node_cleaner_impl import (
+    LoopCleaner as LoopCleanerImpl,
+    NodeCleaner as NodeCleanerImpl,
+    __initialize__,
+)
+from update_with_ai.parts.metadata.lib.src_metadata import SourceMetadataCoordinator
+from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system
+
+
+@dataclass(frozen=True)
+class MockBoundFile:
+    relative_path: str
+    owning_node: Optional[DagNode] = None
+
+
+@dataclass
+class MockResponse:
+    content: str = ""
+    is_failed: bool = False
+    is_terminated: bool = True
+
+
+def _make_dag_node(unit_address: str, role_address: str = "lib") -> DagNode:
+    return DagNode(
+        unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address)
+    )
+
+
+def _make_change(content: str) -> DagMessage:
+    return cast(DagMessage, ChangeMessage(content=MessageContent(content)))
+
+
+class MockStorage:
+    tier = system
+
+    def __init__(self) -> None:
+        self.definitions: dict[DagNode, NodeDefinition] = {}
+        self.messages: dict[DagNode, Set[DagMessage]] = {}
+        self.dependencies: dict[DagNode, Set[DagDependency]] = {}
+        self.feedback: dict[DagNode, List[FeedbackMessage]] = {}
+        self.cleaned_nodes: List[DagNode] = []
+        self.change_descriptions: dict[DagNode, Optional[Any]] = {}
+        self.dirty_nodes: Set[DagNode] = set()
+
+    def seed_dirty_node(self, node: DagNode, message: Optional[DagMessage] = None) -> None:
+        """Records a node whose in-band metadata reports it as requiring cleaning."""
+        self.dirty_nodes.add(node)
+        if message is not None:
+            self.messages.setdefault(node, set()).add(message)
+
+    def get_node_definition(self, node: DagNode) -> Optional[NodeDefinition]:
+        return self.definitions.get(node)
+
+    def get_task_prompt(self, node: DagNode) -> TaskPrompt:
+        definition = self.definitions.get(node)
+        if definition is None:
+            return TaskPrompt("")
+        return definition.task_prompt
+
+    def get_messages(self, node: DagNode) -> Set[DagMessage]:
+        return self.messages.get(node, set())
+
+    def clear_messages(self, node: DagNode) -> None:
+        # Clearing messages does not by itself alter the node's dirty status.
+        self.messages[node] = set()
+
+    def add_message(self, message: DagMessage, to: DagNode) -> None:
+        self.messages.setdefault(to, set()).add(message)
+
+    def add_feedback_message(self, node: DagNode, message: FeedbackMessage) -> None:
+        self.feedback.setdefault(node, []).append(message)
+        self.messages.setdefault(node, set()).add(message)
+
+    def mark_node_dirty(self, node: DagNode, reason: Optional[str] = None) -> None:
+        self.dirty_nodes.add(node)
+
+    def mark_node_clean(
+        self, node: DagNode, change_description: Optional[Any] = None
+    ) -> None:
+        self.cleaned_nodes.append(node)
+        self.change_descriptions[node] = change_description
+        self.messages[node] = set()
+        self.dirty_nodes.discard(node)
+
+    def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
+        return self.dependencies.get(node, set())
+
+    def is_dirty(self, node: DagNode) -> bool:
+        return node in self.dirty_nodes
+
+
+class MockSourceMetadataCoordinator:
+    tier = "agent_session"
+
+    def __init__(self) -> None:
+        self.has_modifications = False
+        self.templates_materialized = False
+        self.modified_nodes: Set[DagNode] = set()
+
+    def is_code_modified(self, path: Any) -> bool:
+        if isinstance(path, DagNode) and self.modified_nodes:
+            return path in self.modified_nodes
+        return self.has_modifications
+
+    def is_node_modified(self, node: DagNode) -> bool:
+        if self.modified_nodes:
+            return node in self.modified_nodes
+        return self.has_modifications
+
+    def materialize_startup_templates(self) -> None:
+        self.templates_materialized = True
+
+
+class MockConversation:
+    tier = "agent_session"
+
+    def __init__(self) -> None:
+        self._messages: List[ConversationMessage] = []
+
+    def initialize(self, initial_messages: Sequence[ConversationMessage] = ()) -> None:
+        self._messages = list(initial_messages)
+
+    def append_message(self, message: ConversationMessage) -> None:
+        self._messages.append(message)
+
+    def append_tool_response(
+        self,
+        tool_response: Any,
+        tool_call_id: str,
+        tool_name: str,
+        tool_arguments: str,
+    ) -> None:
+        self._messages.append(
+            ConversationMessage(
+                role=MessageRole("tool"),
+                content=ConversationContent(str(getattr(tool_response, "content", ""))),
+                tool_call_id=ToolCallId(tool_call_id) if tool_call_id else None,
+                tool_name=cast(Any, tool_name) if tool_name else None,
+            )
+        )
+
+    def get_model_request(self) -> ModelRequest:
+        return ModelRequest(messages=list(self._messages))
+
+
+class MockRunner:
+    tier = "agent_session"
+
+    def __init__(self) -> None:
+        self.outcome = LoopOutcome(
+            response=cast(Any, MockResponse(
+                is_failed=False, is_terminated=True, content="Done"
+            )),
+            conversation=ModelRequest(messages=[]),
+        )
+        self.run_count = 0
+        self.error: Optional[Exception] = None
+        self.inspect_role: bool = False
+        self.captured_role: Optional[str] = None
+        self.captured_nodes: Optional[Sequence[Any]] = None
+        self.captured_custom_role: Optional[str] = None
+
+    def run(self) -> LoopOutcome:
+        self.run_count += 1
+        if self.error is not None:
+            raise self.error
+        if self.inspect_role:
+            from support.lib.lifecycle import get_singleton
+
+            role_cfg = get_singleton(RoleConfig)
+            self.captured_role = str(role_cfg.role)
+            self.captured_nodes = list(role_cfg.nodes)
+            role_cfg.set_role(RoleName("custom_role"))
+            self.captured_custom_role = str(role_cfg.role)
+        return self.outcome
+
+
+class MockNodeConfig:
+    tier = "agent_session"
+
+    def __init__(self) -> None:
+        self.read_only_files: Set[Any] = set()
+        self.read_write_files: Set[Any] = set()
+        self.guide_file: Optional[Any] = None
+        self.allows_step_mode: bool = True
+        self.is_step_mode: bool = False
+        self.templates: Set[tuple[Any, Any]] = set()
+        self.template_parameters: dict = {}
+        self.guide = None
+        self.blame_targets_by_node: dict[DagNode, Set[Any]] = {}
+        self.verification_checks: Sequence = []
+        self.verification_checks_by_node: dict[DagNode, list] = {}
+        self.src_file_alias_by_node: dict[DagNode, str] = {}
+        self.verification_success_message: Optional[str] = None
+        self.feedback: Sequence[str] = []
+        self.per_node_info_by_node: dict = {}
+
+
+class MockLogger:
+    tier = system
+
+    def __init__(self) -> None:
+        self.events: List[logger.RunnerLogEvent] = []
+
+    def consume(self, event: logger.RunnerLogEvent) -> None:
+        self.events.append(event)
+
+
+class MockRoleConfig:
+    tier = "agent_session"
+
+    def __init__(self) -> None:
+        self.role = RoleName("")
+        self.nodes: List[DagNode] = []
+        self.version = ExecutionVersion(0)
+
+    def set_role(self, role: RoleName) -> None:
+        self.role = role
+
+    def set_nodes(self, nodes: Sequence[DagNode]) -> None:
+        self.nodes = list(nodes)
+        self.version = ExecutionVersion(int(self.version) + 1)
+
+
+class LoopNodeCleanerImplTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.registry = LifecycleRegistry()
+        __initialize__(self.registry)
+        self.storage = MockStorage()
+        self.src_metadata = MockSourceMetadataCoordinator()
+        self.sandbox = self.src_metadata
+        self.history = MockConversation()
+        self.runner = MockRunner()
+        self.node_cfg = MockNodeConfig()
+        self.logger = MockLogger()
+        self.role_cfg = MockRoleConfig()
+
+        self.registry.register_instance(
+            self.logger, keys=[logger.RunnerLogger], tier=system
+        )
+        self.registry.register_instance(self.storage, keys=[AgentStorage], tier=system)
+        self.registry.register_instance(
+            self.role_cfg, keys=[RoleConfig], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.src_metadata, keys=[SourceMetadataCoordinator], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.history, keys=[Conversation], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.runner, keys=[LoopDriver], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.node_cfg, keys=[NodeConfig], tier="agent_session"
+        )
+
+    def test_clean_advancement_delivers_changes(self) -> None:
+        """CUJ: Successful session advancement with modifications clears messages on cleaned node."""
+        node = _make_dag_node("//pkg:unit", "lib")
+        self.storage.definitions[node] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt")
+        )
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
+        self.sandbox.has_modifications = True
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: MUST clean dirty nodes within an agent session phase presenting the node role.
+            # Requirement: MUST clean dirty nodes sharing a role.
+            # Requirement: MUST communicate whether processing should continue.
+            # Requirement: WHEN the outcome signals advancement with file modifications, MUST mark the nodes clean in graph storage with the change summary.
+            # Requirement: WHEN cleaning completes without unhandleable failure, MUST return true.
+            cont = cleaner.clean([node])
+            self.assertTrue(cont)
+            self.assertEqual(self.storage.messages.get(node, set()), set())
+            self.assertIn(node, self.storage.cleaned_nodes)
+            self.assertIsNotNone(self.storage.change_descriptions[node])
+
+    def test_clean_advancement_per_node_modifications(self) -> None:
+        """Scenario 6: In a batch, only modified node receives change summary; unmodified node does not."""
+        node1 = _make_dag_node("//pkg:unit1", "lib")
+        node2 = _make_dag_node("//pkg:unit2", "lib")
+        self.storage.definitions[node1] = NodeDefinition(task_prompt=TaskPrompt("Prompt 1"))
+        self.storage.definitions[node2] = NodeDefinition(task_prompt=TaskPrompt("Prompt 2"))
+        self.storage.seed_dirty_node(node1, _make_change("dirty1"))
+        self.storage.seed_dirty_node(node2, _make_change("dirty2"))
+
+        # Only node1 was modified
+        self.sandbox.modified_nodes = {node1}
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            cont = cleaner.clean([node1, node2])
+            self.assertTrue(cont)
+            self.assertIn(node1, self.storage.cleaned_nodes)
+            self.assertIn(node2, self.storage.cleaned_nodes)
+            self.assertIsNotNone(self.storage.change_descriptions[node1])
+            self.assertIsNone(self.storage.change_descriptions[node2])
+
+    def test_clean_blame_delivers_feedback(self) -> None:
+        """CUJ: Session outcome signaling blame delivers feedback message to blamed dependency."""
+        node = _make_dag_node("//pkg:unit", "lib")
+        dep_blamed = _make_dag_node("//pkg:dep_blamed", "lib")
+        bf = MockBoundFile(
+            relative_path="dep_blamed.py",
+            owning_node=dep_blamed,
+        )
+        self.node_cfg.blame_targets_by_node = {node: {bf}}
+        self.storage.definitions[node] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt")
+        )
+        self.storage.dependencies[node] = {DagDependency(node=dep_blamed)}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
+        self.runner.outcome = LoopOutcome(
+            response=cast(Any, MockResponse(
+                is_failed=False,
+                is_terminated=True,
+                content="Blamed //pkg:dep_blamed: Broken API",
+            )),
+            conversation=ModelRequest(messages=[]),
+        )
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: WHEN the outcome signals blame attributed to a configured blame target, MUST deliver feedback messages strictly to the declared feedback dependency node owning the blamed file.
+            # Requirement: WHEN cleaning completes without unhandleable failure, MUST return true.
+            cont = cleaner.clean([node])
+            self.assertTrue(cont)
+            self.assertIn(dep_blamed, self.storage.messages)
+            msgs = list(self.storage.messages[dep_blamed])
+            self.assertEqual(len(msgs), 1)
+            self.assertIsInstance(msgs[0], FeedbackMessage)
+            assert isinstance(msgs[0], FeedbackMessage)
+            self.assertEqual(msgs[0].content, "Broken API")
+            self.assertEqual(msgs[0].target, dep_blamed)
+
+    def test_clean_run_failure_leaves_nodes_dirty(self) -> None:
+        """CUJ: Outcome signaling run failure leaves nodes dirty and returns False."""
+        node = _make_dag_node("//pkg:fail_unit", "lib")
+        self.storage.definitions[node] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt")
+        )
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
+        self.runner.outcome = LoopOutcome(
+            response=cast(Any, MockResponse(
+                is_failed=True,
+                is_terminated=True,
+                content="Fatal tool failure",
+            )),
+            conversation=ModelRequest(messages=[]),
+        )
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: WHEN the outcome signals run failure, MUST leave nodes dirty and return false.
+            # Requirement: WHEN an unhandleable failure occurs while cleaning, MUST return false.
+            cont = cleaner.clean([node])
+            self.assertFalse(cont)
+            self.assertTrue(self.storage.is_dirty(node))
+
+    def test_clean_promptless_nodes_resolves_without_session(self) -> None:
+        """CUJ: Dirty nodes without task prompt resolve pass-through changes without session phase."""
+        node = _make_dag_node("//pkg:pass_thru", "lib")
+        self.storage.definitions[node] = NodeDefinition(task_prompt=TaskPrompt(""))
+        self.storage.seed_dirty_node(node, _make_change("upstream change"))
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: WHEN dirty nodes define no task prompt, MUST resolve pass-through changes without establishing an agent session.
+            # Requirement: WHEN dirty nodes define no task prompt and incoming messages indicate upstream changes, MUST mark the nodes clean with a change summary.
+            cont = cleaner.clean([node])
+            self.assertTrue(cont)
+            self.assertEqual(self.runner.run_count, 0)
+            self.assertEqual(self.storage.messages.get(node, set()), set())
+            self.assertIn(node, self.storage.cleaned_nodes)
+            self.assertIsNotNone(self.storage.change_descriptions[node])
+
+    def test_clean_retries_on_unexpected_failure(self) -> None:
+        """CUJ: Retries session phase once upon encountering unexpected failure before propagating."""
+        node = _make_dag_node("//pkg:retry_unit", "lib")
+        self.storage.definitions[node] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt")
+        )
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
+
+        attempts = 0
+
+        def run_flaky() -> LoopOutcome:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("Transient crash")
+            return LoopOutcome(
+                response=cast(Any, MockResponse(
+                    is_failed=False,
+                    is_terminated=True,
+                    content="Success",
+                )),
+                conversation=ModelRequest(messages=[]),
+            )
+
+        self.runner.run = run_flaky
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: MUST retry the session phase once upon encountering an unexpected failure before propagating.
+            cont = cleaner.clean([node])
+            self.assertTrue(cont)
+            self.assertEqual(attempts, 2)
+
+    def test_clean_blame_parsing_formats(self) -> None:
+        """CUJ: Extracting target and explanation from blame responses with backticks, colons, or package prefixes."""
+        node = _make_dag_node("//pkg:unit", "lib")
+        dep_blamed = _make_dag_node("//pkg:dep_blamed", "lib")
+        bf = MockBoundFile(
+            relative_path="dep_blamed.py",
+            owning_node=dep_blamed,
+        )
+        self.node_cfg.blame_targets_by_node = {node: {bf}}
+        self.storage.definitions[node] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt")
+        )
+        self.storage.dependencies[node] = {DagDependency(node=dep_blamed)}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
+
+        blame_formats = [
+            "Blamed `//pkg:dep_blamed`: Spec contract defect",
+            "Blamed `dep_blamed.py`: Method signature mismatch",
+            "Blamed //pkg:dep_blamed: Error: invalid argument",
+            "Blamed //pkg/sub/dir:dep_blamed: Upstream defect",
+        ]
+
+        for fmt in blame_formats:
+            self.storage.clear_messages(dep_blamed)
+            self.runner.outcome = LoopOutcome(
+                response=cast(Any, MockResponse(
+                    is_failed=False,
+                    is_terminated=True,
+                    content=fmt,
+                )),
+                conversation=ModelRequest(messages=[]),
+            )
+            with enter_phase(system, registry=self.registry) as scope:
+                cleaner = scope.get_singleton(NodeCleanerImpl)
+                cont = cleaner.clean([node])
+                self.assertTrue(cont)
+                self.assertIn(dep_blamed, self.storage.messages)
+
+    def test_clean_blame_unconfigured_target_leaves_nodes_dirty_and_no_propagating_messages(
+        self,
+    ) -> None:
+        """CUJ: Outcome signaling blame for unconfigured target produces no propagating messages and leaves nodes dirty."""
+        node = _make_dag_node("//pkg:unit", "lib")
+        dep_guide = _make_dag_node("//pkg:dep_guide", "lib")
+        self.storage.definitions[node] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt")
+        )
+        self.storage.dependencies[node] = {DagDependency(node=dep_guide)}
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
+        self.node_cfg.blame_targets_by_node = {node: set()}
+        self.runner.outcome = LoopOutcome(
+            response=cast(Any, MockResponse(
+                is_failed=False,
+                is_terminated=True,
+                content="Blamed //pkg:unknown_target: Unconfigured blame error",
+            )),
+            conversation=ModelRequest(messages=[]),
+        )
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: WHEN the outcome signals blame attributed to a target failing to match a configured blame target, MUST produce no propagating messages and leave nodes dirty.
+            cont = cleaner.clean([node])
+            self.assertTrue(cont)
+            self.assertTrue(self.storage.is_dirty(node))
+            self.assertEqual(len(self.storage.get_messages(dep_guide)), 0)
+            self.assertEqual(len(self.storage.feedback.get(dep_guide, [])), 0)
+
+    def test_clean_blame_never_delivered_to_non_feedback_dependencies(self) -> None:
+        """CUJ: Blame feedback is strictly delivered to declared feedback dependencies and never non-feedback dependencies."""
+        node = _make_dag_node("//pkg:unit", "lib")
+        dep_feedback = _make_dag_node("//pkg:feedback_dep", "lib")
+        dep_non_feedback = _make_dag_node("//pkg:guide_dep", "lib")
+        bf = MockBoundFile(
+            relative_path="feedback_dep.py",
+            owning_node=dep_feedback,
+        )
+        self.node_cfg.blame_targets_by_node = {node: {bf}}
+        self.storage.definitions[node] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt")
+        )
+        self.storage.dependencies[node] = {
+            DagDependency(node=dep_feedback),
+            DagDependency(node=dep_non_feedback),
+        }
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
+        self.runner.outcome = LoopOutcome(
+            response=cast(Any, MockResponse(
+                is_failed=False,
+                is_terminated=True,
+                content="Blamed //pkg:feedback_dep: Contract violation",
+            )),
+            conversation=ModelRequest(messages=[]),
+        )
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: MUST NOT deliver feedback messages to non-feedback dependencies, guides, or fixed node specifications.
+            cont = cleaner.clean([node])
+            self.assertTrue(cont)
+            self.assertIn(dep_feedback, self.storage.messages)
+            self.assertEqual(len(self.storage.get_messages(dep_non_feedback)), 0)
+
+    def test_clean_unhandleable_failure_retries_exhausted(self) -> None:
+        """CUJ: Retries session phase once upon encountering unexpected failure before propagating."""
+        node = _make_dag_node("//pkg:exhaust_unit", "lib")
+        self.storage.definitions[node] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt")
+        )
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
+
+        call_count = 0
+
+        def run_always_fails() -> LoopOutcome:
+            nonlocal call_count
+            call_count += 1
+            raise RuntimeError("Fatal crash")
+
+        self.runner.run = run_always_fails
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: MUST retry the session phase once upon encountering an unexpected failure before propagating.
+            with self.assertRaises(RuntimeError):
+                cleaner.clean([node])
+            self.assertEqual(call_count, 2)
+            self.assertTrue(self.storage.is_dirty(node))
+
+    def test_clean_advancement_without_modifications_no_change_messages(self) -> None:
+        """CUJ: Successful session without file modifications clears messages on cleaned node."""
+        node = _make_dag_node("//pkg:unit_clean", "lib")
+        self.storage.definitions[node] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt")
+        )
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
+        self.sandbox.has_modifications = False
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            cont = cleaner.clean([node])
+            self.assertTrue(cont)
+            self.assertEqual(len(self.storage.messages.get(node, set())), 0)
+            # Requirement: WHEN no workspace files were modified, MUST mark the nodes clean without advancing change timestamps.
+            self.assertIn(node, self.storage.cleaned_nodes)
+            self.assertIsNone(self.storage.change_descriptions[node])
+
+    def test_clean_multi_node_session(self) -> None:
+        """CUJ: Cleaning multiple nodes sharing a role within a single agent session."""
+        node1 = _make_dag_node("//pkg:multi1", "lib")
+        node2 = _make_dag_node("//pkg:multi2", "lib")
+        self.storage.definitions[node1] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt 1")
+        )
+        self.storage.definitions[node2] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt 2")
+        )
+        self.storage.seed_dirty_node(node1, _make_change("dirty 1"))
+        self.storage.seed_dirty_node(node2, _make_change("dirty 2"))
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            cont = cleaner.clean([node1, node2])
+            self.assertTrue(cont)
+            self.assertIn(node1, self.storage.cleaned_nodes)
+            self.assertIn(node2, self.storage.cleaned_nodes)
+
+    def test_clean_session_configures_role_on_role_config(self) -> None:
+        """Postcondition: Session setup configures RoleConfig.role."""
+        node = _make_dag_node("//pkg:role_target", "lib")
+        self.storage.definitions[node] = NodeDefinition(
+            task_prompt=TaskPrompt("Prompt")
+        )
+        self.storage.seed_dirty_node(node, _make_change("dirty"))
+        self.runner.inspect_role = True
+
+        with enter_phase(system, registry=self.registry) as scope:
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            cont = cleaner.clean([node])
+            self.assertTrue(cont)
+            self.assertEqual(self.runner.captured_role, "lib")
+            self.assertEqual(self.runner.captured_nodes, [])
+            self.assertEqual(self.runner.captured_custom_role, "custom_role")
+
+    def test_loop_cleaner_success(self) -> None:
+        """CUJ: Iterative topological cleaning over batches to completion."""
+        root = _make_dag_node("//pkg:root")
+        node_b = _make_dag_node("//pkg:dep")
+        subgraph = MockDagSubgraph(batches=[[node_b], [root]])
+        cleaner = MockBatchCleaner(returns_continue=True)
+
+        self.registry.register_instance(subgraph, keys=[DagSubgraph], tier="system")
+
+        with enter_phase("system", registry=self.registry) as scope:
+            loop_cleaner_svc = scope.get_singleton(LoopCleaner)
+            result = loop_cleaner_svc.clean(root, cast(Any, cleaner))
+
+            self.assertTrue(result)
+            self.assertEqual(subgraph.target, root)
+            self.assertEqual(cleaner.cleaned_batches, [[node_b], [root]])
+            self.assertEqual(subgraph.recorded_visits, [[node_b], [root]])
+            self.assertTrue(subgraph.is_complete())
+
+    def test_loop_cleaner_halts_when_cleaner_cannot_continue(self) -> None:
+        """CUJ: Cleaning halts immediately when node cleaner returns False."""
+        root = _make_dag_node("//pkg:root")
+        node_b = _make_dag_node("//pkg:dep")
+        subgraph = MockDagSubgraph(batches=[[node_b], [root]])
+        cleaner = MockBatchCleaner(returns_continue=False)
+
+        self.registry.register_instance(subgraph, keys=[DagSubgraph], tier="system")
+
+        with enter_phase("system", registry=self.registry) as scope:
+            loop_cleaner_svc = scope.get_singleton(LoopCleaner)
+            result = loop_cleaner_svc.clean(root, cast(Any, cleaner))
+
+            self.assertFalse(result)
+            self.assertEqual(cleaner.cleaned_batches, [[node_b]])
+            self.assertFalse(subgraph.is_complete())
+
+    def test_loop_cleaner_already_complete(self) -> None:
+        """CUJ: Cleaning an already complete subgraph executes zero batches."""
+        root = _make_dag_node("//pkg:root")
+        subgraph = MockDagSubgraph(batches=[])
+        cleaner = MockBatchCleaner(returns_continue=True)
+
+        self.registry.register_instance(subgraph, keys=[DagSubgraph], tier="system")
+
+        with enter_phase("system", registry=self.registry) as scope:
+            loop_cleaner_svc = scope.get_singleton(LoopCleaner)
+            result = loop_cleaner_svc.clean(root, cast(Any, cleaner))
+
+            self.assertTrue(result)
+            self.assertEqual(subgraph.target, root)
+            self.assertEqual(len(cleaner.cleaned_batches), 0)
+
+
+class _BoolCallable:
+    def __init__(self, val: bool) -> None:
+        self.val = val
+
+    def __call__(self) -> bool:
+        return self.val
+
+    def __bool__(self) -> bool:
+        return self.val
+
+
+class MockDagSubgraph:
+    tier = "system"
+
+    def __init__(self, batches: List[List[DagNode]]) -> None:
+        self.target: DagNode | None = None
+        self.batches = list(batches)
+        self.recorded_visits: List[List[DagNode]] = []
+
+    def set_target(self, root: DagNode) -> None:
+        self.target = root
+
+    @property
+    def is_complete(self) -> _BoolCallable:
+        return _BoolCallable(len(self.batches) == 0)
+
+    def next_ready_batch(self) -> List[DagNode]:
+        if self.batches:
+            return self.batches.pop(0)
+        return []
+
+    def record_visit(self, batch: Sequence[DagNode]) -> None:
+        self.recorded_visits.append(list(batch))
+
+
+class MockBatchCleaner:
+    def __init__(self, returns_continue: bool = True) -> None:
+        self.returns_continue = returns_continue
+        self.cleaned_batches: List[List[DagNode]] = []
+
+    def clean(self, batch: Sequence[DagNode]) -> bool:
+        self.cleaned_batches.append(list(batch))
+        return self.returns_continue
+
+
+if __name__ == "__main__":
+    unittest.main()

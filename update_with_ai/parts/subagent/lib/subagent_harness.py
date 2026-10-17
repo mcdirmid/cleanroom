@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional, Protocol
 from support.lib.lifecycle import InTier
-from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
 from . import subagent_coordinator
 
 

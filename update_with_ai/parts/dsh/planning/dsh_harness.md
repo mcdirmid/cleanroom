@@ -43,7 +43,7 @@ Autonomous multi-agent execution requires reliable process management, non-block
 ### Knowledge Requirements
 
 - Agent session lifecycle tier management.
-  - Grounded: [agent_session: [agent_session_tier_provision]]
+  - Grounded: [session: [agent_session_tier_provision]]
 - Multi-agent workspace coordination services and wave scheduling.
   - Grounded: [subagent_coordinator: [subagent_coordinator_service]]
 - Subagent harness registry and adapter factory installation.

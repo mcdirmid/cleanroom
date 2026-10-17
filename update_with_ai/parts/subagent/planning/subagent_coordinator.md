@@ -53,6 +53,6 @@ Complex software development methodologies partition work into specialized roles
 ### Knowledge Requirements
 
 - Agent session lifecycle tier management.
-  - Grounded: [agent_session: [agent_session_tier_provision]]
+  - Grounded: [session: [agent_session_tier_provision]]
 - Subagent scheduling, dynamic process supervision, and workspace lifecycle logic.
   - Deferred: Realized by the subagent coordinator implementation component.

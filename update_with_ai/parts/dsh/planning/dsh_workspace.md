@@ -40,6 +40,6 @@ Autonomous agents operating inside role workspaces require explicit boundary gui
 ### Knowledge Requirements
 
 - Agent session lifecycle tier management.
-  - Grounded: [agent_session: [agent_session_tier_provision]]
+  - Grounded: [session: [agent_session_tier_provision]]
 - Role workspace instruction customization, overlay patch generation, and boundary verification logic.
   - Deferred: Realized by the dsh workspace implementation component.

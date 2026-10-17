@@ -1,16 +1,16 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T19:43:57Z
 LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Add workspace_roles constituent
+CHANGE: Add roles constituent
 CODE_HASH: cb20155bbb61
 SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
 -->
 
 # workspace_asm assembly component
 
-assembles: workspace_roles_impl, workspace_registry_impl, workspace_scaffold_impl, workspace_provision_impl, workspace_stub_impl, workspace_sync_impl
-imports: agent_session, src_metadata
-implements: workspace_roles, workspace_registry, workspace_scaffold, workspace_provision, workspace_stub, workspace_sync
+assembles: roles_impl, role_registry_impl, scaffold_impl, provision_impl, stub_impl, sync_impl
+imports: session, src_metadata
+implements: roles, role_registry, scaffold, provision, stub, sync
 
 ## Purpose
 

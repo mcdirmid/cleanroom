@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # antigravity_harness_impl implementation component
 
-imports: agent_session, antigravity_ext, antigravity_harness, subagent_coordinator, subagent_harness
+imports: session, antigravity_ext, antigravity_harness, subagent_coordinator, subagent_harness
 implements: antigravity_harness
 
 ## Purpose

@@ -12,7 +12,7 @@ from __future__ import annotations
 import unittest
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.subagent.lib import (
     subagent_asm,
     subagent_coordinator,

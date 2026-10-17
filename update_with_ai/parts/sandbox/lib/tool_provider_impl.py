@@ -10,8 +10,8 @@
 from __future__ import annotations
 from typing import Any, Dict, Mapping, Optional, Set, cast
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
-from update_with_ai.parts.agent.lib.agent_session import agent_session
-import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
+from update_with_ai.parts.agent.lib.session import session as agent_session
+import update_with_ai.parts.agent.lib.file_alias as file_alias
 from . import tool_provider
 
 # Requirements specified in tool_provider_impl.pyi
@@ -112,8 +112,8 @@ class AliasManagerType(tool_provider.AliasManagerType, Singleton):
 
     # Contract: ParameterType.actual_type - returns FileAlias type.
     @property
-    def actual_type(self) -> type[agent_file_alias.FileAlias]:
-        return agent_file_alias.FileAlias
+    def actual_type(self) -> type[file_alias.FileAlias]:
+        return file_alias.FileAlias
 
     # Contract: ParameterType.wire_type - returns str wire type.
     @property
@@ -121,14 +121,14 @@ class AliasManagerType(tool_provider.AliasManagerType, Singleton):
         return str
 
     # Contract: AliasManagerType.convert - converts wire string to FileAlias via AliasManager.
-    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+    def convert(self, wire_value: str) -> file_alias.FileAlias:
         if not isinstance(wire_value, str):
             raise tool_provider.ParameterConversionError(
                 message=tool_provider.ConversionErrorMessage(
                     f"Expected str for file alias, got {type(wire_value).__name__}"
                 )
             )
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        alias_mgr = get_singleton(file_alias.AliasManager)
         return alias_mgr.to_alias(wire_value)
 
 

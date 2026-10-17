@@ -26,10 +26,10 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
-from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.subagent.lib import subagent_coordinator, subagent_harness
-from update_with_ai.parts.tools.lib import workspace_work
-from update_with_ai.parts.workspace.lib import workspace_registry
+from update_with_ai.parts.workspace_cli.lib import work
+from update_with_ai.parts.workspace.lib import role_registry
 from . import dsh_harness, dsh_telemetry, dsh_workspace
 
 
@@ -117,7 +117,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         )
         is_auditor = False
         try:
-            reg = get_singleton(workspace_registry.WorkspaceRegistry)
+            reg = get_singleton(role_registry.WorkspaceRegistry)
             r_def = reg.resolve_role_definition(dispatch.role_name, dir_scope=dispatch.dir_scope)
             is_auditor = not r_def.writable_file_patterns
         except Exception:
@@ -162,7 +162,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
     def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
         """Dispatches work directive to a DeepSeek Harness role workspace."""
         task_handle = f"dsh_{dispatch.role_name}_{int(time.time() * 1000)}"
-        work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
+        work_mgr = get_singleton(work.WorkspaceWorkManager)
         pending_before = list(work_mgr.get_pending_work(dispatch.workspace_dir))
         if not pending_before:
             pending_before = list(dispatch.ready_targets)
@@ -264,7 +264,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         )
         return task_handle
 
-    # Contract: MUST await turn completion, compute buffer differences via workspace_work, assign unresolved status when zero targets submitted/blamed, parse telemetry, and return RoleTurnResult.
+    # Contract: MUST await turn completion, compute buffer differences via work, assign unresolved status when zero targets submitted/blamed, parse telemetry, and return RoleTurnResult.
     def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
         """Awaits DeepSeek Harness subagent turn completion and returns outcome result."""
         task = self._tasks.get(task_handle)
@@ -313,7 +313,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             except OSError:
                 pass
 
-        work_mgr = get_singleton(workspace_work.WorkspaceWorkManager)
+        work_mgr = get_singleton(work.WorkspaceWorkManager)
         pending_after = work_mgr.get_pending_work(task.dispatch.workspace_dir)
         submitted_list = [t for t in task.pending_before if t not in pending_after]
         if not submitted_list and os.path.isfile(task.log_file):

@@ -53,7 +53,7 @@ Operating DeepSeek Harness within Cleanroom requires concrete process dispatch v
 - Multi-agent workspace coordination services and wave scheduling.
   - Grounded: [subagent_coordinator: [subagent_coordinator_service]]
 - Workspace pending work buffer inspection and tracking.
-  - Grounded: [workspace_work: [workspace_pending_work_tracking]]
+  - Grounded: [work: [workspace_pending_work_tracking]]
 - Subagent harness registry and adapter factory installation.
   - Grounded: [subagent_harness: [harness_registry_service]]
 - DeepSeek Harness telemetry parsing and desktop synchronization services.

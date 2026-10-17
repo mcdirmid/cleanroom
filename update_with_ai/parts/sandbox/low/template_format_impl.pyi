@@ -11,7 +11,7 @@
 from typing import Any, Mapping
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
-from agent_session import AgentSessionTier
+from session import AgentSessionTier
 import template_format
 
 

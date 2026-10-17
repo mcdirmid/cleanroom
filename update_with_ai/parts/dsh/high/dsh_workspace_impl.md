@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # dsh_workspace_impl implementation component
 
-imports: agent_session, dsh_ext
+imports: session, dsh_ext
 implements: dsh_workspace
 
 ## Purpose

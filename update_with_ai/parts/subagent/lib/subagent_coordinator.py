@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import os
 from typing import Optional, Protocol, Sequence
 from support.lib.lifecycle import InTier
-from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
 
 
 # Contract: normalized token telemetry for an execution turn or cumulative session
@@ -173,7 +173,7 @@ def resolve_cleanroom_log_dir(workspace_dir: str) -> str:
     try:
         from support.lib.lifecycle import get_singleton
         import importlib
-        ws_reg_mod = importlib.import_module("workspace_registry")
+        ws_reg_mod = importlib.import_module("role_registry")
         reg = get_singleton(ws_reg_mod.WorkspaceRegistry)  # type: ignore
         main_root = reg.discover_repository_root(workspace_dir)
         log_dir = os.path.join(main_root, "logs")

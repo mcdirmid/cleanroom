@@ -467,7 +467,7 @@ def lint_low_file(file_path: Path) -> list[str]:
 
                 exempt_modules = {
                     "typing", "framework", "support.lib.lifecycle", "pathlib", "enum",
-                    "dataclasses", "os", "sys", "re", "agent_session"
+                    "dataclasses", "os", "sys", "re", "agent_session", "session"
                 }
 
                 for stmt in tree.body:

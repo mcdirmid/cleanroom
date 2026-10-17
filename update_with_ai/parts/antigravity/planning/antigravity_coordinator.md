@@ -42,7 +42,7 @@ Coordinating multi-agent workflows inside an interactive desktop IDE requires sp
 ### Knowledge Requirements
 
 - Agent session lifecycle tier management.
-  - Grounded: [agent_session: [agent_session_tier_provision]]
+  - Grounded: [session: [agent_session_tier_provision]]
 - Multi-agent workspace coordination services and wave scheduling.
   - Grounded: [subagent_coordinator: [subagent_coordinator_service]]
 - Coordinator skill generation, dispatch formatting, and notification parsing logic.

@@ -9,7 +9,7 @@ SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
 # dsh_asm assembly component
 
 assembles: dsh_workspace_impl, dsh_telemetry_impl, dsh_harness_impl
-imports: agent_session, dsh_ext, subagent_coordinator, workspace_work
+imports: session, dsh_ext, subagent_coordinator, work
 implements: dsh_workspace, dsh_telemetry, dsh_harness
 
 ## Purpose

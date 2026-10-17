@@ -1,0 +1,60 @@
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+CODE_HASH: 9734df3b3ec6
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->
+
+# attribution_impl implementation component
+
+imports: session, dag_storage, file_alias, node_config, src_metadata
+implements: attribution
+
+## Purpose
+
+The attribution_impl implementation component realizes upstream culprit matching, single-paragraph validation, feedback message injection, and cascade failure propagation.
+
+Accurate defect attribution requires verifying that blame is directed exclusively to declared upstream dependencies rather than unrelated components or downstream artifacts. The attribution_impl implementation component validates blame targets against configured dependency nodes, enforces concise single-paragraph critiques, routes feedback messages into graph storage for the upstream owner, marks the culprit dirty so it re-enters the work schedule, and automatically fails downstream in-batch dependent nodes.
+
+**Out of scope:** The attribution_impl implementation component does not edit file comments or reorder git history; these are handled by other components.
+
+**Delegated:** Feedback message storage and node status mutations are delegated to dag_storage; in-band source metadata extraction and feedback formatting are delegated to src_metadata.
+
+## Types and Behavior
+
+The attribution coordinator implements defect attribution and failure recording for the session.
+
+When attributing blame to an upstream target:
+
+- The attribution coordinator validates that the blame target corresponds to a declared upstream dependency of the source target configured to receive feedback, rejecting attribution with an error that lists the available blame targets when the blame target is not an eligible dependency.
+
+- The attribution coordinator validates that the explanation string contains no newline characters, rejecting explanations that contain multiple paragraphs or line breaks.
+
+- The attribution coordinator checks that any in-batch dependencies of the source target are clean before attributing blame.
+
+- The attribution coordinator creates a feedback message containing the explanation, records it on the culprit node in graph storage, and marks the culprit node status as dirty.
+
+- The attribution coordinator marks the source target as attributed and marks any in-batch dependent nodes as failed.
+
+- The attribution coordinator formats blame outcomes, available targets, and in-batch dependency errors using user-facing file aliases rather than raw graph node addresses.
+
+When recording task failure:
+
+- The attribution coordinator records the failure explanation on the target node in graph storage.
+
+- The attribution coordinator preserves the dirty status on the target node, marks the node as failed in the active session, and marks in-batch dependent nodes as failed.
+
+- The attribution coordinator formats failure outcomes using user-facing file aliases rather than raw graph node addresses.
+
+When attributing blame to a culprit file:
+
+- The attribution coordinator resolves the culprit file path against the canonical repository and workspace roots.
+
+- The attribution coordinator validates that the critique explanation contains no newline characters, rejecting explanations that contain multiple lines or breaks, and rejects critiques exceeding configured maximum feedback character limits with an advisory instructing defect prioritization.
+
+- The attribution coordinator appends in-band feedback and marks dirty status directly in the canonical repository, constructs an attribution outcome message formatted with the blame critique, and synchronizes the updated files back to the local role workspace.
+
+When recording task failure for a file target:
+
+- The attribution coordinator resolves the target file path, appends verification failure diagnostics, marks dirty status directly in the canonical repository, and synchronizes the updated files back to the local role workspace.

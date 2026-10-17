@@ -21,17 +21,17 @@ for _p in [
 
 import shutil
 from support.lib.lifecycle import get_singleton
-from update_with_ai.parts.storage.lib import src_metadata
-from update_with_ai.parts.systems.lib import uv_cleanroom_asm
-from update_with_ai.parts.uv.lib import uv_manifest_loader
+from update_with_ai.parts.metadata.lib import src_metadata
+from update_with_ai.parts.systems.lib import cleanroom_asm
+from update_with_ai.parts.uv.lib import manifest_loader
 from update_with_ai.support.lib import cleanroom_uv_runner
 
 
 class CleanroomUvRunnerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        uv_cleanroom_asm.__initialize__()
-        cls.loader = get_singleton(uv_manifest_loader.UvManifestLoader)
+        cleanroom_asm.__initialize__()
+        cls.loader = get_singleton(manifest_loader.UvManifestLoader)
         cls.repo_root = _repo_root
 
     def test_resolve_scope_entire_scope(self) -> None:
@@ -71,7 +71,7 @@ class CleanroomUvRunnerTest(unittest.TestCase):
 
     def test_resolve_scope_single_file(self) -> None:
         nodes = cleanroom_uv_runner.resolve_scope_nodes(
-            "staging/parts/sandbox/lib/sandbox_file_reader_impl.py",
+            "staging/parts/sandbox/lib/file_reader_impl.py",
             self.repo_root,
             self.loader,
         )
@@ -79,7 +79,7 @@ class CleanroomUvRunnerTest(unittest.TestCase):
         assert nodes is not None
         self.assertEqual(len(nodes), 1)
         self.assertEqual(
-            nodes[0].unit_address, "//staging/parts/sandbox:sandbox_file_reader_impl"
+            nodes[0].unit_address, "//staging/parts/sandbox:file_reader_impl"
         )
         self.assertEqual(nodes[0].role_address, "lib")
 

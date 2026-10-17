@@ -11,8 +11,8 @@
 from typing import Optional
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
-from agent_session import AgentSessionTier
-import agent_session
+from session import AgentSessionTier
+import session as agent_session
 import dsh_telemetry
 
 

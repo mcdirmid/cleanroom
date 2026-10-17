@@ -8,9 +8,9 @@ SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
 
 # loop_asm assembly component
 
-assembles: loop_guard_impl, loop_node_cleaner_impl
-imports: agent_node_config, agent_storage, dag_storage, dag_subgraph, loop_conversation, loop_driver, runner_logger, src_metadata, tool_provider
-implements: loop_cleaner, loop_guard, loop_node_cleaner
+assembles: guard_impl, node_cleaner_impl
+imports: node_config, node_storage, dag_storage, subgraph, conversation, driver, logger, src_metadata, tool_provider
+implements: cleaner, guard, node_cleaner
 
 ## Purpose
 

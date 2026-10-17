@@ -13,7 +13,7 @@ def __initialize__() -> None:
     """Aggregates loop guard repetition tracking, subgraph iteration, and node cleaning orchestration into the loop subsystem assembly.
 
     CONSTITUENTS:
-    - loop_guard_impl
-    - loop_node_cleaner_impl
+    - guard_impl
+    - node_cleaner_impl
     """
     ...

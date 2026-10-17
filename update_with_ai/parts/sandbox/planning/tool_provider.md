@@ -86,7 +86,7 @@ To preserve agent context window capacity across multi-turn interactions, respon
 - When a call omits a non-required parameter specifying a default value, the default value is bound for the call. [apply_defaults, call_with_python_bindings]
 - When wire conversion fails for a parameter, the tool call fails with feedback citing the parameter name and the conversion failure feedback. [convert_wire_val, convert_failure_error, convert_arguments, catch_conversion_error, call_improper_fails, failed_call_feedback]
 - When a constituent conversion fails in a composite type, conversion fails propagating that constituent's failure. [convert_list, convert_mapping_keys, convert_mapping_vals, convert_failure_error, composite_failure_propagate]
-- The alias manager type delegates wire string conversion to the session alias manager. [convert_wire_val, convert_alias_via_manager, agent_file_alias: [to_alias_without_failure]]
+- The alias manager type delegates wire string conversion to the session alias manager. [convert_wire_val, convert_alias_via_manager, file_alias: [to_alias_without_failure]]
 - When all parameter symbols resolve, required parameters are present, defaults are applied, and wire conversions succeed, the tool is called with action parameter bindings and returns its tool response. [call_wire_bindings, convert_wire_val, call_produces_response, resolve_symbols, convert_arguments, apply_defaults, check_requirements, call_with_python_bindings]
 - When tool-specific execution conditions fail, failure status is indicated in the tool response with diagnostic feedback. [call_produces_response, exec_condition_fails, failed_call_feedback]
 

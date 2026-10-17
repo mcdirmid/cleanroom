@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 from typing import Any, Mapping, NewType, Protocol
-from update_with_ai.parts.agent.lib.agent_session import AgentSessionTier
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
 
 # Requirements specified in template_format.pyi
 

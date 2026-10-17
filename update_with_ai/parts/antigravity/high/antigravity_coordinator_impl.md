@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # antigravity_coordinator_impl implementation component
 
-imports: agent_session, antigravity_coordinator, antigravity_ext, antigravity_workspace, subagent_coordinator, workspace_registry
+imports: session, antigravity_coordinator, antigravity_ext, antigravity_workspace, subagent_coordinator, role_registry
 implements: antigravity_coordinator, antigravity_workspace
 
 ## Purpose
@@ -19,7 +19,7 @@ Automated coordination requires precise prompt construction, dynamic workspace p
 
 **Out of scope:** The antigravity_coordinator_impl implementation component does not directly execute subagent subprocesses or mutate source files; these are handled by other components.
 
-**Delegated:** Session lifecycle scoping is delegated to agent_session; interface definitions are delegated to antigravity_coordinator; skill schema conventions are delegated to antigravity_ext; role dispatch models are delegated to subagent_coordinator; role definition resolution is delegated to workspace_registry.
+**Delegated:** Session lifecycle scoping is delegated to agent_session; interface definitions are delegated to antigravity_coordinator; skill schema conventions are delegated to antigravity_ext; role dispatch models are delegated to subagent_coordinator; role definition resolution is delegated to role_registry.
 
 ## Types and Behavior
 

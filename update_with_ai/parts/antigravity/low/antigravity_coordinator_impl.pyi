@@ -11,12 +11,12 @@
 from typing import Optional
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
-import agent_session
+import session as agent_session
 import antigravity_coordinator
 import antigravity_ext
 import antigravity_workspace
 import subagent_coordinator
-import workspace_registry
+import role_registry
 
 
 @singleton_type("agent_session")
@@ -28,7 +28,7 @@ class AntigravityWorkspaceConfigurer(
 
     GROUNDING:
     - Realizes workspace boundary configuration by querying role definitions through
-      workspace_registry.WorkspaceRegistry.resolve_role_definition, generating
+      role_registry.WorkspaceRegistry.resolve_role_definition, generating
       workspace-local isolation rules conforming to antigravity_ext rule specifications,
       writing role guidance documentation, and synthesizing
       antigravity_workspace.WorkspaceConfinementReport records.
@@ -46,7 +46,7 @@ class AntigravityWorkspaceConfigurer(
         """Establishes Antigravity isolation rules and returns a confinement report.
 
         GROUNDING:
-        - Resolves role definitions via workspace_registry.WorkspaceRegistry.resolve_role_definition,
+        - Resolves role definitions via role_registry.WorkspaceRegistry.resolve_role_definition,
           writes boundary isolation rules into .agents/rules/isolation.md adhering to
           antigravity_ext, writes role guidance documents into the workspace, and returns
           antigravity_workspace.WorkspaceConfinementReport with the list of created file paths.

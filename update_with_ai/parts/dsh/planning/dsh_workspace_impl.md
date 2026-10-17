@@ -44,4 +44,4 @@ Provisioning physical Cleanroom role workspaces for DeepSeek Harness execution r
 ### Knowledge Requirements
 
 - Agent session lifecycle tier management.
-  - Grounded: [agent_session: [agent_session_tier_provision]]
+  - Grounded: [session: [agent_session_tier_provision]]

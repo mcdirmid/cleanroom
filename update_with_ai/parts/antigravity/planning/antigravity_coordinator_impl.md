@@ -32,7 +32,7 @@ Automated coordination requires precise prompt construction, dynamic workspace p
 
 - When generating skills, the realization renders markdown and verifies workspace directory pinning. [render_skill_markdown, verify_workspace_pinning, antigravity_coordinator: [generate_coordinator_skill, enforce_workspace_pinning_requirement]]
 - When preparing and handling dispatch, the realization maps dispatch directives and deserializes wake messages. [map_dispatch_directive, deserialize_wake_message, antigravity_coordinator: [format_subagent_dispatch, parse_wake_notification]]
-- When configuring a workspace, the realization writes boundary rules, writes role guidance, and creates a confinement report. [write_boundary_rules_file, write_guidance_instruction_file, create_confinement_report, antigravity_workspace: [write_workspace_isolation_rules, generate_role_guidance_docs, produce_confinement_report], workspace_registry: [resolve_role_definition]]
+- When configuring a workspace, the realization writes boundary rules, writes role guidance, and creates a confinement report. [write_boundary_rules_file, write_guidance_instruction_file, create_confinement_report, antigravity_workspace: [write_workspace_isolation_rules, generate_role_guidance_docs, produce_confinement_report], role_registry: [resolve_role_definition]]
 
 ## Grounding
 
@@ -53,4 +53,4 @@ Automated coordination requires precise prompt construction, dynamic workspace p
 - Multi-agent workspace coordination services and wave scheduling.
   - Grounded: [subagent_coordinator: [subagent_coordinator_service]]
 - Role definition resolution services.
-  - Grounded: [workspace_registry: [workspace_registry_service]]
+  - Grounded: [role_registry: [workspace_registry_service]]

@@ -36,4 +36,4 @@ Multi-agent coordination requires command-line entrypoints for triggering dynami
 ### Knowledge Requirements
 
 - Agent session lifecycle phase and context management.
-  - Grounded: [agent_session: [agent_session_tier_provision]]
+  - Grounded: [session: [agent_session_tier_provision]]

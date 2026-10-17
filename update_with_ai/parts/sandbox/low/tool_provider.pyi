@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, NewType, Optional, Protocol, Sequence, Set, Tuple
 from framework import data_type, operation, override, poly_type, singleton_type
 from support.lib.lifecycle import InTier
-from agent_session import AgentSessionTier
-import agent_file_alias
+from session import AgentSessionTier
+import file_alias
 
 ToolName = NewType("ToolName", str)
 ToolDescription = NewType("ToolDescription", str)
@@ -344,7 +344,7 @@ class ToolManager(InTier[AgentSessionTier], Protocol):
 
 @singleton_type("agent_session")
 class AliasManagerType(
-    ParameterType[agent_file_alias.FileAlias, str],
+    ParameterType[file_alias.FileAlias, str],
     InTier[AgentSessionTier],
     Protocol,
 ):
@@ -352,7 +352,7 @@ class AliasManagerType(
 
     @property
     @override
-    def actual_type(self) -> type[agent_file_alias.FileAlias]:
+    def actual_type(self) -> type[file_alias.FileAlias]:
         """Data type produced by the converter."""
         ...
 
@@ -364,7 +364,7 @@ class AliasManagerType(
 
     @operation
     @override
-    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+    def convert(self, wire_value: str) -> file_alias.FileAlias:
         """Converts wire string to file alias using the session alias manager.
 
         Args:

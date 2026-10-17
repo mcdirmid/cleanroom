@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # dsh_workspace interface component
 
-imports: agent_session
+imports: session
 
 ## Purpose
 

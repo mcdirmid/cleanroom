@@ -15,8 +15,8 @@ import unittest
 from typing import Any, Callable, Dict, List, Mapping, Optional, Set
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.agent.lib import agent_file_alias
-from update_with_ai.parts.agent.lib.agent_session import agent_session
+from update_with_ai.parts.agent.lib import file_alias
+from update_with_ai.parts.agent.lib.session import session as agent_session
 from update_with_ai.parts.sandbox.lib import tool_provider
 from update_with_ai.parts.sandbox.lib.tool_provider_impl import (
     AliasManagerType,
@@ -378,20 +378,20 @@ class ToolProviderImplTest(unittest.TestCase):
     def test_alias_manager_type_converts_via_session_alias_manager(self) -> None:
         """Scenario 16: AliasManagerType converts wire strings by delegating to AliasManager.to_alias."""
         class _MockAliasManager:
-            def to_alias(self, path: str) -> agent_file_alias.FileAlias:
-                return agent_file_alias.FileAlias(agent_file_alias.RelativePath(path))
+            def to_alias(self, path: str) -> file_alias.FileAlias:
+                return file_alias.FileAlias(file_alias.RelativePath(path))
 
         self.registry.register_instance(
             _MockAliasManager(),
-            keys=[agent_file_alias.AliasManager],
+            keys=[file_alias.AliasManager],
             tier=agent_session,
         )
         with enter_phase(agent_session, registry=self.registry) as scope:
             alias_type = scope.get_singleton(tool_provider.AliasManagerType)
-            self.assertIs(alias_type.actual_type, agent_file_alias.FileAlias)
+            self.assertIs(alias_type.actual_type, file_alias.FileAlias)
             self.assertIs(alias_type.wire_type, str)
             res = alias_type.convert("widget/notes/draft.md")
-            self.assertIsInstance(res, agent_file_alias.FileAlias)
+            self.assertIsInstance(res, file_alias.FileAlias)
             self.assertEqual(res.relative_path, "widget/notes/draft.md")
 
             with self.assertRaises(tool_provider.ParameterConversionError):

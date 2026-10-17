@@ -23,7 +23,7 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
-from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.agent.lib import session as agent_session
 from . import subagent_coordinator, subagent_harness, subagent_tool
 
 

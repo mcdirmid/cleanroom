@@ -11,7 +11,7 @@
 from typing import Optional
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
-import agent_session
+import session as agent_session
 import dsh_ext
 import dsh_workspace
 

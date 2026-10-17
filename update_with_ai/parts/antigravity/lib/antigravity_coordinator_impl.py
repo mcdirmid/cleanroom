@@ -22,9 +22,9 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
-from update_with_ai.parts.agent.lib import agent_session
+from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.subagent.lib import subagent_coordinator
-from update_with_ai.parts.workspace.lib import workspace_registry
+from update_with_ai.parts.workspace.lib import role_registry
 from . import antigravity_coordinator, antigravity_workspace
 
 

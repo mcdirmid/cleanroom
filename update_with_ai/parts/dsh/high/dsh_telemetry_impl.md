@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # dsh_telemetry_impl implementation component
 
-imports: agent_session
+imports: session
 implements: dsh_telemetry
 
 ## Purpose

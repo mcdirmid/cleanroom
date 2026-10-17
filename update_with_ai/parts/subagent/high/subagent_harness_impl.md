@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 
 # subagent_harness_impl implementation component
 
-imports: agent_session, subagent_coordinator, subagent_harness
+imports: session, subagent_coordinator, subagent_harness
 implements: subagent_harness
 
 ## Purpose

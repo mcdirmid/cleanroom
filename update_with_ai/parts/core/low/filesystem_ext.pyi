@@ -9,7 +9,7 @@
 """
 ## External Mechanics & API Documentation
 
-The `filesystem_ext` external component specifies host operating system storage access and pattern scanning mechanics using Python standard library APIs. External boundary specifications define no standalone library files; dependent implementation components (specifically `sandbox_file_reader_impl` and `sandbox_file_editor_impl`) import and invoke standard library filesystem modules directly.
+The `filesystem_ext` external component specifies host operating system storage access and pattern scanning mechanics using Python standard library APIs. External boundary specifications define no standalone library files; dependent implementation components (specifically `file_reader_impl` and `file_editor_impl`) import and invoke standard library filesystem modules directly.
 
 **Host Path Reading & UTF-8 Text Decoding**
 

@@ -43,4 +43,4 @@ Harvesting token telemetry requires parsing JSON stream events from headless dsh
 ### Knowledge Requirements
 
 - Agent session lifecycle tier management.
-  - Grounded: [agent_session: [agent_session_tier_provision]]
+  - Grounded: [session: [agent_session_tier_provision]]
