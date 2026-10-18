@@ -82,6 +82,7 @@ class SubagentCoordinator(
         model_name: Optional[str] = None,
         poll_interval: Optional[float] = None,
         max_unproductive_turns: Optional[int] = None,
+        target_node: Optional[str] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure.
 
@@ -90,6 +91,8 @@ class SubagentCoordinator(
           and filesystem operations.
         - Resolves subagent batch size, token limits, and maximum unproductive turn thresholds from model configurations and persists
           effective batch sizes into role workspaces.
+        - Restricts work discovery and execution to target_node and its transitive dependencies via
+          work.WorkspaceWorkManager.compute_role_work_queue when target_node is specified.
         - Iterates dynamic process supervision until work queues are clean, a turn fails,
           consecutive unproductive turns exceed the threshold, or max_waves is exceeded,
           emitting real-time telemetry and aggregating TokenUsage into OrchestrationSummary.

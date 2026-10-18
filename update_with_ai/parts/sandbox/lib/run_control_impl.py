@@ -46,12 +46,10 @@ class CheckFilesTool(run_control.CheckFilesTool, InTier[AgentSessionTier], Singl
     def name(self) -> tool_provider.ToolName:
         return self._name
 
-    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
-    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         return self._parameters
@@ -123,12 +121,10 @@ class AdvanceTool(run_control.AdvanceTool, InTier[AgentSessionTier], Singleton):
     def name(self) -> tool_provider.ToolName:
         return self._name
 
-    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
-    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         return self._parameters
@@ -217,12 +213,10 @@ class GetWorkTool(run_control.GetWorkTool, InTier[AgentSessionTier], Singleton):
     def name(self) -> tool_provider.ToolName:
         return self._name
 
-    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
-    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         return self._parameters

@@ -2,7 +2,7 @@
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-13T20:00:00Z
 # CHANGE: author dsh_harness_impl unit tests
-# CODE_HASH: 245befc36e28
+# CODE_HASH: 4e7e5b77bb9b
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
@@ -231,7 +231,11 @@ class DshHarnessImplTest(unittest.TestCase):
                 batch_size=3,
                 task_prompt="",
             )
-            prompt = adapter._format_task_prompt(auditor_dispatch)
+            task_handle = adapter.dispatch_role(auditor_dispatch)
+            log_dir = subagent_coordinator.resolve_cleanroom_log_dir(self.test_dir)
+            prompt_file = os.path.join(log_dir, f".dsh_prompt_{task_handle}.md")
+            with open(prompt_file, "r", encoding="utf-8") as f:
+                prompt = f.read()
             self.assertIn("Auditor", prompt)
             self.assertIn("DO NOT EDIT FILES", prompt)
             self.assertIn("bin/blame", prompt)
@@ -276,6 +280,30 @@ class DshHarnessImplTest(unittest.TestCase):
             self.assertEqual(result.role, "qa")
             self.assertIn("//pkg/parts/foo:unit_a", result.submitted_targets)
             self.assertIn("//pkg/parts/foo:unit_b", result.blamed_targets)
+
+    def test_sessions_dir_discovery_and_environment_overrides(self) -> None:
+        """Requirement: MUST discover sessions_dir across environment variables and fallbacks."""
+        orig_env = dict(os.environ)
+        try:
+            # 1. Explicit sessions_dir argument
+            adapter1 = DshHarnessAdapter(sessions_dir="/custom/sessions/path", simulation_mode=True)
+            self.assertEqual(adapter1._sessions_dir, "/custom/sessions/path")
+
+            # 2. DSH_SESSIONS_DIR env var
+            os.environ["DSH_SESSIONS_DIR"] = "/env/sessions/dir"
+            adapter2 = DshHarnessAdapter(simulation_mode=True)
+            self.assertEqual(adapter2._sessions_dir, "/env/sessions/dir")
+
+            # 3. DSH_HOME env var
+            os.environ.pop("DSH_SESSIONS_DIR", None)
+            os.environ["DSH_HOME"] = self.test_dir
+            sess_under_dsh = os.path.join(self.test_dir, "harness", "sessions")
+            os.makedirs(sess_under_dsh, exist_ok=True)
+            adapter3 = DshHarnessAdapter(simulation_mode=True)
+            self.assertEqual(adapter3._sessions_dir, sess_under_dsh)
+        finally:
+            os.environ.clear()
+            os.environ.update(orig_env)
 
 
 if __name__ == "__main__":

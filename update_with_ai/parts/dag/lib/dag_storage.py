@@ -92,6 +92,7 @@ class DagStorage(Protocol):
     - Direct upstream dependencies of a dag node form a directed acyclic graph.
     """
 
+    # Contract: Provides the set of upstream dependencies for a node.
     def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
         """Provides the set of upstream dependencies for a node.
 
@@ -103,6 +104,7 @@ class DagStorage(Protocol):
         """
         ...
 
+    # Contract: Provides the set of messages recorded for a node.
     def get_messages(self, node: DagNode) -> Set[DagMessage]:
         """Provides the set of messages recorded for a node.
 
@@ -114,6 +116,7 @@ class DagStorage(Protocol):
         """
         ...
 
+    # Contract: Indicates whether a node needs to be cleaned.
     def is_dirty(self, node: DagNode) -> bool:
         """Indicates whether a node needs to be cleaned.
 
@@ -133,6 +136,7 @@ class DagStorage(Protocol):
         """
         ...
 
+    # Contract: Adds a feedback message blaming a dependency target node.
     def add_feedback_message(self, node: DagNode, message: FeedbackMessage) -> None:
         """Adds a feedback message blaming a dependency target node.
 
@@ -145,6 +149,7 @@ class DagStorage(Protocol):
         """
         ...
 
+    # Contract: Adds a message to a node.
     def add_message(self, message: DagMessage, to: DagNode) -> None:
         """Adds a message to a node.
 
@@ -157,6 +162,7 @@ class DagStorage(Protocol):
         """
         ...
 
+    # Contract: Marks a node dirty by clearing its clean status and recording a provided reason in in-band metadata.
     def mark_node_dirty(self, node: DagNode, reason: Optional[str] = ...) -> None:
         """Marks a node dirty by clearing its clean status and recording a provided reason in in-band metadata.
 
@@ -171,6 +177,7 @@ class DagStorage(Protocol):
         """
         ...
 
+    # Contract: Marks the target node and all reachable dependencies in its subgraph clean.
     def mark_subgraph_clean(self, node: DagNode) -> None:
         """Marks the target node and all reachable dependencies in its subgraph clean.
 
@@ -184,6 +191,7 @@ class DagStorage(Protocol):
         """
         ...
 
+    # Contract: Clears all messages from a node.
     def clear_messages(self, node: DagNode) -> None:
         """Clears all messages from a node.
 
@@ -195,6 +203,7 @@ class DagStorage(Protocol):
         """
         ...
 
+    # Contract: Marks a node clean in graph storage and on disk.
     def mark_node_clean(
         self, node: DagNode, change_description: Optional[ChangeDescription] = ...
     ) -> None:
@@ -213,6 +222,7 @@ class DagStorage(Protocol):
         """
         ...
 
+    # Contract: Materializes initial template content for a node if its source artifact is missing on disk.
     def materialize_template(self, node: DagNode) -> None:
         """Materializes initial template content for a node if its source artifact is missing on disk.
 

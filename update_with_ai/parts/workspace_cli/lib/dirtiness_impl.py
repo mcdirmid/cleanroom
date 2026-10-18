@@ -32,7 +32,6 @@ from . import dirtiness
 _UNIT_PART_MAP_CACHE: Dict[str, Dict[str, str]] = {}
 
 
-# Contract: Classifies unit type by suffix (_ext, _asm, _impl, interface).
 def _classify_unit_type(unit_name: str) -> str:
     if unit_name.endswith("_ext"):
         return "external"
@@ -43,7 +42,6 @@ def _classify_unit_type(unit_name: str) -> str:
     return "interface"
 
 
-# Contract: Checks whether role is an auditor role based on audit_tag or absence of src_pattern.
 def _is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     clean_r = role_name.split(":")[-1].strip().lower()
     reg = get_singleton(role_registry.WorkspaceRegistry)
@@ -51,7 +49,6 @@ def _is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     return bool(r_def.audit_tag or not r_def.src_pattern)
 
 
-# Contract: Parses high-level markdown specifications to extract unit names and dependencies.
 def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
     high_dir = os.path.join(repo_root, part_dir, "high")
     if os.path.isdir(high_dir):
@@ -95,7 +92,6 @@ def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
     return {}
 
 
-# Contract: Discovers part directories within repository or directory scope.
 def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
     if not dir_scope:
         parts_p = os.path.join(repo_root, "parts")
@@ -117,7 +113,6 @@ def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
     return [dir_scope] if os.path.isdir(scope_p) else []
 
 
-# Contract: Checks if a relative path matches any glob pattern.
 def _matches_any_pattern(rel_path: str, patterns: Sequence[str]) -> bool:
     normalized = rel_path.replace("\\", "/")
     fname = os.path.basename(normalized)
@@ -129,7 +124,6 @@ def _matches_any_pattern(rel_path: str, patterns: Sequence[str]) -> bool:
     )
 
 
-# Contract: Builds or retrieves cached map of unit names to part directories.
 def _unit_part_map(repo_root: str) -> Dict[str, str]:
     cached = _UNIT_PART_MAP_CACHE.get(repo_root)
     if cached is not None:
@@ -143,7 +137,6 @@ def _unit_part_map(repo_root: str) -> Dict[str, str]:
     return mapping
 
 
-# Contract: Parses a dependency label into (package_dir, unit_name).
 def _parse_dependency_label(raw: str, default_pkg: str) -> Tuple[str, str]:
     if raw.startswith("//"):
         label = raw.lstrip("/")
@@ -152,7 +145,6 @@ def _parse_dependency_label(raw: str, default_pkg: str) -> Tuple[str, str]:
     return default_pkg, raw.lstrip(":").strip()
 
 
-# Contract: Resolves declared cross-unit dependencies of a unit into (part_dir, unit_name) pairs.
 def _cross_unit_dependencies(
     repo_root: str, part_dir: str, unit_name: str
 ) -> List[Tuple[str, str]]:
@@ -174,7 +166,6 @@ def _cross_unit_dependencies(
     return deps
 
 
-# Contract: Parses pattern format string into directory name, prefix, and suffix.
 def _parse_pattern_info(src_pattern: str) -> Tuple[str, str, str]:
     if not src_pattern:
         return "", "", ""
@@ -189,7 +180,6 @@ def _parse_pattern_info(src_pattern: str) -> Tuple[str, str, str]:
     return dir_name, prefix, suffix
 
 
-# Contract: Discovers role matching a file path based on directory and file patterns.
 def _resolve_file_role(file_path: str, repo_root: Optional[str] = None) -> str:
     norm = file_path.replace("\\", "/")
     fname, parent = os.path.basename(norm), os.path.basename(os.path.dirname(norm))
@@ -206,7 +196,6 @@ def _resolve_file_role(file_path: str, repo_root: Optional[str] = None) -> str:
     raise ValueError(f"Unrecognized role for file path: {file_path}")
 
 
-# Contract: Resolves part directory, unit name, and role name from file path.
 def _parse_unit_from_file_path(file_path: str, repo_root: str) -> Tuple[str, str, str]:
     norm_path, norm_root = os.path.realpath(file_path), os.path.realpath(repo_root)
     rel = (
@@ -227,7 +216,6 @@ def _parse_unit_from_file_path(file_path: str, repo_root: str) -> Tuple[str, str
 
 
 
-# Contract: Discovers existing companion specification contracts and interface definitions for target.
 # Suffix heuristic stripping '_impl' to expand interface companion contracts for implementation units.
 def _get_unit_contract_files(
     target_file: str,
@@ -312,7 +300,6 @@ def _get_unit_contract_files(
     return existing
 
 
-# Contract: Resolves file path across workspace root and main root.
 def _resolve_scope_file(
     rel_path: str,
     ws_root: str,
@@ -325,7 +312,6 @@ def _resolve_scope_file(
     return None
 
 
-# Contract: Checks if file's LAST_CHANGED timestamp in metadata is after reference timestamp.
 def _is_modified_after(file_path: str, ref_timestamp: str) -> Optional[str]:
     d_meta = src_metadata.extract_metadata(file_path)
     if d_meta and d_meta.last_changed and ref_timestamp < d_meta.last_changed:
@@ -333,7 +319,6 @@ def _is_modified_after(file_path: str, ref_timestamp: str) -> Optional[str]:
     return None
 
 
-# Contract: Traverses upstream role dependency chain.
 def _get_role_upstream_chain(
     role_name: str, repo_root: Optional[str] = None
 ) -> List[str]:
@@ -360,7 +345,6 @@ def _get_role_upstream_chain(
     return [r for r in order if r != clean_r]
 
 
-# Contract: Evaluates whether a unit is dirty across auditor and producer role specifications.
 def _eval_unit_dirty_internal(
     ws_root: str,
     part_dir: str,

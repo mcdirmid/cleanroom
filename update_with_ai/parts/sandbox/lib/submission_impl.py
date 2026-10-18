@@ -155,17 +155,14 @@ class SubmitTool(
             self._change_summary_parameter.name: self._change_summary_parameter,
         }
 
-    # Contract: Tool.name - returns 'submit'.
     @property
     def name(self) -> tool_provider.ToolName:
         return self._name
 
-    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
-    # Contract: ResolveTool.target_parameter - parameter identifying active node being resolved.
     @property
     def target_parameter(
         self,
@@ -179,7 +176,6 @@ class SubmitTool(
     ) -> tool_provider.ToolParameter[Optional[submission.ChangeSummary], str]:
         return self._change_summary_parameter
 
-    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(
         self,
@@ -397,17 +393,14 @@ class FailTool(
             self._explanation_parameter.name: self._explanation_parameter,
         }
 
-    # Contract: Tool.name - returns 'fail'.
     @property
     def name(self) -> tool_provider.ToolName:
         return self._name
 
-    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
-    # Contract: ResolveTool.target_parameter - parameter identifying active node being resolved.
     @property
     def target_parameter(
         self,
@@ -421,7 +414,6 @@ class FailTool(
     ) -> tool_provider.ToolParameter[submission.FailureExplanation, str]:
         return self._explanation_parameter
 
-    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(
         self,
@@ -456,7 +448,6 @@ class FailTool(
         )
 
 
-# Contract: _match_blame_target - matches candidate blame target against bound files using relative path, suffix, or basename.
 def _match_blame_target(
     cand: str, targets: Iterable[file_alias.BoundFile]
 ) -> Optional[file_alias.BoundFile]:
@@ -531,17 +522,14 @@ class BlameTool(
             self._explanation_parameter.name: self._explanation_parameter,
         }
 
-    # Contract: Tool.name - returns 'blame'.
     @property
     def name(self) -> tool_provider.ToolName:
         return self._name
 
-    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return self._description
 
-    # Contract: ResolveTool.target_parameter - parameter identifying active node attributing blame.
     @property
     def target_parameter(
         self,
@@ -562,7 +550,6 @@ class BlameTool(
     ) -> tool_provider.ToolParameter[submission.BlameExplanation, str]:
         return self._explanation_parameter
 
-    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(
         self,

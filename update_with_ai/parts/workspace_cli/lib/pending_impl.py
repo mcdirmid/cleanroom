@@ -30,7 +30,6 @@ PENDING_WORK_FILE = ".cleanroom_pending_work.json"
 
 
 
-# Contract: Parses pattern format string into directory name, prefix, and suffix.
 def _parse_pattern_info(src_pattern: str) -> tuple[str, str, str]:
     if not src_pattern:
         return "", "", ""
@@ -51,7 +50,6 @@ def _parse_pattern_info(src_pattern: str) -> tuple[str, str, str]:
     return dir_name, prefix, suffix
 
 
-# Contract: Discovers role matching a file path based on directory and file patterns.
 def _resolve_file_role(file_path: str, repo_root: Optional[str] = None) -> str:
     norm = file_path.replace("\\", "/")
     fname = os.path.basename(norm)
@@ -69,7 +67,6 @@ def _resolve_file_role(file_path: str, repo_root: Optional[str] = None) -> str:
     raise ValueError(f"Unrecognized role for file path: {file_path}")
 
 
-# Contract: Resolves part directory, unit name, and role name from file path.
 def _parse_unit_from_file_path(file_path: str, repo_root: str) -> tuple[str, str, str]:
     norm_path = os.path.realpath(file_path)
     norm_root = os.path.realpath(repo_root)
@@ -92,7 +89,6 @@ def _parse_unit_from_file_path(file_path: str, repo_root: str) -> tuple[str, str
     return part_dir, unit_name, role_name
 
 
-# Contract: Materializes starter template via graph storage for missing target file.
 def materialize_starter_template(
     target_path: str,
     role_name: str,

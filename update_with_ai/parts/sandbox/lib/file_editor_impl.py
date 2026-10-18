@@ -379,17 +379,14 @@ class ReplaceFileContentTool(file_editor.ReplaceFileContentTool, InTier[AgentSes
             default_value=file_editor.AllowMultiple(False),
         )
 
-    # Contract: Tool.name - returns tool identifier "replace_file_content".
     @property
     def name(self) -> tool_provider.ToolName:
         return tool_provider.ToolName("replace_file_content")
 
-    # Contract: Tool.description - returns tool description.
     @property
     def description(self) -> tool_provider.ToolDescription:
         return tool_provider.ToolDescription("Replaces target content in a read-write file.")
 
-    # Contract: Tool.parameters - returns tool parameter mapping.
     @property
     def parameters(self) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
         return {

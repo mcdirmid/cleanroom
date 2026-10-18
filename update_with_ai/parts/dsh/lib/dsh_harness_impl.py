@@ -2,7 +2,7 @@
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-14T18:55:00Z
 # CHANGE: Delegate telemetry parsing and desktop sync to dsh_telemetry
-# CODE_HASH: 577918af8d17
+# CODE_HASH: f4fba21de782
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
@@ -17,6 +17,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -33,7 +34,6 @@ from update_with_ai.parts.workspace.lib import role_registry
 from . import dsh_harness, dsh_telemetry, dsh_workspace
 
 
-# Contract: Reads blamed culprit files from workspace blame buffer (.cleanroom_blame_buffer.json).
 def _read_blame_buffer(workspace_dir: str) -> List[str]:
     """Reads blamed culprit files from the workspace blame buffer."""
     p = os.path.join(workspace_dir, ".cleanroom_blame_buffer.json")
@@ -60,7 +60,43 @@ def _read_blame_buffer(workspace_dir: str) -> List[str]:
     return []
 
 
-# Contract: Internal state tracking for active DeepSeek Harness tasks.
+def _resolve_default_sessions_dir() -> str:
+    """Discovers DeepSeek Harness sessions directory across environment and OS candidates."""
+    if "DSH_SESSIONS_DIR" in os.environ and os.environ["DSH_SESSIONS_DIR"].strip():
+        return os.environ["DSH_SESSIONS_DIR"].strip()
+
+    dsh_home = os.environ.get("DSH_HOME")
+    if dsh_home and dsh_home.strip():
+        h_cand = os.path.join(dsh_home.strip(), "harness", "sessions")
+        if os.path.isdir(h_cand):
+            return h_cand
+        s_cand = os.path.join(dsh_home.strip(), "sessions")
+        if os.path.isdir(s_cand):
+            return s_cand
+        return h_cand
+
+    home = os.path.expanduser("~")
+    candidates = [
+        os.path.join(home, "Library", "Application Support", "dsh-desktop", "harness", "sessions"),
+        os.path.join(home, ".config", "dsh-desktop", "harness", "sessions"),
+        os.path.join(home, ".local", "share", "dsh-desktop", "harness", "sessions"),
+    ]
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        candidates.append(os.path.join(appdata, "dsh-desktop", "harness", "sessions"))
+
+    for cand in candidates:
+        if os.path.isdir(cand):
+            return cand
+
+    # Platform default fallback
+    if sys.platform == "darwin":
+        return os.path.join(home, "Library", "Application Support", "dsh-desktop", "harness", "sessions")
+    elif sys.platform == "win32":
+        return os.path.join(os.environ.get("APPDATA", home), "dsh-desktop", "harness", "sessions")
+    return os.path.join(home, ".config", "dsh-desktop", "harness", "sessions")
+
+
 @dataclass
 class _ActiveDshTask:
     handle: str
@@ -90,9 +126,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         self._timeout_seconds = timeout_seconds
         self._max_context_tokens = max_context_tokens
         self._custom_cmd = custom_cmd
-        self._sessions_dir = sessions_dir or os.path.expanduser(
-            "~/Library/Application Support/dsh-desktop/harness/sessions"
-        )
+        self._sessions_dir = sessions_dir or _resolve_default_sessions_dir()
         self._simulation_mode = simulation_mode
         self._parser = parser
         self._tasks: Dict[str, _ActiveDshTask] = {}
@@ -108,7 +142,6 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             dsh_asm.__initialize__()
             return get_singleton(dsh_telemetry.DshTelemetryParser)
 
-    # Contract: Prepares role-tailored task prompts distinguishing auditor roles from authoring roles.
     def _format_task_prompt(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
         targets_str = (
             "\n".join(f"- {t}" for t in dispatch.ready_targets)

@@ -407,7 +407,7 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                     "## Purpose\n..."
                 )
 
-            units_a = work_impl._get_part_units(repo_root, "parts/alpha")
+            units_a = work_impl.get_part_units(repo_root, "parts/alpha")
             self.assertIn("alpha_iface", units_a)
             self.assertEqual(units_a["alpha_iface"], [])
             self.assertIn("alpha_impl", units_a)
@@ -420,7 +420,7 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             with open(os.path.join(lib_b, "beta.py"), "w", encoding="utf-8") as f:
                 f.write("# beta\n")
 
-            units_b = work_impl._get_part_units(repo_root, "parts/beta")
+            units_b = work_impl.get_part_units(repo_root, "parts/beta")
             self.assertEqual(units_b, {"beta": []})
 
     def test_compute_role_work_queue_materializes_template(self) -> None:
@@ -792,6 +792,47 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             pending = self.work_mgr.get_pending_work(ws_dir)
             self.assertEqual(len(pending), 1)
             self.assertEqual(pending[0], summary.ready_items[0].target_file)
+
+    def test_compute_role_work_queue_bounds_to_target_unit(self) -> None:
+        with tempfile.TemporaryDirectory() as repo_root:
+            clean_py = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-08T00:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-08T00:00:00Z\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+            part_a = os.path.join(repo_root, "staging/parts/alpha")
+            part_b = os.path.join(repo_root, "staging/parts/beta")
+            os.makedirs(os.path.join(part_a, "lib"), exist_ok=True)
+            os.makedirs(os.path.join(part_a, "low"), exist_ok=True)
+            os.makedirs(os.path.join(part_b, "lib"), exist_ok=True)
+            os.makedirs(os.path.join(part_b, "low"), exist_ok=True)
+
+            with open(os.path.join(part_a, "low/alpha.pyi"), "w", encoding="utf-8") as f:
+                f.write(clean_py)
+            with open(os.path.join(part_a, "lib/alpha.py"), "w", encoding="utf-8") as f:
+                f.write("# alpha\n")
+
+            with open(os.path.join(part_b, "low/beta.pyi"), "w", encoding="utf-8") as f:
+                f.write(clean_py)
+            with open(os.path.join(part_b, "lib/beta.py"), "w", encoding="utf-8") as f:
+                f.write("# beta\n")
+
+            ready_all, _ = self.work_mgr.compute_role_work_queue(
+                role_name="lib",
+                dir_scope="staging",
+                repo_root=repo_root,
+            )
+            self.assertEqual(len(ready_all), 2)
+
+            ready_bounded, _ = self.work_mgr.compute_role_work_queue(
+                role_name="lib",
+                dir_scope="staging",
+                repo_root=repo_root,
+                target_unit="//staging/parts/alpha:alpha#lib",
+            )
+            self.assertEqual(len(ready_bounded), 1)
+            self.assertEqual(ready_bounded[0].target_file, "staging/parts/alpha/lib/alpha.py")
 
 
 if __name__ == "__main__":

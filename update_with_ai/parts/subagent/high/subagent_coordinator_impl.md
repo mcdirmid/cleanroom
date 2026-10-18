@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:00:00Z
-CHANGE: author subagent_coordinator_impl implementation specification
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: support restricting work discovery and execution to target units and transitive dependencies
 CODE_HASH: b93703556435
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
@@ -33,7 +33,7 @@ When coordinating multi-agent execution:
 
 - The realization queries commissioned workspaces and evaluates unblocked dirty role work queues.
 
-- The realization bounds role discovery and execution up to an optional target role boundary when specified.
+- The realization bounds role discovery and execution up to an optional target role boundary when specified, and restricts work discovery to a designated target unit and its transitive upstream dependencies when a target unit is specified.
 
 - The realization commissions absent role workspaces on demand when ready tasks are identified, recording effective batch size limits into role descriptors.
 

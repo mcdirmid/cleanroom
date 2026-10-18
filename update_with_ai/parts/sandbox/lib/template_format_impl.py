@@ -25,7 +25,6 @@ PLACEHOLDER_PATTERN = re.compile(r"<([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*)>")
 DIRECTIVE_STRIP = re.compile(r"<!--\s*(?:IF|ENDIF|FOR|ENDFOR)[^>]*-->")
 
 
-# Contract: TemplateFormatter._lookup_path - resolves dot-separated parameter keys against nested mappings and object attributes.
 def _lookup_path(path: str, context: Mapping[str, Any]) -> Tuple[bool, Any]:
     parts = path.strip().split(".")
     curr: Any = context
@@ -42,7 +41,6 @@ def _lookup_path(path: str, context: Mapping[str, Any]) -> Tuple[bool, Any]:
     return True, curr
 
 
-# Contract: TemplateFormatter._eval_condition - evaluates condition key truthiness, including content when truthy or absent and omitting when falsy.
 def _eval_condition(cond_path: str, context: Mapping[str, Any]) -> bool:
     found, val = _lookup_path(cond_path.strip(), context)
     if not found:
@@ -50,13 +48,11 @@ def _eval_condition(cond_path: str, context: Mapping[str, Any]) -> bool:
     return bool(val)
 
 
-# Contract: TemplateFormatter._resolve_path - resolves path value in parameter context.
 def _resolve_path(path: str, context: Mapping[str, Any]) -> Any:
     found, val = _lookup_path(path, context)
     return val if found else None
 
 
-# Contract: TemplateFormatter._substitute_placeholders - substitutes bound angle-bracket placeholders, preserves unbound placeholders, and strips comment directives.
 def _substitute_placeholders(text: str, context: Mapping[str, Any]) -> str:
     def _repl(match: re.Match[str]) -> str:
         var_path = match.group(1)
@@ -69,7 +65,6 @@ def _substitute_placeholders(text: str, context: Mapping[str, Any]) -> str:
     return DIRECTIVE_STRIP.sub("", res)
 
 
-# Contract: TemplateFormatter._render_lines - evaluates block loops, block conditionals, line-suffix loops, and line-suffix conditionals.
 def _render_lines(lines: Sequence[str], context: Mapping[str, Any]) -> List[str]:
     output: List[str] = []
     i = 0

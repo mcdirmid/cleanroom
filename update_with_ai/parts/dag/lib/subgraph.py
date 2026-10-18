@@ -15,6 +15,7 @@ from .dag_storage import DagNode
 class DagSubgraph(Protocol):
     """System service modeling an active execution subgraph rooted at a target node."""
 
+    # Contract: Sets the active execution subgraph target node.
     def set_target(self, target: DagNode) -> None:
         """Sets the active execution subgraph target node.
 
@@ -29,6 +30,7 @@ class DagSubgraph(Protocol):
         """
         ...
 
+    # Contract: Indicates whether all reachable nodes in the target subgraph are clean.
     def is_complete(self) -> bool:
         """Indicates whether all reachable nodes in the target subgraph are clean.
 
@@ -40,6 +42,7 @@ class DagSubgraph(Protocol):
         """
         ...
 
+    # Contract: Provides the next ready batch of dirty nodes to clean.
     def next_ready_batch(self) -> Sequence[DagNode]:
         """Provides the next ready batch of dirty nodes to clean.
 
@@ -55,6 +58,7 @@ class DagSubgraph(Protocol):
         """
         ...
 
+    # Contract: Records a visit for a batch of nodes being cleaned.
     def record_visit(self, batch: Sequence[DagNode]) -> None:
         """Records a visit for a batch of nodes being cleaned.
 

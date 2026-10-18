@@ -29,7 +29,6 @@ from . import role_registry, roles
 _ROLE_CACHE: Dict[str, Tuple[float, Dict[str, roles.RoleDefinition]]] = {}
 
 
-# Contract: Discovers repository root from argument, registry, or ambient environment.
 def _discover_root(repo_root: Optional[str] = None) -> str:
     """Discovers repository root directory from argument, registry, or ambient environment."""
     if repo_root and os.path.isdir(repo_root):
@@ -45,7 +44,6 @@ def _discover_root(repo_root: Optional[str] = None) -> str:
     return os.path.abspath(os.getcwd())
 
 
-# Contract: Decomposes source path pattern into directory, stem suffix, and extension.
 def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     """Decomposes a source path pattern into its directory, stem suffix, and extension."""
     if not pat:
@@ -60,11 +58,11 @@ def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     return d, suffix, ext
 
 
-# Contract: Builds role definition records from raw attributes, enforcing dependency constraints and postconditions.
 def _build_role_definitions(
     raw_roles: Dict[str, Dict[str, Any]],
 ) -> Dict[str, roles.RoleDefinition]:
     """Builds role definition records from raw role declaration attributes."""
+    # Contract: __orphan__ - MUST return validated role definitions parsed from raw role attribute dictionaries.
     # Contract: Identifies auditor roles based on missing src_pattern or explicit audit_tag.
     auditor_roles = {
         r.split(":")[-1]
@@ -192,7 +190,9 @@ def _build_role_definitions(
     return role_defs
 
 
-# Contract: Parses role declarations from a TOML role configuration file.
+build_role_definitions = _build_role_definitions
+
+
 def _load_roles_from_toml_file(
     toml_path: str,
 ) -> Dict[str, roles.RoleDefinition]:
@@ -207,7 +207,6 @@ def _load_roles_from_toml_file(
     return _build_role_definitions(raw_roles)
 
 
-# Contract: Evaluates define_role invocations and assignments from build file AST.
 def _load_roles_from_build_file(
     build_file_path: str,
 ) -> Dict[str, roles.RoleDefinition]:
@@ -270,7 +269,6 @@ def _load_roles_from_build_file(
     return _build_role_definitions(raw_roles)
 
 
-# Contract: Normalizes role identifier removing colon prefixes and leading slashes.
 def _normalize_role_identifier(role_name_or_address: str) -> str:
     """Normalizes a role name or package-qualified role address into a canonical role name."""
     cleaned = role_name_or_address.strip()
@@ -279,7 +277,6 @@ def _normalize_role_identifier(role_name_or_address: str) -> str:
     return cleaned.strip("/").lower()
 
 
-# Contract: Discovers methodology binding from cleanroom.toml within dir_scope or upward package hierarchy.
 def _find_methodology_for_scope(root: str, dir_scope: str) -> Optional[str]:
     """Finds methodology binding from cleanroom.toml within dir_scope or upward."""
     if not dir_scope:
@@ -336,7 +333,6 @@ def _find_methodology_for_scope(root: str, dir_scope: str) -> Optional[str]:
     return None
 
 
-# Contract: Loads role definitions from bound methodology package or path.
 def _load_roles_from_methodology(
     root: str, methodology: str
 ) -> Optional[Dict[str, roles.RoleDefinition]]:
@@ -386,7 +382,6 @@ class RoleResolver(roles.RoleResolver, Singleton):
 
     tier = agent_session.agent_session
 
-    # Contract: Parses role declarations from repository role configuration files or build files.
     def _get_roles(
         self, repo_root: Optional[str] = None
     ) -> Dict[str, roles.RoleDefinition]:
@@ -459,7 +454,6 @@ class RoleResolver(roles.RoleResolver, Singleton):
             f"Cleanroom role definitions file (cleanroom_roles.toml) not found under: '{root}'"
         )
 
-    # Contract: Constructs role definition carrying its resolved qualified role address.
     def _with_role_address(
         self, base: roles.RoleDefinition, role_address: str
     ) -> roles.RoleDefinition:

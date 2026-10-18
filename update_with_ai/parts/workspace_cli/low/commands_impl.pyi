@@ -184,3 +184,15 @@ class WorkspaceCommandHandler(
           sync.WorkspaceSynchronizer.refresh_system_files.
         """
         ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for workspace discovery and logging routines.
+
+    POSTCONDITIONS:
+    - MUST discover the root of commissioned role workspace or repo root.
+    - MUST load role metadata from current workspace configuration.
+    - MUST resolve cleanroom log file paths and append action record messages.
+    """
+    ...
+

@@ -1,7 +1,7 @@
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:14:13Z
-# CHANGE: Remove the dead PENDING_WORK_FILE pseudo-constant flagged as a type alias
+# LAST_CHANGED: 2026-10-18T01:30:00Z
+# CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
 # CODE_HASH: e7ab0563410b
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
@@ -123,12 +123,14 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
         role_name: str,
         dir_scope: str,
         repo_root: str,
+        target_unit: Optional[str] = None,
     ) -> tuple[Sequence[WorkQueueItem], Sequence[WorkQueueItem]]:
         """Computes ready and blocked dirty units directly from build manifests and metadata.
 
         POSTCONDITIONS:
         - MUST scan part directories in scope for dirty units.
-        - MUST evaluate feedback role dependencies and star role dependencies as implicit role dependencies.
+        - MUST evaluate intra-unit upstream contract dependencies for producer roles from declared role dependencies and cross-unit dependencies from declared star role dependencies.
+        - WHEN target_unit is specified, MUST restrict discovered dirty items to the target unit and its transitive dependencies.
         - WHEN any star role dependency is modified, MUST mark target dirty.
         - MUST check intra-unit upstream roles, auditor feedback deps, and inter-unit module deps.
         - MUST return tuple of (ready_items, blocked_items) sorted topologically.

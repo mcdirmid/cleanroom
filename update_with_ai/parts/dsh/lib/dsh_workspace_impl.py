@@ -24,7 +24,6 @@ from update_with_ai.parts.workspace.lib import role_registry
 from . import dsh_workspace
 
 
-# Contract: Helper formatting AGENTS.md role confinement rules, auditor instructions, tripwires, and command restrictions.
 def _format_agents_md(workspace_dir: str, role_name: str, is_auditor: bool = False) -> str:
     auditor_block = ""
     if is_auditor:
@@ -83,7 +82,6 @@ def _find_model_configs_file(workspace_dir: Optional[str] = None) -> Optional[st
     return None
 
 
-# Contract: Resolves declared model configuration profile names against model configuration definitions to their underlying model identifier and provider.
 def _resolve_model_from_configs(
     model_name: Optional[str],
     workspace_dir: Optional[str] = None,
@@ -123,7 +121,6 @@ def _resolve_model_from_configs(
     return model_name, None
 
 
-# Contract: Formats Cordis overlay patch (.cleanroom/dsh_patch.yml) conforming to dsh_ext for unattended execution.
 def _format_dsh_patch_yml(
     model_name: Optional[str] = None,
     provider: Optional[str] = None,

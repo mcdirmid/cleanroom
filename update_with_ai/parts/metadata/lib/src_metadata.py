@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 
-# Contract: Helper computing auditor tag dynamically: uppercase role name + _AUDIT.
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def get_audit_tag(role_name: str) -> str:
     """Computes auditor tag dynamically: uppercase role name + _AUDIT."""
     clean = role_name.split(":")[-1].strip().upper()
@@ -73,7 +73,7 @@ def _load_role_definitions() -> Dict[str, Any]:
     return {}
 
 
-# Contract: Checks whether a role is an auditor dynamically via workspace registry, node config, or methodology.
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def is_auditor_role(role_name: str) -> bool:
     """Checks whether a role is an auditor dynamically without hardcoded role names."""
     clean = role_name.split(":")[-1].strip().lower()
@@ -124,39 +124,46 @@ class FileMetadata:
 class SourceMetadataCoordinator(Protocol):
     """Protocol for parsing, hashing, and mutating in-band source metadata."""
 
+    # Contract: Extracts in-band metadata record from content string.
     def extract_metadata_from_text(
         self,
         content: str,
         filename_or_ext: str,
     ) -> Optional[FileMetadata]: ...
 
+    # Contract: Reads file on disk and extracts its in-band metadata block.
     def extract_metadata(
         self,
         file_path: Path | str,
     ) -> Optional[FileMetadata]: ...
 
+    # Contract: Extracts source code body strictly excluding metadata comment header.
     def extract_code_body(
         self,
         content: str,
         filename_or_ext: str,
     ) -> str: ...
 
+    # Contract: Computes twelve-character SHA-256 hexadecimal hash of extracted code body.
     def compute_code_hash(
         self,
         content: str,
         filename_or_ext: str,
     ) -> str: ...
 
+    # Contract: Computes code hash for file on disk excluding metadata comment header.
     def compute_file_code_hash(
         self,
         file_path: Path | str,
     ) -> Optional[str]: ...
 
+    # Contract: Evaluates whether file on disk has code modifications compared to in-band code hash.
     def is_code_modified(
         self,
         file_path: Path | str,
     ) -> bool: ...
 
+    # Contract: Updates or injects in-band metadata block within content string.
     def rewrite_metadata_in_text(
         self,
         content: str,
@@ -176,6 +183,7 @@ class SourceMetadataCoordinator(Protocol):
         clear_dirty: bool = False,
     ) -> str: ...
 
+    # Contract: Rewrites file on disk in-place, updating metadata block while preserving code.
     def update_metadata(
         self,
         file_path: Path | str,
@@ -194,23 +202,27 @@ class SourceMetadataCoordinator(Protocol):
         clear_dirty: bool = False,
     ) -> None: ...
 
+    # Contract: Removes LAST_CLEANED timestamp from file in-band metadata block.
     def delete_last_cleaned(
         self,
         file_path: Path | str,
     ) -> None: ...
 
+    # Contract: Marks node dirty by adding DIRTY tag and advancing LAST_CLEANED to now.
     def mark_dirty(
         self,
         file_path: Path | str,
         reason: str = "manual dirty",
     ) -> None: ...
 
+    # Contract: Sets LAST_CLEANED to now, updates code hash, and clears feedback and dirty tags.
     def mark_clean(
         self,
         file_path: Path | str,
         default_change: str = "new file",
     ) -> None: ...
 
+    # Contract: Marks node changed with updated timestamps, change description, and code hash.
     def record_change(
         self,
         file_path: Path | str,
@@ -218,6 +230,7 @@ class SourceMetadataCoordinator(Protocol):
         code_hash: Optional[str] = None,
     ) -> None: ...
 
+    # Contract: Appends unacted feedback item to file metadata block and advances LAST_CLEANED.
     def append_feedback(
         self,
         file_path: Path | str,
@@ -225,23 +238,27 @@ class SourceMetadataCoordinator(Protocol):
         sender: str = "user",
     ) -> None: ...
 
+    # Contract: Stamps role audit timestamp in file header and advances LAST_CLEANED.
     def stamp_audit(
         self,
         file_path: Path | str,
         role_name: str,
     ) -> None: ...
 
+    # Contract: Removes all audit tags from file in-band metadata block.
     def clear_audits(
         self,
         file_path: Path | str,
     ) -> None: ...
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def _is_html_comment_format(path_or_ext: str) -> bool:
     ext = os.path.splitext(path_or_ext)[1].lower()
     return ext == ".md"
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def _find_header_insertion_index(lines: List[str], is_html: bool) -> int:
     """Determines line index where metadata block should be inserted when missing."""
     if not lines:
@@ -262,6 +279,7 @@ def _find_header_insertion_index(lines: List[str], is_html: bool) -> int:
     return idx
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def _extract_block_boundaries(
     lines: List[str], is_html: bool
 ) -> Optional[Tuple[int, int]]:
@@ -285,6 +303,7 @@ def _extract_block_boundaries(
     return None
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
     """Parses raw metadata block lines into FileMetadata."""
     last_cleaned: Optional[str] = None
@@ -354,6 +373,7 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
     )
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def format_metadata_block(meta: FileMetadata, is_html: bool) -> List[str]:
     """Formats a FileMetadata record into comment block lines."""
     ch = meta.change_summary or ""
@@ -434,37 +454,45 @@ def _get_coordinator() -> SourceMetadataCoordinator:
         raise
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def current_utc_timestamp() -> str:
     """Returns current UTC timestamp truncated to seconds with trailing Z."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def extract_metadata_from_text(
     content: str, filename_or_ext: str
 ) -> Optional[FileMetadata]:
     return _get_coordinator().extract_metadata_from_text(content, filename_or_ext)
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def extract_metadata(file_path: Path | str) -> Optional[FileMetadata]:
     return _get_coordinator().extract_metadata(file_path)
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def extract_code_body(content: str, filename_or_ext: str) -> str:
     return _get_coordinator().extract_code_body(content, filename_or_ext)
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def compute_code_hash(content: str, filename_or_ext: str) -> str:
     return _get_coordinator().compute_code_hash(content, filename_or_ext)
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def compute_file_code_hash(file_path: Path | str) -> Optional[str]:
     return _get_coordinator().compute_file_code_hash(file_path)
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def is_code_modified(file_path: Path | str) -> bool:
     return _get_coordinator().is_code_modified(file_path)
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def rewrite_metadata_in_text(
     content: str,
     filename_or_ext: str,
@@ -501,6 +529,7 @@ def rewrite_metadata_in_text(
     )
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def update_metadata(
     file_path: Path | str,
     last_cleaned: Optional[str] = None,
@@ -535,18 +564,22 @@ def update_metadata(
     )
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def delete_last_cleaned(file_path: Path | str) -> None:
     _get_coordinator().delete_last_cleaned(file_path)
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def mark_dirty(file_path: Path | str, reason: str = "manual dirty") -> None:
     _get_coordinator().mark_dirty(file_path, reason=reason)
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def mark_clean(file_path: Path | str, default_change: str = "new file") -> None:
     _get_coordinator().mark_clean(file_path, default_change=default_change)
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def record_change(
     file_path: Path | str,
     change_description: str,
@@ -557,15 +590,18 @@ def record_change(
     )
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def append_feedback(
     file_path: Path | str, explanation: str, sender: str = "user"
 ) -> None:
     _get_coordinator().append_feedback(file_path, explanation, sender=sender)
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def stamp_audit(file_path: Path | str, role_name: str) -> None:
     _get_coordinator().stamp_audit(file_path, role_name)
 
 
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def clear_audits(file_path: Path | str) -> None:
     _get_coordinator().clear_audits(file_path)

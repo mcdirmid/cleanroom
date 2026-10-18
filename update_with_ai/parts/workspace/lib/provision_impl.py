@@ -26,6 +26,7 @@ BLAME_BUFFER_FILE = ".cleanroom_blame_buffer.json"
 PENDING_WORK_FILE = ".cleanroom_pending_work.json"
 
 
+# Contract: __orphan__ - writes a file with specific content and permissions
 def write_file_with_perms(
     path: str, content: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -102,6 +103,7 @@ class WorkspaceProvisioner(
     def __init__(self) -> None:
         pass
 
+    # Contract: Copies a file and applies exact read-only, writable, or executable permissions.
     def copy_file_with_permissions(
         self,
         src: str,
@@ -111,6 +113,7 @@ class WorkspaceProvisioner(
     ) -> None:
         copy_file_with_perms(src, dst, readonly=readonly, executable=executable)
 
+    # Contract: Writes text content to a destination file and applies exact permissions.
     def write_file_with_permissions(
         self,
         dst: str,
@@ -123,10 +126,12 @@ class WorkspaceProvisioner(
             dst, content, readonly=readonly, executable=executable
         )
 
+    # Contract: Packages executable runner tools into the specified bin directory.
     def deploy_runner_zipapps(self, bin_dir: str) -> None:
         scaffolder = get_singleton(scaffold.WorkspaceScaffolder)
         scaffolder.deploy_runner_zipapps(bin_dir)
 
+    # Contract: Synthesizes role-tailored AGENTS.md instructions in the workspace root.
     def write_role_agents_guide(
         self,
         workspace_dir: str,
@@ -142,6 +147,7 @@ class WorkspaceProvisioner(
         scaffolder = get_singleton(scaffold.WorkspaceScaffolder)
         scaffolder.write_role_agents_guide(workspace_dir, role_def, dir_scope)
 
+    # Contract: Synchronizes read-only test stubs for stub role dependencies.
     def sync_test_stubs(
         self,
         workspace_dir: str,

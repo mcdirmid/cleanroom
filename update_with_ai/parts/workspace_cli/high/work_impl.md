@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-10T19:00:00Z
-CHANGE: evaluate producer dirtiness across implicit role deps and star role changes
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
 CODE_HASH: 784c08018e50
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
@@ -31,13 +31,15 @@ When managing pending target state:
 
 - The work manager removes a resolved target path from the pending work buffer file when submitted or blamed, matching target paths and unit stems strictly without clearing unmatched targets.
 
-- The work manager evaluates whether a pending target remains dirty by checking in-band source metadata across local and canonical repositories, treating feedback role dependencies and star role dependencies as implicit role dependencies and evaluating targets as dirty when any star role dependency changes across same-unit, interface, or cross-unit dependencies, verifying all configured feedback role targets for auditor roles against required role audit timestamps and forward contracts, and materializing starter templates via graph storage for missing targets of roles with declared source patterns and upstream dependencies.
+- The work manager evaluates whether a pending target remains dirty by checking in-band source metadata across local and canonical repositories, evaluating intra-unit upstream contract dependencies for producer roles from declared role dependencies and cross-unit dependencies from declared star role dependencies, evaluating targets as dirty when any star role dependency changes across same-unit, interface, or cross-unit dependencies, verifying all configured feedback role targets for auditor roles against required role audit timestamps and forward contracts, and materializing starter templates via graph storage for missing targets of roles with declared source patterns and upstream dependencies.
 
 When evaluating work in a role workspace:
 
+- The work manager bounds work queue discovery to a designated target unit and its transitive upstream dependencies when a target unit is specified.
+
 - The work manager inspects the in-band metadata across every feedback role target configured for the active auditor role when evaluating whether an auditor role unit is dirty, evaluating the unit as dirty when a feedback target is missing, is unparseable, lacks the required role audit attribute, or has been modified more recently than its audit timestamp, and when a non-silent upstream contract dependency has been modified after the audit timestamp of the feedback target.
 
-- The work manager treats feedback role dependencies and star role dependencies as implicit role dependencies when evaluating whether a producer unit is dirty, evaluating the target as dirty when an upstream dependency or a star role dependency has been modified more recently than the last cleaned timestamp of the target.
+- The work manager evaluates intra-unit upstream contract dependencies for producer roles from declared role dependencies, and evaluates cross-unit dependencies from declared star role dependencies when evaluating whether a producer unit is dirty, evaluating the target as dirty when an upstream dependency or a star role dependency has been modified more recently than the last cleaned timestamp of the target.
 
 - The work manager establishes whether the pending work buffer file exists, re-evaluates the dirty status of each pending target from in-band metadata when pending targets exist, and aborts work discovery with an error directing the agent to complete or blame the pending target when a target remains dirty and the request is not forced.
 

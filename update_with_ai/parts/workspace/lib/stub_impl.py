@@ -23,7 +23,6 @@ from update_with_ai.parts.agent.lib import session as agent_session
 from . import role_registry, stub
 
 
-# Contract: Writes a text file and sets exact permissions, handling existing read-only files cleanly.
 def write_file_with_perms(
     dst: str, content: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -43,7 +42,6 @@ def write_file_with_perms(
         pass
 
 
-# Contract: Copies a file and applies exact read-only or read-write permissions.
 def copy_file_with_perms(
     src: str, dst: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -65,7 +63,6 @@ def copy_file_with_perms(
         pass
 
 
-# Contract: Decomposes a source path pattern into its directory, stem suffix, and extension.
 def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     """Decomposes a source path pattern into its directory, stem suffix, and extension."""
     if not pat:
@@ -80,7 +77,6 @@ def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     return d, suffix, ext
 
 
-# Contract: Checks whether rel_path matches any role in stub_role_deps.
 def _is_stub_dep_file(
     rel_path: str,
     role_def: role_registry.RoleDefinition,
@@ -116,7 +112,6 @@ def _is_stub_dep_file(
     return False
 
 
-# Contract: Maps module name -> (part_name, base_dir) across specified parts directories.
 def _get_part_module_map(
     repo_root: str,
     parts_bases: Sequence[str],
@@ -158,7 +153,6 @@ def _get_part_module_map(
     return mapping
 
 
-# Contract: Finds companion .pyi specification file for a unit stem in a part directory.
 def _find_spec_pyi(
     part_path: str, stem: str, main_root: Optional[str] = None
 ) -> Optional[str]:
@@ -185,7 +179,6 @@ def _find_spec_pyi(
     return None
 
 
-# Contract: Checks whether file_path is already a valid cleanroom test stub (contains marker).
 def _is_valid_test_stub(file_path: str) -> bool:
     """Checks whether file_path is already a valid cleanroom test stub."""
     if not os.path.isfile(file_path):
@@ -198,7 +191,6 @@ def _is_valid_test_stub(file_path: str) -> bool:
         return False
 
 
-# Contract: Generates a read-only dependency stub from a .pyi specification.
 def _generate_readonly_test_stub(
     pyi_path: Optional[str],
     stem: str,
@@ -369,7 +361,6 @@ def _generate_readonly_test_stub(
     write_file_with_perms(out_path, "\n".join(stub_lines) + "\n", readonly=True)
 
 
-# Contract: Synchronizes read-only test stubs for all stub_role_deps of a role.
 def _sync_all_stub_deps(
     ws_scope_dir: str,
     main_scope_dir: str,

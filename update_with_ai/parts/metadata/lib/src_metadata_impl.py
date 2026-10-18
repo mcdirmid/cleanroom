@@ -101,6 +101,7 @@ class SourceMetadataCoordinator(
         current_hash = self.compute_file_code_hash(p)
         return current_hash != meta.code_hash
 
+    # Contract: Updates or injects in-band metadata block within content string.
     def rewrite_metadata_in_text(
         self,
         content: str,
@@ -212,6 +213,7 @@ class SourceMetadataCoordinator(
             res += "\n"
         return res
 
+    # Contract: Rewrites file on disk in-place, updating metadata block while preserving code.
     def update_metadata(
         self,
         file_path: Path | str,
@@ -254,13 +256,16 @@ class SourceMetadataCoordinator(
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(updated, encoding="utf-8")
 
+    # Contract: Removes LAST_CLEANED timestamp from file in-band metadata block.
     def delete_last_cleaned(self, file_path: Path | str) -> None:
         self.update_metadata(file_path, clear_last_cleaned=True)
 
+    # Contract: Marks node dirty by adding DIRTY tag and advancing LAST_CLEANED to now.
     def mark_dirty(self, file_path: Path | str, reason: str = "manual dirty") -> None:
         now = src_metadata.current_utc_timestamp()
         self.update_metadata(file_path, dirty=reason, last_cleaned=now)
 
+    # Contract: Sets LAST_CLEANED to now, updates code hash, and clears feedback and dirty tags.
     def mark_clean(
         self, file_path: Path | str, default_change: str = "new file"
     ) -> None:
@@ -286,6 +291,7 @@ class SourceMetadataCoordinator(
             clear_dirty=True,
         )
 
+    # Contract: Marks node changed with updated timestamps, change description, and code hash.
     def record_change(
         self,
         file_path: Path | str,

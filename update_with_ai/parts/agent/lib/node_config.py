@@ -87,6 +87,7 @@ class RoleConfig(Protocol):
     def version(self) -> ExecutionVersion:
         ...
 
+    # Contract: Configures the role of the agent session.
     def set_role(self, role: RoleName) -> None:
         ...
 
@@ -96,62 +97,77 @@ class RoleConfig(Protocol):
 
 
 class NodeConfig(Protocol):
+    # Contract: The session read-only files restricting bound files to read access.
     @property
     def read_only_files(self) -> Set[file_alias.ReadOnlyFile]:
         ...
 
+    # Contract: The session read-write files permitting bound files for read and write access.
     @property
     def read_write_files(self) -> Set[file_alias.ReadWriteFile]:
         ...
 
+    # Contract: Whether the node allows guide step mode.
     @property
     def allows_step_mode(self) -> bool:
         ...
 
+    # Contract: Whether session step mode is active.
     @property
     def is_step_mode(self) -> bool:
         ...
 
+    # Contract: Unbound file configured when guide step mode is active.
     @property
     def guide_file(self) -> Optional[file_alias.UnboundFile]:
         ...
 
+    # Contract: Session templates mapping read-write files to initial file content.
     @property
     def templates(self) -> Mapping[file_alias.BoundFile, file_alias.FileContent]:
         ...
 
+    # Contract: Session template parameters for template evaluation.
     @property
     def template_parameters(self) -> Mapping[TemplateParamKey, Any]:
         ...
 
+    # Contract: The session guide provided when step mode is active.
     @property
     def guide(self) -> Optional[NodeGuide]:
         ...
 
+    # Contract: Session blame targets per session node, mapping read-write files to the read-only bound files eligible for blame.
     @property
     def blame_targets_by_node(self) -> Mapping[dag_storage.DagNode, Set[file_alias.BoundFile]]:
         ...
 
+    # Contract: Session verification checks evaluated during verification.
     @property
     def verification_checks(self) -> Sequence[VerificationCheck]:
         ...
 
+    # Contract: Session verification checks mapped by session node.
     @property
     def verification_checks_by_node(self) -> Mapping[dag_storage.DagNode, Sequence[VerificationCheck]]:
         ...
 
+    # Contract: Relative path of the declared source file alias mapped by session node.
     @property
     def src_file_alias_by_node(self) -> Mapping[dag_storage.DagNode, file_alias.RelativePath]:
         ...
 
+    # Contract: The session verification success message when configured.
     @property
     def verification_success_message(self) -> Optional[VerificationSuccessMessage]:
         ...
 
+    # Contract: Incoming session messages explaining why a read-write file requires cleaning.
     @property
     def feedback(self) -> Sequence[NodeFeedback]:
         ...
 
+    # Contract: Mapping each active node to its per node info.
     @property
     def per_node_info_by_node(self) -> Mapping[dag_storage.DagNode, PerNodeInfo]:
         ...

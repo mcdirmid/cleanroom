@@ -28,7 +28,7 @@ class WorkspaceDirtinessEvaluator(
     - Realizes unit dirtiness evaluation by extracting in-band metadata via
       src_metadata.SourceMetadataCoordinator.extract_metadata, checking local and canonical
       timestamps, verifying auditor role targets across all feedback targets, evaluating producer
-      units across implicit role dependencies and star role dependencies, and resolving role
+      units across intra-unit role dependencies and star role dependencies, and resolving role
       definitions via role_registry.WorkspaceRegistry.resolve_role_definition.
     - Grounds companion contract resolution on role_registry.WorkspaceRegistry.resolve_role_definition,
       reading role_registry.RoleDefinition.role_deps, role_registry.RoleDefinition.star_role_deps,
@@ -52,8 +52,8 @@ class WorkspaceDirtinessEvaluator(
         GROUNDING:
         - Inspects in-band metadata via src_metadata.SourceMetadataCoordinator.extract_metadata,
           checks last_cleaned and last_changed timestamps, verifies all auditor feedback targets,
-          and tests star-role dependency timestamps against role definitions from
-          role_registry.WorkspaceRegistry.resolve_role_definition.
+          evaluates intra-unit role dependencies for producer roles, and tests star-role dependency
+          timestamps against role definitions from role_registry.WorkspaceRegistry.resolve_role_definition.
         """
         ...
 

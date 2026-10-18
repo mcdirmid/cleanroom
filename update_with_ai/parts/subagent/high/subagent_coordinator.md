@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:00:00Z
-CHANGE: author subagent_coordinator interface specification
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: support restricting work queue evaluation to target units and transitive dependencies
 CODE_HASH: 3c4709ee070c
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
@@ -41,6 +41,8 @@ When coordinating multi-agent execution:
 - The subagent coordinator dynamically resolves subagent batch sizes, conversation token limits, and maximum unproductive turn thresholds from declarative model configurations matching designated model names or identifiers.
 
 - The subagent coordinator evaluates DAG work queues across declared roles, dynamically identifying roles with ready work up to an optional target role boundary without static role hardcoding.
+
+- The subagent coordinator restricts work queue evaluation to a designated target unit and its transitive upstream dependencies when a target unit is specified.
 
 - The subagent coordinator ensures absent role workspaces are commissioned via workspace provisioning on demand before dispatching directives, persisting effective batch size bounds into workspace configurations.
 

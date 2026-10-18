@@ -111,3 +111,13 @@ class WorkspaceScaffolder(
           0o444, 0o644, 0o555, or 0o755 mode flags.
         """
         ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for workspace role metadata writing.
+
+    POSTCONDITIONS:
+    - MUST write role configuration metadata with 0o644 permissions.
+    """
+    ...
+

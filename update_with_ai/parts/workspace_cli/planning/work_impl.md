@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-10T19:00:00Z
-CHANGE: evaluate producer unit dirtiness across implicit and star role dependencies
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
 CODE_HASH: ed824ee67e56
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
@@ -29,16 +29,17 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
 - The workspace work manager filters cross-unit dependencies using silent_cross_role_deps and expands star_role_deps from role_registry. [filter_and_expand_dependencies]
 - The workspace work manager raises ValueError or KeyError on unrecognized roles or file paths. [fail_loud_on_unrecognized_roles]
 - The workspace work manager checks local and main repository metadata to test if a pending target is dirty, materializing starter templates via graph storage for missing targets of roles with source patterns and upstream dependencies. [test_pending_target_dirty_state]
-- The workspace work manager evaluates producer unit dirtiness by checking implicit role dependencies against local cleaning timestamps. [evaluate_producer_unit_dirtiness]
+- The workspace work manager evaluates producer unit dirtiness by checking intra-unit role dependencies against local cleaning timestamps. [evaluate_producer_unit_dirtiness]
 - The workspace work manager evaluates unit dirtiness by testing star role dependency modification timestamps. [evaluate_star_dependency_dirtiness]
 - The workspace work manager discovers part units and dependencies from build definitions, High-Level Specifications, or filesystem component stems. [discover_part_units_and_dependencies]
 - The workspace work manager inspects parts in scope to compute ready and blocked role units with topological ordering. [compute_and_sort_role_work_queue]
+- The workspace work manager bounds work queue discovery to a designated target unit and its transitive upstream dependencies when a target unit is specified. [bound_work_queue_to_target_unit]
 - The workspace work manager materializes starter templates via graph storage for missing ready target files of roles with source patterns and upstream dependencies. [materialize_ready_target_templates]
 
 ### Woven Contracts
 
 - When checking work status, the work manager checks the pending buffer, invokes the work scheduler with dir_scope, bounds presented ready items when configured, resolves companion contracts, filters cross-unit dependencies, writes ready targets to disk, and renders the text summary. [read_and_check_pending_buffer, invoke_scheduler_with_dir_scope, bound_ready_items_batch_size, discover_unit_contract_files, filter_and_expand_dependencies, fail_loud_on_unrecognized_roles, write_ready_targets_buffer, render_work_queue_text_summary, work: [check_pending_work_status, discover_directory_scope_work, bound_ready_items_by_batch_size, resolve_unit_contract_files, filter_role_dependencies, enforce_strict_role_resolution, record_ready_targets_buffer, format_work_queue_diagnostics], role_registry: [resolve_role_definition, list_all_role_definitions], work_scheduler: [discover_directory_candidates, filter_ready_dependencies]]
-- When computing role work queues, the work manager discovers part units and dependencies across parts in scope, evaluates auditor units across all feedback targets, evaluates producer units across implicit and star role dependencies, materializes starter templates via graph storage for missing ready files, and sorts ready and blocked units topologically. [discover_part_units_and_dependencies, evaluate_auditor_unit_dirtiness, evaluate_producer_unit_dirtiness, evaluate_star_dependency_dirtiness, compute_and_sort_role_work_queue, materialize_ready_target_templates, work: [compute_role_work_queue_targets, materialize_ready_target_templates, track_implicit_role_dirtiness, flag_star_dependency_dirtiness], dag_storage: [materialize_node_template]]
+- When computing role work queues, the work manager discovers part units and dependencies across parts in scope, evaluates auditor units across all feedback targets, evaluates producer units across intra-unit and star role dependencies, bounds discovery to target units when specified, materializes starter templates via graph storage for missing ready files, and sorts ready and blocked units topologically. [discover_part_units_and_dependencies, evaluate_auditor_unit_dirtiness, evaluate_producer_unit_dirtiness, evaluate_star_dependency_dirtiness, bound_work_queue_to_target_unit, compute_and_sort_role_work_queue, materialize_ready_target_templates, work: [compute_role_work_queue_targets, materialize_ready_target_templates, track_implicit_role_dirtiness, flag_star_dependency_dirtiness], dag_storage: [materialize_node_template]]
 - When all targets are clean, the manager deletes the pending work buffer and renders a clean summary. [delete_pending_work_buffer, render_work_queue_text_summary, work: [clear_pending_work_buffer]]
 - When managing target assignments, the work manager writes assigned targets to disk, removes submitted targets, and checks dirtiness against repository metadata. [write_assigned_pending_targets, filter_out_resolved_pending_target, test_pending_target_dirty_state, evaluate_producer_unit_dirtiness, evaluate_star_dependency_dirtiness, work: [set_pending_work_targets, remove_pending_target_path, is_pending_target_dirty_disk, track_implicit_role_dirtiness, flag_star_dependency_dirtiness], src_metadata: [extract_metadata_disk]]
 

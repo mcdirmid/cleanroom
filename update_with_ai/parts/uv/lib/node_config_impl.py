@@ -28,12 +28,13 @@ from support.lib.lifecycle import (
 )
 
 
-# Contract: session verification checks evaluated during session advancement
-class _CommandVerificationCheck(node_config.VerificationCheck):
+# Contract: CommandVerificationCheck - Realizes verification checking by executing a configured command in a subprocess.
+class CommandVerificationCheck(node_config.VerificationCheck):
     def __init__(self, command: str, cwd: Optional[str] = None) -> None:
         self._command = command
         self._cwd = cwd
 
+    # Contract: verify - Validates node criteria by running command.
     def verify(self) -> Tuple[bool, node_config.VerificationDiagnostic]:
         env = os.environ.copy()
         ws_root = env.get("BUILD_WORKSPACE_DIRECTORY") or self._cwd or os.getcwd()
@@ -77,6 +78,9 @@ class _CommandVerificationCheck(node_config.VerificationCheck):
             return False, node_config.VerificationDiagnostic(str(e))
 
 
+_CommandVerificationCheck = CommandVerificationCheck
+
+
 def _workspace_path(relative: str) -> file_paths.WorkspacePath:
     """Builds a workspace-relative host path record from a relative path string."""
     return file_paths.WorkspacePath(path=file_paths.PathString(relative))
@@ -89,7 +93,6 @@ def _safe_get_singleton(cls: Any) -> Any:
         return None
 
 
-# Contract: parse markdown sections into NodeGuide summaries, step sections, and verification failure instructions
 def _parse_guide_markdown(content: str) -> node_config.NodeGuide:
     lines = content.splitlines()
     preamble_lines, summary_lines, sections = [], [], []
@@ -247,7 +250,6 @@ def _dependency_source_paths(dep_label: str, dep_manifest: Optional[Any]) -> Lis
     return []
 
 
-# Contract: mapping each active node to its per node info (PerNodeInfo)
 def _load_per_node_info(n: dag_storage.DagNode) -> node_config.PerNodeInfo:
     storage = _safe_get_singleton(dag_storage.DagStorage)
     msgs = storage.get_messages(n) if storage else ()

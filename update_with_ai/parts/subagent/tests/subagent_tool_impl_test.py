@@ -59,9 +59,11 @@ class FakeCoordinator:
         repo_root: Optional[str] = None,
         model_name: Optional[str] = None,
         max_unproductive_turns: Optional[int] = None,
+        target_node: Optional[str] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         self.last_target_role = target_role
         self.last_max_unproductive_turns = max_unproductive_turns
+        self.last_target_node = target_node
         return subagent_coordinator.OrchestrationSummary(
             is_converged=self.converged,
             total_waves=3,
@@ -173,6 +175,23 @@ class SubagentToolImplTest(unittest.TestCase):
             status = runner.execute_command(["orchestrate", "staging", "--max-unproductive-turns", "8", "--simulation"])
             self.assertEqual(status, 0)
             self.assertEqual(self.fake_coord.last_max_unproductive_turns, 8)
+
+    def test_execute_command_orchestrate_with_target_unit(self) -> None:
+        """Scenario 5: Verifies execute_command parses --target argument and forwards to coordinator."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(subagent_tool.SubagentToolRunner)
+            status = runner.execute_command([
+                "orchestrate",
+                "staging",
+                "--target",
+                "//staging/parts/sandbox:file_reader_impl#qa",
+                "--simulation",
+            ])
+            self.assertEqual(status, 0)
+            self.assertEqual(
+                self.fake_coord.last_target_node,
+                "//staging/parts/sandbox:file_reader_impl#qa",
+            )
 
 
 if __name__ == "__main__":

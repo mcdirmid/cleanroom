@@ -35,7 +35,6 @@ def _format_node(node: dag_storage.DagNode) -> str:
 CLEANROOM_LOG_FILE = ".cleanroom.log"
 
 
-# Contract: resolves cleanroom log path in the directory containing the parts
 def _cleanroom_log_path() -> Optional[str]:
     """Resolves the cleanroom log path in the directory containing the parts."""
     root = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()

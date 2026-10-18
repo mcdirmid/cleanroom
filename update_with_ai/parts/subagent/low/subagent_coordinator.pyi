@@ -195,6 +195,7 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         model_name: Optional[str] = None,
         poll_interval: Optional[float] = None,
         max_unproductive_turns: Optional[int] = None,
+        target_node: Optional[str] = None,
     ) -> OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure.
 
@@ -209,6 +210,7 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive turns thresholds from model configurations.
         - MUST persist effective batch size bounds into provisioned role workspace configurations.
         - MUST aggregate cumulative token usage and monetary expenditure in orchestration summary.
+        - WHEN target_node is specified, MUST restrict work queue discovery and execution to target_node and its transitive dependencies.
         """
         ...
 
@@ -221,3 +223,14 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         - MUST return path to logs directory.
         """
         ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for subagent log directory and model configuration resolution.
+
+    POSTCONDITIONS:
+    - MUST resolve the canonical repository logs directory for a role workspace.
+    - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive turns thresholds from model configurations.
+    """
+    ...
+

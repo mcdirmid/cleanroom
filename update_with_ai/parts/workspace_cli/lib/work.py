@@ -85,6 +85,7 @@ class WorkspaceWorkManager(Protocol):
         role_name: str,
         dir_scope: str,
         repo_root: str,
+        target_unit: Optional[str] = None,
     ) -> tuple[Sequence[WorkQueueItem], Sequence[WorkQueueItem]]: ...
 
     # Contract: Evaluates dirty units in scope and returns work queue summary, scheduling via dynamic role precedence.

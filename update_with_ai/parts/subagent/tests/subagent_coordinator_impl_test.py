@@ -23,7 +23,7 @@ from update_with_ai.parts.subagent.lib import subagent_coordinator
 from update_with_ai.parts.subagent.lib.subagent_coordinator_impl import (
     SubagentCoordinator,
     __initialize__,
-    _resolve_model_parameters,
+    resolve_model_parameters,
 )
 from update_with_ai.parts.workspace_cli.lib import work
 from update_with_ai.parts.workspace.lib import (
@@ -135,7 +135,9 @@ class FakeWorkspaceWorkManager:
         role_name: str,
         dir_scope: str,
         repo_root: str,
+        target_unit: Optional[str] = None,
     ) -> Tuple[Sequence[work.WorkQueueItem], Sequence[work.WorkQueueItem]]:
+        self.last_target_unit = target_unit
         return self.queue_data.get(role_name, ((), ()))
 
     def get_pending_work(self, workspace_dir: str) -> Sequence[str]:
@@ -555,6 +557,32 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.assertGreaterEqual(poll_calls, 2)
             self.assertEqual(summary.submitted_count, 1)
 
+    def test_orchestrate_restricts_to_target_node_boundary(self) -> None:
+        """Scenario 10: Restricting execution to a target unit and its transitive dependencies."""
+        fake_reg = FakeWorkspaceRegistry([self.spec_role_high])
+        fake_work = FakeWorkspaceWorkManager({
+            "high": (([_make_item("high/unit.md", "high")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        class SingleTurnHarness(FakeHarnessAdapter):
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+                fake_work.queue_data["high"] = ((), ())
+                return subagent_coordinator.RoleTurnResult(
+                    role="high",
+                    status="clean",
+                    submitted_targets=("high/unit.md",),
+                )
+
+        harness = SingleTurnHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001, target_node="//pkg_a/parts/mod:unit#high")
+            self.assertTrue(summary.is_converged)
+            self.assertEqual(fake_work.last_target_unit, "//pkg_a/parts/mod:unit#high")
+
     def test_orchestrate_halts_upon_consecutive_unproductive_turns(self) -> None:
         """Scenario 10: Halting orchestration upon consecutive unproductive turn impasse."""
         fake_reg = FakeWorkspaceRegistry([self.spec_role_high])
@@ -626,13 +654,13 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             with open(cfg_file, "w", encoding="utf-8") as f:
                 f.write('max_unproductive_turns = 7\n\n[models.moe_model]\nbatch_size = 4\nconversation_max_tokens = 45000\nmax_unproductive_turns = 12\n')
 
-            batch, tokens, unprod = _resolve_model_parameters(tmp_dir, "moe_model")
+            batch, tokens, unprod = resolve_model_parameters(tmp_dir, "moe_model")
             self.assertEqual(batch, 4)
             self.assertEqual(tokens, 45000)
             self.assertEqual(unprod, 12)
 
             # Test top-level fallback
-            batch2, tokens2, unprod2 = _resolve_model_parameters(tmp_dir, "unknown_model")
+            batch2, tokens2, unprod2 = resolve_model_parameters(tmp_dir, "unknown_model")
             self.assertIsNone(batch2)
             self.assertIsNone(tokens2)
             self.assertEqual(unprod2, 7)

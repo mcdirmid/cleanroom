@@ -40,7 +40,6 @@ PRICING_RATES: Dict[str, Tuple[float, float, float]] = {
 }
 
 
-# Contract: Reads blamed culprit target paths from the workspace blame buffer file.
 def _read_blame_buffer(workspace_dir: str) -> List[str]:
     """Reads blamed culprit target paths from the workspace blame buffer."""
     buf_path = os.path.join(workspace_dir, ".cleanroom_blame_buffer.json")
@@ -67,7 +66,6 @@ def _read_blame_buffer(workspace_dir: str) -> List[str]:
     return []
 
 
-# Contract: Resolves pricing rate card for model identifier.
 def _resolve_pricing_rates(model_name: Optional[str] = None) -> Tuple[float, float, float]:
     """Resolves (cached_per_m, input_per_m, output_per_m) for model name."""
     if not model_name:

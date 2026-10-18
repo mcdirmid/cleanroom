@@ -9,6 +9,16 @@ import shutil
 import sys
 from typing import Any, Sequence
 
+try:
+    import dotenv
+    dotenv.load_dotenv()
+    from support.lib import app_info
+    _user_env = os.path.join(app_info.get_user_config_dir(), ".env")
+    if os.path.isfile(_user_env):
+        dotenv.load_dotenv(_user_env)
+except Exception:
+    pass
+
 
 def _get_dir_scope() -> str:
     curr = os.path.dirname(os.path.realpath(__file__))
@@ -407,11 +417,12 @@ If you determine that success is not possible (e.g. unreachable code under test,
 
 def ensure_antigravity_plugin_installed() -> str:
     """Installs or refreshes Cleanroom agents in global Antigravity plugin directory."""
+    from support.lib import app_info
     config_root = os.environ.get("ANTIGRAVITY_CONFIG_DIR") or os.path.expanduser("~/.gemini/config")
-    plugin_dir = os.path.join(config_root, "plugins", "cleanroom")
+    plugin_dir = os.path.join(config_root, "plugins", app_info.APP_NAME)
     agents_dir = os.path.join(plugin_dir, "agents")
-    coord_dir = os.path.join(agents_dir, "cleanroom_coordinator")
-    worker_dir = os.path.join(agents_dir, "cleanroom_worker")
+    coord_dir = os.path.join(agents_dir, f"{app_info.APP_NAME}_coordinator")
+    worker_dir = os.path.join(agents_dir, f"{app_info.APP_NAME}_worker")
 
     # If legacy skills directory exists, remove it
     legacy_skills_dir = os.path.join(plugin_dir, "skills")
@@ -422,8 +433,8 @@ def ensure_antigravity_plugin_installed() -> str:
     os.makedirs(worker_dir, exist_ok=True)
 
     plugin_json = {
-        "name": "cleanroom",
-        "description": "Cleanroom multi-agent coordinator and role worker subagents",
+        "name": app_info.APP_NAME,
+        "description": f"{app_info.APP_NAME} multi-agent coordinator and role worker subagents",
     }
     with open(os.path.join(plugin_dir, "plugin.json"), "w", encoding="utf-8") as f:
         json.dump(plugin_json, f, indent=2)
@@ -436,6 +447,98 @@ def ensure_antigravity_plugin_installed() -> str:
         f.write(WORKER_AGENT_MD.strip() + "\n")
 
     return plugin_dir
+
+
+def ensure_dsh_skill_installed() -> str | None:
+    """Installs or refreshes Cleanroom coordinator skill in DSH harness skills directory if present."""
+    from support.lib import app_info
+    dsh_home = os.environ.get("DSH_HOME")
+    candidates = []
+    if dsh_home and dsh_home.strip():
+        candidates.append(os.path.join(dsh_home.strip(), "harness", "skills"))
+        candidates.append(os.path.join(dsh_home.strip(), "skills"))
+
+    home = os.path.expanduser("~")
+    candidates.extend([
+        os.path.join(home, "Library", "Application Support", "dsh-desktop", "harness", "skills"),
+        os.path.join(home, ".config", "dsh-desktop", "harness", "skills"),
+        os.path.join(home, ".local", "share", "dsh-desktop", "harness", "skills"),
+    ])
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        candidates.append(os.path.join(appdata, "dsh-desktop", "harness", "skills"))
+
+    target_skills_dir = None
+    for cand in candidates:
+        if os.path.isdir(cand) or os.path.isdir(os.path.dirname(cand)):
+            target_skills_dir = cand
+            break
+
+    if not target_skills_dir:
+        return None
+
+    skill_dir = os.path.join(target_skills_dir, app_info.APP_NAME)
+    os.makedirs(skill_dir, exist_ok=True)
+    skill_file = os.path.join(skill_dir, "SKILL.md")
+    content = f"""---
+name: {app_info.APP_NAME}
+description: Autonomous {app_info.APP_NAME} role workspace coordinator, work queue inspector, and subagent fleet manager.
+whenToUse: Use when the user types /{app_info.APP_NAME}, asks to orchestrate, or asks to run {app_info.APP_NAME} roles for a scope.
+---
+
+# {app_info.APP_NAME.capitalize()} Autonomous Coordinator
+
+When the user invokes `/{app_info.APP_NAME} [scope] [target_role]` (e.g., `/{app_info.APP_NAME} staging qa` or `orchestrate staging`):
+**You are the Master Coordinator.** Immediately and autonomously execute the {app_info.APP_NAME.capitalize()} DAG using DSH native subagents:
+
+## Autonomous Execution Loop
+
+1. **Inspect Ready Roles in the DAG**:
+   Run:
+   ```bash
+   uv run {app_info.APP_NAME} work-queue <dir_scope> [target_role] --json
+   ```
+   Check which roles currently have ready targets. If all roles in scope are clean, report convergence to the user and stop.
+
+2. **Commission Workspace**:
+   For the first ready role, commission its workspace:
+   ```bash
+   uv run {app_info.APP_NAME} commission <role> <dir_scope>
+   ```
+   This prepares the role workspace at `../role_workspaces/<ws>_<role>_<scope>/` with its internal tools (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, `bin/fail`).
+
+3. **Dispatch Role Subagent**:
+   Call the DSH native `subagent` tool:
+   - `description`: `[<ROLE>] <scope> worker`
+   - `prompt`:
+     ```text
+     You are the <role> worker for scope <scope>.
+     Your assigned workspace is: ../role_workspaces/<ws>_<role>_<scope>
+     1. Change directory to your workspace.
+     2. Run `bin/get_work` to view the pending tasks and contract guidelines.
+     3. Make the necessary code/spec edits in your workspace.
+     4. Run `bin/check_files` to ensure all checks pass.
+     5. Run `bin/submit` to submit your work, or `bin/blame` if upstream defects are discovered.
+     ```
+
+4. **Iterate Until Clean Convergence**:
+   When the child subagent finishes, re-run `uv run {app_info.APP_NAME} work-queue <dir_scope> [target_role] --json`.
+   Repeat steps 2–3 for subsequent ready roles until all roles in scope are clean.
+   Once clean, report: `{app_info.APP_NAME.capitalize()} orchestration for <scope> converged successfully!`
+
+---
+
+## Alternative Options
+
+- If the user explicitly asks to run via the automated CLI script instead of subagents, run:
+  ```bash
+  uv run {app_info.APP_NAME} orchestrate <dir_scope> [target_role] --harness dsh
+  ```
+- To run tests: `bin/test`
+"""
+    with open(skill_file, "w", encoding="utf-8") as f:
+        f.write(content.strip() + "\n")
+    return skill_file
 
 
 def parse_cleanroom_target(target_str: str) -> tuple[str, str | None, bool]:
@@ -513,10 +616,14 @@ def resolve_default_model(repo_root: str | None = None, harness: str | None = No
     """
     root = repo_root or find_workspace_root()
     import tomllib
-    for cand in (
+    from support.lib import app_info
+    candidates = [
         os.path.join(root, "model_configs.toml"),
         os.path.join(os.path.dirname(root), "model_configs.toml"),
-    ):
+        os.path.join(root, app_info.DEFAULT_CONFIG_FILE),
+        app_info.get_user_model_config_file(),
+    ]
+    for cand in candidates:
         if os.path.isfile(cand):
             try:
                 with open(cand, "rb") as f:
@@ -539,6 +646,77 @@ def resolve_default_model(repo_root: str | None = None, harness: str | None = No
             except Exception:
                 pass
     return None
+
+
+def configure_user_environment() -> int:
+    """Prepares the user environment (global ~/.config/cleanroom setup)."""
+    from support.lib import app_info
+    cfg_dir = app_info.get_user_config_dir()
+    os.makedirs(cfg_dir, exist_ok=True)
+
+    model_cfg = app_info.get_user_model_config_file()
+    if not os.path.isfile(model_cfg):
+        with open(model_cfg, "w", encoding="utf-8") as f:
+            f.write(app_info.DEFAULT_USER_MODEL_CONFIGS_TOML)
+        print(f"[OK] Created user model configuration at: {model_cfg}")
+    else:
+        print(f"[INFO] User model configuration already exists at: {model_cfg}")
+
+    creds_file = app_info.get_user_credentials_file()
+    if not os.path.isfile(creds_file):
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        fd = os.open(creds_file, flags, 0o600)
+        with open(fd, "w", encoding="utf-8") as f:
+            f.write(app_info.DEFAULT_USER_CREDENTIALS_TOML)
+        print(f"[OK] Created user credentials template (mode 0600) at: {creds_file}")
+    else:
+        print(f"[INFO] User credentials file already exists at: {creds_file}")
+
+    p = ensure_antigravity_plugin_installed()
+    print(f"[OK] Antigravity plugin and agent definitions refreshed at: {p}")
+
+    dsh_p = ensure_dsh_skill_installed()
+    if dsh_p:
+        print(f"[OK] DeepSeek Harness skill refreshed at: {dsh_p}")
+
+    print(f"\n[SUCCESS] Environment configured. You can edit credentials and model configurations in:\n  {cfg_dir}")
+    return 0
+
+
+def install_workspace(repo_root: str | None = None) -> int:
+    """Prepares a workspace/project to use Cleanroom."""
+    from support.lib import app_info
+    root = repo_root or find_workspace_root()
+
+    cfg_name = app_info.DEFAULT_CONFIG_FILE
+    cfg_path = os.path.join(root, cfg_name)
+    if not os.path.isfile(cfg_path):
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write(f'# {cfg_name}\n# Project-level configuration for {app_info.APP_NAME}\n\n')
+        print(f"[OK] Initialized project configuration at: {cfg_path}")
+    else:
+        print(f"[INFO] Project configuration already exists at: {cfg_path}")
+
+    gitignore_path = os.path.join(root, ".gitignore")
+    patterns_to_ignore = [
+        "role_workspaces/",
+        ".role_workspaces/",
+        f".{app_info.APP_NAME}_*",
+        "staging/",
+    ]
+    existing = ""
+    if os.path.isfile(gitignore_path):
+        with open(gitignore_path, "r", encoding="utf-8") as f:
+            existing = f.read()
+
+    to_add = [p for p in patterns_to_ignore if p not in existing]
+    if to_add:
+        with open(gitignore_path, "a", encoding="utf-8") as f:
+            f.write(f"\n# {app_info.APP_NAME} ephemeral files\n" + "\n".join(to_add) + "\n")
+        print(f"[OK] Added ephemeral workspace patterns to {gitignore_path}")
+
+    print(f"\n[SUCCESS] Workspace {root} prepared for {app_info.APP_NAME}.")
+    return 0
 
 
 def run_work_queue(argv: list[str]) -> int:
@@ -587,7 +765,7 @@ def run_work_queue(argv: list[str]) -> int:
         print("Error: Directory scope must be specified (e.g. uv run cleanroom work-queue staging or staging#qa).", file=sys.stderr)
         return 1
 
-    scope, parsed_role, _ = parse_cleanroom_target(target_input)
+    scope, parsed_role, is_unit = parse_cleanroom_target(target_input)
     target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
 
     root = parsed.repo_root or find_workspace_root()
@@ -631,7 +809,12 @@ def run_work_queue(argv: list[str]) -> int:
         ready_by_role: dict[str, list[dict[str, Any]]] = {}
         blocked_by_role: dict[str, list[dict[str, Any]]] = {}
         for r in declared_roles:
-            q_ready, q_blocked = work.compute_role_work_queue(r.role_name, dir_scope=scope, repo_root=root)
+            q_ready, q_blocked = work.compute_role_work_queue(
+                r.role_name,
+                dir_scope=scope,
+                repo_root=root,
+                target_unit=target_input if is_unit else None,
+            )
             if q_ready:
                 ready_by_role[r.role_name] = [
                     {"target": it.target_file, "reasons": list(it.dirtiness_reasons)}
@@ -1121,6 +1304,8 @@ def run_orchestrate(
             forward_args = ["orchestrate", "--scope", scope]
             if target_role:
                 forward_args.extend(["--role", target_role])
+            if is_unit:
+                forward_args.extend(["--target", target_input])
             forward_args.extend(["--harness", active_harness])
             h_model = parsed.model or resolve_default_model(parsed.repo_root, harness=active_harness)
             if h_model:
@@ -1178,7 +1363,12 @@ def run_orchestrate(
         ready_nodes: list[tuple[str, str, list[str]]] = []
         blocked_nodes: list[tuple[str, str, list[str]]] = []
         for r in declared_roles:
-            q_ready, q_blocked = work.compute_role_work_queue(r.role_name, dir_scope=scope, repo_root=root)
+            q_ready, q_blocked = work.compute_role_work_queue(
+                r.role_name,
+                dir_scope=scope,
+                repo_root=root,
+                target_unit=target_input if is_unit else None,
+            )
             for it in q_ready:
                 ready_nodes.append((r.role_name, it.target_file, list(it.dirtiness_reasons)))
             for it in q_blocked:
@@ -1229,7 +1419,8 @@ def run_orchestrate(
                 print(f"      [{r_name}] {t_file} -> {b_msg}")
 
         role_hint = f" up to {target_role}" if target_role else ""
-        queue_hint = f" {target_role}" if target_role else ""
+        target_display = target_input if is_unit else f"{scope}{role_hint}"
+        queue_hint = f" {target_input}" if is_unit else (f" {target_role}" if target_role else "")
         print("\n" + "=" * 72)
         print("AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE:")
         print("The 'cleanroom_coordinator' subagent definition is installed and ready.")
@@ -1238,7 +1429,7 @@ def run_orchestrate(
         print("    Subagents=[{")
         print('      "TypeName": "cleanroom_coordinator",')
         print('      "Role": "Cleanroom Coordinator",')
-        print(f'      "Prompt": "Clean all dirty nodes in {scope}{role_hint} using cleanroom_coordinator."')
+        print(f'      "Prompt": "Clean all dirty nodes in {target_display} using cleanroom_coordinator."')
         print("    }]")
         print("  )")
         print("\nCoordinator execution steps:")
@@ -1604,6 +1795,8 @@ positional arguments:
     check_files         Run role-specific verification checks on target files
     change              Record a change description on a target node or scope
     prompt              Print task prompt for a target node or scope
+    configure           Configure global user environment (~/.config/cleanroom, model_configs.toml, credentials)
+    install (init)      Prepare current workspace/repository for cleanroom execution
     install-plugin      Install/refresh Cleanroom Antigravity plugin and agent definitions
 
 options:
@@ -1673,6 +1866,12 @@ def main(argv: list[str] | None = None) -> int:
     if not args_list or args_list[0] in ("-h", "--help", "help"):
         print_cleanroom_help()
         return 0 if args_list else 1
+
+    if args_list[0] in ("configure", "config"):
+        return configure_user_environment()
+
+    if args_list[0] in ("install", "init"):
+        return install_workspace()
 
     if args_list[0] in ("install-plugin", "install_plugin", "install-agents"):
         p = ensure_antigravity_plugin_installed()

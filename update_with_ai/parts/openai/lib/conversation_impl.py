@@ -38,7 +38,6 @@ _PATH_PARAM_NAMES = frozenset(
 )
 
 
-# Contract: Identifies file path parameters to preserve in superseded tool calls.
 def _is_path_param(name: str) -> bool:
     normalized = name.lower().replace("-", "_")
     return (

@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T12:00:00Z
-CHANGE: update subagent coordinator scenarios for dynamic queue supervision
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: add scenario for restricting execution to target units and transitive dependencies
 CODE_HASH: 78d6af640f82
 -->
 
@@ -69,3 +69,10 @@ Given: dynamic supervision achieves clean convergence across all evaluated roles
 
 1. The coordinator concludes orchestration.
    Observed: all provisioned role workspace directories for scope_a are automatically deleted before returning the summary.
+
+## Scenario 10 — Restricting execution to a target unit and its transitive dependencies
+
+Given: scope_a has dirty units unit_m and unit_n, where unit_m does not depend on unit_n.
+
+1. The coordinator inspects work queues bounded by target unit unit_m.
+   Observed: only unit_m and its transitive upstream dependencies are evaluated and scheduled; unit_n is excluded.

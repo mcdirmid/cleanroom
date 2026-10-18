@@ -2,7 +2,7 @@
 LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T20:00:00Z
 CHANGE: author dsh_harness_impl implementation specification
-CODE_HASH: 6cf08307fe87
+CODE_HASH: 412876414809
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
 
@@ -33,7 +33,7 @@ When parsing session telemetry:
 
 - The dsh telemetry parser parses text log streams as fallback when structured records are unavailable.
 
-The dsh harness adapter executes DeepSeek Harness turns using configurable command lines within target role workspaces.
+The dsh harness adapter executes DeepSeek Harness turns using configurable command lines within target role workspaces, discovering session storage across environment overrides and platform conventions.
 
 When dispatching and awaiting role turns:
 

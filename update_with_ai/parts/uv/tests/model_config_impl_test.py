@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CLEANED: 2026-10-18T01:04:33Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: c42634ab7450
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# CODE_HASH: afbbeff3f531
+# COVERAGE_AUDIT: 2026-10-18T01:04:33Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
@@ -30,12 +30,15 @@ class UvModelConfigImplTest(unittest.TestCase):
         self.orig_cwd = os.getcwd()
         self.orig_env = dict(os.environ)
         self.orig_argv = list(sys.argv)
+        self.tmp_config_dir = tempfile.TemporaryDirectory()
+        os.environ["CLEANROOM_CONFIG_DIR"] = self.tmp_config_dir.name
 
     def tearDown(self) -> None:
         os.chdir(self.orig_cwd)
         os.environ.clear()
         os.environ.update(self.orig_env)
         sys.argv = list(self.orig_argv)
+        self.tmp_config_dir.cleanup()
 
     def test_default_configuration(self) -> None:
         """Resolving default model configuration properties when no TOML or env vars exist."""
@@ -381,6 +384,82 @@ is_step_mode = false
                 self.assertTrue(agent_cfg.inject_followups)
                 self.assertTrue(agent_cfg.is_startup_reads)
                 self.assertTrue(agent_cfg.edit_delta_output)
+        finally:
+            os.unlink(temp_path)
+
+    def test_user_model_configs_toml_discovery(self) -> None:
+        """Discovering model_configs.toml in user config directory when repo config is absent."""
+        user_cfg = os.path.join(self.tmp_config_dir.name, "model_configs.toml")
+        with open(user_cfg, "w") as f:
+            f.write('default = "user-global-model"\n[models.user-global-model]\nmodel = "User-Global-Qwen"\n')
+
+        with tempfile.TemporaryDirectory() as empty_dir:
+            os.chdir(empty_dir)
+            for var in [
+                "CLEANROOM_MODEL",
+                "CLEANROOM_MODEL_CONFIG_FILE",
+                "MODEL_CONFIG_TARGET",
+                "OPENAI_MODEL",
+            ]:
+                os.environ.pop(var, None)
+            sys.argv = ["cleanroom-loop"]
+
+            reg = LifecycleRegistry()
+            __initialize__(reg)
+
+            with enter_phase("system", registry=reg) as scope:
+                openai_cfg = scope.get_singleton(OpenAIConfig)
+                self.assertEqual(openai_cfg.model_name, "User-Global-Qwen")
+
+    def test_credentials_toml_lookup_and_precedence(self) -> None:
+        """Verifying credentials.toml API key lookup and environment variable precedence."""
+        user_creds = os.path.join(self.tmp_config_dir.name, "credentials.toml")
+        with open(user_creds, "w") as f:
+            f.write(
+                'openai_api_key = "key-from-credentials"\n'
+                'anthropic_api_key = "anthropic-from-credentials"\n'
+            )
+
+        toml_content = """
+default = "test-creds"
+[models.test-creds]
+model = "claude-3-opus"
+api_key_env = "ANTHROPIC_API_KEY"
+
+[models.default-creds]
+model = "gpt-4o"
+"""
+        with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            temp_path = f.name
+
+        try:
+            os.environ["CLEANROOM_MODEL_CONFIG_FILE"] = temp_path
+            os.environ.pop("ANTHROPIC_API_KEY", None)
+            os.environ.pop("OPENAI_API_KEY", None)
+            sys.argv = ["cleanroom-loop", "--config", "test-creds"]
+
+            reg = LifecycleRegistry()
+            __initialize__(reg)
+            with enter_phase("system", registry=reg) as scope:
+                openai_cfg = scope.get_singleton(OpenAIConfig)
+                self.assertEqual(openai_cfg.api_key, "anthropic-from-credentials")
+
+            # Verify env var overrides credentials.toml
+            os.environ["ANTHROPIC_API_KEY"] = "override-from-env"
+            reg2 = LifecycleRegistry()
+            __initialize__(reg2)
+            with enter_phase("system", registry=reg2) as scope2:
+                openai_cfg2 = scope2.get_singleton(OpenAIConfig)
+                self.assertEqual(openai_cfg2.api_key, "override-from-env")
+
+            # Verify OPENAI_API_KEY fallback from credentials.toml when api_key_env not specified
+            sys.argv = ["cleanroom-loop", "--config", "default-creds"]
+            reg3 = LifecycleRegistry()
+            __initialize__(reg3)
+            with enter_phase("system", registry=reg3) as scope3:
+                openai_cfg3 = scope3.get_singleton(OpenAIConfig)
+                self.assertEqual(openai_cfg3.api_key, "key-from-credentials")
         finally:
             os.unlink(temp_path)
 

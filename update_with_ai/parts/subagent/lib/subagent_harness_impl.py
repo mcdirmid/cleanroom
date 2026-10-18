@@ -30,7 +30,6 @@ from update_with_ai.parts.workspace_cli.lib import work
 from . import subagent_coordinator, subagent_harness
 
 
-# Contract: inspect workspace blame buffer for reported defects (await_role)
 def _read_blame_buffer(workspace_dir: str) -> List[str]:
     """Reads blamed culprit files from the workspace blame buffer."""
     p = os.path.join(workspace_dir, ".cleanroom_blame_buffer.json")
@@ -57,7 +56,6 @@ def _read_blame_buffer(workspace_dir: str) -> List[str]:
     return []
 
 
-# Contract: extract token usage metrics and return synthesized RoleTurnResult (await_role)
 def _parse_token_usage_from_log(log_path: str) -> subagent_coordinator.TokenUsage:
     """Parses token telemetry and computes rate-card monetary costs."""
     if not os.path.isfile(log_path):

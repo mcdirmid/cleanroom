@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T11:20:00Z
-CHANGE: add workspace reset and convergence deletion contracts
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: support restricting work queue evaluation to target units and transitive dependencies
 CODE_HASH: 19689d905946
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
@@ -28,6 +28,7 @@ Complex software development methodologies partition work into specialized roles
 - A subagent coordinator resets preexisting role workspaces upon initiating orchestration to ensure clean initial state. [reset_preexisting_role_workspaces]
 - A subagent coordinator dynamically resolves subagent batch sizes, conversation token limits, and maximum unproductive turns thresholds from declarative model configurations matching designated model names or identifiers. [resolve_model_execution_parameters]
 - A subagent coordinator evaluates DAG work queues across declared roles, dynamically identifying roles with ready work up to an optional target role boundary without static role hardcoding. [evaluate_ready_work_queues]
+- A subagent coordinator restricts work queue evaluation to a designated target unit and its transitive upstream dependencies when a target unit is specified. [bound_evaluation_to_target_unit]
 - A subagent coordinator ensures absent role workspaces are commissioned via workspace provisioning on demand before dispatching directives, persisting effective batch size bounds into workspace configurations. [commission_absent_workspaces]
 - A subagent coordinator dispatches role directives to unblocked ready roles concurrently, tracking active worker handles without static wave partitioning. [dispatch_concurrent_role_workers]
 - A subagent coordinator periodically polls active workers through the harness adapter at a configurable polling interval (defaulting to 10 seconds), reaping completed turns and propagating blame defects into the build graph. [poll_active_role_workers]
@@ -40,7 +41,7 @@ Complex software development methodologies partition work into specialized roles
 ### Woven Contracts
 
 - When initiating orchestration, the coordinator resets preexisting role workspaces, resolves model execution parameters, and drives pipeline convergence until clean convergence or failure. [reset_preexisting_role_workspaces, resolve_model_execution_parameters, orchestrate_pipeline_convergence, delete_role_workspaces_on_convergence]
-- When evaluating work queues, the coordinator commissions absent workspaces with batch size bounds and dispatches concurrent role workers without static wave partitioning. [evaluate_ready_work_queues, commission_absent_workspaces, dispatch_concurrent_role_workers]
+- When evaluating work queues, the coordinator commissions absent workspaces with batch size bounds, restricts evaluation to target units when specified, and dispatches concurrent role workers without static wave partitioning. [evaluate_ready_work_queues, bound_evaluation_to_target_unit, commission_absent_workspaces, dispatch_concurrent_role_workers]
 - When supervising active workers, the coordinator periodically polls active workers through the harness adapter, detects unproductive turn impasses, emits real-time telemetry, and aggregates cumulative telemetry. [poll_active_role_workers, detect_unproductive_turn_impasse, emit_realtime_orchestration_telemetry, aggregate_cumulative_telemetry]
 
 ## Grounding

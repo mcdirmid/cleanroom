@@ -8,8 +8,8 @@
 
 """Cleanroom node config implementation low-level specification."""
 
-from typing import Any, Mapping, Optional, Sequence, Set, Type
-from framework import operation, override, singleton_type
+from typing import Any, Mapping, Optional, Sequence, Set, Tuple, Type
+from framework import operation, override, poly_type, singleton_type
 from support.lib.lifecycle import InTier
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 from update_with_ai.parts.agent.lib import file_alias
@@ -317,3 +317,23 @@ class AliasManager(
         - Scans output text for host workspace and execution root path prefixes, replacing them with relative workspace paths.
         """
         ...
+
+
+@poly_type
+class CommandVerificationCheck(node_config.VerificationCheck):
+    """Realizes verification checking by executing a configured command in a subprocess.
+
+    GROUNDING:
+    - Executes command in a subprocess with working directory and dynamic PYTHONPATH to resolve library modules.
+    """
+
+    @operation
+    @override
+    def verify(self) -> Tuple[bool, node_config.VerificationDiagnostic]:
+        """Validates node criteria by running command.
+
+        GROUNDING:
+        - Executes command in subprocess with cwd and PYTHONPATH, returning success status and output diagnostic.
+        """
+        ...
+

@@ -1,9 +1,8 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T03:55:25Z
-# CHANGE: Resolve the active model configuration from argument, environment variables, and file default in precedence order
-# CODE_HASH: 4e0a436c7bd7
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# LAST_CLEANED: 2026-10-17T12:00:00Z
+# LAST_CHANGED: 2026-10-17T12:00:00Z
+# CHANGE: align model_config_impl with app_info_ext and credentials fallback
+# CODE_HASH: e359e2b99da0
 # --- END CLEANROOM METADATA ---
 
 """Cleanroom UV model and runtime configuration implementation low-level specification."""
@@ -21,8 +20,8 @@ class AgentConfig(agent_config.AgentConfig, InTier[SystemTier]):
     """Loads agent execution parameters from TOML configuration or environment defaults.
 
     GROUNDING:
-    - Realizes agent_config by loading execution limits, step mode flags, and delta editing options via filesystem_ext from TOML configuration discovered hierarchically across candidate filenames and user configuration paths.
-    - Resolves the active model configuration name in precedence order from the "--config" command-line argument, the CLEANROOM_MODEL environment variable, the MODEL_CONFIG_TARGET environment variable, and the default entry of the workspace configuration file, and selects the configuration entry named by that resolution as the source of every agent_config.AgentConfig property value realized here.
+    - Realizes agent_config by loading execution limits, step mode flags, and delta editing options via filesystem_ext and app_info_ext from TOML configuration discovered hierarchically across candidate filenames and user configuration paths.
+    - Resolves the active model configuration name in precedence order from the "--config" command-line argument, the application model environment variable resolved via app_info_ext, the MODEL_CONFIG_TARGET environment variable, and the default entry of the workspace configuration file, and selects the configuration entry named by that resolution as the source of every agent_config.AgentConfig property value realized here.
     """
 
     @property
@@ -121,8 +120,8 @@ class OpenAIConfig(openai_config.OpenAIConfig, InTier[SystemTier]):
     """Loads OpenAI connection and hyperparameter settings from TOML configuration or environment variables.
 
     GROUNDING:
-    - Realizes openai_config by extracting API endpoint parameters, timeouts, and authentication keys via filesystem_ext from TOML configuration discovered hierarchically across candidate filenames and user configuration paths.
-    - Resolves the active model configuration name in precedence order from the "--config" command-line argument, the CLEANROOM_MODEL environment variable, the MODEL_CONFIG_TARGET environment variable, and the default entry of the workspace configuration file, loading that entry from the declarative TOML configuration file on the host path read with the filesystem_ext Path.read_text operation, and exposes the resolved configuration through openai_config.OpenAIConfig.model_name and the remaining openai_config.OpenAIConfig properties.
+    - Realizes openai_config by extracting API endpoint parameters, timeouts, and authentication keys via filesystem_ext and app_info_ext from TOML configuration discovered hierarchically across candidate filenames and user configuration paths.
+    - Resolves the active model configuration name in precedence order from the "--config" command-line argument, the application model environment variable resolved via app_info_ext, the MODEL_CONFIG_TARGET environment variable, and the default entry of the workspace configuration file, loading that entry from the declarative TOML configuration file on the host path read with the filesystem_ext Path.read_text operation, and exposes the resolved configuration through openai_config.OpenAIConfig.model_name and the remaining openai_config.OpenAIConfig properties.
     """
 
     @property
@@ -132,13 +131,13 @@ class OpenAIConfig(openai_config.OpenAIConfig, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - WHEN the "--config" command-line argument supplies the active model configuration name, MUST resolve the active model configuration name from that argument.
-        - WHEN the CLEANROOM_MODEL environment variable supplies the active model configuration name, MUST resolve the active model configuration name from that environment variable.
+        - WHEN the application model environment variable supplies the active model configuration name, MUST resolve the active model configuration name from that environment variable.
         - WHEN the MODEL_CONFIG_TARGET environment variable supplies the active model configuration name, MUST resolve the active model configuration name from that environment variable.
         - WHEN the workspace configuration file declares the default entry of the active model configuration, MUST resolve the active model configuration name from that default entry.
 
         GROUNDING:
         - Resolves model identifier string from TOML configuration target or default fallback.
-        - Reads the command-line argument list for the "--config" flag first, then the CLEANROOM_MODEL environment variable, then the MODEL_CONFIG_TARGET environment variable, and finally the default entry declared in the workspace configuration file, and loads the named entry from that TOML configuration file through the filesystem_ext Path.exists and Path.read_text operations.
+        - Reads the command-line argument list for the "--config" flag first, then the application model environment variable resolved via app_info_ext, then the MODEL_CONFIG_TARGET environment variable, and finally the default entry declared in the workspace configuration file, and loads the named entry from that TOML configuration file through the filesystem_ext Path.exists and Path.read_text operations.
         """
         ...
 
@@ -158,7 +157,7 @@ class OpenAIConfig(openai_config.OpenAIConfig, InTier[SystemTier]):
         """Extracts API authentication key.
 
         GROUNDING:
-        - Extracts API authentication key from the designated process environment variable.
+        - Extracts API authentication key from the designated process environment variable or falls back to user credentials resolved via app_info_ext.
         """
         ...
 

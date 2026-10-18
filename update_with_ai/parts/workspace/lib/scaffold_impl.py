@@ -26,7 +26,6 @@ from . import roles, scaffold
 ROLE_CONFIG_FILE = ".cleanroom_role.json"
 
 
-# Contract: Writes a text file and sets exact permissions, handling existing read-only files cleanly.
 def write_file_with_perms(
     dst: str, content: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -49,7 +48,6 @@ def write_file_with_perms(
         pass
 
 
-# Contract: Finds companion .pyi specification file for a unit stem in a part directory.
 def _find_spec_pyi(
     part_path: str, stem: str, main_root: Optional[str] = None
 ) -> Optional[str]:
@@ -76,7 +74,6 @@ def _find_spec_pyi(
     return None
 
 
-# Contract: Reports whether a relative path matches any configured glob pattern.
 def _matches_any_pattern(rel_path: str, patterns: Sequence[str]) -> bool:
     """Reports whether a relative path matches any configured glob pattern."""
     normalized = rel_path.replace("\\", "/")
@@ -90,7 +87,6 @@ def _matches_any_pattern(rel_path: str, patterns: Sequence[str]) -> bool:
     )
 
 
-# Contract: Traverses synchronized scope discovering declared unit directories and stems from low/grounding/high specs.
 def _declared_units(repo_root: str, scope_dir: str) -> List[Tuple[str, str]]:
     """Returns declared (unit_dir, unit_name) pairs beneath a synchronized scope."""
     units: List[Tuple[str, str]] = []
@@ -135,7 +131,6 @@ def _declared_units(repo_root: str, scope_dir: str) -> List[Tuple[str, str]]:
     return units
 
 
-# Contract: Synthesizes starter skeleton content for a declared writable target file from template or spec.
 def _missing_target_skeleton(
     repo_root: str,
     rel_path: str,
@@ -188,7 +183,6 @@ def _missing_target_skeleton(
         return None
 
 
-# Contract: Creates missing starter skeletons matching writable target patterns absent from disk.
 def _create_missing_target_skeletons(
     workspace_dir: str,
     repo_root: str,
@@ -220,7 +214,6 @@ def _create_missing_target_skeletons(
     return created
 
 
-# Contract: Packages self-contained executable runner zipapps into bin_dir with 0o755 permissions and removes stale coverage script.
 def package_runner_zipapps(bin_dir: str) -> None:
     """Packages runner zipapps into bin_dir with executable permissions."""
     os.makedirs(bin_dir, exist_ok=True)
@@ -322,7 +315,7 @@ if __name__ == "__main__":
             pass
 
 
-# Contract: Writes role configuration metadata (.cleanroom_role.json) with 0o644 permissions.
+# Contract: __orphan__ - writes role configuration metadata with 0o644 permissions
 def write_role_metadata(
     workspace_dir: str,
     role_name: str,
@@ -355,7 +348,6 @@ def write_role_metadata(
         pass
 
 
-# Contract: Synthesizes role-tailored AGENTS.md instructions with boundary rules, tripwires, fail-stop, and workflow.
 def write_role_agents_md(
     workspace_dir: str,
     role_def: roles.RoleDefinition,

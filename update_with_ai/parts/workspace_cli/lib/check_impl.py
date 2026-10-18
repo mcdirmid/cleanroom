@@ -39,7 +39,6 @@ from . import (
 )
 
 
-# Contract: Checks whether role is an auditor role based on audit_tag or absence of src_pattern.
 def is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     clean_r = role_name.split(":")[-1].strip().lower()
     reg = get_singleton(role_registry.WorkspaceRegistry)
@@ -47,7 +46,6 @@ def is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     return bool(r_def.audit_tag or not r_def.src_pattern)
 
 
-# Contract: Helper to copy file with exact permissions via WorkspaceProvisioner.
 def copy_file_with_perms(
     src: str,
     dst: str,
@@ -60,7 +58,6 @@ def copy_file_with_perms(
     )
 
 
-# Contract: Extracts unacted feedback lines from a target file's in-band cleanroom metadata header.
 def _extract_unacted_feedback(file_path: str) -> List[str]:
     """Extracts unacted feedback lines from a target file's cleanroom metadata header."""
     if not file_path or not os.path.isfile(file_path):
@@ -96,7 +93,6 @@ def _extract_unacted_feedback(file_path: str) -> List[str]:
     return feedback_items
 
 
-# Contract: Discovers root of commissioned role workspace or repo root by checking for .cleanroom_role.json.
 def find_workspace_root() -> str:
     """Discovers root of commissioned role workspace or repo root."""
     curr = os.getcwd()
@@ -107,7 +103,6 @@ def find_workspace_root() -> str:
     return os.getcwd()
 
 
-# Contract: Loads .cleanroom_role.json from current workspace if present.
 def get_current_role_metadata() -> Optional[Dict[str, Any]]:
     """Loads .cleanroom_role.json from current workspace if present."""
     ws_root = find_workspace_root()
@@ -121,7 +116,6 @@ def get_current_role_metadata() -> Optional[Dict[str, Any]]:
     return None
 
 
-# Contract: Resolves main repository root from explicit repo_root or role_registry.discover_repository_root.
 def _resolve_main_root(
     ws_root: str, meta: Optional[Dict[str, Any]], repo_root: Optional[str] = None
 ) -> str:
@@ -131,7 +125,6 @@ def _resolve_main_root(
     return os.path.realpath(reg.discover_repository_root(ws_root))
 
 
-# Contract: Computes ready and blocked dirty work items for a role using WorkspaceWorkManager.
 def compute_role_work_queue(
     role_name: str,
     dir_scope: str,

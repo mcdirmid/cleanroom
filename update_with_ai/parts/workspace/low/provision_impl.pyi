@@ -168,3 +168,13 @@ class WorkspaceProvisioner(
           stub.WorkspaceStubSynthesizer.sync_all_stub_deps.
         """
         ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for workspace provisioning file writing routines.
+
+    POSTCONDITIONS:
+    - MUST write files with specific content and permissions.
+    """
+    ...
+

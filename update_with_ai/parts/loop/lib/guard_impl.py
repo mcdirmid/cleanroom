@@ -36,7 +36,6 @@ class LoopGuard(guard.LoopGuard, Singleton):
         self._last_edit: Optional[Tuple[str, Any, Any]] = None
         self._edit_count: int = 0
 
-    # Contract: LoopGuard._edit_location - reads file identity and line range from edit tool parameter bindings.
     def _edit_location(
         self,
         tool_name: tool_provider.ToolName,

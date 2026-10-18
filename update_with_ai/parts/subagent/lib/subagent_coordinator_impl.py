@@ -45,6 +45,7 @@ def _resolve_model_parameters(
     model_name: Optional[str] = None,
 ) -> Tuple[Optional[int], Optional[int], Optional[int]]:
     """Resolves (subagent_batch_size, conversation_max_tokens, max_unproductive_turns) from model_configs.toml."""
+    # Contract: __orphan__ - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive turns thresholds from model configurations.
     if tomllib is None:
         return None, None, None
     cfg_path = os.path.join(repo_root, "model_configs.toml")
@@ -120,6 +121,9 @@ def _resolve_model_parameters(
             pass
 
     return resolved_batch, resolved_tokens, resolved_unproductive
+
+
+resolve_model_parameters = _resolve_model_parameters
 
 
 def _persist_batch_size(ws_dir: str, batch_size: int) -> None:
@@ -300,6 +304,7 @@ class SubagentCoordinator(
         model_name: Optional[str] = None,
         poll_interval: Optional[float] = None,
         max_unproductive_turns: Optional[int] = None,
+        target_node: Optional[str] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure."""
         reg = get_singleton(role_registry.WorkspaceRegistry)
@@ -410,7 +415,10 @@ class SubagentCoordinator(
                     for r_entry in roles_to_evaluate:
                         r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
                         ready, blocked = work_mgr.compute_role_work_queue(
-                            r_name, dir_scope=dir_scope, repo_root=root
+                            r_name,
+                            dir_scope=dir_scope,
+                            repo_root=root,
+                            target_unit=target_node,
                         )
                         if ready:
                             all_clean = False
@@ -543,6 +551,7 @@ class SubagentCoordinator(
             status_message=f"Maximum wave limit ({max_waves}) reached before convergence.",
         )
 
+    # Contract: Resolves the canonical repository logs directory for a role workspace.
     def resolve_cleanroom_log_dir(self, workspace_dir: str) -> str:
         """Resolves the canonical repository logs directory for a role workspace."""
         return subagent_coordinator.resolve_cleanroom_log_dir(workspace_dir)

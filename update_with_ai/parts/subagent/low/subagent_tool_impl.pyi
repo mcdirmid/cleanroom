@@ -54,12 +54,23 @@ class SubagentToolRunner(
         max_context_tokens: Optional[int] = None,
         repo_root: Optional[str] = None,
         max_unproductive_turns: Optional[int] = None,
+        target_node: Optional[str] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence.
 
         GROUNDING:
         - Resolves harness adapter via subagent_harness.HarnessResolver.resolve_harness,
-          delegates multi-agent orchestration with optional unproductive turn limits to subagent_coordinator.SubagentCoordinator.orchestrate,
+          delegates multi-agent orchestration with optional unproductive turn limits and target node to subagent_coordinator.SubagentCoordinator.orchestrate,
           and renders summary telemetry.
         """
         ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for subagent CLI entrypoint execution.
+
+    POSTCONDITIONS:
+    - MUST execute command-line runner within the agent_session lifecycle phase.
+    """
+    ...
+

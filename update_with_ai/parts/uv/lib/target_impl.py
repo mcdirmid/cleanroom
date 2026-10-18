@@ -26,7 +26,6 @@ class UvTarget(target.UvTarget, Singleton):
     def __init__(self) -> None:
         pass
 
-    # Contract: strip repository qualifiers and expand omitted target names into canonical nodes
     def _normalize_label(self, raw_label: str) -> str:
         label = raw_label.strip()
         if not label:

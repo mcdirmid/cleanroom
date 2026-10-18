@@ -67,6 +67,7 @@ class UvManifestLoader(manifest_loader.UvManifestLoader, Singleton):
             f"No 'cleanroom.toml' methodology binding found upwards from '{os.path.join(root, pkg_dir)}' to workspace root '{root_abs}'"
         )
 
+    # Contract: retrieve_manifest - discovers methodology bindings and loads role definitions
     def _get_methodology_roles(
         self, root: str, pkg_dir: str
     ) -> Tuple[str, Dict[str, Dict[str, Any]]]:
@@ -227,6 +228,7 @@ class UvManifestLoader(manifest_loader.UvManifestLoader, Singleton):
 
         return f"//{pkg_dir}:{clean_name}"
 
+    # Contract: retrieve_manifest - parses high-level specifications for component metadata
     def _parse_hls(self, hls_path: str) -> Dict[str, Any]:
         info: Dict[str, Any] = {
             "component_type": "implementation",
@@ -459,7 +461,6 @@ class UvManifestLoader(manifest_loader.UvManifestLoader, Singleton):
             role_address=dag_storage.RoleAddress(role_address),
         )
 
-    # Contract: synthesize fallback node definitions for referenced targets lacking manifests
     def _synthesize_dependency_definition(
         self, storage: Any, node: dag_storage.DagNode
     ) -> None:

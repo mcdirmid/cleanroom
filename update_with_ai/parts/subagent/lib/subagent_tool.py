@@ -35,6 +35,8 @@ class SubagentToolRunner(InTier[AgentSessionTier], Protocol):
         timeout: Optional[float] = None,
         max_context_tokens: Optional[int] = None,
         repo_root: Optional[str] = None,
+        max_unproductive_turns: Optional[int] = None,
+        target_node: Optional[str] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence."""
         ...

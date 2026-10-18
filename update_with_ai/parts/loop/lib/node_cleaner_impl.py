@@ -290,7 +290,6 @@ class NodeCleaner(node_cleaner.NodeCleaner, Singleton):
             "session phase failed without an outcome"
         )  # pragma: no cover
 
-    # Contract: NodeCleaner._resolve_promptless - resolves promptless nodes without an agent session phase, marking clean with change summary when incoming messages indicate upstream changes, or clean without changes otherwise.
     def _resolve_promptless(self, nodes: Sequence[dag_storage.DagNode]) -> None:
         storage = _get_storage()
         has_changes = any(
@@ -344,7 +343,6 @@ class NodeCleaner(node_cleaner.NodeCleaner, Singleton):
             outcome = self._run_with_retry(nodes, session)
             return self._evaluate_outcome(storage, nodes, outcome, session)
 
-    # Contract: MUST resolve dirty nodes by evaluating the loop driver outcome.
     def _evaluate_outcome(
         self,
         storage: node_storage.AgentStorage,

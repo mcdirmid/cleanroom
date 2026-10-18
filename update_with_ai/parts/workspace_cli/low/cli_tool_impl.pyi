@@ -169,3 +169,13 @@ class WorkspaceToolRunner(
         - Delegates execution to commands.WorkspaceCommandHandler.run_refresh_sys.
         """
         ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for CLI entrypoint execution.
+
+    POSTCONDITIONS:
+    - MUST execute command-line runner within the agent_session lifecycle phase.
+    """
+    ...
+

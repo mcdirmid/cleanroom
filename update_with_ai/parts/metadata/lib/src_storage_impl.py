@@ -123,31 +123,37 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
     ) -> node_storage.TaskPrompt:
         return self.get_node_definition(node).task_prompt
 
+    # Contract: Associates a declared source file relative path with a node in storage.
     def record_source_file(self, node: dag_storage.DagNode, path: str) -> None:
         norm_path = path.lstrip("/")
         self._source_paths[node] = norm_path
 
+    # Contract: Stores the set of upstream forward dependencies for a node.
     def store_dependencies(
         self, node: dag_storage.DagNode, dependencies: Set[dag_storage.DagDependency]
     ) -> None:
         self._dependencies[node] = set(dependencies)
 
+    # Contract: Provides the set of upstream forward dependencies for a node.
     def get_dependencies(
         self, node: dag_storage.DagNode
     ) -> Set[dag_storage.DagDependency]:
         self._ensure_manifest_loaded(node)
         return set(self._dependencies.get(node, set()))
 
+    # Contract: Stores the tuple of silent source file relative paths for a node.
     def store_silent_source_files(
         self, node: dag_storage.DagNode, paths: Tuple[str, ...]
     ) -> None:
         self._silent_source_files[node] = tuple(paths)
 
+    # Contract: Stores the set of verified feedback target nodes for an auditor node.
     def store_feedback_dependencies(
         self, node: dag_storage.DagNode, feedback_dependencies: Set[dag_storage.DagNode]
     ) -> None:
         self._feedback_dependencies[node] = set(feedback_dependencies)
 
+    # Contract: Returns the set of verified feedback target nodes for an auditor node.
     def get_feedback_dependencies(
         self, node: dag_storage.DagNode
     ) -> Set[dag_storage.DagNode]:
@@ -220,6 +226,7 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
                                     )
         return messages
 
+    # Contract: Indicates whether a node requires cleaning based on missing files, metadata, feedback, or dependency updates.
     def is_dirty(self, node: dag_storage.DagNode) -> bool:
         role_name = node.role_address.split(":")[-1]
         if _is_auditor_role(role_name):
@@ -342,6 +349,7 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
         """Records a synthesized diagnostic message for a node."""
         self._messages.setdefault(node, set()).add(message)
 
+    # Contract: Adds a feedback message blaming a dependency target node.
     def add_feedback_message(
         self, node: dag_storage.DagNode, message: dag_storage.FeedbackMessage
     ) -> None:
@@ -354,6 +362,7 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
             return
         self._messages.setdefault(node, set()).add(message)
 
+    # Contract: Adds a message to a node, updating in-band source metadata.
     def add_message(
         self, message: dag_storage.DagMessage, to: dag_storage.DagNode
     ) -> None:
@@ -372,6 +381,7 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
                 return
         self._messages.setdefault(to, set()).add(message)
 
+    # Contract: Marks a node dirty by clearing clean status and recording dirty reason.
     def mark_node_dirty(
         self, node: dag_storage.DagNode, reason: Optional[str] = None
     ) -> None:
@@ -410,6 +420,7 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
             dag_storage.ChangeMessage(content=dag_storage.MessageContent(msg))
         )
 
+    # Contract: Marks the target node and all reachable dependencies in its subgraph clean.
     def mark_subgraph_clean(self, node: dag_storage.DagNode) -> None:
         visited: Set[dag_storage.DagNode] = set()
         order: list[dag_storage.DagNode] = []
@@ -432,9 +443,11 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
             self.materialize_template(n)
             self.mark_node_clean(n)
 
+    # Contract: Clears messages recorded for a node.
     def clear_messages(self, node: dag_storage.DagNode) -> None:
         self._messages[node] = set()
 
+    # Contract: Marks a node clean in storage, updating metadata and clearing messages.
     def mark_node_clean(
         self,
         node: dag_storage.DagNode,

@@ -163,11 +163,13 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         model_name: Optional[str] = None,
         poll_interval: Optional[float] = None,
         max_unproductive_turns: Optional[int] = None,
+        target_node: Optional[str] = None,
     ) -> OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure."""
         ...
 
 
+# Contract: __orphan__ - resolves the canonical repository logs directory for a role workspace
 def resolve_cleanroom_log_dir(workspace_dir: str) -> str:
     """Resolves the canonical repository logs directory for a role workspace."""
     try:

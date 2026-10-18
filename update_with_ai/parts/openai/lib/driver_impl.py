@@ -81,7 +81,6 @@ class _NoCompletionChoicesError(RuntimeError):
     """Signals that a completion response carried no choices."""
 
 
-# Contract: Repairs unclosed tool arguments into valid JSON upon truncation at generation limit.
 def _repair_json(raw: str) -> str:
     raw = raw.strip()
     if not raw: return "{}"
@@ -120,13 +119,11 @@ def _repair_json(raw: str) -> str:
     return "{}"
 
 
-# Contract: Formats text to preview limit to prevent inlining file content in compact log summaries.
 def _truncate_text(text: str, limit: int = _LOG_PREVIEW_LIMIT) -> str:
     collapsed = " ".join(text.split())
     return collapsed if len(collapsed) <= limit else collapsed[: limit - 3] + "..."
 
 
-# Contract: Formats token usage and percentage of cached tokens for compact runner logging.
 def _token_usage_summary(prompt_tokens: Optional[int], cached_tokens: Optional[int]) -> Tuple[str, str]:
     if prompt_tokens is None:
         return "initial request", "Conversation tokens: initial request (0% cached)"
@@ -135,7 +132,6 @@ def _token_usage_summary(prompt_tokens: Optional[int], cached_tokens: Optional[i
     return f"{size_str}, {pct}% cached", f"Conversation tokens: {size_str} ({pct}% cached on last turn)"
 
 
-# Contract: Formats tool invocation arguments compactly without inlining file content.
 def _format_tool_call(fn_name: str, raw_arguments: str) -> Tuple[str, str]:
     try:
         parsed = json.loads(raw_arguments, strict=False) if raw_arguments else {}
@@ -148,7 +144,6 @@ def _format_tool_call(fn_name: str, raw_arguments: str) -> Tuple[str, str]:
     return f"{fn_name}({arguments_log})", arguments_log
 
 
-# Contract: Formats tool execution result summary and transcript, including corrective reminders.
 def _tool_result_summary(
     fn_name: str,
     arguments_log: str,
@@ -243,7 +238,6 @@ def _build_actual_bindings(tool: Optional[tool_provider.Tool], args_dict: Mappin
     return res
 
 
-# Contract: Serializes tool parameters into JSON schema, deterministically preserving declared parameter sequence.
 def _tool_parameters_schema(tool: tool_provider.Tool) -> dict[str, Any]:
     """Serializes tool parameters into a JSON schema preserving their declared sequence."""
     properties: dict[str, Any] = {}
@@ -258,7 +252,6 @@ def _tool_parameters_schema(tool: tool_provider.Tool) -> dict[str, Any]:
     return {"type": "object", "properties": properties, "required": required}
 
 
-# Contract: Builds the wire tools payload ordering tools deterministically by tool name on each turn.
 def _build_tools_payload(tool_mgr: Any) -> list[dict[str, Any]]:
     """Builds the wire tools payload ordering tools deterministically by tool name."""
     installed = list(tool_mgr.installed_tools.values())
@@ -275,7 +268,6 @@ def _build_tools_payload(tool_mgr: Any) -> list[dict[str, Any]]:
     return payload
 
 
-# Contract: Formats conversation history into OpenAI-conforming messages payload.
 def _build_messages_payload(history: Any) -> list[dict[str, Any]]:
     payload = []
     for m in history.get_model_request().messages:
@@ -290,7 +282,6 @@ def _build_messages_payload(history: Any) -> list[dict[str, Any]]:
     return payload
 
 
-# Contract: Resolves tool suppression key for truncated tool failure responses.
 def _truncated_suppression_key(fn_name: str, args_dict: Optional[Mapping[str, Any]]) -> str:
     if fn_name in _DEDICATED_SUPPRESSION_KEYS:
         return fn_name
@@ -309,7 +300,6 @@ class LoopDriver(driver.LoopDriver, Singleton):
         self._truncation_identifier: int = 0
         self._turn_count: int = 0
 
-    # Contract: Recovers truncated tool invocations by repairing unclosed arguments into valid JSON and resuming with continuation turn.
     def _handle_length_truncation(self, tool_calls: Sequence[Any], turns: int, history: Any, logger: Any, guard: Any, tool_mgr: Any) -> None:
         """Recovers a generation truncated at the token limit and resumes with a continuation turn."""
         if not tool_calls:
@@ -607,7 +597,6 @@ class LoopDriver(driver.LoopDriver, Singleton):
         # Contract: WHEN interaction turns reach conversation limit, halt execution with unexpected failure indicating limit reached.
         raise RuntimeError(f"Unexpected failure: conversation limit reached ({limit} turns)")
 
-    # Contract: Clears repetition tracking when an execution modified workspace files or advanced the guide step.
     def _clear_repetition(self, guard: Any, tool_response: tool_provider.ToolResponse, tool_name: str) -> None:
         """Clears repetition tracking when an execution modified workspace files or advanced the guide step."""
         if tool_response.is_failed:

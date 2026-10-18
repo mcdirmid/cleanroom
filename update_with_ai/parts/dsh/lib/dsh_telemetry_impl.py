@@ -30,7 +30,6 @@ from update_with_ai.parts.agent.lib import session as agent_session
 from . import dsh_telemetry
 
 
-# Contract: Computes monetary token expenditure based on model rate cards.
 def _compute_dsh_rate_card_cost(
     input_tokens: int,
     cached_tokens: int,
@@ -64,7 +63,6 @@ def _compute_dsh_rate_card_cost(
 _notified_desktop_sessions: Set[str] = set()
 
 
-# Contract: Notifies live DeepSeek Harness Desktop application over local RPC bridge.
 def _notify_desktop_session(
     sessions_dir: str,
     workspace_dir: str,
@@ -144,7 +142,6 @@ def _notify_desktop_session(
         return False
 
 
-# Contract: Synchronizes sessions into DeepSeekHarness Desktop App workspace and session storage.
 def _sync_desktop_session(
     sessions_dir: Optional[str],
     workspace_dir: str,

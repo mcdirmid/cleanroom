@@ -1063,6 +1063,65 @@ class CleanroomRoleToolTest(unittest.TestCase):
             self.assertIn("--harness", forwarded)
             self.assertEqual(forwarded[forwarded.index("--harness") + 1], "dsh")
 
+            mock_subagent_mod.reset_mock()
+            ret_unit_dsh = cleanroom_role_tool.main([
+                "clean", "//staging/parts/sandbox:file_reader_impl#qa", "--harness", "dsh", "--repo-root", self.fake_repo
+            ])
+            self.assertEqual(ret_unit_dsh, 0)
+            mock_subagent_mod.main.assert_called_once()
+            forwarded_unit = mock_subagent_mod.main.call_args[0][0]
+            self.assertIn("--target", forwarded_unit)
+            self.assertEqual(forwarded_unit[forwarded_unit.index("--target") + 1], "//staging/parts/sandbox:file_reader_impl#qa")
+
+    def test_configure_command(self) -> None:
+        """Verifies cleanroom configure initializes user config and credentials template."""
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            from support.lib import app_info
+            with patch.dict(os.environ, {f"{app_info.ENV_PREFIX}_CONFIG_DIR": tmp_dir}):
+                ret = cleanroom_role_tool.main(["configure"])
+                self.assertEqual(ret, 0)
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "model_configs.toml")))
+                creds_path = os.path.join(tmp_dir, "credentials.toml")
+                self.assertTrue(os.path.isfile(creds_path))
+                # verify mode 0600 on POSIX
+                if sys.platform != "win32":
+                    mode = os.stat(creds_path).st_mode & 0o777
+                    self.assertEqual(mode, 0o600)
+
+    def test_install_command(self) -> None:
+        """Verifies cleanroom install prepares workspace config and gitignore."""
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            from support.lib import app_info
+            # Run install in fake workspace
+            with patch.object(cleanroom_role_tool, "find_workspace_root", return_value=tmp_dir):
+                ret = cleanroom_role_tool.main(["install"])
+                self.assertEqual(ret, 0)
+                cfg_path = os.path.join(tmp_dir, app_info.DEFAULT_CONFIG_FILE)
+                self.assertTrue(os.path.isfile(cfg_path))
+                gitignore_path = os.path.join(tmp_dir, ".gitignore")
+                self.assertTrue(os.path.isfile(gitignore_path))
+                with open(gitignore_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                self.assertIn("role_workspaces/", content)
+
+    def test_ensure_dsh_skill_installed(self) -> None:
+        """Verifies DSH skill is installed in harness skills directory when present."""
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp_dsh:
+            dsh_skills = os.path.join(tmp_dsh, "harness", "skills")
+            os.makedirs(dsh_skills, exist_ok=True)
+            with patch.dict(os.environ, {"DSH_HOME": tmp_dsh}):
+                skill_path = cleanroom_role_tool.ensure_dsh_skill_installed()
+                self.assertIsNotNone(skill_path)
+                assert skill_path is not None
+                self.assertTrue(os.path.isfile(skill_path))
+                with open(skill_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                self.assertIn("Autonomous Coordinator", content)
+                self.assertNotIn("/Users/seanmcdirmid", content)
+
 
 if __name__ == "__main__":
     unittest.main()

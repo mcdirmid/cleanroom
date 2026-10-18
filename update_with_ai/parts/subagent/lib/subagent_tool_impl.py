@@ -114,6 +114,12 @@ class SubagentToolRunner(
             help="Maximum consecutive unproductive turns before halting execution (default: resolved from model configuration or 5).",
         )
         orch_parser.add_argument(
+            "--target",
+            dest="target_node",
+            default=None,
+            help="Optional target unit or node boundary to restrict execution to.",
+        )
+        orch_parser.add_argument(
             "--repo-root",
             default=None,
             help="Repository root directory.",
@@ -147,6 +153,7 @@ class SubagentToolRunner(
                 max_context_tokens=parsed.max_context_tokens,
                 repo_root=parsed.repo_root,
                 max_unproductive_turns=parsed.max_unproductive_turns,
+                target_node=parsed.target_node,
             )
 
         parser.print_help()
@@ -165,6 +172,7 @@ class SubagentToolRunner(
         max_context_tokens: Optional[int] = None,
         repo_root: Optional[str] = None,
         max_unproductive_turns: Optional[int] = None,
+        target_node: Optional[str] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence."""
         resolver = get_singleton(subagent_harness.HarnessResolver)
@@ -188,6 +196,7 @@ class SubagentToolRunner(
             repo_root=repo_root,
             model_name=model,
             max_unproductive_turns=max_unproductive_turns,
+            target_node=target_node,
         )
 
         print("\n=== Cleanroom Orchestration Summary ===")
@@ -206,6 +215,7 @@ class SubagentToolRunner(
         return 0 if summary.is_converged else 1
 
 
+# Contract: __orphan__ - CLI Entrypoint executing within agent_session lifecycle phase
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """CLI Entrypoint executing within agent_session lifecycle phase."""
     raw_args = list(argv) if argv is not None else sys.argv[1:]

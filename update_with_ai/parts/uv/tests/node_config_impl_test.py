@@ -327,8 +327,8 @@ class TestUvNodeConfigImpl(unittest.TestCase):
 
     def test_command_verification_check_pythonpath(self) -> None:
         """CUJ: Verification check subprocess includes dynamic PYTHONPATH."""
-        from update_with_ai.parts.uv.lib.node_config_impl import _CommandVerificationCheck
-        check = _CommandVerificationCheck(
+        from update_with_ai.parts.uv.lib.node_config_impl import CommandVerificationCheck
+        check = CommandVerificationCheck(
             command='python3 -c "import os; print(os.environ.get(\'PYTHONPATH\', \'\'))"',
             cwd=tempfile.gettempdir(),
         )

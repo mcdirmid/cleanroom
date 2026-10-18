@@ -10,6 +10,7 @@
 """Unit tests for roles_impl."""
 
 from __future__ import annotations
+import os
 import tempfile
 import unittest
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
@@ -54,50 +55,57 @@ class WorkspaceRolesImplTest(unittest.TestCase):
             self.assertIn(expected, role_names)
 
     def test_reject_redundant_feedback_in_role_deps(self) -> None:
-        raw_roles = {
-            "bad": {
-                "role_deps": ["other"],
-                "feedback_role_deps": ["other"],
-            }
-        }
-        with self.assertRaises(ValueError) as ctx:
-            roles_impl._build_role_definitions(raw_roles)
-        self.assertIn("redundantly declares feedback_role_deps", str(ctx.exception))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            toml_path = os.path.join(tmp_dir, "cleanroom_roles.toml")
+            with open(toml_path, "w", encoding="utf-8") as f:
+                f.write(
+                    "[roles.bad]\n"
+                    'role_deps = ["other"]\n'
+                    'feedback_role_deps = ["other"]\n'
+                )
+            with self.assertRaises(ValueError) as ctx:
+                self.resolver.list_roles(repo_root=tmp_dir)
+            self.assertIn("redundantly declares feedback_role_deps", str(ctx.exception))
 
     def test_reject_redundant_star_in_role_deps(self) -> None:
-        raw_roles = {
-            "bad": {
-                "role_deps": ["other"],
-                "star_role_deps": ["other"],
-            }
-        }
-        with self.assertRaises(ValueError) as ctx:
-            roles_impl._build_role_definitions(raw_roles)
-        self.assertIn("redundantly declares star_role_deps", str(ctx.exception))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            toml_path = os.path.join(tmp_dir, "cleanroom_roles.toml")
+            with open(toml_path, "w", encoding="utf-8") as f:
+                f.write(
+                    "[roles.bad]\n"
+                    'role_deps = ["other"]\n'
+                    'star_role_deps = ["other"]\n'
+                )
+            with self.assertRaises(ValueError) as ctx:
+                self.resolver.list_roles(repo_root=tmp_dir)
+            self.assertIn("redundantly declares star_role_deps", str(ctx.exception))
 
     def test_reject_conflicting_silent_role_deps(self) -> None:
-        raw_roles = {
-            "bad": {
-                "role_deps": ["other"],
-                "silent_role_deps": ["other"],
-            }
-        }
-        with self.assertRaises(ValueError) as ctx:
-            roles_impl._build_role_definitions(raw_roles)
-        self.assertIn("both a role dependency and a silent role dependency", str(ctx.exception))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            toml_path = os.path.join(tmp_dir, "cleanroom_roles.toml")
+            with open(toml_path, "w", encoding="utf-8") as f:
+                f.write(
+                    "[roles.bad]\n"
+                    'role_deps = ["other"]\n'
+                    'silent_role_deps = ["other"]\n'
+                )
+            with self.assertRaises(ValueError) as ctx:
+                self.resolver.list_roles(repo_root=tmp_dir)
+            self.assertIn("both a role dependency and a silent role dependency", str(ctx.exception))
 
     def test_reject_auditor_in_role_deps(self) -> None:
-        raw_roles = {
-            "auditor": {
-                "audit_tag": "AUDITOR_AUDIT",
-            },
-            "dev": {
-                "role_deps": ["auditor"],
-            },
-        }
-        with self.assertRaises(ValueError) as ctx:
-            roles_impl._build_role_definitions(raw_roles)
-        self.assertIn("Auditor roles can only be silent_role_deps", str(ctx.exception))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            toml_path = os.path.join(tmp_dir, "cleanroom_roles.toml")
+            with open(toml_path, "w", encoding="utf-8") as f:
+                f.write(
+                    "[roles.auditor]\n"
+                    'audit_tag = "AUDITOR_AUDIT"\n\n'
+                    "[roles.dev]\n"
+                    'role_deps = ["auditor"]\n'
+                )
+            with self.assertRaises(ValueError) as ctx:
+                self.resolver.list_roles(repo_root=tmp_dir)
+            self.assertIn("Auditor roles can only be silent_role_deps", str(ctx.exception))
 
 
 if __name__ == "__main__":

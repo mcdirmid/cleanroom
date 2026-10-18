@@ -42,12 +42,13 @@ class SubagentToolRunner(InTier[AgentSessionTier], Protocol):
         max_context_tokens: Optional[int] = None,
         repo_root: Optional[str] = None,
         max_unproductive_turns: Optional[int] = None,
+        target_node: Optional[str] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence.
 
         POSTCONDITIONS:
         - MUST resolve execution harness adapter with timeout and token limit options.
-        - MUST coordinate dynamic supervision via subagent coordinator up to optional target role with optional unproductive turn limits.
+        - MUST coordinate dynamic supervision via subagent coordinator up to optional target role and optional target node with optional unproductive turn limits.
         - MUST return 0 on convergence, 1 otherwise.
         """
         ...

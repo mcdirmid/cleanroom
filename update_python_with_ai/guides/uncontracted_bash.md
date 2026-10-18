@@ -1,15 +1,15 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-16T23:10:00Z
-LAST_CHANGED: 2026-10-16T23:10:00Z
-CHANGE: Codify uncontracted code identification, inventorying, alignment commenting, and remediation procedures
-CODE_HASH: uncontracted01
+LAST_CLEANED: 2026-10-17T18:00:00Z
+LAST_CHANGED: 2026-10-17T18:00:00Z
+CHANGE: Disallow white-box test exemptions and require contracts for all test-imported symbols
+CODE_HASH: uncontracted04
 -->
 
 # Guide: Uncontracted Code Identification, Specification Alignment, and Remediation
 
 ## Summary
 
-Uncontracted code comprises any runtime logic, methods, classes, parameters, branches, or helpers in implementation modules (`lib/<name>.py` and `lib/<name>_impl.py`) or unit test suites (`tests/<name>_test.py`) that lack an upstream behavioral contract in low-level specifications (`low/<name>.pyi` and `low/<name>_impl.pyi`) and their governing scenarios, planning canvases, and high-level specifications. Auditing begins by cross-referencing all implementation and test declarations against `low/<name>.pyi`: contracted code is annotated with brief inline comments linking methods and critical control-flow branches to the specific postconditions, invariants, or sequencing guarantees they fulfill, while uncontracted declarations are tagged inline using standardized `# NONCONTRACTED: <reason>` comments and cataloged in an inventory tracking document (`uncontracted_code_inventory.md`) before any code is modified or deleted.
+Uncontracted code comprises any runtime logic, methods, classes, parameters, or functions in implementation modules (`lib/<name>.py` and `lib/<name>_impl.py`) or unit test suites (`tests/<name>_test.py`) that are used outside of their defining file and lack an upstream behavioral contract in low-level specifications (`low/<name>.pyi` and `low/<name>_impl.pyi`) and their governing scenarios, planning canvases, and high-level specifications. Functions, helper routines, and class members not used outside of their defining file are private implementation details and do not need to be contracted in low-level specifications or tagged as uncontracted. Unit test suites (`tests/<name>_test.py`) are external callers; test modules that import or assert against functions, helpers, or members count as external usage, and every tested behavior or symbol must be grounded in contracts in `low/<name>.pyi`. Subtypes fulfilling base class or protocol contracts inherit their behavioral contracts transitively across the inheritance hierarchy; inherited members do not need to be re-declared in derived `low/<name>_impl.pyi` stubs. Standard lifecycle registration mechanisms (`__initialize__` and lifecycle initialization patterns) defined by Cleanroom guides are recognized framework facilities rather than uncontracted defects. Auditing cross-references external-facing declarations against `low/<name>.pyi`: contracted code is annotated with brief inline comments linking methods and critical control-flow branches to the specific postconditions, invariants, or sequencing guarantees they fulfill, while uncontracted declarations used outside the file are tagged inline using standardized `# NONCONTRACTED: <reason>` comments and cataloged in an inventory tracking document (`uncontracted_code_inventory.md`) before any code is modified or deleted.
 
 Remediation evaluates each uncontracted inventory entry against strict decision criteria: dead, redundant, speculative, or uncontracted defensive fallback logic is recommended for safe deletion, whereas essential capabilities, active caller requirements, and external data formats are recommended for specification retrofitting. In accordance with the mandatory Specification-First (HLS-First) rule, retrofitting never patches `lib/` or `low/` directly; missing contracts must first be authored in High-Level Specifications (`high/<name>.md` or external boundary specifications `high/<name>_ext.md`) and cascaded down the complete pipeline (`high` → `planning` → `scenarios` → `low` → `lib` → `tests`). All remediation actions are strictly gated on explicit human review and approval of the inventory recommendations. Following human approval, safe deletions are executed first, specification cascades are executed second, all `# NONCONTRACTED:` comments are pruned from code, and the inventory document is removed once full repository verification confirms zero lint errors, zero type errors, and complete test suite success.
 
@@ -17,17 +17,23 @@ Remediation evaluates each uncontracted inventory entry against strict decision 
 
 ## Specification alignment commenting in library code
 
-- [ ] Every public method and function in `lib/<name>.py` and `lib/<name>_impl.py` includes a concise inline comment or docstring citing the specific contract in `low/<name>.pyi` it realizes
+- [ ] Every public method and function in `lib/<name>.py` and `lib/<name>_impl.py` accessed outside the module includes a concise inline comment or docstring citing the specific contract in `low/<name>.pyi` it realizes
 - [ ] Contractual postconditions (`MUST <outcome>.` and `WHEN <condition>, MUST <outcome>.`) in `low/<name>.pyi` are referenced beside their implementing control-flow branches, validation checks, and return statements
 - [ ] Invariant maintenance logic (`INVARIANTS:`) in `low/<name>.pyi` is annotated at internal state mutation points
-- [ ] Inherited contracts fulfilled across subtyping hierarchies cite the declaring base protocol or class
+- [ ] Inherited contracts fulfilled across subtyping hierarchies cite the declaring base protocol or class without requiring redundant re-declaration in derived `.pyi` stubs
+- [ ] Module-level procedural facade functions and top-level entrypoints cite top-level postconditions under `__orphan__()` in `low/<name>.pyi`
 - [ ] Comments on specification alignment remain concise, factual, and devoid of conversational prose or speculative commentary
 
 ## Uncontracted code identification and tagging
 
-- [ ] Implementation modules (`lib/<name>.py`, `lib/<name>_impl.py`) and test modules (`tests/<name>_test.py`) are audited line-by-line against `low/<name>.pyi` and `low/<name>_impl.pyi`
-- [ ] Any method, helper function, class, parameter, fallback branch, or error check lacking a corresponding declaration or contract clause in `low/<name>.pyi` is marked as uncontracted
-- [ ] Every identified uncontracted code construct is tagged inline with a standardized comment: `# NONCONTRACTED: <description of behavior and rationale for uncontracted status>`
+- [ ] Implementation modules (`lib/<name>.py`, `lib/<name>_impl.py`) and test modules (`tests/<name>_test.py`) are audited against `low/<name>.pyi` and `low/<name>_impl.pyi` for external contract surface
+- [ ] Functions, helpers, and class members not used outside of their defining file are private implementation details and do not need to be contracted or tagged as uncontracted
+- [ ] Unit tests are external callers; all functions, helpers, and members imported or exercised by unit test suites are external surface requiring contracts in `low/<name>.pyi`
+- [ ] Inherited methods and properties defined on base protocols or parent classes are contracted through inheritance and do not need to be re-mentioned in derived `.pyi` stubs
+- [ ] Lifecycle registration routines (`__initialize__` and lifecycle initialization patterns) defined by Cleanroom guides are recognized lifecycle infrastructure and are excluded from uncontracted tagging
+- [ ] Module-level procedural facade functions and top-level entrypoints are contracted in low-level specifications under `def __orphan__() -> None:` in accordance with low-level specification structure rules
+- [ ] Any method, helper function, class, parameter, or branch accessed outside of its defining file that lacks a corresponding declaration or contract clause in `low/<name>.pyi` is marked as uncontracted
+- [ ] Every identified uncontracted code construct used outside its defining file is tagged inline with a standardized comment: `# NONCONTRACTED: <description of behavior and rationale for uncontracted status>`
 - [ ] Standardized `# NONCONTRACTED:` comment tags are placed immediately preceding the uncontracted definition, branch, or block
 - [ ] Unit tests asserting behaviors, parameters, or outcomes not grounded in `low/<name>.pyi` contracts are tagged with `# NONCONTRACTED:` comments
 - [ ] Automated search across all source and test directories identifies all occurrences of `# NONCONTRACTED:` markers across the codebase

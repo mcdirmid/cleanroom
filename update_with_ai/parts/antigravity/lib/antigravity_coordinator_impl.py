@@ -35,7 +35,6 @@ COORDINATOR_SKILL_DESC = (
 )
 
 
-# Contract: Renders zero-execution coordinator skill markdown with YAML frontmatter prohibiting workspace inheritance.
 def _render_coordinator_skill_markdown(dir_scope: str = "") -> str:
     """Renders the complete Markdown document for the Cleanroom coordinator skill."""
     scope_hint = f" {dir_scope}" if dir_scope else ""
@@ -226,7 +225,6 @@ class AntigravityCoordinatorGenerator(
         )
 
 
-# Contract: Renders Markdown content for workspace-local Antigravity isolation rules and in-band tool invariants.
 def _render_isolation_rule_content(role_name: str, dir_scope: str) -> str:
     """Renders the Markdown content for workspace-local Antigravity isolation rules."""
     return f"""# Cleanroom Role Workspace Confinement Rules: {role_name}

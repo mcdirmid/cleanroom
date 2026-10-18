@@ -1,7 +1,7 @@
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:14:51Z
-# CHANGE: Filter silent cross-role dependencies, expand star-role contracts, and fail loud on unknown roles
+# LAST_CHANGED: 2026-10-18T01:30:00Z
+# CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
 # CODE_HASH: 6671444c12c2
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
@@ -118,12 +118,14 @@ class WorkspaceWorkManager(
         role_name: str,
         dir_scope: str,
         repo_root: str,
+        target_unit: Optional[str] = None,
     ) -> tuple[Sequence[work.WorkQueueItem], Sequence[work.WorkQueueItem]]:
         """Computes ready and blocked dirty units directly from build manifests and metadata.
 
         GROUNDING:
         - Scans part directories in scope, evaluates auditor units across all feedback role dependencies,
-          evaluates producer units across implicit role dependencies and star role dependencies,
+          evaluates producer units across intra-unit role dependencies and star role dependencies,
+          bounds candidates to target_unit and its transitive dependencies when specified,
           checks dependencies, sorts ready tasks topologically, and materializes starter templates via
           dag_storage.DagStorage.materialize_template for missing ready files.
         """
@@ -190,3 +192,13 @@ class WorkspaceWorkManager(
         - Resolves both cases without any synthetic fallback role, path, or contract entry.
         """
         ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for package unit discovery routines.
+
+    POSTCONDITIONS:
+    - MUST discover unit names and dependencies from high-level specifications or filesystem stems in a part directory.
+    """
+    ...
+

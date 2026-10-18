@@ -58,3 +58,17 @@ class RoleResolver(
           validating constraints and returning resolved definitions.
         """
         ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for role definition parsing and validation routines.
+
+    POSTCONDITIONS:
+    - WHEN feedback role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
+    - WHEN star role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
+    - WHEN a dependency is declared as both a role dependency and a silent role dependency, MUST raise ValueError.
+    - WHEN an auditor role is declared as a role dependency, a star role dependency, or a feedback role dependency, MUST raise ValueError.
+    - MUST return validated role definitions parsed from raw role attribute dictionaries.
+    """
+    ...
+

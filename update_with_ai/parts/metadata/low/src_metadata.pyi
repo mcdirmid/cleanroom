@@ -272,3 +272,14 @@ class SourceMetadataCoordinator(InTier[SystemTier], Protocol):
         - MUST rewrite file clearing all audit tags.
         """
         ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for module-level procedural facade functions.
+
+    POSTCONDITIONS:
+    - MUST delegate module-level procedural queries and mutations to the active SourceMetadataCoordinator singleton.
+    - MUST expose module-level functions for metadata extraction, code body isolation, code hashing, modification checks, and lifecycle updates.
+    """
+    ...
+

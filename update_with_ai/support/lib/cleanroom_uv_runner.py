@@ -8,6 +8,16 @@ import os
 import sys
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
+try:
+    import dotenv
+    dotenv.load_dotenv()
+    from support.lib import app_info
+    _user_env = os.path.join(app_info.get_user_config_dir(), ".env")
+    if os.path.isfile(_user_env):
+        dotenv.load_dotenv(_user_env)
+except Exception:
+    pass
+
 if TYPE_CHECKING:
     from update_with_ai.parts.uv.lib.manifest_loader import UvManifestLoader
     from update_with_ai.parts.dag.lib.dag_storage import DagNode
@@ -303,7 +313,13 @@ def run_cleanroom_target(
                 else (os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.path.abspath(os.path.join(curr, "../../..")))
             )
             import tomllib
-            for cand in (os.path.join(r_root, "model_configs.toml"), os.path.join(os.path.dirname(r_root), "model_configs.toml")):
+            from support.lib import app_info
+            for cand in (
+                os.path.join(r_root, "model_configs.toml"),
+                os.path.join(os.path.dirname(r_root), "model_configs.toml"),
+                os.path.join(r_root, app_info.DEFAULT_CONFIG_FILE),
+                app_info.get_user_model_config_file(),
+            ):
                 if os.path.isfile(cand):
                     with open(cand, "rb") as f:
                         tdata = tomllib.load(f)
@@ -314,7 +330,8 @@ def run_cleanroom_target(
         except Exception:
             pass
     if resolved_model:
-        os.environ["CLEANROOM_MODEL"] = resolved_model
+        from support.lib import app_info
+        os.environ[f"{app_info.ENV_PREFIX}_MODEL"] = resolved_model
 
     if workspace_dir and os.path.isdir(workspace_dir):
         os.chdir(workspace_dir)

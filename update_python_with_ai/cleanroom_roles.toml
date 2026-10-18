@@ -32,8 +32,7 @@ template = "update_python_with_ai/templates/scenario_template.md"
 prompt_template = "Files are aligned according to the guide."
 allows_step_mode = true
 role_deps = []
-star_role_deps = ["scenario", "high"]
-feedback_role_deps = ["high"]
+star_role_deps = ["scenario"]
 tools = [
     "update_with_ai.support.lib.build_lint_common",
 ]

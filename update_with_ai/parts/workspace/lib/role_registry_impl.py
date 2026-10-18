@@ -27,7 +27,6 @@ from update_with_ai.parts.core.lib import file_paths
 from . import role_registry, roles
 
 
-# Contract: Resolves FilePathManager singleton from lifecycle registry.
 def _file_path_manager() -> Optional[file_paths.FilePathManager]:
     """Resolves the host file path manager singleton when it is active in scope."""
     try:
@@ -36,7 +35,6 @@ def _file_path_manager() -> Optional[file_paths.FilePathManager]:
         return None
 
 
-# Contract: Promotes host path to absolute path representation using FilePathManager.create_absolute_path.
 def _create_absolute_path(path: str) -> str:
     """Promotes a host directory onto the absolute path representation."""
     absolute = os.path.abspath(path)
@@ -46,7 +44,6 @@ def _create_absolute_path(path: str) -> str:
     return str(manager.create_absolute_path(file_paths.PathString(absolute)).path)
 
 
-# Contract: Combines workspace-relative path under absolute parent root using FilePathManager.
 def _create_workspace_path_under(parent_root: str, relative_name: str) -> str:
     """Combines a workspace-relative name beneath an absolute parent root directory."""
     manager = _file_path_manager()
@@ -57,13 +54,11 @@ def _create_workspace_path_under(parent_root: str, relative_name: str) -> str:
     return str(manager.resolve_path(root, relative).path)
 
 
-# Contract: Sanitizes folder name replacing directory delimiters with underscores.
 def _sanitize_directory_folder_name(folder_name: str) -> str:
     """Replaces directory delimiter characters with underscores within a folder name."""
     return folder_name.replace("/", "_").replace("\\", "_")
 
 
-# Contract: Matches sibling workspace conventions by resolving parent projects root from role_workspaces container and identifying sibling repository root.
 def _match_sibling_workspace_conventions(workspace_dir: str) -> Optional[str]:
     """Adopts the main repository root carried by sibling role workspaces."""
     parent = os.path.dirname(workspace_dir)
@@ -88,7 +83,6 @@ def _match_sibling_workspace_conventions(workspace_dir: str) -> Optional[str]:
     return None
 
 
-# Contract: Searches ancestor directories for repository configuration markers or .git.
 def _search_ancestor_markers(start_dir: str) -> Optional[str]:
     """Searches ancestor directories for repository markers."""
     curr = start_dir
@@ -119,7 +113,6 @@ def _search_ancestor_markers(start_dir: str) -> Optional[str]:
     return topmost
 
 
-# Contract: Falls back to ambient working directory when ancestor search yields no markers.
 def _fallback_to_ambient_working_directory() -> str:
     """Falls back to the ambient working directory environment when no marker is found."""
     return os.path.abspath(os.getcwd())

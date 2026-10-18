@@ -38,7 +38,6 @@ from . import (
 
 
 
-# Contract: Classifies unit type by suffix (_ext, _asm, _impl, interface).
 def _classify_unit_type(unit_name: str) -> str:
     if unit_name.endswith("_ext"):
         return "external"
@@ -49,7 +48,6 @@ def _classify_unit_type(unit_name: str) -> str:
     return "interface"
 
 
-# Contract: Checks whether role is an auditor role based on audit_tag or absence of src_pattern.
 def _is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     clean_r = role_name.split(":")[-1].strip().lower()
     reg = get_singleton(role_registry.WorkspaceRegistry)
@@ -57,8 +55,8 @@ def _is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     return bool(r_def.audit_tag or not r_def.src_pattern)
 
 
-# Contract: Parses high-level markdown specifications to extract unit names and dependencies.
 def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
+    # Contract: __orphan__ - MUST discover unit names and dependencies from high-level specifications or filesystem stems in a part directory.
     high_dir = os.path.join(repo_root, part_dir, "high")
     if os.path.isdir(high_dir):
         units = {}
@@ -101,6 +99,9 @@ def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
     return {}
 
 
+get_part_units = _get_part_units
+
+
 def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
     if not dir_scope:
         parts_p = os.path.join(repo_root, "parts")
@@ -114,7 +115,6 @@ def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
     return [dir_scope] if os.path.isdir(scope_p) else []
 
 
-# Contract: Parses a dependency label into (package_dir, unit_name).
 def _parse_dependency_label(raw: str, default_pkg: str) -> Tuple[str, str]:
     """Parses a dependency label into (package_dir, unit_name)."""
     if raw.startswith("//"):
@@ -124,7 +124,6 @@ def _parse_dependency_label(raw: str, default_pkg: str) -> Tuple[str, str]:
     return default_pkg, raw.lstrip(":").strip()
 
 
-# Contract: Parses pattern format string into directory name, prefix, and suffix.
 def _parse_pattern_info(src_pattern: str) -> Tuple[str, str, str]:
     if not src_pattern:
         return "", "", ""
@@ -139,7 +138,6 @@ def _parse_pattern_info(src_pattern: str) -> Tuple[str, str, str]:
     return dir_name, prefix, suffix
 
 
-# Contract: Materializes starter template using dag_storage.DagStorage.materialize_template.
 def _materialize_starter_template(target_path: str, role_name_or_address: str, workspace_dir: str) -> None:
     storage = None
     try:
@@ -155,7 +153,6 @@ def _materialize_starter_template(target_path: str, role_name_or_address: str, w
 
 
 
-# Contract: Discovers all dirty units in scope by evaluating each unit against role definitions.
 def _find_all_dirty_in_scope(
     repo_root: str, dir_scope: str = "", role_filter: Optional[str] = None
 ) -> List[Dict[str, Any]]:
@@ -203,7 +200,6 @@ def _find_all_dirty_in_scope(
     return dirty_units
 
 
-# Contract: Sorts candidate units topologically according to module dependencies.
 def _topological_sort_units(
     units_list: List[Dict[str, Any]],
     module_deps: Dict[str, List[str]],
@@ -232,7 +228,6 @@ def _topological_sort_units(
     return order
 
 
-# Contract: Traverses upstream role dependency chain including role_deps, feedback_role_deps, and star_role_deps.
 def _get_role_upstream_chain(
     role_name: str, repo_root: Optional[str] = None
 ) -> List[str]:
@@ -300,7 +295,6 @@ class WorkspaceWorkManager(
     ) -> bool:
         return self._pending().is_pending_target_dirty(target_path, workspace_dir, main_root, role_name)
 
-    # Contract: Evaluates unit dirtiness using WorkspaceDirtinessEvaluator.
     def _eval_unit_dirty(
         self,
         ws_root: str,
@@ -318,6 +312,7 @@ class WorkspaceWorkManager(
         role_name: str,
         dir_scope: str,
         repo_root: str,
+        target_unit: Optional[str] = None,
     ) -> Tuple[Sequence[work.WorkQueueItem], Sequence[work.WorkQueueItem]]:
 
         clean_role = role_name.split(":")[-1].strip().lower()
@@ -362,6 +357,19 @@ class WorkspaceWorkManager(
                     visited.add(curr)
                     queue.extend(module_deps.get(curr, []))
             return visited
+
+        if target_unit:
+            target_clean = target_unit.split("#")[0]
+            if ":" in target_clean:
+                target_clean = target_clean.split(":")[-1]
+            elif "/" in target_clean:
+                target_clean = os.path.basename(target_clean).split(".")[0]
+            target_clean = target_clean.strip()
+            if target_clean:
+                allowed_units = {target_clean} | get_transitive_deps(target_clean)
+                dirty_in_role = [item for item in dirty_in_role if item["unit_name"] in allowed_units]
+                if not dirty_in_role:
+                    return (), ()
 
         ready_candidates: List[Dict[str, Any]] = []
         blocked_candidates: List[Dict[str, Any]] = []

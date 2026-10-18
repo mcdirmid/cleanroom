@@ -2,7 +2,7 @@
 # LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-13T20:00:00Z
 # CHANGE: author dsh_ext external low-level specification
-# CODE_HASH: 8abe12f364ae
+# CODE_HASH: a91ec7ebe767
 # --- END CLEANROOM METADATA ---
 
 """
@@ -37,7 +37,7 @@ The `dsh_ext` external component specifies DeepSeek Harness CLI options, role ag
 
 **Session Storage and Telemetry Schema**
 
-- Storage Directory: `~/Library/Application Support/dsh-desktop/harness/sessions/<dir-slug>/<session-id>/session.v4.jsonl.zstd` (with uncompressed `session.v4.jsonl` fallback)
+- Storage Directory: Discovered via `DSH_SESSIONS_DIR`, `DSH_HOME/harness/sessions`, or platform application support directory (`~/Library/Application Support/dsh-desktop/harness/sessions` on macOS, `~/.config/dsh-desktop/harness/sessions` on Linux), storing `<dir-slug>/<session-id>/session.v4.jsonl.zstd` (with uncompressed `session.v4.jsonl` fallback)
 - Concurrency Lock: `session.lock` inside the active session directory verified non-blockingly via file locking.
 - Active Session ID: `<workspace_dir>/.cleanroom/dsh_session_id.txt` for persisting active session ID across turns.
 - Structured JSON run event usage fields:

@@ -31,7 +31,6 @@ AUDIT_BUFFER_FILE = ".cleanroom_audit_buffer.json"
 ROLE_CONFIG_FILE = ".cleanroom_role.json"
 
 
-# Contract: Writes text file and sets exact permissions, delegating to WorkspaceProvisioner.
 def write_file_with_perms(
     dst: str, content: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -41,7 +40,6 @@ def write_file_with_perms(
     )
 
 
-# Contract: Decomposes source path pattern into directory, stem suffix, and extension.
 def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     """Decomposes a source path pattern into its directory, stem suffix, and extension."""
     if not pat:
@@ -56,7 +54,6 @@ def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     return d, suffix, ext
 
 
-# Contract: Checks whether rel_path matches any role in stub_role_deps.
 def _is_stub_dep_file(
     rel_path: str,
     role_def: role_registry.RoleDefinition,
@@ -92,7 +89,6 @@ def _is_stub_dep_file(
     return False
 
 
-# Contract: Copies file and applies exact permissions, delegating to WorkspaceProvisioner.
 def copy_file_with_perms(
     src: str, dst: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -102,7 +98,6 @@ def copy_file_with_perms(
     )
 
 
-# Contract: Finds relative file paths matching glob patterns within root_dir.
 def _find_matching_files(root_dir: str, patterns: Sequence[str]) -> List[str]:
     """Finds relative file paths matching glob patterns within root_dir."""
     results: List[str] = []

@@ -2,7 +2,7 @@
 # LAST_CLEANED: 2026-10-15T17:42:46Z
 # LAST_CHANGED: 2026-10-13T20:00:00Z
 # CHANGE: author dsh_harness_impl implementation low-level specification
-# CODE_HASH: ab8496699564
+# CODE_HASH: 8ce8d11bf0f5
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---
 
@@ -121,7 +121,7 @@ class DshHarnessManager(
         """Constructs a DeepSeek Harness adapter instance.
 
         GROUNDING:
-        - Instantiates DshHarnessAdapter with configured model, timeout, and session storage path.
+        - Instantiates DshHarnessAdapter with configured model, timeout, and session storage path discovered across environment overrides and platform conventions.
         """
         ...
 

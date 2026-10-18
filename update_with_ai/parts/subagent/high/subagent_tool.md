@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:00:00Z
-CHANGE: author subagent_tool interface specification
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: support optional target unit boundary in orchestrate command
 CODE_HASH: 2d991ec35409
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
@@ -26,4 +26,4 @@ An agent session's *subagent tool runner* provides command dispatch and executio
 
 The subagent tool runner dispatches and executes orchestration commands matching an argument sequence (prepending the orchestrate command when omitted), returning an integer exit code. A module entrypoint executes command dispatch within an agent session phase.
 
-The subagent tool runner orchestrates multi-agent execution across dynamic queue-driven process supervision for a directory scope and optional target role boundary through a designated harness adapter with configurable batch sizes, execution timeouts, conversation token limits, and maximum unproductive turn limits until DAG convergence or failure, rendering cumulative telemetry and financial expenditures.
+The subagent tool runner orchestrates multi-agent execution across dynamic queue-driven process supervision for a directory scope, optional target role boundary, and optional target unit boundary through a designated harness adapter with configurable batch sizes, execution timeouts, conversation token limits, and maximum unproductive turn limits until DAG convergence or failure, rendering cumulative telemetry and financial expenditures.

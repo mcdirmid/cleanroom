@@ -82,6 +82,7 @@ class PathValidationError(ValueError):
 class FilePathManager(Protocol):
     """Validates and resolves path representations."""
 
+    # Contract: Creates a host path from a path string.
     def create_host_path(self, path: PathString) -> HostPath:
         """Creates a host path from a path string.
 
@@ -100,6 +101,7 @@ class FilePathManager(Protocol):
         """
         ...
 
+    # Contract: Creates an absolute path from a path string.
     def create_absolute_path(self, path: PathString) -> AbsolutePath:
         """Creates an absolute path from a path string.
 
@@ -118,6 +120,7 @@ class FilePathManager(Protocol):
         """
         ...
 
+    # Contract: Creates a workspace path from a path string.
     def create_workspace_path(self, path: PathString) -> WorkspacePath:
         """Creates a workspace path from a path string.
 
@@ -137,6 +140,7 @@ class FilePathManager(Protocol):
         """
         ...
 
+    # Contract: Resolves a workspace path into an absolute path given the absolute path of a workspace root.
     def resolve_path(
         self, root: AbsolutePath, relative: WorkspacePath
     ) -> AbsolutePath:

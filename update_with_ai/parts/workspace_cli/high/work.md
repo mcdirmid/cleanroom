@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-10T19:00:00Z
-CHANGE: track dirtiness through implicit role deps and star role changes
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
 CODE_HASH: 137092e219c3
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->
@@ -30,7 +30,9 @@ An agent session's *workspace work manager* evaluates and presents actionable wo
 
 The workspace work manager:
 
-- Evaluates dirty targets and topological readiness across a specified directory scope, discovering ready and blocked work items by role tier depth without requiring a subgraph, bounding presented ready items when a batch size is specified, treating feedback role dependencies and star role dependencies as implicit role dependencies for dirty tracking, evaluating a target as dirty when any star role dependency changes, and materializing starter templates through graph storage for missing ready target files.
+- Evaluates dirty targets and topological readiness across a specified directory scope, discovering ready and blocked work items by role tier depth without requiring a subgraph, bounding presented ready items when a batch size is specified, evaluating intra-unit upstream contract dependencies for producer roles from declared role dependencies and cross-unit dependencies from declared star role dependencies for dirty tracking, evaluating a target as dirty when any star role dependency changes, and materializing starter templates through graph storage for missing ready target files.
+
+- Restricts candidate work items to a designated target unit and its transitive dependencies when a target unit is specified.
 
 - Resolves the companion upstream specification contracts and interface definitions of target units from role definitions, automatically inspecting and including companion interface contracts without the _impl suffix for any unit ending in _impl, guiding agent implementation and verification.
 

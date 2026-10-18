@@ -43,7 +43,7 @@ from . import (
     pending,
 )
 
-# Contract: Discovers root of commissioned role workspace or repo root by checking for .cleanroom_role.json.
+# Contract: __orphan__ - discovers root of commissioned role workspace or repo root
 def find_workspace_root() -> str:
     """Discovers root of commissioned role workspace or repo root."""
     curr = os.getcwd()
@@ -54,7 +54,7 @@ def find_workspace_root() -> str:
     return os.getcwd()
 
 
-# Contract: Loads .cleanroom_role.json from current workspace if present.
+# Contract: __orphan__ - loads .cleanroom_role.json from current workspace
 def get_current_role_metadata() -> Optional[Dict[str, Any]]:
     """Loads .cleanroom_role.json from current workspace if present."""
     ws_root = find_workspace_root()
@@ -68,7 +68,6 @@ def get_current_role_metadata() -> Optional[Dict[str, Any]]:
     return None
 
 
-# Contract: Resolves main repository root from explicit repo_root or role_registry.discover_repository_root.
 def _resolve_main_root(
     ws_root: str, meta: Optional[Dict[str, Any]], repo_root: Optional[str] = None
 ) -> str:
@@ -78,7 +77,7 @@ def _resolve_main_root(
     return os.path.realpath(reg.discover_repository_root(ws_root))
 
 
-# Contract: Resolves path to .cleanroom.log in the directory containing parts.
+# Contract: __orphan__ - resolves path to .cleanroom.log in the directory containing parts
 def resolve_cleanroom_log_path(
     target_or_path: str, repo_root: Optional[str] = None
 ) -> str:
@@ -108,7 +107,7 @@ def resolve_cleanroom_log_path(
     return os.path.join(root, ".cleanroom.log")
 
 
-# Contract: Appends action record message to .cleanroom.log in directory containing parts.
+# Contract: __orphan__ - appends action record message to .cleanroom.log in directory containing parts
 def append_cleanroom_log(
     target_or_path: str,
     message: str,

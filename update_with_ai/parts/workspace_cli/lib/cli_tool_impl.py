@@ -45,7 +45,6 @@ def _ensure_command_handler_registered() -> None:
             pass
 
 
-# Contract: Manages entry and initialization within the agent_session lifecycle phase scope.
 @contextmanager
 def _session_context():
     active = get_active_scope()
@@ -430,6 +429,7 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner, Singleton):
         return 1
 
 
+# Contract: __orphan__ - CLI Entrypoint executing within agent_session lifecycle phase
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """CLI Entrypoint executing within agent_session lifecycle phase."""
     raw_args = list(argv) if argv is not None else sys.argv[1:]

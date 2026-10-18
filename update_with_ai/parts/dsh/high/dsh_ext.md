@@ -2,7 +2,7 @@
 LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-13T20:00:00Z
 CHANGE: author dsh_ext external specification
-CODE_HASH: 9ac3fa4e54e5
+CODE_HASH: 437781a8dfcd
 -->
 
 # dsh_ext external component
@@ -27,4 +27,4 @@ Grounding gaps covered include:
 
 - Role agent documentation conventions: Defines the structure and discovery of `AGENTS.md` files placed within role workspace roots, loaded by `@deepseek-ai/dsh-agent-instructions`, instructing DeepSeek Harness subagents never to access or mutate files outside their provisioned workspace root and restricting shell execution strictly to prescribed Cleanroom role binaries.
 
-- Session storage and streaming telemetry schema: Defines the session archive structure under `~/Library/Application Support/dsh-desktop/harness/sessions/<dir-slug>/<session-id>/session.v4.jsonl.zstd` and uncompressed fallback `session.v4.jsonl`, non-blocking session locking via `session.lock`, active session identifier persistence in `.cleanroom/dsh_session_id.txt`, and the newline-delimited JSON run event stream from `dsh --profile headless --json`, specifying token usage objects with `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, and `totalTokens`.
+- Session storage and streaming telemetry schema: Defines the session archive structure discovered under DSH_SESSIONS_DIR, DSH_HOME, or platform application support directories (`~/Library/Application Support/dsh-desktop/harness/sessions` on macOS or `~/.config/dsh-desktop/harness/sessions` on Linux, storing `<dir-slug>/<session-id>/session.v4.jsonl.zstd` and uncompressed fallback `session.v4.jsonl`), non-blocking session locking via `session.lock`, active session identifier persistence in `.cleanroom/dsh_session_id.txt`, and the newline-delimited JSON run event stream from `dsh --profile headless --json`, specifying token usage objects with `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, and `totalTokens`.

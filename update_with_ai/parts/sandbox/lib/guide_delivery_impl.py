@@ -24,7 +24,6 @@ from . import tool_provider
 # Requirements specified in guide_delivery_impl.pyi
 
 
-# Contract: GuideDelivery.parse_guide / _parse_guide_markdown - extracts guide summary, sequential step sections (excluding summary, lint checks, verification failure), and verification failure instructions.
 def _parse_guide_markdown(content: str) -> node_config.NodeGuide:
     lines = content.splitlines()
     preamble_lines: List[str] = []

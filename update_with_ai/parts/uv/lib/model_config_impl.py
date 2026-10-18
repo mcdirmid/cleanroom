@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CLEANED: 2026-10-18T01:04:33Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z
 # CHANGE: new file
-# CODE_HASH: c50be3d9ae9e
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# CODE_HASH: dc7f16653653
+# COVERAGE_AUDIT: 2026-10-18T01:04:33Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
@@ -16,6 +16,17 @@ import sys
 import tomllib
 from typing import Any, Mapping, Optional
 
+try:
+    import dotenv
+    dotenv.load_dotenv()
+    from support.lib import app_info
+    _user_env = os.path.join(app_info.get_user_config_dir(), ".env")
+    if os.path.isfile(_user_env):
+        dotenv.load_dotenv(_user_env)
+except Exception:
+    pass
+
+from support.lib import app_info
 from support.lib.lifecycle import (
     LifecycleRegistry,
     Singleton,
@@ -27,7 +38,6 @@ from update_with_ai.parts.dag.lib import dag_config
 from update_with_ai.parts.openai.lib import openai_config
 
 
-# Contract: resolve active model configuration name in precedence order (--config, CLEANROOM_MODEL, MODEL_CONFIG_TARGET, default)
 def _resolve_config_name() -> str:
     """Resolves the active model config name from CLI, environment, or default."""
     args = sys.argv[1:] if len(sys.argv) > 1 else []
@@ -37,7 +47,8 @@ def _resolve_config_name() -> str:
         if arg.startswith("--config="):
             return _clean_config_name(arg.split("=", 1)[1].strip())
 
-    name = os.environ.get("CLEANROOM_MODEL")
+    app_env = f"{app_info.ENV_PREFIX}_MODEL"
+    name = os.environ.get(app_env) or os.environ.get("CLEANROOM_MODEL")
     if name and name.strip():
         return _clean_config_name(name.strip())
 
@@ -60,21 +71,27 @@ def _clean_config_name(val: str) -> str:
 def _is_valid_model_config_file(path: str) -> bool:
     if not os.path.isfile(path):
         return False
-    if path.endswith("cleanroom.toml"):
+    if path.endswith(f"{app_info.APP_NAME}.toml") or path.endswith("cleanroom.toml"):
         data = _load_toml_data(path)
         return "models" in data or "default" in data
     return True
 
 
-# Contract: discover TOML configuration file in workspace
 def _find_toml_config_file() -> Optional[str]:
     """Finds a candidate TOML configuration file across workspace and home directories."""
+    app_cfg_env = f"{app_info.ENV_PREFIX}_MODEL_CONFIG_FILE"
+    if app_cfg_env in os.environ:
+        env_path = os.environ[app_cfg_env]
+        if env_path and os.path.isfile(env_path):
+            return env_path
     if "CLEANROOM_MODEL_CONFIG_FILE" in os.environ:
         env_path = os.environ["CLEANROOM_MODEL_CONFIG_FILE"]
         return env_path if (env_path and os.path.isfile(env_path)) else None
 
     repo_candidates = [
         "model_configs.toml",
+        f"{app_info.APP_NAME}_models.toml",
+        app_info.DEFAULT_CONFIG_FILE,
         "cleanroom_models.toml",
         "cleanroom.toml",
     ]
@@ -97,8 +114,14 @@ def _find_toml_config_file() -> Optional[str]:
                 return p
         curr = parent
 
+    user_cfg = app_info.get_user_model_config_file()
+    if os.path.isfile(user_cfg):
+        return user_cfg
+
     home = os.path.expanduser("~")
     for cand in (
+        os.path.join(home, ".config", app_info.APP_NAME, "models.toml"),
+        os.path.join(home, f".{app_info.APP_NAME}", "models.toml"),
         os.path.join(home, ".config", "cleanroom", "models.toml"),
         os.path.join(home, ".cleanroom", "models.toml"),
     ):
@@ -158,12 +181,25 @@ class _ConfigData:
         )
 
         # 3. API Key
+        creds = app_info.load_credentials()
         api_key_env = data.get("api_key_env")
-        if api_key_env and isinstance(api_key_env, str) and api_key_env in os.environ:
-            self.api_key = os.environ[api_key_env]
+        if api_key_env and isinstance(api_key_env, str):
+            if api_key_env in os.environ:
+                self.api_key = os.environ[api_key_env]
+            elif api_key_env in creds:
+                self.api_key = creds[api_key_env]
+            elif api_key_env.upper() in creds:
+                self.api_key = creds[api_key_env.upper()]
+            else:
+                self.api_key = None
         else:
+            self.api_key = None
+
+        if not self.api_key:
             self.api_key = (
                 os.environ.get("OPENAI_API_KEY")
+                or creds.get("OPENAI_API_KEY")
+                or creds.get("openai_api_key")
                 or (str(data["api_key"]) if "api_key" in data else None)
                 or None
             )

@@ -1,7 +1,7 @@
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:15:00Z
-CHANGE: Define dirtiness_impl implementation component
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: evaluate producer intra-unit dependencies from declared role dependencies and cross-unit dependencies from star role dependencies
 CODE_HASH: 7dfb7b550812
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
@@ -31,7 +31,7 @@ When evaluating unit dirtiness:
 
 - The dirtiness evaluator inspects the in-band metadata across every feedback role target configured for an active auditor role, evaluating the unit as dirty when a feedback target is missing, lacks the required role audit attribute, or has been modified after its audit timestamp.
 
-- The dirtiness evaluator treats feedback role dependencies and star role dependencies as implicit role dependencies for producer roles, evaluating the target as dirty when an upstream dependency or a star role dependency has been modified more recently than the last cleaned timestamp of the target.
+- The dirtiness evaluator evaluates intra-unit upstream contract dependencies for producer roles from declared role dependencies, and evaluates cross-unit dependencies from declared star role dependencies, evaluating the target as dirty when an upstream dependency or a star role dependency has been modified more recently than the last cleaned timestamp of the target.
 
 - The dirtiness evaluator resolves companion upstream specification contract files and interface definitions for candidate targets using dynamic role definitions, avoiding peer implementation file leakage.
 
