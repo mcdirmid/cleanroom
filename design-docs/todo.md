@@ -438,9 +438,6 @@ Cleanroom provides deep integration with DeepSeek Harness (`dsh`) across both di
    - Injects real-time status badges into the Cordis desktop shell.
    - Displays active cleaning waves, dirty dependency DAGs, and subagent process health.
 
-4. **DSH Skill (`skills/dsh/SKILL.md`)**:
-   - Provides turnkey system instructions for DSH workers operating inside sibling sandboxes.
-
 ---
 
 ### Google Antigravity Integration & Rate Economics
