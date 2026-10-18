@@ -90,9 +90,10 @@ class WorkspacePendingManager(
 
         GROUNDING:
         - Checks target metadata via src_metadata.SourceMetadataCoordinator.extract_metadata across
-          local workspace and main repository, evaluating auditor role targets across all
-          configured feedback role targets from role_registry.WorkspaceRegistry.resolve_role_definition,
-          evaluating producer targets across implicit role dependencies and star role dependencies,
-          and materializing missing files via dag_storage.DagStorage.materialize_template.
+          local workspace and main repository, evaluating canonical lifecycle timestamps from main repository
+          when available, evaluating auditor role targets across all configured feedback role targets from
+          role_registry.WorkspaceRegistry.resolve_role_definition, evaluating producer targets across
+          implicit role dependencies and star role dependencies, and materializing missing files via
+          dag_storage.DagStorage.materialize_template.
         """
         ...

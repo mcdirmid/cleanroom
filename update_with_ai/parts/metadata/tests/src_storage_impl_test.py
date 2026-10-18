@@ -634,7 +634,7 @@ class TestSrcStorageImpl(unittest.TestCase):
             with open(abs_path, "r", encoding="utf-8") as f:
                 content = f.read()
             self.assertIn("# DIRTY: contract broken", content)
-            self.assertNotIn("LAST_CLEANED:", content)
+            self.assertIn("LAST_CLEANED:", content)
 
             # Mark clean clears dirty
             storage.mark_node_clean(node)
@@ -645,8 +645,8 @@ class TestSrcStorageImpl(unittest.TestCase):
             self.assertTrue(storage.is_dirty(node))
             with open(abs_path, "r", encoding="utf-8") as f:
                 content_no_reason = f.read()
-            self.assertNotIn("LAST_CLEANED:", content_no_reason)
-            self.assertNotIn("# DIRTY:", content_no_reason)
+            self.assertIn("LAST_CLEANED:", content_no_reason)
+            self.assertIn("# DIRTY: dirty", content_no_reason)
 
     def test_mark_node_dirty_auditor(self) -> None:
         """CUJ: mark_node_dirty on auditor node invalidates target audit tag."""

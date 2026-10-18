@@ -36,8 +36,8 @@ class WorkspaceProvisioner(InTier[AgentSessionTier], Protocol):
         - MUST resolve the role definition for the requested role and directory scope.
         - MUST create the workspace directory tree including a bin directory.
         - WHEN reset is true, MUST clear stale pending work buffers in the workspace.
-        - MUST copy writable target files with 0o644 permissions.
-        - MUST copy upstream contract dependencies with 0o444 permissions.
+        - MUST copy writable target files with 0o644 permissions, projecting metadata headers to only retain CHANGE and FEEDBACK fields with an ephemeral CODE_HASH while omitting LAST_CLEANED, LAST_CHANGED, and audit tags.
+        - MUST copy upstream contract dependencies with 0o444 permissions, projecting metadata headers to only retain CHANGE and FEEDBACK fields while omitting LAST_CLEANED, LAST_CHANGED, and audit tags.
         - WHEN the role definition declares stub role dependencies, MUST synthesize read-only test stubs raising NotImplementedError from companion specifications without copying real implementation files.
         - MUST package executable runner tools into the bin directory with 0o755 permissions.
         - MUST write cleanroom_files_ext.ROLE_DESCRIPTOR_FILE role configuration in the workspace root without exposing host repository paths.

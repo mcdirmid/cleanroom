@@ -29,3 +29,11 @@ Given: an active role workspace with a pending target whose source file does not
 
 2. The caller marks the target clean.
    Observed: `is_pending_target_dirty` returns false.
+
+## Scenario 3 — Evaluating pending target dirtiness with projected workspace metadata
+
+Given: an assigned pending target in a role workspace whose local header lacks `LAST_CLEANED`, while its canonical file in the main repository is clean.
+
+1. The caller checks `is_pending_target_dirty`.
+   Observed: resolves the canonical file from the main repository and returns `False`.
+

@@ -33,7 +33,7 @@ The workspace scaffolder:
 
 - Synthesizes an `AGENTS.md` guide containing the behavioral constraints, role instructions, and tool usage sequences tailored to the commissioned role.
 
-- Writes boundary rules into the guide that confine the agent to the workspace, forbid git operations, and declare the main repository read-only, and writes a contamination tripwire that mandates an immediate abort upon reading an out-of-bounds file outside the workspace directory, while explicitly permitting and instructing file inspection of in-workspace specifications, tests, code implementations, and commit change metadata headers using file-reading tools.
+- Writes boundary rules into the guide that confine the agent to the workspace, forbid git operations, declare the main repository read-only, explain that in-band metadata in role workspace files is projected to show only change, feedback, and ephemeral code hash fields while canonical lifecycle timestamps (such as last cleaned, last changed, and audit tags) are maintained exclusively in the main repository, and writes a contamination tripwire that mandates an immediate abort upon reading an out-of-bounds file outside the workspace directory, while explicitly permitting and instructing file inspection of in-workspace specifications, tests, code implementations, and commit change metadata headers using file-reading tools.
 
 - Writes a command execution tripwire into the guide that strictly restricts terminal shell command execution to prescribed `bin/` executables (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, `bin/fail`) and mandates an immediate abort upon executing unapproved commands.
 

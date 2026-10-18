@@ -21,12 +21,12 @@ Operating across isolated role workspaces requires atomic data movement to preve
 
 ### Contracts
 
-- The workspace synchronizer pulls updated upstream contracts and source files from the canonical main repository into a role workspace. [pull_upstream_contracts]
+- The workspace synchronizer pulls updated upstream contracts and source files from the canonical main repository into a role workspace, projecting in-band metadata to expose only change, feedback, and ephemeral code hash attributes on writable targets. [pull_upstream_contracts]
 - The workspace synchronizer delegates test stub synchronization for stub role dependencies to workspace provisioning without copying implementation code. [sync_stub_dependencies]
 - The workspace synchronizer refreshes non-parts system files from the canonical main repository into a role workspace, delegating runner deployment, role guide regeneration, and test stub synchronization, while scoping tool configurations to the role workspace boundaries. [refresh_system_files_into_workspace]
 - The workspace synchronizer scans writable target files in a role workspace to identify modified content. [scan_modified_targets]
 - The workspace synchronizer verifies that canonical main targets match workspace baseline hashes before committing harvested files. [validate_harvest_baselines]
-- The workspace synchronizer copies validated target files from a role workspace into the canonical main repository. [commit_harvested_files]
+- The workspace synchronizer copies validated target files from a role workspace into the canonical main repository, stripping ephemeral code hashes. [commit_harvested_files]
 - The workspace synchronizer stamps role audits on verified targets in the canonical main repository for auditor roles. [stamp_auditor_role_audits]
 - The workspace synchronizer flushes buffered blame feedback from the role workspace blame buffer into culprit files in the main repository. [flush_blame_buffer_entries]
 

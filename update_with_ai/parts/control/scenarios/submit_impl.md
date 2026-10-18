@@ -183,21 +183,24 @@ it has not been modified since its target was last clean; the current UTC timest
 3. The agent modifies `/ws/alpha_scope_a/parts/widget/widget_spec.md` and submits it as the
    alpha-role file target with the change summary `renamed the widget field`.
    Observed: an accepted submission outcome; the canonical repository file
-   `/repo/parts/widget/widget_spec.md` records the change summary `renamed the widget field`; and
-   the local role workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` carries the same
-   updated content.
+   `/repo/parts/widget/widget_spec.md` records the change summary `renamed the widget field` and
+   has any ephemeral code hash stripped; and the local role workspace file
+   `/ws/alpha_scope_a/parts/widget/widget_spec.md` carries the same updated content with its
+   ephemeral code hash refreshed to reflect the new code baseline.
    Realized by: path resolution through `agent_file_alias`; the modification determination through
-   `src_metadata`; `src_metadata` again, updating the in-band change metadata in the canonical
-   file; and the component's own synchronization of the updated canonical file back to the role
-   workspace.
+   `src_metadata` comparing against the ephemeral code hash; `src_metadata` again, updating the in-band
+   change metadata in the canonical file while stripping the ephemeral code hash; and the component's
+   own synchronization of the updated canonical file back to the role workspace with a refreshed
+   ephemeral code hash.
 
 4. The agent submits `/ws/alpha_scope_a/parts/gadget/gadget_spec.md` as the alpha-role file target
    with no change summary.
    Observed: an accepted submission outcome, and the canonical repository file
    `/repo/parts/gadget/gadget_spec.md` records last cleaned `2026-01-12T00:00:00Z` and no change
-   summary.
-   Realized by: `src_metadata` reporting no modification and, on the clean transition, advancing
-   the in-band last cleaned timestamp and withdrawing the change summary.
+   summary, with any ephemeral code hash stripped.
+   Realized by: `src_metadata` reporting no modification against the ephemeral code hash and, on the
+   clean transition, advancing the in-band last cleaned timestamp, withdrawing the change summary, and
+   stripping any ephemeral code hash.
 
 ## Implementation-only
 

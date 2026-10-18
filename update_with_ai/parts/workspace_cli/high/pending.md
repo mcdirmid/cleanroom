@@ -34,4 +34,4 @@ The workspace pending manager:
 
 - Clears the pending work buffer file when all assigned tasks in the role workspace evaluate clean.
 
-- Evaluates whether an assigned pending target remains dirty by checking in-band source metadata across the role workspace and main repository, treating feedback and star-role dependencies as implicit dependencies, and materializing starter templates when missing.
+- Evaluates whether an assigned pending target remains dirty by checking in-band source metadata across the role workspace and main repository, resolving canonical lifecycle metadata from the main repository when available, treating feedback and star-role dependencies as implicit dependencies, and materializing starter templates when missing.

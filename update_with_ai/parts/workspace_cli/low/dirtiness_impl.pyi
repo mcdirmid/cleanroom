@@ -51,9 +51,11 @@ class WorkspaceDirtinessEvaluator(
 
         GROUNDING:
         - Inspects in-band metadata via src_metadata.SourceMetadataCoordinator.extract_metadata,
-          checks last_cleaned and last_changed timestamps, verifies all auditor feedback targets,
-          evaluates intra-unit role dependencies for producer roles, and tests star-role dependency
-          timestamps against role definitions from role_registry.WorkspaceRegistry.resolve_role_definition.
+          resolving candidate files from canonical repository root first when available to inspect
+          authoritative lifecycle timestamps, checks last_cleaned and last_changed timestamps,
+          verifies all auditor feedback targets, evaluates intra-unit role dependencies for producer roles,
+          and tests star-role dependency timestamps against role definitions from
+          role_registry.WorkspaceRegistry.resolve_role_definition.
         """
         ...
 

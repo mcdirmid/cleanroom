@@ -402,6 +402,12 @@ If you determine that success is not possible (e.g. unreachable code under test,
 - When an active node carries unacted feedback or blame from downstream roles (QA), passing `bin/check_files` does NOT mean the defect is resolved.
 - You MUST inspect `low/*.pyi` and `tests/*_test.py`, modify code logic to satisfy contracts and pass tests, ensure `bin/check_files` passes, and submit with a change summary describing how the feedback was fixed.
 
+## METADATA PROJECTION & INVIOLABILITY:
+- NEVER manually edit `# --- CLEANROOM METADATA ---` or `<!-- CLEANROOM METADATA -->` headers. Use only tools (`bin/submit`, `bin/blame`, `bin/fail`).
+- Files in your role workspace are projected to intentionally omit `LAST_CLEANED`, `LAST_CHANGED`, and audit timestamps. Canonical lifecycle timestamps are maintained exclusively in the main repository and managed by `bin/submit`.
+- Never attempt to manually add `LAST_CLEANED` or `LAST_CHANGED` to local workspace files, and never treat missing lifecycle timestamps in local workspace files as a defect.
+- If `bin/get_work` assigns a target, perform thorough semantic verification against contracts and test suites rather than assuming it is clean just because static syntax and type checks pass.
+
 ## STANDARD WORKFLOW:
 1. Run `bin/get_work` to acquire pending ready nodes and review unacted feedback.
 2. Consult your workspace `AGENTS.md` and companion guide to perform role duties.

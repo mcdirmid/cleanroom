@@ -19,7 +19,7 @@ Provisioning isolated role workspaces requires precise file-level permission con
 - The workspace provisioner creates directory structures including bin and target package folders. [make_workspace_dirs]
 - The workspace provisioner creates the role workspace working tree by copying workspace roots, project configurations, and build definitions while configuring type-checking to cover the workspace without directory exclusions. [create_workspace_working_tree]
 - The workspace provisioner creates a missing target skeleton when a declared writable target file does not yet exist on disk. [create_missing_target_skeleton]
-- The workspace provisioner copies files with permissions set to 0o644 for writable targets. [copy_file_with_write_perms]
+- The workspace provisioner copies files with permissions set to 0o644 for writable targets, projecting in-band metadata to expose only change, feedback, and ephemeral code hash attributes. [copy_file_with_write_perms]
 - The workspace provisioner copies files with permissions set to 0o444 for read-only contracts. [copy_file_with_read_perms]
 - The workspace provisioner applies explicit read-only, writable, or executable permissions when copying or writing files. [apply_file_permissions]
 - The workspace provisioner synthesizes read-only test stubs with NotImplementedError from companion specifications for stub role dependencies. [synthesize_stub_role_dependencies]
@@ -29,7 +29,7 @@ Provisioning isolated role workspaces requires precise file-level permission con
 
 ### Woven Contracts
 
-- When commissioning a workspace, the provisioner creates the working tree with type-checking coverage, creates missing target skeletons, creates folders, copies targets with write perms, copies contracts with read perms, applies file permissions, synthesizes stub role dependencies, packages runner zipapps, serializes role metadata, and writes AGENTS.md instructions. [make_workspace_dirs, create_workspace_working_tree, create_missing_target_skeleton, copy_file_with_write_perms, copy_file_with_read_perms, apply_file_permissions, synthesize_stub_role_dependencies, package_runner_zipapps, serialize_role_descriptor, format_role_agents_markdown, provision: [create_workspace_directories, copy_writable_targets, copy_readonly_contracts, copy_file_with_permissions, synthesize_readonly_test_stubs, deploy_runner_executables, write_role_configuration, write_role_agents_instructions], scaffold: [deploy_runner_zipapps, write_role_metadata, write_role_agents_instructions, create_missing_target_skeletons], stub: [generate_readonly_test_stub, sync_all_stub_deps, is_stub_dep_file]]
+- When commissioning a workspace, the provisioner creates the working tree with type-checking coverage, creates missing target skeletons, creates folders, copies targets with write perms, copies contracts with read perms, applies file permissions, synthesizes stub role dependencies, packages runner zipapps, serializes role metadata, and writes AGENTS.md instructions. [make_workspace_dirs, create_workspace_working_tree, create_missing_target_skeleton, copy_file_with_write_perms, copy_file_with_read_perms, apply_file_permissions, synthesize_stub_role_dependencies, package_runner_zipapps, serialize_role_descriptor, format_role_agents_markdown, provision: [create_workspace_directories, copy_writable_targets, copy_readonly_contracts, copy_file_with_permissions, synthesize_readonly_test_stubs, deploy_runner_executables, write_role_configuration, write_role_agents_instructions], scaffold: [deploy_runner_zipapps, write_role_metadata, write_role_agents_instructions, create_missing_target_skeletons], stub: [generate_readonly_test_stub, sync_all_stub_deps, is_stub_dep_file], src_metadata: [extract_metadata_disk, update_metadata_disk]]
 
 
 ## Grounding
@@ -57,3 +57,5 @@ Provisioning isolated role workspaces requires precise file-level permission con
   - Grounded: [stub: [workspace_stub_service]]
 - Runner zipapp packaging, role metadata, and guide scaffolding services.
   - Grounded: [scaffold: [workspace_scaffolding_service]]
+- In-band metadata extraction, projection, and ephemeral code hash generation.
+  - Grounded: [src_metadata: [source_metadata_service]]

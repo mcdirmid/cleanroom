@@ -35,4 +35,4 @@ When managing pending target state:
 
 - The pending manager removes the pending work buffer file completely when cleared.
 
-- The pending manager evaluates whether a pending target remains dirty by checking in-band source metadata across the workspace and main repository, evaluating star-role and feedback dependencies as implicit dependencies, verifying auditor role feedback targets against audit timestamps, and materializing starter templates via graph storage when missing.
+- The pending manager evaluates whether a pending target remains dirty by checking in-band source metadata across the workspace and main repository, evaluating canonical lifecycle timestamps from the main repository when available, evaluating star-role and feedback dependencies as implicit dependencies, verifying auditor role feedback targets against audit timestamps, and materializing starter templates via graph storage when missing.

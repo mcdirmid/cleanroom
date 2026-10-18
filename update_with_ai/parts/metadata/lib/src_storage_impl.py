@@ -302,7 +302,7 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
             return True
 
         meta = src_metadata.extract_metadata(src_path)
-        if meta is None or not meta.last_cleaned:
+        if meta is None:
             return True
         if meta.dirty:
             self._record_message(
@@ -320,6 +320,8 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
                         content=dag_storage.MessageContent(entry)
                     ),
                 )
+            return True
+        if not meta.last_cleaned:
             return True
         for dep in self.get_dependencies(node):
             if not dep.is_silent:
@@ -381,7 +383,7 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
                 return
         self._messages.setdefault(to, set()).add(message)
 
-    # Contract: Marks a node dirty by clearing clean status and recording dirty reason.
+    # Contract: Marks a node dirty by recording dirty reason in in-band metadata.
     def mark_node_dirty(
         self, node: dag_storage.DagNode, reason: Optional[str] = None
     ) -> None:
@@ -405,19 +407,14 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
                 )
             return
 
+        dirty_msg = reason if reason else "dirty"
         src_path = self._resolve_source_path(node)
         if src_path is not None and src_path.is_file():
-            if reason:
-                src_metadata.update_metadata(
-                    src_path, dirty=reason, clear_last_cleaned=True
-                )
-            else:
-                src_metadata.delete_last_cleaned(src_path)
+            src_metadata.update_metadata(src_path, dirty=dirty_msg)
             return
 
-        msg = reason if reason else "dirty"
         self._messages.setdefault(node, set()).add(
-            dag_storage.ChangeMessage(content=dag_storage.MessageContent(msg))
+            dag_storage.ChangeMessage(content=dag_storage.MessageContent(dirty_msg))
         )
 
     # Contract: Marks the target node and all reachable dependencies in its subgraph clean.

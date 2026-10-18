@@ -17,6 +17,7 @@ import provision
 import role_registry
 import scaffold
 import stub
+import src_metadata
 
 
 @singleton_type("agent_session")
@@ -71,11 +72,16 @@ class WorkspaceProvisioner(
           role_registry.RoleDefinition.writable_file_patterns when that file does not
           yet exist on disk.
         - Creates bin and target package folders, copies files matching
-          role_registry.RoleDefinition.writable_file_patterns with 0o644 permissions,
+          role_registry.RoleDefinition.writable_file_patterns with 0o644 permissions
+          (projecting metadata headers through src_metadata.SourceMetadataCoordinator
+          to expose only change and feedback fields with an ephemeral code hash
+          computed via src_metadata.SourceMetadataCoordinator.compute_file_code_hash),
           copies files matching role_registry.RoleDefinition.readonly_file_patterns with
-          0o444 permissions, and synthesizes read-only test stubs raising NotImplementedError
-          for every role_registry.RoleDefinition.stub_role_deps entry from companion
-          specifications without copying real implementation files.
+          0o444 permissions (projecting metadata headers through
+          src_metadata.SourceMetadataCoordinator to expose only change and feedback fields),
+          and synthesizes read-only test stubs raising NotImplementedError for every
+          role_registry.RoleDefinition.stub_role_deps entry from companion specifications
+          without copying real implementation files.
         - Packages executable bin zipapps whose __main__.py invokes the cleanroom_role_tool
           runner entrypoint, writes role metadata containing role identity, directory scope, and
           optional model profile parameters into cleanroom_files_ext.ROLE_DESCRIPTOR_FILE without

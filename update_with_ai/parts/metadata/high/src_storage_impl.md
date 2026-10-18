@@ -57,7 +57,7 @@ An auditor node evaluates as dirty when:
 
 Marking an auditor node clean records the current timestamp as the audit timestamp on each verified feedback target file in-band metadata header without modifying the target file last changed timestamp.
 
-Marking a node dirty in dag storage clears the last cleaned timestamp from its declared source file in-band metadata header and sets its dirty tag, marking the node dirty without modifying its change summary or last changed timestamp.
+Marking a node dirty in dag storage sets its dirty tag in its declared source file in-band metadata header without clearing its last cleaned timestamp or modifying its change summary or last changed timestamp.
 
 Marking an auditor node dirty in dag storage removes the audit timestamp from each verified feedback target file in-band metadata header.
 

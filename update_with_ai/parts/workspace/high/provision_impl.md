@@ -8,7 +8,7 @@ SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 
 # provision_impl implementation component
 
-imports: session, cleanroom_files_ext, role_registry, scaffold, stub
+imports: session, cleanroom_files_ext, role_registry, scaffold, stub, src_metadata
 implements: provision
 
 ## Purpose
@@ -19,7 +19,7 @@ Provisioning isolated role workspaces requires precise file-level permission con
 
 **Out of scope:** The provision_impl implementation component does not parse git commits, evaluate forward dirty node propagation, or schedule multi-node builds; these are handled by other components.
 
-**Delegated:** Role definition resolution, target directory computation, and workspace registry persistence are delegated to role_registry. File naming conventions for the role descriptor configuration are delegated to cleanroom_files_ext. Test stub generation and synchronization are delegated to stub. Runner zipapp deployment, role metadata serialization, AGENTS.md guide synthesis, and missing target skeleton generation are delegated to scaffold.
+**Delegated:** Role definition resolution, target directory computation, and workspace registry persistence are delegated to role_registry. File naming conventions for the role descriptor configuration are delegated to cleanroom_files_ext. Test stub generation and synchronization are delegated to stub. Runner zipapp deployment, role metadata serialization, AGENTS.md guide synthesis, and missing target skeleton generation are delegated to scaffold. In-band metadata extraction, projection, and ephemeral code hash generation are delegated to src_metadata.
 
 ## Types and Behavior
 
@@ -35,7 +35,7 @@ The workspace provisioner:
 
 - Synthesizes read-only test stubs raising `NotImplementedError` from companion specification files into the workspace for stub role dependencies, delegating stub generation and synchronization to the workspace stub synthesizer.
 
-- Copies writable target files into the workspace with write permissions, creating a missing target skeleton when a declared file does not yet exist on disk.
+- Copies writable target files into the workspace with write permissions, projecting in-band metadata to expose only change, feedback, and ephemeral code hash attributes, and creating a missing target skeleton when a declared file does not yet exist on disk.
 
 - Copies and writes files across role workspaces, applying explicit read-only, writable, or executable permissions.
 

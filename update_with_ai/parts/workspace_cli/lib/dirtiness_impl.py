@@ -305,7 +305,8 @@ def _resolve_scope_file(
     ws_root: str,
     main_root: str,
 ) -> Optional[str]:
-    for root in (ws_root, main_root) if main_root != ws_root else (ws_root,):
+    # Resolve canonical file from main_root first when available to inspect authoritative lifecycle metadata
+    for root in (main_root, ws_root) if main_root != ws_root else (ws_root,):
         cand = os.path.join(root, rel_path)
         if os.path.isfile(cand):
             return cand
@@ -442,10 +443,10 @@ def _eval_unit_dirty_internal(
             "reasons": [f"Source file {target_rel} does not exist"],
         }
     meta = src_metadata.extract_metadata(full_path)
-    if not meta or not meta.last_cleaned:
+    if not meta:
         return {
             "is_dirty": True,
-            "reasons": [f"Header missing LAST_CLEANED in {target_rel}"],
+            "reasons": [f"Target {target_rel} missing valid in-band metadata header"],
         }
     if meta.dirty:
         reasons.append(f"Target explicitly marked DIRTY: {meta.dirty}")
@@ -453,6 +454,27 @@ def _eval_unit_dirty_internal(
         for fb in meta.feedback:
             clean_fb = re.sub(r"^\[.*?\]:\s*", "", fb.strip())
             reasons.append(f"Unacted feedback in {target_rel}: {clean_fb}")
+    if main_root != ws_root:
+        ws_full = os.path.join(ws_root, target_rel)
+        if os.path.isfile(ws_full):
+            ws_meta = src_metadata.extract_metadata(ws_full)
+            if ws_meta:
+                if ws_meta.dirty and f"Target explicitly marked DIRTY: {ws_meta.dirty}" not in reasons:
+                    reasons.append(f"Target explicitly marked DIRTY: {ws_meta.dirty}")
+                if ws_meta.feedback:
+                    existing_fb = {re.sub(r"^\[.*?\]:\s*", "", f.strip()) for f in (meta.feedback or [])}
+                    for fb in ws_meta.feedback:
+                        clean_fb = re.sub(r"^\[.*?\]:\s*", "", fb.strip())
+                        if clean_fb not in existing_fb:
+                            reasons.append(f"Unacted feedback in {target_rel}: {clean_fb}")
+
+    if not meta.last_cleaned:
+        if not reasons:
+            reasons.append(f"Target has not been cleaned ({target_rel})")
+        return {
+            "is_dirty": True,
+            "reasons": reasons,
+        }
 
     ctype = _classify_unit_type(unit_name)
     is_impl = unit_name.endswith("_impl")

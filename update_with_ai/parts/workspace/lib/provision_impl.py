@@ -19,7 +19,39 @@ from typing import List, Optional, Sequence
 
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 from update_with_ai.parts.agent.lib import session as agent_session
+from update_with_ai.parts.metadata.lib import src_metadata
 from . import provision, role_registry, scaffold, stub
+
+
+def _project_for_role_workspace(content: str, filename: str, is_writable: bool) -> str:
+    """Projects in-band metadata for role workspace: only change, feedback, and ephemeral code hash."""
+    meta = src_metadata.extract_metadata_from_text(content, filename)
+    if meta is None:
+        return content
+    code_hash = None
+    if is_writable:
+        code_hash = src_metadata.compute_code_hash(content, filename)
+    return src_metadata.rewrite_metadata_in_text(
+        content,
+        filename,
+        clear_last_cleaned=True,
+        last_changed="",
+        clear_audits=True,
+        clear_dirty=True,
+        code_hash=code_hash,
+        clear_code_hash=not is_writable,
+    )
+
+
+def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
+    """Copies a file into a role workspace, projecting metadata headers with ephemeral code hashes on writable files."""
+    try:
+        with open(src, "r", encoding="utf-8") as f:
+            content = f.read()
+        projected = _project_for_role_workspace(content, os.path.basename(src), is_writable=is_writable)
+        write_file_with_perms(dst, projected, readonly=not is_writable)
+    except (UnicodeDecodeError, OSError):
+        copy_file_with_perms(src, dst, readonly=not is_writable)
 
 
 BLAME_BUFFER_FILE = ".cleanroom_blame_buffer.json"
@@ -235,7 +267,7 @@ class WorkspaceProvisioner(
                     continue
                 src_f = os.path.join(scope_dir, rel)
                 dst_f = os.path.join(workspace_dir, dir_scope, rel)
-                copy_file_with_perms(src_f, dst_f, readonly=False)
+                _copy_projected_file(src_f, dst_f, is_writable=True)
 
             readonly_rel = _find_matching_files(
                 scope_dir, role_def.readonly_file_patterns
@@ -245,7 +277,7 @@ class WorkspaceProvisioner(
                     continue
                 src_f = os.path.join(scope_dir, rel)
                 dst_f = os.path.join(workspace_dir, dir_scope, rel)
-                copy_file_with_perms(src_f, dst_f, readonly=True)
+                _copy_projected_file(src_f, dst_f, is_writable=False)
 
             if role_def.stub_role_deps:
                 stub_synth.sync_all_stub_deps(

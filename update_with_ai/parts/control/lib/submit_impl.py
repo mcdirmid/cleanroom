@@ -73,6 +73,55 @@ def _copy_file_with_perms(
         pass
 
 
+def _write_file_with_perms(
+    path: str, content: str, readonly: bool = False, executable: bool = False
+) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        try:
+            os.chmod(path, 0o644)
+        except OSError:
+            pass
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    mode = (0o555 if readonly else 0o755) if executable else (0o444 if readonly else 0o644)
+    try:
+        os.chmod(path, mode)
+    except OSError:
+        pass
+
+
+def _project_for_role_workspace(content: str, filename: str, is_writable: bool) -> str:
+    """Projects in-band metadata for role workspace: only change, feedback, and ephemeral code hash."""
+    meta = src_metadata.extract_metadata_from_text(content, filename)
+    if meta is None:
+        return content
+    code_hash = None
+    if is_writable:
+        code_hash = src_metadata.compute_code_hash(content, filename)
+    return src_metadata.rewrite_metadata_in_text(
+        content,
+        filename,
+        clear_last_cleaned=True,
+        last_changed="",
+        clear_audits=True,
+        clear_dirty=True,
+        code_hash=code_hash,
+        clear_code_hash=not is_writable,
+    )
+
+
+def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
+    """Copies a file into a role workspace, projecting metadata headers with ephemeral code hashes on writable files."""
+    try:
+        with open(src, "r", encoding="utf-8") as f:
+            content = f.read()
+        projected = _project_for_role_workspace(content, os.path.basename(src), is_writable=is_writable)
+        _write_file_with_perms(dst, projected, readonly=not is_writable)
+    except (UnicodeDecodeError, OSError):
+        _copy_file_with_perms(src, dst, readonly=not is_writable)
+
+
 def _resolve_target_path(target: str, repo_root: str) -> str:
     target_str = target.strip()
     norm_root = os.path.realpath(repo_root)
@@ -584,20 +633,21 @@ class SubmissionCoordinator(submit.SubmissionCoordinator, Singleton):
             else os.path.relpath(target_path, main_root)
         )
         main_file = os.path.join(main_root, rel_path)
-        if ws_root != main_root and os.path.isfile(target_path):
-            _copy_file_with_perms(target_path, main_file, readonly=False)
-
         part_dir, u_name, _ = _parse_unit_from_file_path(target_path, ws_root)
         active_unit = unit_name or u_name
 
         if is_modified:
+            if ws_root != main_root and os.path.isfile(target_path):
+                _copy_file_with_perms(target_path, main_file, readonly=False)
             src_metadata.record_change(main_file, summary_text)
+            src_metadata.update_metadata(main_file, clear_code_hash=True)
             msg = f"[CHANGE] {rel_path}: {summary_text}"
         else:
             src_metadata.mark_clean(main_file)
+            src_metadata.update_metadata(main_file, clear_code_hash=True)
             msg = f"[CLEAN] {rel_path}"
         if ws_root != main_root and os.path.isfile(main_file):
-            _copy_file_with_perms(main_file, target_path, readonly=False)
+            _copy_projected_file(main_file, target_path, is_writable=True)
         return submit.SubmissionOutcome(accepted=True, message=msg)
 
 

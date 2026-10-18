@@ -483,6 +483,71 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertFalse(os.path.exists(blame_buf))
             self.assertFalse(os.path.exists(turn_log))
 
+    def test_commission_projects_metadata_for_writable_and_readonly_files(self) -> None:
+        with tempfile.TemporaryDirectory() as repo_root:
+            scope_dir = os.path.join(repo_root, "test_scope")
+            parts_lib = os.path.join(scope_dir, "parts", "alpha", "lib")
+            parts_low = os.path.join(scope_dir, "parts", "alpha", "low")
+            os.makedirs(parts_lib, exist_ok=True)
+            os.makedirs(parts_low, exist_ok=True)
+
+            writable_src = os.path.join(parts_lib, "alpha.py")
+            with open(writable_src, "w", encoding="utf-8") as f:
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n"
+                    "# LAST_CLEANED: 2026-10-15T17:42:47Z\n"
+                    "# LAST_CHANGED: 2026-10-14T17:45:00Z\n"
+                    "# CHANGE: implement alpha\n"
+                    "# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z\n"
+                    "# DIRTY: some reason\n"
+                    "# FEEDBACK:\n"
+                    "# - please check type hints\n"
+                    "# --- END CLEANROOM METADATA ---\n"
+                    "def alpha(): pass\n"
+                )
+
+            readonly_src = os.path.join(parts_low, "alpha.pyi")
+            with open(readonly_src, "w", encoding="utf-8") as f:
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n"
+                    "# LAST_CLEANED: 2026-10-15T17:42:47Z\n"
+                    "# LAST_CHANGED: 2026-10-14T17:45:00Z\n"
+                    "# CHANGE: define contract\n"
+                    "# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z\n"
+                    "# --- END CLEANROOM METADATA ---\n"
+                    "def alpha() -> None: ...\n"
+                )
+
+            desc = self.provisioner.commission(
+                role_name="lib",
+                dir_scope="test_scope",
+                repo_root=repo_root,
+            )
+            ws_dir = desc.workspace_dir
+            ws_writable = os.path.join(ws_dir, "test_scope", "parts", "alpha", "lib", "alpha.py")
+            ws_readonly = os.path.join(ws_dir, "test_scope", "parts", "alpha", "low", "alpha.pyi")
+
+            self.assertTrue(os.path.isfile(ws_writable))
+            self.assertTrue(os.path.isfile(ws_readonly))
+
+            with open(ws_writable, "r", encoding="utf-8") as f:
+                writable_content = f.read()
+            self.assertIn("CHANGE: implement alpha", writable_content)
+            self.assertIn("CODE_HASH:", writable_content)
+            self.assertIn("- please check type hints", writable_content)
+            self.assertNotIn("LAST_CLEANED:", writable_content)
+            self.assertNotIn("LAST_CHANGED:", writable_content)
+            self.assertNotIn("SPEC_QA_AUDIT:", writable_content)
+            self.assertNotIn("DIRTY:", writable_content)
+
+            with open(ws_readonly, "r", encoding="utf-8") as f:
+                readonly_content = f.read()
+            self.assertIn("CHANGE: define contract", readonly_content)
+            self.assertNotIn("CODE_HASH:", readonly_content)
+            self.assertNotIn("LAST_CLEANED:", readonly_content)
+            self.assertNotIn("LAST_CHANGED:", readonly_content)
+            self.assertNotIn("SPEC_QA_AUDIT:", readonly_content)
+
 
 if __name__ == "__main__":
     unittest.main()

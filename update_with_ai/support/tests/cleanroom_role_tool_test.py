@@ -143,8 +143,8 @@ class CleanroomRoleToolTest(unittest.TestCase):
         meta = src_metadata.extract_metadata(target)
         self.assertIsNotNone(meta)
         assert meta is not None
-        self.assertIsNotNone(meta.last_cleaned)
-        self.assertIsNotNone(meta.last_changed)
+        self.assertIsNone(meta.last_cleaned)
+        self.assertIsNone(meta.last_changed)
         self.assertEqual(meta.change_summary, "Implemented config parser")
         self.assertIsNotNone(meta.code_hash)
 
@@ -153,6 +153,9 @@ class CleanroomRoleToolTest(unittest.TestCase):
         main_meta = src_metadata.extract_metadata(main_lib)
         self.assertIsNotNone(main_meta)
         assert main_meta is not None
+        self.assertIsNotNone(main_meta.last_cleaned)
+        self.assertIsNotNone(main_meta.last_changed)
+        self.assertIsNone(main_meta.code_hash)
         self.assertEqual(main_meta.change_summary, "Implemented config parser")
 
         # 3. Unmodified file submitted WITH summary -> fails (ret=1)
@@ -162,15 +165,21 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.assertEqual(ret_unchanged_with_sum, 1)
 
         # 4. Unmodified file submitted WITHOUT summary -> succeeds (ret=0), preserves LAST_CHANGED and CHANGE
-        old_changed = meta.last_changed
+        old_changed = main_meta.last_changed
         ret_unchanged = cleanroom_role_tool.main(["submit", target])
         self.assertEqual(ret_unchanged, 0)
 
         meta2 = src_metadata.extract_metadata(target)
         self.assertIsNotNone(meta2)
         assert meta2 is not None
-        self.assertEqual(meta2.last_changed, old_changed)
+        self.assertIsNone(meta2.last_changed)
         self.assertEqual(meta2.change_summary, "Implemented config parser")
+
+        main_meta2 = src_metadata.extract_metadata(main_lib)
+        self.assertIsNotNone(main_meta2)
+        assert main_meta2 is not None
+        self.assertEqual(main_meta2.last_changed, old_changed)
+        self.assertEqual(main_meta2.change_summary, "Implemented config parser")
 
     def test_submit_command_auditor(self) -> None:
         """Verifies that submit stamps <ROLE>_AUDIT directly in main without buffer."""

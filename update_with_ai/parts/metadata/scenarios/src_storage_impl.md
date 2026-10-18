@@ -359,9 +359,9 @@ supplies the reason "the upstream contract changed".
 1. The caller marks the beta-role node for widget dirty with that reason.
    Observed: the node's clean status is removed, the reason "the upstream contract changed" is
    recorded in its in-band metadata, and the node reports as dirty.
-   Realized by: the component's own dirty marking, which deletes the clean timestamp, sets the dirty
-   tag and records the supplied reason in the in-band metadata header of the node's source file
-   through `src_metadata`, without modifying the recorded change summary or last changed timestamp.
+   Realized by: the component's own dirty marking, which sets the dirty tag and records the supplied
+   reason in the in-band metadata header of the node's source file through `src_metadata`, preserving
+   the clean timestamp and without modifying the recorded change summary or last changed timestamp.
 
 ### Scenario 18 — Marking a subgraph clean over a chain of dependencies
 

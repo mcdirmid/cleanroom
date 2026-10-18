@@ -111,3 +111,49 @@ class WorkspacePendingImplTest(unittest.TestCase):
         assert meta is not None
         self.assertIsNone(meta.dirty)
         self.assertFalse(self.pending_mgr.is_pending_target_dirty("test.py", ws_dir))
+
+    def test_is_pending_target_dirty_projected_workspace_metadata(self) -> None:
+        """Verifies that pending dirty evaluation resolves canonical metadata when workspace has projected metadata."""
+        canonical_repo = os.path.join(self.test_dir, "canonical_repo")
+        role_ws = os.path.join(self.test_dir, "role_ws")
+        part_rel = os.path.join("parts", "foo", "lib")
+        os.makedirs(os.path.join(canonical_repo, part_rel), exist_ok=True)
+        os.makedirs(os.path.join(role_ws, part_rel), exist_ok=True)
+
+        rel_target = os.path.join("parts", "foo", "lib", "bar.py")
+        main_target = os.path.join(canonical_repo, rel_target)
+        ws_target = os.path.join(role_ws, rel_target)
+
+        # Clean in canonical repo
+        src_metadata.update_metadata(
+            main_target,
+            last_cleaned="2026-10-10T12:00:00Z",
+            last_changed="2026-10-10T12:00:00Z",
+            clear_dirty=True,
+        )
+
+        # Projected in role workspace (no LAST_CLEANED)
+        with open(ws_target, "w", encoding="utf-8") as f:
+            f.write("# --- CLEANROOM METADATA ---\n# CODE_HASH: 123456\n# --- END CLEANROOM METADATA ---\n")
+
+        # When evaluated with main_root pointing to canonical_repo:
+        self.assertFalse(
+            self.pending_mgr.is_pending_target_dirty(
+                rel_target,
+                workspace_dir=role_ws,
+                main_root=canonical_repo,
+                role_name="lib",
+            )
+        )
+
+        # If canonical target becomes dirty:
+        src_metadata.update_metadata(main_target, dirty="Defect found")
+        self.assertTrue(
+            self.pending_mgr.is_pending_target_dirty(
+                rel_target,
+                workspace_dir=role_ws,
+                main_root=canonical_repo,
+                role_name="lib",
+            )
+        )
+

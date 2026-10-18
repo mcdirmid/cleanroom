@@ -307,7 +307,7 @@ class AgentStorage(node_storage.AgentStorage, InTier[SystemTier]):
     def mark_node_dirty(
         self, node: dag_storage.DagNode, reason: Optional[str] = ...
     ) -> None:
-        """Marks a node dirty by clearing clean status and recording dirty reason.
+        """Marks a node dirty by recording dirty reason in in-band metadata.
 
         Args:
             node: The node to mark dirty.
@@ -315,7 +315,7 @@ class AgentStorage(node_storage.AgentStorage, InTier[SystemTier]):
 
         POSTCONDITIONS:
         - MUST mark the node dirty so that is_dirty returns true.
-        - MUST clear the last cleaned status in the node's in-band metadata.
+        - MUST preserve the last cleaned timestamp in the node's in-band metadata.
         - MUST record a dirty tag in the node's in-band source metadata.
         - MUST preserve the node's change description and last changed timestamp.
         - WHEN reason is provided, MUST record the supplied reason as the dirty tag content.
@@ -323,9 +323,9 @@ class AgentStorage(node_storage.AgentStorage, InTier[SystemTier]):
 
         GROUNDING:
         - Rewrites the resolved source header through
-          src_metadata.SourceMetadataCoordinator.update_metadata with clear_last_cleaned set true and
-          dirty set to the supplied reason, leaving src_metadata.FileMetadata.change_summary and
-          src_metadata.FileMetadata.last_changed untouched.
+          src_metadata.SourceMetadataCoordinator.update_metadata with dirty set to the supplied reason
+          (defaulting to "dirty"), leaving src_metadata.FileMetadata.last_cleaned,
+          src_metadata.FileMetadata.change_summary, and src_metadata.FileMetadata.last_changed untouched.
         - For an auditor node, rebuilds each verified feedback target's
           src_metadata.FileMetadata.audits mapping without the auditor role entry and writes it back
           through src_metadata.SourceMetadataCoordinator.update_metadata so that only the auditor role

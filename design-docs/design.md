@@ -302,11 +302,18 @@ Verification failed: PathNormalizer rejects valid Windows UNC paths.
 # QA_AUDIT: 2026-10-16T12:05:00Z PASSED git:047a949f
 ```
 
-- **`LAST_CLEANED`**: The 40-character Git commit hash at the moment this node passed all verification gates and was stamped clean.
-- **`LAST_CHANGED`**: The 40-character Git commit hash of the latest substantive edit to this file or any of its upstream dependency contracts.
-- **`CODE_HASH`**: SHA-256 hex digest of the sanitized file body.
+- **`LAST_CLEANED`**: The UTC timestamp (or Git commit hash) at the moment this node passed all verification gates and was stamped clean.
+- **`LAST_CHANGED`**: The UTC timestamp (or Git commit hash) of the latest substantive edit to this file or any of its upstream dependency contracts.
+- **`CODE_HASH`**: SHA-256 hex digest of the sanitized file body. In the main workspace, code hashes are omitted or stripped; in role workspaces, ephemeral code hashes are computed dynamically on writable files during synchronization to detect agent modifications.
+- **`DIRTY:`**: Explicit in-band dirty tag (`# DIRTY: <reason>`) recording why a target requires cleaning. Marking a node dirty sets this tag without deleting `LAST_CLEANED`, preserving clean provenance while unambiguously signaling dirtiness. Marking clean clears the `DIRTY:` tag.
 - **`FEEDBACK:`**: Ephemeral diagnosis block injected upon failure or blame.
 - **`<ROLE>_AUDIT:`**: In-band attestation stamps applied by auditor roles.
+
+#### Role Workspace Metadata Projection
+To protect model context budgets and prevent subagents from misinterpreting internal lifecycle state, role workspaces receive filtered metadata headers:
+- Only `CHANGE`, `FEEDBACK`, and ephemeral `CODE_HASH` are projected into role workspaces.
+- Canonical lifecycle stamps (`LAST_CLEANED`, `LAST_CHANGED`, audit stamps) remain exclusively in the main workspace.
+- The in-process loop harness (`--harness loop`) operates directly against main workspace metadata.
 
 ---
 
@@ -514,20 +521,27 @@ cleanroom <subcommand> [arguments] [options]
 
 ## 8. Multi-Harness Telemetry & Desktop Integration
 
-### DeepSeek Harness (`dsh`), Telemetry & Cordis Shell
+### DeepSeek Harness (`dsh`), Direct JSON-RPC Integration & Cordis Shell
 
-Cleanroom provides deep integration with DeepSeek Harness (`dsh`):
+Cleanroom provides deep integration with DeepSeek Harness (`dsh`) across both direct JSON-RPC client-server communication and local CLI workflows:
 
-1. **`dsh_telemetry` Background Daemon**:
+1. **Direct JSON-RPC Remote Orchestration**:
+   - Cleanroom connects directly to the running DeepSeek Harness server over JSON-RPC via HTTP.
+   - Discovers active desktop endpoints and authentication credentials dynamically from the Cordis desktop SQLite cookie store (`cookies.sqlite`).
+   - Invokes structured RPC methods (`workspace/create`, `session/create`, `session/prompt`) to drive subagent turns directly against the running server.
+   - Completely eliminates kernel write-lease contention (`flock` on `session.lock`) when running alongside an active Cordis desktop UI session, preventing UI session forking and deadlocks.
+   - Retains automatic fallback to headless CLI invocation (`dsh exec`) when no desktop server instance is discovered.
+
+2. **`dsh_telemetry` Background Daemon**:
    - Runs a non-blocking UNIX domain socket server listening for subagent lifecycle events.
    - Emits structured JSON events: `{"event": "subagent_start", "scope": "...", "role": "...", "workspace": "..."}`.
    - Tracks per-turn token usage, execution time, and tool call frequency.
 
-2. **Cordis Desktop Shell Overlay**:
+3. **Cordis Desktop Shell Overlay**:
    - Injects real-time status badges into the Cordis desktop shell.
    - Displays active cleaning waves, dirty dependency DAGs, and subagent process health.
 
-3. **DSH Skill (`skills/dsh/SKILL.md`)**:
+4. **DSH Skill (`skills/dsh/SKILL.md`)**:
    - Provides turnkey system instructions for DSH workers operating inside sibling sandboxes.
 
 ---

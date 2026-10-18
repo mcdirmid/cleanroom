@@ -33,3 +33,11 @@ Given: an implementation unit ending in `_impl` whose immediate upstream role la
 
 2. The caller resolves companion specification contracts via `resolve_contract_files`.
    Observed: returns the companion interface contract without the `_impl` suffix.
+
+## Scenario 4 — Evaluating unit dirtiness with projected role workspace metadata
+
+Given: a role workspace containing a projected target file whose metadata header omits `LAST_CLEANED`, and whose canonical file in the main repository has a valid `LAST_CLEANED` timestamp and unchanged dependencies.
+
+1. The caller evaluates unit dirtiness via `evaluate_unit_dirty`.
+   Observed: inspects canonical lifecycle metadata from the main repository, determines the unit is not dirty, and reports dirty status `False`.
+

@@ -24,7 +24,7 @@ Determining whether a unit in a Cleanroom pipeline needs rebuilding or verificat
 
 An agent session's *workspace dirtiness evaluator* analyzes units within a directory scope to determine whether their forward artifacts require update.
 
-- Evaluates whether a unit is dirty given its role, directory scope, and companion definitions, automatically inspecting and including companion interface contracts without the _impl suffix for any unit ending in _impl, and returning whether the unit is dirty, the list of dirtiness reasons, associated dependency files, and companion contract files.
+- Evaluates whether a unit is dirty given its role, directory scope, and companion definitions, automatically inspecting and including companion interface contracts without the _impl suffix for any unit ending in _impl, inspecting canonical lifecycle metadata from the main repository when available to prevent projected workspace files from being misdiagnosed as dirty due to omitted lifecycle timestamps, and returning whether the unit is dirty, the list of dirtiness reasons, associated dependency files, and companion contract files.
 
 - When a component type is unmapped in an immediate upstream role, walks the upstream role dependency ancestry until a role mapping that component type is reached for dirtiness propagation.
 

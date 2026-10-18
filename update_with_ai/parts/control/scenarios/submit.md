@@ -139,15 +139,16 @@ it has not been modified since its target was last clean; the current UTC timest
 3. The agent modifies `/ws/alpha_scope_a/parts/widget/widget_spec.md` and submits it as the
    alpha-role file target with the change summary `renamed the widget field`.
    Observed: an accepted submission outcome; the canonical repository file
-   `/repo/parts/widget/widget_spec.md` records the change summary `renamed the widget field`; and
-   the local role workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` carries the same
-   updated content.
+   `/repo/parts/widget/widget_spec.md` records the change summary `renamed the widget field` and
+   has any ephemeral code hash stripped; and the local role workspace file
+   `/ws/alpha_scope_a/parts/widget/widget_spec.md` carries the same updated content with its
+   ephemeral code hash refreshed to reflect the new code baseline.
 
 4. The agent submits `/ws/alpha_scope_a/parts/gadget/gadget_spec.md` as the alpha-role file target
    with no change summary.
    Observed: an accepted submission outcome, and the canonical repository file
    `/repo/parts/gadget/gadget_spec.md` records last cleaned `2026-01-12T00:00:00Z` and no change
-   summary.
+   summary, with any ephemeral code hash stripped.
 
 5. The agent submits `/ws/alpha_scope_a/parts/widget/widget_spec.md` without specifying role_name.
    Observed: the submission coordinator discovers the role name and directory scope from the workspace's `.cleanroom_role.json` manifest.

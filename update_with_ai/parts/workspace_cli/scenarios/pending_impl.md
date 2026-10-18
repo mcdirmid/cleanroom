@@ -23,3 +23,11 @@ Given: an assigned pending target `staging/parts/agent/lib/foo.py` which was cle
 
 1. The caller checks `is_pending_target_dirty`.
    Observed: the target evaluates dirty due to the modified star-role dependency.
+
+## Scenario 3 — Canonical lifecycle metadata inspection for pending targets
+
+Given: an assigned pending target whose local workspace copy omits `LAST_CLEANED`, and whose canonical file in the main repository contains a valid `LAST_CLEANED` timestamp.
+
+1. The caller checks `is_pending_target_dirty`.
+   Observed: evaluates canonical lifecycle metadata from the main repository and returns `False`.
+

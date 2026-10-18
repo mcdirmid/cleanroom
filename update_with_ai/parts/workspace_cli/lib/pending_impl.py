@@ -245,12 +245,25 @@ class WorkspacePendingManager(pending.WorkspacePendingManager, Singleton):
                     materialize_starter_template(target_path, eval_role, workspace_dir)
                 return True
 
+            # Check candidate metadata across main repository and workspace
+            target_meta = None
+            if m_root != workspace_dir:
+                rel_target = os.path.relpath(full_ws, workspace_dir) if full_ws.startswith(workspace_dir) else target_path
+                full_main = os.path.join(m_root, rel_target)
+                if os.path.isfile(full_main):
+                    target_meta = src_metadata.extract_metadata(full_main)
+            if target_meta is None:
+                target_meta = src_metadata.extract_metadata(full_ws)
+
             meta_ws = src_metadata.extract_metadata(full_ws)
             if (
                 meta_ws is None
-                or not meta_ws.last_cleaned
                 or meta_ws.dirty
                 or meta_ws.feedback
+                or target_meta is None
+                or not target_meta.last_cleaned
+                or target_meta.dirty
+                or target_meta.feedback
             ):
                 return True
 

@@ -69,6 +69,7 @@ class WorkspacePendingManager(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST check in-band metadata dirty status across local workspace and main repository.
+        - MUST resolve canonical lifecycle metadata from main repository when available.
         - MUST evaluate feedback role dependencies and star role dependencies as implicit role dependencies.
         - WHEN any star role dependency is modified, MUST return true.
         - MUST return true if target is missing, marked dirty, or has unacted feedback.

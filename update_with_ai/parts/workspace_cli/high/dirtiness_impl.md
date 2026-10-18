@@ -27,7 +27,7 @@ The workspace dirtiness evaluator analyzes units in a designated directory scope
 
 When evaluating unit dirtiness:
 
-- The dirtiness evaluator inspects the target file corresponding to the unit and role, determining whether the file is absent from disk, unparseable, or modified after its last cleaned timestamp.
+- The dirtiness evaluator inspects the target file corresponding to the unit and role, resolving candidate files from the canonical repository root first when available to inspect authoritative lifecycle timestamps rather than local projected workspace files, determining whether the file is absent from disk, unparseable, or modified after its last cleaned timestamp.
 
 - The dirtiness evaluator inspects the in-band metadata across every feedback role target configured for an active auditor role, evaluating the unit as dirty when a feedback target is missing, lacks the required role audit attribute, or has been modified after its audit timestamp.
 

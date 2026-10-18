@@ -29,7 +29,7 @@ When pulling changes from the canonical main repository into a role workspace, t
 
 - Delegates test stub synchronization to workspace provisioning to verify that the workspace files matching stub role dependencies are valid read-only test stubs that contain no implementation details, synthesizing read-only test stubs raising `NotImplementedError` from companion specification files of the main repository when such a file is missing, is outdated against its companion specification, or contains leaked implementation code, and deleting orphaned stubs whose companion specifications no longer exist in the main repository.
 
-- Copies newer files from the main repository into the role workspace, enforcing read-only permissions on upstream dependencies and read-write permissions on role targets. An existing writable target is pulled from the main repository whenever the local target carries no uncommitted code modification and the main repository version differs in content or metadata, preserving pending local targets and deleted targets that await template regeneration.
+- Copies newer files from the main repository into the role workspace, enforcing read-only permissions on upstream dependencies and read-write permissions on role targets, projecting metadata headers to expose only change, feedback, and code hash attributes while omitting lifecycle timestamps, and computing code body hashes on all writable files in the scope. An existing writable target is pulled from the main repository whenever the local target carries no uncommitted code modification and the main repository version differs in content or metadata, preserving pending local targets and deleted targets that await template regeneration.
 
 - Preserves the uncommitted local modifications of a writable target, failing fast when an upstream modification conflicts with an active local change.
 
@@ -44,6 +44,6 @@ When harvesting changes from a role workspace back to the canonical main reposit
 
 - In the validation phase, the synchronizer checks that main repository targets have not been modified concurrently by comparing main repository code hashes against the role workspace baseline.
 
-- In the commit phase, the synchronizer copies validated files into the main repository and updates in-band timestamps. For auditor roles, the synchronizer stamps role audit attributes onto verified targets without changing target code bodies.
+- In the commit phase, the synchronizer copies validated files into the main repository, strips code hashes from the committed files, and updates in-band timestamps. For auditor roles, the synchronizer stamps role audit attributes onto verified targets without changing target code bodies.
 
 When flushing blame feedback, the workspace synchronizer reads the local blame buffer file, extracts culprit file paths and critique messages, locates target files in the canonical main repository, appends unacted feedback entries with UTC timestamps to target headers in-place, and deletes the blame buffer file upon successful application.

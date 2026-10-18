@@ -24,7 +24,7 @@ Operating command-line subagents inside isolated role workspaces requires durabl
 - The workspace pending manager records assigned target paths into the pending work buffer file. [set_pending_work_targets]
 - The workspace pending manager removes matching submitted or blamed target paths and unit stems from the pending work buffer file. [remove_pending_target_path]
 - The workspace pending manager deletes the pending work buffer file when cleared. [clear_pending_work_buffer]
-- The workspace pending manager evaluates whether a pending target remains dirty on disk across local workspace and main repository. [is_pending_target_dirty_disk]
+- The workspace pending manager evaluates whether a pending target remains dirty on disk across local workspace and main repository, resolving canonical lifecycle metadata from the main repository when available. [is_pending_target_dirty_disk]
 - The workspace pending manager evaluates feedback role dependencies and star role dependencies as implicit dependencies when checking pending target dirtiness. [track_implicit_role_dirtiness]
 - The workspace pending manager materializes starter templates via graph storage for missing targets of roles with declared source patterns and upstream dependencies. [materialize_pending_target_template]
 

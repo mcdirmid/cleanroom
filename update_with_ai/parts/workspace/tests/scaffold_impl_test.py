@@ -131,6 +131,8 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
             self.assertIn("Acting on Blame & Feedback", content)
             self.assertIn("bin/check_files", content)
             self.assertIn("bin/submit", content)
+            self.assertIn("Metadata Inviolability & Projection", content)
+            self.assertIn("canonical lifecycle timestamps", content)
 
     def test_write_role_agents_guide_auditor(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

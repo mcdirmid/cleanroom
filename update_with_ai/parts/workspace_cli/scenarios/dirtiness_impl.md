@@ -23,3 +23,11 @@ Given: a unit in a part declaring cross-unit dependencies on companion parts.
 
 1. The caller invokes `extract_cross_unit_dependencies`.
    Observed: returns resolved pairs of `(part_dir, unit_name)` for all declared dependencies.
+
+## Scenario 3 — Evaluating target file dirtiness resolving canonical repository root
+
+Given: a target file in a role workspace whose metadata lacks `LAST_CLEANED`, while the canonical target in the repository root has matching clean metadata.
+
+1. The caller invokes `evaluate_unit_dirty`.
+   Observed: resolves the candidate file from the canonical repository root first, finding valid lifecycle timestamps, and reports dirty `False`.
+

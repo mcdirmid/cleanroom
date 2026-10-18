@@ -40,6 +40,37 @@ def write_file_with_perms(
     )
 
 
+def _project_for_role_workspace(content: str, filename: str, is_writable: bool) -> str:
+    """Projects in-band metadata for role workspace: only change, feedback, and ephemeral code hash."""
+    meta = src_metadata.extract_metadata_from_text(content, filename)
+    if meta is None:
+        return content
+    code_hash = None
+    if is_writable:
+        code_hash = src_metadata.compute_code_hash(content, filename)
+    return src_metadata.rewrite_metadata_in_text(
+        content,
+        filename,
+        clear_last_cleaned=True,
+        last_changed="",
+        clear_audits=True,
+        clear_dirty=True,
+        code_hash=code_hash,
+        clear_code_hash=not is_writable,
+    )
+
+
+def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
+    """Copies a file into a role workspace, projecting metadata headers with ephemeral code hashes on writable files."""
+    try:
+        with open(src, "r", encoding="utf-8") as f:
+            content = f.read()
+        projected = _project_for_role_workspace(content, os.path.basename(src), is_writable=is_writable)
+        write_file_with_perms(dst, projected, readonly=not is_writable)
+    except (UnicodeDecodeError, OSError):
+        copy_file_with_perms(src, dst, readonly=not is_writable)
+
+
 def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
     """Decomposes a source path pattern into its directory, stem suffix, and extension."""
     if not pat:
@@ -232,11 +263,19 @@ class WorkspaceSynchronizer(
                     needs_copy = True
             elif not is_writable:
                 try:
-                    with open(src_f, "rb") as sf, open(dst_f, "rb") as df:
-                        if sf.read() != df.read():
-                            needs_copy = True
-                except OSError:
-                    needs_copy = True
+                    with open(src_f, "r", encoding="utf-8") as sf, open(dst_f, "r", encoding="utf-8") as df:
+                        src_content = sf.read()
+                        dst_content = df.read()
+                    src_projected = _project_for_role_workspace(src_content, os.path.basename(src_f), is_writable=False)
+                    if src_projected != dst_content:
+                        needs_copy = True
+                except (UnicodeDecodeError, OSError):
+                    try:
+                        with open(src_f, "rb") as sf, open(dst_f, "rb") as df:
+                            if sf.read() != df.read():
+                                needs_copy = True
+                    except OSError:
+                        needs_copy = True
             else:
                 local_modified = False
                 try:
@@ -245,25 +284,32 @@ class WorkspaceSynchronizer(
                     local_modified = False
 
                 if local_modified:
-                    main_meta = src_metadata.extract_metadata(src_f)
+                    main_code_hash = src_metadata.compute_file_code_hash(src_f)
                     ws_meta = src_metadata.extract_metadata(dst_f)
                     if (
-                        main_meta
+                        main_code_hash
                         and ws_meta
-                        and main_meta.code_hash
                         and ws_meta.code_hash
-                        and main_meta.code_hash != ws_meta.code_hash
+                        and main_code_hash != ws_meta.code_hash
                     ):
                         raise RuntimeError(
                             f"Conflict detected during pull: upstream '{rel}' code was modified concurrently with local uncommitted edits."
                         )
                 else:
                     try:
-                        with open(src_f, "rb") as sf, open(dst_f, "rb") as df:
-                            if sf.read() != df.read():
-                                needs_copy = True
-                    except OSError:
-                        needs_copy = True
+                        with open(src_f, "r", encoding="utf-8") as sf, open(dst_f, "r", encoding="utf-8") as df:
+                            src_content = sf.read()
+                            dst_content = df.read()
+                        src_projected = _project_for_role_workspace(src_content, os.path.basename(src_f), is_writable=True)
+                        if src_projected != dst_content:
+                            needs_copy = True
+                    except (UnicodeDecodeError, OSError):
+                        try:
+                            with open(src_f, "rb") as sf, open(dst_f, "rb") as df:
+                                if sf.read() != df.read():
+                                    needs_copy = True
+                        except OSError:
+                            needs_copy = True
 
                 if not needs_copy:
                     try:
@@ -274,7 +320,7 @@ class WorkspaceSynchronizer(
                         pass
 
             if needs_copy:
-                copy_file_with_perms(src_f, dst_f, readonly=not is_writable)
+                _copy_projected_file(src_f, dst_f, is_writable=is_writable)
                 pulled_count += 1
 
         return pulled_count
@@ -519,12 +565,7 @@ class WorkspaceSynchronizer(
                 if not os.path.isfile(main_f):
                     is_modified = True
                 else:
-                    try:
-                        with open(ws_f, "rb") as wf, open(main_f, "rb") as mf:
-                            if wf.read() != mf.read():
-                                is_modified = True
-                    except OSError:
-                        is_modified = True
+                    is_modified = src_metadata.is_code_modified(ws_f)
 
                 if is_modified:
                     ws_meta = src_metadata.extract_metadata(ws_f)
@@ -544,9 +585,11 @@ class WorkspaceSynchronizer(
                     change = meta.change_summary if meta else "harvested changes"
                     src_metadata.record_change(main_f, change)
                     src_metadata.mark_clean(main_f)
+                    src_metadata.update_metadata(main_f, clear_code_hash=True)
                     if role_def.audit_tag:
                         src_metadata.stamp_audit(main_f, role_def.audit_tag)
                         stamped_audits.append(rel)
+                    _copy_projected_file(main_f, ws_f, is_writable=True)
                     harvested_count += 1
 
         return sync.SyncResult(

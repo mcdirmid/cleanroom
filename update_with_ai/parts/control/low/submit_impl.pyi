@@ -83,8 +83,9 @@ class SubmissionCoordinator(
           file_alias.AliasManager.workspace_root and the resolved target path.
         - Stamps in-band audit tags and updates canonical in-band change metadata through
           src_metadata.SourceMetadataCoordinator.stamp_audit and
-          src_metadata.SourceMetadataCoordinator.record_change, then reflects the rewritten
-          headers back into the role workspace.
+          src_metadata.SourceMetadataCoordinator.record_change while stripping ephemeral
+          code hashes, then reflects the rewritten headers back into the role workspace with a
+          refreshed ephemeral code hash.
         """
         ...
 

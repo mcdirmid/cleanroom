@@ -26,8 +26,8 @@ since it was commissioned.
 
 1. The synchronizer pulls upstream changes for alpha in scope_a.
    Observed: the workspace `beta/high/beta.md` holds `beta contract two` with read-only
-   permissions, the workspace alpha source for widget holds `widget two` with read-write
-   permissions, and the sync result reports two pulled files.
+   permissions and only change and feedback visible in its header, the workspace alpha source for widget holds `widget two` with read-write
+   permissions and an ephemeral code hash, and the sync result reports two pulled files.
 
 ## Scenario 3 — An upstream file that the workspace does not have at all
 
@@ -74,7 +74,7 @@ canonical `/repo/alpha/widget.md` still holds the baseline content the workspace
 commissioned from.
 
 1. The synchronizer harvests alpha's changes for scope_a.
-   Observed: `/repo/alpha/widget.md` holds the modified content, the sync result reports one
+   Observed: `/repo/alpha/widget.md` holds the modified content with its ephemeral code hash stripped, the sync result reports one
    harvested file, and no stamped audits.
 
 2. The auditor role epsilon, whose feedback role dependency is alpha, verifies the same widget

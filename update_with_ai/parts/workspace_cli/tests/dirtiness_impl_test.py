@@ -209,3 +209,57 @@ class WorkspaceDirtinessImplTest(unittest.TestCase):
             unit_name="bar",
         )
         self.assertEqual(list(deps), [("parts/baz", "qux")])
+
+    def test_evaluate_unit_dirty_projected_role_workspace_metadata(self) -> None:
+        """Verifies that projected workspace files without LAST_CLEANED resolve canonical main metadata."""
+        canonical_repo = os.path.join(self.test_dir, "canonical_repo")
+        role_ws = os.path.join(self.test_dir, "role_ws")
+        part_rel = os.path.join("parts", "foo")
+
+        main_lib_dir = os.path.join(canonical_repo, part_rel, "lib")
+        main_low_dir = os.path.join(canonical_repo, part_rel, "low")
+        os.makedirs(main_lib_dir, exist_ok=True)
+        os.makedirs(main_low_dir, exist_ok=True)
+
+        ws_lib_dir = os.path.join(role_ws, part_rel, "lib")
+        ws_low_dir = os.path.join(role_ws, part_rel, "low")
+        os.makedirs(ws_lib_dir, exist_ok=True)
+        os.makedirs(ws_low_dir, exist_ok=True)
+
+        main_target = os.path.join(main_lib_dir, "bar.py")
+        main_spec = os.path.join(main_low_dir, "bar.pyi")
+
+        ws_target = os.path.join(ws_lib_dir, "bar.py")
+        ws_spec = os.path.join(ws_low_dir, "bar.pyi")
+
+        # Upstream spec clean in main
+        src_metadata.update_metadata(
+            main_spec,
+            last_cleaned="2026-10-10T10:00:00Z",
+            last_changed="2026-10-10T10:00:00Z",
+            clear_dirty=True,
+        )
+        # Target file clean in main
+        src_metadata.update_metadata(
+            main_target,
+            last_cleaned="2026-10-10T12:00:00Z",
+            last_changed="2026-10-10T12:00:00Z",
+            clear_dirty=True,
+        )
+        # Projected target file in role workspace (has CODE_HASH, but NO last_cleaned, NO last_changed)
+        with open(ws_target, "w", encoding="utf-8") as f:
+            f.write("# --- CLEANROOM METADATA ---\n# CODE_HASH: 123456\n# --- END CLEANROOM METADATA ---\n")
+        # Projected spec in role workspace
+        with open(ws_spec, "w", encoding="utf-8") as f:
+            f.write("# --- CLEANROOM METADATA ---\n# CODE_HASH: abcdef\n# --- END CLEANROOM METADATA ---\n")
+
+        res = self.evaluator.evaluate_unit_dirty(
+            ws_root=role_ws,
+            part_dir="parts/foo",
+            unit_name="bar",
+            eval_role="lib",
+            repo_root=canonical_repo,
+        )
+        self.assertFalse(res.is_dirty)
+        self.assertEqual(res.dirtiness_reasons, ())
+

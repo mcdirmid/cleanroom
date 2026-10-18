@@ -28,7 +28,7 @@ The workspace provisioner:
 
 - Commissions an isolated role workspace for a specified role and directory scope, creating the workspace directory structure, configuring role metadata, and registering the workspace in the persistent registry.
 
-- Copies the declared writable files of the role with read-write permissions, and copies upstream contract dependencies with read-only permissions, preventing in-place clobbering of upstream specifications.
+- Copies the declared writable files of the role with read-write permissions, projecting in-band metadata to expose only change, feedback, and ephemeral code hash attributes, and copies upstream contract dependencies with read-only permissions, preventing in-place clobbering of upstream specifications.
 
 - Copies and writes files across role workspaces using buffered chunk streaming while strictly preserving POSIX mode bits (including read-only and executable flags).
 

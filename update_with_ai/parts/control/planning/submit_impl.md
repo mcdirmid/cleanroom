@@ -29,7 +29,7 @@ The implementation evaluates verification results from the verification evaluato
 - The submission coordinator invokes graph storage to update node status to clean with change description. [update_storage_clean]
 - The submission coordinator formats accepted submission outcome messages with user-facing file aliases. [format_submission_outcome_alias]
 - The submission coordinator validates file targets against auditor and producer file submission constraints. [validate_file_target_submission_constraints]
-- The submission coordinator updates in-band file metadata headers directly in the canonical repository. [update_canonical_file_metadata]
+- The submission coordinator updates in-band file metadata headers directly in the canonical repository, stripping ephemeral code hashes. [update_canonical_file_metadata]
 
 ### Woven Contracts
 

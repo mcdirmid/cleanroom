@@ -130,7 +130,7 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 1. **Option 4: Subagent-Driven Cleanroom Workspaces (Primary Orchestration)**:
    - Autonomous multi-agent architecture driving pre-confined workspaces via a **Zero-Execution Coordinator**.
    - Uniform support across **Google Antigravity** and **DeepSeek Harness (`dsh`)** (Goose support turned down and decommissioned).
-   - Built on canonical Cleanroom parts: `update_with_ai/parts/subagent/` (generic DAG coordinator and command harness) and platform parts (`parts/antigravity/` and `parts/dsh/` completed with `dsh_telemetry`).
+   - Built on canonical Cleanroom parts: `update_with_ai/parts/subagent/` (generic DAG coordinator and command harness) and platform parts (`parts/antigravity/` and `parts/dsh/` completed with direct JSON-RPC server orchestration and `dsh_telemetry`).
    - Detailed technical architecture in [`design.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md) Section 2; operational status in [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md).
 2. **Option 3: Subagentless Cleanroom Workspaces**:
    - Sibling workspace directories (`../role_workspaces/<workspace-name>_<role>_<dir>`) running independent conversational sessions in Antigravity or any IDE.

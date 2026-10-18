@@ -16,12 +16,12 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 ### Contracts
 
-- The workspace synchronizer copies newer upstream files from main to workspace setting 0o444 permissions on contracts and updating unmodified writable targets with 0o644 permissions while deleting missing files. [copy_upstream_files_with_perms]
+- The workspace synchronizer copies newer upstream files from main to workspace setting 0o444 permissions on contracts and updating unmodified writable targets with 0o644 permissions while projecting metadata headers with ephemeral code hashes and deleting missing files. [copy_upstream_files_with_perms]
 - The workspace synchronizer delegates test stub synchronization for stub role dependencies to workspace provisioning. [sync_stub_role_dependencies]
 - The workspace synchronizer recopies project configurations, guides, and linters into the workspace, delegating runner deployment, role guide regeneration, and test stub synchronization to workspace provisioning without altering targets. [recopy_system_files_fast]
 - The workspace synchronizer computes on-disk SHA-256 code hashes and extracts in-band metadata to identify modified files. [evaluate_target_file_modifications]
 - The workspace synchronizer compares main repository code hashes against workspace baselines to detect concurrent edits. [compare_main_and_workspace_hashes]
-- The workspace synchronizer copies validated target files into the canonical repository and updates in-band clean timestamps. [copy_validated_files_to_main]
+- The workspace synchronizer copies validated target files into the canonical repository, stripping ephemeral code hashes, and updates in-band clean timestamps. [copy_validated_files_to_main]
 - The workspace synchronizer calls stamp_audit and update_metadata on audited target files for auditor roles. [stamp_audit_on_targets]
 - The workspace synchronizer parses the local blame buffer file and appends unacted feedback to culprit files in main. [process_blame_buffer_entries]
 

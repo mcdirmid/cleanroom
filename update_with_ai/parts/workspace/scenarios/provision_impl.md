@@ -26,7 +26,7 @@ unit gadget is present, and the persistent workspaces registry is empty.
 
 1. The provisioner commissions the alpha workspace for scope_a.
    Observed: the tree exists at `/ws/alpha_scope_a`; `alpha/widget.md` exists with read-write
-   permissions as a starter skeleton; `alpha/gadget.md` exists with read-write permissions and the
+   permissions as a starter skeleton; `alpha/gadget.md` exists with read-write permissions, projected metadata exposing an ephemeral code hash, and the
    content of the gadget source; `beta/high/beta_contract.md` and `guides/alpha_guide.md` exist
    with read-only permissions; and the persistent registry holds exactly one descriptor for
    `/ws/alpha_scope_a`.

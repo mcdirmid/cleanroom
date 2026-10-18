@@ -22,7 +22,7 @@ Uncontrolled read-write access across an entire codebase leads to accidental cro
 
 - The workspace provisioner commissions an isolated role workspace for a specified role and directory scope, creating the workspace directory structure, configuring role metadata, and registering the workspace in the persistent registry. [commission_role_workspace]
 - The workspace provisioner creates directory structures for commissioned role workspaces. [create_workspace_directories]
-- The workspace provisioner copies writable target files into role workspaces with read-write permissions. [copy_writable_targets]
+- The workspace provisioner copies writable target files into role workspaces with read-write permissions, projecting in-band metadata to expose only change, feedback, and ephemeral code hash attributes. [copy_writable_targets]
 - The workspace provisioner copies upstream contract dependencies into role workspaces with read-only permissions. [copy_readonly_contracts]
 - The workspace provisioner streams file copies using buffered chunks while strictly preserving POSIX mode bits including read-only and executable flags. [copy_file_with_permissions]
 - The workspace provisioner synthesizes and synchronizes read-only test stubs with NotImplementedError from companion specifications for stub role dependencies, updating stubs when companion specifications change and purging orphaned stubs. [synthesize_readonly_test_stubs]

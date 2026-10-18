@@ -56,7 +56,8 @@ class MockDagStorage:
 
 
 class MockRoleDef:
-    def __init__(self, is_auditor=False, audit_tag=None, src_pattern=""):
+    def __init__(self, role_name="lib", is_auditor=False, audit_tag=None, src_pattern=""):
+        self.role_name = role_name
         self.is_auditor = is_auditor
         self.audit_tag = audit_tag
         self.src_pattern = src_pattern
@@ -67,8 +68,8 @@ class MockNodeConfig:
 
     def __init__(self):
         self.role_definitions = {
-            "lib": MockRoleDef(is_auditor=False, src_pattern="{unit_dir}/lib/{unit_name}.py"),
-            "qa": MockRoleDef(is_auditor=True, audit_tag="QA_AUDIT", src_pattern=""),
+            "lib": MockRoleDef(role_name="lib", is_auditor=False, src_pattern="{unit_dir}/lib/{unit_name}.py"),
+            "qa": MockRoleDef(role_name="qa", is_auditor=True, audit_tag="QA_AUDIT", src_pattern=""),
         }
         self.feedback: Optional[list[str]] = None
 
@@ -207,6 +208,77 @@ class ControlSubmitImplTest(unittest.TestCase):
             outcome = self.coordinator.submit_target(target, change_summary=None, has_modifications=False)
             self.assertFalse(outcome.accepted)
             self.assertIn("Session feedback is present but no workspace files were modified", outcome.message)
+
+    def test_submit_target_file_strips_code_hash_in_main_and_refreshes_in_workspace(self) -> None:
+        import tempfile
+        import json
+        import os
+        from update_with_ai.parts.metadata.lib import metadata_asm
+        metadata_asm.__initialize__(registry=self.registry)
+
+        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_root:
+            main_lib = os.path.join(main_root, "staging", "parts", "sample", "lib")
+            ws_lib = os.path.join(ws_root, "staging", "parts", "sample", "lib")
+            os.makedirs(main_lib, exist_ok=True)
+            os.makedirs(ws_lib, exist_ok=True)
+
+            main_file = os.path.join(main_lib, "sample.py")
+            ws_file = os.path.join(ws_lib, "sample.py")
+
+            # Main file has last_cleaned, last_changed, change summary, and NO code_hash
+            main_content = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-15T17:42:47Z\n"
+                "# LAST_CHANGED: 2026-10-14T17:45:00Z\n"
+                "# CHANGE: Initial implementation\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "x = 1\n"
+            )
+            with open(main_file, "w", encoding="utf-8") as f:
+                f.write(main_content)
+
+            # Workspace file has only change and baseline code hash
+            from update_with_ai.parts.metadata.lib import src_metadata
+            code_hash = src_metadata.compute_code_hash("x = 1\n", "sample.py")
+            ws_content = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# CHANGE: Initial implementation\n"
+                f"# CODE_HASH: {code_hash}\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "x = 2\n"
+            )
+            with open(ws_file, "w", encoding="utf-8") as f:
+                f.write(ws_content)
+
+            with open(os.path.join(ws_root, ".cleanroom_role.json"), "w", encoding="utf-8") as f:
+                json.dump({"role": "lib", "dir_scope": "staging"}, f)
+
+            with enter_phase(agent_session.agent_session, registry=self.registry):
+                outcome = self.coordinator.submit_target_file(
+                    target=ws_file,
+                    summary="Updated x to 2",
+                    repo_root=main_root,
+                    workspace_root=ws_root,
+                    role_name="lib",
+                )
+                self.assertTrue(outcome.accepted, outcome.message)
+
+            with open(main_file, "r", encoding="utf-8") as f:
+                mf_content = f.read()
+            self.assertIn("CHANGE: Updated x to 2", mf_content)
+            self.assertIn("LAST_CLEANED:", mf_content)
+            self.assertIn("LAST_CHANGED:", mf_content)
+            self.assertNotIn("CODE_HASH:", mf_content)
+            self.assertIn("x = 2", mf_content)
+
+            with open(ws_file, "r", encoding="utf-8") as f:
+                wf_content = f.read()
+            self.assertIn("CHANGE: Updated x to 2", wf_content)
+            self.assertIn("CODE_HASH:", wf_content)
+            self.assertNotIn("LAST_CLEANED:", wf_content)
+            self.assertNotIn("LAST_CHANGED:", wf_content)
+            new_hash = src_metadata.compute_code_hash("x = 2\n", "sample.py")
+            self.assertIn(f"CODE_HASH: {new_hash}", wf_content)
 
 
 if __name__ == "__main__":

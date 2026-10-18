@@ -72,9 +72,10 @@ class WorkspaceScaffolder(
         """Synthesizes role-tailored AGENTS.md instructions in the workspace root.
 
         GROUNDING:
-        - Formats AGENTS.md instructions carrying role constraints, boundary rules, contamination
-          tripwires, terminal command restrictions, fail-stop reporting protocols, and tool execution
-          instructions with 0o644 permissions (workspace_scaffold_mechanics).
+        - Formats AGENTS.md instructions carrying role constraints, boundary rules explaining projected
+          in-band metadata and main repository lifecycle timestamp authority, contamination tripwires,
+          terminal command restrictions, fail-stop reporting protocols, and tool execution instructions
+          with 0o644 permissions (workspace_scaffold_mechanics).
         """
         ...
 

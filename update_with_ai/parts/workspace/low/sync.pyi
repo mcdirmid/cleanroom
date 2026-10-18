@@ -52,6 +52,7 @@ class WorkspaceSynchronizer(InTier[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - MUST copy newer upstream files into the role workspace.
         - MUST preserve 0o444 read-only permissions on upstream contracts.
+        - WHEN copying files into the role workspace, MUST project metadata headers to only retain CHANGE and FEEDBACK fields, computing and injecting an ephemeral CODE_HASH on writable targets while omitting LAST_CLEANED, LAST_CHANGED, and audit tags.
         - WHEN the role declares stub role dependencies, MUST synchronize read-only test
           stubs from companion specifications without copying implementation code.
         - MUST return the count of pulled files.
@@ -90,10 +91,10 @@ class WorkspaceSynchronizer(InTier[AgentSessionTier], Protocol):
         """Harvests modified targets, stamps audits, and flushes blame back to main.
 
         POSTCONDITIONS:
-        - MUST scan writable target files to identify modified content.
+        - MUST scan writable target files to identify modified content against ephemeral code hashes.
         - MUST validate canonical main target baselines against workspace baseline hashes
           before committing harvested files.
-        - MUST copy validated target files into the canonical main repository.
+        - MUST copy validated target files into the canonical main repository, stripping ephemeral code hashes.
         - MUST update in-band clean timestamps on committed targets.
         - WHEN the role is an auditor role, MUST stamp role audits on verified targets in
           the canonical main repository.

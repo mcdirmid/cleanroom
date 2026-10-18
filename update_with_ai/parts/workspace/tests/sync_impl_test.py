@@ -12,10 +12,12 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import tempfile
 import unittest
+from pathlib import Path
 from typing import Dict, List, Optional
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
 from update_with_ai.parts.agent.lib import session as agent_session
@@ -26,7 +28,6 @@ from update_with_ai.parts.workspace.lib import (
     sync,
     sync_impl,
 )
-
 
 
 def _parse_metadata_text(content: str) -> Optional[src_metadata.FileMetadata]:
@@ -78,7 +79,6 @@ class FakeSourceMetadataCoordinator:
         self.updated: List[tuple] = []
         self.stamped: List[tuple] = []
         self.appended: List[tuple] = []
-        self.metadata: Dict[str, src_metadata.FileMetadata] = {}
 
     def extract_metadata_from_text(
         self, content: str, filename_or_ext: str
@@ -86,67 +86,293 @@ class FakeSourceMetadataCoordinator:
         return _parse_metadata_text(content)
 
     def extract_metadata(
-        self, file_path
+        self, file_path: Path | str
     ) -> Optional[src_metadata.FileMetadata]:
-        key = str(file_path)
-        if key in self.metadata:
-            return self.metadata[key]
+        p = Path(file_path)
+        if not p.is_file():
+            return None
         try:
-            with open(key, "r", encoding="utf-8") as fh:
-                return _parse_metadata_text(fh.read())
+            content = p.read_text(encoding="utf-8")
+            return self.extract_metadata_from_text(content, p.name)
         except OSError:
             return None
 
     def extract_code_body(self, content: str, filename_or_ext: str) -> str:
-        return content
+        is_html = src_metadata._is_html_comment_format(filename_or_ext)
+        lines = content.splitlines()
+        bounds = src_metadata._extract_block_boundaries(lines, is_html)
+        if bounds is None:
+            body_lines = lines
+        else:
+            start, end = bounds
+            body_lines = lines[:start] + lines[end + 1 :]
+        return "\n".join(body_lines).strip()
 
     def compute_code_hash(self, content: str, filename_or_ext: str) -> str:
-        return hashlib.md5(content.encode("utf-8")).hexdigest()[:12]
+        body = self.extract_code_body(content, filename_or_ext)
+        return hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
 
-    def compute_file_code_hash(self, file_path) -> Optional[str]:
+    def compute_file_code_hash(self, file_path: Path | str) -> Optional[str]:
+        p = Path(file_path)
+        if not p.is_file():
+            return None
         try:
-            with open(str(file_path), "r", encoding="utf-8") as fh:
-                return self.compute_code_hash(fh.read(), str(file_path))
+            content = p.read_text(encoding="utf-8")
+            return self.compute_code_hash(content, p.name)
         except OSError:
             return None
 
-    def is_code_modified(self, file_path) -> bool:
-        return False
+    def is_code_modified(self, file_path: Path | str) -> bool:
+        p = Path(file_path)
+        if not p.is_file():
+            return True
+        meta = self.extract_metadata(p)
+        if meta is None or not meta.code_hash:
+            return True
+        current_hash = self.compute_file_code_hash(p)
+        return current_hash != meta.code_hash
 
     def rewrite_metadata_in_text(
-        self, content: str, filename_or_ext: str, **kwargs
+        self,
+        content: str,
+        filename_or_ext: str,
+        last_cleaned: Optional[str] = None,
+        clear_last_cleaned: bool = False,
+        last_changed: Optional[str] = None,
+        change_summary: Optional[str] = None,
+        code_hash: Optional[str] = None,
+        clear_code_hash: bool = False,
+        clear_feedback: bool = False,
+        append_feedback: Optional[str] = None,
+        audits: Optional[Dict[str, str]] = None,
+        clear_audits: bool = False,
+        stamp_audit: Optional[str] = None,
+        dirty: Optional[str] = None,
+        clear_dirty: bool = False,
     ) -> str:
-        return content
+        is_html = src_metadata._is_html_comment_format(filename_or_ext)
+        lines = content.splitlines()
+        bounds = src_metadata._extract_block_boundaries(lines, is_html)
 
-    def update_metadata(self, file_path, **kwargs) -> None:
-        self.updated.append((str(file_path), kwargs))
+        existing_meta = (
+            src_metadata.parse_metadata_content(lines[bounds[0] : bounds[1] + 1])
+            if bounds is not None
+            else src_metadata.FileMetadata(
+                last_cleaned=None,
+                last_changed=None,
+                change_summary="",
+                feedback=[],
+                audits={},
+            )
+        )
 
-    def delete_last_cleaned(self, file_path) -> None:
-        self.updated.append((str(file_path), {"clear_last_cleaned": True}))
+        if clear_last_cleaned:
+            new_last_cleaned: Optional[str] = None
+        elif last_cleaned is not None:
+            new_last_cleaned = last_cleaned
+        else:
+            new_last_cleaned = existing_meta.last_cleaned
 
-    def mark_dirty(self, file_path, reason: str = "manual dirty") -> None:
-        self.updated.append((str(file_path), {"dirty": reason}))
+        new_last_changed = (
+            last_changed if last_changed is not None else existing_meta.last_changed
+        )
+        new_change = (
+            change_summary
+            if change_summary is not None
+            else existing_meta.change_summary
+        )
 
-    def mark_clean(self, file_path, default_change: str = "new file") -> None:
-        self.updated.append((str(file_path), {"last_cleaned": "now"}))
+        if clear_code_hash:
+            new_code_hash: Optional[str] = None
+        elif code_hash is not None:
+            new_code_hash = code_hash
+        else:
+            new_code_hash = existing_meta.code_hash
+
+        if clear_feedback:
+            new_feedback: List[str] = []
+        else:
+            new_feedback = list(existing_meta.feedback)
+
+        if append_feedback:
+            new_feedback.append(append_feedback)
+
+        if clear_audits:
+            new_audits: Dict[str, str] = {}
+        elif audits is not None:
+            new_audits = dict(audits)
+        else:
+            new_audits = dict(existing_meta.audits)
+
+        if stamp_audit:
+            role_upper = stamp_audit.upper().strip()
+            tag = role_upper if role_upper.endswith("_AUDIT") else f"{role_upper}_AUDIT"
+            new_audits[tag] = src_metadata.current_utc_timestamp()
+
+        if clear_dirty:
+            new_dirty: Optional[str] = None
+        elif dirty is not None:
+            new_dirty = dirty
+        else:
+            new_dirty = existing_meta.dirty
+
+        new_meta = src_metadata.FileMetadata(
+            last_cleaned=new_last_cleaned,
+            last_changed=new_last_changed,
+            change_summary=new_change,
+            feedback=new_feedback,
+            audits=new_audits,
+            dirty=new_dirty,
+            code_hash=new_code_hash,
+        )
+
+        new_block_lines = src_metadata.format_metadata_block(new_meta, is_html)
+
+        if bounds is not None:
+            start, end = bounds
+            result_lines = lines[:start] + new_block_lines + lines[end + 1 :]
+        else:
+            insert_idx = src_metadata._find_header_insertion_index(lines, is_html)
+            if insert_idx == 0 and lines:
+                new_block_lines.append("")
+            result_lines = lines[:insert_idx] + new_block_lines + lines[insert_idx:]
+
+        trailing_newline = content.endswith("\n") or not content
+        res = "\n".join(result_lines)
+        if trailing_newline and not res.endswith("\n"):
+            res += "\n"
+        return res
+
+    def update_metadata(
+        self,
+        file_path: Path | str,
+        last_cleaned: Optional[str] = None,
+        clear_last_cleaned: bool = False,
+        last_changed: Optional[str] = None,
+        change_summary: Optional[str] = None,
+        code_hash: Optional[str] = None,
+        clear_code_hash: bool = False,
+        clear_feedback: bool = False,
+        append_feedback: Optional[str] = None,
+        audits: Optional[Dict[str, str]] = None,
+        clear_audits: bool = False,
+        stamp_audit: Optional[str] = None,
+        dirty: Optional[str] = None,
+        clear_dirty: bool = False,
+    ) -> None:
+        self.updated.append((str(file_path), {
+            "last_cleaned": last_cleaned,
+            "clear_last_cleaned": clear_last_cleaned,
+            "last_changed": last_changed,
+            "change_summary": change_summary,
+            "code_hash": code_hash,
+            "clear_code_hash": clear_code_hash,
+            "clear_feedback": clear_feedback,
+            "append_feedback": append_feedback,
+            "audits": audits,
+            "clear_audits": clear_audits,
+            "stamp_audit": stamp_audit,
+            "dirty": dirty,
+            "clear_dirty": clear_dirty,
+        }))
+        p = Path(file_path)
+        if p.is_file():
+            content = p.read_text(encoding="utf-8")
+        else:
+            content = ""
+        updated = self.rewrite_metadata_in_text(
+            content=content,
+            filename_or_ext=p.name,
+            last_cleaned=last_cleaned,
+            clear_last_cleaned=clear_last_cleaned,
+            last_changed=last_changed,
+            change_summary=change_summary,
+            code_hash=code_hash,
+            clear_code_hash=clear_code_hash,
+            clear_feedback=clear_feedback,
+            append_feedback=append_feedback,
+            audits=audits,
+            clear_audits=clear_audits,
+            stamp_audit=stamp_audit,
+            dirty=dirty,
+            clear_dirty=clear_dirty,
+        )
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(updated, encoding="utf-8")
+
+    def delete_last_cleaned(self, file_path: Path | str) -> None:
+        self.update_metadata(file_path, clear_last_cleaned=True)
+
+    def mark_dirty(self, file_path: Path | str, reason: str = "manual dirty") -> None:
+        now = src_metadata.current_utc_timestamp()
+        self.update_metadata(file_path, dirty=reason, last_cleaned=now)
+
+    def mark_clean(
+        self, file_path: Path | str, default_change: str = "new file"
+    ) -> None:
+        p = Path(file_path)
+        existing = self.extract_metadata(p)
+        now = src_metadata.current_utc_timestamp()
+        last_changed = (
+            existing.last_changed if (existing and existing.last_changed) else now
+        )
+        change_summary = (
+            existing.change_summary
+            if (existing and existing.change_summary)
+            else default_change
+        )
+        code_hash = self.compute_file_code_hash(p)
+        self.update_metadata(
+            p,
+            last_cleaned=now,
+            last_changed=last_changed,
+            change_summary=change_summary,
+            code_hash=code_hash,
+            clear_feedback=True,
+            clear_dirty=True,
+        )
 
     def record_change(
-        self, file_path, change_description: str, code_hash: Optional[str] = None
+        self,
+        file_path: Path | str,
+        change_description: str,
+        code_hash: Optional[str] = None,
     ) -> None:
-        self.updated.append(
-            (str(file_path), {"change_summary": change_description})
+        now = src_metadata.current_utc_timestamp()
+        p = Path(file_path)
+        computed_hash = code_hash
+        if computed_hash is None and p.is_file():
+            computed_hash = self.compute_file_code_hash(p)
+        self.update_metadata(
+            file_path,
+            last_cleaned=now,
+            last_changed=now,
+            change_summary=change_description,
+            code_hash=computed_hash,
+            clear_feedback=True,
+            clear_audits=True,
+            clear_dirty=True,
         )
 
     def append_feedback(
-        self, file_path, explanation: str, sender: str = "user"
+        self, file_path: Path | str, explanation: str, sender: str = "user"
     ) -> None:
         self.appended.append((str(file_path), explanation, sender))
+        now = src_metadata.current_utc_timestamp()
+        clean_entry = re.sub(r"^\[.*?\]:\s*", "", explanation.strip())
+        self.update_metadata(file_path, append_feedback=clean_entry, last_cleaned=now)
 
-    def stamp_audit(self, file_path, role_name: str) -> None:
+    def stamp_audit(self, file_path: Path | str, role_name: str) -> None:
         self.stamped.append((str(file_path), role_name))
+        now = src_metadata.current_utc_timestamp()
+        self.update_metadata(
+            file_path,
+            last_cleaned=now,
+            stamp_audit=role_name,
+        )
 
-    def clear_audits(self, file_path) -> None:
-        self.updated.append((str(file_path), {"clear_audits": True}))
+    def clear_audits(self, file_path: Path | str) -> None:
+        self.update_metadata(file_path, clear_audits=True)
 
 
 class FakeWorkspaceRegistry:
@@ -526,25 +752,12 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                 "# --- CLEANROOM METADATA ---\n"
                 "# LAST_CLEANED: 2026-10-07T00:00:00Z\n"
                 "# LAST_CHANGED: 2026-10-07T00:00:00Z\n"
-                "# CODE_HASH: 123456789abc\n"
+                "# CHANGE: Initial unit\n"
                 "# --- END CLEANROOM METADATA ---\n"
                 "x = 1\n"
             )
-            code_hash = self.src_meta.compute_code_hash(content_clean, "unit.py")
-            content_clean = content_clean.replace("123456789abc", code_hash)
             with open(main_target, "w", encoding="utf-8") as f:
                 f.write(content_clean)
-            with open(ws_target, "w", encoding="utf-8") as f:
-                f.write(content_clean)
-
-            os.chmod(ws_target, 0o444)
-
-            # The canonical file carries an unacted dirty tag that pull must propagate.
-            content_dirty = content_clean.replace(
-                "# CODE_HASH:", "# DIRTY: Test failure\n# CODE_HASH:"
-            )
-            with open(main_target, "w", encoding="utf-8") as f:
-                f.write(content_dirty)
 
             pulled = self.synchronizer.pull(
                 workspace_dir=ws_dir,
@@ -556,7 +769,40 @@ class WorkspaceSyncImplTest(unittest.TestCase):
 
             with open(ws_target, "r", encoding="utf-8") as f:
                 ws_content = f.read()
-            self.assertIn("Test failure", ws_content)
+            self.assertIn("CHANGE: Initial unit", ws_content)
+            self.assertIn("CODE_HASH:", ws_content)
+            self.assertNotIn("LAST_CLEANED:", ws_content)
+            self.assertNotIn("LAST_CHANGED:", ws_content)
+
+            os.chmod(ws_target, 0o444)
+
+            # The canonical file carries unacted feedback that pull must propagate.
+            content_feedback = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-07T00:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-07T00:00:00Z\n"
+                "# CHANGE: Initial unit\n"
+                "# FEEDBACK:\n"
+                "# - Fix unit logic\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "x = 1\n"
+            )
+            with open(main_target, "w", encoding="utf-8") as f:
+                f.write(content_feedback)
+
+            pulled = self.synchronizer.pull(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(pulled, 1)
+
+            with open(ws_target, "r", encoding="utf-8") as f:
+                ws_content = f.read()
+            self.assertIn("Fix unit logic", ws_content)
+            self.assertIn("CODE_HASH:", ws_content)
+            self.assertNotIn("LAST_CLEANED:", ws_content)
 
             st = os.stat(ws_target)
             self.assertTrue(bool(st.st_mode & stat.S_IWUSR))
@@ -637,6 +883,66 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertNotIn("secret_main_code", content)
             mode = os.stat(ws_stub).st_mode
             self.assertFalse(bool(mode & stat.S_IWUSR))
+
+    def test_harvest_strips_code_hash_in_main_and_refreshes_ws_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+            main_lib = os.path.join(main_root, "scope", "parts", "sample", "lib")
+            ws_lib = os.path.join(ws_dir, "scope", "parts", "sample", "lib")
+            os.makedirs(main_lib, exist_ok=True)
+            os.makedirs(ws_lib, exist_ok=True)
+
+            main_target = os.path.join(main_lib, "sample.py")
+            ws_target = os.path.join(ws_lib, "sample.py")
+
+            main_content = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-15T17:42:47Z\n"
+                "# LAST_CHANGED: 2026-10-14T17:45:00Z\n"
+                "# CHANGE: Initial implementation\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "x = 1\n"
+            )
+            with open(main_target, "w", encoding="utf-8") as f:
+                f.write(main_content)
+
+            pulled = self.synchronizer.pull(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(pulled, 1)
+
+            with open(ws_target, "r", encoding="utf-8") as f:
+                ws_content = f.read()
+            self.assertIn("CODE_HASH:", ws_content)
+            self.assertNotIn("LAST_CLEANED:", ws_content)
+            self.assertNotIn("LAST_CHANGED:", ws_content)
+
+            with open(ws_target, "w", encoding="utf-8") as f:
+                f.write(ws_content.replace("x = 1", "x = 42"))
+
+            res = self.synchronizer.harvest(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(res.harvested_files, 1)
+
+            with open(main_target, "r", encoding="utf-8") as f:
+                mf_content = f.read()
+            self.assertIn("x = 42", mf_content)
+            self.assertIn("LAST_CLEANED:", mf_content)
+            self.assertIn("LAST_CHANGED:", mf_content)
+            self.assertNotIn("CODE_HASH:", mf_content)
+
+            with open(ws_target, "r", encoding="utf-8") as f:
+                wf_content = f.read()
+            self.assertIn("x = 42", wf_content)
+            self.assertIn("CODE_HASH:", wf_content)
+            self.assertNotIn("LAST_CLEANED:", wf_content)
+            self.assertNotIn("LAST_CHANGED:", wf_content)
 
 
 if __name__ == "__main__":

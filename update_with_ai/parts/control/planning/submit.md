@@ -34,7 +34,7 @@ Allowing untested code to enter the repository creates regressions. The submissi
 - A submission coordinator rejects submission of read-only targets or targets outside directory scope. [reject_invalid_producer_file_submission]
 - A submission coordinator discovers role context and directory scope from workspace manifest metadata designated by cleanroom_files_ext when executed within an isolated role workspace. [discover_workspace_context]
 - A submission coordinator validates file modification hash against change summary presence. [validate_file_change_summary]
-- A submission coordinator executes build submission targets or updates in-band source metadata directly. [execute_file_submission_mutation]
+- A submission coordinator executes build submission targets or updates in-band source metadata directly, stripping ephemeral code hashes when committing files to the main repository. [execute_file_submission_mutation]
 
 ### Woven Contracts
 
