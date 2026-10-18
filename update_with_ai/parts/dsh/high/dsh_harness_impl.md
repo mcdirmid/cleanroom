@@ -37,11 +37,11 @@ The dsh harness adapter executes DeepSeek Harness turns using configurable comma
 
 When dispatching and awaiting role turns:
 
-- The dsh harness adapter writes role-tailored task prompts to disk distinguishing auditor roles from authoring roles, tests non-blocking file locks on session locks when adopting previously recorded session identifiers to prevent adoption collisions, and records initial pending targets seeded from ready targets before launching the DeepSeek Harness process.
+- The dsh harness adapter formats role-tailored task prompts distinguishing auditor roles from authoring roles, records initial pending targets seeded from ready targets, evaluates whether the live DeepSeek Harness server is reachable via the telemetry parser, and dispatches the turn over the local RPC bridge when reachable to stream real-time progress to the Desktop UI without file lock contention.
 
-- The dsh harness adapter launches the dsh CLI in the role workspace directory, setting overlay patch parameters, session resumption arguments when available, and non-interactive permission flags, and tracks running process handles.
+- When the live server is unreachable, the dsh harness adapter tests non-blocking file locks on session locks when adopting previously recorded session identifiers to prevent adoption collisions, launches the dsh CLI in the role workspace directory setting overlay patch parameters, session resumption arguments when available, and non-interactive permission flags, and tracks running process handles.
 
-- The dsh harness adapter polls and awaits process termination without mandatory execution timeouts, terminating active processes only when an explicit timeout duration expires.
+- The dsh harness adapter polls and awaits turn completion via RPC status responses or process termination without mandatory execution timeouts, terminating active executions only when an explicit timeout duration expires.
 
 - The dsh harness adapter inspects workspace blame buffers and turn execution logs for attributed defects, computes submitted targets by comparing pending work buffers or action records, scrapes active session identifiers from event logs and saves them into role workspace files for turn continuity, records unresolved status when a completed turn produces zero submitted and zero blamed targets, and parses token metrics into normalized telemetry.
 

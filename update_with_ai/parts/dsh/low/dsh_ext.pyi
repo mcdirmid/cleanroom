@@ -46,6 +46,16 @@ The `dsh_ext` external component specifies DeepSeek Harness CLI options, role ag
   - `usage.outputTokens`: INTEGER (generated completion tokens)
   - `usage.totalTokens`: INTEGER (sum of tokens)
 
+**DeepSeek Harness Local JSON-RPC Wire Protocol**
+
+- Discovery: Read-only SQLite `Cookies` (`dsh-auth-%`) in application support directories discovering active listening port and authentication cookie.
+- Local RPC Endpoints (`POST http://127.0.0.1:{port}/api/{endpoint}`):
+  - `workspace/create`: Enrolls workspace path, returns `{ result: { value: { workspace: { workspaceId } } } }`.
+  - `session/create`: Enrolls or attaches session to workspace, returns `{ result: { ok: true } }`.
+  - `session/prompt`: Enqueues prompt task, returns `{ result: { messageId } }`.
+- Subagent Delegation Depth Limits (`maxDepth`):
+  - Supported in `@deepseek-ai/dsh-tool-subagent` via integer values (`maxDepth: 2`) or `'provider-managed'`, backed by in-process providers with `depthLimit` capability.
+
 ## Build Dependencies
 
 - None

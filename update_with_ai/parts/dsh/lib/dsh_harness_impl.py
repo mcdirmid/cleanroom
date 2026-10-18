@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CLEANED: 2026-10-18T19:13:51Z
 # LAST_CHANGED: 2026-10-14T18:55:00Z
 # CHANGE: Delegate telemetry parsing and desktop sync to dsh_telemetry
 # CODE_HASH: f4fba21de782
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
@@ -106,6 +106,8 @@ class _ActiveDshTask:
     start_time: float
     prompt_file: str
     log_file: str
+    is_rpc: bool = False
+    rpc_handle: Optional[str] = None
 
 
 # Contract: Realizes subagent execution in DeepSeek Harness role workspaces conforming to dsh_ext.
@@ -225,6 +227,49 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         if self._simulation_mode:
             proc = None
         else:
+            server_available = self._telemetry_parser.is_desktop_server_available(self._sessions_dir)
+            if server_available:
+                session_file = os.path.join(dispatch.workspace_dir, ".cleanroom", "dsh_session_id.txt")
+                saved_sid: Optional[str] = None
+                if os.path.isfile(session_file):
+                    try:
+                        with open(session_file, "r", encoding="utf-8") as sf:
+                            saved_sid = sf.read().strip() or None
+                    except OSError:
+                        pass
+
+                rpc_handle = self._telemetry_parser.dispatch_turn_rpc(
+                    workspace_dir=dispatch.workspace_dir,
+                    role_name=dispatch.role_name,
+                    prompt_text=prompt_text,
+                    session_id=saved_sid,
+                    sessions_dir=self._sessions_dir,
+                    model_name=self._model_name,
+                )
+                if rpc_handle:
+                    if rpc_handle.startswith("dsh_rpc::"):
+                        parts = rpc_handle.split("::")
+                        if len(parts) >= 2 and parts[1]:
+                            os.makedirs(os.path.dirname(session_file), exist_ok=True)
+                            try:
+                                with open(session_file, "w", encoding="utf-8") as sf:
+                                    sf.write(parts[1])
+                            except OSError:
+                                pass
+
+                    self._tasks[task_handle] = _ActiveDshTask(
+                        handle=task_handle,
+                        dispatch=dispatch,
+                        process=None,
+                        pending_before=pending_before,
+                        start_time=time.time(),
+                        prompt_file=prompt_file,
+                        log_file=log_path,
+                        is_rpc=True,
+                        rpc_handle=rpc_handle,
+                    )
+                    return task_handle
+
             session_file = os.path.join(dispatch.workspace_dir, ".cleanroom", "dsh_session_id.txt")
             session_arg = ""
             if os.path.isfile(session_file):
@@ -297,41 +342,20 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         )
         return task_handle
 
-    # Contract: MUST await turn completion, compute buffer differences via work, assign unresolved status when zero targets submitted/blamed, parse telemetry, and return RoleTurnResult.
-    def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
-        """Awaits DeepSeek Harness subagent turn completion and returns outcome result."""
-        task = self._tasks.get(task_handle)
-        if task is None:
-            return subagent_coordinator.RoleTurnResult(
-                role="",
-                status="failed",
-                failure_reason=f"Unknown task handle '{task_handle}'",
-            )
-
+    def _finalize_turn(
+        self,
+        task: _ActiveDshTask,
+        rpc_status: Optional[dsh_telemetry.DshRpcTurnStatus] = None,
+    ) -> subagent_coordinator.RoleTurnResult:
         wall_clock = time.time() - task.start_time
 
-        if task.process is not None:
-            try:
-                if self._timeout_seconds is not None and self._timeout_seconds > 0:
-                    task.process.wait(timeout=self._timeout_seconds)
-                else:
-                    task.process.wait()
-            except subprocess.TimeoutExpired:
-                task.process.kill()
-                task.process.wait()
-                return subagent_coordinator.RoleTurnResult(
-                    role=task.dispatch.role_name,
-                    status="failed",
-                    failure_reason="Process execution timed out",
-                    wall_clock_seconds=time.time() - task.start_time,
-                )
-            if task.process.returncode != 0:
-                return subagent_coordinator.RoleTurnResult(
-                    role=task.dispatch.role_name,
-                    status="failed",
-                    failure_reason=f"Process exited with code {task.process.returncode}",
-                    wall_clock_seconds=time.time() - task.start_time,
-                )
+        if rpc_status and rpc_status.error:
+            return subagent_coordinator.RoleTurnResult(
+                role=task.dispatch.role_name,
+                status="failed",
+                failure_reason=rpc_status.error,
+                wall_clock_seconds=wall_clock,
+            )
 
         blamed = list(_read_blame_buffer(task.dispatch.workspace_dir))
         if not blamed and os.path.isfile(task.log_file):
@@ -372,7 +396,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
         # Telemetry parsing
         metrics = dsh_telemetry.DshSessionTokenMetrics()
-        if os.path.isfile(task.log_file):
+        if rpc_status and rpc_status.metrics:
+            metrics = rpc_status.metrics
+        elif os.path.isfile(task.log_file):
             try:
                 with open(task.log_file, "r", encoding="utf-8", errors="replace") as lf:
                     log_text = lf.read()
@@ -430,6 +456,58 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             wall_clock_seconds=wall_clock,
         )
 
+    # Contract: MUST await turn completion, compute buffer differences via work, assign unresolved status when zero targets submitted/blamed, parse telemetry, and return RoleTurnResult.
+    def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
+        """Awaits DeepSeek Harness subagent turn completion and returns outcome result."""
+        task = self._tasks.get(task_handle)
+        if task is None:
+            return subagent_coordinator.RoleTurnResult(
+                role="",
+                status="failed",
+                failure_reason=f"Unknown task handle '{task_handle}'",
+            )
+
+        if task.is_rpc:
+            while True:
+                rpc_status = self._telemetry_parser.poll_turn_rpc(task.rpc_handle or "", sessions_dir=self._sessions_dir)
+                if rpc_status.is_completed:
+                    return self._finalize_turn(task, rpc_status=rpc_status)
+                if self._timeout_seconds is not None and self._timeout_seconds > 0:
+                    elapsed = time.time() - task.start_time
+                    if elapsed >= self._timeout_seconds:
+                        return subagent_coordinator.RoleTurnResult(
+                            role=task.dispatch.role_name,
+                            status="failed",
+                            failure_reason="RPC turn execution timed out",
+                            wall_clock_seconds=elapsed,
+                        )
+                time.sleep(0.1)
+
+        if task.process is not None:
+            try:
+                if self._timeout_seconds is not None and self._timeout_seconds > 0:
+                    task.process.wait(timeout=self._timeout_seconds)
+                else:
+                    task.process.wait()
+            except subprocess.TimeoutExpired:
+                task.process.kill()
+                task.process.wait()
+                return subagent_coordinator.RoleTurnResult(
+                    role=task.dispatch.role_name,
+                    status="failed",
+                    failure_reason="Process execution timed out",
+                    wall_clock_seconds=time.time() - task.start_time,
+                )
+            if task.process.returncode != 0:
+                return subagent_coordinator.RoleTurnResult(
+                    role=task.dispatch.role_name,
+                    status="failed",
+                    failure_reason=f"Process exited with code {task.process.returncode}",
+                    wall_clock_seconds=time.time() - task.start_time,
+                )
+
+        return self._finalize_turn(task, rpc_status=None)
+
     # Contract: MUST return role turn result when terminated, or None when still running without blocking.
     def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
         """Polls DeepSeek Harness subagent turn execution without blocking."""
@@ -441,7 +519,25 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                 failure_reason=f"Unknown task handle '{task_handle}'",
             )
 
-        if self._simulation_mode or task.process is None:
+        if self._simulation_mode:
+            return self.await_role(task_handle)
+
+        if task.is_rpc:
+            rpc_status = self._telemetry_parser.poll_turn_rpc(task.rpc_handle or "", sessions_dir=self._sessions_dir)
+            if rpc_status.is_active:
+                if self._timeout_seconds is not None and self._timeout_seconds > 0:
+                    elapsed = time.time() - task.start_time
+                    if elapsed >= self._timeout_seconds:
+                        return subagent_coordinator.RoleTurnResult(
+                            role=task.dispatch.role_name,
+                            status="failed",
+                            failure_reason="RPC turn execution timed out",
+                            wall_clock_seconds=elapsed,
+                        )
+                return None
+            return self._finalize_turn(task, rpc_status=rpc_status)
+
+        if task.process is None:
             return self.await_role(task_handle)
 
         poll_res = task.process.poll()

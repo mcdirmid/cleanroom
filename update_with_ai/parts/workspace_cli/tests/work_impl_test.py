@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CLEANED: 2026-10-18T19:13:51Z
 # LAST_CHANGED: 2026-10-11T05:58:06Z
 # CHANGE: Replace the undeclared private registry and source metadata constructors with test doubles implementing the declared WorkspaceRegistry and SourceMetadataCoordinator interfaces
 # CODE_HASH: be7f91954e3b
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 

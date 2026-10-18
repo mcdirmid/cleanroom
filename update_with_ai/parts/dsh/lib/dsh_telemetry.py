@@ -35,6 +35,24 @@ class DshSessionTokenMetrics:
     model_name: str = ""
 
 
+# Contract: DshRpcTurnStatus data type representing RPC turn execution status and metrics.
+@dataclass(frozen=True)
+class DshRpcTurnStatus:
+    """Turn execution status and metrics returned from the DeepSeek Harness JSON-RPC bridge.
+
+    Args:
+        is_active: Whether the turn is actively executing.
+        is_completed: Whether the turn finished execution.
+        error: Optional error message if execution failed.
+        metrics: Accumulated token metrics.
+    """
+
+    is_active: bool = False
+    is_completed: bool = False
+    error: Optional[str] = None
+    metrics: Optional[DshSessionTokenMetrics] = None
+
+
 # Contract: DshTelemetryParser protocol for parsing session storage, streams, and desktop synchronization.
 class DshTelemetryParser(Protocol):
     """Parses DeepSeek Harness session storage archives and event streams for token metrics."""
@@ -63,3 +81,28 @@ class DshTelemetryParser(Protocol):
         dir_scope: str,
         start_time: float,
     ) -> None: ...
+
+    # Contract: MUST probe application cookie storage and verify reachability over the local RPC bridge.
+    def is_desktop_server_available(
+        self,
+        sessions_dir: Optional[str] = None,
+    ) -> bool: ...
+
+    # Contract: MUST ensure workspace registration and create or resume session on the server.
+    # MUST enqueue the prompt task and return a task handle, or None if unreachable.
+    def dispatch_turn_rpc(
+        self,
+        workspace_dir: str,
+        role_name: str,
+        prompt_text: str,
+        session_id: Optional[str] = None,
+        sessions_dir: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> Optional[str]: ...
+
+    # Contract: MUST query turn execution status from the central server and return DshRpcTurnStatus.
+    def poll_turn_rpc(
+        self,
+        task_handle: str,
+        sessions_dir: Optional[str] = None,
+    ) -> DshRpcTurnStatus: ...

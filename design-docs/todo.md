@@ -36,12 +36,11 @@
    - [Google Antigravity Integration & Rate Economics](#google-antigravity-integration--rate-economics)
 8. [Current Implementation Progress & Verification Health](#8-current-implementation-progress--verification-health)
 9. [Master Actionable Roadmap & Next TODOs](#9-master-actionable-roadmap--next-todos)
-   - [Task 1: DSH Desktop Session Lock Reconciliation](#task-1-dsh-desktop-session-lock-reconciliation)
+   - [Task 1: DSH Remote JSON-RPC Orchestration & Desktop Session Reconciliation](#task-1-dsh-remote-json-rpc-orchestration--desktop-session-reconciliation)
    - [Task 2: Phase 3 Harness Adapters (Claude Code & OpenAI Codex CLI)](#task-2-phase-3-harness-adapters-claude-code--openai-codex-cli)
    - [Task 3: Phase 4 Cross-Model Empirical Benchmarking Suite](#task-3-phase-4-cross-model-empirical-benchmarking-suite)
    - [Task 4: Multi-Wave End-to-End Orchestration Stress Testing](#task-4-multi-wave-end-to-end-orchestration-stress-testing)
    - [Task 5: Standalone Ephemeral Distribution (`uvx cleanroom`)](#task-5-standalone-ephemeral-distribution-uvx-cleanroom)
-   - [Task 6: Continuous Integration (CI) Workflow via GitHub Actions](#task-6-continuous-integration-ci-workflow-via-github-actions)
 
 ---
 
@@ -469,13 +468,18 @@ In Google Antigravity environments:
   - Option 4 (Subagent-Driven Wave Coordinator) fully operational.
   - DeepSeek Harness (`dsh`) telemetry daemon and Cordis desktop shell overlay completed.
   - Decommissioned legacy FastMCP daemon (Option 2) and Goose CLI adapter.
+- [x] **Phase 3: DSH Remote JSON-RPC Orchestration & Desktop Session Reconciliation (Task 1)**
+  - Dual-mode subagent turn dispatch implemented in `parts/dsh`: opportunistic JSON-RPC bridge when DSH Desktop / server is active, with headless CLI fallback.
+  - Full specification cascade completed across HLS, Planning, Scenarios, Low-level stubs, Library implementations, and Unit tests.
+  - Zero `session.lock` contention with live desktop UI; real-time session streaming preserved.
+  - Option A (`maxDepth: 2` native coordinator) analyzed and documented for future adoption.
 
 ### Current Verification Health
 
 Cleanroom maintains 100% test pass rates across all validation suites:
-- **`bin/test`**: **557 passed tests**
-- **Pyright Type Checking**: **0 errors, 0 warnings**
-- **Specification Linter**: **126 High-Level, 101 Planning, 126 Low-Level specifications validated**
+- **`bin/test`**: **622 passed tests, 9 subtests passed**
+- **Pyright Type Checking**: **0 errors, 0 warnings, 0 informations**
+- **Specification Linter**: **127 High-Level, 101 Planning, 127 Low-Level specifications validated**
 
 ---
 
@@ -485,17 +489,20 @@ The following prioritized roadmap outlines the next development tasks for Cleanr
 
 ---
 
-### Task 1: DSH Desktop Session Lock Reconciliation
-- **Priority**: High (Urgent)
+### [COMPLETED] Task 1: DSH Remote JSON-RPC Orchestration & Desktop Session Reconciliation
+- **Status**: Completed (2026-10-18)
 - **Component**: `update_with_ai/parts/dsh/`
-- **Problem**: When the DeepSeek Harness CLI (`dsh`) runs concurrently with an active Cordis desktop UI session, the desktop SQLite lock blocks CLI subagent turn dispatch.
-- **Implementation Steps**:
-  1. Author HLS in `parts/dsh/high/dsh_session_reconciliation.md`.
-  2. Implement spectator-mode lock acquisition with non-blocking retry backoff in `parts/dsh/lib/dsh_harness_impl.py`.
-  3. Add RPC turn dispatch via the `dsh_telemetry` socket server to bypass database contention.
-  4. Cascade downstream: Planning $\to$ Low $\to$ Lib $\to$ Unit Tests.
+- **Architecture**: Option B (Python Remote Coordinator over JSON-RPC client-server bridge to DSH Server / Cordis Desktop), with Option A analysis preserved for future adoption.
+- **Problem**: When the DeepSeek Harness CLI (`dsh`) runs concurrently with an active Cordis desktop UI session, kernel write leases (`flock` on `session.lock`) block CLI turn dispatch, causing session forking and frozen UI conversations.
+- **Implementation Completed**:
+  1. [x] Updated HLS in `parts/dsh/high/dsh_harness.md` and `parts/dsh/high/dsh_harness_impl.md` specifying dual-mode turn dispatch (opportunistic JSON-RPC bridge when DSH Desktop / server is active, with headless CLI fallback).
+  2. [x] Grounded DSH wire protocol and cookie discovery in `parts/dsh/high/dsh_ext.md` and `parts/dsh/low/dsh_ext.pyi`.
+  3. [x] Implemented JSON-RPC turn dispatch (`workspace/create`, `session/create`, `session/prompt`), server discovery via immutable SQLite Cookies DB, and status polling in `parts/dsh/lib/dsh_telemetry_impl.py` and `parts/dsh/lib/dsh_harness_impl.py`.
+  4. [x] Cascaded downstream across all Cleanroom phases: Planning $\to$ Scenarios $\to$ Low $\to$ Lib $\to$ Unit Tests.
+  5. [x] Analyzed and documented Option A (`maxDepth: 2` support in `@deepseek-ai/dsh-tool-subagent`) for future native agentic coordinator adoption.
 
 ---
+
 
 ### Task 2: Phase 3 Harness Adapters (Claude Code & OpenAI Codex CLI)
 - **Priority**: High
@@ -548,14 +555,4 @@ The following prioritized roadmap outlines the next development tasks for Cleanr
   2. Test `uvx --from . cleanroom --help` in an isolated directory.
   3. Provide pre-built binary distributions via GitHub Releases.
 
----
 
-### Task 6: Continuous Integration (CI) Workflow via GitHub Actions
-- **Priority**: Low
-- **Component**: `.github/workflows/ci.yml`
-- **Objective**: Automate repository health checks on every pull request and push.
-- **Implementation Steps**:
-  1. Author `.github/workflows/ci.yml`.
-  2. Configure environment setup using `astral-sh/setup-uv`.
-  3. Run `bin/test` to execute pytest, Pyright, and specification linter.
-  4. Add branch protection rules enforcing green CI status before merge.

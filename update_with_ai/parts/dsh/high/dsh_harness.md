@@ -32,9 +32,9 @@ The *dsh harness manager* of an agent session creates and manages DeepSeek Harne
 
 When executing a role turn:
 
-- The dsh harness adapter formats task prompts, checks session lock availability to safely adopt persisted sessions without collision, and dispatches DeepSeek Harness subagent processes within the designated role workspace directory, specifying headless profile execution, session resumption, and Cordis overlay patches.
+- The dsh harness adapter formats task prompts, evaluates whether an active DeepSeek Harness server or Desktop application is reachable over the local RPC bridge, dispatches the turn over the RPC bridge when reachable to stream real-time progress to the Desktop UI without file lock contention, and falls back to dispatching headless subagent processes within the designated role workspace directory when unreachable.
 
-- The dsh harness adapter provides non-blocking polling and awaiting of process completion without mandatory execution timeouts, terminating active processes only when an explicit timeout limit is configured.
+- The dsh harness adapter provides non-blocking polling and awaiting of turn completion via the RPC bridge or process supervision without mandatory execution timeouts, terminating active executions only when an explicit timeout limit is configured.
 
 - The dsh harness adapter inspects workspace blame buffers, turn execution logs, and pending work queues to determine blamed and submitted targets.
 

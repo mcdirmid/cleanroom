@@ -23,8 +23,8 @@ Autonomous multi-agent execution requires reliable process management, non-block
 
 ### Contracts
 
-- A dsh harness adapter formats task prompts and dispatches DeepSeek Harness subagent processes within the designated role workspace directory, specifying headless profile execution and Cordis overlay patches. [dispatch_dsh_subagent_process]
-- A dsh harness adapter provides non-blocking polling and awaiting of process completion without mandatory execution timeouts, terminating active processes only when an explicit timeout limit is configured. [poll_and_await_dsh_process]
+- A dsh harness adapter formats task prompts, evaluates server reachability, dispatches role turns over the local RPC bridge when reachable, and falls back to dispatching headless subagent processes within the designated role workspace directory. [dispatch_dsh_subagent_turn]
+- A dsh harness adapter provides non-blocking polling and awaiting of turn completion via the RPC bridge or process supervision without mandatory execution timeouts, terminating active executions only when an explicit timeout limit is configured. [poll_and_await_dsh_turn]
 - A dsh harness adapter inspects workspace blame buffers, turn logs, and pending work queues to determine blamed and submitted targets. [inspect_blame_and_submitted_targets]
 - A dsh harness adapter extracts token telemetry from DeepSeek Harness event streams or session storage archives and calculates monetary expenditures using standard model pricing rate cards. [extract_and_calculate_token_telemetry]
 - A dsh harness adapter produces a complete role turn result capturing status, submitted targets, blamed targets, failure diagnostics, token usage telemetry, and duration. [formulate_role_turn_result]
@@ -32,7 +32,7 @@ Autonomous multi-agent execution requires reliable process management, non-block
 
 ### Woven Contracts
 
-- When executing a role turn, the harness adapter dispatches the subagent process, polls or awaits completion without mandatory execution timeouts, inspects blame buffers, extracts token telemetry, and formulates the role turn result. [dispatch_dsh_subagent_process, poll_and_await_dsh_process, inspect_blame_and_submitted_targets, extract_and_calculate_token_telemetry, formulate_role_turn_result, subagent_coordinator: [dispatch_concurrent_role_workers, poll_active_role_workers]]
+- When executing a role turn, the harness adapter dispatches the subagent turn over RPC or headless CLI, polls or awaits completion without mandatory execution timeouts, inspects blame buffers, extracts token telemetry, and formulates the role turn result. [dispatch_dsh_subagent_turn, poll_and_await_dsh_turn, inspect_blame_and_submitted_targets, extract_and_calculate_token_telemetry, formulate_role_turn_result, subagent_coordinator: [dispatch_concurrent_role_workers, poll_active_role_workers]]
 
 ## Grounding
 

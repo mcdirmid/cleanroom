@@ -30,7 +30,7 @@ class DshHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         """Dispatches work directive to a DeepSeek Harness role workspace.
 
         POSTCONDITIONS:
-        - MUST initiate DeepSeek Harness subagent turn in the designated workspace and return a task handle.
+        - MUST initiate DeepSeek Harness subagent turn via RPC bridge or headless process in the designated workspace and return a task handle.
         """
         ...
 
@@ -95,7 +95,7 @@ class DshHarnessManager(InTier[AgentSessionTier], Protocol):
         ...
 
     @operation
-    def get_telemetry_parser(self) -> DshTelemetryParser:
+    def get_telemetry_parser(self) -> dsh_telemetry.DshTelemetryParser:
         """Returns the DeepSeek Harness telemetry parser service.
 
         POSTCONDITIONS:

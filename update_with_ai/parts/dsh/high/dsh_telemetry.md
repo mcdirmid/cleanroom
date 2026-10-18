@@ -24,6 +24,8 @@ Accurate accounting of token consumption and live session visibility across auto
 
 A *dsh token metrics* record captures uncached prompt tokens, cached prompt tokens, completion tokens, total tokens, model name, and monetary expenditure in USD parsed from DeepSeek Harness session storage or event streams.
 
+A *dsh rpc turn status* record captures active execution status, completed status, failure error details, and cumulative token metrics parsed from DeepSeek Harness JSON-RPC turn events.
+
 The *dsh telemetry parser* of an agent session extracts token metrics from event streams or session storage archives, calculates token expenditure, and synchronizes active sessions with the DeepSeek Harness Desktop application.
 
 The dsh telemetry parser:
@@ -33,3 +35,9 @@ The dsh telemetry parser:
 - Queries session storage archives beneath the configured sessions directory, decompressing zstd archives to extract session token counts.
 
 - Synchronizes workspace and session identity records into DeepSeek Harness Desktop storage, notifying live Desktop GUI applications over the local RPC bridge.
+
+- Evaluates whether an active DeepSeek Harness Desktop application or background server is reachable over the local RPC bridge.
+
+- Dispatches role turns over the local RPC bridge by ensuring workspace registration, creating or resuming sessions, and enqueueing prompt tasks without local file lock contention.
+
+- Polls active turn status over the local RPC bridge until turn quiescence.

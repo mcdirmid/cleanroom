@@ -13,6 +13,7 @@ from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier
 from session import AgentSessionTier
 import session as agent_session
+import dsh_ext
 import dsh_telemetry
 
 
@@ -78,5 +79,53 @@ class DshTelemetryParser(
         GROUNDING:
         - Updates desktop workspace.json and session projcache records and dispatches RPC
           notifications to running Desktop processes (dsh_telemetry_mechanics).
+        """
+        ...
+
+    @operation
+    @override
+    def is_desktop_server_available(
+        self,
+        sessions_dir: Optional[str] = None,
+    ) -> bool:
+        """Evaluates whether an active DeepSeek Harness Desktop application or background server is reachable.
+
+        GROUNDING:
+        - Probes application cookie storage and verifies reachability over the local RPC bridge
+          (dsh_telemetry_mechanics).
+        """
+        ...
+
+    @operation
+    @override
+    def dispatch_turn_rpc(
+        self,
+        workspace_dir: str,
+        role_name: str,
+        prompt_text: str,
+        session_id: Optional[str] = None,
+        sessions_dir: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Dispatches a role turn over the local JSON-RPC bridge to the central DeepSeek Harness server.
+
+        GROUNDING:
+        - Dispatches workspace/create, session/create, and session/prompt over the local RPC bridge
+          conforming to dsh_ext (dsh_telemetry_mechanics).
+        """
+        ...
+
+    @operation
+    @override
+    def poll_turn_rpc(
+        self,
+        task_handle: str,
+        sessions_dir: Optional[str] = None,
+    ) -> dsh_telemetry.DshRpcTurnStatus:
+        """Polls active turn status over the local JSON-RPC bridge.
+
+        GROUNDING:
+        - Queries session status and event records over the JSON-RPC bridge
+          (dsh_telemetry_mechanics).
         """
         ...

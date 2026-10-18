@@ -12,11 +12,11 @@ CODE_HASH: aab023d783f0
 Given: a role dispatch directive for role_a with prompt and ready targets in workspace_dir_a.
 
 1. The harness adapter dispatches the turn.
-   Observed: a task prompt file is written and a DeepSeek Harness subagent process is launched with handle `dsh-task-1-role_a`.
+   Observed: when a live DeepSeek Harness server is reachable, the turn is dispatched over the local RPC bridge without file lock contention; when unreachable, a task prompt file is written and a headless DeepSeek Harness process is launched with handle `dsh-task-1-role_a`.
 
 ## Scenario 2 — Awaiting successful turn and extracting token telemetry
 
-Given: an active turn for role_a completes with zero exit code and recorded session telemetry.
+Given: an active turn for role_a completes successfully via the RPC bridge or process execution with recorded session telemetry.
 
 1. The harness adapter awaits turn completion.
    Observed: a role turn result is returned with clean status, submitted targets, and token telemetry reflecting input and output tokens.

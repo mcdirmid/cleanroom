@@ -7,7 +7,7 @@ CODE_HASH: c196301d8383
 
 # Concrete scenarios for `dsh_telemetry_impl` (implementation)
 
-Scenarios 1 through 4 restate the caller observations of the interface scenarios and add, beside each observation, the realization that produces it.
+Scenarios 1 through 6 restate the caller observations of the interface scenarios and add, beside each observation, the realization that produces it.
 
 ## Reused from the interface
 
@@ -42,3 +42,22 @@ Given: a live workspace and session directory.
 1. The telemetry parser synchronizes the session with desktop storage.
    Observed: the workspace entry in `workspace.json` and session projcache JSON are created or updated with the role turn title and start timestamp.
    Realized by: the component's desktop synchronizer writing projcache files and sending RPC requests to local Desktop endpoints.
+
+### Scenario 5 — Evaluating desktop server reachability and dispatching turn over RPC
+
+Given: an active DeepSeek Harness server or Desktop application listening on a local port with valid authentication cookies.
+
+1. The telemetry parser evaluates server reachability.
+   Observed: reachability is confirmed.
+   Realized by: probing the active application port and verifying cookie authentication.
+2. The telemetry parser dispatches a role turn with workspace directory, role name, and task prompt.
+   Observed: the turn is accepted by the server over the JSON-RPC bridge and a task handle is returned.
+   Realized by: executing workspace/create, session/create, and session/prompt RPC requests.
+
+### Scenario 6 — Polling active RPC turn status until completion
+
+Given: a task handle representing an active role turn dispatched over the RPC bridge.
+
+1. The telemetry parser polls turn status.
+   Observed: a DshRpcTurnStatus record is returned indicating execution state and accumulated token usage.
+   Realized by: querying session status and event records over the JSON-RPC bridge.

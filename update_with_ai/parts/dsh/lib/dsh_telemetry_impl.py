@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import re
@@ -63,24 +64,42 @@ def _compute_dsh_rate_card_cost(
 _notified_desktop_sessions: Set[str] = set()
 
 
-def _notify_desktop_session(
-    sessions_dir: str,
-    workspace_dir: str,
-    session_id: str,
-) -> bool:
-    """Notifies live DeepSeek Harness Desktop application over local RPC bridge."""
-    target_key = f"{workspace_dir}::{session_id}"
-    if target_key in _notified_desktop_sessions:
-        return True
-
-    try:
+def _discover_desktop_server(sessions_dir: Optional[str] = None) -> Optional[tuple[int, str, str]]:
+    """Discovers active DeepSeek Harness server port and authentication cookie."""
+    cookies_path: Optional[str] = None
+    if sessions_dir:
         harness_dir = os.path.dirname(sessions_dir)
         desktop_dir = os.path.dirname(harness_dir)
-        cookies_path = os.path.join(desktop_dir, "Cookies")
-        if not os.path.isfile(cookies_path):
-            return False
+        c_cand = os.path.join(desktop_dir, "Cookies")
+        if os.path.isfile(c_cand):
+            cookies_path = c_cand
+        else:
+            return None
 
-        # Open SQLite in immutable mode to avoid blocking or locks from Chromium
+    if not cookies_path:
+        home = os.path.expanduser("~")
+        candidates = [
+            os.path.join(home, "Library", "Application Support", "dsh-desktop", "Cookies"),
+            os.path.join(home, ".config", "dsh-desktop", "Cookies"),
+            os.path.join(home, ".local", "share", "dsh-desktop", "Cookies"),
+        ]
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            candidates.append(os.path.join(appdata, "dsh-desktop", "Cookies"))
+        dsh_home = os.environ.get("DSH_HOME")
+        if dsh_home:
+            candidates.insert(0, os.path.join(dsh_home, "Cookies"))
+            candidates.insert(1, os.path.join(os.path.dirname(dsh_home), "Cookies"))
+
+        for cand in candidates:
+            if os.path.isfile(cand):
+                cookies_path = cand
+                break
+
+    if not cookies_path or not os.path.isfile(cookies_path):
+        return None
+
+    try:
         conn = sqlite3.connect(f"file:{cookies_path}?immutable=1", uri=True)
         try:
             cur = conn.cursor()
@@ -92,35 +111,73 @@ def _notify_desktop_session(
             conn.close()
 
         if not row:
-            return False
-
-        cookie_name, cookie_value, port = row
-        if not port or not cookie_name or not cookie_value:
-            return False
-
-        def _call_rpc(endpoint: str, payload_args: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-            envelope = {
-                "type": "client-request",
-                "rpcId": str(uuid.uuid4()),
-                "method": endpoint,
-                "payload": {"args": payload_args},
-            }
-            req = urllib.request.Request(
-                f"http://127.0.0.1:{port}/api/{endpoint}",
-                data=json.dumps(envelope).encode("utf-8"),
-                headers={
-                    "Cookie": f"{cookie_name}={cookie_value}",
-                    "Content-Type": "application/json",
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=1.0) as resp:
-                if resp.status == 200:
-                    return json.loads(resp.read().decode("utf-8"))
             return None
 
+        cookie_name, cookie_value, port = row
+        actual_port = int(port) if port else 3080
+        if not cookie_name or not cookie_value:
+            return None
+        return (actual_port, str(cookie_name), str(cookie_value))
+    except Exception:
+        return None
+
+
+def _call_dsh_rpc(
+    port: int,
+    cookie_name: str,
+    cookie_value: str,
+    endpoint: str,
+    payload_args: Dict[str, Any],
+    timeout: float = 2.0,
+) -> Optional[Dict[str, Any]]:
+    """Dispatches a JSON-RPC request to the DeepSeek Harness server."""
+    envelope = {
+        "type": "client-request",
+        "rpcId": str(uuid.uuid4()),
+        "method": endpoint,
+        "payload": {"args": payload_args},
+    }
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}/api/{endpoint}",
+        data=json.dumps(envelope).encode("utf-8"),
+        headers={
+            "Cookie": f"{cookie_name}={cookie_value}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status == 200:
+                return json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return None
+    return None
+
+
+def _notify_desktop_session(
+    sessions_dir: str,
+    workspace_dir: str,
+    session_id: str,
+) -> bool:
+    """Notifies live DeepSeek Harness Desktop application over local RPC bridge."""
+    target_key = f"{workspace_dir}::{session_id}"
+    if target_key in _notified_desktop_sessions:
+        return True
+
+    server_info = _discover_desktop_server(sessions_dir)
+    if not server_info:
+        return False
+    port, cookie_name, cookie_value = server_info
+
+    try:
         # 1. Ensure workspace exists in DSH Desktop in-memory registry
-        ws_res = _call_rpc("workspace/create", {"request": {"path": os.path.realpath(workspace_dir)}})
+        ws_res = _call_dsh_rpc(
+            port, cookie_name, cookie_value,
+            "workspace/create",
+            {"request": {"path": os.path.realpath(workspace_dir)}},
+            timeout=1.0,
+        )
         target_ws_id = None
         if ws_res and isinstance(ws_res, dict):
             val = ws_res.get("result", {}).get("value", {})
@@ -133,7 +190,12 @@ def _notify_desktop_session(
             return False
 
         # 2. Attach session to workspace in memory
-        sess_res = _call_rpc("session/create", {"request": {"workspaceId": target_ws_id, "sessionId": session_id}})
+        sess_res = _call_dsh_rpc(
+            port, cookie_name, cookie_value,
+            "session/create",
+            {"request": {"workspaceId": target_ws_id, "sessionId": session_id}},
+            timeout=1.0,
+        )
         ok = bool(sess_res and isinstance(sess_res, dict) and sess_res.get("result", {}).get("ok"))
         if ok:
             _notified_desktop_sessions.add(target_key)
@@ -262,6 +324,9 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
     """Realizes event stream and session storage archive parsing for DeepSeek Harness."""
 
     tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self._active_rpc_turns: Dict[str, Dict[str, Any]] = {}
 
     # Contract: MUST parse token counts from JSON stream events or fallback log text and calculate cost_usd.
     def parse_stream_text(
@@ -398,6 +463,317 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
             dir_scope=dir_scope,
             start_time=start_time,
         )
+
+    # Contract: MUST probe application cookie storage and verify reachability over the local RPC bridge.
+    def is_desktop_server_available(
+        self,
+        sessions_dir: Optional[str] = None,
+    ) -> bool:
+        """Evaluates whether an active DeepSeek Harness Desktop application or background server is reachable."""
+        server_info = _discover_desktop_server(sessions_dir)
+        if not server_info:
+            return False
+        port, cookie_name, cookie_value = server_info
+        res = _call_dsh_rpc(port, cookie_name, cookie_value, "session/list", {"_request": {}}, timeout=1.5)
+        if res is not None and isinstance(res, dict):
+            if res.get("result", {}).get("ok") is True:
+                return True
+        res_init = _call_dsh_rpc(port, cookie_name, cookie_value, "initialize", {}, timeout=1.0)
+        return res_init is not None and res_init.get("result", {}).get("ok") is True
+
+    # Contract: MUST ensure workspace registration and create or resume session on the server.
+    # MUST enqueue the prompt task and return a task handle, or None if unreachable.
+    def dispatch_turn_rpc(
+        self,
+        workspace_dir: str,
+        role_name: str,
+        prompt_text: str,
+        session_id: Optional[str] = None,
+        sessions_dir: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Dispatches a role turn over the local JSON-RPC bridge to the central DeepSeek Harness server."""
+        server_info = _discover_desktop_server(sessions_dir)
+        if not server_info:
+            return None
+        port, cookie_name, cookie_value = server_info
+
+        real_ws = os.path.realpath(workspace_dir)
+
+        # 1. Discover existing sessions for this workspace in DSH Desktop
+        list_res = _call_dsh_rpc(port, cookie_name, cookie_value, "session/list", {"_request": {}}, timeout=2.0)
+        actual_session_id: Optional[str] = None
+        if list_res and isinstance(list_res, dict):
+            items = list_res.get("result", {}).get("value", {}).get("items", [])
+
+            def _is_usable(it: Dict[str, Any]) -> bool:
+                # Sessions locked in minimal preset lack file mutation tools
+                preset = it.get("projections", {}).get("values", {}).get("agentPreset")
+                return preset != "minimal"
+
+            # If session_id was passed, check if it matches an existing usable session
+            if session_id:
+                for it in items:
+                    if it.get("sessionId") == session_id and _is_usable(it):
+                        actual_session_id = session_id
+                        break
+            # If not found or not passed, look for any usable session matching this cwd
+            if not actual_session_id:
+                for it in items:
+                    if it.get("cwd") == real_ws and _is_usable(it):
+                        actual_session_id = it.get("sessionId")
+                        break
+
+        # 2. If no existing session found, ensure workspace registration and create one
+        if not actual_session_id:
+            _call_dsh_rpc(
+                port, cookie_name, cookie_value,
+                "workspace/create",
+                {"request": {"path": real_ws}},
+                timeout=2.0,
+            )
+            create_args: Dict[str, Any] = {"request": {"cwd": real_ws, "agentPreset": "standard"}}
+            if session_id:
+                create_args["request"]["sessionId"] = session_id
+            create_res = _call_dsh_rpc(
+                port, cookie_name, cookie_value,
+                "session/create",
+                create_args,
+                timeout=2.0,
+            )
+            if create_res and isinstance(create_res, dict):
+                val = create_res.get("result", {}).get("value", {})
+                if isinstance(val, dict):
+                    actual_session_id = val.get("sessionId")
+                if not actual_session_id:
+                    actual_session_id = create_res.get("result", {}).get("sessionId")
+            if not actual_session_id:
+                actual_session_id = session_id or f"dsh-sess-{role_name}-{int(time.time() * 1000)}"
+
+        # 3. Dispatch prompt over session/prompt
+        request_id = str(uuid.uuid4())
+        prompt_args: Dict[str, Any] = {
+            "request": {
+                "requestId": request_id,
+                "sessionId": actual_session_id,
+                "mode": "queue",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt_text,
+                    }
+                ],
+            }
+        }
+
+        prompt_res = _call_dsh_rpc(
+            port, cookie_name, cookie_value,
+            "session/prompt",
+            prompt_args,
+            timeout=3.0,
+        )
+        if prompt_res is None or not isinstance(prompt_res, dict):
+            # Backward compatibility with mock handler accepting flat prompt args
+            fallback_args: Dict[str, Any] = {
+                "sessionId": actual_session_id,
+                "prompt": prompt_text,
+            }
+            if model_name:
+                fallback_args["config"] = {"model": model_name}
+            prompt_res = _call_dsh_rpc(
+                port, cookie_name, cookie_value,
+                "session/prompt",
+                fallback_args,
+                timeout=2.0,
+            )
+            if prompt_res is None or not isinstance(prompt_res, dict):
+                return None
+
+        res_data = prompt_res.get("result", {})
+        if isinstance(res_data, dict) and not res_data.get("ok", True):
+            return None
+
+        task_handle = f"dsh_rpc::{actual_session_id}::{uuid.uuid4().hex[:8]}"
+        self._active_rpc_turns[task_handle] = {
+            "session_id": actual_session_id,
+            "request_id": request_id,
+            "workspace_dir": workspace_dir,
+            "role_name": role_name,
+            "model_name": model_name,
+            "start_time": time.time(),
+            "port": port,
+            "cookie_name": cookie_name,
+            "cookie_value": cookie_value,
+        }
+        return task_handle
+
+    # Contract: MUST query turn execution status from the central server and return DshRpcTurnStatus.
+    def poll_turn_rpc(
+        self,
+        task_handle: str,
+        sessions_dir: Optional[str] = None,
+    ) -> dsh_telemetry.DshRpcTurnStatus:
+        """Polls active turn status over the local JSON-RPC bridge."""
+        turn_info = self._active_rpc_turns.get(task_handle)
+        session_id = ""
+        port = None
+        cookie_name = ""
+        cookie_value = ""
+        workspace_dir = ""
+        model_name = None
+
+        if turn_info:
+            session_id = turn_info["session_id"]
+            port = turn_info["port"]
+            cookie_name = turn_info["cookie_name"]
+            cookie_value = turn_info["cookie_value"]
+            workspace_dir = turn_info["workspace_dir"]
+            model_name = turn_info["model_name"]
+        elif task_handle.startswith("dsh_rpc::"):
+            parts = task_handle.split("::")
+            if len(parts) >= 2:
+                session_id = parts[1]
+
+        if not session_id:
+            return dsh_telemetry.DshRpcTurnStatus(
+                is_active=False,
+                is_completed=True,
+                error=f"Unknown task handle '{task_handle}'",
+            )
+
+        if port is None:
+            server_info = _discover_desktop_server(sessions_dir)
+            if server_info:
+                port, cookie_name, cookie_value = server_info
+
+        if port is None:
+            return dsh_telemetry.DshRpcTurnStatus(
+                is_active=False,
+                is_completed=True,
+                error="DeepSeek Harness server is unreachable",
+            )
+
+        # 1. Query session/list
+        list_res = _call_dsh_rpc(
+            port, cookie_name, cookie_value,
+            "session/list",
+            {"_request": {}},
+            timeout=2.0,
+        )
+        if list_res and isinstance(list_res, dict):
+            items = list_res.get("result", {}).get("value", {}).get("items", [])
+            for it in items:
+                if it.get("sessionId") == session_id:
+                    running = it.get("running", False)
+                    projections = it.get("projections", {}).get("values", {})
+                    token_usage = projections.get("tokenUsage", {})
+                    in_t = int(token_usage.get("uncachedInputTokens") or 0)
+                    c_t = int(token_usage.get("cacheReadTokens") or 0)
+                    out_t = int(token_usage.get("outputTokens") or 0)
+                    metrics = None
+                    if in_t or c_t or out_t:
+                        metrics = dsh_telemetry.DshSessionTokenMetrics(
+                            input_tokens=in_t,
+                            cached_tokens=c_t,
+                            output_tokens=out_t,
+                            total_tokens=in_t + c_t + out_t,
+                            cost_usd=_compute_dsh_rate_card_cost(in_t, c_t, out_t, model_name),
+                            model_name=model_name or "",
+                        )
+
+                    if running:
+                        return dsh_telemetry.DshRpcTurnStatus(
+                            is_active=True,
+                            is_completed=False,
+                            metrics=metrics,
+                        )
+                    else:
+                        if not metrics and sessions_dir and workspace_dir:
+                            metrics = self.parse_session_storage(sessions_dir, workspace_dir, model_name)
+                        return dsh_telemetry.DshRpcTurnStatus(
+                            is_active=False,
+                            is_completed=True,
+                            metrics=metrics,
+                        )
+
+        # 2. Fallback to session/status for backward compatibility with mock servers
+        status_res = _call_dsh_rpc(
+            port, cookie_name, cookie_value,
+            "session/status",
+            {"sessionId": session_id},
+            timeout=2.0,
+        )
+        if status_res and isinstance(status_res, dict):
+            res_obj = status_res.get("result", {})
+            if isinstance(res_obj, dict):
+                st = res_obj.get("status")
+                err = res_obj.get("error")
+                usage = res_obj.get("usage")
+                metrics = None
+                if isinstance(usage, dict):
+                    in_t = int(usage.get("inputTokens") or 0)
+                    c_t = int(usage.get("cacheReadTokens") or 0)
+                    out_t = int(usage.get("outputTokens") or 0)
+                    metrics = dsh_telemetry.DshSessionTokenMetrics(
+                        input_tokens=in_t,
+                        cached_tokens=c_t,
+                        output_tokens=out_t,
+                        total_tokens=in_t + c_t + out_t,
+                        cost_usd=_compute_dsh_rate_card_cost(in_t, c_t, out_t, model_name),
+                        model_name=model_name or "",
+                    )
+                if st in ("running", "active", "busy", "streaming"):
+                    return dsh_telemetry.DshRpcTurnStatus(
+                        is_active=True,
+                        is_completed=False,
+                        metrics=metrics,
+                    )
+                elif st in ("completed", "idle", "finished", "success"):
+                    if not metrics and sessions_dir and workspace_dir:
+                        metrics = self.parse_session_storage(sessions_dir, workspace_dir, model_name)
+                    return dsh_telemetry.DshRpcTurnStatus(
+                        is_active=False,
+                        is_completed=True,
+                        metrics=metrics,
+                    )
+                elif st in ("error", "failed"):
+                    return dsh_telemetry.DshRpcTurnStatus(
+                        is_active=False,
+                        is_completed=True,
+                        error=str(err) if err else "Execution error",
+                        metrics=metrics,
+                    )
+
+        # 3. Fallback check on session lock
+        if sessions_dir and workspace_dir:
+            encoded_ws = "--" + os.path.realpath(workspace_dir).strip("/").replace("/", "-") + "--"
+            lock_path = os.path.join(sessions_dir, encoded_ws, session_id, "session.lock")
+            if os.path.exists(lock_path):
+                try:
+                    with open(lock_path, "r+") as lf:
+                        fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        fcntl.flock(lf, fcntl.LOCK_UN)
+                    metrics = self.parse_session_storage(sessions_dir, workspace_dir, model_name)
+                    return dsh_telemetry.DshRpcTurnStatus(
+                        is_active=False,
+                        is_completed=True,
+                        metrics=metrics,
+                    )
+                except (BlockingIOError, OSError):
+                    return dsh_telemetry.DshRpcTurnStatus(
+                        is_active=True,
+                        is_completed=False,
+                    )
+
+        metrics = None
+        if sessions_dir and workspace_dir:
+            metrics = self.parse_session_storage(sessions_dir, workspace_dir, model_name)
+        return dsh_telemetry.DshRpcTurnStatus(
+            is_active=False,
+            is_completed=True,
+            metrics=metrics,
+        )
+
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

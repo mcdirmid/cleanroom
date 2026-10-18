@@ -24,10 +24,14 @@ Harvesting token telemetry requires parsing JSON stream events from headless dsh
 - The telemetry parser realization applies pricing rates for the active model family to calculate USD expenditures. [apply_dsh_pricing_rates]
 - The telemetry parser realization parses token metrics from stdout log text when structured records are absent. [parse_log_text_fallback]
 - The telemetry parser realization synchronizes workspace and session records into Desktop files and invokes Desktop RPC endpoints. [sync_desktop_sessions]
+- The telemetry parser realization probes local cookie storage in immutable mode to determine if the desktop server is reachable. [eval_dsh_server_available]
+- The telemetry parser realization dispatches role turns by calling workspace/create, session/create, and session/prompt over the JSON-RPC bridge. [dispatch_dsh_turn_rpc]
+- The telemetry parser realization polls turn execution status and extracts token counts until completion. [poll_dsh_turn_rpc]
 
 ### Woven Contracts
 
 - When parsing session telemetry or recording sessions, the parser extracts metrics from event streams or storage archives, falls back to text logs, applies model pricing, and synchronizes desktop sessions. [query_dsh_telemetry_metrics, parse_log_text_fallback, apply_dsh_pricing_rates, sync_desktop_sessions, dsh_telemetry: [query_dsh_telemetry_metrics, apply_dsh_pricing_rates, parse_log_text_fallback, sync_desktop_sessions]]
+- When coordinating live turn execution, the parser probes server reachability, dispatches role turns over JSON-RPC, and polls turn status until completion. [eval_dsh_server_available, dispatch_dsh_turn_rpc, poll_dsh_turn_rpc, dsh_telemetry: [eval_dsh_server_available, dispatch_dsh_turn_rpc, poll_dsh_turn_rpc]]
 
 ## Grounding
 

@@ -37,6 +37,24 @@ class DshSessionTokenMetrics:
     model_name: str = ""
 
 
+@data_type
+@dataclass(frozen=True)
+class DshRpcTurnStatus:
+    """Turn execution status and metrics returned from the DeepSeek Harness JSON-RPC bridge.
+
+    Args:
+        is_active: Whether the turn is actively executing.
+        is_completed: Whether the turn finished execution.
+        error: Optional error message if execution failed.
+        metrics: Accumulated token metrics.
+    """
+
+    is_active: bool = False
+    is_completed: bool = False
+    error: Optional[str] = None
+    metrics: Optional[DshSessionTokenMetrics] = None
+
+
 @singleton_type("agent_session")
 class DshTelemetryParser(InTier[AgentSessionTier], Protocol):
     """Parses DeepSeek Harness session storage archives and event streams for token metrics."""
@@ -82,5 +100,48 @@ class DshTelemetryParser(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST update desktop storage files and send RPC notifications when sessions_dir is valid.
+        """
+        ...
+
+    @operation
+    def is_desktop_server_available(
+        self,
+        sessions_dir: Optional[str] = None,
+    ) -> bool:
+        """Evaluates whether an active DeepSeek Harness Desktop application or background server is reachable.
+
+        POSTCONDITIONS:
+        - MUST probe application cookie storage and verify reachability over the local RPC bridge.
+        """
+        ...
+
+    @operation
+    def dispatch_turn_rpc(
+        self,
+        workspace_dir: str,
+        role_name: str,
+        prompt_text: str,
+        session_id: Optional[str] = None,
+        sessions_dir: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Dispatches a role turn over the local JSON-RPC bridge to the central DeepSeek Harness server.
+
+        POSTCONDITIONS:
+        - MUST ensure workspace registration and create or resume session on the server.
+        - MUST enqueue the prompt task and return a task handle, or None if unreachable.
+        """
+        ...
+
+    @operation
+    def poll_turn_rpc(
+        self,
+        task_handle: str,
+        sessions_dir: Optional[str] = None,
+    ) -> DshRpcTurnStatus:
+        """Polls active turn status over the local JSON-RPC bridge.
+
+        POSTCONDITIONS:
+        - MUST query turn execution status from the central server and return DshRpcTurnStatus.
         """
         ...

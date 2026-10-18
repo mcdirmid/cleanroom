@@ -34,3 +34,19 @@ Given: a live workspace and session directory.
 
 1. The telemetry parser synchronizes the session with desktop storage.
    Observed: the workspace entry in `workspace.json` and session projcache JSON are created or updated with the role turn title and start timestamp.
+
+## Scenario 5 — Evaluating desktop server reachability and dispatching turn over RPC
+
+Given: an active DeepSeek Harness server or Desktop application listening on a local port with valid authentication cookies.
+
+1. The telemetry parser evaluates server reachability.
+   Observed: reachability is confirmed.
+2. The telemetry parser dispatches a role turn with workspace directory, role name, and task prompt.
+   Observed: the turn is accepted by the server over the JSON-RPC bridge and a task handle is returned.
+
+## Scenario 6 — Polling active RPC turn status until completion
+
+Given: a task handle representing an active role turn dispatched over the RPC bridge.
+
+1. The telemetry parser polls turn status.
+   Observed: a DshRpcTurnStatus record is returned indicating execution state and accumulated token usage.

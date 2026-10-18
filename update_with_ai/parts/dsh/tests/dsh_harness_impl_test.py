@@ -1,9 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CLEANED: 2026-10-18T19:13:51Z
 # LAST_CHANGED: 2026-10-13T20:00:00Z
 # CHANGE: author dsh_harness_impl unit tests
 # CODE_HASH: 4e7e5b77bb9b
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib import session as agent_session
-from update_with_ai.parts.dsh.lib import dsh_asm, dsh_harness
+from update_with_ai.parts.dsh.lib import dsh_asm, dsh_harness, dsh_telemetry
 from update_with_ai.parts.dsh.lib.dsh_harness_impl import (
     DshHarnessAdapter,
     DshHarnessManager,
@@ -91,6 +91,82 @@ class FakeWorkspaceWorkManager:
             items.remove(target)
             return True
         return False
+
+
+class FakeDshTelemetryParser:
+    tier = agent_session.agent_session
+
+    def __init__(self, server_available: bool = True) -> None:
+        self.server_available = server_available
+        self.dispatched: list[dict[str, Any]] = []
+        self.polled_handles: list[str] = []
+        self.turn_status: dsh_telemetry.DshRpcTurnStatus = dsh_telemetry.DshRpcTurnStatus(
+            is_active=False,
+            is_completed=True,
+            metrics=dsh_telemetry.DshSessionTokenMetrics(
+                input_tokens=600,
+                cached_tokens=200,
+                output_tokens=150,
+                total_tokens=950,
+                cost_usd=0.0001,
+            ),
+        )
+
+    def is_desktop_server_available(self, sessions_dir: Optional[str] = None) -> bool:
+        return self.server_available
+
+    def dispatch_turn_rpc(
+        self,
+        workspace_dir: str,
+        role_name: str,
+        prompt_text: str,
+        session_id: Optional[str] = None,
+        sessions_dir: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> Optional[str]:
+        if not self.server_available:
+            return None
+        sid = session_id or f"mock-sid-{role_name}"
+        self.dispatched.append({
+            "workspace_dir": workspace_dir,
+            "role_name": role_name,
+            "prompt_text": prompt_text,
+            "session_id": sid,
+        })
+        return f"dsh_rpc::{sid}::mock-msg-1"
+
+    def poll_turn_rpc(
+        self,
+        task_handle: str,
+        sessions_dir: Optional[str] = None,
+    ) -> dsh_telemetry.DshRpcTurnStatus:
+        self.polled_handles.append(task_handle)
+        return self.turn_status
+
+    def parse_stream_text(
+        self,
+        stream_text: str,
+        model_name: Optional[str] = None,
+    ) -> dsh_telemetry.DshSessionTokenMetrics:
+        return dsh_telemetry.DshSessionTokenMetrics()
+
+    def parse_session_storage(
+        self,
+        sessions_dir: str,
+        workspace_dir: str,
+        model_name: Optional[str] = None,
+    ) -> dsh_telemetry.DshSessionTokenMetrics:
+        return dsh_telemetry.DshSessionTokenMetrics()
+
+    def sync_desktop_session(
+        self,
+        sessions_dir: Optional[str],
+        workspace_dir: str,
+        role_name: str,
+        dir_scope: str,
+        start_time: float,
+    ) -> None:
+        pass
 
 
 class DshHarnessImplTest(unittest.TestCase):
@@ -305,7 +381,107 @@ class DshHarnessImplTest(unittest.TestCase):
             os.environ.clear()
             os.environ.update(orig_env)
 
+    def test_dispatch_and_await_role_via_rpc(self) -> None:
+        """Scenario 1 & 2: Dispatches role turn over RPC bridge when server is reachable and extracts telemetry."""
+        with enter_phase(agent_session.agent_session, registry=self.registry):
+            fake_parser = FakeDshTelemetryParser(server_available=True)
+            adapter = DshHarnessAdapter(
+                model_name="DeepSeek-V41-Flash",
+                simulation_mode=False,
+                parser=fake_parser,
+            )
+
+            self.work_mgr.set_pending_work(self.test_dir, ["lib/foo.py"])
+            dispatch = subagent_coordinator.RoleDispatch(
+                role_name="lib",
+                workspace_dir=self.test_dir,
+                dir_scope="//pkg",
+                ready_targets=("lib/foo.py",),
+                batch_size=1,
+                task_prompt="",
+            )
+
+            handle = adapter.dispatch_role(dispatch)
+            self.assertTrue(handle.startswith("dsh_lib_"))
+            self.assertEqual(len(fake_parser.dispatched), 1)
+            self.assertEqual(fake_parser.dispatched[0]["workspace_dir"], self.test_dir)
+
+            # Simulate agent submitting target
+            self.work_mgr.remove_pending_target(self.test_dir, "lib/foo.py")
+
+            result = adapter.await_role(handle)
+            self.assertEqual(result.role, "lib")
+            self.assertEqual(result.status, "clean")
+            self.assertEqual(result.submitted_targets, ("lib/foo.py",))
+            self.assertIsNotNone(result.telemetry)
+            assert result.telemetry is not None
+            self.assertEqual(result.telemetry.total_tokens, 950)
+
+    def test_poll_role_via_rpc_active_and_completed(self) -> None:
+        """Scenario 5: Non-blocking polling over RPC bridge returns None while active and result when completed."""
+        with enter_phase(agent_session.agent_session, registry=self.registry):
+            fake_parser = FakeDshTelemetryParser(server_available=True)
+            fake_parser.turn_status = dsh_telemetry.DshRpcTurnStatus(is_active=True, is_completed=False)
+            adapter = DshHarnessAdapter(
+                model_name="DeepSeek-V41-Flash",
+                simulation_mode=False,
+                parser=fake_parser,
+            )
+
+            self.work_mgr.set_pending_work(self.test_dir, ["lib/foo.py"])
+            dispatch = subagent_coordinator.RoleDispatch(
+                role_name="lib",
+                workspace_dir=self.test_dir,
+                dir_scope="//pkg",
+                ready_targets=("lib/foo.py",),
+                batch_size=1,
+                task_prompt="",
+            )
+
+            handle = adapter.dispatch_role(dispatch)
+            res_running = adapter.poll_role(handle)
+            self.assertIsNone(res_running)
+
+            # Turn finishes
+            fake_parser.turn_status = dsh_telemetry.DshRpcTurnStatus(
+                is_active=False,
+                is_completed=True,
+                metrics=dsh_telemetry.DshSessionTokenMetrics(input_tokens=100, total_tokens=100),
+            )
+            self.work_mgr.remove_pending_target(self.test_dir, "lib/foo.py")
+            res_done = adapter.poll_role(handle)
+            self.assertIsNotNone(res_done)
+            assert res_done is not None
+            self.assertEqual(res_done.status, "clean")
+
+    def test_dispatch_role_fallback_when_server_unavailable(self) -> None:
+        """Scenario 1: Falls back to headless CLI execution when server is unreachable."""
+        with enter_phase(agent_session.agent_session, registry=self.registry):
+            fake_parser = FakeDshTelemetryParser(server_available=False)
+            adapter = DshHarnessAdapter(
+                model_name="DeepSeek-V41-Flash",
+                simulation_mode=False,
+                custom_cmd="echo done",
+                parser=fake_parser,
+            )
+
+            self.work_mgr.set_pending_work(self.test_dir, ["lib/foo.py"])
+            dispatch = subagent_coordinator.RoleDispatch(
+                role_name="lib",
+                workspace_dir=self.test_dir,
+                dir_scope="//pkg",
+                ready_targets=("lib/foo.py",),
+                batch_size=1,
+                task_prompt="",
+            )
+
+            handle = adapter.dispatch_role(dispatch)
+            task = adapter._tasks[handle]
+            self.assertFalse(task.is_rpc)
+            self.assertIsNotNone(task.process)
+            adapter.await_role(handle)
+
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -12,8 +12,8 @@ CODE_HASH: 7f0712377f91
 Given: a role dispatch directive for role_a with prompt and ready targets in workspace_dir_a.
 
 1. The harness adapter dispatches the turn.
-   Observed: a role-tailored task prompt file is written, lock availability is verified to adopt persisted sessions safely, and a DeepSeek Harness subagent process is launched with handle `dsh-task-1-role_a`.
-   Realized by: the component's process launcher writing the role-tailored prompt file, verifying non-blocking session locks, and executing the dsh headless command with overlay patch parameters and session resumption flags.
+   Observed: when a live DeepSeek Harness server is reachable, the turn is dispatched over the local RPC bridge without file lock contention; when unreachable, a role-tailored task prompt file is written, lock availability is verified to adopt persisted sessions safely, and a DeepSeek Harness subagent process is launched with handle `dsh-task-1-role_a`.
+   Realized by: the component evaluating server reachability, dispatching over the JSON-RPC bridge or launching the headless process with overlay patch parameters and session resumption flags.
 
 ### Scenario 2 — Awaiting successful turn and extracting token telemetry
 
