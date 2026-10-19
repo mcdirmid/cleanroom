@@ -257,6 +257,28 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             stub_role_deps=["low"],
             src_pattern="{unit_dir}/tests/{unit_name}_test.py",
         )
+        self.spec_role_planning = role_registry.RoleDefinition(
+            role_name="planning",
+            guide_path="guides/planning.md",
+            writable_file_patterns=["planning/*.md"],
+            readonly_file_patterns=["high/*.md"],
+            feedback_role_deps=["high"],
+            role_deps=["high"],
+            star_role_deps=["planning"],
+            stub_role_deps=[],
+            src_pattern="{unit_dir}/planning/{unit_name}.md",
+        )
+        self.role_qa = role_registry.RoleDefinition(
+            role_name="qa",
+            guide_path="guides/qa.md",
+            writable_file_patterns=["qa/*.md"],
+            readonly_file_patterns=["lib/*.py", "tests/*.py"],
+            feedback_role_deps=["lib", "test"],
+            role_deps=["lib", "test"],
+            star_role_deps=["qa"],
+            stub_role_deps=[],
+            src_pattern="{unit_dir}/qa/{unit_name}.md",
+        )
 
     def test_partitioning_dirty_roles_into_topological_waves(self) -> None:
         """Scenario 1: Evaluates DAG queues and partitions unblocked dirty roles."""
@@ -664,6 +686,311 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.assertIsNone(batch2)
             self.assertIsNone(tokens2)
             self.assertEqual(unprod2, 7)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    def test_stress_multi_wave_deep_diamond_and_star_dependency_hierarchy(self) -> None:
+        """Requirement: MUST iterate through multi-wave deep diamond and star dependency hierarchies until convergence."""
+        fake_reg = FakeWorkspaceRegistry([
+            self.spec_role_high,
+            self.spec_role_planning,
+            self.spec_role_low,
+            self.impl_role_lib,
+            self.impl_role_test,
+            self.role_qa,
+        ])
+
+        # 13 targets total across 5 roles
+        high_targets = ("high/core.md", "high/utils.md")
+        planning_targets = ("planning/core.md", "planning/utils.md", "planning/aggregator.md")
+        low_targets = ("low/core.pyi", "low/utils.pyi", "low/aggregator.pyi")
+        lib_targets = ("lib/core.py", "lib/utils.py", "lib/aggregator.py")
+        test_targets = ("tests/core_test.py", "tests/utils_test.py", "tests/aggregator_test.py")
+        qa_targets = ("qa/report.md",)
+
+        # Initial queue: high is ready; all downstream are blocked
+        fake_work = FakeWorkspaceWorkManager({
+            "high": (([_make_item(t, "high") for t in high_targets], ())),
+            "planning": (((), [_make_item(t, "planning", is_ready=False) for t in planning_targets])),
+            "low": (((), [_make_item(t, "low", is_ready=False) for t in low_targets])),
+            "lib": (((), [_make_item(t, "lib", is_ready=False) for t in lib_targets])),
+            "test": (((), [_make_item(t, "test", is_ready=False) for t in test_targets])),
+            "qa": (((), [_make_item(t, "qa", is_ready=False) for t in qa_targets])),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        dispatched_order: List[str] = []
+
+        class StressMultiWaveHarness(FakeHarnessAdapter):
+            def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
+                dispatched_order.append(dispatch.role_name)
+                return f"h_{dispatch.role_name}"
+
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+                role = task_handle.replace("h_", "")
+                if role == "high":
+                    fake_work.queue_data["high"] = ((), ())
+                    fake_work.queue_data["planning"] = (([_make_item(t, "planning") for t in planning_targets], ()))
+                    return subagent_coordinator.RoleTurnResult(
+                        role="high",
+                        status="clean",
+                        submitted_targets=high_targets,
+                        telemetry=subagent_coordinator.TokenUsage(100, 20, 30, 150, 0.002),
+                    )
+                elif role == "planning":
+                    fake_work.queue_data["planning"] = ((), ())
+                    fake_work.queue_data["low"] = (([_make_item(t, "low") for t in low_targets], ()))
+                    return subagent_coordinator.RoleTurnResult(
+                        role="planning",
+                        status="clean",
+                        submitted_targets=planning_targets,
+                        telemetry=subagent_coordinator.TokenUsage(200, 50, 60, 310, 0.004),
+                    )
+                elif role == "low":
+                    fake_work.queue_data["low"] = ((), ())
+                    fake_work.queue_data["lib"] = (([_make_item(t, "lib") for t in lib_targets], ()))
+                    fake_work.queue_data["test"] = (([_make_item(t, "test") for t in test_targets], ()))
+                    return subagent_coordinator.RoleTurnResult(
+                        role="low",
+                        status="clean",
+                        submitted_targets=low_targets,
+                        telemetry=subagent_coordinator.TokenUsage(300, 80, 90, 470, 0.006),
+                    )
+                elif role == "lib":
+                    fake_work.queue_data["lib"] = ((), ())
+                    # QA remains blocked until test also completes
+                    if not fake_work.queue_data["test"][0]:
+                        fake_work.queue_data["qa"] = (([_make_item(t, "qa") for t in qa_targets], ()))
+                    return subagent_coordinator.RoleTurnResult(
+                        role="lib",
+                        status="clean",
+                        submitted_targets=lib_targets,
+                        telemetry=subagent_coordinator.TokenUsage(400, 100, 120, 620, 0.008),
+                    )
+                elif role == "test":
+                    fake_work.queue_data["test"] = ((), ())
+                    # QA unblocks when lib is also clean
+                    if not fake_work.queue_data["lib"][0]:
+                        fake_work.queue_data["qa"] = (([_make_item(t, "qa") for t in qa_targets], ()))
+                    return subagent_coordinator.RoleTurnResult(
+                        role="test",
+                        status="clean",
+                        submitted_targets=test_targets,
+                        telemetry=subagent_coordinator.TokenUsage(400, 100, 120, 620, 0.008),
+                    )
+                elif role == "qa":
+                    fake_work.queue_data["qa"] = ((), ())
+                    return subagent_coordinator.RoleTurnResult(
+                        role="qa",
+                        status="clean",
+                        submitted_targets=qa_targets,
+                        telemetry=subagent_coordinator.TokenUsage(150, 30, 40, 220, 0.003),
+                    )
+                return None
+
+        harness = StressMultiWaveHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001)
+
+            self.assertTrue(summary.is_converged)
+            self.assertEqual(summary.submitted_count, 15)
+            self.assertEqual(summary.blamed_count, 0)
+            self.assertEqual(summary.total_waves, 5)
+            # High was dispatched first, then planning, then low, then lib & test concurrently, then qa
+            self.assertEqual(dispatched_order[0], "high")
+            self.assertEqual(dispatched_order[1], "planning")
+            self.assertEqual(dispatched_order[2], "low")
+            self.assertIn("lib", dispatched_order[3:5])
+            self.assertIn("test", dispatched_order[3:5])
+            self.assertEqual(dispatched_order[5], "qa")
+            self.assertGreater(summary.total_telemetry.total_tokens, 0)
+            self.assertGreater(summary.total_telemetry.cost_usd, 0.0)
+
+    def test_stress_upstream_blame_feedback_propagation_across_wave_barriers(self) -> None:
+        """Requirement: MUST propagate blame defects across wave barriers, blocking dependents until fixed."""
+        fake_reg = FakeWorkspaceRegistry([
+            self.spec_role_high,
+            self.spec_role_low,
+            self.impl_role_lib,
+        ])
+
+        fake_work = FakeWorkspaceWorkManager({
+            "high": (([_make_item("high/core.md", "high")], ())),
+            "low": (((), [_make_item("low/core.pyi", "low", is_ready=False)])),
+            "lib": (((), [_make_item("lib/core.py", "lib", is_ready=False)])),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        lib_turns = 0
+        low_turns = 0
+
+        class BlameHarness(FakeHarnessAdapter):
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+                nonlocal lib_turns, low_turns
+                role = task_handle.replace("handle_", "")
+                if role == "high":
+                    fake_work.queue_data["high"] = ((), ())
+                    fake_work.queue_data["low"] = (([_make_item("low/core.pyi", "low")], ()))
+                    return subagent_coordinator.RoleTurnResult(
+                        role="high",
+                        status="clean",
+                        submitted_targets=("high/core.md",),
+                    )
+                elif role == "low":
+                    low_turns += 1
+                    fake_work.queue_data["low"] = ((), ())
+                    fake_work.queue_data["lib"] = (([_make_item("lib/core.py", "lib")], ()))
+                    return subagent_coordinator.RoleTurnResult(
+                        role="low",
+                        status="clean",
+                        submitted_targets=("low/core.pyi",),
+                    )
+                elif role == "lib":
+                    lib_turns += 1
+                    if lib_turns == 1:
+                        # Turn 1 blames low for missing contract specification
+                        fake_work.queue_data["lib"] = (((), [_make_item("lib/core.py", "lib", is_ready=False)]))
+                        fake_work.queue_data["low"] = (([_make_item("low/core.pyi", "low")], ()))
+                        return subagent_coordinator.RoleTurnResult(
+                            role="lib",
+                            status="blamed",
+                            submitted_targets=(),
+                            blamed_targets=("low/core.pyi",),
+                        )
+                    else:
+                        # Turn 2 completes cleanly after low has been fixed
+                        fake_work.queue_data["lib"] = ((), ())
+                        return subagent_coordinator.RoleTurnResult(
+                            role="lib",
+                            status="clean",
+                            submitted_targets=("lib/core.py",),
+                        )
+                return None
+
+        harness = BlameHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001)
+
+            self.assertTrue(summary.is_converged)
+            self.assertEqual(summary.blamed_count, 1)
+            self.assertEqual(summary.submitted_count, 4)  # high (1), low (1), low fix (1), lib clean (1)
+            self.assertEqual(low_turns, 2)  # low ran initially and then ran again to fix blame
+            self.assertEqual(lib_turns, 2)  # lib ran, blamed, then ran again to submit
+
+    def test_stress_wave_barriers_block_downstream_until_all_parallel_prerequisites_succeed(self) -> None:
+        """Requirement: MUST enforce wave barriers preventing downstream execution until all parallel dependencies succeed."""
+        fake_reg = FakeWorkspaceRegistry([
+            self.impl_role_lib,
+            self.impl_role_test,
+            self.role_qa,
+        ])
+
+        fake_work = FakeWorkspaceWorkManager({
+            "lib": (([_make_item("lib/unit.py", "lib")], ())),
+            "test": (([_make_item("tests/unit_test.py", "test")], ())),
+            "qa": (((), [_make_item("qa/report.md", "qa", is_ready=False)])),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        test_poll_count = 0
+        qa_dispatched_too_early = False
+
+        class BarrierHarness(FakeHarnessAdapter):
+            def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
+                nonlocal qa_dispatched_too_early
+                if dispatch.role_name == "qa":
+                    # If qa is dispatched while test is still not finished, barrier was violated
+                    if fake_work.queue_data["test"][0] or test_poll_count < 2:
+                        qa_dispatched_too_early = True
+                return super().dispatch_role(dispatch)
+
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+                nonlocal test_poll_count
+                role = task_handle.replace("handle_", "")
+                if role == "lib":
+                    fake_work.queue_data["lib"] = ((), ())
+                    return subagent_coordinator.RoleTurnResult(
+                        role="lib",
+                        status="clean",
+                        submitted_targets=("lib/unit.py",),
+                    )
+                elif role == "test":
+                    test_poll_count += 1
+                    if test_poll_count < 2:
+                        # test still executing during first poll
+                        return None
+                    fake_work.queue_data["test"] = ((), ())
+                    fake_work.queue_data["qa"] = (([_make_item("qa/report.md", "qa")], ()))
+                    return subagent_coordinator.RoleTurnResult(
+                        role="test",
+                        status="clean",
+                        submitted_targets=("tests/unit_test.py",),
+                    )
+                elif role == "qa":
+                    fake_work.queue_data["qa"] = ((), ())
+                    return subagent_coordinator.RoleTurnResult(
+                        role="qa",
+                        status="clean",
+                        submitted_targets=("qa/report.md",),
+                    )
+                return None
+
+        harness = BarrierHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001)
+
+            self.assertTrue(summary.is_converged)
+            self.assertFalse(qa_dispatched_too_early)
+            self.assertEqual(summary.submitted_count, 3)
+
+    def test_stress_orphan_workspaces_decommissioned_and_workers_interrupted_on_cancellation(self) -> None:
+        """Requirement: MUST interrupt active workers and delete provisioned workspaces when cancelled."""
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            ws_high = os.path.join(tmp_dir, "high_pkg_a")
+            ws_low = os.path.join(tmp_dir, "low_pkg_a")
+            os.makedirs(ws_high, exist_ok=True)
+            os.makedirs(ws_low, exist_ok=True)
+
+            fake_reg = FakeWorkspaceRegistry(
+                [self.spec_role_high, self.spec_role_low],
+                base_dir=tmp_dir,
+            )
+            fake_work = FakeWorkspaceWorkManager({
+                "high": (([_make_item("high/core.md", "high")], ())),
+                "low": (((), [_make_item("low/core.pyi", "low", is_ready=False)])),
+            })
+            self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+            self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+            class CancelHarness(FakeHarnessAdapter):
+                def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+                    # Re-create ws_low as if provisioned during execution
+                    os.makedirs(ws_low, exist_ok=True)
+                    # Simulate user cancellation via SIGINT (KeyboardInterrupt)
+                    raise KeyboardInterrupt("Simulated Ctrl+C cancellation")
+
+            harness = CancelHarness()
+
+            with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+                coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+                with self.assertRaises(KeyboardInterrupt):
+                    coord.orchestrate("pkg_a", harness, poll_interval=0.001, repo_root=tmp_dir)
+
+            # Assert running worker was interrupted
+            self.assertIn("handle_high", harness.interrupted)
+            # Assert orphan workspaces were cleanly decommissioned from disk
+            self.assertFalse(os.path.exists(ws_high))
+            self.assertFalse(os.path.exists(ws_low))
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 

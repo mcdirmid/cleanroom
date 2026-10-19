@@ -352,9 +352,9 @@ class SubagentCoordinator(
         cumulative_output = 0
         cumulative_cost = 0.0
         failure_msg: Optional[str] = None
-        if True:
+        active_workers: Dict[str, str] = {}  # role_name -> task_handle
+        try:
             # Continuous dynamic queue-driven process supervision loop
-            active_workers: Dict[str, str] = {}  # role_name -> task_handle
             queue_dirty = True
             sleep_interval = poll_interval if poll_interval is not None else 10.0
 
@@ -520,6 +520,22 @@ class SubagentCoordinator(
                 # 6. Sleep if active workers are still running
                 if active_workers:
                     time.sleep(sleep_interval)
+        except (KeyboardInterrupt, SystemExit):
+            print(
+                f"[ORCHESTRATE] Interruption received; interrupting {len(active_workers)} active worker(s) and cleaning up workspaces...",
+                flush=True,
+            )
+            for h in active_workers.values():
+                try:
+                    harness.interrupt_role(h)
+                except Exception:
+                    pass
+            for r_entry in all_scope_roles:
+                r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
+                if os.path.isdir(ws_dir):
+                    shutil.rmtree(ws_dir, ignore_errors=True)
+            raise
 
         total_tokens = cumulative_input + cumulative_cached + cumulative_output
         telemetry = subagent_coordinator.TokenUsage(

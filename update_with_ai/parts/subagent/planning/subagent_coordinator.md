@@ -36,11 +36,13 @@ Complex software development methodologies partition work into specialized roles
 - A subagent coordinator emits real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state. [emit_realtime_orchestration_telemetry]
 - A subagent coordinator drives the supervision loop until all units in scope evaluate clean, a role reports failure, or maximum wave limits are reached. [orchestrate_pipeline_convergence]
 - A subagent coordinator automatically deletes all provisioned role workspaces in scope upon achieving clean convergence. [delete_role_workspaces_on_convergence]
+- A subagent coordinator interrupts active workers upon receiving cancellation signals. [interrupt_active_workers_on_cancellation]
+- A subagent coordinator deletes provisioned role workspaces in scope upon receiving cancellation signals. [decommission_workspaces_on_cancellation]
 - A subagent coordinator aggregates cumulative token consumption into monetary expenditures across all dispatched roles. [aggregate_cumulative_telemetry]
 
 ### Woven Contracts
 
-- When initiating orchestration, the coordinator resets preexisting role workspaces, resolves model execution parameters, and drives pipeline convergence until clean convergence or failure. [reset_preexisting_role_workspaces, resolve_model_execution_parameters, orchestrate_pipeline_convergence, delete_role_workspaces_on_convergence]
+- When initiating orchestration, the coordinator resets preexisting role workspaces, resolves model execution parameters, drives pipeline convergence until clean convergence or failure, and cleans up upon cancellation. [reset_preexisting_role_workspaces, resolve_model_execution_parameters, orchestrate_pipeline_convergence, delete_role_workspaces_on_convergence, interrupt_active_workers_on_cancellation, decommission_workspaces_on_cancellation]
 - When evaluating work queues, the coordinator commissions absent workspaces with batch size bounds, restricts evaluation to target units when specified, and dispatches concurrent role workers without static wave partitioning. [evaluate_ready_work_queues, bound_evaluation_to_target_unit, commission_absent_workspaces, dispatch_concurrent_role_workers]
 - When supervising active workers, the coordinator periodically polls active workers through the harness adapter, detects unproductive turn impasses, emits real-time telemetry, and aggregates cumulative telemetry. [poll_active_role_workers, detect_unproductive_turn_impasse, emit_realtime_orchestration_telemetry, aggregate_cumulative_telemetry]
 

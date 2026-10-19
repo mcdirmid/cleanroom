@@ -86,3 +86,12 @@ Given: role_a completes consecutive execution turns without submitting or blamin
 1. The coordinator polls active workers.
    Observed: dynamic supervision halts when unproductive turns reach the threshold, returning a non-converged summary with impasse details.
    Realized by: the component's impasse detection tracking consecutive turns yielding zero submitted and zero blamed targets and breaking the supervisor loop.
+
+### Scenario 11 — Decommissioning workspaces and interrupting workers on cancellation
+
+Given: active workers are executing in provisioned workspaces for scope_a when a cancellation signal occurs.
+
+1. The coordinator receives a cancellation signal during dynamic supervision.
+   Observed: all running workers are interrupted through the harness adapter and all provisioned role workspace directories for scope_a are deleted.
+   Realized by: the component's cancellation handler catching cancellation, calling `interrupt_role` on active worker handles, and deleting provisioned role workspace directories for scope_a.
+

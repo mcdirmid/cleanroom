@@ -58,6 +58,8 @@ When coordinating multi-agent execution:
 
 - The subagent coordinator automatically deletes all provisioned role workspaces in scope upon achieving clean convergence.
 
+- The subagent coordinator interrupts all active workers and automatically deletes all provisioned role workspaces in scope when orchestration is interrupted by system termination or user cancellation signals.
+
 - The subagent coordinator aggregates cumulative token consumption into monetary expenditures across all dispatched roles.
 
 - Canonical log directory discovery resolves the canonical logs directory for a role workspace by querying the workspace registry for the repository root or traversing parent directories to locate the root logs directory.

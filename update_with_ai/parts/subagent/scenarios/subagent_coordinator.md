@@ -76,3 +76,11 @@ Given: scope_a has dirty units unit_m and unit_n, where unit_m does not depend o
 
 1. The coordinator inspects work queues bounded by target unit unit_m.
    Observed: only unit_m and its transitive upstream dependencies are evaluated and scheduled; unit_n is excluded.
+
+## Scenario 11 — Decommissioning workspaces and interrupting workers on cancellation
+
+Given: active workers are executing in provisioned workspaces for scope_a when a cancellation signal occurs.
+
+1. The coordinator receives a cancellation signal during dynamic supervision.
+   Observed: all running workers are interrupted through the harness adapter and all provisioned role workspace directories for scope_a are deleted.
+

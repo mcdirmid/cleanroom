@@ -97,6 +97,7 @@ class SubagentCoordinator(
           consecutive unproductive turns exceed the threshold, or max_waves is exceeded,
           emitting real-time telemetry and aggregating TokenUsage into OrchestrationSummary.
         - Upon clean convergence, deletes provisioned role workspace directories for declared roles in scope.
+        - When cancelled or interrupted by signals, interrupts active workers via harness.interrupt_role and deletes provisioned role workspace directories in scope.
         """
         ...
 

@@ -36,13 +36,9 @@
    - [Google Antigravity Integration & Rate Economics](#google-antigravity-integration--rate-economics)
 8. [Current Implementation Progress & Verification Health](#8-current-implementation-progress--verification-health)
 9. [Master Actionable Roadmap & Next TODOs](#9-master-actionable-roadmap--next-todos)
-   - [Task 1: DSH Remote JSON-RPC Orchestration & Desktop Session Reconciliation](#task-1-dsh-remote-json-rpc-orchestration--desktop-session-reconciliation)
-   - [Task 2: Phase 3 Harness Adapters (Claude Code & OpenAI Codex CLI)](#task-2-phase-3-harness-adapters-claude-code--openai-codex-cli)
-   - [Task 3: Phase 4 Cross-Model Empirical Benchmarking Suite](#task-3-phase-4-cross-model-empirical-benchmarking-suite)
-   - [Task 4: Multi-Wave End-to-End Orchestration Stress Testing](#task-4-multi-wave-end-to-end-orchestration-stress-testing)
-   - [Task 5: Standalone Ephemeral Distribution (`uvx cleanroom`)](#task-5-standalone-ephemeral-distribution-uvx-cleanroom)
-   - [Task 6: Role Workspace Metadata Filtering & Ephemeral Code Hashing](#task-6-role-workspace-metadata-filtering--ephemeral-code-hashing)
-   - [Task 7: Dirty Reasoning Propagation & LAST_CLEANED Preservation](#task-7-dirty-reasoning-propagation--last_cleaned-preservation)
+   - [Task 1: Multi-Wave End-to-End Orchestration Stress Testing](#task-1-multi-wave-end-to-end-orchestration-stress-testing)
+   - [Task 2: Cross-Model Empirical Benchmarking Suite](#task-2-cross-model-empirical-benchmarking-suite)
+   - [Task 3: Standalone Ephemeral Distribution (`uvx cleanroom`)](#task-3-standalone-ephemeral-distribution-uvx-cleanroom)
 
 ---
 
@@ -492,11 +488,17 @@ In Google Antigravity environments:
   - Enriched Rule 4 ("Metadata Projection & Inviolability") across `AGENTS.md` and role worker prompts (`cleanroom_role_tool.py`), explicitly instructing LLM subagents that role workspaces intentionally project out lifecycle timestamps so workers never diagnose missing `LAST_CLEANED` as a defect.
   - Cascaded across full specification pipeline: HLS (`high/`) $\to$ Planning (`planning/`) $\to$ Scenarios (`scenarios/`) $\to$ Low (`low/`) $\to$ Lib (`lib/`) $\to$ Tests (`tests/`).
   - Validated end-to-end multi-agent convergence with `uv run cleanroom clean staging#qa --harness antigravity` using the autonomous `cleanroom_coordinator`.
+- [x] **Phase 6: Multi-Wave End-to-End Orchestration Stress Testing (Task 1)**
+  - Synthetic mock project trees with diamond and star dependencies across 5 roles and 13 targets verified through 5 execution waves.
+  - Multi-agent wave barriers validated: parallel implementation roles (`lib` + `test`) cluster dynamically into concurrent waves, and downstream auditor roles (`qa`) remain blocked until all parallel dependencies succeed.
+  - Upstream blame defect propagation verified: failing turns generate structured blame feedback that propagates upstream, halts downstream workers, and automatically resumes upon defect resolution.
+  - Cancellation & termination handling: `SubagentCoordinator.orchestrate` traps interruption signals (SIGINT/SIGTERM/KeyboardInterrupt), interrupts active worker processes via `harness.interrupt_role`, and deletes all provisioned role workspace sandboxes in scope.
+  - Full specification cascade verified across all Cleanroom methodologies (127 HLS, 101 Planning, 127 Low, 0 Pyright errors, 631 passed tests).
 
 ### Current Verification Health
 
 Cleanroom maintains 100% test pass rates across all validation suites:
-- **`bin/test`**: **627 passed tests, 9 subtests passed**
+- **`bin/test`**: **631 passed tests, 9 subtests passed**
 - **Pyright Type Checking**: **0 errors, 0 warnings, 0 informations**
 - **Specification Linter**: **127 High-Level, 101 Planning, 127 Low-Level specifications validated**
 
@@ -504,68 +506,47 @@ Cleanroom maintains 100% test pass rates across all validation suites:
 
 ## 9. Master Actionable Roadmap & Next TODOs
 
-The following prioritized roadmap outlines the next development tasks for Cleanroom engineering (excluding academic paper drafting and neural language specification, which are tracked independently).
+The following prioritized roadmap outlines the active forward engineering tasks for Cleanroom:
 
 ---
 
-### [COMPLETED] Task 1: DSH Remote JSON-RPC Orchestration & Desktop Session Reconciliation
+### [COMPLETED] Task 1: Multi-Wave End-to-End Orchestration Stress Testing
 - **Status**: Completed (2026-10-18)
-- **Component**: `update_with_ai/parts/dsh/`
-- **Architecture**: Option B (Python Remote Coordinator over JSON-RPC client-server bridge to DSH Server / Cordis Desktop), with Option A analysis preserved for future adoption.
-- **Problem**: When the DeepSeek Harness CLI (`dsh`) runs concurrently with an active Cordis desktop UI session, kernel write leases (`flock` on `session.lock`) block CLI turn dispatch, causing session forking and frozen UI conversations.
-- **Implementation Completed**:
-  1. [x] Updated HLS in `parts/dsh/high/dsh_harness.md` and `parts/dsh/high/dsh_harness_impl.md` specifying dual-mode turn dispatch (opportunistic JSON-RPC bridge when DSH Desktop / server is active, with headless CLI fallback).
-  2. [x] Grounded DSH wire protocol and cookie discovery in `parts/dsh/high/dsh_ext.md` and `parts/dsh/low/dsh_ext.pyi`.
-  3. [x] Implemented JSON-RPC turn dispatch (`workspace/create`, `session/create`, `session/prompt`), server discovery via immutable SQLite Cookies DB, and status polling in `parts/dsh/lib/dsh_telemetry_impl.py` and `parts/dsh/lib/dsh_harness_impl.py`.
-  4. [x] Cascaded downstream across all Cleanroom phases: Planning $\to$ Scenarios $\to$ Low $\to$ Lib $\to$ Unit Tests.
-  5. [x] Analyzed and documented Option A (`maxDepth: 2` support in `@deepseek-ai/dsh-tool-subagent`) for future native agentic coordinator adoption.
-
----
-
-
-### Task 2: Phase 3 Harness Adapters (Claude Code & OpenAI Codex CLI)
-- **Priority**: High
-- **Component**: `update_with_ai/parts/harnesses/`
-- **Objective**: Expand Cleanroom's multi-agent execution beyond Antigravity and DSH to support Anthropic Claude Code and OpenAI Codex CLI.
-- **Implementation Steps**:
-  1. Author HLS in `parts/control/high/external_harness_adapters.md`.
-  2. Define uniform `HarnessAdapter` interface supporting `spawn_worker()`, `await_turn()`, and `collect_telemetry()`.
-  3. Implement `ClaudeCodeHarnessAdapter` invoking `claude --dangerously-skip-permissions` inside sibling workspaces.
-  4. Implement `CodexHarnessAdapter` utilizing OpenAI developer CLI primitives.
-  5. Add unit test suite verifying workspace isolation and clean exit codes across all adapters.
-
----
-
-### Task 3: Phase 4 Cross-Model Empirical Benchmarking Suite
-- **Priority**: Medium
-- **Component**: `bin/evaluate_model_efficiency.py`
-- **Objective**: Provide automated benchmarking measuring token cost, turn latency, and specification adherence across competing frontier models.
-- **Implementation Steps**:
-  1. Author specification in `parts/tools/high/benchmark_runner.md`.
-  2. Build benchmarking matrix covering:
-     - Gemini 2.5 Flash / Pro
-     - Gemini 3.0 Pro
-     - Claude 3.7 Sonnet (Thinking & Non-Thinking)
-     - DeepSeek V3 & R1
-     - OpenAI o3-mini / GPT-4.5
-  3. Execute automated test runs across standardized Cleanroom parts (`parts/storage`, `parts/tools`).
-  4. Output comparative Markdown report with token efficiency and pass-rate metrics.
-
----
-
-### Task 4: Multi-Wave End-to-End Orchestration Stress Testing
-- **Priority**: Medium
 - **Component**: `update_with_ai/parts/subagent/tests/`
 - **Objective**: Rigorously test the zero-execution coordinator under deep dependency hierarchies (4+ waves deep, 10+ concurrent subagents).
-- **Implementation Steps**:
-  1. Create synthetic mock project tree with complex diamond and star dependencies.
-  2. Simulate simulated worker failures and verify upstream `blame` feedback propagation.
-  3. Confirm that wave barriers properly block downstream execution until all upstream workers succeed.
-  4. Assert that orphan workspaces are cleanly decommissioned on SIGINT/SIGTERM.
+- **Implementation Completed**:
+  1. [x] Authored diamond and star dependency stress test with 13 targets across 5 roles, verifying multi-wave convergence and parallel wave grouping (`lib` + `test`).
+  2. [x] Simulated worker blame failure, verifying blame defect feedback propagation into queues, blocking downstream execution until the upstream defect was resolved.
+  3. [x] Verified wave barriers prevent downstream execution until all parallel dependencies succeed.
+  4. [x] Contracted and implemented cancellation handling, ensuring active workers are interrupted and orphan workspaces are cleanly decommissioned on SIGINT/cancellation.
+  5. [x] Full specification cascade aligned across HLS, Planning, Scenarios, Low-level stubs, Library, and Unit tests with 100% test pass rate.
 
 ---
 
-### Task 5: Standalone Ephemeral Distribution (`uvx cleanroom`)
+### Task 2: Cross-Model Empirical Benchmarking Suite
+- **Priority**: Medium
+- **Component**: `bin/evaluate_model_efficiency.py` & `parts/tools/`
+- **Design Specification**: [`benchmark_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/benchmark_design_doc.md) (complements [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md))
+- **Objective**: Provide automated benchmarking measuring token cost, turn latency, KV prompt-cache efficiency, and specification adherence across a 4-tier model spectrum, using `omlx` for local models, restricting expensive Tier 3 & 4 models to two premier anchor targets, and executing a lean, time-calibrated unit scale per RQ.
+- **Implementation Steps**:
+  1. Complete authoritative benchmarking design doc: [`benchmark_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/benchmark_design_doc.md).
+  2. Implement automated runner `bin/evaluate_model_efficiency.py` supporting multi-tier adapters:
+     - **Tier 1 (Free Local)**: Qwen 3.6 35B MoE & Qwen 27B Dense running strictly via **`omlx`** on Apple Silicon.
+     - **Tier 2 (Budget Cloud)**: DeepSeek V4.1 Flash (DSH JSON-RPC) & Gemini 3.8 Flash (Antigravity).
+     - **Tier 3 & Tier 4 (Selective Anchors)**: Evaluated strictly against **Anchor Target 1 (Mini-SQLite)** and **Anchor Target 2 (CPython `heapq`/`graphlib`)** using OpenAI o3-mini, Claude Sonnet 3.5/3.7, Gemini 4 Argon, Claude Opus 5.5, OpenAI gpt-6.1-sol, and Meta Muse Wonder Full.
+  3. Execute empirical flight campaigns with **lean unit counts per RQ**:
+     - **RQ1**: 8 curated units (4 CPython, 4 SQLite) with 8 Attractor State Ambiguity tests.
+     - **RQ2**: 10 boundary cases with 2 algorithmic guides ($\mathcal{G}$).
+     - **RQ3**: Mini-SQLite (1 monolith vs. 3 divided units across 12 boundary edge cases).
+     - **RQ4**: 6 controlled spec ungroundings (2 deletions, 2 erasures, 2 contradictions) with DAG batching $B \in \{1, 2, 4\}$.
+     - **RQ5**: 10 autonomous evolution tasks (4 feature additions, 3 contract alterations, 3 refactorings).
+     - **RQ6**: 6 injected concurrency defects and 15 mutants in Mini-SQLite buffer pool and Workspace lock manager.
+     - **RQ7**: 25k record event stream parser evaluating the Hidden Benchmark Firewall ($GDI \approx 1.04$) across 3 conditions (3 trials each).
+  4. Output comparative Markdown reports and publication-ready LaTeX tables (`reports/latex/rq*.tex`).
+
+---
+
+### Task 3: Standalone Ephemeral Distribution (`uvx cleanroom`)
 - **Priority**: Low
 - **Component**: `pyproject.toml`, distribution scripts
 - **Objective**: Enable developers to run Cleanroom on any target project without cloning the Cleanroom codebase (`uvx cleanroom orchestrate .`).
@@ -574,46 +555,6 @@ The following prioritized roadmap outlines the next development tasks for Cleanr
   2. Test `uvx --from . cleanroom --help` in an isolated directory.
   3. Provide pre-built binary distributions via GitHub Releases.
 
----
 
-### [COMPLETED] Task 6: Role Workspace Metadata Filtering & Ephemeral Code Hashing
-- **Status**: Completed (2026-10-18)
-- **Component**: [`update_with_ai/parts/metadata/`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/metadata/), [`update_with_ai/parts/workspace/`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/), [`update_with_ai/parts/control/`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/)
-- **Objective**: Manage metadata primarily in the main workspace, expose only projected fields (`CHANGE`, `FEEDBACK`, and ephemeral `CODE_HASH`) to role workspaces, compute `CODE_HASH` dynamically on writable files during sync, and strip `CODE_HASH` when syncing back to main.
-- **Specification & Behavioral Invariants**:
-  1. **Primary Metadata in Main Workspace**: Metadata is primarily maintained in the main workspace. Canonical lifecycle headers (such as `LAST_CLEANED`, `LAST_CHANGED`, and audit attestation stamps) live in the main workspace and are not projected into worker workspaces.
-  2. **Role Workspace Projection Filtering**: Only `CHANGE`, `FEEDBACK`, and `CODE_HASH` are visible when files are moved over to the role workspace. All other metadata fields are filtered out to protect context budgets, eliminate prompt noise, and prevent accidental tampering by role subagents.
-  3. **Ephemeral Code Hash**: The `CODE_HASH` is not preserved in the main workspace. Instead, it is computed dynamically on writable files when the role workspace is synced, and is only used to determine if the agent updated a file or not in the role workspace.
-  4. **Harvest & Sync-Back Strip**: When a file is synced back (harvested) or submitted to the main workspace, the ephemeral `CODE_HASH` is removed and not written back to the canonical file in the main workspace, while the role workspace copy is refreshed with a newly computed ephemeral code hash.
-  5. **Loop Harness Invariant**: The loop harness (`--harness loop`) continues to see files as they exist in the main workspace since it operates directly in the main workspace.
-- **Implementation Completed**:
-  1. [x] Updated metadata projection and formatting in [`provision_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/lib/provision_impl.py), [`sync_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/lib/sync_impl.py), and [`submit_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/lib/submit_impl.py) to support workspace projection filtering (emitting only `CHANGE`, `FEEDBACK`, and ephemeral `CODE_HASH`).
-  2. [x] Updated workspace provisioning and synchronization to compute `CODE_HASH` exclusively on writable files when staging or pulling into the role workspace.
-  3. [x] Updated harvesting logic in [`sync_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/lib/sync_impl.py) and submit logic in [`submit_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/control/lib/submit_impl.py) to compare workspace file contents against the ephemeral baseline hash to detect agent modifications, strip `CODE_HASH` from canonical files in the main workspace, and refresh ephemeral code hashes in the role workspace.
-  4. [x] Preserved canonical `LAST_CHANGED` timestamps and metadata in the main workspace during clean submissions without code changes.
-  5. [x] Full specification cascade completed across all Cleanroom methodologies: HLS (`high/*.md`) $\to$ Planning (`planning/*.md`) $\to$ Scenarios (`scenarios/*.md`) $\to$ Low stubs (`low/*.pyi`) $\to$ Lib (`lib/*.py`) $\to$ Tests (`tests/*_test.py`).
-  6. [x] Validated across the entire repository with `bin/test` (625 passed tests, 9 subtests passed, 0 linter/pyright errors).
-
----
-
-### [COMPLETED] Task 7: Dirty Reasoning Propagation & LAST_CLEANED Preservation
-- **Status**: Completed (2026-10-18)
-- **Component**: [`update_with_ai/parts/metadata/`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/metadata/), [`update_with_ai/parts/workspace_cli/`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace_cli/), [`update_with_ai/support/`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/support/)
-- **Objective**: Ensure that dirtiness reasons are accurately propagated and surfaced to role workers, eliminate false diagnoses of missing header tags, preserve `LAST_CLEANED` timestamps during dirty operations, and protect subagents from confusing internal metadata projection with file defects.
-- **Specification & Behavioral Invariants**:
-  1. **Preservation of `LAST_CLEANED` on Dirty**: Marking a node dirty (`uv run cleanroom dirty` / `dag_storage.mark_node_dirty`) sets the `# DIRTY: <reason>` tag (defaulting to `"dirty"` if no reason is given) without clearing or deleting the `# LAST_CLEANED: <timestamp>` header tag. The presence of the `DIRTY:` tag is what makes the node dirty, preserving historical clean provenance.
-  2. **Prioritization of Explicit Dirty Reasons & Feedback**: `src_storage_impl.is_dirty` and `dirtiness_impl.evaluate_unit_dirty` evaluate `meta.dirty` and `meta.feedback` before checking `meta.last_cleaned`. Explicit failure explanations and blame diagnostics are always prioritized over fallback reasons.
-  3. **Accurate Uncleaned Diagnostics**: Replaced misleading reason `Header missing LAST_CLEANED in {target_rel}` with `Target has not been cleaned ({target_rel})`.
-  4. **Subagent Orientation (Rule 4: Metadata Projection & Inviolability)**: Updated `AGENTS.md` and `cleanroom_worker` system prompt instructions (`cleanroom_role_tool.py`) explaining that role workspaces intentionally project out internal lifecycle timestamps (`LAST_CLEANED`, `LAST_CHANGED`, audit stamps), explicitly forbidding workers from treating the absence of lifecycle timestamps as formatting defects.
-- **Implementation Completed**:
-  1. [x] Updated HLS in [`high/src_storage_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/metadata/high/src_storage_impl.md) contracting that `mark_node_dirty` sets the dirty tag without clearing the last cleaned timestamp.
-  2. [x] Updated Planning in [`planning/src_storage_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/metadata/planning/src_storage_impl.md) replacing `mark_node_dirty_clears_last_cleaned` with `mark_node_dirty_preserves_last_cleaned`.
-  3. [x] Updated Scenarios in [`scenarios/src_storage_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/metadata/scenarios/src_storage_impl.md) Scenario 17.
-  4. [x] Updated Low-level stubs in [`low/src_storage_impl.pyi`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/metadata/low/src_storage_impl.pyi) postconditions and grounding.
-  5. [x] Implemented in [`lib/src_storage_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/metadata/lib/src_storage_impl.py) preserving `last_cleaned` and checking `dirty`/`feedback` first in `is_dirty`.
-  6. [x] Updated unit tests in [`tests/src_storage_impl_test.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/metadata/tests/src_storage_impl_test.py) asserting `LAST_CLEANED:` is preserved when dirty is marked with or without reason.
-  7. [x] Updated `dirtiness_impl.py` and `pending_impl.py` candidate resolution order across main and role workspaces.
-  8. [x] Added Rule 4 ("Metadata Projection & Inviolability") across `AGENTS.md`, `cleanroom_role_tool.py`, and refreshed all 18 role workspaces.
-  9. [x] Verified full repository with `bin/test` (627 passed tests, 9 subtests passed) and validated live end-to-end convergence via `uv run cleanroom clean staging#qa --harness antigravity`.
 
 

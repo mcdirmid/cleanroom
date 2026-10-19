@@ -49,4 +49,6 @@ When coordinating multi-agent execution:
 
 - The realization automatically deletes all provisioned role workspaces in scope upon achieving clean convergence.
 
+- The realization interrupts all active workers and automatically deletes all provisioned role workspaces in scope when orchestration is interrupted by system termination or user cancellation signals.
+
 - The realization normalizes token metrics from turn outcomes and tallies total costs according to model pricing rate cards.

@@ -211,6 +211,7 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         - MUST persist effective batch size bounds into provisioned role workspace configurations.
         - MUST aggregate cumulative token usage and monetary expenditure in orchestration summary.
         - WHEN target_node is specified, MUST restrict work queue discovery and execution to target_node and its transitive dependencies.
+        - WHEN orchestration is interrupted by cancellation signals, MUST interrupt active workers through harness.interrupt_role and delete all provisioned role workspaces in scope.
         """
         ...
 
