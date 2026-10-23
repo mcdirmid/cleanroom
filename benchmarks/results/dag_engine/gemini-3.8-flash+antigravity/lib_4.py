@@ -8,11 +8,11 @@
 # Run Index: 4
 #
 # Telemetry Measurements:
-#   Uncached Inbound Tokens: 4,164,329
-#   Cached Inbound Tokens:   49,581,500
-#   Outbound Tokens:         434,520
-#   Total Tokens:            54,180,349
-#   Financial Cost ($USD):   $1.8298
+#   Uncached Inbound Tokens: 4,188,757
+#   Cached Inbound Tokens:   50,200,400
+#   Outbound Tokens:         436,000
+#   Total Tokens:            54,825,157
+#   Financial Cost ($USD):   $1.8483
 #   Wall Clock Duration:     2265.71s
 #   Step Latencies (s):      []
 #   Turn Latencies (s):      []

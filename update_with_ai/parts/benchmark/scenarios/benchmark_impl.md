@@ -83,10 +83,10 @@ Given: a benchmark unit and a caller requesting a dry-run flight.
 
 ## Scenario 10 — Subagent session transcript harvesting for Antigravity harness
 
-Given: an Antigravity brain directory containing coordinator and worker subagent transcripts reporting planner responses with input tokens, cache read tokens, output tokens, and assigned role names.
+Given: an Antigravity brain directory containing a parent caller transcript, a coordinator subagent transcript, and worker subagent transcripts reporting planner responses with input tokens, cache read tokens, output tokens, and assigned role names, where the last worker subagent transcript has a newer modification timestamp than the coordinator transcript.
 
 1. The log harvester extracts telemetry from the subagent transcripts for a flight commencing after a designated timestamp.
-   Observed: accurately aggregates uncached inbound tokens, cached inbound tokens, and outbound tokens across coordinator and role worker conversations, excludes the coordinator from role execution rounds, and tallies role execution rounds per target role based on worker dispatch waves rather than planner response steps.
+   Observed: identifies the coordinator subagent transcript rather than the newer worker transcript or parent caller transcript, accurately aggregates uncached inbound tokens, cached inbound tokens, and outbound tokens across coordinator and role worker conversations, excludes the coordinator from role execution rounds, and tallies role execution rounds per target role based on worker dispatch waves rather than planner response steps.
 
 ## Scenario 11 — Antigravity Desktop IPC coordination dispatch and active flight persistence
 

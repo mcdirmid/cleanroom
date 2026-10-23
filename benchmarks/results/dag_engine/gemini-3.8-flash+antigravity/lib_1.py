@@ -12,7 +12,7 @@
 #   Cached Inbound Tokens:   48,891,174
 #   Outbound Tokens:         436,207
 #   Total Tokens:            53,303,406
-#   Financial Cost ($USD):   $2.6915
+#   Financial Cost ($USD):   $1.7944
 #   Wall Clock Duration:     2214.00s
 #   Step Latencies (s):      []
 #   Turn Latencies (s):      []

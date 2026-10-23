@@ -399,10 +399,63 @@ class _LogHarvester:
         return uncached_in, cached_in, out_tokens, latencies, role_rounds
 
     @staticmethod
+    def _is_antigravity_baseline_complete(
+        brain_dir: Path,
+        since_timestamp: float,
+        scope: str = "",
+    ) -> bool:
+        """Checks whether an active Antigravity baseline developer subagent has concluded its round."""
+        if not brain_dir.is_dir():
+            return True
+
+        candidate_workers: List[Tuple[float, Path]] = []
+        for entry in brain_dir.iterdir():
+            if not entry.is_dir() or entry.name.startswith("."):
+                continue
+            t_file = entry / ".system_generated" / "logs" / "transcript.jsonl"
+            if not t_file.is_file():
+                continue
+            try:
+                mtime = t_file.stat().st_mtime
+            except OSError:
+                continue
+            if mtime < since_timestamp:
+                continue
+            try:
+                with open(t_file, "r", encoding="utf-8", errors="replace") as f:
+                    header_lines = [f.readline() for _ in range(6)]
+                header_text = "".join(header_lines)
+            except OSError:
+                continue
+            if (
+                "autonomous software developer working in scope" in header_text
+                and "AUTONOMOUS ANTIGRAVITY BASELINE DIRECTIVE" not in header_text
+                and (not scope or f"scope '{scope}'" in header_text)
+            ):
+                candidate_workers.append((mtime, t_file))
+
+        if not candidate_workers:
+            return True
+
+        candidate_workers.sort(key=lambda x: x[0], reverse=True)
+        latest_file = candidate_workers[0][1]
+        try:
+            lines = [l for l in latest_file.read_text(encoding="utf-8", errors="replace").splitlines() if l.strip()]
+            if not lines:
+                return False
+            last_entry = json.loads(lines[-1])
+            if last_entry.get("type") == "PLANNER_RESPONSE" and not last_entry.get("tool_calls"):
+                return True
+        except (OSError, json.JSONDecodeError, ValueError):
+            pass
+        return False
+
+    @staticmethod
     def harvest_from_antigravity(
         brain_dir: Path,
         since_timestamp: float,
         scope: str = "",
+        baseline: bool = False,
     ) -> Tuple[int, int, int, List[float], Dict[str, int]]:
         """Harvests telemetry from Antigravity coordinator and role worker subagent transcripts."""
         uncached_in = 0
@@ -414,7 +467,8 @@ class _LogHarvester:
         if not brain_dir.is_dir():
             return uncached_in, cached_in, out_tokens, latencies, role_rounds
 
-        candidate_coords: List[Tuple[float, str]] = []
+        # Priority tier: 3 = dedicated subagent (coordinator or baseline worker), 1 = parent/fallback
+        candidate_coords: List[Tuple[int, float, str]] = []
         for entry in brain_dir.iterdir():
             if not entry.is_dir() or entry.name.startswith("."):
                 continue
@@ -435,24 +489,52 @@ class _LogHarvester:
             except OSError:
                 continue
 
-            if (
-                "cleanroom_coordinator" in header_text
-                or "cleanroom_baseline_worker" in header_text
-                or "Baseline Developer" in header_text
-                or (scope and f"Clean all dirty nodes in {scope}" in header_text)
-                or (scope and f"scope '{scope}'" in header_text)
-            ):
-                candidate_coords.append((mtime, entry.name))
+            # Exclude individual Cleanroom role worker transcripts from root candidate selection
+            if re.search(r"You are an autonomous Cleanroom '[a-zA-Z0-9_]+' worker", header_text):
+                continue
+
+            is_parent_directive = (
+                "AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE" in header_text
+                or "AUTONOMOUS ANTIGRAVITY BASELINE DIRECTIVE" in header_text
+            )
+            is_baseline_worker_subagent = (
+                "autonomous software developer working in scope" in header_text
+                and not is_parent_directive
+            )
+            is_coord_subagent = (
+                ("cleanroom_coordinator" in header_text or (scope and f"Clean all dirty nodes in {scope}" in header_text))
+                and not is_parent_directive
+            )
+
+            if baseline:
+                if is_baseline_worker_subagent and (not scope or f"scope '{scope}'" in header_text):
+                    candidate_coords.append((3, mtime, entry.name))
+                elif is_baseline_worker_subagent:
+                    candidate_coords.append((2, mtime, entry.name))
+                elif "cleanroom_baseline_worker" in header_text or "Baseline Developer" in header_text:
+                    candidate_coords.append((1, mtime, entry.name))
+            else:
+                if is_coord_subagent and (not scope or f"Clean all dirty nodes in {scope}" in header_text):
+                    candidate_coords.append((3, mtime, entry.name))
+                elif is_coord_subagent:
+                    candidate_coords.append((2, mtime, entry.name))
+                elif (
+                    "cleanroom_coordinator" in header_text
+                    or "cleanroom_baseline_worker" in header_text
+                    or "Baseline Developer" in header_text
+                    or (scope and f"Clean all dirty nodes in {scope}" in header_text)
+                ):
+                    candidate_coords.append((1, mtime, entry.name))
 
         if not candidate_coords:
             return uncached_in, cached_in, out_tokens, latencies, role_rounds
 
-        candidate_coords.sort(key=lambda x: x[0], reverse=True)
-        coord_id = candidate_coords[0][1]
+        candidate_coords.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        coord_id = candidate_coords[0][2]
 
         coord_file = brain_dir / coord_id / ".system_generated" / "logs" / "transcript.jsonl"
         worker_roles: Dict[str, str] = {}
-        is_baseline = False
+        is_baseline = baseline
 
         try:
             with open(coord_file, "r", encoding="utf-8", errors="replace") as f:
@@ -462,18 +544,23 @@ class _LogHarvester:
                     except (json.JSONDecodeError, ValueError):
                         continue
                     content = str(d.get("content", ""))
-                    if "cleanroom_baseline_worker" in content or "Baseline Developer" in content:
+                    if (
+                        "cleanroom_baseline_worker" in content
+                        or "Baseline Developer" in content
+                        or "autonomous software developer working in scope" in content
+                    ):
                         is_baseline = True
 
                     for m in re.finditer(
                         r'\{[^{}]*"role":\s*"Cleanroom ([a-zA-Z0-9_]+) Worker"[^{}]*"conversationId":\s*"([0-9a-fA-F\-]{36})"',
                         content,
                     ):
-                        worker_roles[m.group(2)] = m.group(1).lower()
+                        if m.group(2) != coord_id:
+                            worker_roles[m.group(2)] = m.group(1).lower()
 
                     for m in re.finditer(r'"conversationId":\s*"([0-9a-fA-F\-]{36})"', content):
                         cid = m.group(1)
-                        if cid not in worker_roles:
+                        if cid != coord_id and cid not in worker_roles:
                             worker_roles[cid] = "unknown"
         except OSError:
             pass
@@ -490,9 +577,9 @@ class _LogHarvester:
                             dur = d.get("duration_ms") or d.get("durationMs")
                             if dur is not None and isinstance(dur, (int, float)):
                                 latencies.append(round(dur / 1000.0, 3))
-                        uncached_in += d.get("input_tokens", 0)
-                        cached_in += d.get("cached_tokens", 0)
-                        out_tokens += d.get("output_tokens", 0)
+                            uncached_in += d.get("input_tokens", 0)
+                            cached_in += d.get("cache_read_tokens", 0) + d.get("cached_tokens", 0)
+                            out_tokens += d.get("output_tokens", 0)
             except OSError:
                 pass
             return uncached_in, cached_in, out_tokens, latencies, {"baseline": 1}
@@ -520,7 +607,7 @@ class _LogHarvester:
                     except OSError:
                         pass
 
-        # Accumulate token metrics across coordinator and all worker conversations
+                        # Accumulate token metrics across coordinator and all worker conversations
         all_convs = [coord_id] + list(worker_roles.keys())
         for cid in all_convs:
             t_file = brain_dir / cid / ".system_generated" / "logs" / "transcript.jsonl"
@@ -535,7 +622,7 @@ class _LogHarvester:
                             continue
                         if d.get("type") == "PLANNER_RESPONSE":
                             uncached_in += d.get("input_tokens", 0)
-                            cached_in += d.get("cache_read_tokens", 0)
+                            cached_in += d.get("cache_read_tokens", 0) + d.get("cached_tokens", 0)
                             out_tokens += d.get("output_tokens", 0)
             except OSError:
                 continue
@@ -1259,10 +1346,14 @@ def _execute_flight(
                         )
                         sys.stdout.flush()
 
+                        appdata_dir = os.environ.get("ANTIGRAVITY_APP_DATA_DIR") or os.path.expanduser("~/.gemini/antigravity")
+                        ag_brain_dir = Path(appdata_dir) / "brain"
                         converged = False
                         while time.time() - poll_start < max_wait:
                             time.sleep(poll_interval)
-                            if _has_materialized_artifacts(flight_unit_dir):
+                            if _has_materialized_artifacts(flight_unit_dir) and _LogHarvester._is_antigravity_baseline_complete(
+                                ag_brain_dir, start_epoch, scope=flight_scope
+                            ):
                                 converged = True
                                 break
 
@@ -1479,7 +1570,7 @@ def _execute_flight(
                     appdata_dir = os.environ.get("ANTIGRAVITY_APP_DATA_DIR") or os.path.expanduser("~/.gemini/antigravity")
                     brain_dir = Path(appdata_dir) / "brain"
                     u_in, c_in, out_tok, lats, _ = _LogHarvester.harvest_from_antigravity(
-                        brain_dir, start_epoch, scope=flight_scope
+                        brain_dir, start_epoch, scope=flight_scope, baseline=True
                     )
 
                 if not (u_in or c_in or out_tok):
@@ -1894,10 +1985,11 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             start_epoch = 0.0
 
         scope = unit.unit_dir.split("/")[0]
+        is_baseline_flight = (data.get("methodology") == "baseline" or clean_id.endswith("_baseline"))
         appdata_dir = os.environ.get("ANTIGRAVITY_APP_DATA_DIR") or os.path.expanduser("~/.gemini/antigravity")
         brain_dir = Path(appdata_dir) / "brain"
         u_in, c_in, out_tok, lats, r_rounds = _LogHarvester.harvest_from_antigravity(
-            brain_dir, start_epoch, scope=scope
+            brain_dir, start_epoch, scope=scope, baseline=is_baseline_flight
         )
 
         logs_dir = self._repo_root / "logs"

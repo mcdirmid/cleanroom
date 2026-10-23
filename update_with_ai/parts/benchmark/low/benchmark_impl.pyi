@@ -78,7 +78,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         - MUST execute the flight under the requested harness or simulation mode.
         - WHEN baseline is True and harness is 'loop', MUST raise ValueError rejecting loop harness.
         - WHEN baseline is True, MUST record exactly one execution round under baseline role.
-        - WHEN baseline is True, MUST provide the low-level specification and instruct the developer agent to consult it, implement the two-file library structure in lib/, test _impl.py, and achieve 100% test coverage with opt-outs.
+        - WHEN baseline is True, MUST provide the low-level specification and instruct the developer agent to consult it, implement the two-file library structure in lib/, test _impl.py, and achieve 100% test coverage with opt-outs, awaiting baseline round completion.
         - MUST harvest telemetry and evaluate verification gates.
         - MUST return a flight record with complete empirical measurements.
         - MUST skip artifact archival and workspace draining when dry_run is True.
@@ -215,7 +215,7 @@ def __orphan__() -> None:
 
     POSTCONDITIONS:
     - MUST provide benchmark evaluation suites categorized by suite identifiers derived from benchmark part directories.
-    - MUST harvest empirical measurements including token counts, step latencies, and role execution rounds from runner log files and transcripts.
+    - MUST harvest empirical measurements including token counts, step latencies, and role execution rounds from runner log files and transcripts, distinguishing coordinator and baseline developer subagent transcripts from individual role worker transcripts and parent caller sessions.
     - MUST tally role execution rounds exclusively across target role workers based on worker dispatch waves while excluding coordinator sessions from role rounds.
     - MUST provision a concise sequential ephemeral flight scope directory (e.g. benchmark_1), rewrite copied benchmark imports, disallow bare parts imports, mark specifications clean up to specification QA, and copy scope methodology configuration.
     - WHEN an evaluated flight scope index does not exist in the repository root, MUST purge any orphaned role workspaces matching that index to permit sequential reuse.

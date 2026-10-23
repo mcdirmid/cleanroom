@@ -4,6 +4,7 @@ import io
 import json
 import os
 import tempfile
+import time
 import unittest
 from unittest import mock
 from unittest.mock import patch
@@ -334,10 +335,25 @@ class BenchmarkImplTest(unittest.TestCase):
             w2_log_dir = brain_dir / worker2_id / ".system_generated" / "logs"
             w2_log_dir.mkdir(parents=True, exist_ok=True)
             w2_lines = [
-                json.dumps({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": "You are an autonomous Cleanroom 'test' worker. Immediately run bin/get_work."}),
+                json.dumps({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": "You are an autonomous Cleanroom 'test' worker for scope 'benchmarks'. Immediately run bin/get_work."}),
                 json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 1500, "cache_read_tokens": 8000, "output_tokens": 300}),
             ]
-            (w2_log_dir / "transcript.jsonl").write_text("\n".join(w2_lines) + "\n", encoding="utf-8")
+            w2_transcript = w2_log_dir / "transcript.jsonl"
+            w2_transcript.write_text("\n".join(w2_lines) + "\n", encoding="utf-8")
+            # Ensure worker transcript has a newer mtime than coordinator transcript to verify coordinator prioritization
+            os.utime(w2_transcript, (time.time() + 10.0, time.time() + 10.0))
+
+            # Also create a parent caller conversation with a newer mtime containing the directive
+            parent_id = "00000000-0000-0000-0000-000000000000"
+            parent_log_dir = brain_dir / parent_id / ".system_generated" / "logs"
+            parent_log_dir.mkdir(parents=True, exist_ok=True)
+            parent_transcript = parent_log_dir / "transcript.jsonl"
+            parent_lines = [
+                json.dumps({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": "AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE for scope 'benchmarks': Clean all dirty nodes in benchmarks using cleanroom_coordinator."}),
+                json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 99999, "cache_read_tokens": 99999, "output_tokens": 99999}),
+            ]
+            parent_transcript.write_text("\n".join(parent_lines) + "\n", encoding="utf-8")
+            os.utime(parent_transcript, (time.time() + 20.0, time.time() + 20.0))
 
             repo_root = Path(tmp_dir) / "repo"
             logs_dir = repo_root / "logs" / "benchmarks"
@@ -927,6 +943,7 @@ class BenchmarkImplTest(unittest.TestCase):
                     harness="antigravity",
                     baseline=True,
                     wait_for_convergence=False,
+                    antigravity_dispatch="none",
                 )
 
             stdout_output = mock_stdout.getvalue()
@@ -938,6 +955,43 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertIn("_impl_test.py", stdout_output)
             self.assertEqual(record.methodology, "baseline")
             self.assertEqual(record.stages_executed, ["baseline"])
+
+    def test_antigravity_baseline_transcript_harvesting(self) -> None:
+        """CUJ: Harvesting baseline worker subagent transcript with cache_read_tokens and ignoring parent caller transcript."""
+        from update_with_ai.parts.benchmark.lib.benchmark_impl import _LogHarvester
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            brain_dir = Path(tmp_dir) / "brain"
+            parent_id = "00000000-0000-0000-0000-000000000001"
+            worker_id = "00000000-0000-0000-0000-000000000002"
+
+            w_log_dir = brain_dir / worker_id / ".system_generated" / "logs"
+            w_log_dir.mkdir(parents=True, exist_ok=True)
+            w_transcript = w_log_dir / "transcript.jsonl"
+            w_lines = [
+                json.dumps({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": "You are an autonomous software developer working in scope 'benchmark_1'."}),
+                json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 2000, "cache_read_tokens": 10000, "output_tokens": 500, "duration_ms": 1500}),
+            ]
+            w_transcript.write_text("\n".join(w_lines) + "\n", encoding="utf-8")
+
+            p_log_dir = brain_dir / parent_id / ".system_generated" / "logs"
+            p_log_dir.mkdir(parents=True, exist_ok=True)
+            p_transcript = p_log_dir / "transcript.jsonl"
+            p_lines = [
+                json.dumps({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": "AUTONOMOUS ANTIGRAVITY BASELINE DIRECTIVE for benchmark_1: Invoke cleanroom_baseline_worker."}),
+                json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 50000, "cache_read_tokens": 50000, "output_tokens": 5000}),
+            ]
+            p_transcript.write_text("\n".join(p_lines) + "\n", encoding="utf-8")
+            os.utime(p_transcript, (time.time() + 10.0, time.time() + 10.0))
+
+            u_in, c_in, out_tok, lats, rounds = _LogHarvester.harvest_from_antigravity(
+                brain_dir, 0.0, scope="benchmark_1", baseline=True
+            )
+            self.assertEqual(u_in, 2000)
+            self.assertEqual(c_in, 10000)
+            self.assertEqual(out_tok, 500)
+            self.assertEqual(lats, [1.5])
+            self.assertEqual(rounds, {"baseline": 1})
+            self.assertTrue(_LogHarvester._is_antigravity_baseline_complete(brain_dir, 0.0, scope="benchmark_1"))
 
 
 if __name__ == "__main__":
