@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-10-11T05:58:06Z
-# CHANGE: Replace the undeclared private registry and source metadata constructors with test doubles implementing the declared WorkspaceRegistry and SourceMetadataCoordinator interfaces
-# CODE_HASH: be7f91954e3b
-# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for work_impl."""
 
 import hashlib
@@ -190,6 +181,7 @@ def _role(
     feedback_role_deps: Optional[List[str]] = None,
     stub_role_deps: Optional[List[str]] = None,
     audit_tag: Optional[str] = None,
+    silent_role_deps: Optional[List[str]] = None,
 ) -> role_registry.RoleDefinition:
     return role_registry.RoleDefinition(
         role_name=name,
@@ -201,6 +193,7 @@ def _role(
         role_deps=role_deps or [],
         star_role_deps=star_role_deps or [],
         stub_role_deps=stub_role_deps or [],
+        silent_role_deps=silent_role_deps or [],
         audit_tag=audit_tag,
     )
 
@@ -247,6 +240,15 @@ def _make_roles():
             feedback_role_deps=["lib", "test"],
             star_role_deps=["low", "test"],
             audit_tag="QA_AUDIT",
+        ),
+        _role(
+            "coverage",
+            "{unit_dir}/lib/{unit_name}.py",
+            ["lib/*.py", "**/lib/*.py"],
+            feedback_role_deps=["lib", "test"],
+            star_role_deps=["low"],
+            silent_role_deps=["qa"],
+            audit_tag="COVERAGE_AUDIT",
         ),
         _role(
             "scenario",
@@ -834,6 +836,70 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             self.assertEqual(len(ready_bounded), 1)
             self.assertEqual(ready_bounded[0].target_file, "staging/parts/alpha/lib/alpha.py")
 
+    def test_compute_role_work_queue_blocks_on_dirty_silent_role_deps(self) -> None:
+        """Verifies that silent_role_deps (e.g. qa for coverage) blocks role from being ready while silent dep is dirty."""
+        with tempfile.TemporaryDirectory() as td:
+            repo_root = td
+            clean_py = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-10T00:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-08T00:00:00Z\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+            clean_with_audit = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-10T00:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-08T00:00:00Z\n"
+                "# QA_AUDIT: 2026-10-10T00:00:00Z\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+            part_a = os.path.join(repo_root, "staging/parts/alpha")
+            os.makedirs(os.path.join(part_a, "lib"), exist_ok=True)
+            os.makedirs(os.path.join(part_a, "tests"), exist_ok=True)
+            os.makedirs(os.path.join(part_a, "low"), exist_ok=True)
+
+            with open(os.path.join(part_a, "low/alpha.pyi"), "w", encoding="utf-8") as f:
+                f.write(clean_py)
+            with open(os.path.join(part_a, "lib/alpha.py"), "w", encoding="utf-8") as f:
+                f.write(clean_py + "def run(): pass\n")
+            with open(os.path.join(part_a, "tests/alpha_test.py"), "w", encoding="utf-8") as f:
+                f.write(clean_py + "def test_run(): pass\n")
+
+            # QA is dirty because lib/alpha.py and tests/alpha_test.py do not have QA_AUDIT yet.
+            ready_cov, blocked_cov = self.work_mgr.compute_role_work_queue(
+                role_name="coverage",
+                dir_scope="staging",
+                repo_root=repo_root,
+                target_unit="alpha",
+            )
+            self.assertEqual(len(ready_cov), 0)
+            self.assertEqual(len(blocked_cov), 1)
+            self.assertIn("Upstream role 'qa' is dirty", blocked_cov[0].blocked_reasons[0])
+
+            # Now stamp QA_AUDIT on both lib and test targets.
+            with open(os.path.join(part_a, "lib/alpha.py"), "w", encoding="utf-8") as f:
+                f.write(clean_with_audit + "def run(): pass\n")
+            with open(os.path.join(part_a, "tests/alpha_test.py"), "w", encoding="utf-8") as f:
+                f.write(clean_with_audit + "def test_run(): pass\n")
+
+            ready_cov, blocked_cov = self.work_mgr.compute_role_work_queue(
+                role_name="coverage",
+                dir_scope="staging",
+                repo_root=repo_root,
+                target_unit="alpha",
+            )
+            self.assertEqual(len(ready_cov), 1)
+            self.assertEqual(len(blocked_cov), 0)
+            self.assertEqual(ready_cov[0].target_file, "staging/parts/alpha/lib/alpha.py")
+
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-18T19:13:51Z
+# LAST_CHANGED: 2026-10-11T05:58:06Z
+# CHANGE: Replace the undeclared private registry and source metadata constructors with test doubles implementing the declared WorkspaceRegistry and SourceMetadataCoordinator interfaces
+# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

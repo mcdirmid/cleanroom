@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-09T21:29:23Z
-CHANGE: Synchronize active nodes sequence on role config during get work dispatch
-CODE_HASH: bf3a1567dea3
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # coordinate_impl implementation component
 
 imports: session, dag_storage, verification, work_scheduler, submit, attribution, node_config, file_alias, subgraph
@@ -46,3 +38,10 @@ The session coordinator:
 - Dispatches fail by delegating failure logging to the attribution coordinator, updating the target state to failed, and marking any in-batch dependents as failed.
 
 - Formats user-facing node aliases using source file paths or configured file patterns instead of exposing internal graph node target addresses.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-09T21:29:23Z
+CHANGE: Synchronize active nodes sequence on role config during get work dispatch
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

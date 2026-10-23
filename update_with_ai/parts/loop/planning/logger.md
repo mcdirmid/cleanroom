@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:58:45Z
-CHANGE: Declare runner log event as an observable execution event record
-CODE_HASH: 9f9ef7373333
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # logger interface component
 
 ## Intent
@@ -46,3 +38,10 @@ By centralizing event consumption within a system-level logging service, the com
   - Deferred: Written to stdout in implementation.
 - Persistent file recording of verbose event transcripts with immediate flush.
   - Deferred: Appended to unbuffered file in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:58:45Z
+CHANGE: Declare runner log event as an observable execution event record
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

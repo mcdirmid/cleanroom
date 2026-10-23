@@ -1,16 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_harness interface library
-# CODE_HASH: 48affbb885ea
-# --- END CLEANROOM METADATA ---
-
 """Interface specification for subagent_harness."""
 
 from __future__ import annotations
 
 from typing import Any, Mapping, Optional, Protocol
-from support.lib.lifecycle import InTier
+from support.lib.lifecycle import Singleton
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 from . import subagent_coordinator
 
@@ -29,14 +22,14 @@ class CommandHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         """Dispatches work directive to a subagent bound to the role workspace."""
         ...
 
-    # Contract: CommandHarnessAdapter.await_role - awaits process completion, inspects blame buffer, computes submitted targets, and returns RoleTurnResult.
-    def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
-        """Awaits subagent turn completion and returns outcome result."""
+    # Contract: CommandHarnessAdapter.await_role - awaits process completion, inspects blame buffer, computes submitted targets, and returns RoleRoundResult.
+    def await_role(self, task_handle: str) -> subagent_coordinator.RoleRoundResult:
+        """Awaits subagent round completion and returns outcome result."""
         ...
 
-    # Contract: CommandHarnessAdapter.poll_role - polls subagent turn execution non-blockingly without waiting for completion.
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
-        """Polls subagent turn execution without blocking."""
+    # Contract: CommandHarnessAdapter.poll_role - polls subagent round execution non-blockingly without waiting for completion.
+    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+        """Polls subagent round execution without blocking."""
         ...
 
     # Contract: CommandHarnessAdapter.interrupt_role - aborts active subagent task execution upon timeout or loop limit.
@@ -63,7 +56,7 @@ class HarnessAdapterFactory(Protocol):
 
 
 # Contract: HarnessRegistry maintains installed platform harness adapter factories and resolves adapters in the agent session tier.
-class HarnessRegistry(InTier[AgentSessionTier], Protocol):
+class HarnessRegistry(Singleton[AgentSessionTier], Protocol):
     """Maintains installed platform harness adapter factories and resolves adapters."""
 
     # Contract: Returns mapping of installed platform names to harness adapter factories.
@@ -95,3 +88,8 @@ class HarnessRegistry(InTier[AgentSessionTier], Protocol):
 
 HarnessResolver = HarnessRegistry
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T21:00:00Z
+# CHANGE: author subagent_harness interface library
+# --- END CLEANROOM METADATA ---

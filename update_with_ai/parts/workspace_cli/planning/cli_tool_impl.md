@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T17:50:00Z
-CHANGE: Delegate substantive command workflows to commands
-CODE_HASH: ddcac4fe97c8
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # cli_tool_impl implementation component
 
 ## Intent
@@ -44,3 +36,10 @@ Command-line subagents in Cleanroom workspaces require a robust entrypoint that 
   - Grounded: [session: [agent_session_tier_provision]]
 - Role workspace domain command execution workflows.
   - Grounded: [commands: [workspace_commands_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T17:50:00Z
+CHANGE: Delegate substantive command workflows to commands
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T01:39:02Z
-CHANGE: Clarify host path creation and restructure prose per high-level spec guide
-CODE_HASH: 4116f90d9863
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_paths interface component
 
 ## Purpose
@@ -31,3 +23,10 @@ The file path manager assumes only non-empty path strings are supplied, and crea
 The file path manager validates a supplied path string against the path kind being created, requiring an absolute path to name a host absolute location and requiring a workspace path to name a host relative location without a leading separator.
 
 The file path manager can also resolve a workspace path into an absolute path given the absolute path of a workspace root.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Clarify host path creation and restructure prose per high-level spec guide
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

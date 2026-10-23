@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_coordinator_impl implementation library
-# CODE_HASH: 01b4d975e313
-# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for subagent_coordinator_impl."""
 
 from __future__ import annotations
@@ -40,12 +31,12 @@ from update_with_ai.parts.workspace.lib import (
 from . import subagent_coordinator
 
 
-def _resolve_model_parameters(
+# Contract: __orphan__ - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
+def resolve_model_parameters(
     repo_root: str,
     model_name: Optional[str] = None,
 ) -> Tuple[Optional[int], Optional[int], Optional[int]]:
-    """Resolves (subagent_batch_size, conversation_max_tokens, max_unproductive_turns) from model_configs.toml."""
-    # Contract: __orphan__ - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive turns thresholds from model configurations.
+    """Resolves (subagent_batch_size, conversation_max_tokens, max_unproductive_rounds) from model_configs.toml."""
     if tomllib is None:
         return None, None, None
     cfg_path = os.path.join(repo_root, "model_configs.toml")
@@ -58,7 +49,7 @@ def _resolve_model_parameters(
         return None, None, None
 
     global_unproductive: Optional[int] = None
-    u_top = cfg.get("max_unproductive_turns")
+    u_top = cfg.get("max_unproductive_rounds")
     if u_top is not None:
         try:
             global_unproductive = int(u_top)
@@ -113,7 +104,7 @@ def _resolve_model_parameters(
             pass
 
     resolved_unproductive = global_unproductive
-    u_val = matched_data.get("max_unproductive_turns")
+    u_val = matched_data.get("max_unproductive_rounds")
     if u_val is not None:
         try:
             resolved_unproductive = int(u_val)
@@ -123,7 +114,7 @@ def _resolve_model_parameters(
     return resolved_batch, resolved_tokens, resolved_unproductive
 
 
-resolve_model_parameters = _resolve_model_parameters
+_resolve_model_parameters = resolve_model_parameters
 
 
 def _persist_batch_size(ws_dir: str, batch_size: int) -> None:
@@ -142,10 +133,7 @@ def _persist_batch_size(ws_dir: str, batch_size: int) -> None:
         pass
 
 
-class SubagentCoordinator(
-    subagent_coordinator.SubagentCoordinator,
-    Singleton,
-):
+class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
     """Realizes zero-execution multi-agent workspace coordination across execution waves."""
 
     tier = agent_session.agent_session
@@ -266,19 +254,19 @@ class SubagentCoordinator(
 
     # Contract: dispatch each role directive through harness.dispatch_role
     # Contract: await completion of each dispatched role through harness.await_role
-    # Contract: return sequence of role turn results
+    # Contract: return sequence of role round results
     def run_wave(
         self,
         wave: Sequence[subagent_coordinator.RoleDispatch],
         harness: subagent_coordinator.HarnessAdapter,
-    ) -> Sequence[subagent_coordinator.RoleTurnResult]:
+    ) -> Sequence[subagent_coordinator.RoleRoundResult]:
         """Dispatches all roles in an execution wave through the harness and awaits results."""
         handles: List[str] = []
         for dispatch in wave:
             handle = harness.dispatch_role(dispatch)
             handles.append(handle)
 
-        results: List[subagent_coordinator.RoleTurnResult] = []
+        results: List[subagent_coordinator.RoleRoundResult] = []
         for handle in handles:
             res = harness.await_role(handle)
             results.append(res)
@@ -288,9 +276,9 @@ class SubagentCoordinator(
     # Contract: reset preexisting role workspaces for declared roles upon initiating orchestration
     # Contract: iterate through execution waves until all units in scope evaluate clean, role fails, or max_waves reached
     # Contract: periodically poll active workers through harness.poll_role or harness.await_role at configurable interval (default 10s)
-    # Contract: when role turn reports status failed, stop execution and return non-converged summary with failure details
-    # Contract: when consecutive unproductive turns exceed threshold (default 2), stop execution and return non-converged summary
-    # Contract: emit real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state
+    # Contract: when role round reports status failed, stop execution and return non-converged summary with failure details
+    # Contract: when consecutive unproductive rounds exceed threshold (default 2), stop execution and return non-converged summary
+    # Contract: emit real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state
     # Contract: when all units evaluate clean across all roles, automatically delete all provisioned role workspaces in scope and return converged summary
     # Contract: aggregate cumulative token usage and monetary expenditure in orchestration summary
     def orchestrate(
@@ -305,6 +293,7 @@ class SubagentCoordinator(
         poll_interval: Optional[float] = None,
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
+        max_unproductive_rounds: Optional[int] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure."""
         reg = get_singleton(role_registry.WorkspaceRegistry)
@@ -314,22 +303,35 @@ class SubagentCoordinator(
         # Resolve model parameters from model_configs.toml
         resolved_batch, _, resolved_unproductive = _resolve_model_parameters(root, model_name=model_name)
         effective_batch_size = batch_size if batch_size is not None else resolved_batch
+        user_unproductive = max_unproductive_rounds if max_unproductive_rounds is not None else max_unproductive_turns
         effective_max_unproductive = (
-            max_unproductive_turns
-            if max_unproductive_turns is not None
+            user_unproductive
+            if user_unproductive is not None
             else (resolved_unproductive if resolved_unproductive is not None else 5)
         )
-        unproductive_turns: Dict[str, int] = {}
+        unproductive_rounds: Dict[str, int] = {}
+        unresolved_reminders: Dict[str, str] = {}
 
         print(f"[ORCHESTRATE] Starting orchestration: scope='{dir_scope}', max_waves={max_waves}", flush=True)
 
-        # Reset preexisting role workspaces for declared roles in scope to ensure clean initial state
+        # Reset and recommission role workspaces for declared roles in scope to ensure clean initial state with model binding
         all_scope_roles = reg.list_roles(repo_root=root, dir_scope=dir_scope)
         for r_entry in all_scope_roles:
             r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
             ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
             if os.path.isdir(ws_dir):
                 shutil.rmtree(ws_dir, ignore_errors=True)
+            try:
+                prov = get_singleton(provision.WorkspaceProvisioner)
+                prov.commission(
+                    role_name=r_name,
+                    dir_scope=dir_scope,
+                    repo_root=root,
+                    reset=True,
+                    model=model_name,
+                )
+            except Exception:
+                pass
 
         # Filter roles up to target_role if specified
         roles_to_evaluate = all_scope_roles
@@ -353,6 +355,7 @@ class SubagentCoordinator(
         cumulative_cost = 0.0
         failure_msg: Optional[str] = None
         active_workers: Dict[str, str] = {}  # role_name -> task_handle
+        assigned_targets_map: Dict[str, Sequence[str]] = {}  # role_name -> assigned targets
         try:
             # Continuous dynamic queue-driven process supervision loop
             queue_dirty = True
@@ -368,6 +371,7 @@ class SubagentCoordinator(
                         res = harness.await_role(handle)
                     if res is not None:
                         del active_workers[role_name]
+                        assigned_for_role = assigned_targets_map.pop(role_name, ())
                         worker_finished = True
                         submitted_count += len(res.submitted_targets)
                         blamed_count += len(res.blamed_targets)
@@ -387,16 +391,44 @@ class SubagentCoordinator(
                             failure_msg = res.failure_reason or f"Role {role_name} failed execution."
                             break
                         if len(res.submitted_targets) == 0 and len(res.blamed_targets) == 0:
-                            unproductive_turns[role_name] = unproductive_turns.get(role_name, 0) + 1
-                            if unproductive_turns[role_name] >= effective_max_unproductive:
-                                failure_msg = (
-                                    f"Role '{role_name}' made no progress (0 submitted, 0 blamed) "
-                                    f"for {unproductive_turns[role_name]} consecutive turns."
+                            # Verify whether assigned targets transitioned to clean or were resolved in active work queue
+                            ready_now, _ = work_mgr.compute_role_work_queue(
+                                role_name,
+                                dir_scope=dir_scope,
+                                repo_root=root,
+                                target_unit=target_node,
+                            )
+                            ready_targets_now = {item.target_file for item in ready_now}
+                            is_resolved = False
+                            if assigned_for_role:
+                                is_resolved = any(t not in ready_targets_now for t in assigned_for_role)
+                            elif not ready_now:
+                                is_resolved = True
+
+                            if is_resolved:
+                                unproductive_rounds[role_name] = 0
+                                unresolved_reminders.pop(role_name, None)
+                            else:
+                                unproductive_rounds[role_name] = unproductive_rounds.get(role_name, 0) + 1
+                                unresolved_reminders[role_name] = (
+                                    f"CRITICAL REMINDER: The previous round for role '{role_name}' concluded without submitting, blaming, or failing any assigned targets.\n"
+                                    f"Conversational commentary without tool execution is strictly prohibited.\n"
+                                    f"You must verify your work with `bin/check_files <target>` and immediately conclude the round by running:\n"
+                                    f"  - `bin/submit <target> \"<summary>\"` (to certify valid targets),\n"
+                                    f"  - `bin/blame <culprit_target> \"<critique>\"` (if an upstream dependency has defects), or\n"
+                                    f"  - `bin/fail` (if encountering an unrecoverable failure).\n"
+                                    f"Execute the appropriate tools now to complete and conclude the round."
                                 )
-                                print(f"[ORCHESTRATE] Circuit breaker tripped: {failure_msg}", flush=True)
-                                break
+                                if unproductive_rounds[role_name] >= effective_max_unproductive:
+                                    failure_msg = (
+                                        f"Role '{role_name}' made no progress (0 submitted, 0 blamed) "
+                                        f"for {unproductive_rounds[role_name]} consecutive rounds."
+                                    )
+                                    print(f"[ORCHESTRATE] Circuit breaker tripped: {failure_msg}", flush=True)
+                                    break
                         else:
-                            unproductive_turns[role_name] = 0
+                            unproductive_rounds[role_name] = 0
+                            unresolved_reminders.pop(role_name, None)
 
                 if worker_finished:
                     queue_dirty = True
@@ -491,21 +523,23 @@ class SubagentCoordinator(
                             ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
                             if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
                                 prov = get_singleton(provision.WorkspaceProvisioner)
-                                prov.commission(r_name, dir_scope=dir_scope, repo_root=root)
+                                prov.commission(r_name, dir_scope=dir_scope, repo_root=root, model=model_name)
 
                             if effective_batch_size is not None:
                                 _persist_batch_size(ws_dir, effective_batch_size)
 
+                            reminder = unresolved_reminders.pop(r_name, "")
                             dispatch = subagent_coordinator.RoleDispatch(
                                 role_name=r_name,
                                 workspace_dir=ws_dir,
                                 dir_scope=dir_scope,
                                 ready_targets=tuple(target_paths),
                                 batch_size=effective_batch_size,
-                                task_prompt="",
+                                task_prompt=reminder,
                             )
                             handle = harness.dispatch_role(dispatch)
                             active_workers[r_name] = handle
+                            assigned_targets_map[r_name] = tuple(target_paths)
                             dispatched_any = True
                             print(
                                 f"[ORCHESTRATE] Dispatched role '{r_name}' on {len(target_paths)} target(s): {', '.join(target_paths)}",
@@ -571,6 +605,21 @@ class SubagentCoordinator(
     def resolve_cleanroom_log_dir(self, workspace_dir: str) -> str:
         """Resolves the canonical repository logs directory for a role workspace."""
         return subagent_coordinator.resolve_cleanroom_log_dir(workspace_dir)
+
+    def resolve_model_parameters(
+        self,
+        repo_root: str,
+        model_name: Optional[str] = None,
+    ) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+        """Dynamically resolves subagent batch sizes, token limits, and unproductive round thresholds."""
+        return _resolve_model_parameters(repo_root, model_name=model_name)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-18T19:13:51Z
+# LAST_CHANGED: 2026-10-20T23:55:00Z
+# CHANGE: Suppress unproductive rounds and scolding reminders when assigned targets are resolved or cleaned in repository
+# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

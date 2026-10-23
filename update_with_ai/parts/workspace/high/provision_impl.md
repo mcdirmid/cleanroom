@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T17:45:00Z
-CHANGE: specify in-workspace file inspection and terminal command restrictions in AGENTS.md synthesis
-CODE_HASH: 89d2888e72e7
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # provision_impl implementation component
 
 imports: session, cleanroom_files_ext, role_registry, scaffold, stub, src_metadata
@@ -29,7 +21,7 @@ The workspace provisioner:
 
 - Validates that the target directory exists and resolves the role definition.
 
-- Creates the role workspace working tree, copying workspace roots, project configurations, and build definitions while configuring type-checking to cover the workspace without directory exclusions.
+- Creates the role workspace working tree, copying workspace roots, project configurations (.python-version, pyproject.toml, uv.lock, model_configs.toml), and build definitions while configuring type-checking to cover the workspace without directory exclusions.
 
 - Inspects the declared role patterns to identify writable target files, upstream contract dependencies, and stub role dependencies.
 
@@ -43,19 +35,28 @@ The workspace provisioner:
 
 - Copies upstream contract dependencies and guides into the workspace with read-only permissions, ensuring agents cannot alter an upstream specification in place.
 
-- Deploys executable zipapp runner wrappers into the `bin/` directory of the workspace, packaging executable runners for the work, check files, submit, blame, fail, and coverage subcommands with execution permissions.
+- Copies user-facing runtime libraries and type stubs (`lifecycle.py`, `lifecycle.pyi`, `framework.py`, `framework.pyi`) into support directories with read-only permissions, projecting constituent runtime support libraries, companion guides, starter templates, and methodology configurations belonging exclusively to the active methodology binding directly into the workspace root (`./support/lib`, `./guides`, `./templates`, `./cleanroom_roles.toml`, `./pyright_spec.json`), strictly avoiding copying or scanning any unbound repository root directories, while strictly excluding internal methodology oracles, AST linters, and role runners (`build_lint_common.py`, `*_lint.py`, `cleanroom_role_tool.py`, `cleanroom_uv_runner.py`) from role workspace filesystems.
+
+- Deploys self-contained executable zipapps into the `bin/` directory of the workspace, packaging compiled Python bytecode (`.pyc`) and source modules for cleanroom_role_tool, build_lint_common, and role verification linters inside the archive so that runners execute in-memory across Python runtime versions without exposing loose oracle files in the role workspace filesystem.
 
 
 - Writes the role descriptor configuration file recording the role address, role name, and directory scope, omitting host repository paths to preserve isolation, with optional model profile attributes.
 
 - Synthesizes an `AGENTS.md` guide containing the behavioral constraints, role instructions, and tool usage sequences tailored to the commissioned role.
 
-- Writes boundary rules into the guide that confine the agent to the workspace, forbid git operations, and declare the main repository read-only, and writes a contamination tripwire that mandates an immediate abort upon reading an out-of-bounds file outside the workspace directory, while explicitly permitting and instructing file inspection of in-workspace specifications, tests, code implementations, and commit change metadata headers using file-reading tools.
+- Writes boundary rules into the guide that confine the agent to the workspace, forbid git operations, and declare the main repository read-only, and writes a contamination tripwire that mandates an immediate abort upon reading an out-of-bounds file outside the workspace directory, while explicitly permitting and instructing file inspection of in-workspace specifications, tests, code implementations, and commit change metadata headers.
 
-- Writes a command execution tripwire into the guide that strictly restricts terminal shell command execution to prescribed `bin/` executables (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, `bin/fail`) and mandates an immediate abort upon executing unapproved commands.
+- Writes execution guidance into the guide that permits shell commands and native harness tools within the workspace directory, while mandating that Cleanroom target verification and round resolution proceed through prescribed `bin/` executables (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, `bin/fail`).
 
 - Writes a fail-stop and reporting protocol into the guide that prohibits self-healing on an infrastructure traceback, error, or missing dependency, while distinguishing ordinary verification test failures and establishing an unresolvable impasse protocol where failures are recorded via `bin/fail` and escalated to the coordinator.
 
 - Writes instructions for acting on blame and feedback into the guide, warning authoring agents that static checks do not execute tests or verify runtime logic, clarifying that passing `bin/check_files` does not mean feedback is resolved, directing authors to resolve runtime defects against contracts and tests before submitting, and mandating that auditor agents inspect target `# CHANGE:` commit headers before delivering blame to tailor feedback to what remains unaddressed without recycling identical critiques.
 
 - Registers the new workspace descriptor in the workspace registry.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-22T13:50:00Z
+LAST_CHANGED: 2026-10-22T13:50:00Z
+CHANGE: Restrict workspace provisioning exclusively to target scope and bound methodology package assets
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

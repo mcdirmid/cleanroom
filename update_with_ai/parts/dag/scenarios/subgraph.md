@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:21Z
-CHANGE: Author dag subgraph concrete scenarios
-CODE_HASH: b227c1b0f898
--->
-
 # Concrete scenarios for `subgraph` (interface)
 
 ## Scenario 1 — Establishing the active subgraph and its dependency-first order
@@ -155,3 +148,9 @@ Given: role `//my/scope:alpha` and role `//my/scope:beta` both have role tier de
 
 1. The caller computes topological order.
    Observed: `//my/pkg:widget#//my/scope:alpha` precedes `//my/pkg:widget#//my/scope:beta` based on alphabetical comparison of the unqualified role names `alpha` vs `beta` extracted after the final colon delimiter.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:21Z
+CHANGE: Author dag subgraph concrete scenarios
+-->

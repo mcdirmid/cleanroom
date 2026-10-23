@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_coordinator_impl implementation specification
-CODE_HASH: d5c4f7252675
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # antigravity_coordinator_impl implementation component
 
 imports: session, antigravity_coordinator, antigravity_ext, antigravity_workspace, subagent_coordinator, role_registry
@@ -37,10 +29,17 @@ The antigravity coordinator generator realization creates coordinator skills and
 
 When generating the coordinator skill:
 
-- The realization renders the skill document containing YAML metadata and instructions for evaluating work queues and dispatching worker subagents.
+- The realization renders the skill document containing YAML metadata and instructions for evaluating work queues, dispatching worker subagents, and messaging back workers that finish rounds without submitting, blaming, or failing assigned targets.
 
 - The realization validates that the generated skill enforces workspace directory pinning and prohibits inheriting the supervisor workspace.
 
-- The realization maps role dispatch directives into subagent dispatch specifications with target workspace paths and task prompts instructing workers to drain ready nodes via submission, blame attribution, or failure diagnostics.
+- The realization maps role dispatch directives into subagent dispatch specifications with target workspace paths and task prompts incorporating coordinator reminders to drain ready nodes via submission, blame attribution, or failure diagnostics.
 
 - The realization extracts action status, submitted targets, blamed targets, and failure diagnostics from subagent completion messages.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T21:45:00Z
+CHANGE: author antigravity_coordinator_impl implementation specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T19:43:57Z
-LAST_CHANGED: 2026-10-11T02:45:00Z
-CHANGE: Restate the root assembly structurally and remove the constituent enumeration from prose
-CODE_HASH: e929743aa7eb
-SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
--->
-
 # cleanroom_asm assembly component
 
 assembles: control_asm, file_paths_impl, metadata_asm, workspace_cli_asm, openai_loop_asm, workspace_asm
@@ -25,3 +17,10 @@ Operating an autonomous software development environment requires unifying speci
 The cleanroom_asm assembly component aggregates the implementations of every interface component in the system, uniting the constituent subsystem assemblies and implementations into a unified root system that is ready for end-to-end execution.
 
 The uv cleanroom assembly initializes its constituent assemblies and implementations recursively, registering every singleton service across the system and session lifecycle tiers to achieve full architectural interface closure.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T19:43:57Z
+LAST_CHANGED: 2026-10-11T02:45:00Z
+CHANGE: Restate the root assembly structurally and remove the constituent enumeration from prose
+SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
+-->

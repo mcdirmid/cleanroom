@@ -106,8 +106,9 @@ def main(): pass
         lines = updated.splitlines()
         self.assertEqual(lines[0], "#!/usr/bin/env python3")
         self.assertEqual(lines[1], "# -*- coding: utf-8 -*-")
-        self.assertEqual(lines[2], "# --- CLEANROOM METADATA ---")
-        self.assertIn("def main(): pass", updated)
+        self.assertEqual(lines[3], "def main(): pass")
+        self.assertEqual(lines[-1], "# --- END CLEANROOM METADATA ---")
+        self.assertIn("# --- CLEANROOM METADATA ---", updated)
 
     def test_rewrite_markdown_metadata_insert_frontmatter(self) -> None:
         original = """---
@@ -127,8 +128,9 @@ title: Doc
         self.assertEqual(lines[0], "---")
         self.assertEqual(lines[1], "title: Doc")
         self.assertEqual(lines[2], "---")
-        self.assertEqual(lines[3], "<!-- CLEANROOM METADATA")
-        self.assertIn("# Hello World", updated)
+        self.assertEqual(lines[4], "# Hello World")
+        self.assertEqual(lines[-1], "-->")
+        self.assertIn("<!-- CLEANROOM METADATA", updated)
 
     def test_append_feedback(self) -> None:
         original = """# --- CLEANROOM METADATA ---

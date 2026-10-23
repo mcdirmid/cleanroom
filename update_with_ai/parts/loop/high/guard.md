@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Split detection from threshold outcomes into declarative statements
-CODE_HASH: de33d286b482
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # guard interface component
 
 imports: tool_provider
@@ -29,3 +21,10 @@ The loop guard evaluates consecutive executions of identical tools and consecuti
 The loop guard produces a loop reminder when consecutive repetitions reach a warning threshold, and produces a loop failure communicating session termination when consecutive repetitions reach a fatal threshold.
 
 The loop guard clears repetition tracking when a tool execution demonstrates forward progress.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Split detection from threshold outcomes into declarative statements
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

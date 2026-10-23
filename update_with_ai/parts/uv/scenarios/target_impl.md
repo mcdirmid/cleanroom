@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:20:04Z
-CHANGE: Author uv target_impl concrete scenarios
-CODE_HASH: 773dff92540d
--->
-
 # Concrete scenarios for `uv_target_impl` (implementation)
 
 Scenarios 1 through 26 restate the caller observations of the interface scenarios and add, beside
@@ -468,3 +461,9 @@ package `parts`.
    is returned.
    Realized by: target syntax validation through `uv_target_labels_ext`, whose package path segment
    and unit name rules reject the label, and the component's own propagation of that rejection.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:20:04Z
+CHANGE: Author uv target_impl concrete scenarios
+-->

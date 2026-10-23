@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:49:24Z
-CHANGE: Contract the empty next ready batch when no dirty node has all target subgraph dependencies clean
-CODE_HASH: a50dfddce639
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # subgraph interface component
 
 ## Intent
@@ -62,3 +54,10 @@ By calculating dependency-first topological ordering, evaluating subgraph comple
   - Deferred: Queried from dag_storage in implementation.
 - Traversal boundaries for batch size and node visit limits.
   - Deferred: Queried from dag_config in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:49:24Z
+CHANGE: Contract the empty next ready batch when no dirty node has all target subgraph dependencies clean
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

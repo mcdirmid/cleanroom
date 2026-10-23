@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:07:14Z
-CHANGE: Canonicalize warning and fatal thresholds and split reminder content statements
-CODE_HASH: 6303af4c1696
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # guard_impl implementation component
 
 ## Intent
@@ -19,8 +11,9 @@ By enforcing an explicit warning threshold of two repetitions and fatal threshol
 ### Contracts
 
 - The loop guard tracks consecutive executions of identical tools with identical arguments. [track_identical_tool_executions]
-- The loop guard tracks consecutive edits to the same file and line range. [track_consecutive_file_range_edits]
+- The loop guard tracks consecutive edits to the same file and line range using the session's editing tool. [track_consecutive_file_range_edits]
 - When consecutive identical tool executions reach the warning threshold of two repetitions, the loop guard produces a loop reminder. [remind_tool_repetition_at_two]
+- The tool repetition reminder directs the agent to modify files using the session's editing tool or conclude the round with blame or fail. [direct_action_or_conclude_round]
 - The tool repetition reminder advises the agent that no new information will be revealed until session read-write files are updated. [advise_no_new_info_until_files_updated]
 - The tool repetition reminder warns that repeating without modifying files will trigger fatal termination. [warn_repetition_triggers_fatal]
 - When consecutive identical tool executions reach the fatal threshold, the loop guard produces a loop failure communicating session failure. [fail_tool_repetition_at_fatal]
@@ -30,7 +23,7 @@ By enforcing an explicit warning threshold of two repetitions and fatal threshol
 
 ### Woven Contracts
 
-- Repeating identical tool calls or line-bounded edits triggers advisory reminders at two repetitions and fatal failure when reaching the fatal limit. [track_identical_tool_executions, track_consecutive_file_range_edits, remind_tool_repetition_at_two, advise_no_new_info_until_files_updated, warn_repetition_triggers_fatal, fail_tool_repetition_at_fatal, remind_edit_repetition_at_two, fail_edit_repetition_at_fatal, guard: [produce_loop_reminder_at_warning, produce_loop_failure_at_fatal]]
+- Repeating identical tool calls or line-bounded edits triggers advisory reminders at two repetitions and fatal failure when reaching the fatal limit. [track_identical_tool_executions, track_consecutive_file_range_edits, remind_tool_repetition_at_two, direct_action_or_conclude_round, advise_no_new_info_until_files_updated, warn_repetition_triggers_fatal, fail_tool_repetition_at_fatal, remind_edit_repetition_at_two, fail_edit_repetition_at_fatal, guard: [produce_loop_reminder_at_warning, produce_loop_failure_at_fatal]]
 - Tool executions demonstrating progress clear repetition counters to allow legitimate iterative development. [reset_counters_on_forward_progress, guard: [clear_repetition_on_progress]]
 
 ## Grounding
@@ -48,5 +41,14 @@ By enforcing an explicit warning threshold of two repetitions and fatal threshol
 
 ### Knowledge Requirements
 
+- Identification of the session's editing tool and its coordinate parameters.
+  - Grounded: [loop_guard_service, file_editor: [editing_tool_capability]]
 - Repetition counter reset on forward progress.
   - Grounded: [loop_guard_service]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-21T20:00:00Z
+LAST_CHANGED: 2026-10-21T20:00:00Z
+CHANGE: Ground editing tool capability from file_editor for edit tracking and reminder direction
+SPEC_QA_AUDIT: 2026-10-21T20:00:00Z
+-->

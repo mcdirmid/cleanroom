@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Define roles_impl implementation component
-CODE_HASH: b0f6828adf80
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # roles_impl implementation component
 
 imports: session
@@ -32,3 +24,10 @@ The role resolver validates declaration constraints across role dependencies, fa
 The role resolver discovers methodology configurations across directory scopes by inspecting package configuration files and parent package hierarchies, caching parsed role definitions against configuration file modification timestamps.
 
 The role resolver resolves role definitions for unqualified role names and qualified role addresses, qualifying role definitions with their requested role addresses upon resolution.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T18:45:00Z
+CHANGE: Define roles_impl implementation component
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

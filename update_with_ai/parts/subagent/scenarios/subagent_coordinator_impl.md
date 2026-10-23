@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T12:00:00Z
-CHANGE: update subagent coordinator impl scenarios for dynamic queue supervision
-CODE_HASH: 7dc34696b488
--->
-
 # subagent_coordinator_impl scenarios
 
 ### Scenario 1 — Resetting preexisting role workspaces on startup
@@ -53,15 +46,15 @@ Given: an active subagent worker process for role_a fails or exits with an unres
 
 1. The coordinator polls active workers.
    Observed: dynamic supervision halts and returns a non-converged summary with failure diagnostics.
-   Realized by: the component's error handler detecting failed turn status and breaking the supervisor loop.
+   Realized by: the component's error handler detecting failed round status and breaking the supervisor loop.
 
 ### Scenario 7 — Cumulative token telemetry aggregation
 
-Given: multiple concurrent subagent turns complete consuming tokens.
+Given: multiple concurrent subagent rounds complete consuming tokens.
 
-1. The coordinator reaps finished worker turns.
-   Observed: input, cached, and output tokens from all completed turns are aggregated into cumulative financial costs.
-   Realized by: the component's telemetry accumulator aggregating turn token usages into cumulative project totals.
+1. The coordinator reaps finished worker rounds.
+   Observed: input, cached, and output tokens from all completed rounds are aggregated into cumulative financial costs.
+   Realized by: the component's telemetry accumulator aggregating round token usages into cumulative project totals.
 
 ### Scenario 8 — Restricting execution up to a target role boundary
 
@@ -79,13 +72,13 @@ Given: dynamic supervision achieves clean convergence across all evaluated roles
    Observed: all provisioned role workspace directories for scope_a are automatically deleted before returning the summary.
    Realized by: the component's convergence cleanup deleting all provisioned role workspace directories for scope_a when is_converged is true.
 
-### Scenario 10 — Halting orchestration upon consecutive unproductive turn impasse
+### Scenario 10 — Halting orchestration upon consecutive unproductive round impasse
 
-Given: role_a completes consecutive execution turns without submitting or blaming any ready targets.
+Given: role_a completes consecutive execution rounds without submitting or blaming any ready targets and its assigned ready targets remain unresolved in the repository.
 
 1. The coordinator polls active workers.
-   Observed: dynamic supervision halts when unproductive turns reach the threshold, returning a non-converged summary with impasse details.
-   Realized by: the component's impasse detection tracking consecutive turns yielding zero submitted and zero blamed targets and breaking the supervisor loop.
+   Observed: dynamic supervision halts when unproductive rounds on unresolved targets reach the threshold, returning a non-converged summary with impasse details; unproductive round counts and scolding reminders are suppressed when assigned ready targets are resolved or cleaned in the repository.
+   Realized by: the component's impasse detection tracking consecutive rounds yielding zero submitted and zero blamed targets on unresolved targets and breaking the supervisor loop.
 
 ### Scenario 11 — Decommissioning workspaces and interrupting workers on cancellation
 
@@ -95,3 +88,16 @@ Given: active workers are executing in provisioned workspaces for scope_a when a
    Observed: all running workers are interrupted through the harness adapter and all provisioned role workspace directories for scope_a are deleted.
    Realized by: the component's cancellation handler catching cancellation, calling `interrupt_role` on active worker handles, and deleting provisioned role workspace directories for scope_a.
 
+### Scenario 12 — Reminding role workers upon unresolved round completion
+
+Given: a role worker completes a round without submitting, blaming, or failing assigned ready targets and its assigned ready targets remain unresolved in the repository.
+
+1. The coordinator reaps the unresolved round and dispatches a subsequent round for the role.
+   Observed: the subsequent role dispatch directive includes an actionable reminder in its task prompt instructing the worker to verify with check_files and conclude the round via submit, blame, or fail without conversational stopping; reminders are suppressed when assigned ready targets were resolved or cleaned in the repository.
+   Realized by: the component's unresolved round tracker recording a reminder string upon observing zero submitted and zero blamed targets on unresolved targets without failure, and setting task_prompt on the next RoleDispatch.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-20T23:45:00Z
+CHANGE: Suppress unproductive rounds and scolding reminders when assigned targets are resolved or cleaned in the repository
+-->

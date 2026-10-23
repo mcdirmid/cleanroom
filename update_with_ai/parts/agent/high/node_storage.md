@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T01:39:02Z
-CHANGE: Align node definition with its task prompt and restructure the agent storage operation list
-CODE_HASH: 264960eede71
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # node_storage interface component
 
 imports: dag_storage
@@ -31,3 +23,10 @@ A system's *agent storage* is a dag storage backed by workspace build target man
 The agent storage maintains the nodes and dependencies that workspace target manifests declare, and provides the task prompts and node definitions of declared nodes.
 
 The agent storage evaluates whether a node is dirty from the in-band source file metadata of the node and the change state of its non-silent dependencies.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Align node definition with its task prompt and restructure the agent storage operation list
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

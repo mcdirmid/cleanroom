@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:06:37Z
-CHANGE: Declare the loop cleaner as a topological cleaning service over dag storage
-CODE_HASH: d868997bbdac
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # cleaner interface component
 
 ## Intent
@@ -46,3 +38,10 @@ By guaranteeing dependency-first evaluation order and halting promptly on unreco
   - Deferred: Delegated to DagSubgraph in implementation.
 - Delegation of ready batch workloads to NodeCleaner.
   - Deferred: Delegated to NodeCleaner in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:06:37Z
+CHANGE: Declare the loop cleaner as a topological cleaning service over dag storage
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

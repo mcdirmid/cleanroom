@@ -1,11 +1,6 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:03:56Z
-# CHANGE: Remove a stray blank line from the coordinator protocol body
-# CODE_HASH: 52d01a6fc2ea
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional, Protocol, Sequence
@@ -42,7 +37,7 @@ class ControlDispatchOutcome:
     remaining_open_targets: Sequence[dag_storage.DagNode]
 
 
-class SessionCoordinator(Protocol):
+class SessionCoordinator(Singleton[AgentSessionTier], Protocol):
     """Central coordinator facade managing session state and dispatching actions."""
 
     # Contract: Sequence of nodes currently in OPEN state.
@@ -106,3 +101,9 @@ class SessionCoordinator(Protocol):
         target_alias: Optional[str] = None,
         explanation: str = "",
     ) -> ControlDispatchOutcome: ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:03:56Z
+# CHANGE: Remove a stray blank line from the coordinator protocol body
+# --- END CLEANROOM METADATA ---

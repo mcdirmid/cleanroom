@@ -1,15 +1,7 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-12T12:35:00Z
-# CHANGE: Present single-line event summaries to standard output without timestamps or event names
-# CODE_HASH: 6879e46c3a9e
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Runner logger implementation low-level specification."""
 
 import sys
-from framework import operation, override, singleton_type
+from support.lib.framework import operation, override, singleton_type
 import logger
 
 
@@ -55,3 +47,10 @@ def __orphan__() -> None:
     - MUST resolve the transcript log file destination from configured environment variables when present.
     """
     ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-12T12:35:00Z
+# CHANGE: Present single-line event summaries to standard output without timestamps or event names
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

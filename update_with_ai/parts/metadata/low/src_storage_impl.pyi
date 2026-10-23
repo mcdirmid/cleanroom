@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T04:14:49Z
-# CHANGE: Ground target manifest discovery on agent storage alongside in-band metadata parsing
-# CODE_HASH: afe4a1e95181
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Cleanroom storage implementation low-level specification."""
 
 from typing import Optional, Set, Tuple
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 import node_storage
 import dag_storage
 import file_paths
@@ -18,7 +10,7 @@ import src_metadata
 
 
 @singleton_type("system")
-class AgentStorage(node_storage.AgentStorage, InTier[SystemTier]):
+class AgentStorage(node_storage.AgentStorage):
     """Realizes in-memory graph indexing and in-band source file metadata persistence for Cleanroom targets.
 
     GROUNDING:
@@ -448,3 +440,10 @@ class AgentStorage(node_storage.AgentStorage, InTier[SystemTier]):
           src_metadata.SourceMetadataCoordinator.update_metadata.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T04:14:49Z
+# CHANGE: Ground target manifest discovery on agent storage alongside in-band metadata parsing
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

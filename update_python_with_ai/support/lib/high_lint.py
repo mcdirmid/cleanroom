@@ -33,7 +33,7 @@ def find_all_parts_dirs() -> list[Path]:
     if not ROOT.exists():
         return dirs
     for entry in sorted(ROOT.iterdir()):
-        if entry.is_dir() and not entry.name.startswith(".") and entry.name != "staging":
+        if entry.is_dir() and not entry.name.startswith("."):
             p = entry / "parts"
             if p.is_dir():
                 cfg = p / "cleanroom.toml"
@@ -283,6 +283,14 @@ def lint_high_file(file_path: Path) -> list[str]:
                                 for s in c_tree.body:
                                     if isinstance(s, ast.ClassDef):
                                         classes.add(s.name)
+                                    elif isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                                        classes.add(s.name)
+                                    elif isinstance(s, ast.AnnAssign) and isinstance(s.target, ast.Name):
+                                        classes.add(s.target.id)
+                                    elif isinstance(s, ast.Assign):
+                                        for t in s.targets:
+                                            if isinstance(t, ast.Name):
+                                                classes.add(t.id)
                             except (SyntaxError, OSError):
                                 pass
                         return classes
@@ -309,6 +317,8 @@ def lint_high_file(file_path: Path) -> list[str]:
 
     for l_idx, line in enumerate(lines[idx:], idx + 1):
         line_s = line.strip()
+        if line_s.startswith("<!--") and "CLEANROOM METADATA" in line_s:
+            break
         if line.startswith("## "):
             current_section = line_s[3:].strip()
             if current_section not in valid_sections:

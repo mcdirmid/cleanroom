@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T21:45:00Z
-# CHANGE: author antigravity_coordinator_impl implementation library
-# CODE_HASH: ac5bdc13bf76
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for antigravity_coordinator_impl."""
 
 from __future__ import annotations
@@ -53,7 +44,7 @@ Your sole responsibility is coordinating multi-agent DAG convergence across comm
 1. **NO CODE CUSTODY**: Never open, read, or edit implementation source files (`lib/*.py`, `tests/*_test.py`, `high/*.md`, etc.).
 2. **NO TEST EXECUTION**: Never run test suites (`pytest`, `pyright`, etc.) in the coordinator session.
 3. **NO EXPLORATORY SEARCHING**: Never run `find`, `grep`, `git diff`, or directory tree walks.
-5. **WORKSPACE COMMISSIONING**: Ensure all role workspaces are commissioned for the active scope before dispatching turns (`bin/cleanroom commission <role> <scope>`).
+4. **WORKSPACE COMMISSIONING**: Ensure all role workspaces are commissioned for the active scope before dispatching rounds (`bin/cleanroom commission <role> <scope>`).
 5. **QUEUE EVALUATION ONLY**: Inspect the DAG work queue for ready nodes `(unit, role)` by running:
    ```bash
    bin/cleanroom work-queue{scope_hint} --json
@@ -62,6 +53,7 @@ Your sole responsibility is coordinating multi-agent DAG convergence across comm
    - For roles with ready nodes, message existing active role subagents (`send_message`) or dispatch them (`invoke_subagent`).
    - **STRICT BOUNDARY INVARIANT**: You MUST explicitly set the subagent `Workspace` parameter to the role workspace directory (`../role_workspaces/<ws>_<role>_<scope>/`). Setting `Workspace: inherit` is STRICTLY PROHIBITED.
    - Instruct role workers to follow their workspace `AGENTS.md`, perform role verification, resolve ready nodes via `bin/submit`, `bin/blame`, or `bin/fail`, and drain all ready nodes before completing.
+   - **UNRESOLVED ROUND REMINDER**: If a role worker stops, completes, or sends a message without having submitted, blamed, or failed its assigned ready targets, IMMEDIATELY message it back using `send_message`: remind it that it ended the round without submitting, blaming, or failing, and instruct it to execute `bin/check_files` and conclude the round with `bin/submit`, `bin/blame`, or `bin/fail`.
 7. **REACTIVE WAKEUP & SLEEP**:
    - Stop calling tools and wait for reactive notification. Do NOT poll or sleep in a loop.
    - Upon receiving a completion message, re-evaluate the DAG work queue and repeat until all nodes in scope converge clean.
@@ -69,10 +61,7 @@ Your sole responsibility is coordinating multi-agent DAG convergence across comm
 
 
 # Contract: AntigravityCoordinatorGenerator realizes skill artifact generation, tool parameter formatting, and wake notification parsing in the agent session tier.
-class AntigravityCoordinatorGenerator(
-    Singleton,
-    antigravity_coordinator.AntigravityCoordinatorGenerator,
-):
+class AntigravityCoordinatorGenerator(antigravity_coordinator.AntigravityCoordinatorGenerator):
     """Realizes skill artifact generation, tool parameter formatting, and wake notification parsing."""
 
     tier = agent_session.agent_session
@@ -106,19 +95,22 @@ class AntigravityCoordinatorGenerator(
         """Formats a role dispatch directive into an Antigravity tool specification."""
         targets_str = ", ".join(dispatch.ready_targets) if dispatch.ready_targets else "all ready nodes"
         batch_hint = f" (bounded to batch size {dispatch.batch_size})" if dispatch.batch_size else ""
+        base_prompt = (
+            f"Execute autonomous Cleanroom round for role '{dispatch.role_name}' in scope '{dispatch.dir_scope}'.\n"
+            f"Nodes ready: {targets_str}{batch_hint}.\n"
+            f"1. Run bin/get_work to acquire pending ready nodes.\n"
+            f"2. Run bin/check_files to establish ground truth errors. Never guess or speculate on errors before seeing check output.\n"
+            f"3. Consult your workspace AGENTS.md and role companion guide to perform role duties.\n"
+            f"4. Edit assigned target files and re-run bin/check_files to verify clean state.\n"
+            f"5. Resolve nodes: run bin/submit <target> to submit completed work; if blocked on defective upstream contracts, run bin/blame <culprit_file> '<critique>'; if an unresolvable blocker occurs, run bin/fail <target> '<reason>'.\n"
+            f"6. Immediately call bin/get_work again to drain any remaining ready nodes in scope.\n"
+            f"CRITICAL: Never output conversational commentary without tools or end a step on a colon. Conclude the round via bin/submit, bin/blame, or bin/fail.\n"
+            f"When all ready nodes in scope are clean, emit your round completion message."
+        )
         prompt = (
-            dispatch.task_prompt
+            f"{dispatch.task_prompt}\n\n{base_prompt}"
             if dispatch.task_prompt
-            else (
-                f"Execute autonomous Cleanroom turn for role '{dispatch.role_name}' in scope '{dispatch.dir_scope}'.\n"
-                f"Nodes ready: {targets_str}{batch_hint}.\n"
-                f"1. Run bin/get_work to acquire pending ready nodes.\n"
-                f"2. Consult your workspace AGENTS.md and role companion guide to perform role duties.\n"
-                f"3. Run bin/check_files to verify clean state.\n"
-                f"4. Resolve nodes: run bin/submit <target> to submit completed work; if blocked on defective upstream contracts, run bin/blame <culprit_file> '<critique>'; if an unresolvable blocker occurs, run bin/fail <target> '<reason>'.\n"
-                f"5. Immediately call bin/get_work again to drain any remaining ready nodes in scope.\n"
-                f"When all ready nodes in scope are clean, emit your turn completion message."
-            )
+            else base_prompt
         )
 
         return antigravity_coordinator.SubagentDispatchSpec(
@@ -245,10 +237,7 @@ def _render_isolation_rule_content(role_name: str, dir_scope: str) -> str:
 
 
 # Contract: AntigravityWorkspaceConfigurer realizes Antigravity-specific isolation rules and workspace confinement in the agent session tier.
-class AntigravityWorkspaceConfigurer(
-    Singleton,
-    antigravity_workspace.AntigravityWorkspaceConfigurer,
-):
+class AntigravityWorkspaceConfigurer(antigravity_workspace.AntigravityWorkspaceConfigurer):
     """Realizes Antigravity-specific isolation rules and workspace confinement."""
 
     tier = agent_session.agent_session
@@ -283,7 +272,13 @@ class AntigravityWorkspaceConfigurer(
             role_name=role_name,
             is_confined=True,
         )
-
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T21:45:00Z
+# CHANGE: author antigravity_coordinator_impl implementation library
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -292,18 +287,12 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         AntigravityCoordinatorGenerator,
-        keys=[
-            antigravity_coordinator.AntigravityCoordinatorGenerator,
-            AntigravityCoordinatorGenerator,
-        ],
+        keys=[antigravity_coordinator.AntigravityCoordinatorGenerator, AntigravityCoordinatorGenerator],
         tier=agent_session.agent_session,
     )
     reg.register_singleton(
         AntigravityWorkspaceConfigurer,
-        keys=[
-            antigravity_workspace.AntigravityWorkspaceConfigurer,
-            AntigravityWorkspaceConfigurer,
-        ],
+        keys=[antigravity_workspace.AntigravityWorkspaceConfigurer, AntigravityWorkspaceConfigurer],
         tier=agent_session.agent_session,
     )
 

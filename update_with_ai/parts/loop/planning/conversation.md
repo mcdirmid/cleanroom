@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:06:38Z
-CHANGE: Complete conversation capability statements and canonicalize stubbing terminology
-CODE_HASH: fdbc662fdb15
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # conversation interface component
 
 ## Intent
@@ -57,3 +49,10 @@ By tracking message roles, correlating tool calls, and stubbing obsolete tool pa
 
 - Model message sequence encoding and suppression key stubbing.
   - Deferred: Implemented by conversation manager in provider implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:06:38Z
+CHANGE: Complete conversation capability statements and canonicalize stubbing terminology
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

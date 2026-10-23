@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:50:00Z
-CHANGE: Define commands interface scenarios
-CODE_HASH: ff1a29323e5f
--->
-
 # Concrete scenarios for `commands` (interface)
 
 ## Scenario 1 — Executing get_work command
@@ -34,6 +27,9 @@ Given: an active role workspace with a modified target passing verification.
 2. The caller executes `run_submit` when verification checks fail.
    Observed: the handler rejects submission and returns a non-zero exit code.
 
+3. The caller executes `run_submit` on a modified target before running `run_check_files`.
+   Observed: the handler rejects submission, reports that `check_files` must be run on the modified target, and returns exit code 1.
+
 ## Scenario 4 — Executing blame and fail commands
 
 Given: an active role workspace with a pending culprit target.
@@ -43,6 +39,9 @@ Given: an active role workspace with a pending culprit target.
 
 2. The caller executes `run_fail` with a failure diagnostic.
    Observed: the handler records the failure diagnostic, clears pending work, and returns exit code 0.
+
+3. The caller executes `run_blame` or `run_fail` while workspace target files remain modified without having been checked via `run_check_files`.
+   Observed: the handler rejects the operation, reporting that `check_files` must be run on the modified target files, and returns exit code 1.
 
 ## Scenario 5 — Executing coverage command
 
@@ -60,3 +59,9 @@ Given: an active Cleanroom repository directory.
 
 2. The caller executes `run_refresh_sys`.
    Observed: the handler recopies system configuration files, bin utilities, and companion guides into active role workspaces, returning exit code 0.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T17:50:00Z
+CHANGE: Define commands interface scenarios
+-->

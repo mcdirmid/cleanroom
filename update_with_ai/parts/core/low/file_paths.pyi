@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:06:13Z
-# CHANGE: Clarify host path typing and contract direct host path creation fallback; make failure branches atomic
-# CODE_HASH: 4b2f7c6bfd80
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """File paths low-level interface specification."""
 
 from dataclasses import dataclass
 from typing import NewType, Protocol
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 
 PathString = NewType("PathString", str)
 ValidationMessage = NewType("ValidationMessage", str)
@@ -76,7 +68,7 @@ class PathValidationError(ValueError):
 
 
 @singleton_type("system")
-class FilePathManager(InTier[SystemTier], Protocol):
+class FilePathManager(Singleton[SystemTier], Protocol):
     """Validates and resolves path representations."""
 
     @operation
@@ -158,3 +150,10 @@ class FilePathManager(InTier[SystemTier], Protocol):
         - MUST produce the combined absolute path formed by joining the workspace root absolute path with the workspace path.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:06:13Z
+# CHANGE: Clarify host path typing and contract direct host path creation fallback; make failure branches atomic
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

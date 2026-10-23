@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:06:38Z
-CHANGE: Declare loop guard tracking and same-location edit detection per the high-level contract
-CODE_HASH: be0772062935
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # guard interface component
 
 ## Intent
@@ -48,3 +40,10 @@ By distinguishing repetitive oscillations from productive tool invocations, the 
   - Deferred: Tracked via in-memory execution state in implementation.
 - Threshold evaluation for warning reminders and fatal aborts.
   - Deferred: Enforced via configured warning and fatal limits in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:06:38Z
+CHANGE: Declare loop guard tracking and same-location edit detection per the high-level contract
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

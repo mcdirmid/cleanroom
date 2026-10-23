@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:55Z
-CHANGE: Author sandbox tool_provider concrete scenarios
-CODE_HASH: a03670754e9d
--->
-
 # Concrete scenarios for `tool_provider` (interface)
 
 ## Scenario 1 — Installing tools and reporting what is installed
@@ -230,3 +223,9 @@ the string `widget/notes/draft.md` to a bound file.
 
 1. The caller converts the wire string `widget/notes/draft.md` with the alias manager type.
    Observed: the conversion produces the bound file resolved by the alias manager without failure.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:55Z
+CHANGE: Author sandbox tool_provider concrete scenarios
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T17:55:00Z
-CHANGE: Define stub interface specification
-CODE_HASH: 8dba2c166cae
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # stub interface component
 
 imports: session, role_registry
@@ -33,3 +25,10 @@ The workspace stub synthesizer:
 - Determines whether a relative file path matches any declared role in a role's stub dependencies.
 
 - Checks whether an existing file on disk is a valid Cleanroom test stub.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T17:55:00Z
+CHANGE: Define stub interface specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

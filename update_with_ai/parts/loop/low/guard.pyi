@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:19:48Z
-# CHANGE: Align loop guard evaluation contracts and repetition tracking orphan
-# CODE_HASH: 13ddfd954622
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Loop guard low-level interface specification."""
 
 from dataclasses import dataclass
 from typing import Any, Mapping, NewType, Optional, Protocol, Union
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import tool_provider
 
@@ -42,7 +34,7 @@ class LoopFailure:
 
 
 @singleton_type("agent_session")
-class LoopGuard(InTier[AgentSessionTier], Protocol):
+class LoopGuard(Singleton[AgentSessionTier], Protocol):
     """Session service tracking repetitive tool executions and edit oscillations across turns."""
 
     @operation
@@ -85,3 +77,10 @@ def __orphan__() -> None:
     - MUST track repetitive execution patterns across turns for an agent session.
     """
     ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:19:48Z
+# CHANGE: Align loop guard evaluation contracts and repetition tracking orphan
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

@@ -120,12 +120,9 @@ def generate_asm_content(
                     Path(parts_dir).glob(f"*/low/{dep}.pyi")
                 ):
                     domain = p.parent.parent.name
-                    import_pfx = (
-                        f"{scope_name}.parts.{domain}.lib"
-                        if scope_name
-                        else f"parts.{domain}.lib"
-                    )
-                    lines.append(f"from {import_pfx} import {dep}")
+                    resolved_scope = scope_name or (Path(parts_dir).parent.name if Path(parts_dir).name == "parts" else Path(parts_dir).name)
+                    import_pfx = f"{resolved_scope}.parts.{domain}.lib" if resolved_scope else f".{dep}"
+                    lines.append(f"from {import_pfx} import {dep}" if resolved_scope else f"from . import {dep}")
                     found = True
                     break
             if not found:
@@ -257,6 +254,18 @@ def generate_lib_skeleton(
         lines.append(
             "from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system"
         )
+    else:
+        lifecycle_imports: set[str] = set()
+        if "Singleton" in pyi_content or "InTier" in pyi_content:
+            lifecycle_imports.add("Singleton")
+        if "SystemTier" in pyi_content:
+            lifecycle_imports.add("SystemTier")
+        if "LifecycleTier" in pyi_content:
+            lifecycle_imports.add("LifecycleTier")
+        if "system" in pyi_content:
+            lifecycle_imports.add("system")
+        if lifecycle_imports:
+            lines.append(f"from support.lib.lifecycle import {', '.join(sorted(lifecycle_imports))}")
 
     abs_pyi = os.path.abspath(pyi_path)
     parts_split = abs_pyi.split(os.sep)
@@ -298,15 +307,11 @@ def generate_lib_skeleton(
         for t_name in sorted(tier_names):
             resolved_domain = part_mod_map.get(t_name, "")
             if resolved_domain:
-                if base_pkg:
-                    lines.append(f"from {base_pkg}.parts.{resolved_domain}.lib.{t_name} import {t_name}")
-                else:
-                    lines.append(f"from parts.{resolved_domain}.lib.{t_name} import {t_name}")
+                import_pfx = f"{base_pkg}.parts.{resolved_domain}.lib.{t_name}" if base_pkg else f".{t_name}"
+                lines.append(f"from {import_pfx} import {t_name}" if base_pkg else f"from . import {t_name}")
             else:
-                if base_pkg:
-                    lines.append(f"from {base_pkg}.parts.{t_name}.lib.{t_name} import {t_name}")
-                else:
-                    lines.append(f"from parts.{t_name}.lib.{t_name} import {t_name}")
+                import_pfx = f"{base_pkg}.parts.{t_name}.lib.{t_name}" if base_pkg else f".{t_name}"
+                lines.append(f"from {import_pfx} import {t_name}" if base_pkg else f"from . import {t_name}")
 
     dep_imports: list[str] = []
     for node in tree.body:
@@ -334,7 +339,7 @@ def generate_lib_skeleton(
                         mod_import = (
                             f"from {base_pkg}.parts.{target_p}.lib import {mod}"
                             if base_pkg
-                            else f"from parts.{target_p}.lib import {mod}"
+                            else f"from .{target_p}.lib import {mod}"
                         )
                         if alias.asname:
                             dep_imports.append(f"{mod_import} as {alias.asname}")
@@ -347,7 +352,7 @@ def generate_lib_skeleton(
                     dep_imports.append(f"import {mod}")
         elif isinstance(node, ast.ImportFrom):
             mod = node.module or ""
-            if mod.split(".")[0] in (
+            if mod == "__future__" or mod.split(".")[0] in (
                 "typing",
                 "dataclasses",
                 "support",
@@ -389,7 +394,7 @@ def generate_lib_skeleton(
                 if target_p == current_part:
                     dep_imports.append(f"from .{mod} import {names_str}")
                 else:
-                    prefix = f"from {base_pkg}.parts.{target_p}.lib.{mod}" if base_pkg else f"from parts.{target_p}.lib.{mod}"
+                    prefix = f"from {base_pkg}.parts.{target_p}.lib.{mod}" if base_pkg else f"from .{target_p}.lib.{mod}"
                     dep_imports.append(f"{prefix} import {names_str}")
             else:
                 names_str = ", ".join(
@@ -462,20 +467,18 @@ def generate_lib_skeleton(
                 for b in node.bases
                 if ast.unparse(b) not in ("data_type",)
             ]
-            if not is_impl:
-                base_strs = [
-                    b
-                    for b in base_strs
-                    if not b.startswith("InTier[") and b != "InTier"
-                ]
 
             if is_impl and is_cls_singleton:
-                if "Singleton" not in base_strs:
-                    base_strs.append("Singleton")
+                reg_bases = [
+                    b
+                    for b in base_strs
+                    if not b.startswith(("Singleton", "lifecycle.Singleton", "InTier", "lifecycle.InTier"))
+                    and b not in ("object", "Protocol")
+                ]
                 singleton_classes.append(
                     (
                         cls_name,
-                        [b for b in base_strs if b != "Singleton"],
+                        reg_bases,
                         tier_val,
                     )
                 )
@@ -790,7 +793,7 @@ def main() -> int:
             asm_spec = args.pyi or spec_file
             if not asm_spec and not raw_deps:
                 sys.stderr.write(
-                    f"lib_lint: Cannot scaffold {args.module_path}: specification .pyi not found\n"
+                    f"Cannot scaffold {args.module_path}: specification .pyi not found\n"
                 )
                 return 1
             if dir_name:
@@ -806,22 +809,26 @@ def main() -> int:
             return 0
         else:
             sys.stderr.write(
-                f"lib_lint: Cannot scaffold {args.module_path}: specification .pyi not found\n"
+                f"Cannot scaffold {args.module_path}: specification .pyi not found\n"
             )
             return 1
 
     if args.build_path is None:
         if not os.path.isfile(args.module_path):
-            sys.stderr.write(f"lib_lint: File not found: {args.module_path}\n")
+            sys.stderr.write(f"File not found: {args.module_path}\n")
             return 1
         mod_content = read_text(args.module_path)
         if spec_file and is_uninitialized_module(mod_content):
-            sys.stderr.write(f"lib_lint: {args.module_path} is uninitialized\n")
+            sys.stderr.write(
+                f"{args.module_path} is uninitialized (missing implementation classes and functions). Consult your Companion Guide (update_python_with_ai/guides/low_to_lib.md) for required structure.\n"
+            )
             return 1
     elif os.path.isfile(args.module_path):
         mod_content = read_text(args.module_path)
         if spec_file and is_uninitialized_module(mod_content):
-            sys.stderr.write(f"lib_lint: {args.module_path} is uninitialized\n")
+            sys.stderr.write(
+                f"{args.module_path} is uninitialized (missing implementation classes and functions). Consult your Companion Guide (update_python_with_ai/guides/low_to_lib.md) for required structure.\n"
+            )
             return 1
 
     if args.build_path is None:
@@ -1005,12 +1012,12 @@ def main() -> int:
                         pass
                     else:
                         sys.stderr.write(
-                            f"lib_lint: Cannot update read-only BUILD file: {args.build_path} (missing deps: {sorted(missing)})\n"
+                            f"Cannot update read-only BUILD file: {args.build_path} (missing deps: {sorted(missing)})\n"
                         )
                         return 1
                 else:
                     sys.stderr.write(
-                        f"lib_lint: Cannot update read-only BUILD file: {args.build_path} ({e})\n"
+                        f"Cannot update read-only BUILD file: {args.build_path} ({e})\n"
                     )
                     return 1
     else:
@@ -1158,12 +1165,12 @@ def main() -> int:
                         pass
                     else:
                         sys.stderr.write(
-                            f"lib_lint: Cannot update read-only BUILD file: {args.build_path} (missing deps: {sorted(missing)})\n"
+                            f"Cannot update read-only BUILD file: {args.build_path} (missing deps: {sorted(missing)})\n"
                         )
                         return 1
                 else:
                     sys.stderr.write(
-                        f"lib_lint: Cannot update read-only BUILD file: {args.build_path} ({e})\n"
+                        f"Cannot update read-only BUILD file: {args.build_path} ({e})\n"
                     )
                     return 1
 

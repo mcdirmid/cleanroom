@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T19:43:56Z
-LAST_CHANGED: 2026-10-13T20:00:00Z
-CHANGE: author dsh_asm assembly specification
-CODE_HASH: 6407b4266acb
-SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
--->
-
 # dsh_asm assembly component
 
 assembles: dsh_workspace_impl, dsh_telemetry_impl, dsh_harness_impl
@@ -25,3 +17,10 @@ Integrating Cleanroom with DeepSeek Harness requires coordinated assembly of wor
 The dsh_asm assembly component aggregates the implementations of the dsh workspace and dsh harness interfaces, providing a unified assembly for DeepSeek Harness platform integration.
 
 The dsh assembly initializes its constituent implementations recursively and registers every singleton service with the agent session lifecycle tier.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T19:43:56Z
+LAST_CHANGED: 2026-10-13T20:00:00Z
+CHANGE: author dsh_asm assembly specification
+SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
+-->

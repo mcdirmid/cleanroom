@@ -1,24 +1,15 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:55:00Z
-# CHANGE: Define stub interface protocol
-# CODE_HASH: 6ced7557ed52
-# COVERAGE_AUDIT: 2026-10-14T17:55:00Z
-# QA_AUDIT: 2026-10-14T17:55:00Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface for stub."""
 
 from __future__ import annotations
 
 from typing import Dict, Optional, Protocol, Tuple
-from support.lib.lifecycle import InTier
+from support.lib.lifecycle import Singleton
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 from . import role_registry
 
 
 # Contract: WorkspaceStubSynthesizer protocol synthesizes and synchronizes read-only test stubs from specifications.
-class WorkspaceStubSynthesizer(InTier[AgentSessionTier], Protocol):
+class WorkspaceStubSynthesizer(Singleton[AgentSessionTier], Protocol):
     """Service synthesizing and synchronizing read-only test stubs from specifications."""
 
     # Contract: Generates read-only test stub from .pyi specification raising NotImplementedError with 0o444 permissions.
@@ -58,3 +49,11 @@ class WorkspaceStubSynthesizer(InTier[AgentSessionTier], Protocol):
     def is_valid_test_stub(self, file_path: str) -> bool:
         """Checks whether file_path is already a valid cleanroom test stub."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T17:55:00Z
+# CHANGE: Define stub interface protocol
+# COVERAGE_AUDIT: 2026-10-14T17:55:00Z
+# QA_AUDIT: 2026-10-14T17:55:00Z
+# --- END CLEANROOM METADATA ---

@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-08T00:46:00Z
-# CHANGE: Unit tests for src_storage_impl
-# CODE_HASH: b36fbb7b9630
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for src_storage_impl aligned with low-level specifications."""
 
 import os
@@ -724,3 +715,11 @@ class TestSrcStorageImpl(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-08T00:46:00Z
+# CHANGE: Unit tests for src_storage_impl
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

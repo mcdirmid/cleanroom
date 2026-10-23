@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T17:45:00Z
-CHANGE: specify in-workspace file inspection and terminal command restrictions in AGENTS.md refresh
-CODE_HASH: 6bc60d056164
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # sync_impl implementation component
 
 imports: session, role_registry, src_metadata, cleanroom_files_ext, provision
@@ -35,8 +27,7 @@ When pulling changes from the canonical main repository into a role workspace, t
 
 - Deletes the files within the role workspace scope that no longer exist in the canonical main repository.
 
-When refreshing system files, the workspace synchronizer recopies project configurations, guide files, and linters from the main repository into the role workspace, delegates runner packaging, role guide regeneration, and test stub synchronization to workspace provisioning without touching an in-scope source file, and validates that every stub role dependency file remains a read-only test stub.
-
+When refreshing system files, the workspace synchronizer recopies project configurations, promoted methodology assets (`./support/lib/`, `./guides/`, `./templates/`, `./cleanroom_roles.toml`, `./pyright_spec.json`), and linters belonging exclusively to the active methodology binding from the main repository into the role workspace root without scanning or mirroring unbound repository root directories, delegates runner packaging, role guide regeneration, and test stub synchronization to workspace provisioning without touching an in-scope source file, and validates that every stub role dependency file remains a read-only test stub.
 
 When harvesting changes from a role workspace back to the canonical main repository, the workspace synchronizer performs two-phase synchronization:
 
@@ -47,3 +38,10 @@ When harvesting changes from a role workspace back to the canonical main reposit
 - In the commit phase, the synchronizer copies validated files into the main repository, strips code hashes from the committed files, and updates in-band timestamps. For auditor roles, the synchronizer stamps role audit attributes onto verified targets without changing target code bodies.
 
 When flushing blame feedback, the workspace synchronizer reads the local blame buffer file, extracts culprit file paths and critique messages, locates target files in the canonical main repository, appends unacted feedback entries with UTC timestamps to target headers in-place, and deletes the blame buffer file upon successful application.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-22T13:50:00Z
+LAST_CHANGED: 2026-10-22T13:50:00Z
+CHANGE: Restrict system file refreshing exclusively to bound methodology package assets
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

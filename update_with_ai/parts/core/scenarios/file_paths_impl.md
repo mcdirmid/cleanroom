@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:09:09Z
-CHANGE: Author core file_paths_impl concrete scenarios
-CODE_HASH: 55cae8f271f0
--->
-
 # Concrete scenarios for `file_paths_impl` (implementation)
 
 Scenarios 1 through 7 restate the caller observations of the interface scenarios and add, beside
@@ -169,3 +162,9 @@ scope_a/widget.py.
    Realized by: the component's own joining and normalization, which are string transformations,
    with the host filesystem consulted only for the absoluteness of the root through
    `filesystem_ext`.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:09:09Z
+CHANGE: Author core file_paths_impl concrete scenarios
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T19:43:57Z
-LAST_CHANGED: 2026-10-11T02:45:00Z
-CHANGE: Restate the root assembly structurally and remove the constituent enumeration from prose
-CODE_HASH: d68f7d3bd0bb
-SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
--->
-
 # openai_loop_asm assembly component
 
 assembles: dag_asm, loop_asm, conversation_impl, driver_impl, logger_impl, sandbox_asm, uv_asm, loop_impl, model_config_impl
@@ -25,3 +17,10 @@ Building an autonomous multi-agent development environment requires integrating 
 The openai_loop_asm assembly component aggregates the implementations of every interface component in the application, uniting the constituent sub-assemblies and standalone implementations into a complete root system that is ready to execute.
 
 The uv openai loop assembly initializes its constituent assemblies and implementations recursively, registering every singleton service across the system and session lifecycle tiers to achieve complete interface closure.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T19:43:57Z
+LAST_CHANGED: 2026-10-11T02:45:00Z
+CHANGE: Restate the root assembly structurally and remove the constituent enumeration from prose
+SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
+-->

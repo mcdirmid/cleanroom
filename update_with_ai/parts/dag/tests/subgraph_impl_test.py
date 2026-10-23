@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-09T04:22:58Z
-# CHANGE: Assert candidate with uncleaned in-subgraph dependencies excluded during batch expansion and external dependencies ignored
-# CODE_HASH: b1a0654f7e65
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for subgraph_impl per its grounding specification."""
 
 from __future__ import annotations
@@ -384,11 +375,17 @@ class DagSubgraphImplTest(unittest.TestCase):
         node_alpha = _make_node("same_unit", "//my/scope:alpha")
         node_beta = _make_node("same_unit", "//different/scope:beta")
         self.storage.set_dependencies(target, {_make_dep(node_beta), _make_dep(node_alpha)})
+        self.storage.set_dirty(target, True)
+        self.storage.set_dirty(node_alpha, True)
+        self.storage.set_dirty(node_beta, True)
         with enter_phase(system, registry=self.registry) as scope:
             subgraph = scope.get_singleton(DagSubgraph)
             subgraph.set_target(target)
-            order = list(subgraph._topological_order)
-            self.assertLess(order.index(node_alpha), order.index(node_beta))
+            batch1 = subgraph.next_ready_batch()
+            self.assertEqual(batch1, [node_alpha])
+            self.storage.set_dirty(node_alpha, False)
+            batch2 = subgraph.next_ready_batch()
+            self.assertEqual(batch2, [node_beta])
 
 
 if __name__ == "__main__":
@@ -396,3 +393,11 @@ if __name__ == "__main__":
 
 # Untested requirements:
 # None
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-09T04:22:58Z
+# CHANGE: Assert candidate with uncleaned in-subgraph dependencies excluded during batch expansion and external dependencies ignored
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

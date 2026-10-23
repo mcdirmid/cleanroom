@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: eef26cd62e8b
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # work_scheduler interface component
 
 imports: session, dag_storage, subgraph
@@ -35,3 +27,10 @@ The work scheduler orders candidate nodes by role tier depth, so that upstream r
 The work scheduler evaluates the readiness of a candidate node by checking that every direct non-silent upstream dependency in graph storage is clean.
 
 The work scheduler synthesizes scheduled tasks by loading role guides, formatting task instructions, listing declared dependency paths, deriving companion grounding specifications based on upstream role dependencies, and appending the unaddressed feedback messages recorded on the target node.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

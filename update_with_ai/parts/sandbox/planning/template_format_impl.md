@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:10:54Z
-CHANGE: Contract regular expression directive scanning against the external formatting boundary
-CODE_HASH: cff5df9acf0f
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # template_format_impl implementation component
 
 ## Intent
@@ -64,3 +56,10 @@ By evaluating dot-separated parameter lookups, handling line-suffix and block-le
 
 - Normalization of extraneous blank lines around directive comments.
   - Grounded: [template_formatting]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:10:54Z
+CHANGE: Contract regular expression directive scanning against the external formatting boundary
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

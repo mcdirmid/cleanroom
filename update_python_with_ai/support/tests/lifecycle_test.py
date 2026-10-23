@@ -532,19 +532,16 @@ class TestLifecycle(unittest.TestCase):
             self.assertIs(svc1, svc2)
 
     def test_module_identity_and_cross_aliasing(self) -> None:
-        """CUJ: Module identity is preserved across support.lib and update_with_ai.support.lib aliases.
+        """CUJ: Module identity is preserved across support.lib and update_python_with_ai.support.lib aliases.
 
-        Verifies that importing lifecycle via support.lib.lifecycle and update_with_ai.support.lib.lifecycle
+        Verifies that importing lifecycle via support.lib.lifecycle and update_python_with_ai.support.lib.lifecycle
         returns the exact same module object in sys.modules, sharing the global default registry.
         """
         import support.lib.lifecycle as mod1
-        import update_with_ai.support.lib.lifecycle as mod2
-        import update_python_with_ai.support.lib.lifecycle as mod3
+        import update_python_with_ai.support.lib.lifecycle as mod2
 
         self.assertIs(mod1, mod2)
-        self.assertIs(mod1, mod3)
         self.assertIs(mod1.get_default_registry(), mod2.get_default_registry())
-        self.assertIs(mod1.get_default_registry(), mod3.get_default_registry())
 
         # Testing requirement: Registering a singleton via mod1 is resolvable via mod2
         class CrossModuleService(Singleton):

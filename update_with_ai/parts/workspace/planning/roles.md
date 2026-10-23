@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Define roles planning specification
-CODE_HASH: 4612414b158c
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # roles interface component
 
 ## Intent
@@ -44,3 +36,10 @@ Managing autonomous development roles requires consistent mapping between role c
 
 - Parsing of declarative role configuration files and build files.
   - Deferred: Provided by workspace roles implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T18:45:00Z
+CHANGE: Define roles planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

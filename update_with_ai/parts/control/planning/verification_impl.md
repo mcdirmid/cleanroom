@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: b265a489eb67
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # verification_impl implementation component
 
 ## Intent
@@ -53,3 +45,10 @@ Compilers and build tools output varied terminal sequences and progress indicato
 
 - Regex-based diagnostic noise scrubbing of progress bars, build banners, and timing stats.
   - Grounded: [verification_evaluation]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

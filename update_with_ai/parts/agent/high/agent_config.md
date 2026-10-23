@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T01:39:02Z
-CHANGE: Replace the fragment policy lead-in with declarative policy properties and canonicalize policy terminology
-CODE_HASH: 247b6a2a335e
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # agent_config interface component
 
 ## Purpose
@@ -33,3 +25,10 @@ The policies of an agent config are:
 - A *startup read* policy directing the agent to inspect declared files at session start.
 
 - A *delta output* policy directing editing tools to report the changes they make rather than complete file content.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Replace the fragment policy lead-in with declarative policy properties and canonicalize policy terminology
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

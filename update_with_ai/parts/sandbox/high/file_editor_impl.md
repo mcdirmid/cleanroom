@@ -1,14 +1,6 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Reject editing tool replacements that alter the cleanroom metadata header
-CODE_HASH: 83639e6c31b2
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_editor_impl implementation component
 
-imports: filesystem_ext, tool_provider, file_alias, node_config, agent_config, src_metadata
+imports: filesystem_ext, tool_provider, file_alias, node_config, agent_config, src_metadata, file_reader
 implements: file_editor
 
 ## Purpose
@@ -40,7 +32,15 @@ Editing tool execution fails if:
 
 An editing tool that changes file content writes the updated content to the filesystem, records that workspace file writes occurred, and reminds the agent to verify syntax and type correctness before making further writes. Successful editing tool execution includes a diff delta representation in the response content when delta output is configured. Editing tool responses share the constant suppression key `replace_file_content`.
 
-The replace file content tool is named `replace_file_content`, accepting in sequence a file alias *path* parameter, an integer *start_line* parameter defining the starting line of the search window, an integer *end_line* parameter defining the ending line of the search window, a boolean *allow_multiple* parameter, a text *target_content* parameter specifying the exact text to replace within the search window, and a text *replacement_content* parameter.
+The replace file content tool tracks consecutive failed replacement attempts during the session, resetting the counter upon any successful file replacement.
+
+When consecutive replacement attempts fail:
+
+- At two consecutive failures, tool execution produces a warning reminder advising the agent of repeated edit failure, and designates a follow-up execution of the session's file viewing tool targeting the read-write file with reasoning text indicating that actual file contents must be inspected before attempting further replacements, when the target file is present.
+
+- At four consecutive failures, tool execution produces a terminating failure response communicating session failure.
+
+The replace file content tool is named `replace_file_content`, accepting in sequence a file alias *path* parameter, an integer *start_line* parameter defining the starting line of the search window, an integer *end_line* parameter defining the ending line of the search window, a boolean *allow_multiple* parameter, a text *target_content* parameter specifying the exact text to replace within the search window, and a text *replacement_content* parameter. The allow multiple parameter converts wire booleans and boolean string values into an allow multiple choice, rejecting invalid wire values. The start line and end line parameters convert wire integers and integer string values into line numbers, rejecting non-integer wire values.
 
 The target content parameter configures a *missing note* that produces diagnostic feedback from the supplied parameter names.
 
@@ -79,3 +79,10 @@ Executing can write:
 - Fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be written.
 
 - Records the file edit in the edit manager and produces a successful response indicating that write access is permitted, when a declared read-write file is supplied.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-21T21:20:00Z
+LAST_CHANGED: 2026-10-21T21:20:00Z
+CHANGE: Realize consecutive failed replacement tracking with follow-up file view at two failures and fatal termination at four failures
+SPEC_QA_AUDIT: 2026-10-21T21:20:00Z
+-->

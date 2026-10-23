@@ -1,18 +1,11 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:21:34Z
-# CHANGE: Remove stale EditManager installation claim and unused imports
-# CODE_HASH: 8762bd16fc16
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Sandbox file editor low-level interface specification."""
 
 from typing import Any, Mapping, NewType, Optional, Protocol, Union
-from framework import operation, override, poly_type, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, poly_type, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
+import file_reader
 import tool_provider
 
 FileUpdateRevision = NewType("FileUpdateRevision", int)
@@ -23,9 +16,9 @@ FileHash = NewType("FileHash", str)
 AllowMultiple = NewType("AllowMultiple", bool)
 
 
-@poly_type
-class EditingTool(tool_provider.Tool, Protocol):
-    """Polymorphic tool that modifies a read-write file."""
+@singleton_type("agent_session")
+class EditingTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
+    """Tool that modifies a read-write file."""
 
     @property
     @override
@@ -50,9 +43,24 @@ class EditingTool(tool_provider.Tool, Protocol):
     ) -> tool_provider.ToolResponse:
         ...
 
+    @property
+    def path_parameter(self) -> tool_provider.ToolParameter[file_alias.FileAlias, str]:
+        """Parameter identifying the target read-write file."""
+        ...
+
+    @property
+    def start_line_parameter(self) -> tool_provider.ToolParameter[Optional[LineNumber], int]:
+        """Optional parameter specifying the start line boundary."""
+        ...
+
+    @property
+    def end_line_parameter(self) -> tool_provider.ToolParameter[Optional[LineNumber], int]:
+        """Optional parameter specifying the end line boundary."""
+        ...
+
 
 @singleton_type("agent_session")
-class EditManager(InTier[AgentSessionTier], Protocol):
+class EditManager(Singleton[AgentSessionTier], Protocol):
     """Agent session service that tracks session edits and exposes workspace file modification state."""
 
     @property
@@ -142,7 +150,7 @@ class EditManager(InTier[AgentSessionTier], Protocol):
 
 
 @singleton_type("agent_session")
-class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
+class ReplaceFileContentTool(EditingTool, Singleton[AgentSessionTier], Protocol):
     """Editing tool that replaces target content in a read-write file."""
 
     @operation
@@ -204,5 +212,15 @@ class ReplaceFileContentTool(EditingTool, InTier[AgentSessionTier], Protocol):
         - WHEN replacement would alter, corrupt, or delete in-band metadata header blocks, MUST reject the edit.
         - WHEN edit delta output is configured, MUST append a unified diff to the response output.
         - WHEN multiple replacements are permitted, MUST replace multiple occurrences.
+        - WHEN consecutive replacement attempts fail, MUST issue a warning reminder at two consecutive failures.
+        - WHEN consecutive replacement attempts reach two failures and the target file is present, MUST designate a follow-up tool call to view the target file using the session's file viewing tool.
+        - WHEN consecutive replacement attempts reach four failures, MUST terminate with failure.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-21T21:20:00Z
+# LAST_CHANGED: 2026-10-21T21:20:00Z
+# CHANGE: Contract consecutive failed replacement warning, follow-up file view, and fatal termination
+# SPEC_QA_AUDIT: 2026-10-21T21:20:00Z
+# --- END CLEANROOM METADATA ---

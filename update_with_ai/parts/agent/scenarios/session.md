@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:12Z
-CHANGE: Author agent agent_session interface scenarios
-CODE_HASH: 8e70c384d549
--->
-
 # Concrete scenarios for `agent_session` (interface)
 
 ## Scenario 1 — Establishing one agent session
@@ -29,11 +22,11 @@ Given: agent alpha runs in `/ws/alpha_scope_a` and agent beta runs in `/ws/beta_
 
 Given: the caller has opened one session for agent alpha in `/ws/alpha_scope_a` and a second
 session for the same agent in the same workspace directory, and the first session has recorded the
-conversation turn whose text is `clean the widget target` and one pending tool call for the unit
+conversation step whose text is `clean the widget target` and one pending tool call for the unit
 widget.
 
 1. The caller reads the conversation recorded by the second session.
-   Observed: no conversation turn is recorded there, and no conversation turn carries the text
+   Observed: no conversation step is recorded there, and no conversation step carries the text
    `clean the widget target`.
 
 2. The caller reads the second session's pending tool calls.
@@ -50,14 +43,14 @@ Given: no agent is running in `/ws/alpha_scope_a`, and no session has been estab
 ## Scenario 5 — A session that has ended
 
 Given: one session for agent alpha in `/ws/alpha_scope_a` is current, and it has recorded one
-conversation turn.
+conversation step.
 
 1. The caller ends that session.
    Observed: no session for `/ws/alpha_scope_a` is current afterwards, and the conversation that
    session recorded is no longer reported.
 
-2. The caller asks the ended session to record a further conversation turn.
-   Observed: the request fails explicitly, and the ended session records no turn.
+2. The caller asks the ended session to record a further conversation step.
+   Observed: the request fails explicitly, and the ended session records no step.
 
 ## Scenario 6 — The tier beneath the system environment
 
@@ -72,3 +65,9 @@ also holds the ambient setting whose name is `default persona`.
 2. The caller ends the alpha session and reads the ambient setting again.
    Observed: `default persona` is still readable and unchanged, so ending the session removed only
    state bounded by that session.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:12Z
+CHANGE: Author agent agent_session interface scenarios
+-->

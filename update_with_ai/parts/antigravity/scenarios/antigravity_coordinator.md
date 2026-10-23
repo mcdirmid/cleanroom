@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_coordinator scenarios
-CODE_HASH: 9819ab45984b
--->
-
 # antigravity_coordinator scenarios
 
 ## Scenario 1 — Generating zero-execution coordinator skill
@@ -34,3 +27,9 @@ Given: a completion message emitted by a role subagent.
 
 1. The generator parses the message text.
    Observed: action status, submitted targets, blamed targets, and failure diagnostics are extracted into a structured wake notification.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T21:45:00Z
+CHANGE: author antigravity_coordinator scenarios
+-->

@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:50:00Z
-# CHANGE: Author scaffold_impl low-level specification
-# CODE_HASH: 6d495bfa9be4
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for scaffold_impl."""
 
 from typing import Optional
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import cleanroom_files_ext
 import roles
@@ -18,10 +10,7 @@ import scaffold
 
 
 @singleton_type("agent_session")
-class WorkspaceScaffolder(
-    scaffold.WorkspaceScaffolder,
-    InTier[AgentSessionTier],
-):
+class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
     """Realizes runner zipapp packaging, role metadata, guide synthesis, and starter skeletons.
 
     GROUNDING:
@@ -32,12 +21,16 @@ class WorkspaceScaffolder(
 
     @operation
     @override
-    def deploy_runner_zipapps(self, bin_dir: str) -> None:
+    def deploy_runner_zipapps(self, bin_dir: str, role_def: Optional[roles.RoleDefinition] = None, can_blame: bool = True) -> None:
         """Packages executable runner tools into the specified bin directory.
 
         GROUNDING:
         - Packages self-contained executable runner zipapp wrappers into bin_dir with 0o755
-          permissions (workspace_scaffold_mechanics).
+          permissions, configuring runner import paths bounded strictly to the active role workspace
+          root on sys.path without injecting arbitrary workspace subdirectories onto sys.path,
+          isolating runner execution from the canonical repository root in sys.path, packaging blame
+          only when role_def declares feedback capability or auditor tags, and omitting blame for
+          author roles without feedback capability (workspace_scaffold_mechanics).
         """
         ...
 
@@ -74,8 +67,14 @@ class WorkspaceScaffolder(
         GROUNDING:
         - Formats AGENTS.md instructions carrying role constraints, boundary rules explaining projected
           in-band metadata and main repository lifecycle timestamp authority, contamination tripwires,
-          terminal command restrictions, fail-stop reporting protocols, and tool execution instructions
-          with 0o644 permissions (workspace_scaffold_mechanics).
+          companion guide references resolved from workspace root and repository root,
+          permitted in-workspace shell commands and native harness tools while mandating round resolution
+          through prescribed bin/ tools (omitting blame for roles without feedback capability), round conclusion protocols directing workers to stop immediately
+          without tool calls when all ready targets are resolved or only blocked targets remain,
+          cleanroom compilation stub isolation rules for roles declaring stub dependencies,
+          prohibitions against runner binary inspection and linter hunting,
+          model-contingent payload ceiling protection for local or output-constrained models while omitting it for cloud models,
+          fail-stop reporting protocols, and tool execution instructions with 0o644 permissions (workspace_scaffold_mechanics).
         """
         ...
 
@@ -92,7 +91,7 @@ class WorkspaceScaffolder(
 
         GROUNDING:
         - Inspects declared units and generates starter skeleton code from companion specifications
-          or templates (workspace_scaffold_mechanics).
+          or templates resolved both from workspace root and repository root (workspace_scaffold_mechanics).
         """
         ...
 
@@ -122,3 +121,9 @@ def __orphan__() -> None:
     """
     ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-22T13:50:00Z
+# LAST_CHANGED: 2026-10-22T13:50:00Z
+# CHANGE: Enforce strict workspace root sys.path isolation in runner zipapps
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

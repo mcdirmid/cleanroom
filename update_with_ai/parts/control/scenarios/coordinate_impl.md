@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:17:16Z
-CHANGE: Author control coordinate_impl concrete scenarios
-CODE_HASH: 53ab7f84c843
--->
-
 # Concrete scenarios for `coordinate_impl` (implementation)
 
 Scenarios 1 through 10 restate the caller observations of the interface scenarios and add, beside
@@ -265,3 +258,9 @@ lib-role node for unit widget at `parts/widget/lib/widget.py`; the critique is `
    Realized by: the blame dispatch, which resolves the blame target alias against the configured
    upstream blame targets via `attribution`, registers the blamed dependency node, and
    delegates defect attribution to `attribution`.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:17:16Z
+CHANGE: Author control coordinate_impl concrete scenarios
+-->

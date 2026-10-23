@@ -1,11 +1,6 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:59:26Z
-# CHANGE: Drop the dead tier import and the generated scaffold markers from the node configuration interface
-# CODE_HASH: ba825866b221
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from .session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 from typing import Any, List, Mapping, NewType, Optional, Protocol, Sequence, Set, Tuple
 from dataclasses import dataclass
 from . import file_alias
@@ -71,7 +66,7 @@ class PerNodeInfo:
     feedback: Sequence[NodeFeedback]
 
 
-class RoleConfig(Protocol):
+class RoleConfig(Singleton[AgentSessionTier], Protocol):
     # Contract: The role of the agent session.
     @property
     def role(self) -> RoleName:
@@ -96,7 +91,7 @@ class RoleConfig(Protocol):
         ...
 
 
-class NodeConfig(Protocol):
+class NodeConfig(Singleton[AgentSessionTier], Protocol):
     # Contract: The session read-only files restricting bound files to read access.
     @property
     def read_only_files(self) -> Set[file_alias.ReadOnlyFile]:
@@ -171,3 +166,9 @@ class NodeConfig(Protocol):
     @property
     def per_node_info_by_node(self) -> Mapping[dag_storage.DagNode, PerNodeInfo]:
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T04:59:26Z
+# CHANGE: Drop the dead tier import and the generated scaffold markers from the node configuration interface
+# --- END CLEANROOM METADATA ---

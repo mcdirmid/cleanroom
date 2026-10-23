@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:58:39Z
-CHANGE: Align agent config typing with canonical policy properties and supersede arg keep resolution
-CODE_HASH: 75adcfacf4d8
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # agent_config interface component
 
 ## Intent
@@ -43,3 +35,10 @@ The component serves as a system-level configuration authority defining operatio
 
 - System-wide agent configuration parameters from environment or model configuration.
   - Deferred: Provided by system runtime configuration.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:58:39Z
+CHANGE: Align agent config typing with canonical policy properties and supersede arg keep resolution
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

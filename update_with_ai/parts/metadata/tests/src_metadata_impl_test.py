@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-06T14:35:00Z
-# CHANGE: new file
-# CODE_HASH: a5931a71d3e9
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from pathlib import Path
 import tempfile
 import unittest
@@ -107,8 +98,9 @@ def main(): pass
         lines = updated.splitlines()
         self.assertEqual(lines[0], "#!/usr/bin/env python3")
         self.assertEqual(lines[1], "# -*- coding: utf-8 -*-")
-        self.assertEqual(lines[2], "# --- CLEANROOM METADATA ---")
-        self.assertIn("def main(): pass", updated)
+        self.assertEqual(lines[3], "def main(): pass")
+        self.assertEqual(lines[-1], "# --- END CLEANROOM METADATA ---")
+        self.assertIn("# --- CLEANROOM METADATA ---", updated)
 
     def test_rewrite_markdown_frontmatter(self) -> None:
         original = """---
@@ -127,8 +119,32 @@ author: Cleanroom
         lines = updated.splitlines()
         self.assertEqual(lines[0], "---")
         self.assertEqual(lines[3], "---")
-        self.assertEqual(lines[4], "<!-- CLEANROOM METADATA")
-        self.assertIn("# Title", updated)
+        self.assertEqual(lines[5], "# Title")
+        self.assertEqual(lines[-1], "-->")
+        self.assertIn("<!-- CLEANROOM METADATA", updated)
+
+    def test_rewrite_migrates_top_metadata_to_bottom(self) -> None:
+        original = """# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-06T10:00:00Z
+# CHANGE: Old change
+# --- END CLEANROOM METADATA ---
+
+from __future__ import annotations
+
+def hello():
+    return "world"
+"""
+        updated = self.coordinator.rewrite_metadata_in_text(
+            original,
+            "hello.py",
+            change_summary="New change",
+        )
+        lines = updated.splitlines()
+        self.assertEqual(lines[0], "from __future__ import annotations")
+        self.assertEqual(lines[2], "def hello():")
+        self.assertEqual(lines[3], '    return "world"')
+        self.assertEqual(lines[-1], "# --- END CLEANROOM METADATA ---")
+        self.assertIn("# CHANGE: New change", updated)
 
     def test_file_operations_in_temp_dir(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -208,3 +224,11 @@ CHANGE: helper test
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-06T14:35:00Z
+# CHANGE: new file
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

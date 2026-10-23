@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:20:03Z
-CHANGE: Author uv target interface scenarios
-CODE_HASH: 46f2989e86d2
--->
-
 # Concrete scenarios for `uv_target` (interface)
 
 ## Scenario 1 — Normalizing a package-qualified target label
@@ -71,3 +64,9 @@ and the caller holds no canonical node for it.
    Observed: the request fails explicitly, naming the package directory `parts/sprocket` that the
    workspace root `/repo/alpha_scope_a` does not contain, rather than reporting a directory that
    holds no unit.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:20:03Z
+CHANGE: Author uv target interface scenarios
+-->

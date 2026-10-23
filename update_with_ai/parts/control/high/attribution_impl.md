@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 9734df3b3ec6
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # attribution_impl implementation component
 
 imports: session, dag_storage, file_alias, node_config, src_metadata
@@ -58,3 +50,10 @@ When attributing blame to a culprit file:
 When recording task failure for a file target:
 
 - The attribution coordinator resolves the target file path, appends verification failure diagnostics, marks dirty status directly in the canonical repository, and synchronizes the updated files back to the local role workspace.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

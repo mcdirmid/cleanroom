@@ -1,11 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T19:43:57Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 2b172aa96473
-# SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
-# --- END CLEANROOM METADATA ---
-
 """Cleanroom UV OpenAI loop root system assembly specification."""
 
 
@@ -24,3 +16,10 @@ def __initialize__() -> None:
     - model_config_impl
     """
     ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T19:43:57Z
+# LAST_CHANGED: 2026-10-07T00:00:00Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
+# --- END CLEANROOM METADATA ---

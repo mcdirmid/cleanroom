@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:50:00Z
-CHANGE: Define commands_impl concrete scenarios
-CODE_HASH: f1c99c948939
--->
-
 # Concrete scenarios for `commands_impl` (implementation)
 
 ## Scenario 1 — Work evaluation with pending dirtiness gating
@@ -34,6 +27,9 @@ Given: an active role workspace with modified target `parts/agent/lib/bar.py`.
 2. The handler executes `run_submit` when static verification fails without bypass.
    Observed: submission is refused, target remains modified and dirty, and exit code is 1.
 
+3. The handler executes `run_submit` on a modified target without having run `run_check_files` since modification.
+   Observed: submission is refused, target remains modified and dirty, and exit code is 1.
+
 ## Scenario 4 — Blame attribution with single-paragraph constraint
 
 Given: a culprit upstream target and a multi-line critique containing newline characters.
@@ -42,4 +38,13 @@ Given: a culprit upstream target and a multi-line critique containing newline ch
    Observed: blame is rejected due to newline violation, and exit code is 1.
 
 2. The handler executes `run_blame` with a valid single-paragraph critique.
-   Observed: critique feedback is appended to culprit, cleanroom log is appended, pending work is cleared, and exit code is 0.
+   Observed: critique feedback is appended to culprit, blamed culprit is recorded into `.cleanroom_blame_buffer.json`, cleanroom log is appended, pending work is cleared, and exit code is 0.
+
+3. The handler executes `run_blame` or `run_fail` while workspace target files are modified without having run `run_check_files` since modification.
+   Observed: execution is refused, reporting that `check_files` must be run on the modified files, and exit code is 1.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-20T21:07:00Z
+LAST_CHANGED: 2026-10-20T21:07:00Z
+CHANGE: Record blamed culprit into blame buffer during run_blame scenario
+-->

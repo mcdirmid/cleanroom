@@ -1,13 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:42:34Z
-# CHANGE: Drop the uncontracted pending work file constant that the grounding specification no longer declares
-# CODE_HASH: 9d826860f054
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for work."""
 
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
@@ -55,7 +50,7 @@ class WorkQueueSummary:
 
 
 # Contract: WorkspaceWorkManager protocol evaluates dirtiness and task readiness across directory scopes.
-class WorkspaceWorkManager(Protocol):
+class WorkspaceWorkManager(Singleton[AgentSessionTier], Protocol):
     """Evaluates dirtiness and task readiness across directory scopes."""
 
     # Contract: Reads target paths from local pending work buffer.
@@ -106,3 +101,8 @@ class WorkspaceWorkManager(Protocol):
         role_name: Optional[str] = None,
     ) -> Sequence[str]: ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:42:34Z
+# CHANGE: Drop the uncontracted pending work file constant that the grounding specification no longer declares
+# --- END CLEANROOM METADATA ---

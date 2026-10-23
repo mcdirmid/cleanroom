@@ -1,11 +1,5 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:58:25Z
-# CHANGE: Remove generated scaffold markers and document the declared path data types and manager operations from the grounding specification
-# CODE_HASH: 53ff9bd18d18
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from support.lib.lifecycle import Singleton, SystemTier
 from dataclasses import dataclass
 from typing import NewType, Protocol
 
@@ -79,7 +73,7 @@ class PathValidationError(ValueError):
 
 
 # Contract: FilePathManager protocol validating and resolving path representations.
-class FilePathManager(Protocol):
+class FilePathManager(Singleton[SystemTier], Protocol):
     """Validates and resolves path representations."""
 
     # Contract: Creates a host path from a path string.
@@ -161,3 +155,9 @@ class FilePathManager(Protocol):
         - MUST produce the combined absolute path formed by joining the workspace root absolute path with the workspace path.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T04:58:25Z
+# CHANGE: Remove generated scaffold markers and document the declared path data types and manager operations from the grounding specification
+# --- END CLEANROOM METADATA ---

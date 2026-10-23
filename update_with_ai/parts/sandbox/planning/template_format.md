@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-06T00:52:38Z
-CHANGE: import commonmark_ext and weave token contracts
-CODE_HASH: f5fee945aa90
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # template_format interface component
 
 ## Intent
@@ -52,3 +44,10 @@ By tolerating partial bindings and preserving unrendered placeholders, the templ
   - Deferred: Requires CommonMark comment directive parsing in implementation.
 - Resolving dot-separated parameter bindings in hierarchical dictionaries.
   - Deferred: Requires nested parameter resolution in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-06T00:52:38Z
+CHANGE: import commonmark_ext and weave token contracts
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

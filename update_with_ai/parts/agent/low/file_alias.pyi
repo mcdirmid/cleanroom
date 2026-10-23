@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:08:12Z
-# CHANGE: Align alias manager parameter conversion typing and split text sanitization masking contracts
-# CODE_HASH: 2926ead6cb59
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Agent file alias low-level interface specification."""
 
 from dataclasses import dataclass
 from typing import NewType, Protocol, Type
-from framework import data_type, operation, override, singleton_type, variant
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, override, singleton_type, variant
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import dag_storage
 import file_paths
@@ -69,7 +61,7 @@ class UnboundFile(FileAlias):
 
 
 @singleton_type("agent_session")
-class AliasManager(InTier[AgentSessionTier], Protocol):
+class AliasManager(Singleton[AgentSessionTier], Protocol):
     """Configured with a workspace root, sanitizes text and converts string paths to file aliases."""
 
     @property
@@ -122,3 +114,10 @@ def __orphan__() -> None:
     - MUST display itself by its relative path when converted to a string.
     """
     ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:08:12Z
+# CHANGE: Align alias manager parameter conversion typing and split text sanitization masking contracts
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

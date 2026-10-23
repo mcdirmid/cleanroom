@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:12:03Z
-CHANGE: Author control attribution_impl concrete scenarios
-CODE_HASH: f244809ae876
--->
-
 # Concrete scenarios for `attribution_impl` (implementation)
 
 Scenarios 1 through 7 restate the caller observations of the interface scenarios and add, beside
@@ -247,3 +240,9 @@ Given: the agent is cleaning the file `/ws/alpha_scope_a/parts/widget/widget_spe
 1. The agent blames the culprit file with that oversized critique.
    Observed: the attribution is refused with an explicit error indicating that the critique exceeds the maximum length of 600 characters (750 provided) and advising to prioritize contract discrepancies to report so the authoring role can make progress; neither the canonical repository file nor the local role workspace copy is modified.
    Realized by: the component's own critique character length validation against configured model limits, refusing before `src_metadata` appends feedback.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:12:03Z
+CHANGE: Author control attribution_impl concrete scenarios
+-->

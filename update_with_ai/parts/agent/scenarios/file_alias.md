@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:14Z
-CHANGE: Author agent file_alias interface scenarios
-CODE_HASH: 425d9e28fbb2
--->
-
 # Concrete scenarios for `agent_file_alias` (interface)
 
 ## Scenario 1 — Converting a declared read-write file
@@ -89,3 +82,9 @@ node declares the bound file whose workspace path is `widget/notes/draft.md`.
 4. The caller sanitizes the text `the file /ws/alpha_scope_b/widget/notes/draft.md is elsewhere`.
    Observed: the text is returned unchanged, because `/ws/alpha_scope_b/widget/notes/draft.md`
    contains no relative workspace path of this alias manager.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:14Z
+CHANGE: Author agent file_alias interface scenarios
+-->

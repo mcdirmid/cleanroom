@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:57:40Z
-# CHANGE: Replace the undeclared private registry and source metadata constructors with test doubles implementing the declared WorkspaceRegistry and SourceMetadataCoordinator interfaces
-# CODE_HASH: a44c35aa1d4a
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for sync_impl."""
 
 import hashlib
@@ -70,6 +61,25 @@ def _parse_metadata_text(content: str) -> Optional[src_metadata.FileMetadata]:
     )
 
 
+def _find_metadata_bounds(lines: List[str], is_html: bool) -> Optional[tuple[int, int]]:
+    if is_html:
+        for idx, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("<!--") and "CLEANROOM METADATA" in stripped:
+                for i in range(idx, len(lines)):
+                    if "-->" in lines[i]:
+                        return (idx, i)
+                return None
+        return None
+    for idx, line in enumerate(lines):
+        if line.strip() == "# --- CLEANROOM METADATA ---":
+            for i in range(idx + 1, len(lines)):
+                if lines[i].strip() == "# --- END CLEANROOM METADATA ---":
+                    return (idx, i)
+            return None
+    return None
+
+
 class FakeSourceMetadataCoordinator:
     """Test double implementing the declared SourceMetadataCoordinator interface."""
 
@@ -98,9 +108,9 @@ class FakeSourceMetadataCoordinator:
             return None
 
     def extract_code_body(self, content: str, filename_or_ext: str) -> str:
-        is_html = src_metadata._is_html_comment_format(filename_or_ext)
+        is_html = filename_or_ext.endswith(".md")
         lines = content.splitlines()
-        bounds = src_metadata._extract_block_boundaries(lines, is_html)
+        bounds = _find_metadata_bounds(lines, is_html)
         if bounds is None:
             body_lines = lines
         else:
@@ -132,6 +142,20 @@ class FakeSourceMetadataCoordinator:
         current_hash = self.compute_file_code_hash(p)
         return current_hash != meta.code_hash
 
+    def is_metadata_altered(
+        self, original_content: str, new_content: str, filename_or_ext: str
+    ) -> bool:
+        is_html = filename_or_ext.endswith(".md")
+        orig_bounds = _find_metadata_bounds(original_content.splitlines(), is_html)
+        new_bounds = _find_metadata_bounds(new_content.splitlines(), is_html)
+        if orig_bounds is not None:
+            if new_bounds is None:
+                return True
+            orig_meta = original_content.splitlines()[orig_bounds[0] : orig_bounds[1] + 1]
+            new_meta = new_content.splitlines()[new_bounds[0] : new_bounds[1] + 1]
+            return orig_meta != new_meta
+        return new_bounds is not None
+
     def rewrite_metadata_in_text(
         self,
         content: str,
@@ -150,9 +174,9 @@ class FakeSourceMetadataCoordinator:
         dirty: Optional[str] = None,
         clear_dirty: bool = False,
     ) -> str:
-        is_html = src_metadata._is_html_comment_format(filename_or_ext)
+        is_html = filename_or_ext.endswith(".md")
         lines = content.splitlines()
-        bounds = src_metadata._extract_block_boundaries(lines, is_html)
+        bounds = _find_metadata_bounds(lines, is_html)
 
         existing_meta = (
             src_metadata.parse_metadata_content(lines[bounds[0] : bounds[1] + 1])
@@ -230,12 +254,21 @@ class FakeSourceMetadataCoordinator:
 
         if bounds is not None:
             start, end = bounds
-            result_lines = lines[:start] + new_block_lines + lines[end + 1 :]
+            body_lines = lines[:start] + lines[end + 1 :]
         else:
-            insert_idx = src_metadata._find_header_insertion_index(lines, is_html)
-            if insert_idx == 0 and lines:
-                new_block_lines.append("")
-            result_lines = lines[:insert_idx] + new_block_lines + lines[insert_idx:]
+            body_lines = list(lines)
+
+        while body_lines and not body_lines[-1].strip():
+            body_lines.pop()
+
+        if bounds is not None and bounds[0] == 0:
+            while body_lines and not body_lines[0].strip():
+                body_lines.pop(0)
+
+        if body_lines:
+            result_lines = body_lines + [""] + new_block_lines
+        else:
+            result_lines = new_block_lines
 
         trailing_newline = content.endswith("\n") or not content
         res = "\n".join(result_lines)
@@ -475,7 +508,8 @@ class FakeWorkspaceProvisioner:
             f"# AGENTS for {role_name}\n"
             "## Contamination Tripwire (Poison Pill)\n"
             "CRITICAL CONTAMINATION: I read a file outside my assigned role workspace\n"
-            "## Command Execution Tripwire (Restricted Binaries Only)\n"
+            "## In-Workspace Execution & Permitted Commands\n"
+            "## Mandatory Cleanroom Workflow Binaries\n"
             "bin/fail\n"
             "## Acting on Blame & Feedback\n"
             "## Unresolvable Impasse & Failure Protocol\n"
@@ -688,6 +722,10 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                     "star_role_deps = ['low']\n\n"
                     "[roles.qa]\nname = 'qa'\naudit_tag = 'QA_AUDIT'\nguide_path = 'guides/qa.md'\n"
                 )
+            support_lib_dir = os.path.join(main_root, "scope", "support", "lib")
+            os.makedirs(support_lib_dir, exist_ok=True)
+            with open(os.path.join(support_lib_dir, "lifecycle.py"), "w", encoding="utf-8") as f:
+                f.write("# lifecycle runtime\n")
             with open(os.path.join(main_root, "notes.txt"), "w", encoding="utf-8") as f:
                 f.write("# notes\n")
             with open(os.path.join(main_root, "pyrightconfig.json"), "w", encoding="utf-8") as f:
@@ -704,6 +742,7 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertGreater(refreshed, 0)
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, "pyproject.toml")))
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, "cleanroom_roles.toml")))
+            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "support", "lib", "lifecycle.py")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "notes.txt")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "pyrightconfig.json")))
             agents_md = os.path.join(ws_dir, "AGENTS.md")
@@ -712,7 +751,8 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                 agents_text = f.read()
             self.assertIn("## Contamination Tripwire (Poison Pill)", agents_text)
             self.assertIn("CRITICAL CONTAMINATION: I read a file outside my assigned role workspace", agents_text)
-            self.assertIn("## Command Execution Tripwire (Restricted Binaries Only)", agents_text)
+            self.assertIn("## In-Workspace Execution & Permitted Commands", agents_text)
+            self.assertIn("## Mandatory Cleanroom Workflow Binaries", agents_text)
             self.assertIn("bin/fail", agents_text)
             self.assertIn("## Acting on Blame & Feedback", agents_text)
             self.assertIn("## Unresolvable Impasse & Failure Protocol", agents_text)
@@ -947,3 +987,11 @@ class WorkspaceSyncImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-20T23:45:00Z
+# LAST_CHANGED: 2026-10-20T23:45:00Z
+# CHANGE: Assert refreshed runtime support at workspace root
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

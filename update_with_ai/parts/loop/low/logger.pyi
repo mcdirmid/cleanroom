@@ -1,18 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: 8a5b833a18f0
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Runner logger low-level interface specification."""
 
 from dataclasses import dataclass
 from typing import NewType, Protocol
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 
 EventName = NewType("EventName", str)
 EventSummary = NewType("EventSummary", str)
@@ -35,7 +26,7 @@ class RunnerLogEvent:
 
 
 @singleton_type("system")
-class RunnerLogger(InTier[SystemTier], Protocol):
+class RunnerLogger(Singleton[SystemTier], Protocol):
     """System service consuming execution log events."""
 
     @operation
@@ -53,3 +44,11 @@ class RunnerLogger(InTier[SystemTier], Protocol):
         - MUST write the verbose transcript representation to the transcript log file.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

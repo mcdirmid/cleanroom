@@ -1,28 +1,27 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T01:39:02Z
-CHANGE: Group the configuration field inventory by concern and name the serialized schema
-CODE_HASH: dd9f70cef89c
--->
-
 # model_config_ext external component
 
 ## Purpose
 
-The model_config_ext external component defines the external build target model configuration JSON dictionary format emitted by the model_config Starlark build rule.
+The model_config_ext external component defines the external declarative model configuration format, capability tier mappings, and token rate pricing schemas for Cleanroom language models.
 
-Configuring language model execution requires binding declarative build target parameters to runtime client settings. The model_config_ext external component specifies the external configuration dictionary emitted by the model_config rule, covering build target identity, model endpoint and credential binding, request limits and sampling settings, and agent execution preferences.
+Configuring language model execution and empirical benchmarking requires binding declarative model parameters, capability tiers, rate cards, and authentication settings to runtime client environments. The model_config_ext external component specifies the external configuration schema for declarative TOML model definition files and serialized configuration dictionaries, covering model identity, provider binding, capability tiers, token rate pricing, execution bounds, and agent preferences.
 
-**Out of scope:** The model_config_ext external component does not transmit network requests, configure sandboxes, or enforce loop repetition; these are handled by other components.
+**Out of scope:** The model_config_ext external component does not transmit network requests, execute subagents, or enforce loop repetition; these are handled by other components.
 
 ## Grounding Gaps Covered
 
-The model_config_ext component provides external serialization and discovery knowledge for model configuration files emitted by model_config.bzl.
+The model_config_ext component provides external serialization and discovery knowledge for declarative TOML model configuration files and build configuration dictionaries.
 
 Grounding gaps covered include:
 
-- Model configuration JSON extraction: Extracts the model configuration dictionary schema emitted by model_config.bzl, covering target label and target name, model identifier, remote API base url endpoint, designated API key environment variable name, request timeout duration, maximum conversation turn limit, temperature, maximum token limit, and the guide step mode, startup file inspection, follow-up tool call injection, node visit limit, and batch size settings.
+- Model configuration schema extraction: Extracts the model configuration schema from declarative TOML files and serialized JSON dictionaries, covering model identifiers, remote API base url endpoints, designated API key environment variables, request timeout durations, conversation turn limits, sampling temperatures, maximum token limits, capability tiers, tier labels, uncached input rates, cached input rates, output rates, quantization settings, default harnesses, batch sizes, conversation token bounds, test failure limits (max_failures), and unproductive turn limits.
 
-- Configuration file discovery: Locates target configuration JSON files in the workspace runfiles tree, the build output directory, or the directory adjacent to the running executable, resolved from the target package and target name.
+- Configuration file discovery: Locates target configuration TOML and JSON files in repository roots, parent directories, build output trees, or the canonical user configuration directory.
 
-- JSON text deserialization and credential binding: Decodes raw UTF-8 JSON text documents into structured in-memory records, validates configuration fields, extracts authentication credentials from the designated process environment variable, falls back to ambient environment credentials or standard defaults when no configuration file is present, and reports JSON parsing errors.
+- Text deserialization and credential binding: Decodes raw UTF-8 TOML or JSON text into structured in-memory records, validates configuration fields, extracts authentication credentials from designated environment variables or user credentials stores, falls back to ambient environment credentials or standard defaults when configuration files are absent, and reports parsing errors.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-19T18:45:00Z
+LAST_CHANGED: 2026-10-19T18:45:00Z
+CHANGE: Enhance model_config_ext with declarative TOML schema, capability tiers, and token rate pricing
+-->

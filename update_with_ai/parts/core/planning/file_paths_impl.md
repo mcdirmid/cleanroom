@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:01:18Z
-CHANGE: Drop planning front-matter for the path implementation canvas
-CODE_HASH: b41c4b26046b
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_paths_impl implementation component
 
 ## Intent
@@ -54,3 +46,10 @@ By centralizing normalization routines and relying on host filesystem mechanics,
 
 - Empty path detection and diagnostic error raising.
   - Grounded: [caller input]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:01:18Z
+CHANGE: Drop planning front-matter for the path implementation canvas
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

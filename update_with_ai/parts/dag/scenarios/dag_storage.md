@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:21Z
-CHANGE: Author dag dag_storage concrete scenarios
-CODE_HASH: c2b45373db5b
--->
-
 # Concrete scenarios for `dag_storage` (interface)
 
 ## Scenario 1 — Reading a node's dependencies across the silent partition
@@ -175,3 +168,9 @@ for gadget is dirty and lies on no path from either node.
 1. The caller marks the subgraph clean at the alpha-role node for widget.
    Observed: both the alpha-role node for widget and the beta-role node for widget are marked clean,
    each being reachable from the other, and the alpha-role node for gadget is still dirty.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:21Z
+CHANGE: Author dag dag_storage concrete scenarios
+-->

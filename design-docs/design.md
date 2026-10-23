@@ -16,6 +16,8 @@
 2. [Execution Paradigms & Isolation Architecture](#2-execution-paradigms--isolation-architecture)
    - [Paradigm Comparison Matrix](#paradigm-comparison-matrix)
    - [Option 4: Subagent-Driven Workspaces with Zero-Execution Coordinator (Primary)](#option-4-subagent-driven-workspaces-with-zero-execution-coordinator-primary)
+   - [Multi-Wave Orchestration, Wave Barriers & Blame Defect Propagation](#multi-wave-orchestration-wave-barriers--blame-defect-propagation)
+   - [Process Interruption & Cancellation Sandbox Cleanup](#process-interruption--cancellation-sandbox-cleanup)
    - [Option 3: Subagentless Interactive Workspaces](#option-3-subagentless-interactive-workspaces)
    - [Option 1: Custom In-Process Headless Loop](#option-1-custom-in-process-headless-loop)
 3. [Historical Post-Mortems & Decommissioned Systems](#3-historical-post-mortems--decommissioned-systems)
@@ -42,7 +44,7 @@
    - [Unified CLI Command Architecture](#unified-cli-command-architecture)
 8. [Multi-Harness Telemetry & Desktop Integration](#8-multi-harness-telemetry--desktop-integration)
    - [DeepSeek Harness (`dsh`), Telemetry & Cordis Shell](#deepseek-harness-dsh-telemetry--cordis-shell)
-   - [Google Antigravity Integration & Rate Economics](#google-antigravity-integration--rate-economics)
+   - [Google Antigravity Integration, Native Desktop IPC (`agentapi`) & Rate Economics](#google-antigravity-integration-native-desktop-ipc-agentapi--rate-economics)
 
 ---
 
@@ -143,7 +145,7 @@ Cleanroom defines three active operational paradigms, each tailored to distinct 
 
 | Architectural Feature | Option 1: Custom Loop (`--harness loop`) | Option 3: Subagentless Workspaces | Option 4: Subagent-Driven Workspaces (Primary) | Option 2: In-Tree FastMCP Subagents (*Archived*) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Execution Mode** | Headless in-process Python loop | Interactive developer CLI / IDE turn | Autonomous multi-agent wave coordinator | Multi-subagent hierarchy in single working dir |
+| **Execution Mode** | Headless in-process Python loop | Interactive developer CLI / IDE round | Autonomous multi-agent wave coordinator | Multi-subagent hierarchy in single working dir |
 | **Supervisor Role** | Algorithmic Python loop driver | Human developer or IDE agent | Zero-execution coordinator subagent | Subagent coordinator with file edit permissions |
 | **Isolation Mechanism** | Ephemeral in-process state | Sibling directories with `chmod 444` mounts | Sibling directories with `chmod 444` mounts | Software lifecycle hooks (`cleanroom_sandbox_hook.py`) |
 | **Double-Blind Safety** | Procedural tool-masking | Physical OS filesystem enforcement | Physical OS filesystem enforcement | Software prompt rules (Repeatedly bypassed) |
@@ -204,6 +206,28 @@ The coordinator subagent (`cleanroom_coordinator`) is granted strictly restricte
 5. Awaits wave completion. When all nodes in Wave $N$ report clean, re-evaluates `work-queue` for Wave $N+1$.
 6. Terminates when `work-queue` returns empty (all nodes clean).
 
+#### Multi-Wave Orchestration, Wave Barriers & Blame Defect Propagation
+Cleanroom's subagent coordinator (`update_with_ai/parts/subagent/`) orchestrates multi-agent cleaning passes across complex dependency topologies (including deep diamond graphs and star dependencies):
+
+1. **Dynamic Parallel Role Clustering**:
+   Ready nodes across decoupled targets or orthogonal roles (such as `lib` and `test` within a component, or across independent parts) cluster dynamically into concurrent waves. Workers execute in parallel inside dedicated physical sandboxes (`../role_workspaces/<session>/...`), preventing cross-agent crosstalk or filesystem lock collisions.
+
+2. **Downstream Wave Synchronization Barriers**:
+   Downstream auditor and integration roles (such as `spec_qa`, `qa`, and `coverage`) are strictly blocked behind synchronization barriers. No downstream verification role is dispatched until all of its required upstream implementation dependencies have succeeded and stamped their artifacts clean.
+
+3. **Closed-Loop Blame Defect Propagation**:
+   When an auditor or worker discovers an upstream specification omission or contract defect, it executes `cleanroom blame <target>#<role> --upstream=<culprit> --reason="..."`.
+   - The blame feedback is prepended directly into the culprit node's in-band metadata header.
+   - The DAG dirtiness engine immediately invalidates the culprit node and all transitive downstream dependents.
+   - Downstream workers halt execution; the coordinator schedules the culprit node for re-cleaning in the next wave with the critique provided in context.
+   - Once the upstream defect is repaired and marked clean, dependent nodes unblock and resume downstream compilation automatically.
+
+#### Process Interruption & Cancellation Sandbox Cleanup
+To prevent orphan child processes, zombie subagents, and filesystem clutter during user cancellation:
+- `SubagentCoordinator.orchestrate` traps interruption signals (`SIGINT`, `SIGTERM`, `KeyboardInterrupt`).
+- On signal capture, the coordinator issues immediate cancellation directives (`harness.interrupt_role`) to terminate all active child worker processes.
+- All provisioned ephemeral role workspaces in scope (`../role_workspaces/<session>/...`) are atomically decommissioned and purged from disk.
+
 ---
 
 ### Option 3: Subagentless Interactive Workspaces
@@ -237,8 +261,8 @@ An autonomous in-process agent loop designed for unattended CI/CD environments (
   $$\text{Prompt(Guide, Target, Header)} \longrightarrow \text{LLM Call} \longrightarrow \text{Tool Execution} \longrightarrow \text{Observation} \longrightarrow \text{Verification}$$
 - **`loop_guard.py`**: Enforces strict safety fences:
   - Repetition guard: Detects identical sequential tool invocations and breaks execution loops.
-  - Turn limit: Enforces maximum turns per node (default: 15) to prevent run-away token drain.
-  - Test gate: Invokes `tool_runner.py` after each turn; breaks out immediately upon passing all tests.
+  - Step limit: Enforces maximum steps per node (default: 15) to prevent run-away token drain.
+  - Test gate: Invokes `tool_runner.py` after each step; breaks out immediately upon passing all tests.
 
 ---
 
@@ -264,7 +288,7 @@ An experimental harness adapter for Block's Goose CLI agent (`--harness goose`) 
 
 **Root Causes of Decommissioning**:
 1. **Lack of Structured IPC**: Goose operated via an interactive TTY shell without a stable JSON RPC interface, causing frequent terminal parsing deadlocks during long test executions.
-2. **Incompatible Working Directory Model**: Goose did not support dynamic workspace context switching per turn, requiring fragile symlink-swapping hacks at the shell root.
+2. **Incompatible Working Directory Model**: Goose did not support dynamic workspace context switching per round, requiring fragile symlink-swapping hacks at the shell root.
 3. **Platform Redundancy**: DeepSeek Harness (`dsh`) provided identical local CLI capabilities with superior structured telemetry, native socket event streaming, and rock-solid process stability.
 
 *Verdict*: Goose was turndowned, and all related code was deleted.
@@ -528,14 +552,14 @@ Cleanroom provides deep integration with DeepSeek Harness (`dsh`) across both di
 1. **Direct JSON-RPC Remote Orchestration**:
    - Cleanroom connects directly to the running DeepSeek Harness server over JSON-RPC via HTTP.
    - Discovers active desktop endpoints and authentication credentials dynamically from the Cordis desktop SQLite cookie store (`cookies.sqlite`).
-   - Invokes structured RPC methods (`workspace/create`, `session/create`, `session/prompt`) to drive subagent turns directly against the running server.
+   - Invokes structured RPC methods (`workspace/create`, `session/create`, `session/prompt`) to drive subagent rounds directly against the running server.
    - Completely eliminates kernel write-lease contention (`flock` on `session.lock`) when running alongside an active Cordis desktop UI session, preventing UI session forking and deadlocks.
    - Retains automatic fallback to headless CLI invocation (`dsh exec`) when no desktop server instance is discovered.
 
 2. **`dsh_telemetry` Background Daemon**:
    - Runs a non-blocking UNIX domain socket server listening for subagent lifecycle events.
    - Emits structured JSON events: `{"event": "subagent_start", "scope": "...", "role": "...", "workspace": "..."}`.
-   - Tracks per-turn token usage, execution time, and tool call frequency.
+   - Tracks per-round token usage, execution time, and tool call frequency.
 
 3. **Cordis Desktop Shell Overlay**:
    - Injects real-time status badges into the Cordis desktop shell.
@@ -543,12 +567,42 @@ Cleanroom provides deep integration with DeepSeek Harness (`dsh`) across both di
 
 ---
 
-### Google Antigravity Integration & Rate Economics
+### Google Antigravity Integration, Native Desktop IPC (`agentapi`) & Rate Economics
 
-In Google Antigravity environments:
-- Cleanroom registers the `cleanroom_coordinator` agent definition.
-- Emits the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE` for zero-friction handoff.
-- Employs token-conscious prompting adhering to production rate limits:
+In Google Antigravity environments, Cleanroom operates seamlessly across interactive pair programming, autonomous multi-agent coordination, and automated benchmarking flights:
+
+1. **Zero-Execution Coordinator Registration**:
+   - Registers the `cleanroom_coordinator` agent definition equipped strictly with DAG scheduling tools (`work-queue`, `invoke_subagent`, `manage_subagents`, `send_message`).
+   - Emits the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE` for zero-friction handoff when invoked via `cleanroom orchestrate` or `cleanroom clean --harness antigravity`.
+
+2. **Elimination of Background Prompt Starvation via Native Desktop IPC (`agentapi`)**:
+   - In the Antigravity desktop IDE, CLI processes that run longer than 10 seconds (such as batch cleaning or cross-model benchmark evaluations) are automatically converted into background support tasks.
+   - Standard stdout is directed to task logs (`.system_generated/tasks/task-X.log`), suppressing the flight target scope from the chat model's step context and risking process stall.
+   - Cleanroom detects the desktop app environment dynamically (`ANTIGRAVITY_AGENT == "1"`) and locates the bundled `agentapi` executable via `$ANTIGRAVITY_AGENTAPI_EXE`, `PATH`, or `~/.gemini/antigravity/bin/agentapi`.
+
+3. **Reactive Wakeup Protocol (`agentapi send-message`)**:
+   - Cleanroom extracts `ANTIGRAVITY_CONVERSATION_ID` from the environment and executes:
+     ```bash
+     agentapi send-message --title "Cleanroom Coordinator Directive" \
+       "$ANTIGRAVITY_CONVERSATION_ID" \
+       "Clean all dirty nodes in <scope> using cleanroom_coordinator"
+     ```
+   - This delivers a high-priority reactive wakeup event directly into the active chat session, resuming the supervisor model immediately with the explicit flight scope without waiting for background stdout polling.
+
+4. **Headless Tab Dispatch (`agentapi new-conversation`)**:
+   - For empirical benchmarking and unattended flight execution, Cleanroom supports `--antigravity-dispatch=new-conversation`:
+     ```bash
+     agentapi new-conversation --title="Cleanroom Coordinator: <scope>" -- \
+       "Clean all dirty nodes in <scope> using cleanroom_coordinator"
+     ```
+   - This provisions a dedicated coordinator conversation tab in the desktop sidebar, isolating benchmark supervisor activity from the user's main chat canvas.
+
+5. **Flight State Persistence & Resilient Fallback**:
+   - Active flight metadata is written atomically to `.cleanroom/active_flight.json` upon launch and deleted upon DAG convergence.
+   - If `agentapi` or conversation IDs are unavailable (e.g. headless CI environments or standard bash terminals), Cleanroom falls back gracefully to standard synchronous stdout directives.
+
+6. **Rate Economics & Model Tier Allocation**:
+   Cleanroom employs token-conscious prompting adhering to production rate limits:
 
 | Model Tier | Cost per 1M Input Tokens | Cost per 1M Output Tokens | Role Suitability |
 | :--- | :--- | :--- | :--- |

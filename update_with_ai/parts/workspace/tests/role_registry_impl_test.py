@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-13T01:30:00Z
-# CHANGE: test role metadata workspace discovery without persistent registry file
-# CODE_HASH: f06034aa56a6
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for role_registry_impl."""
 
 import json
@@ -333,3 +324,11 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-13T01:30:00Z
+# CHANGE: test role metadata workspace discovery without persistent registry file
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

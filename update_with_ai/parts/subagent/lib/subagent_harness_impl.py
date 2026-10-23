@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T11:00:00Z
-# CHANGE: turn down support for goose, supporting only antigravity and dsh
-# CODE_HASH: 7fd31d6b5b1d
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for subagent_harness_impl."""
 
 from __future__ import annotations
@@ -146,9 +137,13 @@ class CommandHarnessAdapter(
             f"- Scope: {dispatch.dir_scope}\n"
             f"- Workspace: {dispatch.workspace_dir}\n\n"
             f"## Assigned Targets\n{targets_str}\n\n"
-            "CRITICAL: DO NOT EDIT METADATA. Never touch `# --- CLEANROOM METADATA ---` or `<!-- CLEANROOM METADATA -->` headers. Use only tools.\n\n"
+            "CRITICAL CONSTRAINTS:\n"
+            "- DO NOT create or edit any files other than your assigned targets.\n"
+            "- DO NOT create scratch tests, temporary test scripts, or auxiliary test runners.\n"
+            "- Rely solely on `bin/check_files <target>` for verification. Runtime testing is strictly the domain of downstream QA.\n"
+            "- DO NOT EDIT METADATA headers. Never touch `# --- CLEANROOM METADATA ---` or `<!-- CLEANROOM METADATA -->`. Use only tools.\n\n"
             f"## Instructions\n"
-            f"1. Align and verify your assigned targets according to your role guide.\n"
+            f"1. Edit ONLY the assigned target file(s) according to your role guide. Do not implement ad-hoc scratch tests.\n"
             f"2. Run verification commands to check consistency:\n"
             f"   `bin/check_files`\n"
             f"3. When targets are verified clean, submit them:\n"
@@ -182,7 +177,7 @@ class CommandHarnessAdapter(
         except OSError:
             pass
 
-        log_file = os.path.join(log_dir, f".cleanroom_turn_{handle}.log")
+        log_file = os.path.join(log_dir, f".cleanroom_round_{handle}.log")
         start_time = time.time()
 
         proc: Optional[subprocess.Popen[str]] = None
@@ -226,11 +221,11 @@ class CommandHarnessAdapter(
     # Contract: inspect workspace blame buffer for reported defects
     # Contract: determine submitted targets by set difference with remaining pending items
     # Contract: extract token usage metrics and return synthesized RoleTurnResult
-    def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
-        """Awaits subagent turn completion and returns outcome result."""
+    def await_role(self, task_handle: str) -> subagent_coordinator.RoleRoundResult:
+        """Awaits subagent round completion and returns outcome result."""
         task = self._active_tasks.pop(task_handle, None)
         if task is None:
-            return subagent_coordinator.RoleTurnResult(
+            return subagent_coordinator.RoleRoundResult(
                 role="unknown",
                 status="failed",
                 failure_reason=f"Task handle '{task_handle}' not found.",
@@ -249,7 +244,7 @@ class CommandHarnessAdapter(
             except subprocess.TimeoutExpired:
                 task.proc.kill()
                 task.proc.wait()
-                return subagent_coordinator.RoleTurnResult(
+                return subagent_coordinator.RoleRoundResult(
                     role=task.dispatch.role_name,
                     status="failed",
                     failure_reason=f"Subagent process timed out after {self.timeout_seconds} seconds.",
@@ -280,7 +275,7 @@ class CommandHarnessAdapter(
 
         telemetry = _parse_token_usage_from_log(task.log_file)
 
-        return subagent_coordinator.RoleTurnResult(
+        return subagent_coordinator.RoleRoundResult(
             role=task.dispatch.role_name,
             status=status,
             submitted_targets=tuple(submitted),
@@ -290,13 +285,13 @@ class CommandHarnessAdapter(
             wall_clock_seconds=elapsed,
         )
 
-    # Contract: when subagent process has terminated, return role turn result
+    # Contract: when subagent process has terminated, return role round result
     # Contract: when subagent process is still running, return None without blocking or termination
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
-        """Polls subagent turn execution without blocking."""
+    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+        """Polls subagent round execution without blocking."""
         task = self._active_tasks.get(task_handle)
         if task is None:
-            return subagent_coordinator.RoleTurnResult(
+            return subagent_coordinator.RoleRoundResult(
                 role="unknown",
                 status="failed",
                 failure_reason=f"Task handle '{task_handle}' not found.",
@@ -327,10 +322,7 @@ class CommandHarnessAdapter(
                 pass
 
 
-class HarnessRegistry(
-    subagent_harness.HarnessRegistry,
-    Singleton,
-):
+class HarnessRegistry(subagent_harness.HarnessRegistry):
     """Realizes harness registry and resolution for external agent platforms."""
 
     tier = agent_session.agent_session
@@ -401,6 +393,13 @@ class HarnessRegistry(
 
 
 HarnessResolver = HarnessRegistry
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-20T10:00:00Z
+# CHANGE: Standardize terminology on role rounds and role round results, deprecating turn terminology
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -408,12 +407,13 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
+        CommandHarnessAdapter,
+        keys=[CommandHarnessAdapter, subagent_harness.CommandHarnessAdapter],
+        tier=CommandHarnessAdapter.tier,
+    )
+    reg.register_singleton(
         HarnessRegistry,
-        keys=[
-            subagent_harness.HarnessRegistry,
-            subagent_harness.HarnessResolver,
-            HarnessRegistry,
-        ],
+        keys=[subagent_harness.HarnessRegistry, subagent_harness.HarnessResolver, HarnessRegistry],
         tier=agent_session.agent_session,
     )
 

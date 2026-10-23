@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T12:35:00Z
-CHANGE: Present single-line event summaries to standard output without timestamps or event names
-CODE_HASH: 7681b35984eb
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # logger_impl implementation component
 
 ## Intent
@@ -50,3 +42,10 @@ By clearing prior run logs at startup and resolving output destinations from env
 
 - Log destination resolution from environment variables and startup file truncation.
   - Grounded: [transcript_log_writing]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T12:35:00Z
+CHANGE: Present single-line event summaries to standard output without timestamps or event names
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

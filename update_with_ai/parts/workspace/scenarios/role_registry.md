@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T01:30:00Z
-CHANGE: eliminate cleanroom_workspaces.json workspace registry file
-CODE_HASH: 06f6dba399c6
--->
-
 # Concrete scenarios for `role_registry` (interface)
 
 ## Scenario 1 — Resolving a declared role and a role nobody declares
@@ -170,3 +163,9 @@ Given: no workspaces have been recorded or provisioned.
 4. The caller unregisters the alpha workspace in scope_a.
    Observed: loading the active workspaces returns no descriptor, and the previously recorded
    `/ws/alpha_scope_a` state is served afresh rather than from a cached read.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-13T01:30:00Z
+CHANGE: eliminate cleanroom_workspaces.json workspace registry file
+-->

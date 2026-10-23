@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:30:00Z
-CHANGE: Define submission interface component
-CODE_HASH: 3ce37c03c730
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # submission interface component
 
 imports: tool_provider, file_alias
@@ -29,3 +21,10 @@ The *submit tool* is a resolve tool that concludes active nodes upon passing ver
 The *fail tool* is a resolve tool that terminates the run in failure. The fail tool accepts a text *explanation* parameter.
 
 The *blame tool* is a resolve tool that attributes task failure to an upstream dependency node. The blame tool accepts a file alias *blame target* parameter and a text explanation parameter.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:30:00Z
+CHANGE: Define submission interface component
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:07:15Z
-CHANGE: Canonicalize change timestamps and state the feedback routing invariant
-CODE_HASH: 813128a78879
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # node_cleaner_impl implementation component
 
 ## Intent
@@ -77,3 +69,10 @@ By retrying transient session failures once before propagation, isolating prompt
 
 - Pass-through resolution for promptless nodes without establishing agent sessions.
   - Grounded: [node_storage: [agent_storage_service], dag_storage: [dag_storage_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:07:15Z
+CHANGE: Canonicalize change timestamps and state the feedback routing invariant
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

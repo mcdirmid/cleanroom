@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:22Z
-CHANGE: Author dag subgraph_impl concrete scenarios
-CODE_HASH: 4a7f97df62bf
--->
-
 # Concrete scenarios for `subgraph_impl` (implementation)
 
 Scenarios 1 through 8 restate the caller observations of the interface scenarios and add, beside
@@ -289,3 +282,9 @@ node for widget and the alpha-role node for gadget are dirty.
    Observed: the alpha-role node for gadget alone.
    Realized by: the component's own batch scan, which reads the freshly cleaned status through
    `dag_storage` instead of reusing the status captured when the target was indexed.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:22Z
+CHANGE: Author dag subgraph_impl concrete scenarios
+-->

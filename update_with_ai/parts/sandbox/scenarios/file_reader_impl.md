@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:12:01Z
-CHANGE: Author sandbox file_reader_impl concrete scenarios
-CODE_HASH: c9a2868c9b53
--->
-
 # Concrete scenarios for `file_reader_impl` (implementation)
 
 Scenarios 1 through 6 restate the caller observations of the interface scenarios and add, beside
@@ -174,3 +167,9 @@ positive" and `widget.py` as a read-write file holding the line "value = 1".
    without viewing the file directly.
    Realized by: regular expression line scanning through `filesystem_ext` and the component's own
    edit-safety guard over read-write file matches.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:12:01Z
+CHANGE: Author sandbox file_reader_impl concrete scenarios
+-->

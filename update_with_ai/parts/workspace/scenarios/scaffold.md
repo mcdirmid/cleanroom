@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:50:00Z
-CHANGE: Author scaffold concrete scenarios
-CODE_HASH: e38b49fbf659
--->
-
 # Concrete scenarios for `scaffold` (interface)
 
 ## Scenario 1 — Deploying runner zipapps into the bin directory
@@ -26,7 +19,7 @@ Given: role `alpha` commissioned for scope `scope_a`, with model profile `gpt-4o
 Given: role `alpha` is a writable authoring role with companion guide `guides/alpha_guide.md` and scope `parts/alpha`.
 
 1. The scaffolder writes the role agents guide into `/ws/alpha_scope_a`.
-   Observed: `AGENTS.md` exists in `/ws/alpha_scope_a` with permissions 0o644; it contains boundary rules confining execution to the workspace, the contamination tripwire with permitted in-workspace code and spec reading, the command execution tripwire restricting terminal execution to prescribed `bin/` tools, instructions for acting on blame and feedback (explaining that static checks do not verify runtime behavior), and fail-stop protocols.
+   Observed: `AGENTS.md` exists in `/ws/alpha_scope_a` with permissions 0o644; it contains boundary rules confining execution to the workspace, the contamination tripwire with permitted in-workspace code and spec reading, instructions permitting in-workspace shell commands and native harness tools while mandating turn resolution through prescribed `bin/` tools, instructions for acting on blame and feedback (explaining that static checks do not verify runtime behavior), and fail-stop protocols.
 
 ## Scenario 4 — Synthesizing role AGENTS.md guide instructions for auditor role
 
@@ -41,3 +34,9 @@ Given: role `alpha` declares source pattern `parts/alpha/lib/{unit_name}.py` and
 
 1. The scaffolder creates missing target skeletons for the workspace.
    Observed: `parts/alpha/lib/widget.py` is generated in `/ws/alpha_scope_a` with starter skeleton content derived from `widget.pyi`, and has permissions 0o644.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:50:00Z
+CHANGE: Align scaffold scenarios with permitted shell and harness tool execution
+-->

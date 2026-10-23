@@ -30,7 +30,7 @@ check() { # check <desc> <file> <pattern>
 mkdir -p "$tmp/c1"
 cat > "$tmp/c1/my_service.pyi" <<'EOF'
 from typing import Protocol
-from framework import operation, singleton_type
+from support.lib.framework import operation, singleton_type
 from support.lib.lifecycle import InTier, SystemTier
 
 @singleton_type("system")
@@ -64,7 +64,7 @@ fi
 mkdir -p "$tmp/c2"
 cat > "$tmp/c2/bad_comment.pyi" <<'EOF'
 # This is a forbidden free-floating comment
-from framework import singleton_type
+from support.lib.framework import singleton_type
 
 @singleton_type
 class Service:
@@ -80,7 +80,7 @@ fi
 # Case 3: Prohibited docstring section rejected
 mkdir -p "$tmp/c3"
 cat > "$tmp/c3/prohibited_section.pyi" <<'EOF'
-from framework import operation, singleton_type
+from support.lib.framework import operation, singleton_type
 
 @singleton_type
 class Service:
@@ -103,7 +103,7 @@ fi
 # Case 4: Contract sentence missing period rejected
 mkdir -p "$tmp/c4"
 cat > "$tmp/c4/missing_period.pyi" <<'EOF'
-from framework import operation, singleton_type
+from support.lib.framework import operation, singleton_type
 
 @singleton_type
 class Service:
@@ -126,7 +126,7 @@ fi
 # Case 5: Service method missing @property or @operation rejected
 mkdir -p "$tmp/c5"
 cat > "$tmp/c5/missing_dec.pyi" <<'EOF'
-from framework import singleton_type
+from support.lib.framework import singleton_type
 
 @singleton_type
 class Service:
@@ -143,7 +143,7 @@ fi
 # Case 6: Property taking extra arguments rejected
 mkdir -p "$tmp/c6"
 cat > "$tmp/c6/bad_property.pyi" <<'EOF'
-from framework import singleton_type
+from support.lib.framework import singleton_type
 
 @singleton_type
 class Service:
@@ -161,7 +161,7 @@ fi
 # Case 7: Type invariant repeated as precondition rejected
 mkdir -p "$tmp/c7"
 cat > "$tmp/c7/repeated_inv.pyi" <<'EOF'
-from framework import operation, singleton_type
+from support.lib.framework import operation, singleton_type
 
 @singleton_type
 class Service:
@@ -247,7 +247,7 @@ Defines types.
 EOF
 cat > "$tmp/c10/low/service.pyi" <<'EOF'
 from typing import Protocol
-from framework import singleton_type
+from support.lib.framework import singleton_type
 
 @singleton_type
 class Service(Protocol):

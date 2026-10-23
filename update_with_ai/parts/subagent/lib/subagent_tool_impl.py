@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T11:00:00Z
-# CHANGE: turn down support for goose, supporting only antigravity and dsh
-# CODE_HASH: e4e71dcaf155
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for subagent_tool_impl."""
 
 from __future__ import annotations
@@ -28,10 +19,7 @@ from . import subagent_coordinator, subagent_harness, subagent_tool
 
 
 # Contract: SubagentToolRunner realizes command dispatch and execution runner for subagent orchestration in the agent session tier.
-class SubagentToolRunner(
-    subagent_tool.SubagentToolRunner,
-    Singleton,
-):
+class SubagentToolRunner(subagent_tool.SubagentToolRunner):
     """Realizes command dispatch and execution runner for subagent orchestration."""
 
     tier = agent_session.agent_session
@@ -108,10 +96,12 @@ class SubagentToolRunner(
             help="Context token compaction limit for subagent processes.",
         )
         orch_parser.add_argument(
+            "--max-unproductive-rounds",
             "--max-unproductive-turns",
+            dest="max_unproductive_rounds",
             type=int,
             default=None,
-            help="Maximum consecutive unproductive turns before halting execution (default: resolved from model configuration or 5).",
+            help="Maximum consecutive unproductive rounds before halting execution (default: resolved from model configuration or 5).",
         )
         orch_parser.add_argument(
             "--target",
@@ -152,7 +142,7 @@ class SubagentToolRunner(
                 timeout=parsed.timeout,
                 max_context_tokens=parsed.max_context_tokens,
                 repo_root=parsed.repo_root,
-                max_unproductive_turns=parsed.max_unproductive_turns,
+                max_unproductive_rounds=parsed.max_unproductive_rounds,
                 target_node=parsed.target_node,
             )
 
@@ -173,8 +163,14 @@ class SubagentToolRunner(
         repo_root: Optional[str] = None,
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
+        max_unproductive_rounds: Optional[int] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence."""
+        effective_unproductive = (
+            max_unproductive_rounds
+            if max_unproductive_rounds is not None
+            else max_unproductive_turns
+        )
         resolver = get_singleton(subagent_harness.HarnessResolver)
         harness_name = harness or "antigravity"
         simulation_mode = harness_name.lower() == "simulation"
@@ -195,7 +191,7 @@ class SubagentToolRunner(
             batch_size=batch_size,
             repo_root=repo_root,
             model_name=model,
-            max_unproductive_turns=max_unproductive_turns,
+            max_unproductive_rounds=effective_unproductive,
             target_node=target_node,
         )
 
@@ -227,7 +223,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             subagent_asm.__initialize__()
             runner = get_singleton(subagent_tool.SubagentToolRunner)
         return runner.execute_command(raw_args)
-
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T11:00:00Z
+# CHANGE: turn down support for goose, supporting only antigravity and dsh
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

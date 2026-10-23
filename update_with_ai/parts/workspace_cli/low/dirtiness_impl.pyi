@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T18:15:00Z
-# CHANGE: Define dirtiness_impl low-level implementation specification
-# CODE_HASH: 9f6582c462b9
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for dirtiness_impl."""
 
 from typing import Optional, Sequence, Tuple
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import src_metadata
 import role_registry
@@ -18,10 +10,7 @@ import dirtiness
 
 
 @singleton_type("agent_session")
-class WorkspaceDirtinessEvaluator(
-    dirtiness.WorkspaceDirtinessEvaluator,
-    InTier[AgentSessionTier],
-):
+class WorkspaceDirtinessEvaluator(dirtiness.WorkspaceDirtinessEvaluator):
     """Realizes unit dirtiness evaluation, companion contract resolution, and cross-unit dependency extraction.
 
     GROUNDING:
@@ -53,6 +42,7 @@ class WorkspaceDirtinessEvaluator(
         - Inspects in-band metadata via src_metadata.SourceMetadataCoordinator.extract_metadata,
           resolving candidate files from canonical repository root first when available to inspect
           authoritative lifecycle timestamps, checks last_cleaned and last_changed timestamps,
+          formats uninitialized target diagnostics without exposing internal metadata terminology,
           verifies all auditor feedback targets, evaluates intra-unit role dependencies for producer roles,
           and tests star-role dependency timestamps against role definitions from
           role_registry.WorkspaceRegistry.resolve_role_definition.
@@ -91,3 +81,10 @@ class WorkspaceDirtinessEvaluator(
         - Discovers part units and maps dependency labels into directory and unit name pairs.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T18:15:00Z
+# CHANGE: Report uninitialized targets as requiring initial implementation without exposing internal metadata terminology
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

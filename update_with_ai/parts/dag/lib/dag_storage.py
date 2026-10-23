@@ -1,11 +1,5 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:59:20Z
-# CHANGE: Align the message sum type with its declaration (base dataclass frozen with init disabled, real default values on the variants) and document every declared operation and postcondition
-# CODE_HASH: 0f6b87cd41ca
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from support.lib.lifecycle import Singleton, SystemTier
 
 from dataclasses import dataclass
 from typing import NewType, Optional, Protocol, Set
@@ -85,7 +79,7 @@ class FeedbackMessage(DagMessage):
 
 
 # Contract: DagStorage stores node graph structure, node status, and messages for dag nodes.
-class DagStorage(Protocol):
+class DagStorage(Singleton[SystemTier], Protocol):
     """Stores node graph structure, node status, and messages for dag nodes.
 
     INVARIANTS:
@@ -234,3 +228,9 @@ class DagStorage(Protocol):
         - WHEN source artifact already exists on disk, MUST preserve existing content without overwriting.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T04:59:20Z
+# CHANGE: Align the message sum type with its declaration (base dataclass frozen with init disabled, real default values on the variants) and document every declared operation and postcondition
+# --- END CLEANROOM METADATA ---

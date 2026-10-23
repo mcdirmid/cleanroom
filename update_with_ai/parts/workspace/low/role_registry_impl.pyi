@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Delegate role configuration resolution to roles
-# CODE_HASH: 47b98b0105c9
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for role_registry_impl."""
 
 from typing import Optional, Sequence
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import cleanroom_files_ext
 import file_paths
@@ -19,10 +11,7 @@ import roles
 
 
 @singleton_type("agent_session")
-class WorkspaceRegistry(
-    role_registry.WorkspaceRegistry,
-    InTier[AgentSessionTier],
-):
+class WorkspaceRegistry(role_registry.WorkspaceRegistry):
     """Realizes role configuration resolution and active workspace tracking.
 
     GROUNDING:
@@ -168,3 +157,10 @@ class WorkspaceRegistry(
           the canonical repository root.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:45:00Z
+# CHANGE: Delegate role configuration resolution to roles
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

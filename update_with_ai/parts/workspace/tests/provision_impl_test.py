@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:58:13Z
-# CHANGE: Replace the undeclared private workspace registry constructor with a test double implementing the declared WorkspaceRegistry interface
-# CODE_HASH: 685e003bab6d
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for provision_impl."""
 
 import json
 import os
 import stat
+import sys
 import tempfile
 from typing import Any, Optional, Sequence
 import unittest
@@ -80,11 +72,13 @@ class FakeWorkspaceStubSynthesizer:
     def generate_readonly_test_stub(
         self, pyi_path, stem, out_path, dep_dir="", part_map=None
     ) -> None:
-        provision_impl.write_file_with_perms(
-            out_path,
-            "# CLEANROOM TEST STUB (READ-ONLY)\nraise NotImplementedError()\n",
-            readonly=True,
-        )
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write("# CLEANROOM TEST STUB (READ-ONLY)\nraise NotImplementedError()\n")
+        try:
+            os.chmod(out_path, 0o444)
+        except OSError:
+            pass
 
     def sync_all_stub_deps(
         self, workspace_dir, main_root, role_def, dir_scope="staging"
@@ -171,9 +165,19 @@ def _make_roles():
 class FakeWorkspaceScaffolder:
     tier = agent_session.agent_session
 
-    def deploy_runner_zipapps(self, bin_dir: str) -> None:
+    def deploy_runner_zipapps(
+        self,
+        bin_dir: str,
+        role_def: Optional[role_registry.RoleDefinition] = None,
+        can_blame: bool = True,
+    ) -> None:
         os.makedirs(bin_dir, exist_ok=True)
-        for tool in ("get_work", "check_files", "submit", "blame", "fail"):
+        if role_def is not None:
+            can_blame = bool(role_def.feedback_role_deps or role_def.audit_tag or not role_def.writable_file_patterns)
+        tools = ["get_work", "check_files", "submit", "fail"]
+        if can_blame:
+            tools.append("blame")
+        for tool in tools:
             p = os.path.join(bin_dir, tool)
             with open(p, "w", encoding="utf-8") as f:
                 f.write("#!/bin/sh\n")
@@ -215,7 +219,8 @@ class FakeWorkspaceScaffolder:
         content = (
             "## Contamination Tripwire (Poison Pill)\n"
             "CRITICAL CONTAMINATION: I read a file outside my assigned role workspace\n"
-            "## Command Execution Tripwire (Restricted Binaries Only)\n"
+            "## In-Workspace Execution & Permitted Commands\n"
+            "## Mandatory Cleanroom Workflow Binaries\n"
             "bin/fail\n"
             "## Acting on Blame & Feedback\n"
             "## Unresolvable Impasse & Failure Protocol\n"
@@ -245,7 +250,21 @@ class FakeWorkspaceScaffolder:
         readonly: bool = False,
         executable: bool = False,
     ) -> None:
-        provision_impl.write_file_with_perms(dst, content, readonly=readonly, executable=executable)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if os.path.exists(dst):
+            try:
+                os.chmod(dst, 0o644)
+            except OSError:
+                pass
+        with open(dst, "w", encoding="utf-8") as f:
+            f.write(content)
+        mode = 0o444 if readonly else 0o644
+        if executable:
+            mode |= 0o111
+        try:
+            os.chmod(dst, mode)
+        except OSError:
+            pass
 
 
 class WorkspaceProvisionImplTest(unittest.TestCase):
@@ -304,7 +323,32 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             with open(contract_f, "w", encoding="utf-8") as f:
                 f.write("# sample contract\n")
 
+            support_lib_dir = os.path.join(repo_root, "test_scope", "support", "lib")
+            os.makedirs(support_lib_dir, exist_ok=True)
+            with open(os.path.join(support_lib_dir, "lifecycle.py"), "w", encoding="utf-8") as f:
+                f.write("class LifecycleRegistry:\n    pass\n")
+            with open(os.path.join(support_lib_dir, "build_lint_common.py"), "w", encoding="utf-8") as f:
+                f.write("# oracle AST parser\n")
+            with open(os.path.join(support_lib_dir, "test_lint.py"), "w", encoding="utf-8") as f:
+                f.write("# oracle test linter\n")
+
+            guides_d = os.path.join(repo_root, "test_scope", "guides")
+            os.makedirs(guides_d, exist_ok=True)
+            with open(os.path.join(guides_d, "qa.md"), "w", encoding="utf-8") as f:
+                f.write("# qa guide\n")
+            tmpl_d = os.path.join(repo_root, "test_scope", "templates")
+            os.makedirs(tmpl_d, exist_ok=True)
+            with open(os.path.join(tmpl_d, "tmpl.md"), "w", encoding="utf-8") as f:
+                f.write("# tmpl\n")
+
+            parts_d = os.path.join(repo_root, "test_scope", "parts")
+            os.makedirs(parts_d, exist_ok=True)
+            with open(os.path.join(parts_d, "cleanroom.toml"), "w", encoding="utf-8") as f:
+                f.write('methodology = "cleanroom_python_roles.toml"\n')
+
             # Project configurations and legacy Bazel files in repo root
+            with open(os.path.join(repo_root, ".python-version"), "w", encoding="utf-8") as f:
+                f.write("3.12.0\n")
             with open(os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8") as f:
                 f.write("[project]\nname = 'test'\n")
             with open(os.path.join(repo_root, "cleanroom_python_roles.toml"), "w", encoding="utf-8") as f:
@@ -320,6 +364,14 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             with open(os.path.join(repo_root, "pyrightconfig.json"), "w", encoding="utf-8") as f:
                 f.write("{}\n")
 
+            # Unbound consumer directory at repo root must NOT be copied into role workspace
+            unbound_dir = os.path.join(repo_root, "unbound_consumer", "parts")
+            os.makedirs(unbound_dir, exist_ok=True)
+            with open(os.path.join(repo_root, "unbound_consumer", "pyproject.toml"), "w", encoding="utf-8") as f:
+                f.write("[project]\nname = 'unbound'\n")
+            with open(os.path.join(unbound_dir, "cleanroom.toml"), "w", encoding="utf-8") as f:
+                f.write('methodology = "cleanroom_python_roles.toml"\n')
+
             desc = self.provisioner.commission(
                 role_name="lib",
                 dir_scope="test_scope",
@@ -330,12 +382,21 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertTrue(os.path.isdir(ws_dir))
             bin_dir = os.path.join(ws_dir, "bin")
             self.assertTrue(os.path.isdir(bin_dir))
-            for tool in ("get_work", "check_files", "submit", "blame", "fail"):
+            for tool in ("get_work", "check_files", "submit", "fail"):
                 tool_p = os.path.join(bin_dir, tool)
                 self.assertTrue(os.path.isfile(tool_p))
                 mode = stat.S_IMODE(os.stat(tool_p).st_mode)
                 self.assertEqual(mode & 0o755, 0o755)
+            self.assertFalse(os.path.isfile(os.path.join(bin_dir, "blame")))
             self.assertFalse(os.path.isfile(os.path.join(bin_dir, "coverage")))
+
+            desc_qa = self.provisioner.commission(
+                role_name="qa",
+                dir_scope="test_scope",
+                repo_root=repo_root,
+            )
+            bin_dir_qa = os.path.join(desc_qa.workspace_dir, "bin")
+            self.assertTrue(os.path.isfile(os.path.join(bin_dir_qa, "blame")))
 
             role_cfg = os.path.join(ws_dir, ".cleanroom_role.json")
             self.assertTrue(os.path.isfile(role_cfg))
@@ -350,7 +411,8 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertNotIn("main_workspace_root", agents_text)
             self.assertIn("## Contamination Tripwire (Poison Pill)", agents_text)
             self.assertIn("CRITICAL CONTAMINATION: I read a file outside my assigned role workspace", agents_text)
-            self.assertIn("## Command Execution Tripwire (Restricted Binaries Only)", agents_text)
+            self.assertIn("## In-Workspace Execution & Permitted Commands", agents_text)
+            self.assertIn("## Mandatory Cleanroom Workflow Binaries", agents_text)
             self.assertIn("bin/fail", agents_text)
             self.assertIn("## Acting on Blame & Feedback", agents_text)
             self.assertIn("## Unresolvable Impasse & Failure Protocol", agents_text)
@@ -369,16 +431,46 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertIn("NEVER recycle identical blame critiques", qa_agents_text)
 
             # Decoupled project configurations copied as read-only
+            ws_pyver = os.path.join(ws_dir, ".python-version")
+            self.assertTrue(os.path.isfile(ws_pyver))
             ws_pyproj = os.path.join(ws_dir, "pyproject.toml")
             self.assertTrue(os.path.isfile(ws_pyproj))
             self.assertEqual(stat.S_IMODE(os.stat(ws_pyproj).st_mode) & 0o444, 0o444)
             ws_roles = os.path.join(ws_dir, "cleanroom_python_roles.toml")
             self.assertTrue(os.path.isfile(ws_roles))
             self.assertEqual(stat.S_IMODE(os.stat(ws_roles).st_mode) & 0o444, 0o444)
+            ws_parts_cfg = os.path.join(ws_dir, "test_scope", "parts", "cleanroom.toml")
+            self.assertTrue(os.path.isfile(ws_parts_cfg))
+            self.assertEqual(stat.S_IMODE(os.stat(ws_parts_cfg).st_mode) & 0o444, 0o444)
+
+            # Support libraries: promoted to workspace root, runtime files copied, linters/runners excluded
+            ws_support = os.path.join(ws_dir, "support", "lib")
+            self.assertTrue(os.path.isfile(os.path.join(ws_support, "lifecycle.py")))
+            self.assertFalse(os.path.exists(os.path.join(ws_support, "build_lint_common.py")))
+            self.assertFalse(os.path.exists(os.path.join(ws_support, "test_lint.py")))
+
+            # Promoted guides and templates at workspace root
+            self.assertTrue(os.path.isdir(os.path.join(ws_dir, "guides")))
+            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "guides", "qa.md")))
+            self.assertTrue(os.path.isdir(os.path.join(ws_dir, "templates")))
+            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "templates", "tmpl.md")))
+
+            # Verify standard python import without PYTHONPATH
+            import subprocess
+            res = subprocess.run(
+                [sys.executable, "-c", "from support.lib.lifecycle import LifecycleRegistry; print('OK')"],
+                cwd=ws_dir,
+                capture_output=True,
+                text=True,
+                env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+            )
+            self.assertEqual(res.returncode, 0)
+            self.assertIn("OK", res.stdout)
 
             # Non-system files must NOT be copied into role workspace
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "notes.txt")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "pyrightconfig.json")))
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "unbound_consumer")))
 
             ws_contract = os.path.join(ws_dir, "test_scope", "low", "sample.pyi")
             self.assertTrue(os.path.isfile(ws_contract))
@@ -551,3 +643,11 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-20T23:45:00Z
+# LAST_CHANGED: 2026-10-20T23:45:00Z
+# CHANGE: Assert active methodology assets promoted to role workspace root
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

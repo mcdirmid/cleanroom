@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:14:19Z
-CHANGE: Author control submit concrete scenarios
-CODE_HASH: 6b95eb91cfeb
--->
-
 # Concrete scenarios for `submit` (interface)
 
 ## Scenario 1 — Submitting a documented target whose files were modified
@@ -165,3 +158,8 @@ been modified since the target was last clean.
    present and workspace files must be modified to address feedback before submitting or fail must
    be called, and the alpha-role target node for unit widget stays dirty.
 
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:14:19Z
+CHANGE: Author control submit concrete scenarios
+-->

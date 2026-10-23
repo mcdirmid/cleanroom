@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:58:56Z
-# CHANGE: Restrict assembly CONSTITUENTS to exactly the constituent modules declared in the grounding specification
-# CODE_HASH: af81874198e0
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry
@@ -32,3 +25,9 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         mod.__initialize__(registry)
 
 _initialize_ = __initialize__
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T04:58:56Z
+# CHANGE: Restrict assembly CONSTITUENTS to exactly the constituent modules declared in the grounding specification
+# --- END CLEANROOM METADATA ---

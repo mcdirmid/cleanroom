@@ -36,9 +36,10 @@
    - [Google Antigravity Integration & Rate Economics](#google-antigravity-integration--rate-economics)
 8. [Current Implementation Progress & Verification Health](#8-current-implementation-progress--verification-health)
 9. [Master Actionable Roadmap & Next TODOs](#9-master-actionable-roadmap--next-todos)
-   - [Task 1: Multi-Wave End-to-End Orchestration Stress Testing](#task-1-multi-wave-end-to-end-orchestration-stress-testing)
-   - [Task 2: Cross-Model Empirical Benchmarking Suite](#task-2-cross-model-empirical-benchmarking-suite)
-   - [Task 3: Standalone Ephemeral Distribution (`uvx cleanroom`)](#task-3-standalone-ephemeral-distribution-uvx-cleanroom)
+   - [Task 1: Cross-Model Empirical Benchmarking Suite](#task-1-cross-model-empirical-benchmarking-suite)
+   - [Task 2: Minimal Hermetic Role Workspace Provisioning & Clutter Eradication](#task-2-minimal-hermetic-role-workspace-provisioning--clutter-eradication)
+   - [[COMPLETED] Task 3: Refine Broad Exception Linter (`check_exception_eating`) for Task Executors & Boundary Handlers](#completed-task-3-refine-broad-exception-linter-check_exception_eating-for-task-executors--boundary-handlers)
+   - [Task 4: Standalone Ephemeral Distribution (`uvx cleanroom`)](#task-4-standalone-ephemeral-distribution-uvx-cleanroom)
 
 ---
 
@@ -145,7 +146,7 @@ Cleanroom supports three primary operational paradigms, synthesized from extensi
 | Dimension | Option 1: Custom Loop (`--harness loop`) | Option 3: Subagentless Workspaces | Option 4: Subagent-Driven Workspaces (Primary) | Option 2: In-Tree FastMCP Subagents (*Decommissioned*) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Execution Model** | Autonomous in-process Python loop | Interactive single-agent / developer CLI | Multi-agent wave scheduler + zero-execution coordinator | Hierarchical subagents in single working directory |
-| **Context Isolation** | None (Single API conversation context) | Complete (Separate interactive chats or human turns) | Complete (Physical OS workspace per subagent) | Weak (Software prompt instructions; single directory) |
+| **Context Isolation** | None (Single API conversation context) | Complete (Separate interactive chats or human rounds) | Complete (Physical OS workspace per subagent) | Weak (Software prompt instructions; single directory) |
 | **Sandbox Boundary** | In-process execution | Ephemeral sibling directories (`chmod 444`) | Ephemeral sibling directories (`chmod 444`) | Software hooks (`cleanroom_sandbox_hook.py`) |
 | **Harness Support** | Headless CLI (Any OpenAI/Gemini endpoint) | Any terminal, IDE, or chat agent | Google Antigravity, DeepSeek Harness (`dsh`) | FastMCP server via Antigravity tool calling |
 | **Token Efficiency** | High (Direct targeted prompt calls) | Very High (Zero supervisor token overhead) | Optimal (Parallel subagents, bounded wave contexts) | Catastrophic (10x-20x explosion via tool churn) |
@@ -200,7 +201,7 @@ Option 4 combines the physical isolation of sibling workspaces with autonomous m
 ### Option 3: Subagentless Interactive Cleanroom
 
 Designed for human-in-the-loop development or single-agent IDE execution (such as Antigravity chat, Cursor, or VS Code):
-- **User or Supervisor Turn**: Inspects work queue via `uv run cleanroom work-queue <scope>`.
+- **User or Supervisor Round**: Inspects work queue via `uv run cleanroom work-queue <scope>`.
 - **Commissioning**: Runs `uv run cleanroom commission <target>#<role>` to build an isolated sibling directory in `../role_workspaces/<session>/`.
 - **Worker Execution**: The agent or developer switches context to the sibling workspace, edits the isolated target, and tests via `bin/test`.
 - **Promotion**: Runs `uv run cleanroom submit <target>#<role>`, verifying tests and updating in-band metadata.
@@ -221,7 +222,7 @@ An autonomous in-process agent runner for headless environments and CI/CD pipeli
 In early architectural iterations, Cleanroom attempted to enforce role isolation in-tree within a single shared working directory using an external FastMCP server daemon and Antigravity `PreToolUse` hooks (`cleanroom_sandbox_hook.py`).
 
 **Root Causes of Failure**:
-1. **Context Window Token Explosion**: The coordinator and all subagents shared a single monolithic context. Tool definitions, MCP schemas, stdout/stderr streams, and file diffs accumulated rapidly, consuming over 1,500,000 tokens within 3–4 cleaning turns and triggering rate-limit quotas under Google One Ultra.
+1. **Context Window Token Explosion**: The coordinator and all subagents shared a single monolithic context. Tool definitions, MCP schemas, stdout/stderr streams, and file diffs accumulated rapidly, consuming over 1,500,000 tokens within 3–4 cleaning rounds and triggering rate-limit quotas under Google One Ultra.
 2. **Tool-Call Indirection Overhead**: Subagents did not read/write files directly; they routed calls through FastMCP endpoints (`cleanroom_read_file`, `cleanroom_write_file`), introducing high serialization latency and frequent JSON truncation.
 3. **Flaky Daemon Process Lifecycles**: The long-running FastMCP background process suffered from socket disconnections, orphan daemon locks, and zombie processes across IDE restarts.
 4. **Lack of OS-Level Enforcement**: Software hooks were repeatedly bypassed by models inventing shell commands or using alternate edit tools.
@@ -236,7 +237,7 @@ An experimental harness adapter for the Block Goose CLI agent (`--harness goose`
 
 **Root Causes of Decommissioning**:
 1. **Unstable Subprocess IPC**: Goose relied on an interactive terminal session that lacked a structured JSON RPC interface, causing frequent deadlock during long-running test suites.
-2. **Lack of Workspace Sandboxing**: Goose lacked native support for switching working directories per-turn, requiring aggressive shell symlink swapping that corrupted concurrent runs.
+2. **Lack of Workspace Sandboxing**: Goose lacked native support for switching working directories per-round, requiring aggressive shell symlink swapping that corrupted concurrent runs.
 3. **Redundancy with DSH and Antigravity**: DeepSeek Harness (`dsh`) provided identical local CLI capabilities with superior structured telemetry, socket streaming, and zero process flakiness.
 
 *Decision*: Goose integration was turndowned and purged from the active harness suite.
@@ -421,14 +422,14 @@ Cleanroom provides deep integration with DeepSeek Harness (`dsh`) across both di
 1. **Direct JSON-RPC Remote Orchestration**:
    - Cleanroom connects directly to the running DeepSeek Harness server over JSON-RPC via HTTP.
    - Discovers active desktop endpoints and authentication credentials dynamically from the Cordis desktop SQLite cookie store (`cookies.sqlite`).
-   - Invokes structured RPC methods (`workspace/create`, `session/create`, `session/prompt`) to drive subagent turns directly against the running server.
+   - Invokes structured RPC methods (`workspace/create`, `session/create`, `session/prompt`) to drive subagent rounds directly against the running server.
    - Completely eliminates kernel write-lease contention (`flock` on `session.lock`) when running alongside an active Cordis desktop UI session, preventing UI session forking and deadlocks.
    - Retains automatic fallback to headless CLI invocation (`dsh exec`) when no desktop server instance is discovered.
 
 2. **`dsh_telemetry` Background Daemon**:
    - Runs a non-blocking UNIX domain socket server listening for subagent lifecycle events.
    - Emits structured JSON events: `{"event": "subagent_start", "scope": "...", "role": "...", "workspace": "..."}`.
-   - Tracks per-turn token usage, execution time, and tool call frequency.
+   - Tracks per-round token usage, execution time, and tool call frequency.
 
 3. **Cordis Desktop Shell Overlay**:
    - Injects real-time status badges into the Cordis desktop shell.
@@ -441,6 +442,9 @@ Cleanroom provides deep integration with DeepSeek Harness (`dsh`) across both di
 In Google Antigravity environments:
 - Cleanroom registers the `cleanroom_coordinator` agent definition.
 - Emits the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE` for zero-friction handoff.
+- Supports native desktop app IPC integration via `agentapi` (`$ANTIGRAVITY_AGENTAPI_EXE` or `~/.gemini/antigravity/bin/agentapi`):
+  - **Reactive Wakeup (`agentapi send-message`)**: Injects high-priority directives directly into `$ANTIGRAVITY_CONVERSATION_ID`, waking up the active conversation agent even when long-running CLI commands background into tasks.
+  - **Headless Tab Spawning (`agentapi new-conversation`)**: Spawns dedicated coordinator tabs in the desktop sidebar directly from Python processes.
 - Employs token-conscious prompting adhering to production rate limits:
 
 | Model Tier | Cost per 1M Input Tokens | Cost per 1M Output Tokens | Role Suitability |
@@ -471,7 +475,7 @@ In Google Antigravity environments:
   - DeepSeek Harness (`dsh`) telemetry daemon and Cordis desktop shell overlay completed.
   - Decommissioned legacy FastMCP daemon (Option 2) and Goose CLI adapter.
 - [x] **Phase 3: DSH Remote JSON-RPC Orchestration & Desktop Session Reconciliation (Task 1)**
-  - Dual-mode subagent turn dispatch implemented in `parts/dsh`: opportunistic JSON-RPC bridge when DSH Desktop / server is active, with headless CLI fallback.
+  - Dual-mode subagent round dispatch implemented in `parts/dsh`: opportunistic JSON-RPC bridge when DSH Desktop / server is active, with headless CLI fallback.
   - Full specification cascade completed across HLS, Planning, Scenarios, Low-level stubs, Library implementations, and Unit tests.
   - Zero `session.lock` contention with live desktop UI; real-time session streaming preserved.
   - Option A (`maxDepth: 2` native coordinator) analyzed and documented for future adoption.
@@ -488,19 +492,26 @@ In Google Antigravity environments:
   - Enriched Rule 4 ("Metadata Projection & Inviolability") across `AGENTS.md` and role worker prompts (`cleanroom_role_tool.py`), explicitly instructing LLM subagents that role workspaces intentionally project out lifecycle timestamps so workers never diagnose missing `LAST_CLEANED` as a defect.
   - Cascaded across full specification pipeline: HLS (`high/`) $\to$ Planning (`planning/`) $\to$ Scenarios (`scenarios/`) $\to$ Low (`low/`) $\to$ Lib (`lib/`) $\to$ Tests (`tests/`).
   - Validated end-to-end multi-agent convergence with `uv run cleanroom clean staging#qa --harness antigravity` using the autonomous `cleanroom_coordinator`.
-- [x] **Phase 6: Multi-Wave End-to-End Orchestration Stress Testing (Task 1)**
+- [x] **Phase 6: Multi-Wave End-to-End Orchestration Stress Testing**
   - Synthetic mock project trees with diamond and star dependencies across 5 roles and 13 targets verified through 5 execution waves.
   - Multi-agent wave barriers validated: parallel implementation roles (`lib` + `test`) cluster dynamically into concurrent waves, and downstream auditor roles (`qa`) remain blocked until all parallel dependencies succeed.
-  - Upstream blame defect propagation verified: failing turns generate structured blame feedback that propagates upstream, halts downstream workers, and automatically resumes upon defect resolution.
+  - Upstream blame defect propagation verified: failing rounds generate structured blame feedback that propagates upstream, halts downstream workers, and automatically resumes upon defect resolution.
   - Cancellation & termination handling: `SubagentCoordinator.orchestrate` traps interruption signals (SIGINT/SIGTERM/KeyboardInterrupt), interrupts active worker processes via `harness.interrupt_role`, and deletes all provisioned role workspace sandboxes in scope.
-  - Full specification cascade verified across all Cleanroom methodologies (127 HLS, 101 Planning, 127 Low, 0 Pyright errors, 631 passed tests).
+  - Full specification cascade verified across all Cleanroom methodologies (129 HLS, 103 Planning, 129 Low, 0 Pyright errors, 703 passed tests).
+- [x] **Phase 7: Native Antigravity Desktop `agentapi` Coordinator Dispatch & Reactive IPC**
+  - Solved Antigravity Desktop background-task prompt starvation and stdout suppression for long-running CLI and benchmark commands.
+  - Environment detection: detects `ANTIGRAVITY_AGENT == "1"`, retrieves `ANTIGRAVITY_CONVERSATION_ID`, and locates the `agentapi` binary via `$ANTIGRAVITY_AGENTAPI_EXE`, `PATH`, or `~/.gemini/antigravity/bin/agentapi`.
+  - Reactive Wakeup (`send-message`): dispatches `agentapi send-message --title "Cleanroom Coordinator Directive" "$ANTIGRAVITY_CONVERSATION_ID" "Clean all dirty nodes in <scope> using cleanroom_coordinator"`, waking the desktop model reactively with explicit scope targets.
+  - Headless Tab Dispatch (`new-conversation`): supports `--antigravity-dispatch=new-conversation` (or `--antigravity-mode=new-conversation`) spawning dedicated sidebar coordinator tabs to decouple long-running flight polling from active chat canvases.
+  - Resilient Fallback: persists active run metadata to `.cleanroom/active_flight.json` and falls back gracefully to standard synchronous stdout directives if `agentapi` or conversation IDs are absent.
+  - Cascaded across full specification pipeline (`update_with_ai/parts/benchmark/` HLS $\to$ Planning $\to$ Scenarios $\to$ Low $\to$ Lib $\to$ Tests) and validated with unit test suite in `cleanroom_role_tool_test.py`.
 
 ### Current Verification Health
 
 Cleanroom maintains 100% test pass rates across all validation suites:
-- **`bin/test`**: **631 passed tests, 9 subtests passed**
+- **`bin/test` & Unit Suites**: **703 passed tests (617 in `update_with_ai`, 15 in `parts/benchmark`, 71 in `support/tests`), 9 subtests passed**
 - **Pyright Type Checking**: **0 errors, 0 warnings, 0 informations**
-- **Specification Linter**: **127 High-Level, 101 Planning, 127 Low-Level specifications validated**
+- **Specification Linter**: **129 High-Level, 103 Planning, 129 Low-Level specifications validated**
 
 ---
 
@@ -510,43 +521,84 @@ The following prioritized roadmap outlines the active forward engineering tasks 
 
 ---
 
-### [COMPLETED] Task 1: Multi-Wave End-to-End Orchestration Stress Testing
-- **Status**: Completed (2026-10-18)
-- **Component**: `update_with_ai/parts/subagent/tests/`
-- **Objective**: Rigorously test the zero-execution coordinator under deep dependency hierarchies (4+ waves deep, 10+ concurrent subagents).
-- **Implementation Completed**:
-  1. [x] Authored diamond and star dependency stress test with 13 targets across 5 roles, verifying multi-wave convergence and parallel wave grouping (`lib` + `test`).
-  2. [x] Simulated worker blame failure, verifying blame defect feedback propagation into queues, blocking downstream execution until the upstream defect was resolved.
-  3. [x] Verified wave barriers prevent downstream execution until all parallel dependencies succeed.
-  4. [x] Contracted and implemented cancellation handling, ensuring active workers are interrupted and orphan workspaces are cleanly decommissioned on SIGINT/cancellation.
-  5. [x] Full specification cascade aligned across HLS, Planning, Scenarios, Low-level stubs, Library, and Unit tests with 100% test pass rate.
-
----
-
-### Task 2: Cross-Model Empirical Benchmarking Suite
+### Task 1: Cross-Model Empirical Benchmarking Suite
 - **Priority**: Medium
-- **Component**: `bin/evaluate_model_efficiency.py` & `parts/tools/`
+- **Component**: `update_with_ai/parts/benchmark/` & `bin/evaluate_model_efficiency.py`
 - **Design Specification**: [`benchmark_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/benchmark_design_doc.md) (complements [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md))
-- **Objective**: Provide automated benchmarking measuring token cost, turn latency, KV prompt-cache efficiency, and specification adherence across a 4-tier model spectrum, using `omlx` for local models, restricting expensive Tier 3 & 4 models to two premier anchor targets, and executing a lean, time-calibrated unit scale per RQ.
+- **Objective**: Provide automated benchmarking measuring token cost, step latency, KV prompt-cache efficiency, and specification adherence across a 4-tier model spectrum, using `omlx` for local models, restricting expensive Tier 3 & 4 models to two premier anchor targets, and executing a lean, time-calibrated unit scale across a 3-tier code size hierarchy (~500 LOC workhorses, ~1,000 LOC Tier 1 local ceiling, 2,000+ LOC frontier stress ceiling).
 - **Implementation Steps**:
-  1. Complete authoritative benchmarking design doc: [`benchmark_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/benchmark_design_doc.md).
-  2. Implement automated runner `bin/evaluate_model_efficiency.py` supporting multi-tier adapters:
-     - **Tier 1 (Free Local)**: Qwen 3.6 35B MoE & Qwen 27B Dense running strictly via **`omlx`** on Apple Silicon.
+  1. [x] Complete authoritative benchmarking design doc: [`benchmark_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/benchmark_design_doc.md).
+  2. [x] Implement automated runner `bin/evaluate_model_efficiency.py` backed by the contracted component `update_with_ai/parts/benchmark/`:
+     - **Tier 1 (Free Local)**: Qwen 3.6 35B MoE & Qwen 27B Dense running strictly via **`omlx`** on Apple Silicon (demonstrating ~1,000 LOC capacity ceiling).
      - **Tier 2 (Budget Cloud)**: DeepSeek V4.1 Flash (DSH JSON-RPC) & Gemini 3.8 Flash (Antigravity).
-     - **Tier 3 & Tier 4 (Selective Anchors)**: Evaluated strictly against **Anchor Target 1 (Mini-SQLite)** and **Anchor Target 2 (CPython `heapq`/`graphlib`)** using OpenAI o3-mini, Claude Sonnet 3.5/3.7, Gemini 4 Argon, Claude Opus 5.5, OpenAI gpt-6.1-sol, and Meta Muse Wonder Full.
-  3. Execute empirical flight campaigns with **lean unit counts per RQ**:
-     - **RQ1**: 8 curated units (4 CPython, 4 SQLite) with 8 Attractor State Ambiguity tests.
-     - **RQ2**: 10 boundary cases with 2 algorithmic guides ($\mathcal{G}$).
-     - **RQ3**: Mini-SQLite (1 monolith vs. 3 divided units across 12 boundary edge cases).
-     - **RQ4**: 6 controlled spec ungroundings (2 deletions, 2 erasures, 2 contradictions) with DAG batching $B \in \{1, 2, 4\}$.
-     - **RQ5**: 10 autonomous evolution tasks (4 feature additions, 3 contract alterations, 3 refactorings).
-     - **RQ6**: 6 injected concurrency defects and 15 mutants in Mini-SQLite buffer pool and Workspace lock manager.
-     - **RQ7**: 25k record event stream parser evaluating the Hidden Benchmark Firewall ($GDI \approx 1.04$) across 3 conditions (3 trials each).
+     - **Tier 3 & Tier 4 (Selective Anchors)**: Evaluated strictly against **Anchor Target 1 (Heavyweight Systems Engine - 2,000+ LOC)** and **Anchor Target 2 (CPython `graphlib`/`heapq`)** using OpenAI o3-mini, Claude Sonnet 3.5/3.7, Gemini 4 Argon, Claude Opus 5.5, OpenAI gpt-6.1-sol, and Meta Muse Wonder Full.
+     - **Unified Telemetry Stream**: Harvests non-cached inbound, cached inbound, outbound (with reasoning tokens), financial cost ($USD), step latencies, and wall-clock time; enforces two-pass verification gates (Spec Lint + Pyright + Pytest + Coverage + Mutmut) and emits Section 7 JSON traces to `logs/benchmarks/`.
+  3. [ ] Execute empirical flight campaigns with **lean unit counts per RQ**:
+     - **RQ1**: 8 curated units (4 CPython `heapq`/`graphlib`, 4 SemVer 2.0 solver) with 8 Attractor State Ambiguity tests.
+     - **RQ2**: 10 boundary cases (5 CPython, 5 Generalized DAG engine) with 2 algorithmic guides ($\mathcal{G}$).
+     - **RQ3**: Heavyweight Systems Subsystem (2,000+ LOC: 1 monolith vs. 4–5 decoupled units across 12 boundary edge cases).
+     - **RQ4**: 6 controlled spec ungroundings (2 deletions, 2 erasures, 2 contradictions) with DAG batching $B \in \{1, 2, 4\}$ on Generalized DAG & Workspace Sandbox units.
+     - **RQ5**: 10 autonomous evolution tasks on SemVer 2.0 solver and DAG engine (4 feature additions, 3 contract alterations, 3 refactorings).
+     - **RQ6**: 6 injected concurrency defects and 15 mutants in Workspace Sandboxing Subsystem & Lock Manager.
+     - **RQ7**: 25k record log stream & event pipeline parser evaluating the Hidden Benchmark Firewall ($GDI \approx 1.04$) across 3 conditions (3 trials each).
   4. Output comparative Markdown reports and publication-ready LaTeX tables (`reports/latex/rq*.tex`).
 
 ---
 
-### Task 3: Standalone Ephemeral Distribution (`uvx cleanroom`)
+### Task 2: Minimal Hermetic Role Workspace Provisioning & Clutter Eradication
+- **Priority**: High
+- **Component**: `update_with_ai/parts/workspace/` (`provision_impl.py`, `sync_impl.py`, `scaffold_impl.py`, `roles_impl.py`)
+- **Objective**: Prevent context pollution, token waste, and agent distraction by ensuring provisioned role workspaces contain strictly the files required for the assigned role, eliminating all configuration file dumps, dead legacy manifests, irrelevant guides, and starter templates.
+- **Problem Statement**:
+  - `provision_impl.py` and `sync_impl.py` currently copy the entire methodology package (`update_python_with_ai/`) into the role workspace: dumping all `.toml` and `.json` files into the workspace root (`cleanroom_roles.toml`, `pyright_spec.json`), all 8 methodology guides into `guides/`, all starter templates into `templates/`, and creating a redundant `update_python_with_ai/` subdirectory.
+  - When role agents (such as `test` or `lib`) inspect their working directory via `ls` or file lookups, they see `cleanroom_roles.toml`, irrelevant guides, and templates. This distracts the model from its assigned task, prompts unnecessary inspection loops, pollutes context windows, and wastes tokens.
+  - Additionally, references to the non-existent legacy ghost file `cleanroom_python_roles.toml` persist across fallback search loops in `roles_impl.py`, `provision_impl.py`, `manifest_loader_impl.py`, and `benchmark_impl.py`.
+- **Implementation Steps**:
+  1. [ ] **Purge Ghost File References (`cleanroom_python_roles.toml`)**:
+     - Remove all fallback references to `cleanroom_python_roles.toml` across `roles_impl.py`, `provision_impl.py`, `role_registry_impl.py`, `manifest_loader_impl.py`, `benchmark_impl.py`, and specification stubs.
+     - Enforce `cleanroom_roles.toml` as the sole canonical role manifest name.
+  2. [ ] **Bundle Role Configuration Inside Zipapps**:
+     - Update `scaffold_impl.py` to package `cleanroom_roles.toml` directly into the `bin/*` runner zipapps.
+     - Update `roles_impl.py` to load role definitions directly from the zipapp bundle or in-memory cache, decoupling tool execution from workspace root files.
+  3. [ ] **Strip Unneeded Files from Role Workspace Root**:
+     - Update `provision_impl.py` and `sync_impl.py` to **never** copy `cleanroom_roles.toml`, `cleanroom_python_roles.toml`, or `pyright_spec.json` into the role workspace root.
+     - Never copy `templates/` into the role workspace.
+     - Never create a redundant `update_python_with_ai/` directory in the workspace root.
+  4. [ ] **Selective Single-Guide Provisioning**:
+     - Ensure `guides/` in the role workspace contains strictly the single companion guide designated for the assigned role (e.g. `guides/low_to_test.md` for `test`, `guides/low_to_lib.md` for `lib`).
+     - Cease copying all other 7 methodology guides into the role workspace.
+  5. [ ] **Preserve Minimal Runtime Support for Code Execution**:
+     - Maintain strictly `support/lib/` containing only the user-facing runtime primitives (`framework.py`, `framework.pyi`, `lifecycle.py`, `lifecycle.pyi`) so that `pyright` and `pytest` cleanly resolve runtime dependencies of code under test without import errors.
+     - Maintain minimal project scaffolding: `pyproject.toml`, `uv.lock`, `.python-version`, `.cleanroom_role.json`, `AGENTS.md`, and `bin/` tools.
+  6. [ ] **Cascade Specification Alignment & Verification**:
+     - Author HLS, Planning, Scenarios, and Low-level specifications under `update_with_ai/parts/workspace/` before code modifications.
+     - Verify with `bin/test update_with_ai/parts/workspace` and test on live commissioned workspaces.
+
+---
+
+### [COMPLETED] Task 3: Refine Broad Exception Linter (`check_exception_eating`) for Task Executors & Boundary Handlers
+- **Priority**: Medium
+- **Status**: Completed (2026-10-22)
+- **Component**: `update_with_ai/support/lib/build_lint_common.py` (`check_exception_eating`), `update_python_with_ai/support/lib/lib_lint.py`
+- **Objective**: Prevent agent flailing and false-positive rejections in executor/runner components by allowing legitimate exception reification and boundary handling while continuing to prohibit silent bug suppression.
+- **Problem Statement**:
+  - `check_exception_eating` currently implements a blunt AST check that flags any `try...except Exception:` or bare except block lacking an immediate `raise` statement within the handler.
+  - In execution engines, DAG runners, scheduler loops, and retry handlers (e.g. `dag_engine_impl.py`), the component is contractually required to invoke arbitrary user-supplied callbacks (`action()`), catch arbitrary `Exception` failures, record them into `NodeResult(state=NodeState.FAILED, error=exc)`, and continue running independent nodes according to failure policies (such as `CONTINUE_ON_ERROR`).
+  - Re-raising `exc` would crash the entire runner, breaking contracts and preventing `DAGRunReport` generation.
+  - Because the linter treats all non-reraising broad exception handlers as "exception eating", `lib` agents become trapped in extensive trial-and-error loops (often >80 steps) attempting awkward AST workarounds (like custom wrapper exception classes) to satisfy the linter.
+- **Implementation Completed**:
+  1. [x] **Recognize Reification & Structured Capture**:
+     - Enhanced the AST analyzer in `check_exception_eating` to inspect the handler body: if the caught exception instance (`except Exception as exc:`) is assigned into a result data structure, passed as an argument to a failure handler, or stored into an error attribute (e.g. `error=exc`, `_result.error = exc`), classify it as legitimate exception reification rather than unhandled suppression.
+  2. [x] **Support Explicit Pragma Directives**:
+     - Provided an inline comment escape hatch (such as `# cleanroom: allow-broad-exception` or `# intentional-catch`) for boundary execution layers and foreign callback runners where broad exception capture is required by architectural design.
+  3. [x] **Preserve Anti-Suppression for Logic Code**:
+     - Maintained strict rejection of genuine silent suppression (e.g. `except Exception: pass`, empty handlers, or handlers that return arbitrary uncontracted fallbacks without recording the error).
+  4. [x] **Add Unit Tests for Linter Boundaries**:
+     - Added test cases in `build_lint_common_test.py` and `lib_lint_test.sh` verifying that runner patterns and pragma comments pass cleanly while empty exception suppression continues to fail.
+
+---
+
+### Task 4: Standalone Ephemeral Distribution (`uvx cleanroom`)
 - **Priority**: Low
 - **Component**: `pyproject.toml`, distribution scripts
 - **Objective**: Enable developers to run Cleanroom on any target project without cloning the Cleanroom codebase (`uvx cleanroom orchestrate .`).
@@ -554,6 +606,7 @@ The following prioritized roadmap outlines the active forward engineering tasks 
   1. Audit package data inclusion in `pyproject.toml` to ensure methodology templates and default configs are bundled into wheels.
   2. Test `uvx --from . cleanroom --help` in an isolated directory.
   3. Provide pre-built binary distributions via GitHub Releases.
+
 
 
 

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Define roles_impl concrete scenarios
-CODE_HASH: b7787358d322
--->
-
 # Concrete scenarios for `roles_impl` (implementation)
 
 ## Scenario 1 — Parsing TOML role configurations and caching definitions
@@ -23,3 +16,9 @@ Given: a repository package without a TOML configuration file, but containing a 
 
 1. The caller resolves `auditor`.
    Observed: the resolver parses the build file AST, extracts the role attributes, marks it as an auditor role, and returns the populated role definition.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:45:00Z
+CHANGE: Define roles_impl concrete scenarios
+-->

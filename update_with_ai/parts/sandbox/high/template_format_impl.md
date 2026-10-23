@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Split the formatting mechanics sentence from the resolution surface and separate conditional polarity into its own bullets
-CODE_HASH: 461aba5adb9d
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # template_format_impl implementation component
 
 imports: commonmark_ext
@@ -42,3 +34,10 @@ The template formatter:
 - Repeats the lines enclosed by a block loop marker for each element of the resolved sequence, binding the loop variable in the parameter context.
 
 - Normalizes extraneous blank lines introduced around block directive comments by formatting tools to preserve tight list spacing.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Split the formatting mechanics sentence from the resolution surface and separate conditional polarity into its own bullets
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

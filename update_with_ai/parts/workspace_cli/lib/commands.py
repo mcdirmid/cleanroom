@@ -1,23 +1,14 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:50:00Z
-# CHANGE: Define commands interface protocol
-# CODE_HASH: d93ce18ce31c
-# COVERAGE_AUDIT: 2026-10-14T17:50:00Z
-# QA_AUDIT: 2026-10-14T17:50:00Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface for commands."""
 
 from __future__ import annotations
 
 from typing import Optional, Protocol
-from support.lib.lifecycle import InTier
+from support.lib.lifecycle import Singleton
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 
 
 # Contract: WorkspaceCommandHandler protocol coordinates substantive domain operations for Cleanroom role workspaces.
-class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
+class WorkspaceCommandHandler(Singleton[AgentSessionTier], Protocol):
     """Executes substantive domain operations for Cleanroom role workspaces."""
 
     # Contract: Evaluates dirty work in local workspace and prints ready tasks, respecting batch_size and max_feedback_chars.
@@ -110,3 +101,10 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         """Refreshes system files, bin tools, configs, and guides across role workspaces."""
         ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T17:50:00Z
+# CHANGE: Define commands interface protocol
+# COVERAGE_AUDIT: 2026-10-14T17:50:00Z
+# QA_AUDIT: 2026-10-14T17:50:00Z
+# --- END CLEANROOM METADATA ---

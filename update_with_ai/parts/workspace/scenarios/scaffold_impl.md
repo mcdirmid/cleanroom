@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:50:00Z
-CHANGE: Author scaffold_impl concrete scenarios
-CODE_HASH: dfa84c0dd3cf
--->
-
 # Concrete scenarios for `scaffold_impl` (implementation)
 
 Scenarios 1 through 5 restate the caller observations of the interface scenarios and add, beside each observation, the realization that produces it.
@@ -16,7 +9,7 @@ Scenarios 1 through 5 restate the caller observations of the interface scenarios
 Given: an empty or newly created workspace directory `/ws/alpha_scope_a` with a `bin` directory.
 
 1. The scaffolder deploys runner zipapps into `/ws/alpha_scope_a/bin`.
-   Observed: `/ws/alpha_scope_a/bin` contains standalone executable zipapps for `get_work`, `check_files`, `submit`, `blame`, `feedback`, and `fail`; each file begins with `#!/usr/bin/env python3` followed by a valid zip archive containing `__main__.py`, has permissions 0o755, and any preexisting `coverage` file is removed.
+   Observed: `/ws/alpha_scope_a/bin` contains standalone executable zipapps for `get_work`, `check_files`, `submit`, and `fail` (and `blame` and `feedback` when the role declares feedback capability or auditor tags); each file begins with `#!/usr/bin/env python3` followed by a valid zip archive containing `__main__.py` configuring import paths bounded strictly to the role workspace root on sys.path without injecting arbitrary workspace subdirectories onto sys.path, isolating runner execution from the canonical repository root in sys.path, has permissions 0o755, and any preexisting `coverage` file is removed.
    Realized by: the component's zipapp packaging routine which builds compressed archives with embedded repository root traversal and delegates execution to `cleanroom_role_tool`.
 
 ### Scenario 2 — Writing role configuration metadata
@@ -32,7 +25,7 @@ Given: role `alpha` commissioned for scope `scope_a`, with model profile `gpt-4o
 Given: role `alpha` is a writable authoring role with companion guide `guides/alpha_guide.md` and scope `parts/alpha`.
 
 1. The scaffolder writes the role agents guide into `/ws/alpha_scope_a`.
-   Observed: `AGENTS.md` exists in `/ws/alpha_scope_a` with permissions 0o644; it contains boundary rules confining execution to the workspace and explaining that in-band metadata in role workspaces is projected to show change, feedback, and code hash fields while canonical lifecycle timestamps are maintained in the main repository, the contamination tripwire with permitted in-workspace code and spec reading, the command execution tripwire restricting terminal execution to prescribed `bin/` tools, instructions for acting on blame and feedback (explaining that static checks do not verify runtime behavior), and fail-stop protocols.
+   Observed: `AGENTS.md` exists in `/ws/alpha_scope_a` with permissions 0o644; it contains boundary rules confining execution to the workspace and explaining that in-band metadata in role workspaces is projected to show change, feedback, and code hash fields while canonical lifecycle timestamps are maintained in the main repository, the contamination tripwire with permitted in-workspace code and spec reading, instructions directing workers to rely on their assigned companion guide (resolved to `./guides/alpha_guide.md` at workspace root) rather than searching for workspace reference files, prohibitions against searching for linters or inspecting runner executables, instructions permitting in-workspace shell commands and native harness tools while mandating round resolution through prescribed `bin/` tools (omitting blame for roles without feedback capability) and round conclusion when only blocked targets or zero ready targets remain, instructions for acting on blame and feedback (explaining that static checks do not verify runtime behavior, referencing assigned targets, and explaining compilation stubs when stub dependencies are declared), and fail-stop protocols.
    Realized by: the component's markdown formatter generating workflow instructions for author roles and writing the guide file.
 
 ### Scenario 4 — Synthesizing role AGENTS.md guide instructions for auditor role
@@ -40,7 +33,7 @@ Given: role `alpha` is a writable authoring role with companion guide `guides/al
 Given: role `spec_qa` is a read-only auditor role with companion guide `guides/spec_qa.md` and scope `parts/alpha`.
 
 1. The scaffolder writes the role agents guide into `/ws/spec_qa_scope_a`.
-   Observed: `AGENTS.md` exists with auditor requirements instructing inspection of `# CHANGE:` commit headers before delivering blame and prohibiting blind recycling of feedback without checking what the author attempted to fix.
+   Observed: `AGENTS.md` exists with auditor requirements instructing inspection of `# CHANGE:` commit headers before delivering blame, round conclusion when targets are blocked, and prohibiting blind recycling of feedback without checking what the author attempted to fix.
    Realized by: the component's markdown formatter generating verification and blame attribution instructions tailored for auditor roles.
 
 ### Scenario 5 — Generating starter skeletons for missing targets
@@ -48,5 +41,11 @@ Given: role `spec_qa` is a read-only auditor role with companion guide `guides/s
 Given: role `alpha` declares source pattern `parts/alpha/lib/{unit_name}.py` and writable file patterns `["parts/alpha/lib/*.py"]`; unit `widget` has companion specification `parts/alpha/low/widget.pyi` in the repository root, but `parts/alpha/lib/widget.py` does not yet exist.
 
 1. The scaffolder creates missing target skeletons for the workspace.
-   Observed: `parts/alpha/lib/widget.py` is generated in `/ws/alpha_scope_a` with starter skeleton content derived from `widget.pyi`, and has permissions 0o644.
-   Realized by: the component's target skeleton generator inspecting unit declarations and generating skeleton function signatures from companion specifications.
+   Observed: `parts/alpha/lib/widget.py` is generated in `/ws/alpha_scope_a` with starter skeleton content derived from `widget.pyi` or templates resolved from workspace root `./templates/` or repository root, and has permissions 0o644.
+   Realized by: the component's target skeleton generator inspecting unit declarations and generating skeleton function signatures from companion specifications or resolved templates.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-22T13:50:00Z
+LAST_CHANGED: 2026-10-22T13:50:00Z
+CHANGE: Enforce strict workspace root sys.path isolation in runner zipapps
+-->

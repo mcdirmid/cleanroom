@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T01:39:02Z
-CHANGE: Express alias manager parameter conversion as a delegated capability and restructure the alias operation list
-CODE_HASH: 6e0724c0c3c9
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_alias interface component
 
 imports: session, dag_storage, file_paths
@@ -33,3 +25,10 @@ A file alias is either a *bound file* or an *unbound file*. A bound file is mapp
 An agent session's *alias manager* is configured with the absolute path of a workspace root, and resolves a string path into a file alias via *to alias*, converting a string that names a declared bound file into that bound file and converting any other string into an unbound file.
 
 The alias manager also sanitizes text by masking occurrences of relative workspace paths and preceding path prefixes with file alias relative paths, preventing the agent from observing host filesystem structure.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Express alias manager parameter conversion as a delegated capability and restructure the alias operation list
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

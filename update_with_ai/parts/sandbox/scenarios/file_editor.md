@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:59Z
-CHANGE: Author sandbox file_editor concrete scenarios
-CODE_HASH: ff02eca5383f
--->
-
 # Concrete scenarios for `file_editor` (interface)
 
 ## Scenario 1 — Replacing one occurrence inside a declared line range
@@ -118,3 +111,19 @@ Given: the agent session declares `widget.py` as a read-write file starting with
 
 2. The caller invokes the replace file content tool with target content `value = 1` matching with normalized whitespace.
    Observed: the tool succeeds via whitespace-tolerant line matching and appends a unified diff to the response output.
+
+## Scenario 9 — Consecutive failed replacements triggering warning, follow-up view, and fatal failure
+
+Given: the agent session declares `widget.py` as a read-write file holding the single line "value = 1".
+
+1. The caller invokes the replace file content tool with target content "missing_text" twice consecutively.
+   Observed: both invocations fail, and the second failure produces a warning reminder and designates a follow-up tool call to view `widget.py` using the session's file viewing tool.
+
+2. The caller invokes the replace file content tool with target content "missing_text" two more times consecutively.
+   Observed: on the fourth consecutive failed replacement, the tool terminates with a fatal failure.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-21T21:20:00Z
+LAST_CHANGED: 2026-10-21T21:20:00Z
+CHANGE: Add scenario for consecutive failed replacement warning, follow-up view, and fatal termination
+-->

@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:40:00Z
-# CHANGE: Realize SourceMetadataCoordinator implementation in src_metadata_impl
-# CODE_HASH: 904e61032f5c
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 import hashlib
 import os
@@ -30,9 +21,7 @@ parse_metadata_content = src_metadata.parse_metadata_content
 format_metadata_block = src_metadata.format_metadata_block
 
 
-class SourceMetadataCoordinator(
-    src_metadata.SourceMetadataCoordinator, Singleton
-):
+class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
     """Realizes source metadata parsing, hashing, and in-place header rewriting."""
 
     tier = system
@@ -100,6 +89,38 @@ class SourceMetadataCoordinator(
             return True
         current_hash = self.compute_file_code_hash(p)
         return current_hash != meta.code_hash
+
+    def is_metadata_altered(
+        self,
+        original_content: str,
+        new_content: str,
+        filename_or_ext: str,
+    ) -> bool:
+        # Contract: Evaluates whether new content alters, corrupts, deletes, or injects in-band metadata.
+        is_html = _is_html_comment_format(filename_or_ext)
+        orig_lines = original_content.splitlines()
+        orig_bounds = _extract_block_boundaries(orig_lines, is_html)
+        new_lines = new_content.splitlines()
+        new_bounds = _extract_block_boundaries(new_lines, is_html)
+
+        if orig_bounds is not None:
+            if new_bounds is None:
+                return True
+            orig_meta = orig_lines[orig_bounds[0] : orig_bounds[1] + 1]
+            new_meta = new_lines[new_bounds[0] : new_bounds[1] + 1]
+            return orig_meta != new_meta
+        else:
+            if new_bounds is not None:
+                return True
+            for line in new_lines:
+                stripped = line.strip()
+                if (
+                    stripped == "# --- CLEANROOM METADATA ---"
+                    or stripped == "# --- END CLEANROOM METADATA ---"
+                    or (stripped.startswith("<!--") and "CLEANROOM METADATA" in stripped)
+                ):
+                    return True
+            return False
 
     # Contract: Updates or injects in-band metadata block within content string.
     def rewrite_metadata_in_text(
@@ -200,12 +221,21 @@ class SourceMetadataCoordinator(
 
         if bounds is not None:
             start, end = bounds
-            result_lines = lines[:start] + new_block_lines + lines[end + 1 :]
+            body_lines = lines[:start] + lines[end + 1 :]
         else:
-            insert_idx = _find_header_insertion_index(lines, is_html)
-            if insert_idx == 0 and lines:
-                new_block_lines.append("")
-            result_lines = lines[:insert_idx] + new_block_lines + lines[insert_idx:]
+            body_lines = list(lines)
+
+        while body_lines and not body_lines[-1].strip():
+            body_lines.pop()
+
+        if bounds is not None and bounds[0] == 0:
+            while body_lines and not body_lines[0].strip():
+                body_lines.pop(0)
+
+        if body_lines:
+            result_lines = body_lines + [""] + new_block_lines
+        else:
+            result_lines = new_block_lines
 
         trailing_newline = content.endswith("\n") or not content
         res = "\n".join(result_lines)
@@ -334,6 +364,13 @@ class SourceMetadataCoordinator(
     def clear_audits(self, file_path: Path | str) -> None:
         # Contract: MUST rewrite file clearing all audit tags.
         self.update_metadata(file_path, clear_audits=True)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:40:00Z
+# CHANGE: Realize SourceMetadataCoordinator implementation in src_metadata_impl
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -342,10 +379,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         SourceMetadataCoordinator,
-        keys=[
-            src_metadata.SourceMetadataCoordinator,
-            SourceMetadataCoordinator,
-        ],
+        keys=[src_metadata.SourceMetadataCoordinator, SourceMetadataCoordinator],
         tier=system,
     )
 

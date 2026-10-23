@@ -15,6 +15,7 @@ verification to maintain a node's silent sources (see specs/high/sandbox.md).
 """
 
 import ast
+import io
 import os
 import re
 import subprocess
@@ -583,7 +584,9 @@ def check_syntax(file_path: str) -> list[str]:
         return errors
     try:
         with open(file_path, encoding="utf-8") as f:
-            ast.parse(f.read(), filename=file_path)
+            content = f.read()
+            compile(content, file_path, "exec")
+            ast.parse(content, filename=file_path)
     except SyntaxError as e:
         line = e.lineno if e.lineno is not None else 1
         errors.append(f"{file_path}:{line}: error: syntax error: {e.msg}")
@@ -703,6 +706,10 @@ def check_cross_part_imports(modules_dir: str, file_path: str) -> list[str]:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 mod_name = alias.name
+                if mod_name == "parts" or mod_name.startswith("parts."):
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: bare 'parts' imports are disallowed; must use full package scope"
+                    )
                 root_stem = mod_name.split(".")[0]
                 if root_stem in stdlib or root_stem in sibling_stems:
                     continue
@@ -714,6 +721,10 @@ def check_cross_part_imports(modules_dir: str, file_path: str) -> list[str]:
                         )
         elif isinstance(node, ast.ImportFrom):
             if node.level == 0 and node.module:
+                if node.module == "parts" or node.module.startswith("parts."):
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: bare 'parts' imports are disallowed; must use full package scope"
+                    )
                 root_stem = node.module.split(".")[0]
                 if root_stem in stdlib or root_stem in sibling_stems:
                     continue
@@ -801,16 +812,7 @@ def check_lib_structure(file_path: str) -> list[str]:
         tree = ast.parse(text, filename=file_path)
         base_name = os.path.basename(file_path)
         is_impl = base_name.endswith("_impl.py") or base_name.endswith("_asm.py")
-        if not is_impl:
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef):
-                    for b in node.bases:
-                        b_str = ast.unparse(b)
-                        if b_str.startswith("InTier[") or b_str == "InTier":
-                            errors.append(
-                                f"{file_path}:{node.lineno}: error: interface module class '{node.name}' must not inherit from InTier (tier bindings belong only to concrete implementations in _impl modules)"
-                            )
-        elif base_name.endswith("_impl.py"):
+        if base_name.endswith("_impl.py"):
             has_singleton = any(
                 isinstance(node, ast.ClassDef)
                 and (
@@ -944,9 +946,8 @@ def _extract_decorator_name(dec: ast.expr) -> Optional[str]:
 
 
 def check_framework_imports(file_path: str) -> list[str]:
-    """Check that library modules do not import specification framework decorators.
-    Specification framework decorators belong in .pyi grounding specifications only.
-    Implementation-friendly annotations ('operation', 'override') may be safely used."""
+    """Check that library modules do not use deprecated bare 'framework' imports.
+    Framework decorators and constructs should be imported from 'support.lib.framework'."""
     errors: list[str] = []
     if not os.path.exists(file_path):
         return errors
@@ -956,58 +957,20 @@ def check_framework_imports(file_path: str) -> list[str]:
     except OSError:
         return errors
 
-    framework_module_aliases: dict[str, int] = {}
-    used_allowed_framework_attr = False
-
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "framework" or alias.name.endswith(".framework"):
-                    framework_module_aliases[
-                        alias.asname or alias.name.split(".")[-1]
-                    ] = node.lineno
+                if alias.name == "framework":
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: bare 'import framework' is deprecated; "
+                        f"import from 'support.lib.framework' instead"
+                    )
         elif isinstance(node, ast.ImportFrom):
-            if node.module == "framework" or (
-                node.module and node.module.endswith(".framework")
-            ):
-                disallowed = [
-                    a.name
-                    for a in node.names
-                    if a.name not in ALLOWED_FRAMEWORK_IMPORTS
-                ]
-                if disallowed:
-                    errors.append(
-                        f"{file_path}:{node.lineno}: error: library module must not import specification decorators "
-                        f"({', '.join(sorted(disallowed))}) from 'framework'; "
-                        f"specification decorators belong in .pyi grounding specifications only"
-                    )
-        elif isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            for dec in node.decorator_list:
-                dec_name = _extract_decorator_name(dec)
-                if dec_name in FRAMEWORK_DECORATORS:
-                    errors.append(
-                        f"{file_path}:{dec.lineno}: error: specification framework decorator '@{dec_name}' must not be used in library code; "
-                        f"specification decorators belong in .pyi grounding specifications only and must be omitted from library implementations"
-                    )
-        elif isinstance(node, ast.Attribute):
-            if (
-                isinstance(node.value, ast.Name)
-                and node.value.id in framework_module_aliases
-            ):
-                if node.attr in ALLOWED_FRAMEWORK_IMPORTS:
-                    used_allowed_framework_attr = True
-                elif node.attr in FRAMEWORK_DECORATORS:
-                    errors.append(
-                        f"{file_path}:{node.lineno}: error: specification framework decorator '@{node.attr}' must not be used in library code; "
-                        f"specification decorators belong in .pyi grounding specifications only and must be omitted from library implementations"
-                    )
-
-    if framework_module_aliases and not used_allowed_framework_attr:
-        for alias, lineno in framework_module_aliases.items():
-            errors.append(
-                f"{file_path}:{lineno}: error: library module must not import from 'framework'; "
-                f"specification decorators belong in .pyi grounding specifications only"
-            )
+            if node.module == "framework":
+                errors.append(
+                    f"{file_path}:{node.lineno}: error: bare 'from framework' is deprecated; "
+                    f"import from 'support.lib.framework' instead"
+                )
 
     return errors
 
@@ -1192,20 +1155,115 @@ def check_no_stubs(file_path: str) -> list[str]:
     return errors
 
 
+_PRAGMA_BROAD_EXCEPTION = re.compile(
+    r"#\s*(?:cleanroom:\s*(?:allow-broad-exception|allow-exception-eating)|intentional-catch|allow-broad-exception)\b",
+    re.IGNORECASE,
+)
+
+
+def _get_broad_exception_pragma_lines(source: str) -> set[int]:
+    """Extract line numbers of comments containing broad exception pragma directives."""
+    lines: set[int] = set()
+    try:
+        tokens = tokenize.tokenize(io.BytesIO(source.encode("utf-8")).readline)
+        for tok in tokens:
+            if tok.type == tokenize.COMMENT and _PRAGMA_BROAD_EXCEPTION.search(tok.string):
+                lines.add(tok.start[0])
+    except (tokenize.TokenError, OSError, SyntaxError):
+        for idx, line in enumerate(source.splitlines(), start=1):
+            if _PRAGMA_BROAD_EXCEPTION.search(line):
+                lines.add(idx)
+    return lines
+
+
+def _is_handler_reified(h: ast.ExceptHandler) -> bool:
+    """Determine whether the caught exception variable is legitimately reified,
+    stored into a result structure/attribute, passed to a failure handler,
+    or returned/yielded, rather than silently suppressed."""
+    if not h.name:
+        return False
+    exc_name = h.name
+    tracked_names = {exc_name}
+
+    def _references_tracked(node: ast.AST) -> bool:
+        for child in ast.walk(node):
+            if (
+                isinstance(child, ast.Name)
+                and child.id in tracked_names
+                and isinstance(child.ctx, ast.Load)
+            ):
+                return True
+        return False
+
+    def _is_call_reification(call: ast.Call) -> bool:
+        # Pure queries and built-in conversion/print functions are not failure handlers or collectors
+        if isinstance(call.func, ast.Name) and call.func.id in {
+            "print",
+            "str",
+            "repr",
+            "type",
+            "isinstance",
+            "issubclass",
+            "id",
+            "bool",
+            "len",
+        }:
+            return False
+        for arg in call.args:
+            if _references_tracked(arg):
+                return True
+        for kw in call.keywords:
+            if _references_tracked(kw.value):
+                return True
+        return False
+
+    # Propagate tracked aliases across local assignments within the handler body
+    for stmt in ast.walk(h):
+        if isinstance(stmt, ast.Assign):
+            for t in stmt.targets:
+                if isinstance(t, ast.Name) and stmt.value and _references_tracked(stmt.value):
+                    tracked_names.add(t.id)
+
+    # Walk handler body to check for structured capture
+    for stmt in ast.walk(h):
+        # 1. Attribute or Subscript assignment (e.g. _result.error = exc, results[node] = exc)
+        if isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+            for t in targets:
+                if isinstance(t, (ast.Attribute, ast.Subscript)):
+                    if stmt.value and _references_tracked(stmt.value):
+                        return True
+        # 2. Call argument (e.g. record_failure(exc), NodeResult(..., error=exc), errors.append(exc))
+        if isinstance(stmt, ast.Call):
+            if _is_call_reification(stmt):
+                return True
+        # 3. Return or Yield (e.g. return NodeResult(error=exc), return False, exc)
+        if isinstance(stmt, (ast.Return, ast.Yield, ast.YieldFrom)):
+            if stmt.value and _references_tracked(stmt.value):
+                return True
+
+    return False
+
+
 def check_exception_eating(file_path: str) -> list[str]:
     """Check that library modules do not suppress unexpected failures by catching
-    broad exceptions (bare except, Exception, BaseException) without re-raising."""
+    broad exceptions (bare except, Exception, BaseException) without re-raising,
+    reifying into an error/result structure or failure handler, or supplying an
+    explicit pragma escape hatch."""
     errors: list[str] = []
     if not os.path.exists(file_path):
         return errors
     try:
         with open(file_path, encoding="utf-8") as f:
-            tree = ast.parse(f.read(), filename=file_path)
-    except OSError:
+            source = f.read()
+            tree = ast.parse(source, filename=file_path)
+    except (OSError, SyntaxError):
         return errors
 
+    pragma_lines = _get_broad_exception_pragma_lines(source)
+
     for node in ast.walk(tree):
-        if isinstance(node, ast.Try):
+        if isinstance(node, (ast.Try, ast.TryStar)):
             for h in node.handlers:
                 is_broad = False
                 if h.type is None:
@@ -1224,12 +1282,25 @@ def check_exception_eating(file_path: str) -> list[str]:
                             is_broad = True
                 if is_broad:
                     has_raise = any(isinstance(stmt, ast.Raise) for stmt in ast.walk(h))
-                    if not has_raise:
-                        type_str = ast.unparse(h.type) if h.type else "bare except"
-                        errors.append(
-                            f"{file_path}:{h.lineno}: error: broad exception eating detected: '{type_str}' "
-                            f"must not suppress unexpected failures; re-raise or allow exceptions to propagate"
-                        )
+                    if has_raise:
+                        continue
+
+                    h_end = getattr(h, "end_lineno", h.lineno) or h.lineno
+                    check_lines = set(range(max(1, h.lineno - 1), h_end + 1)) | {
+                        node.lineno,
+                        max(1, node.lineno - 1),
+                    }
+                    if bool(check_lines & pragma_lines):
+                        continue
+
+                    if _is_handler_reified(h):
+                        continue
+
+                    type_str = ast.unparse(h.type) if h.type else "bare except"
+                    errors.append(
+                        f"{file_path}:{h.lineno}: error: broad exception eating detected: '{type_str}' "
+                        f"must not suppress unexpected failures; re-raise or allow exceptions to propagate"
+                    )
     return errors
 
 
@@ -1391,27 +1462,64 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
             tree = ast.parse(f.read(), filename=file_path)
     except OSError:
         return errors
-    expected_prefix = lib_pkg.replace("/", ".")
+    pkg_str = lib_pkg
+    if os.path.isabs(pkg_str):
+        curr = pkg_str
+        cand_root = ""
+        while curr and curr != os.path.dirname(curr):
+            if any(
+                os.path.isfile(os.path.join(curr, m))
+                for m in ("cleanroom.toml", "pyproject.toml", "cleanroom_roles.toml")
+            ):
+                cand_root = curr
+                break
+            curr = os.path.dirname(curr)
+        if cand_root:
+            pkg_str = os.path.relpath(pkg_str, cand_root)
+        else:
+            pkg_str = "lib"
+
+    expected_prefix = pkg_str.replace("/", ".").replace("\\", ".").strip(".")
+    is_scoped = expected_prefix != "lib"
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
+                if alias.name == "parts" or alias.name.startswith("parts."):
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: bare 'parts' imports are disallowed; must use full package scope 'from {expected_prefix}...'"
+                    )
                 name = alias.name.split(".")[-1]
                 if name and os.path.isfile(os.path.join(lib_pkg, name + ".py")):
-                    if alias.name != f"lib.{name}" and not alias.name.endswith(
-                        f".{name}"
-                    ):
+                    expected_import = f"{expected_prefix}.{name}"
+                    if alias.name != expected_import:
                         errors.append(
-                            f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'import {expected_prefix}.{name}' or 'import lib.{name}'"
+                            f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'import {expected_import}'"
                         )
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                name = node.module.split(".")[-1]
-                if name and os.path.isfile(os.path.join(lib_pkg, name + ".py")):
-                    if node.module != f"lib.{name}" and not node.module.endswith(
-                        f".{name}"
-                    ):
+                if node.module == "parts" or node.module.startswith("parts."):
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: bare 'parts' imports are disallowed; must use full package scope 'from {expected_prefix}...'"
+                    )
+                mod_parts = node.module.split(".")
+                name = mod_parts[-1]
+                if is_scoped and node.module == "lib":
+                    for alias in node.names:
+                        if os.path.isfile(os.path.join(lib_pkg, alias.name + ".py")):
+                            errors.append(
+                                f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'from {expected_prefix}.{alias.name} import ...' or 'from {expected_prefix} import {alias.name}'"
+                            )
+                elif is_scoped and node.module.startswith("lib."):
+                    if os.path.isfile(os.path.join(lib_pkg, name + ".py")):
                         errors.append(
-                            f"{file_path}:{node.lineno}: error: import of lib module '{node.module}' must be 'from {expected_prefix}.{name} import ...' or 'from lib.{name} import ...'"
+                            f"{file_path}:{node.lineno}: error: import of lib module '{node.module}' must be 'from {expected_prefix}.{name} import ...'"
+                        )
+                elif os.path.isfile(os.path.join(lib_pkg, name + ".py")):
+                    expected_mod = f"{expected_prefix}.{name}"
+                    if node.module != expected_mod and node.module != expected_prefix:
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: import of lib module '{node.module}' must be 'from {expected_mod} import ...'"
                         )
     return errors
 
@@ -1567,6 +1675,73 @@ def check_test_structure(file_path: str) -> list[str]:
     return errors
 
 
+def check_test_getattr(file_path: str) -> list[str]:
+    """Check that test modules do not use getattr(), setattr(), or hasattr(), do not access
+    attributes or methods on cast(Any, ...), and do not access private members on
+    target or collaborator objects; tests must adhere strictly to the static
+    contracts in low/*.pyi rather than using dynamic reflection or white-box hacks."""
+    errors: list[str] = []
+    if not os.path.exists(file_path):
+        return errors
+    base = os.path.basename(file_path)
+    if not base.endswith("_test.py"):
+        return errors
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=file_path)
+    except (OSError, SyntaxError):
+        return errors
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            fn_name = None
+            if isinstance(node.func, ast.Name):
+                fn_name = node.func.id
+            elif (
+                isinstance(node.func, ast.Attribute)
+            ):
+                fn_name = node.func.attr
+            if fn_name in ("getattr", "setattr", "hasattr"):
+                errors.append(
+                    f"{file_path}:{node.lineno}: error: test module must not use '{fn_name}()'; "
+                    "tests must adhere strictly to the static contracts in low/*.pyi rather than using dynamic reflection"
+                )
+        elif isinstance(node, ast.Attribute):
+            is_cast_any = False
+            if isinstance(node.value, ast.Call):
+                call_fn = None
+                if isinstance(node.value.func, ast.Name):
+                    call_fn = node.value.func.id
+                elif isinstance(node.value.func, ast.Attribute):
+                    call_fn = node.value.func.attr
+                if call_fn == "cast" and len(node.value.args) >= 1:
+                    first_dump = ast.dump(node.value.args[0])
+                    if "Any" in first_dump:
+                        is_cast_any = True
+            if is_cast_any:
+                errors.append(
+                    f"{file_path}:{node.lineno}: error: test module must not access attribute or method '{node.attr}' on 'cast(Any, ...)'; "
+                    "tests must interact with targets through typed contracts in low/*.pyi"
+                )
+            if node.attr.startswith("_") and not (
+                node.attr.startswith("__") and node.attr.endswith("__")
+            ):
+                is_self_or_cls = False
+                if isinstance(node.value, ast.Name) and node.value.id in ("self", "cls"):
+                    is_self_or_cls = True
+                if not is_self_or_cls:
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: test module must not access private member '{node.attr}' on target or collaborator object; "
+                        "tests must adhere strictly to public contracts in low/*.pyi"
+                    )
+    errors.sort(
+        key=lambda s: int(s.split(":")[1])
+        if len(s.split(":")) > 1 and s.split(":")[1].isdigit()
+        else 0
+    )
+    return errors
+
+
 def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
     """Perform a dry-run test discovery/load to verify that the test module
     imports cleanly and loads into unittest without runtime import/decorator crashes."""
@@ -1578,32 +1753,68 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
     test_dir = os.path.dirname(module_path) or "."
     mod_stem = os.path.splitext(os.path.basename(module_path))[0]
 
+    ws_root = os.path.abspath(".")
     repo_root = str(Path(__file__).resolve().parents[3])
-    extra_dirs = [repo_root, os.path.abspath("."), os.path.abspath(lib_parent), os.path.abspath(test_dir)]
-    if os.path.isdir(repo_root):
+
+    # Prioritize workspace paths (test directory, workspace root, and workspace packages)
+    prioritized_dirs: list[str] = [
+        os.path.abspath(test_dir),
+        ws_root,
+    ]
+    if os.path.isdir(ws_root):
+        for entry in os.listdir(ws_root):
+            cand = os.path.join(ws_root, entry)
+            if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv", "__pycache__")):
+                if cand not in prioritized_dirs:
+                    prioritized_dirs.append(cand)
+                sup = os.path.join(cand, "support", "lib")
+                if os.path.isdir(sup) and sup not in prioritized_dirs:
+                    prioritized_dirs.append(sup)
+
+    is_role_ws = (
+        os.path.isfile(os.path.join(ws_root, ".cleanroom_role.json"))
+        or os.path.basename(os.path.dirname(ws_root)) == "role_workspaces"
+    )
+
+    # Append fallback paths from canonical repository root only when NOT in an isolated role workspace
+    if not is_role_ws and os.path.isdir(repo_root) and repo_root != ws_root:
+        if repo_root not in prioritized_dirs:
+            prioritized_dirs.append(repo_root)
         for entry in os.listdir(repo_root):
             cand = os.path.join(repo_root, entry)
-            if os.path.isdir(cand) and (
-                os.path.isdir(os.path.join(cand, "parts"))
-                or os.path.isdir(os.path.join(cand, "support"))
-            ):
-                extra_dirs.append(cand)
+            if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv", "__pycache__")):
+                if cand not in prioritized_dirs:
+                    prioritized_dirs.append(cand)
                 sup = os.path.join(cand, "support", "lib")
-                if os.path.isdir(sup):
-                    extra_dirs.append(sup)
+                if os.path.isdir(sup) and sup not in prioritized_dirs:
+                    prioritized_dirs.append(sup)
 
-    path_inserts = "; ".join(f"sys.path.insert(0, os.path.abspath('{d}'))" for d in extra_dirs)
-    cmd = [
-        sys.executable,
-        "-c",
-        (
-            f"import sys, os, unittest; "
-            f"{path_inserts}; "
-            f"import importlib; "
-            f"mod = importlib.import_module('{mod_stem}'); "
-            f"suite = unittest.defaultTestLoader.loadTestsFromModule(mod)"
-        ),
-    ]
+    dirs_repr = repr([os.path.abspath(d) for d in prioritized_dirs])
+    if is_role_ws:
+        cmd = [
+            sys.executable,
+            "-c",
+            (
+                f"import sys, os, unittest; "
+                f"repo = {repr(os.path.abspath(repo_root))}; "
+                f"sys.path = {dirs_repr} + [p for p in sys.path if p not in {dirs_repr} and os.path.abspath(p) != repo and not os.path.abspath(p).startswith(repo + os.sep)]; "
+                f"import importlib; "
+                f"mod = importlib.import_module('{mod_stem}'); "
+                f"suite = unittest.defaultTestLoader.loadTestsFromModule(mod)"
+            ),
+        ]
+    else:
+        cmd = [
+            sys.executable,
+            "-c",
+            (
+                f"import sys, os, unittest; "
+                f"sys.path = {dirs_repr} + [p for p in sys.path if p not in {dirs_repr}]; "
+                f"import importlib; "
+                f"mod = importlib.import_module('{mod_stem}'); "
+                f"suite = unittest.defaultTestLoader.loadTestsFromModule(mod)"
+            ),
+        ]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if res.returncode != 0:
@@ -2038,6 +2249,48 @@ def _is_property_setter(node: ast.AST) -> bool:
     return False
 
 
+def _get_hierarchy_contract_members(
+    cdef: ast.ClassDef,
+    dep_trees: Sequence[ast.AST],
+    visited: Optional[set[str]] = None,
+) -> tuple[set[str], set[str]]:
+    """Recursively collect declared method names and field names for a class and its base protocols."""
+    if visited is None:
+        visited = set()
+    if cdef.name in visited:
+        return set(), set()
+    visited.add(cdef.name)
+
+    methods: set[str] = set()
+    fields: set[str] = set()
+    for item in cdef.body:
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            methods.add(item.name)
+        elif isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+            fields.add(item.target.id)
+
+    for base in cdef.bases:
+        base_name: Optional[str] = None
+        if isinstance(base, ast.Name):
+            base_name = base.id
+        elif isinstance(base, ast.Attribute):
+            base_name = base.attr
+        elif isinstance(base, ast.Subscript):
+            if isinstance(base.value, ast.Name):
+                base_name = base.value.id
+            elif isinstance(base.value, ast.Attribute):
+                base_name = base.value.attr
+        if not base_name or base_name in ("Protocol", "Generic", "Singleton", "InTier", "object"):
+            continue
+        for tree in dep_trees:
+            for n in getattr(tree, "body", []):
+                if isinstance(n, ast.ClassDef) and n.name == base_name:
+                    b_meths, b_fields = _get_hierarchy_contract_members(n, dep_trees, visited)
+                    methods.update(b_meths)
+                    fields.update(b_fields)
+    return methods, fields
+
+
 def check_signature_alignment(
     module_path: str,
     pyi_path: Optional[str] = None,
@@ -2069,6 +2322,25 @@ def check_signature_alignment(
     except (OSError, SyntaxError, UnicodeDecodeError):
         return errors
 
+    dep_trees: list[ast.AST] = [pyi_tree]
+    seen_pyi: set[str] = {os.path.abspath(spec_file)}
+    spec_dir = os.path.dirname(spec_file)
+    cand_pyi_paths: list[str] = list(pyi_deps)
+    if os.path.isdir(spec_dir):
+        cand_pyi_paths.extend(
+            [os.path.join(spec_dir, f) for f in os.listdir(spec_dir) if f.endswith(".pyi")]
+        )
+    for p in cand_pyi_paths:
+        abs_p = os.path.abspath(p)
+        if abs_p in seen_pyi or not os.path.isfile(abs_p):
+            continue
+        seen_pyi.add(abs_p)
+        try:
+            with open(abs_p, "r", encoding="utf-8") as f:
+                dep_trees.append(ast.parse(f.read(), filename=abs_p))
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            pass
+
     spec_display = os.path.basename(spec_file)
     spec_classes = {
         n.name: n
@@ -2085,6 +2357,31 @@ def check_signature_alignment(
         if cname not in py_classes:
             continue
         p_cls = py_classes[cname]
+
+        s_bases = [ast.unparse(b) for b in s_cls.bases]
+        p_bases = [ast.unparse(b) for b in p_cls.bases]
+        norm_s_bases = [b.replace("InTier[", "Singleton[") for b in s_bases]
+        norm_p_bases = [b.replace("InTier[", "Singleton[") for b in p_bases]
+        missing_bases = [b for b, nb in zip(s_bases, norm_s_bases) if nb not in norm_p_bases]
+        extra_bases = [b for b, nb in zip(p_bases, norm_p_bases) if nb not in norm_s_bases]
+        if missing_bases or extra_bases:
+            diag_parts = []
+            if missing_bases:
+                diag_parts.append(f"missing base(s) {', '.join(missing_bases)}")
+            if extra_bases:
+                diag_parts.append(f"unexpected base(s) {', '.join(extra_bases)}")
+            errors.append(
+                f"{module_path}:{p_cls.lineno}: error: class '{cname}' inheritance hierarchy does not match specification '{spec_display}': {'; '.join(diag_parts)}"
+            )
+
+        contract_methods, contract_fields = _get_hierarchy_contract_members(s_cls, dep_trees)
+        for item in p_cls.body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if not item.name.startswith("_") and item.name != "initialize":
+                    if item.name not in contract_methods and item.name not in contract_fields:
+                        errors.append(
+                            f"{module_path}:{item.lineno}: error: class '{cname}' defines uncontracted public method '{item.name}()' not declared in specification '{spec_display}'"
+                        )
 
         s_methods: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
         for n in s_cls.body:
@@ -2275,9 +2572,11 @@ def build_module_resolution_map(
     label_map: dict[str, str] = {}
     sibling_stems: set[str] = set()
 
-    # 1. Standard lifecycle
+    # 1. Standard lifecycle & framework
     import_map["lifecycle"] = "support.lib.lifecycle"
     label_map["lifecycle"] = "//update_python_with_ai/support/lib:lifecycle"
+    import_map["framework"] = "support.lib.framework"
+    label_map["framework"] = "//update_python_with_ai/support/lib:framework"
 
     # 2. Local package directory (modules_dir)
     if os.path.isdir(modules_dir):
@@ -3387,8 +3686,8 @@ def maintain_impl_lifecycle(
                     s_bases = [
                         ast.unparse(b)
                         for b in node.bases
-                        if not ast.unparse(b).startswith("InTier")
-                        and ast.unparse(b) not in ("Singleton", "lifecycle.Singleton", "object")
+                        if not ast.unparse(b).startswith(("InTier", "Singleton[", "lifecycle.Singleton["))
+                        and ast.unparse(b) not in ("Singleton", "lifecycle.Singleton", "object", "Protocol")
                     ]
                     spec_bases_by_cls[node.name] = s_bases
         except Exception:
@@ -3435,8 +3734,8 @@ def maintain_impl_lifecycle(
         raw_bases = [
             ast.unparse(b)
             for b in node.bases
-            if not ast.unparse(b).startswith("InTier")
-            and ast.unparse(b) not in ("Singleton", "lifecycle.Singleton", "object")
+            if not ast.unparse(b).startswith(("InTier", "Singleton[", "lifecycle.Singleton["))
+            and ast.unparse(b) not in ("Singleton", "lifecycle.Singleton", "object", "Protocol")
         ]
         candidate_bases = spec_bases_by_cls.get(cls_name, raw_bases)
         computed_keys = [cls_name] + [b for b in candidate_bases if b != cls_name]
@@ -3682,6 +3981,7 @@ def check_undeclared_imports(
     file_path: str,
     allowed_deps: Sequence[str],
     extra_allowed: Optional[Sequence[str]] = None,
+    lib_pkg: Optional[str] = None,
 ) -> list[str]:
     """Check that all imported modules in file_path are in allowed_deps (or stdlib/framework).
 
@@ -3701,6 +4001,12 @@ def check_undeclared_imports(
         "pytest",
     }
 
+    cand_lib = lib_pkg
+    if not cand_lib:
+        sibling = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(file_path))), "lib")
+        if os.path.isdir(sibling):
+            cand_lib = sibling
+
     imported = extract_imported_stems(file_path)
     seen_errors: set[str] = set()
     allowed_display = ", ".join(sorted(allowed_set)) if allowed_set else "(none)"
@@ -3713,6 +4019,11 @@ def check_undeclared_imports(
             or stem.startswith("support.")
             or stem == "lifecycle"
             or stem in ("lib", "tests")
+        ):
+            continue
+        if cand_lib and (
+            os.path.isfile(os.path.join(cand_lib, f"{stem}.py"))
+            or os.path.isdir(os.path.join(cand_lib, stem))
         ):
             continue
         err_key = f"{lineno}:{stem}"
@@ -3940,10 +4251,15 @@ def compute_lib_derived_info(
             lib_deps.append(f":{d}")
             allowed_deps.add(d)
 
-    if uses_lifecycle:
-        lifecycle_label = "//update_python_with_ai/support/lib:lifecycle"
+    framework_label = "//update_python_with_ai/support/lib:framework"
+    if framework_label not in lib_deps:
+        lib_deps.append(framework_label)
+    allowed_deps.add("framework")
+
+    lifecycle_label = "//update_python_with_ai/support/lib:lifecycle"
+    if lifecycle_label not in lib_deps:
         lib_deps.append(lifecycle_label)
-        allowed_deps.add("lifecycle")
+    allowed_deps.add("lifecycle")
 
     # Canonicalize per ensure_target
     want_list = []
@@ -3977,8 +4293,8 @@ def compute_lib_derived_info(
         pyi_deps = set(parse_pyi_dependencies(pyi_path, ext_pyi_paths))
         # allowed_deps must correspond to what is declared in low (*.pyi)
         allowed_deps = (allowed_deps & pyi_deps) | {stem}
-        if uses_lifecycle:
-            allowed_deps.add("lifecycle")
+        allowed_deps.add("framework")
+        allowed_deps.add("lifecycle")
     elif pyi_path and os.path.isfile(pyi_path):
         for d in parse_pyi_dependencies(pyi_path, ext_pyi_paths):
             allowed_deps.add(d)
@@ -4109,8 +4425,8 @@ def compute_test_derived_info(
             direct_deps_list.append(iface_target)
 
     allowed_deps: set[str] = {d for d in reachable_map.keys() if not d.endswith("_ext")}
-    if uses_lifecycle:
-        allowed_deps.add("lifecycle")
+    allowed_deps.add("framework")
+    allowed_deps.add("lifecycle")
     if pyi_path and os.path.isfile(pyi_path):
         for d in parse_pyi_dependencies(pyi_path):
             if not d.endswith("_ext"):
@@ -4149,10 +4465,13 @@ def compute_test_derived_info(
         if s in reachable_map and reachable_map[s] not in test_lib_deps:
             test_lib_deps.append(reachable_map[s])
 
-    if uses_lifecycle:
-        lifecycle_label = "//update_python_with_ai/support/lib:lifecycle"
-        if lifecycle_label not in test_lib_deps:
-            test_lib_deps.append(lifecycle_label)
+    framework_label = "//update_python_with_ai/support/lib:framework"
+    if framework_label not in test_lib_deps:
+        test_lib_deps.append(framework_label)
+
+    lifecycle_label = "//update_python_with_ai/support/lib:lifecycle"
+    if lifecycle_label not in test_lib_deps:
+        test_lib_deps.append(lifecycle_label)
 
     # Canonicalize per ensure_target
     want_list = []

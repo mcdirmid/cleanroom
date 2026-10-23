@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-05T04:26:30Z
-CHANGE: new file
-CODE_HASH: f56f88b888bb
--->
-
 # commonmark_ext external component
 
 ## Purpose
@@ -28,3 +21,9 @@ Grounding gaps covered include:
 - Table and list structure preservation: Establishes line-suffix comment placement conventions for Markdown table rows and bullet list items, preventing formatting engines from injecting spurious blank lines or disrupting table column alignment.
 
 - Regular expression pattern definitions: Specifies regular expression patterns for identifying block conditional delimiters, line-suffix conditional markers, block loop delimiters, line-suffix loop markers, and parameter placeholder substitutions.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-05T04:26:30Z
+CHANGE: new file
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:10:53Z
-CHANGE: Declare progressive guide delivery, primer, and step advancement typing statements
-CODE_HASH: 20548bbc54e4
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # guide_delivery interface component
 
 ## Intent
@@ -58,3 +50,10 @@ By parsing markdown guides into sequential milestone sections, retaining active 
   - Deferred: Requires state tracking in implementation.
 - Parsing markdown section headers and bulleted checklists.
   - Deferred: Requires markdown parsing in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:10:53Z
+CHANGE: Declare progressive guide delivery, primer, and step advancement typing statements
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-06T14:35:00Z
-CHANGE: new file
-CODE_HASH: d3e991489f28
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # src_metadata interface component
 
 ## Purpose
@@ -26,8 +18,17 @@ The source metadata coordinator extracts file metadata from source content strin
 
 The source metadata coordinator computes a deterministic code hash over the code body, and evaluates whether a file has code modifications by comparing its on-disk code hash with its recorded in-band code hash.
 
-The source metadata coordinator rewrites metadata comment headers in content strings and updates files on disk in place. In-band metadata headers adhere to format-specific commenting conventions: Python source files (`.py`, `.pyi`) format headers as line comments delimited by `# --- CLEANROOM METADATA ---` and `# --- END CLEANROOM METADATA ---` positioned immediately beneath optional shebang and encoding lines; Markdown specifications (`.md`) format headers as HTML comments delimited by `<!-- CLEANROOM METADATA` and `-->` positioned at document start or beneath frontmatter.
+The source metadata coordinator evaluates whether proposed content changes alter, corrupt, delete, or inject in-band cleanroom metadata blocks relative to original content strings.
+
+The source metadata coordinator rewrites metadata comment blocks in content strings and updates files on disk in place. In-band metadata blocks adhere to format-specific commenting conventions positioned at the bottom of the file following source content to preserve code line numbers: Python source files (`.py`, `.pyi`) format metadata as line comments delimited by `# --- CLEANROOM METADATA ---` and `# --- END CLEANROOM METADATA ---` appended at the end of the file; Markdown specifications (`.md`) format metadata as HTML comments delimited by `<!-- CLEANROOM METADATA` and `-->` appended at the end of the document. When extracting metadata, the coordinator detects comment blocks positioned at the bottom or anywhere within the file.
 
 The source metadata coordinator updates lifecycle status by marking files clean, marking files dirty, recording change summaries, appending unacted feedback items, stamping role audits, clearing role audits, and deleting last cleaned timestamps.
 
-The component also exposes module-level procedural facade functions for metadata extraction, code body isolation, code hashing, modification checks, and lifecycle updates, delegating each operation to the active source metadata coordinator singleton.
+The component also exposes module-level procedural facade functions for metadata extraction, code body isolation, code hashing, modification checks, metadata alteration checks, and lifecycle updates, delegating each operation to the active source metadata coordinator singleton, alongside utilities for role audit tagging, auditor role classification, metadata parsing and formatting, and UTC timestamp generation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-20T22:32:00Z
+CHANGE: Contract metadata alteration detection capability on SourceMetadataCoordinator and module facade
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

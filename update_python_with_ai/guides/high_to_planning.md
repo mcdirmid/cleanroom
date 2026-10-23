@@ -1,15 +1,8 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T05:04:27Z
-LAST_CHANGED: 2026-10-10T21:54:00Z
-CHANGE: Clarify that cleanroom metadata headers are managed automatically by submit
-CODE_HASH: 5e62bf07cb81
--->
-
 # Guide: High-Level to Planning Specification Alignment
 
 ## Summary
 
-The artifact is a Planning specification (`planning/<name>.md` or `planning/<name>_impl.md`) extracting, factoring, grounding, and weaving behavioral contracts from a High-Level Specification (`high/<name>.md`), submitted via `submit(target="<target_file>", change_summary="...")` (in single-target sessions, target may be omitted). Cleanroom metadata headers (enclosed by `<!-- CLEANROOM METADATA` and `-->`) are managed automatically by Cleanroom tooling upon `submit(change_summary=...)`; direct edits to metadata headers are prohibited and rejected by editing tools. Submitting an unchanged file rejects a change summary; modifying content requires one. Editing an upstream file initiates a star-dependency cascade, marking downstream dependents dirty for re-stamping. In multi-node sessions, multiple planning specs are processed together by package-relative alias path. The artifact conforms to this guide and `design-docs/planning_format.md`. When a High-Level Specification lacks an imported component required for grounding, or when contracts cannot be constructively grounded using declared imports, the planning agent does not fabricate provisions; it attributes defect blame to `high/<name>.md` via `blame(...)`.
+The artifact is a Planning specification (`planning/<name>.md` or `planning/<name>_impl.md`) extracting, factoring, grounding, and weaving behavioral contracts from a High-Level Specification (`high/<name>.md`), submitted via `submit(target="<target_file>", change_summary="...")` (in single-target sessions, target may be omitted). Cleanroom metadata blocks at the bottom of the file (enclosed by `<!-- CLEANROOM METADATA` and `-->`) are managed automatically by Cleanroom tooling upon `submit(change_summary=...)`; direct edits to metadata blocks are prohibited and rejected by editing tools. Submitting an unchanged file rejects a change summary; modifying content requires one. Editing an upstream file initiates a star-dependency cascade, marking downstream dependents dirty for re-stamping. In multi-node sessions, multiple planning specs are processed together by package-relative alias path. The artifact conforms to this guide and `design-docs/planning_format.md`. When a High-Level Specification lacks an imported component required for grounding, or when contracts cannot be constructively grounded using declared imports, the planning agent does not fabricate provisions; it attributes defect blame to `high/<name>.md` via `blame(...)`.
 
 Planning specifications isolate design rationale into continuous prose (`## Intent`), organize static type signatures into typing requirements (`### Typing`), atomize behavioral contracts into single-sentence requirements with unique semantic slugs (`### Contracts`), and synthesize cross-cutting interactions into a flat bullet list of woven contracts (`### Woven Contracts`) under `## Factored Contracts`. Every sentence of the High-Level Specification's Types and Behavior must be accounted for across five critical clause types: failure modes, degenerate/empty cases, side-effect state mutations, conditional branches, and trailing qualifiers. Feasibility is established under `## Grounding` by pairing exported capabilities (`### Knowledge Provisions`) with consumer obligations (`### Knowledge Requirements`). External boundary components (`_ext`) and assembly components (`_asm`) do not define standalone planning specifications. Implementation specifications (`planning/<name>_impl.md`) resolve 100% of inherited interface deferrals (the union of all `Deferred:` requirements from every interface named in `implements:`, verbatim, in `implements:` order) under `### Inherited Deferred Requirements` without open deferrals. Verification is conducted by the `spec_qa` auditor role.
 
@@ -103,3 +96,10 @@ Planning specifications isolate design rationale into continuous prose (`## Inte
 - [ ] Conjunction leakage — combining independent behavioral obligations into a single compound sentence
 - [ ] Front-matter in planning — declaring `imports:` or `implements:` in planning files
 - [ ] Open deferrals in implementations — leaving `  - Deferred:` sub-bullets in `_impl.md`
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-07T05:04:27Z
+LAST_CHANGED: 2026-10-10T21:54:00Z
+CHANGE: Clarify that cleanroom metadata headers are managed automatically by submit
+CODE_HASH: 5e62bf07cb81
+-->

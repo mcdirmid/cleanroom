@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: a97c2464ddda
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for work_scheduler."""
 
 from dataclasses import dataclass
 from typing import Mapping, Optional, Protocol, Sequence
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import dag_storage
 import subgraph
@@ -48,7 +40,7 @@ class WorkSchedule:
 
 
 @singleton_type("agent_session")
-class WorkScheduler(InTier[AgentSessionTier], Protocol):
+class WorkScheduler(Singleton[AgentSessionTier], Protocol):
     """Scheduler that discovers ready dirty nodes and synthesizes prompts."""
 
     @operation
@@ -90,3 +82,10 @@ class WorkScheduler(InTier[AgentSessionTier], Protocol):
         - Formats aggregated prompt lines for specified candidate nodes.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-07T00:11:26Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

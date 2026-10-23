@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_coordinator interface specification
-CODE_HASH: 987d185fc071
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # antigravity_coordinator interface component
 
 imports: session, subagent_coordinator
@@ -39,3 +31,10 @@ When generating the coordinator skill:
 - The antigravity coordinator generator formats subagent dispatch specifications for ready roles identified in an execution wave, instructing workers to drain ready nodes and resolve them via submission, blame attribution, or failure diagnostics.
 
 - The antigravity coordinator generator parses wake notification messages received from subagent turns to extract completed, blamed, and failed targets.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T21:45:00Z
+CHANGE: author antigravity_coordinator interface specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

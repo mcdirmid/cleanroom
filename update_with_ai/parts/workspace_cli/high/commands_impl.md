@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:50:00Z
-CHANGE: Define commands_impl implementation specification
-CODE_HASH: 84f9b696bce7
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # commands_impl implementation component
 
 imports: session, cleanroom_files_ext, attribution, submit, coverage, check, commands, pending, provision, role_registry, sync
@@ -31,12 +23,19 @@ The realization:
 
 - Delegates file verification checks, linters, and type checking to the workspace checker.
 
-- Evaluates role verification checks on the target file during submit execution, rejecting submission when verification fails unless bypassed, delegates file validation and metadata stamping to the submission coordinator, reflects stamped files into the role workspace, appends submission records to the cleanroom log, and clears the target from pending work on success.
+- Evaluates role verification checks on the target file during submit execution, enforcing that modified targets have been verified via check_files since their latest modifications unless bypassed, rejecting submission when verification fails unless bypassed, delegates file validation and metadata stamping to the submission coordinator, reflects stamped files into the role workspace, appends submission records to the cleanroom log, and clears the target from pending work on success.
 
-- Verifies single-paragraph critique constraints during blame and feedback execution, delegates attribution to the attribution coordinator, appends blame records to the cleanroom log, and clears the target from pending work on success.
+- Verifies single-paragraph critique constraints during blame and feedback execution, enforcing that modified workspace targets have been verified via check_files since their latest modifications, delegates attribution to the attribution coordinator, records blamed culprit targets into the workspace blame buffer, appends blame records to the cleanroom log, and clears the target from pending work on success.
 
-- Delegates failure tagging and diagnostic recording to the attribution coordinator during fail execution, clearing the target from pending work on success.
+- Enforces that modified target files have been verified via check_files since their latest modifications, delegates failure tagging and diagnostic recording to the attribution coordinator during fail execution, clearing the target from pending work on success.
 
 - Delegates statement coverage evaluation to the coverage evaluator during coverage execution, using local workspace files when present, and formats diagnostic span reports.
 
 - Delegates workspace provisioning, registration, and system synchronization across active role workspaces during commission and refresh system execution, dynamically discovering or requiring the directory scope without hardcoded defaults, mapping directory scope arguments when provisioning across all declared roles, supporting resetting stale work buffers and stamping model execution profiles into role descriptors, and supporting provisioning across all declared roles within a directory scope when requested.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-20T21:07:00Z
+LAST_CHANGED: 2026-10-20T21:07:00Z
+CHANGE: Record blamed culprit targets into workspace blame buffer during blame execution
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

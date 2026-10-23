@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Define roles interface component
-CODE_HASH: 71ae330bdf01
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # roles interface component
 
 imports: session
@@ -29,3 +21,10 @@ An agent session's *role resolver* resolves role specifications and validates ro
 Role definitions obey three declaration constraints. Feedback role dependencies and star role dependencies are implicitly role dependencies, so neither is declared again under role dependencies, and a dependency is never declared as both a role dependency and a silent role dependency. An auditor role is declared only as a silent role dependency, never as a role dependency, a star role dependency, or a feedback role dependency.
 
 The role resolver resolves a role definition and lists every declared role definition from declarative role configuration files or repository build files, raising an explicit failure when a queried role is undeclared or when a role definition violates a declaration constraint. When resolving an unqualified role definition within a directory scope, the resolver discovers the methodology configuration bound to that directory scope or its package hierarchy and loads the role definitions declared by that methodology. When resolving a qualified role address, the resolver loads role definitions declared by the addressed package.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T18:45:00Z
+CHANGE: Define roles interface component
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

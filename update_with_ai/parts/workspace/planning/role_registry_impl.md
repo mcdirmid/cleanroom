@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Delegate role configuration resolution to roles
-CODE_HASH: 56307906bfda
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # role_registry_impl implementation component
 
 ## Intent
@@ -52,3 +44,10 @@ Reliable multi-role orchestration depends on deterministic workspace naming conv
 
 - Reading and writing files on the local filesystem.
   - Grounded: [workspace_discovery_logic, path_sanitization_mechanics]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T18:45:00Z
+CHANGE: Delegate role configuration resolution to roles
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

@@ -1,15 +1,7 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:48:24Z
-# CHANGE: Realize delegation of tools with argument mappings to by-name execution
-# CODE_HASH: f235aa3793da
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Tool provider low-level implementation specification."""
 
 from typing import Mapping
-from framework import operation, override, singleton_type
+from support.lib.framework import operation, override, singleton_type
 import file_alias
 import tool_provider
 
@@ -133,3 +125,10 @@ class AliasManagerType(tool_provider.AliasManagerType):
         - MUST convert wire strings to file aliases via the session alias manager.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:48:24Z
+# CHANGE: Realize delegation of tools with argument mappings to by-name execution
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T19:15:00Z
-CHANGE: author antigravity_harness_impl planning specification
-CODE_HASH: 77f27727ac21
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # antigravity_harness_impl implementation component
 
 ## Intent
@@ -54,3 +46,10 @@ Harvesting accurate token telemetry from local execution logs and managing subpr
   - Grounded: [subagent_coordinator: [harness_adapter_protocol]]
 - Subagent harness registry and adapter factory installation.
   - Grounded: [subagent_harness: [harness_registry_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-13T19:15:00Z
+CHANGE: author antigravity_harness_impl planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:40:00Z
-CHANGE: Define pending interface specification
-CODE_HASH: 882c6083a5d6
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # pending interface component
 
 imports: session, cleanroom_files_ext
@@ -35,3 +27,10 @@ The workspace pending manager:
 - Clears the pending work buffer file when all assigned tasks in the role workspace evaluate clean.
 
 - Evaluates whether an assigned pending target remains dirty by checking in-band source metadata across the role workspace and main repository, resolving canonical lifecycle metadata from the main repository when available, treating feedback and star-role dependencies as implicit dependencies, and materializing starter templates when missing.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T17:40:00Z
+CHANGE: Define pending interface specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

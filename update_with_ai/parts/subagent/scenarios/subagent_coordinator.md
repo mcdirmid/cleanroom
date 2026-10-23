@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-18T01:30:00Z
-CHANGE: add scenario for restricting execution to target units and transitive dependencies
-CODE_HASH: 78d6af640f82
--->
-
 # subagent_coordinator scenarios
 
 ## Scenario 1 — Resetting preexisting role workspaces on startup
@@ -51,10 +44,10 @@ Given: an active subagent worker process for role_a fails or exits with an unres
 
 ## Scenario 7 — Cumulative token telemetry aggregation
 
-Given: multiple concurrent subagent turns complete consuming tokens.
+Given: multiple concurrent subagent rounds complete consuming tokens.
 
-1. The coordinator reaps finished worker turns.
-   Observed: input, cached, and output tokens from all completed turns are aggregated into cumulative financial costs.
+1. The coordinator reaps finished worker rounds.
+   Observed: input, cached, and output tokens from all completed rounds are aggregated into cumulative financial costs.
 
 ## Scenario 8 — Restricting execution up to a target role boundary
 
@@ -84,3 +77,15 @@ Given: active workers are executing in provisioned workspaces for scope_a when a
 1. The coordinator receives a cancellation signal during dynamic supervision.
    Observed: all running workers are interrupted through the harness adapter and all provisioned role workspace directories for scope_a are deleted.
 
+## Scenario 12 — Reminding role workers upon unresolved round completion
+
+Given: a role worker completes a round without submitting, blaming, or failing assigned ready targets.
+
+1. The coordinator reaps the unresolved round and dispatches a subsequent round for the role.
+   Observed: the subsequent role dispatch directive includes an actionable reminder in its task prompt instructing the worker to verify with check_files and conclude the round via submit, blame, or fail without conversational stopping.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: add scenario for restricting execution to target units and transitive dependencies
+-->

@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-13T20:00:00Z
-# CHANGE: author dsh_asm assembly library
-# CODE_HASH: 380b2579395b
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 
 from typing import Optional
@@ -31,3 +24,9 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
 
 
 _initialize_ = __initialize__
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-13T20:00:00Z
+# CHANGE: author dsh_asm assembly library
+# --- END CLEANROOM METADATA ---

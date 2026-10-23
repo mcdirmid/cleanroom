@@ -1,22 +1,14 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:19:47Z
-# CHANGE: Align loop cleaner acyclic caller guarantee, halt, and conclusion contracts
-# CODE_HASH: c7bc8c8c4d92
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Loop cleaner low-level interface specification."""
 
 from typing import Protocol
-from framework import operation, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import operation, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 import dag_storage
 import node_cleaner
 
 
 @singleton_type("system")
-class LoopCleaner(InTier[SystemTier], Protocol):
+class LoopCleaner(Singleton[SystemTier], Protocol):
     """Coordinates topological graph cleaning across graph storage."""
 
     @operation
@@ -42,3 +34,10 @@ class LoopCleaner(InTier[SystemTier], Protocol):
         - WHEN all nodes in the subgraph rooted at the target node are clean, MUST return true.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:19:47Z
+# CHANGE: Align loop cleaner acyclic caller guarantee, halt, and conclusion contracts
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

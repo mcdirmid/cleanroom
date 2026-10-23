@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T21:45:00Z
-# CHANGE: author antigravity_harness_impl implementation library
-# CODE_HASH: 7ad6cfb1160c
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for antigravity_harness_impl."""
 
 from __future__ import annotations
@@ -327,10 +318,7 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
 
 
 # Contract: AntigravityHarnessManager realizes management of Antigravity execution adapters and transcript parsing in the agent session tier.
-class AntigravityHarnessManager(
-    Singleton,
-    antigravity_harness.AntigravityHarnessManager,
-):
+class AntigravityHarnessManager(antigravity_harness.AntigravityHarnessManager):
     """Realizes management of Antigravity execution adapters and transcript parsing."""
 
     tier = agent_session.agent_session
@@ -372,7 +360,13 @@ class AntigravityHarnessManager(
     def get_transcript_parser(self) -> antigravity_harness.TranscriptTelemetryParser:
         """Returns the transcript telemetry parser service."""
         return self._parser
-
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T21:45:00Z
+# CHANGE: author antigravity_harness_impl implementation library
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -381,10 +375,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         AntigravityHarnessManager,
-        keys=[
-            antigravity_harness.AntigravityHarnessManager,
-            AntigravityHarnessManager,
-        ],
+        keys=[antigravity_harness.AntigravityHarnessManager, AntigravityHarnessManager],
         tier=agent_session.agent_session,
     )
 

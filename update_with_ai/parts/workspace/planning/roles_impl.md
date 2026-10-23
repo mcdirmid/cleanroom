@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Define roles_impl planning specification
-CODE_HASH: 3e9b0d705dd6
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # roles_impl implementation component
 
 ## Intent
@@ -42,3 +34,10 @@ The roles_impl implementation component provides concrete algorithms to parse co
 
 - Declarative role configurations and package build files on disk.
   - Grounded: [role_declaration_evaluation]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T18:45:00Z
+CHANGE: Define roles_impl planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

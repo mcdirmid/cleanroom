@@ -1,11 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T19:43:57Z
-# LAST_CHANGED: 2026-10-14T18:30:00Z
-# CHANGE: Add submission_impl constituent
-# CODE_HASH: 56dd3244c768
-# SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
-# --- END CLEANROOM METADATA ---
-
 """Sandbox subsystem assembly specification."""
 
 
@@ -22,3 +14,10 @@ def __initialize__() -> None:
     - tool_provider_impl
     """
     ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T19:43:57Z
+# LAST_CHANGED: 2026-10-14T18:30:00Z
+# CHANGE: Add submission_impl constituent
+# SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
+# --- END CLEANROOM METADATA ---

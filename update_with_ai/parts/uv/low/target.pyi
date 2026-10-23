@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 17e63d62a527
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Cleanroom target low-level interface specification."""
 
 from typing import NewType, Protocol
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.core.lib import file_paths
 
@@ -24,7 +16,7 @@ class NodeDirectory(file_paths.WorkspacePath):
 
 
 @singleton_type("system")
-class UvTarget(InTier[SystemTier], Protocol):
+class UvTarget(Singleton[SystemTier], Protocol):
     """Normalizes Cleanroom target labels and extracts package directories."""
 
     @operation
@@ -56,3 +48,10 @@ class UvTarget(InTier[SystemTier], Protocol):
         - MUST extract a node directory from a node.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-07T00:00:00Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

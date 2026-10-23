@@ -1,13 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-13T20:00:00Z
-# CHANGE: author dsh_harness interface library
-# CODE_HASH: 067fe5b26aea
-# --- END CLEANROOM METADATA ---
-
 """Interface specification for dsh_harness."""
 
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
@@ -17,23 +12,23 @@ from update_with_ai.parts.subagent.lib import subagent_coordinator
 from .dsh_telemetry import DshSessionTokenMetrics, DshTelemetryParser
 
 
-# Contract: DshHarnessAdapter protocol for executing subagent turns within DeepSeek Harness workspaces.
+# Contract: DshHarnessAdapter protocol for executing subagent rounds within DeepSeek Harness workspaces.
 class DshHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
-    """Executes subagent turns within DeepSeek Harness role workspaces."""
+    """Executes subagent rounds within DeepSeek Harness role workspaces."""
 
-    # Contract: MUST initiate DeepSeek Harness subagent turn in the designated workspace and return a task handle.
+    # Contract: MUST initiate DeepSeek Harness subagent round in the designated workspace and return a task handle.
     def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
         """Dispatches work directive to a DeepSeek Harness role workspace."""
         ...
 
-    # Contract: MUST await turn completion without mandatory timeout unless configured, and return role turn result with telemetry.
-    def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
-        """Awaits DeepSeek Harness subagent turn completion and returns outcome result."""
+    # Contract: MUST await round completion without mandatory timeout unless configured, and return role round result with telemetry.
+    def await_role(self, task_handle: str) -> subagent_coordinator.RoleRoundResult:
+        """Awaits DeepSeek Harness subagent round completion and returns outcome result."""
         ...
 
-    # Contract: MUST return None when running, or role turn result when terminated.
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
-        """Polls DeepSeek Harness subagent turn execution without blocking."""
+    # Contract: MUST return None when running, or role round result when terminated.
+    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+        """Polls DeepSeek Harness subagent round execution without blocking."""
         ...
 
     # Contract: MUST terminate active DeepSeek Harness subagent process associated with task handle.
@@ -43,7 +38,7 @@ class DshHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
 
 
 # Contract: DshHarnessManager protocol managing DeepSeek Harness execution adapters and telemetry parsing.
-class DshHarnessManager(Protocol):
+class DshHarnessManager(Singleton[AgentSessionTier], Protocol):
     """Manages DeepSeek Harness execution adapters and telemetry parsing services."""
 
     # Contract: MUST construct and return configured DeepSeek Harness adapter instance.
@@ -69,3 +64,9 @@ class DshHarnessManager(Protocol):
     def get_telemetry_parser(self) -> DshTelemetryParser:
         """Returns the DeepSeek Harness telemetry parser service."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-13T20:00:00Z
+# CHANGE: author dsh_harness interface library
+# --- END CLEANROOM METADATA ---

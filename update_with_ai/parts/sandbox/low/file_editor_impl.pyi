@@ -1,19 +1,12 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T04:14:49Z
-# CHANGE: Reject editing tool replacements that alter the cleanroom metadata header
-# CODE_HASH: 43c41d3dd53f
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Sandbox file editor implementation low-level specification."""
 
 from typing import Any, Mapping, Optional, Union
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import agent_config
 import file_alias
+import file_reader
 import node_config
 import file_editor
 import src_metadata
@@ -21,7 +14,7 @@ import tool_provider
 
 
 @singleton_type("agent_session")
-class EditManager(file_editor.EditManager, InTier[AgentSessionTier]):
+class EditManager(file_editor.EditManager):
     """Realizes workspace file modification tracking.
 
     GROUNDING:
@@ -146,9 +139,7 @@ class EditManager(file_editor.EditManager, InTier[AgentSessionTier]):
 
 
 @singleton_type("agent_session")
-class ReplaceFileContentTool(
-    file_editor.ReplaceFileContentTool, InTier[AgentSessionTier]
-):
+class ReplaceFileContentTool(file_editor.ReplaceFileContentTool):
     """Realizes targeted text replacement within bounded line ranges.
 
     GROUNDING:
@@ -292,8 +283,14 @@ class ReplaceFileContentTool(
         - WHEN the replacement succeeds, MUST remind the agent to verify syntax and type correctness before making further writes.
         - MUST set the suppression key of produced responses to "replace_file_content".
         - WHEN delta output is configured, MUST include a diff delta representation of the change in the response content.
+        - WHEN consecutive replacement attempts fail, MUST issue a warning reminder at two consecutive failures.
+        - WHEN consecutive replacement attempts reach two failures and the target file is present, MUST designate a follow-up tool call to view the target file using the session's file viewing tool.
+        - WHEN consecutive replacement attempts reach four failures, MUST terminate with failure.
 
         GROUNDING:
+        - Tracks consecutive failed replacement attempts in private session state, resetting the counter upon any successful replacement.
+        - Issues a warning reminder and populates a follow_up_tool_call designating file_reader.ViewFileTool when reaching two consecutive failed replacements with a resolved target file, satisfying the deferred requirement grounded on file_reader:[view_file_capability] and tool_provider:[tool_response_generation].
+        - Returns a terminating tool_provider.ToolResponse record when reaching four consecutive failed replacements.
         - Resolves the bound tool_provider.ToolParameter entries from actual_parameter_bindings,
           converting the path wire string through file_alias.AliasManager.convert and defaulting
           an omitted path to file_editor.EditManager.last_read_or_edited_file when that alias
@@ -316,3 +313,10 @@ class ReplaceFileContentTool(
           tool_provider.ToolResponse records whose suppression key is "replace_file_content".
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-21T22:00:00Z
+# LAST_CHANGED: 2026-10-21T22:00:00Z
+# CHANGE: Convert wire integer string values to line numbers in replace_file_content
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

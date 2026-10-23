@@ -26,7 +26,7 @@ According to the high-level specifications in [`update_with_ai/parts/workspace_c
 
 ## How It Is Used by Other Parts
 
-- **`subagent`**: After dispatching a subagent turn into a role workspace, `subagent_harness` inspects `pending` and `work` buffers (`pending_work.json`, `blame.json`) to compute which targets were submitted, blamed, or left uncompleted.
+- **`subagent`**: After dispatching a subagent round into a role workspace, `subagent_harness` inspects `pending` and `work` buffers (`pending_work.json`, `blame.json`) to compute which targets were submitted, blamed, or left uncompleted.
 - **`dsh`**: DeepSeek Harness role agent documentation explicitly directs agents to call `tools` binaries (`bin/get-work`, `bin/check-files`, `bin/submit`, `bin/blame`, `bin/status`).
 - **`workspace`**: Deploys the CLI binaries provided by `tools` into the `bin/` directory of newly provisioned role workspaces.
 - **`systems`**: Aggregated into `cleanroom_asm`.

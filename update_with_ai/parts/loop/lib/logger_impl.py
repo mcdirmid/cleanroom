@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T12:35:00Z
-# CHANGE: Present single-line event summaries to standard output without timestamps or event names
-# CODE_HASH: 82e406be5544
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 import os
 import sys
@@ -22,7 +13,7 @@ _DEFAULT_LOG_PATH = "agent_loop.log"
 _LOG_PATH_ENV_VAR = "RUNNER_LOG_FILE"
 
 
-class RunnerLogger(logger.RunnerLogger, Singleton):
+class RunnerLogger(logger.RunnerLogger):
     """Realizes live terminal logging and unbuffered transcript file output."""
 
     tier = system
@@ -44,6 +35,13 @@ class RunnerLogger(logger.RunnerLogger, Singleton):
             transcript.write(f"{event.transcript}\n")
             # Contract: MUST flush transcript log entries immediately after each write to guarantee unbuffered persistence.
             transcript.flush()
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T12:35:00Z
+# CHANGE: Present single-line event summaries to standard output without timestamps or event names
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

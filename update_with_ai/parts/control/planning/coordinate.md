@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 4b47360e8174
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # coordinate interface component
 
 ## Intent
@@ -61,3 +53,10 @@ Autonomous tools require a consistent state coordinator so that nodes being work
   - Deferred: Delegated to SubmissionCoordinator from submit in implementation.
 - Defect attribution and failure dispatching through attribution coordinator.
   - Deferred: Delegated to AttributionCoordinator from attribution in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

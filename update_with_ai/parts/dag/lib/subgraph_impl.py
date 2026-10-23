@@ -1,18 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:59:23Z
-# CHANGE: Order ready nodes by role tier depth then unit address then role address, end each ready batch before the first node with unsatisfied in-subgraph dependencies, and bound batches at exactly the configured batch size
-# CODE_HASH: a5f668e73384
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence, Set
 
 from support.lib.lifecycle import (
-    InTier,
+
     LifecycleRegistry,
     Singleton,
     SystemTier,
@@ -28,7 +19,7 @@ from .dag_storage import DagNode, DagStorage
 # Requirements specified in subgraph_impl.pyi
 
 
-class DagSubgraph(subgraph.DagSubgraph, InTier[SystemTier], Singleton):
+class DagSubgraph(subgraph.DagSubgraph):
     """Coordinates topological subgraph queries and visit bounds across graph storage."""
 
     tier = system
@@ -210,6 +201,13 @@ class DagSubgraph(subgraph.DagSubgraph, InTier[SystemTier], Singleton):
                 raise RuntimeError(
                     f"Node visit limit exceeded ({visit_limit}) for node '{node.unit_address}:{node.role_address}'"
                 )
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T04:59:23Z
+# CHANGE: Order ready nodes by role tier depth then unit address then role address, end each ready batch before the first node with unsatisfied in-subgraph dependencies, and bound batches at exactly the configured batch size
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -218,7 +216,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         DagSubgraph,
-        keys=[DagSubgraph, subgraph.DagSubgraph, InTier[SystemTier]],
+        keys=[DagSubgraph, subgraph.DagSubgraph],
         tier=system,
     )
 

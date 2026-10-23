@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T18:30:00Z
-# CHANGE: Define submission low-level interface specification
-# CODE_HASH: 24bf2712dcd8
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Sandbox submission low-level interface specification."""
 
 from typing import Any, Mapping, NewType, Optional, Protocol, Sequence, Set
-from framework import operation, override, poly_type, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, poly_type, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import node_config
@@ -63,7 +55,7 @@ class ResolveTool(tool_provider.Tool, Protocol):
 
 
 @singleton_type("agent_session")
-class SubmitTool(ResolveTool, InTier[AgentSessionTier], Protocol):
+class SubmitTool(ResolveTool, Singleton[AgentSessionTier], Protocol):
     """Tool that marks an active node complete upon passing verification."""
 
     @property
@@ -96,7 +88,7 @@ class SubmitTool(ResolveTool, InTier[AgentSessionTier], Protocol):
 
 
 @singleton_type("agent_session")
-class FailTool(ResolveTool, InTier[AgentSessionTier], Protocol):
+class FailTool(ResolveTool, Singleton[AgentSessionTier], Protocol):
     """Tool that terminates session execution in failure."""
 
     @property
@@ -126,7 +118,7 @@ class FailTool(ResolveTool, InTier[AgentSessionTier], Protocol):
 
 
 @singleton_type("agent_session")
-class BlameTool(ResolveTool, InTier[AgentSessionTier], Protocol):
+class BlameTool(ResolveTool, Singleton[AgentSessionTier], Protocol):
     """Tool that attributes failure to an upstream prerequisite."""
 
     @property
@@ -160,3 +152,10 @@ class BlameTool(ResolveTool, InTier[AgentSessionTier], Protocol):
         - MUST attribute task failure to an upstream dependency node.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T18:30:00Z
+# CHANGE: Define submission low-level interface specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

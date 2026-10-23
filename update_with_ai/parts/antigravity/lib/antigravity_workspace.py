@@ -1,17 +1,10 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T21:45:00Z
-# CHANGE: author antigravity_workspace interface library
-# CODE_HASH: 4ba0c0a644a7
-# --- END CLEANROOM METADATA ---
-
 """Interface specification for antigravity_workspace."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
-from support.lib.lifecycle import InTier
+from support.lib.lifecycle import Singleton
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 
 
@@ -34,7 +27,7 @@ class WorkspaceConfinementReport:
 
 
 # Contract: AntigravityWorkspaceConfigurer configures Antigravity-specific isolation rules and workspace confinement.
-class AntigravityWorkspaceConfigurer(InTier[AgentSessionTier], Protocol):
+class AntigravityWorkspaceConfigurer(Singleton[AgentSessionTier], Protocol):
     """Configures Antigravity-specific isolation rules and workspace confinement."""
 
     # Contract: AntigravityWorkspaceConfigurer.configure_workspace - writes workspace-local isolation rules and returns a confinement report.
@@ -48,3 +41,8 @@ class AntigravityWorkspaceConfigurer(InTier[AgentSessionTier], Protocol):
         """Establishes Antigravity isolation rules and returns a confinement report."""
         ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T21:45:00Z
+# CHANGE: author antigravity_workspace interface library
+# --- END CLEANROOM METADATA ---

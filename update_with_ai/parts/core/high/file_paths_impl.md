@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T01:51:09Z
-CHANGE: Remove interface-restated catalogs and keep only implementation-specific validation and normalization behavior
-CODE_HASH: b34d186d1ab4
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_paths_impl implementation component
 
 imports: filesystem_ext
@@ -26,3 +18,10 @@ Manipulating filesystem paths directly without boundary validation risks format 
 When creating an absolute path, the file path manager establishes absoluteness through the host filesystem, failing when the path string names a location relative to the current working directory or is empty. When creating a workspace path, the file path manager requires a path string naming a location within the workspace without a leading separator, failing when the path string names an absolute location.
 
 Creating or resolving paths normalizes redundant separators and relative directory segments into encapsulated path records, and resolving a workspace path against the absolute path of a workspace root joins the two path strings before normalizing the combination into an absolute path record.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T01:51:09Z
+CHANGE: Remove interface-restated catalogs and keep only implementation-specific validation and normalization behavior
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

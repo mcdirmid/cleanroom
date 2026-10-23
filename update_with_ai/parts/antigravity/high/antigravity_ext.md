@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_ext external component
-CODE_HASH: 0054c68f2cbc
--->
-
 # antigravity_ext external component
 
 ## Purpose
@@ -28,3 +21,9 @@ Grounding gaps covered include:
 - Subagent invocation payload schema: Defines the JSON parameter schemas for the `invoke_subagent` tool, including `TypeName`, `Role`, `Prompt`, and `Workspace` path parameters, establishing the protocol for binding child agent execution directly to isolated sibling directories without inheriting the parent workspace.
 
 - Transcript execution event log schema: Defines the JSONL event record schema in `<appDataDir>/brain/<conversation_id>/.system_generated/logs/transcript.jsonl`, specifying step objects with step indices, event types, status indicators, tool invocation records, and model token usage metrics covering input tokens, cached tokens, and completion tokens.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T21:45:00Z
+CHANGE: author antigravity_ext external component
+-->

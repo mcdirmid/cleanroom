@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:21:35Z
-# CHANGE: Canonicalize change timestamps, split run failure clauses, and fix LoopDriver.run grounding
-# CODE_HASH: 1613b80f551c
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Loop node cleaner implementation low-level specification."""
 
 from typing import Sequence
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 import dag_storage
 import subgraph
 import cleaner
@@ -24,7 +16,7 @@ import src_metadata
 
 
 @singleton_type("system")
-class LoopCleaner(cleaner.LoopCleaner, InTier[SystemTier]):
+class LoopCleaner(cleaner.LoopCleaner):
     """Realizes dependency-first topological cleaning and visit recording using dag subgraph.
 
     GROUNDING:
@@ -62,7 +54,7 @@ class LoopCleaner(cleaner.LoopCleaner, InTier[SystemTier]):
 
 
 @singleton_type("system")
-class NodeCleaner(node_cleaner.NodeCleaner, InTier[SystemTier]):
+class NodeCleaner(node_cleaner.NodeCleaner):
     """Realizes node clean execution, session seeding, and message dispatch.
 
     GROUNDING:
@@ -156,3 +148,10 @@ class NodeCleaner(node_cleaner.NodeCleaner, InTier[SystemTier]):
         - MUST NOT deliver feedback messages to non-feedback dependencies.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:21:35Z
+# CHANGE: Canonicalize change timestamps, split run failure clauses, and fix LoopDriver.run grounding
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

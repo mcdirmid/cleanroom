@@ -21,6 +21,7 @@
    - [Tier 4: Frontier / Heavyweight Cloud Tier (Performance Ceilings)](#tier-4-frontier--heavyweight-cloud-tier-performance-ceilings)
    - [Core Benchmarking Matrix](#core-benchmarking-matrix)
    - [Operational Harness Mapping](#operational-harness-mapping)
+   - [Dynamic Model Catalog & Declarative Configuration](#dynamic-model-catalog--declarative-configuration)
 4. [Paper Research Question (RQ) Alignment Matrix](#4-paper-research-question-rq-alignment-matrix)
    - [RQ1: Coincident Error Manifestation & Information Confinement](#rq1-coincident-error-manifestation--information-confinement)
    - [RQ2: Accidental Agreement Suppression & Branch-to-Spec Invariant Mining](#rq2-accidental-agreement-suppression--branch-to-spec-invariant-mining)
@@ -29,12 +30,17 @@
    - [RQ5: Autonomous Specification-as-Bytecode Evolution](#rq5-autonomous-specification-as-bytecode-evolution)
    - [RQ6: Concurrency Soundness: Adversarial Interleaving & Specialized Triage](#rq6-concurrency-soundness-adversarial-interleaving--specialized-triage)
    - [RQ7: Non-Functional Auditing, Goodhart's Law Evasion, & Performance Deadlocks](#rq7-non-functional-auditing-goodharts-law-evasion--performance-deadlocks)
-5. [Subject Systems & Golden Benchmark Corpora](#5-subject-systems--golden-benchmark-corpora)
-   - [CPython Standard Library Benchmark Suite](#cpython-standard-library-benchmark-suite)
-   - [Mini-SQLite Relational Query & B-Tree Storage Engine](#mini-sqlite-relational-query--b-tree-storage-engine)
-   - [Mini-Git Content-Addressable Object & DAG Engine](#mini-git-content-addressable-object--dag-engine)
-   - [Deterministic Raft Distributed Consensus Engine](#deterministic-raft-distributed-consensus-engine)
-   - [Cleanroom Self-Hosting Production Systems Corpus](#cleanroom-self-hosting-production-systems-corpus)
+5. [Subject Systems & Specification-Grounded Benchmark Corpora](#5-subject-systems--specification-grounded-benchmark-corpora)
+   - [CPython Standard Library Benchmark Suite (`graphlib` & `heapq`)](#cpython-standard-library-benchmark-suite-graphlib--heapq)
+   - [Generalized DAG Wave Processing Engines (`dag_engine` vs. `dag_engine_lite`)](#generalized-dag-wave-processing-engines-dag_engine-vs-dag_engine_lite)
+   - [Edge-Case Heavy Benchmark Corpora (500–1,000 LOC Target)](#edge-case-heavy-benchmark-corpora-5001000-loc-target)
+     - [Option A: SemVer 2.0 Package Constraint & Backtracking Solver (~700–900 LOC)](#option-a-semver-20-package-constraint--backtracking-solver-700900-loc)
+     - [Option B: RFC 6902 JSON Patch & RFC 7396 Merge Patch Engine (~580–780 LOC)](#option-b-rfc-6902-json-patch--rfc-7396-merge-patch-engine-580780-loc)
+     - [Option C: Temporal Interval Set Algebra & Recurring Calendar Scheduler (~620–860 LOC)](#option-c-temporal-interval-set-algebra--recurring-calendar-scheduler-620860-loc)
+     - [Option D: Unified Diff Parser, 3-Way Text Merge & Patch Engine (~650–900 LOC)](#option-d-unified-diff-parser-3-way-text-merge--patch-engine-650900-loc)
+   - [Ephemeral Sibling Workspace & Process Containment Subsystem (~1,000 LOC)](#ephemeral-sibling-workspace--process-containment-subsystem-1000-loc)
+   - [Heavyweight Frontier Stress Benchmark (2,000+ LOC)](#heavyweight-frontier-stress-benchmark-2000-loc)
+   - [Benchmarks Corpus Architecture & Dual-Specification Pattern (`benchmarks/parts/`)](#benchmarks-corpus-architecture--dual-specification-pattern-benchmarksparts)
    - [Prior-Knowledge Probing Protocol](#prior-knowledge-probing-protocol)
    - [Principle of Domain-Specific Generator Preemption (Anti-Parser Rule)](#principle-of-domain-specific-generator-preemption-anti-parser-rule)
 6. [Experimental Conditions & Baseline Controls](#6-experimental-conditions--baseline-controls)
@@ -45,13 +51,21 @@
 7. [Unified Metrics, Measurement Instruments & Telemetry](#7-unified-metrics-measurement-instruments--telemetry)
    - [Correctness, Defect Escape & Soundness Metrics](#correctness-defect-escape--soundness-metrics)
    - [Operational Economics, Token Efficiency & KV Cache Metrics](#operational-economics-token-efficiency--kv-cache-metrics)
+   - [Role Execution Rounds & Convergence Efficiency](#role-execution-rounds--convergence-efficiency)
    - [Systems, Concurrency & Quality Metrics](#systems-concurrency--quality-metrics)
 8. [Automated Benchmark Tooling Architecture (`bin/evaluate_model_efficiency.py`)](#8-automated-benchmark-tooling-architecture-binevaluate_model_efficiencypy)
    - [CLI Interface & Execution Modes](#cli-interface--execution-modes)
    - [Pipeline Orchestration & Sandboxed Runner](#pipeline-orchestration--sandboxed-runner)
    - [Multi-Model Adapter Engine](#multi-model-adapter-engine)
+   - [Run Archival & Workspace Draining Protocol (`benchmarks/results/`)](#run-archival--workspace-draining-protocol-benchmarksresults)
    - [Artifact, JSON Telemetry & LaTeX Table Emitter](#artifact-json-telemetry--latex-table-emitter)
-9. [Actionable Implementation Roadmap & Milestones](#9-actionable-implementation-roadmap--milestones)
+9. [Empirical Case Study & Code Quality Analysis: Generalized DAG Wave Processing Engine](#9-empirical-case-study--code-quality-analysis-generalized-dag-wave-processing-engine)
+   - [Benchmark Overview & Subject System](#benchmark-overview--subject-system)
+   - [Cross-Model Telemetry & Empirical Outcome Matrix](#cross-model-telemetry--empirical-outcome-matrix)
+   - [Qualitative Code Quality Analysis by Model](#qualitative-code-quality-analysis-by-model)
+   - [Pathological Anti-Patterns: Interface Hallucination, White-Box Evasions & Auditor Contamination](#pathological-anti-patterns-interface-hallucination-white-box-evasions--auditor-contamination)
+   - [Architectural Hardening & Framework Gates Derived from Findings](#architectural-hardening--framework-gates-derived-from-findings)
+10. [Actionable Implementation Roadmap & Milestones](#10-actionable-implementation-roadmap--milestones)
 
 ---
 
@@ -59,7 +73,7 @@
 
 The Cleanroom empirical evaluation must establish two decisive contributions:
 1. **Academic & Theoretical Rigor (The Research Paper)**: Provide empirical validation for the seven core Research Questions (RQ1–RQ7) articulated in [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md), demonstrating that double-blind isolation ($\mathcal{I} = 0$), task asymmetry, and bipartite boundary contracts eliminate coincident errors, defeat Goodhart's Law, and guarantee a 100% fail-stop safety invariant without human code inspection.
-2. **Industrial & Operational Economics (The Production Framework)**: Operationalize Task 2 from [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md) by implementing an automated, reproducible benchmarking harness (`bin/evaluate_model_efficiency.py`) that profiles token expenditure, prompt-cache hit rates, turn latencies, and monetary costs across a heterogeneous 4-tier model spectrum—from free local consumer hardware to frontier cloud reasoning engines.
+2. **Industrial & Operational Economics (The Production Framework)**: Operationalize Task 2 from [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md) by implementing an automated, reproducible benchmarking harness (`bin/evaluate_model_efficiency.py`) that profiles token expenditure, prompt-cache hit rates, step latencies, and monetary costs across a heterogeneous 4-tier model spectrum—from free local consumer hardware to frontier cloud reasoning engines.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -71,16 +85,16 @@ The Cleanroom empirical evaluation must establish two decisive contributions:
 │   │ Tier 1: Free Local ($0)  │ ──────► │                   │ ◄────► │ CPython Stdlib │ │
 │   │ Qwen 35B MoE, 27B Dense  │         │                   │        └────────────────┘ │
 │   ├──────────────────────────┤         │ evaluate_model_   │        ┌────────────────┐ │
-│   │ Tier 2: Budget Cloud     │ ──────► │   efficiency.py   │ ◄────► │ Mini-SQLite    │ │
+│   │ Tier 2: Budget Cloud     │ ──────► │   efficiency.py   │ ◄────► │ SemVer Solver  │ │
 │   │ DeepSeek V4.1, Gemini 3.8│         │                   │        └────────────────┘ │
 │   ├──────────────────────────┤         │ - Sandboxed env   │        ┌────────────────┐ │
-│   │ Tier 3: Mid Reasoners    │ ──────► │ - chmod 444 masks │ ◄────► │ Mini-Git       │ │
+│   │ Tier 3: Mid Reasoners    │ ──────► │ - chmod 444 masks │ ◄────► │ DAG Wave Engine│ │
 │   │ o3-mini, Claude Sonnet   │         │ - KV cache logs   │        └────────────────┘ │
-│   ├──────────────────────────┤         │ - Oracle diff     │        ┌────────────────┐ │
-│   │ Tier 4: Frontier Cloud   │ ──────► │ - mutmut mutants  │ ◄────► │ Raft Consensus │ │
+│   ├──────────────────────────┤         │ - Golden vectors  │        ┌────────────────┐ │
+│   │ Tier 4: Frontier Cloud   │ ──────► │ - mutmut mutants  │ ◄────► │ Workspace Sand │ │
 │   │ Gemini Argon, Opus, Sol  │         │ - Telemetry JSON  │        └────────────────┘ │
 │   └──────────────────────────┘         └─────────┬─────────┘        ┌────────────────┐ │
-│                                                  │                  │ Cleanroom Self │ │
+│                                                  │                  │ 2,000+ LOC Eng │ │
 │                                                  ▼                  └────────────────┘ │
 │                                        ┌───────────────────┐                           │
 │                                        │  RESEARCH PAPERS  │                           │
@@ -193,7 +207,7 @@ High-throughput, hyper-economical cloud endpoints enabling massive parallel suba
 
 1. **DeepSeek V4.1 Flash (Thinking Mode enabled)**:
    - *Pricing*: \$0.15 per 1M input tokens / \$0.60 per 1M output tokens.
-   - *Capabilities*: Multi-step reasoning with thinking traces, native multi-token prediction, automatic context caching (reducing multi-turn input costs by up to 75%).
+   - *Capabilities*: Multi-step reasoning with thinking traces, native multi-token prediction, automatic context caching (reducing multi-step input costs by up to 75%).
    - *Framework Role*: Primary low-cost cloud subagent driver, dual test certifier ($V$), and iterative implementation patcher. Matches older frontier models on multi-step tasks at a fraction of the cost.
 
 2. **Gemini 3.8 Flash**:
@@ -241,36 +255,58 @@ State-of-the-art enterprise frontier engines defining the theoretical performanc
 
 ---
 
-### Strategic Focus for Tier 3 & Tier 4 Models: Two Premier Anchor Targets
+### Three-Tier Target Size Hierarchy & Model Capacity Frontiers
 
-> [!NOTE]
-> **Economical Target Selection**: Due to API cost ceilings and operational efficiency, Tier 3 and Tier 4 models are **strictly evaluated against two high-leverage anchor benchmarks**, rather than running across the entire broad corpus. Tier 1 (`omlx`) and Tier 2 (DeepSeek / Gemini Flash) provide the continuous, high-volume execution across all components.
+Cleanroom calibrates benchmark task sizes across three distinct code-scale tiers, matching the empirical capability boundaries of local versus frontier models:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│               TIER 3 & TIER 4 SELECTIVE BENCHMARK EVALUATION MATRIX                    │
+│                     THREE-TIER TARGET SIZE HIERARCHY & MODEL CEILINGS                  │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                        │
-│   ANCHOR TARGET 1: Mini-SQLite Relational Query & B-Tree Storage Engine                │
-│   • Domain: Complex stateful systems code (B-tree rebalancing, 3-valued NULLs, ACID)   │
-│   • Golden Oracle: Canonical C sqlite3 binary (bit-for-bit differential verification)  │
-│   • Evaluates: RQ3 (Modularity: Monolith vs. Divided Units) & RQ4 (Soundness & Blame)  │
-│   • Models Tested: Claude 3.5/3.7 Sonnet, OpenAI o3-mini, Gemini 4 Argon, Claude Opus  │
+│   TIER A: CORE WORKHORSE MODULES (~500 LOC Lib Code)                                   │
+│   • Target: Generalized DAG Processing & Scheduling Engine (~500 LOC)                  │
+│   • Target: SemVer 2.0 Dependency Constraint & Backtracking Solver (~500 LOC)          │
+│   • Target: CPython graphlib (TopologicalSorter) & heapq (~300–400 LOC)                │
+│   • Model Scope: Universal baseline across ALL tiers (Local omlx to Frontier).         │
+│   • Purpose: High-volume iterative flights, coincident error tests (RQ1), and          │
+│     bipartite boundary invariant mining (RQ2).                                         │
 │                                                                                        │
-│   ANCHOR TARGET 2: CPython Algorithmic Systems Module (heapq & graphlib)               │
-│   • Domain: Pure algorithmic contracts, cycle detection, and tie-breaking invariants   │
-│   • Golden Oracle: Official CPython test suite (test.test_heapq, test.test_graphlib)   │
-│   • Evaluates: RQ1 (Coincident Error Breaking) & RQ2 (Bipartite Contract Mining)       │
-│   • Models Tested: Claude Sonnet, o3-mini, gpt-6.1-sol, Meta Muse Wonder Full          │
+│   TIER B: PRODUCTION SUBSYSTEMS (~1,000 LOC Lib Code)                                  │
+│   • Target: Ephemeral Sibling Workspace & Sandboxed Process Subsystem (~1,000 LOC)     │
+│   • Model Scope: Empirical capacity ceiling for Tier 1 Local Models (omlx Qwen 35B/27B)│
+│     and Tier 2 Budget Cloud (DeepSeek V4.1 / Gemini 3.8 Flash).                        │
+│   • Purpose: Empirically proving that local 35B models on Apple Silicon can compile    │
+│     ~1,000 LOC production systems without regression when isolated by Cleanroom.       │
+│                                                                                        │
+│   TIER C: HEAVYWEIGHT FRONTIER STRESS BENCHMARKS (2,000+ LOC Lib Code)                 │
+│   • Target: Complete Transactional Storage / Distributed Node Engine (2,000+ LOC)      │
+│   • Model Scope: Exclusively Tier 3 (o3-mini, Sonnet 3.7) & Tier 4 (Argon, Opus, Sol)  │
+│   • Purpose: Pushing models to the context limit; evaluating whether deep reasoning   │
+│     trees prevent attention degradation and instruction drift on 2,000+ line monoliths │
+│     versus Cleanroom's factored modular units (RQ3 Modularity Strategy).               │
 │                                                                                        │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-1. **Anchor Target 1: Mini-SQLite Engine (Systems Focus)**
-   - *Why It Matters*: Stateful systems software with pointer balancing, slotted page serialization, 3-valued boolean logic (`NULL = NULL` is NULL), and transactional rollback.
-   - *Significance for Tiers 3 & 4*: Tests whether frontier reasoning eliminates architectural deadlocks, correctly decomposes multi-file transactions, and discovers subtle boundary edge cases without regression churn.
-2. **Anchor Target 2: CPython Algorithmic Systems Module (`heapq` & `graphlib`) (Algorithmic Focus)**
-   - *Why It Matters*: Demonstrates the "Specification Gap" against official Python documentation, testing whether frontier reasoning captures intricate invariants (such as Tarjan SCC cycle detection and custom heap comparator tie-breaks) in fewer turns than budget models.
+---
+
+### Strategic Focus for Tier 3 & Tier 4 Models: 2,000+ LOC Stress Anchors
+
+> [!NOTE]
+> **Selective Frontier Stress Testing**: While Tier 1 (`omlx`) reliably executes ~500 to ~1,000 LOC tasks and Tier 2 handles high-volume sweeps, Tier 3 and Tier 4 models are **selectively deployed on 2,000+ LOC heavyweight targets** and algorithmic boundary anchors:
+
+1. **Anchor Target 1: Heavyweight Systems Engine (2,000+ LOC Stress Target)**
+   - *Domain*: Complex, stateful, multi-component systems software (e.g. transactional storage engine or end-to-end workspace lifecycle pipeline).
+   - *Evaluates*: **RQ3 (Modularity Strategy)**:
+     - *Monolith Condition*: Synthesizing the entire 2,000+ LOC system in a single shot. Local models fail; frontier models are stress-tested for attention dilution, CUJ edge-case omission, and regression churn.
+     - *Modular Cleanroom Condition*: The 2,000+ LOC system is decomposed into 4–5 decoupled units (~400–600 LOC each), enabling even Tier 1 local models to compile every component cleanly!
+   - *Models Tested*: Claude 3.5/3.7 Sonnet, OpenAI o3-mini, Gemini 4 Argon, Claude Opus 5.5, OpenAI gpt-6.1-sol, Meta Muse Wonder Full.
+2. **Anchor Target 2: CPython Algorithmic Systems Module (`heapq` & `graphlib`)**
+   - *Domain*: Pure algorithmic contracts, cycle detection, and tie-breaking invariants.
+   - *Golden Oracle*: Official CPython test suite (`test.test_heapq`, `test.test_graphlib`).
+   - *Evaluates*: RQ1 (Coincident Error Breaking) & RQ2 (Bipartite Contract Mining).
+   - *Models Tested*: Claude Sonnet, o3-mini, gpt-6.1-sol, Meta Muse Wonder Full.
 
 ---
 
@@ -300,13 +336,21 @@ To execute benchmarks deterministically across diverse platforms, Cleanroom maps
 1. **Option 1: Custom In-Process Loop Harness (`--harness loop`) with `omlx`**:
    - Universal adapter for **Local Models (Qwen 35B / 27B)** via the local **`omlx`** server on Apple Silicon.
    - Direct API client driver for **OpenAI (o3-mini, gpt-6.1-sol)**, **Anthropic (Sonnet 3.5/3.7, Opus 5.5)**, and **Meta Muse Wonder Full**.
-   - Drives deterministic multi-turn ReAct loop: prompt with active guide $\to$ tool invocation $\to$ deterministic verification gate (`bin/test`) $\to$ in-band metadata update.
+   - Drives deterministic multi-step ReAct loop: prompt with active guide $\to$ tool invocation $\to$ deterministic verification gate (`bin/test`) $\to$ in-band metadata update.
 2. **Option 4: Google Antigravity Subagent Harness**:
    - Native integration for **Gemini 3.8 Flash** and **Gemini 4 Argon**.
    - The coordinator executes zero code, issuing autonomous subagent invocations (`invoke_subagent`) bound to isolated sibling workspaces (`chmod 444`).
 3. **Option 4: DeepSeek Harness (`dsh`) & Direct JSON-RPC**:
    - Native integration for **DeepSeek V4.1 Flash**.
    - Communicates over non-blocking UNIX domain sockets and HTTP JSON-RPC directly with the DSH server, completely bypassing `flock` lease locks on `session.lock`.
+
+### Dynamic Model Catalog & Declarative Configuration
+
+To avoid code staleness, rate card hardcoding, or artificial vendor lock-in, Cleanroom decouples all model specifications, endpoint URLs, and token rate cards into declarative configuration files:
+- **Primary Source**: `~/.config/cleanroom/model_configs.toml` (managed via `app_info_ext` and user preferences).
+- **Fallback Candidate**: Repository-level candidate files (`model_configs.toml`) or environment overrides (`CLEANROOM_MODEL_CONFIG_FILE`).
+- **Canonical Starter Template & Schema**: `update_python_with_ai/templates/model_configs.toml` serves as the authoritative template and schema definition for initial provisioning via `cleanroom configure`.
+- **Dynamic Resolution (`model_config_ext`)**: The benchmark evaluator invokes `load_model_catalog()` to dynamically extract model profiles, pricing rates ($R_{\text{in}}^{\text{uncached}}$, $R_{\text{in}}^{\text{cached}}$, $R_{\text{out}}$), capability tiers (Tier 1 Local, Tier 2 Budget, Tier 3 Mid-Tier, Tier 4 Frontier), and default execution harnesses without modifying library code or AST signatures.
 
 ---
 
@@ -319,13 +363,13 @@ The benchmark suite directly implements the experimental evaluation protocols re
 
 | Research Question | Benchmark Scope & Subject System | Lean Scaled Units | Key Focus & Contrast |
 | :--- | :--- | :---: | :--- |
-| **RQ1: Coincident Errors** | CPython (`heapq`/`bisect`) & Mini-SQLite queries | **8 curated units** | Conditions 1–4; 8 Attractor State Ambiguity tests |
-| **RQ2: Bipartite Contracts** | CPython (`heapq`/`graphlib`) & Mini-SQLite | **10 boundary cases** | Directional vs. Bipartite; 2 Algorithmic Guides ($\mathcal{G}$) |
-| **RQ3: Modularity Strategy** | Mini-SQLite Engine (1 monolith vs. 3 `_impl` units) | **1 system (3 units)** | CUJ trap & mutation kill on 12 boundary edge cases |
-| **RQ4: Fail-Safe Soundness** | Cleanroom DAG & Mini-SQLite stubs | **6 ungrounding trials** | 2 deletions, 2 erasures, 2 contradictions; $B \in \{1,2,4\}$ |
-| **RQ5: Spec Evolution** | Mini-SQLite & CPython specs | **10 evolution tasks** | 4 additions, 3 alterations, 3 refactorings; 0 code edits |
-| **RQ6: Concurrency Soundness** | Mini-SQLite Pager & Workspace Lock Manager | **6 concurrency defects** | 2 races, 2 deadlocks, 2 async yields; 15 mutants |
-| **RQ7: Non-Functional Audit** | Mini-SQLite Event Stream Parser | **1 task (25k records)** | Hidden Firewall vs. Unblinded; 3 trials/condition |
+| **RQ1: Coincident Errors** | CPython (`heapq`/`graphlib`) & SemVer 2.0 Solver | **8 curated units** | Conditions 1–4; 8 Attractor State Ambiguity tests |
+| **RQ2: Bipartite Contracts** | CPython (`graphlib`) & Generalized DAG Wave Engine | **10 boundary cases** | Directional vs. Bipartite; 2 Algorithmic Guides ($\mathcal{G}$) |
+| **RQ3: Modularity Strategy** | Heavyweight Systems Subsystem (1 monolith vs. 4–5 units)| **1 system (2,000+ LOC)**| Monolithic collapse vs. Modular Tier 1 `omlx` compilation |
+| **RQ4: Fail-Safe Soundness** | Generalized DAG Engine & Workspace Sandbox stubs | **6 ungrounding trials** | 2 deletions, 2 erasures, 2 contradictions; $B \in \{1,2,4\}$ |
+| **RQ5: Spec Evolution** | SemVer 2.0 Solver & Generalized DAG Engine specs | **10 evolution tasks** | 4 additions, 3 alterations, 3 refactorings; 0 code edits |
+| **RQ6: Concurrency Soundness** | Workspace Sandboxing Subsystem & Lock Manager | **6 concurrency defects** | 2 races, 2 deadlocks, 2 async yields; 15 mutants |
+| **RQ7: Non-Functional Audit** | Log Stream & Event Pipeline Parser | **1 task (25k records)** | Hidden Firewall vs. Unblinded; 3 trials/condition |
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -334,7 +378,7 @@ The benchmark suite directly implements the experimental evaluation protocols re
 │                                                                                        │
 │   RQ1: Coincident Errors (8 Units) ──► Attractor State Ambiguity (8 cases, I=0 vs I>0) │
 │   RQ2: Bipartite Contracts (10 Cases) ──► Directional vs Bipartite; 2 Algo Guides (G)  │
-│   RQ3: Modularity Strategy ──► Mini-SQLite (1 Monolith vs 3 Units; 12 Edge Cases)      │
+│   RQ3: Modularity Strategy ──► Heavyweight Systems (2,000+ LOC Monolith vs 4-5 Units)  │
 │   RQ4: Compositional Soundness ──► 6 Controlled Spec Ungroundings; Batching B=1,2,4    │
 │   RQ5: Autonomous Evolution ──► 10 Evolution Tasks (4 add, 3 alter, 3 refactor)        │
 │   RQ6: Concurrency Soundness ──► 6 Injected Defects (2 races, 2 deadlocks, 2 async)    │
@@ -349,14 +393,14 @@ The benchmark suite directly implements the experimental evaluation protocols re
   1. Unconfined LLMs ($\mathcal{I}(P; V \mid S) > 0$) replicate coincident errors on edge cases;
   2. Task asymmetry under double-blind isolation ($\mathcal{I} = 0$, `chmod 444`) breaks error correlation, even with a single foundation model;
   3. Smaller local models (Qwen 35B / 27B via `omlx`) achieve near-zero defect escape rates under Cleanroom gatekeeping.
-- **Lean Scale**: **8 curated test units** (4 from CPython `heapq`/`bisect`, 4 from Mini-SQLite queries).
+- **Lean Scale**: **8 curated test units** (4 from CPython `heapq`/`graphlib`, 4 from SemVer 2.0 solver).
 - **Conditions**:
   - *Condition 1 (Task Homogeneity)*: Model generates two implementations $P_1, P_2$ from spec $S$ (classical N-version programming).
   - *Condition 2 (Joint Context / Baseline 2)*: Single agent generates both `lib.py` and `test.py` in the same conversational context ($\mathcal{I} > 0$).
   - *Condition 3 (Cleanroom Single-Model)*: Same model assigned to asymmetric tasks in physically isolated workspaces ($W_{\text{lib}}, W_{\text{test}}$) under `chmod 444` ($\mathcal{I} = 0$).
   - *Condition 4 (Cleanroom Heterogeneous)*: Different models assigned to primal and dual roles (e.g., DeepSeek for $P$, Gemini for $V$).
 - **Experiment 1 (The Attractor State Ambiguity Test)**:
-  - **8 curated tasks** containing deliberate specification ambiguities (e.g., `<` vs. `<=`, empty collection returns).
+  - **8 curated tasks** containing deliberate specification ambiguities (e.g., `<` vs. `<=`, empty collection returns, semver pre-release precedence).
   - Measures the shift from silent false convergence (shipping buggy code) to deterministic non-convergence / fail-stop with diagnostic blame.
 
 ### RQ2: Accidental Agreement Suppression & Branch-to-Spec Invariant Mining
@@ -364,14 +408,14 @@ The benchmark suite directly implements the experimental evaluation protocols re
 - **Objective**: Prove that:
   1. The **Bipartite Boundary Principle** ($\langle [s^+], [s^-] \rangle$) eliminates accidental agreement at domain boundaries;
   2. **Branch-to-Specification Invariant Mining** extracts latent edge cases from initial CUJ implementations and lifts surviving mutants into formal contracts.
-- **Lean Scale**: **10 curated boundary edge cases** (5 in CPython algorithmic modules, 5 in Mini-SQLite).
+- **Lean Scale**: **10 curated boundary edge cases** (5 in CPython algorithmic modules, 5 in Generalized DAG Wave Engine).
 - **Conditions**:
   - *Regimen A (Directional / One-Sided)*: Contracts specify only the positive condition ($\Phi(x) \implies \text{SuccessResult}(x)$).
   - *Regimen B (Cleanroom Bipartite)*: Contracts mandate dual atomic slugs ($\langle [s^+]: \Phi(x) \implies \text{Success}, [s^-]: \neg \Phi(x) \implies \text{Error} \rangle$).
 - **Experiment 2 (Weight Suppression Baseline / Algorithmic Guidance $\mathcal{G}$)**:
   - Evaluated on **2 classic algorithms** known to exhibit bugs in open-source training data:
     1. Tarjan's Strongly Connected Components (SCC) cycle detection in `graphlib`.
-    2. B-tree page rebalancing & underflow merging in Mini-SQLite.
+    2. Backtracking diamond dependency resolution and conflict explanation in SemVer 2.0 solver.
   - Group A: Spec only (model falls into training data attractor bug).
   - Group B: Spec paired with mathematically verified algorithmic guide ($\mathcal{G}$), neutralizing model weight bias.
 
@@ -382,10 +426,11 @@ The benchmark suite directly implements the experimental evaluation protocols re
   2. *Code Coverage Illusion*: Monoliths achieve $\ge 90\%$ statement coverage while missing boundary branches (mutation score $\le 40\%$), while modular units achieve 100% normalized coverage and $\ge 95\%$ mutation score.
   3. *Regression Churn*: Monoliths suffer 25–40% regression churn; modular units exhibit strictly 0.0% churn.
   4. *KV Cache & Token Economics*: Modular compilation re-uses cached static `.pyi` stubs, reducing marginal token burn by $> 75\%$.
-- **Lean Subject System**: Focused squarely on **Mini-SQLite Relational Query & B-Tree Storage Engine** (~1,500 LOC):
-  - *Condition Monolith*: `sqlite_engine_monolith_impl` (~1,500 LOC lib + 800 LOC test).
-  - *Condition Modular Cleanroom*: 3 Decoupled Units (`btree_pager_impl` ~450 LOC, `table_heap_impl` ~350 LOC, `query_exec_impl` ~500 LOC).
-- **Edge-Case Evaluation**: **12 high-impact domain boundary edge cases** (3-valued NULL comparisons, outer join row preservation on empty right tables, B-tree root page splits, secondary index key collision, transaction abort rollbacks).
+  5. *Democratization of Large-Scale Synthesis*: Proving that while 2,000+ LOC monolithic targets cause failure or severe regression churn even on frontier models, decomposing the system into 4–5 units (~400–600 LOC each) allows **Tier 1 Local Models (`omlx` Qwen 35B / 27B)** to compile the entire 2,000+ LOC system cleanly without cloud API costs!
+- **Subject System**: Evaluated on a **Heavyweight Systems Subsystem (2,000+ LOC)**:
+  - *Condition Monolith*: 1 massive single-file implementation (~2,000+ LOC lib + 1,200 LOC test). Tier 1 local models fail; Tier 3 & 4 frontier models suffer context degradation and high regression churn.
+  - *Condition Modular Cleanroom*: 4–5 Decoupled Units (~400–600 LOC each), each realizing a typed interface stub (`*.pyi`). Tier 1 local models succeed with 100% normalized coverage and 0% regression churn.
+- **Edge-Case Evaluation**: **12 high-impact domain boundary edge cases** verifying stateful recovery, boundary invariants, and inter-unit handoffs.
 
 ### RQ4: Compositional Soundness, Non-Contaminating Blame, & Fail-Safe Invariant
 
@@ -397,15 +442,15 @@ The benchmark suite directly implements the experimental evaluation protocols re
   - *2 Ungrounded Interface Deletions*: Strip imported method declarations or return types; verify Pass 1 static refusal before code synthesis.
   - *2 Boundary Contract Erasures*: Strip negative boundary slugs $[s^-]$; verify divergent completions or branch coverage failure.
   - *2 Injected Contradictory Invariants*: Inject conflicting postconditions; verify assertion deadlock and auditor blame escalation.
-- **DAG Concurrency Batching**: Evaluated at batch sizes $B \in \{1, 2, 4\}$ on Mini-SQLite modular units, measuring KV prompt-cache hit rates and parallel wall-clock speedup.
+- **DAG Concurrency Batching**: Evaluated at batch sizes $B \in \{1, 2, 4\}$ on Generalized DAG Wave Engine & Workspace Sandbox modular units, measuring KV prompt-cache hit rates and parallel wall-clock speedup.
 
 ### RQ5: Autonomous Specification-as-Bytecode Evolution
 
 - **Objective**: Validate the core thesis: can software undergo continuous evolution purely through specification edits, with 100% of executable code synthesized without human intervention?
-- **Lean Scale**: **10 realistic software evolution tasks** on Mini-SQLite and CPython specs:
-  - *4 Feature Additions*: e.g., adding `COUNT(DISTINCT)` aggregation, `NULLS FIRST` sort order.
-  - *3 Contract Modifications*: e.g., changing tie-breaking precedence, altering B-tree node split fill factor.
-  - *3 Modularity Refactorings*: e.g., extracting secondary index cursor iterators into a distinct protocol.
+- **Lean Scale**: **10 realistic software evolution tasks** on SemVer 2.0 Solver and Generalized DAG Engine specs:
+  - *4 Feature Additions*: e.g., adding hyphenated version range matching, priority wave weighting.
+  - *3 Contract Modifications*: e.g., changing tie-breaking precedence, altering cycle-detection error reporting format.
+  - *3 Modularity Refactorings*: e.g., extracting version constraint tokenizers into a distinct protocol.
 - **Protocol**: Human edits strictly `low/*.pyi`; Cleanroom DAG detects dirty nodes; workers converge to `CLEAN`; verify 0 manual edits in `lib/` or `tests/`.
 
 ### RQ6: Concurrency Soundness: Adversarial Interleaving & Specialized Triage
@@ -413,78 +458,159 @@ The benchmark suite directly implements the experimental evaluation protocols re
 - **Objective**: Evaluate the two-tier concurrency verification architecture (§2.10.4) and triage calculus (§4.3) across multi-threaded and asynchronous systems:
   1. *Concurrency Blind Spot*: Standard functional test generators ($\mathcal{D}_{\text{func}}$) achieve 100% statement coverage while missing data races and deadlocks.
   2. *Adversarial Interleaving Synthesis*: Concurrency certifier ($\mathcal{D}_{\text{conc}}$) synthesizes barrier stepping, phase latches, and conservation checks, exposing 100% of defects.
-  3. *Specialized Triage Arbiter ($\mathcal{A}_{\text{triage}}$)*: Inspects thread stack traces via `sys._current_frames()`, extracts wait-for dependency cycles, and emits abstract lock-ordering blame ($\le 3$ turn convergence).
-- **Lean Subject Systems**: Mini-SQLite Pager & Buffer Pool Latches, and Workspace Worktree Lock Manager.
+  3. *Specialized Triage Arbiter ($\mathcal{A}_{\text{triage}}$)*: Inspects thread stack traces via `sys._current_frames()`, extracts wait-for dependency cycles, and emits abstract lock-ordering blame ($\le 3$ round convergence).
+- **Lean Subject Systems**: Workspace Sandboxing Subsystem & Concurrency Lock Manager.
 - **Defect Suite**: **6 injected real-world concurrency defects** + **15 targeted concurrency mutants**:
-  - *2 Lost Update Races*: dirty page counter updated non-atomically; lease counter increment unsynchronized.
-  - *2 Lock Inversion Deadlocks*: buffer pool eviction lock vs. page latch inversion; worker task lock vs. lease lock.
-  - *2 Async `await` Interleaving Races*: TOCTOU race across `await` in workspace idle check; async WAL frame flusher yielding control during header write.
+  - *2 Lost Update Races*: dirty node counter updated non-atomically; lease counter increment unsynchronized.
+  - *2 Lock Inversion Deadlocks*: workspace cleanup lock vs. process monitor lock; worker task lock vs. lease lock.
+  - *2 Async `await` Interleaving Races*: TOCTOU race across `await` in workspace idle check; async process drain yielding control during buffer flush.
 
 ### RQ7: Non-Functional Auditing, Goodhart's Law Evasion, & Performance Deadlocks
 
 - **Objective**: Validate the Multi-Agent Auditing Matrix (§4.4) on non-functional optimization:
   1. *Goodhart's Law Evasion*: Proving the **Hidden Benchmark Firewall** ($\mathcal{I}(\text{Agent}; \text{Profiler}) = 0$) prevents metric gaming ($GDI \approx 1.04$), while unblinded agents overfit to proxies ($GDI = 4.82$) and collapse under out-of-distribution stress.
-  2. *Stateful Architectural Guidance*: Guiding agents to transition from list accumulation to zero-copy streaming generators in $\le 3$ turns with 0% functional regression.
-- **Lean Workload**: Scaled down to **25,000 JSON/CSV records** processed by the Mini-SQLite event stream parser under a $< 64\text{MB}$ memory ceiling, evaluated across 3 conditions with **3 trials each** (total 9 flights).
+  2. *Stateful Architectural Guidance*: Guiding agents to transition from list accumulation to zero-copy streaming generators in $\le 3$ rounds with 0% functional regression.
+- **Lean Workload**: Scaled down to **25,000 JSON/CSV records** processed by the Log Stream & Event Pipeline Parser under a $< 64\text{MB}$ memory ceiling, evaluated across 3 conditions with **3 trials each** (total 9 flights).
 
 ---
 
-## 5. Subject Systems & Golden Benchmark Corpora
+## 5. Subject Systems & Specification-Grounded Benchmark Corpora
 
-To eliminate evaluation bias, Cleanroom benchmarks systems software equipped with **pre-existing, independent ground-truth oracles**:
+> [!IMPORTANT]
+> **The Specification Primacy Invariant**: Having an external binary oracle (such as native `git` CLI) is meaningless without a formal, machine-checkable specification ($S = \langle \Sigma, \mathcal{C} \rangle$). Cleanroom does not generate code from thin air against test binaries; it compiles typed specifications. Therefore, benchmark targets are selected where specifications are **grounded in established standards (PEPs, RFCs, and formal contracts)** rather than requiring ad-hoc manual specification writing for synthetic toy problems.
 
-| Benchmark Suite | Domain & Key Challenges | Golden Oracle | Verification Method |
-| :--- | :--- | :--- | :--- |
-| **CPython Standard Library** | Algorithmic edge cases: `heapq`, `bisect`, `fnmatch`, `difflib`, `graphlib` | Canonical CPython test suite (`test.test_*`) | Differential execution against official test suite; Spec Gap analysis |
-| **Mini-SQLite Engine** | Relational algebra, B-trees, 3-valued NULLs, ACID rollback, buffer pool | Canonical C `sqlite3` binary | Bit-for-bit differential SQL query batches, error codes, row orders |
-| **Mini-Git Object DAG** | Content-addressable hashing, octal tree sorting, LCA commit reachability | Canonical `git` CLI & `libgit2` | `git fsck --full`, differential `git log`, `git cat-file`, `git merge-base` |
-| **Raft Distributed Consensus** | Leader election, log compaction, snapshot boundaries, split votes | TLA+ model traces & `PySyncObj` | Differential execution under simulated packet drops & partitions |
-| **Cleanroom Self-Hosting** | Compiler, AST linkers, DAG scheduler, sandbox runtime (11 packages, ~15k LOC) | Self-hosting compilation suite (`bin/test`) | Closed-world AST linking, 100% statement coverage, 0 Pyright errors |
+| Benchmark Suite | Code Size (Lib LOC) | Target Model Tiers | Specification Authority | Key System Invariants |
+| :--- | :---: | :---: | :--- | :--- |
+| **CPython `graphlib` & `heapq`** | **~280–350 LOC** | Universal (All Tiers) | PEP 603 / CPython Standard Library Spec | Cycle detection, dynamic node readiness, heap tie-breakers |
+| **Synchronous DAG Wave Engine (`dag_engine_lite`)** | **~280–350 LOC** | Universal (All Tiers) | Cleanroom Synchronous DAG Spec | Deterministic Kahn's sort, DP critical path, failure policies without concurrency |
+| **Concurrent DAG Wave Engine (`dag_engine`)** | **~480–520 LOC** | Universal (All Tiers) | Cleanroom Concurrent DAG Spec | Thread pool dispatch, barriers, async timeouts, cancellation sweeps |
+| **Option A: SemVer 2.0 & Backtracking Solver**| **~700–900 LOC** | Universal (All Tiers) | SemVer 2.0.0 RFC & PubGrub Spec | Caret/tilde range matching (`^0.0.x`), numeric/ASCII precedence, conflict graph |
+| **Option B: RFC 6902 JSON Patch & Merge Patch**| **~580–780 LOC** | Universal (All Tiers) | RFC 6902, RFC 6901, RFC 7396 | Pointer unescape order (`~1` before `~0`), cyclic move cycles, atomic rollback |
+| **Option C: Interval Set Algebra & Calendar**| **~620–860 LOC** | Universal (All Tiers) | ISO 8601 & RFC 5545 Recurrence | Abutting intervals `[a,b) ∪ [b,c)`, century leap rules, month-end clamping |
+| **Option D: Unified Diff & 3-Way Merge Engine**| **~650–900 LOC** | Universal (All Tiers) | Unified Diff (POSIX) & Git 3-Way Merge | Myers SES, false conflict deduplication, line offset drift, fuzzy context |
+| **Workspace Sandboxing Subsystem**| **~900–1,100 LOC**| **Tier 1 Local Ceiling (`omlx`)** & Tier 2 | Cleanroom Workspace & Isolation Spec | Ephemeral worktrees, POSIX `chmod 444` masks, process drains |
+| **Heavyweight Systems Engine** | **2,000+ LOC** | **Tier 3 & 4 Stress Ceiling** | Transactional Storage / Pipeline Spec | Multi-component transactions, B-tree balancing, WAL recovery |
 
-### CPython Standard Library Benchmark Suite
+### CPython Standard Library Benchmark Suite (`graphlib` & `heapq`)
+- **`graphlib.TopologicalSorter` (~280 LOC)**: Evaluates dynamic graph dependency scheduling, cycle detection, and state machine transitions (`prepare()`, `get_ready()`, `done()`, `is_active()`).
+- **`heapq` (~350 LOC)**: Evaluates binary heap invariants, custom comparator tie-breaks, and bisection search.
+- **Verification**: Evaluated directly against CPython's official test suites (`test.test_graphlib`, `test.test_heapq`).
+- **Specification Gap Analysis**: Demonstrates how formal bi-conditional Cleanroom contracts eliminate unstated boundary assumptions found in informal human documentation.
 
-The CPython Standard Library suite serves as the foundational algorithmic benchmark:
-- **`heapq`**: Binary heap priority queues, custom key tie-breaking, heap invariant maintenance.
-- **`bisect`**: Bisection search and insertion, boundary indexing on custom key extractors.
-- **`fnmatch`**: Shell-style wildcard pattern matching, regex compilation, escape sequence handling.
-- **`difflib`**: Sequence matcher, Myers diff heuristic, ratio calculations.
-- **`graphlib`**: Topological sorting, cycle detection, dynamic node readiness propagation.
+### Generalized DAG Wave Processing Engines (`dag_engine` vs. `dag_engine_lite`)
+- **`dag_engine_lite` (~280–350 LOC, Synchronous Baseline)**:
+  - Strips all concurrency, threading locks (`threading.RLock`), thread pools (`ThreadPoolExecutor`), async timeouts, and non-deterministic cancellation signals.
+  - Retains pure algorithmic and state-machine graph semantics:
+    - Directed acyclic graph construction and invariant validation (`NodeNotFoundError` on missing nodes).
+    - Tarjan / DFS cycle detection with exact cycle sequence reconstruction (`CycleError`).
+    - Deterministic topological ordering breaking ties by priority descending, then `node_id` ascending.
+    - Longest critical path computation using dynamic programming over topological order.
+    - Deterministic sequential wave scheduling and failure policies (`FAIL_FAST`, `CONTINUE_ON_ERROR`, `SKIP_DOWNSTREAM`).
+    - Node action retries up to configured counts and consolidated `DAGRunReport` generation.
+  - Eliminates defensive unreachable concurrency branches, preventing Coverage Arbiter deadlocks and providing a clean, 100% deterministic baseline for Tier 1 and Tier 2 models.
+- **`dag_engine` (~480–520 LOC, Concurrent Extension)**:
+  - Extends graph processing with asynchronous thread pool execution, configurable concurrency limits, thread-safe mutations, wall-clock timeout enforcement, and cancellation signal trapping across worker threads.
 
-**Specification Gap Analysis**:
-Official Python documentation was written for human developers and relies on unstated assumptions. Comparing reverse-engineered, contract-complete Cleanroom specifications against official Python documentation reveals:
-1. *Omitted Boundary Conditions*: Exception types on empty collections, tie-breaking behavior.
-2. *Implicit Type Coercions & Sentinels*: Behavior on unorderable types, generator exhaustion.
-3. *Unstated Invariants*: Pre- and post-conditions left implicit in prose.
+### Edge-Case Heavy Benchmark Corpora (500–1,000 LOC Target)
 
-### Mini-SQLite Relational Query & B-Tree Storage Engine
+A critical limitation of conventional software engineering and LLM evaluation is the **Code Coverage Illusion**: a test suite can effortlessly attain 100% executable statement and branch coverage while leaving the system completely broken on subtle domain boundary invariants, precedence rules, and edge-case combinations.
 
-Synthesizes a relational engine in Python:
-- B-tree page splits, balance-after-delete, slotted page offsets.
-- Relational scan, filter, projection, hash/nested-loop inner and left outer join.
-- 3-valued boolean logic (`NULL = NULL` is NULL, `NULL IS NULL` is TRUE).
-- Atomic transaction commit and rollback via shadow pager frames.
+To rigorously stress-test Cleanroom's Bipartite Boundary Principle ($\langle [s^+], [s^-] \rangle$), task asymmetry, and dual verification certifier ($\mathcal{D}: S \to V$), Cleanroom evaluates four specification-grounded benchmark corpora targeting **500 to 1,000 lines of `lib/*_impl.py` code**:
 
-### Mini-Git Content-Addressable Object & DAG Engine
+#### Option A: SemVer 2.0 Package Constraint & Backtracking Solver (~700–900 LOC)
+- **Specification Authority**: [SemVer 2.0.0 RFC](https://semver.org) and Cargo/npm SemVer Range Specification.
+- **Architectural Scope**:
+  1. *Version Parser & AST (~100–130 LOC)*: Strict parsing, validating numeric segment leading zero prohibition (e.g. `1.0.0-01` is strictly invalid, but `1.0.0-01a` is valid), build metadata parsing.
+  2. *Precedence Ordering Engine (~90–120 LOC)*: RFC §11 precedence algorithm comparing numeric segments as integers and alphanumeric segments as ASCII (`1.0.0-alpha.1 < 1.0.0-alpha.2 < 1.0.0-alpha.beta < 1.0.0-beta.2 < 1.0.0-beta.11 < 1.0.0-rc.1 < 1.0.0`), with build metadata strictly excluded from precedence comparison.
+  3. *Range Parser & Comparator AST (~180–240 LOC)*: Caret (`^`), tilde (`~`), wildcards (`*`, `x`), hyphen ranges (`1.2.3 - 2.3.4`), comparator sets (`>=1.2.3 <2.0.0`), unions (`||`), and prerelease exclusion rules.
+  4. *Range Satisfaction & Intersection Arithmetic (~110–150 LOC)*: Determining whether a version satisfies complex range constraints, computing constraint intersection and disjoint subsets.
+  5. *Backtracking Dependency Solver (~200–280 LOC, PubGrub-Lite)*: Given package versions and declared dependencies, finding mutually compatible version assignments, backtracking upon diamond conflicts, and emitting human-readable conflict explanation derivations when unsatisfiable.
+- **Why 100% Coverage is Deceptive**:
+  - `beta.2` vs `beta.11`: Naive string sorting places `beta.11` before `beta.2`. Comparing `alpha < beta` achieves 100% branch coverage on the comparison function, but fails on numeric sub-segments.
+  - Caret zero rules: `^1.2.3` permits `<2.0.0`, but `^0.2.3` permits only `<0.3.0` and `^0.0.3` permits only `<0.0.4`. A single `if major > 0: ... else: ...` gets 100% branch coverage with two simple tests, but completely misses the `0.0.x` edge case.
+  - A linear dependency solver passes all CUJ tests with 100% line coverage, yet fails or loops indefinitely on diamond cycles and conflict backtracks.
 
-Synthesizes Git core internals:
-- Object storage: Blob, Tree, Commit, and Tag serialization with zlib compression.
-- Content-addressable SHA-1 / SHA-256 object store.
-- Canonical octal tree entry sorting (directories sorted as if possessing a trailing `/`).
-- Directed Acyclic Graph traversal and Lowest Common Ancestor (LCA) merge-base resolution.
+#### Option B: RFC 6902 JSON Patch & RFC 7396 Merge Patch Engine (~580–780 LOC)
+- **Specification Authority**: IETF RFC 6902 (JSON Patch), RFC 6901 (JSON Pointer), RFC 7396 (JSON Merge Patch).
+- **Architectural Scope**:
+  1. *RFC 6901 JSON Pointer Resolver (~120–160 LOC)*: Strict escape sequence ordering (`~1` for `/` must be processed before `~0` for `~`), array index validation (rejecting leading zeroes `/01`), `-` append token, nested path navigation.
+  2. *RFC 6902 Patch Operations (~180–240 LOC)*: `add`, `remove`, `replace`, `move`, `copy`, `test` with array index shifting.
+  3. *Deep Structural Equality (~70–90 LOC)*: Strict typing distinctions (e.g. `1` vs `1.0`), nested dict/list equality.
+  4. *Circular Move Prevention (~60–80 LOC)*: Detecting and rejecting attempts to move a parent node into one of its own descendants (`move /a -> /a/b/c`).
+  5. *Transactional Journal & Atomic Rollback (~90–120 LOC)*: Step-by-step undo logging; if operation $k$ of $N$ fails, the entire document rolls back cleanly to its exact initial state with zero mutation leakage.
+  6. *RFC 7396 Merge Patch (~60–90 LOC)*: Recursive dict merging and explicit `null` deletions.
+- **Why 100% Coverage is Deceptive**:
+  - Escape ordering: If `~0` is replaced before `~1`, path `/a~01b` corrupts to `/a~/b` instead of `/a~1b`. Executing chained `.replace()` calls achieves 100% statement coverage while producing silent data corruption.
+  - Atomic rollback: Testing an invalid operation tests the error branch, but without checking whether preceding mutations were rolled back, leaving silent partial state pollution.
 
-### Deterministic Raft Distributed Consensus Engine
+#### Option C: Temporal Interval Set Algebra & Recurring Calendar Scheduler (~620–860 LOC)
+- **Specification Authority**: ISO 8601 interval arithmetic and RFC 5545 recurrence algebra.
+- **Architectural Scope**:
+  1. *Half-Open Interval Algebra (~90–120 LOC)*: `[start, end)` boundary inclusion, zero-width instant behavior `[t, t)`, intersection and subset checks.
+  2. *Disjoint Interval Set Operations (~160–210 LOC)*: Set union, intersection, difference, complement, and canonical coalescing of abutting intervals (`[1, 5) ∪ [5, 10) = [1, 10)`).
+  3. *Pure Gregorian Calendar Engine (~120–160 LOC)*: Century leap year rules ($Y \pmod{4} == 0 \land (Y \pmod{100} \neq 0 \lor Y \pmod{400} == 0)$), month-end clamping (e.g. `Jan 31 + 1 month = Feb 28/29`).
+  4. *Business Day & Holiday Conventions (~90–130 LOC)*: Following, Modified Following, and Preceding adjustment conventions with holiday exclusion masks.
+  5. *Recurrence Expansion (~160–240 LOC, RRule-Lite)*: Evaluating `FREQ`, `INTERVAL`, `BYDAY`, `BYMONTHDAY`, `COUNT`, `UNTIL`, and `SETPOS` filters.
+- **Why 100% Coverage is Deceptive**:
+  - Abutting intervals: Union of `[1, 5)` and `[5, 10)` merges into `[1, 10)`, but their intersection is strictly $\emptyset$. A naive inequality (`start <= other.end`) hits 100% coverage on basic intervals but corrupts boundary intersection.
+  - Leap centuries: Standard years (2020, 2024) provide 100% branch coverage while missing century non-leap years (1900, 2100).
+  - Month-end overflow: Adding 1 month to `March 31` gives `April 30`; subtracting 1 month from `March 31` gives `February 28/29`.
 
-Synthesizes Raft distributed consensus:
-- Leader election, randomized election timers, term step-downs.
-- AppendEntries RPC log replication, commit index progression.
-- Snapshot creation and log compaction truncation boundaries.
-- Resilient to out-of-order messages, duplicated RPCs, and simulated network partitions.
+#### Option D: Unified Diff Parser, 3-Way Text Merge & Patch Engine (~650–900 LOC)
+- **Specification Authority**: Unified diff format (POSIX) and Git 3-way merge semantics.
+- **Architectural Scope**:
+  1. *Unified Diff / Hunk Parser (~130–170 LOC)*: Chunk headers `@@ -l,s +l,s @@`, context lines, additions, deletions.
+  2. *Myers Diff Algorithm (~180–240 LOC)*: Shortest edit script (SES), diagonal vector search.
+  3. *3-Way Merge Core (~170–230 LOC)*: Diff3 chunking, clean merges, false conflict deduplication (identical edits on both branches merge cleanly without conflict).
+  4. *Conflict Marker Generation (~80–120 LOC)*: Emitting `<<<<<<<`, `=======`, `>>>>>>>` blocks, handling adjacent non-overlapping insertions.
+  5. *Patch Application with Offset Drift & Fuzzy Matching (~90–140 LOC)*: Line offset drift tracking, fuzz matching, and atomic rollback on hunk rejection.
+- **Why 100% Coverage is Deceptive**:
+  - False conflicts: If both branches make the exact same change, naive diffing marks it as a conflict. Tests checking only clean edits and conflicts achieve 100% branch coverage while missing false-conflict resolution.
+  - EOF newline discrepancies (`\ No newline at end of file`) cause silent off-by-one hunk misapplications.
 
-### Cleanroom Self-Hosting Production Systems Corpus
+### Ephemeral Sibling Workspace & Process Containment Subsystem (~1,000 LOC)
+- Serves as the **demonstrated capacity ceiling for Tier 1 Local Models (`omlx` Qwen 35B / 27B)**:
+  - Multi-tenant directory isolation and ephemeral branch setup.
+  - POSIX file permission masking (`chmod 444`) to enforce double-blind purity.
+  - Subprocess execution containment, asynchronous stream drains, timeout enforcement, and SIGINT/SIGTERM process tree cleanup.
+- Proves that local consumer models running under Cleanroom can reliably author ~1,000 LOC production systems with zero regression.
 
-The ultimate end-to-end integration benchmark: compiling Cleanroom with Cleanroom.
-- **11 core packages, 50+ units, ~15,000 LOC of verified Python systems code**.
-- Evaluates the production DAG scheduler (`parts/dag`), workspace provisioner (`parts/workspace`), AST linkers, in-band metadata parser (`parts/metadata`), and subagent coordinator (`parts/subagent`).
+### Heavyweight Frontier Stress Benchmark (2,000+ LOC)
+- Reserved exclusively for **Tier 3 (o3-mini, Claude Sonnet 3.5/3.7)** and **Tier 4 (Gemini 4 Argon, Claude Opus 5.5, OpenAI gpt-6.1-sol, Meta Muse)**:
+  - Combines multi-component transactional state machines, log compaction, B-tree balancing, and crash recovery replay.
+  - Directly evaluates **RQ3 (Modularity Strategy)**: proves that synthesizing 2,000+ LOC as a single monolithic implementation induces severe attention dilution and regression churn on even frontier models, whereas decomposing into 4–5 units (~400–600 LOC each) enables clean convergence.
+
+### Benchmarks Corpus Architecture & Dual-Specification Pattern (`benchmarks/parts/`)
+
+To separate production compiler tools from empirical research subjects, the benchmark corpus is housed in a standalone package tree:
+
+```
+benchmarks/
+├── __init__.py
+├── cleanroom_roles.toml           # Lean methodology: low -> spec_qa -> lib / test -> qa -> coverage
+└── parts/
+    ├── cleanroom.toml             # Target methodology: //benchmarks
+    └── dag_engine/
+        ├── __init__.py
+        ├── description.md         # Component overview & scope
+        └── low/
+            ├── dag_engine.pyi      # Interface Specification (Protocols, enums, exceptions, postconditions)
+            └── dag_engine_impl.pyi # Implementation Specification (Realizations, @override, GROUNDING algorithms)
+```
+
+#### The Cleanroom Dual-Specification Pattern
+Each benchmark unit requires two complementary typed stubs under `low/`:
+1. **Interface Specification (`<unit>.pyi`)**:
+   - Declares the public structural surface: abstract protocols, frozen parameter/result dataclasses, enums, and structured exception hierarchies.
+   - Specifies formal behavioral contracts via declarative `POSTCONDITIONS:`.
+2. **Implementation Specification (`<unit>_impl.pyi`)**:
+   - Concretely realizes the interface protocols (`class <Class>(<unit>.<Protocol>): ...`).
+   - Every realization method is decorated with `@operation` and `@override`.
+   - Embeds rich `GROUNDING:` algorithmic specifications (e.g., Kahn's topological sort, DFS cycle path reconstruction, thread pool wave clustering, dynamic programming critical paths) that guide neural code generation.
+3. **Tooling & Test Scaffold Compatibility**:
+   - `test_lint.py` inspects sibling interface specifications (`base_name[:-9] + ".pyi"`) to synthesize test obligations covering all contract postconditions.
+   - `lib_lint.py --scaffold` generates the realization skeleton (`lib/<unit>_impl.py`) with `__initialize__` lifecycle hooks and strict type annotations.
+   - Ephemeral `# CODE_HASH:` comments are stripped from stubs to prevent cache contamination and git churn.
 
 ### Prior-Knowledge Probing Protocol
 
@@ -518,7 +644,7 @@ To evaluate Cleanroom's contributions rigorously against standard industry pract
 │                                                                                        │
 │   BASELINE 2: Single-Agent Joint Context TDD (I > 0)                                   │
 │   • Single LLM generates both lib.py and tests/*_test.py from spec in same context.    │
-│   • Tests execute in loop; model self-patches until tests turn green.                  │
+│   • Tests execute in loop; model self-patches until tests pass.                       │
 │   • Subject to coincident errors and tautological self-affirmation.                    │
 │                                                                                        │
 │   BASELINE 3: Cleanroom Single-Model (I = 0, Task Asymmetry)                           │
@@ -569,13 +695,31 @@ To evaluate Cleanroom's contributions rigorously against standard industry pract
 
 | Metric | Symbol | Definition & Formula | Unit |
 | :--- | :---: | :--- | :---: |
-| **Convergence Turns** | $T_{\text{conv}}$ | Iterative compilation rounds required to reach certified $\mathbf{CLEAN}$ | Integer turns |
-| **Gross Token Expenditure** | $\text{Tokens}_{\text{total}}$ | Total input tokens + output tokens consumed per converged target | Tokens |
-| **KV Cache Hit Rate** | $\text{Cache}_{\text{hit}}$ | $\frac{\text{Cached Input Tokens}}{\text{Total Input Tokens}}$ on static `.pyi` interface stubs | Percentage ($\%$) |
-| **Monetary Cost per Target** | $\text{Cost}_{\text{target}}$ | Total API cost consumed per certified unit | \$ USD |
+| **Non-Cached Inbound Tokens** | $T_{\text{in}}^{\text{uncached}}$ | Fresh prompt tokens requiring full compute ($T_{\text{in}} - T_{\text{in}}^{\text{cached}}$) | Tokens |
+| **Cached Inbound Tokens** | $T_{\text{in}}^{\text{cached}}$ | Reused prompt context retrieved from KV cache (stubs, prompts) | Tokens |
+| **Outbound Tokens** | $T_{\text{out}}$ | Total synthesized completion tokens | Tokens |
+| **Prompt Cache Hit Rate** | $\eta_{\text{cache}}$ | $\frac{T_{\text{in}}^{\text{cached}}}{T_{\text{in}}^{\text{cached}} + T_{\text{in}}^{\text{uncached}}}$ on static `.pyi` interface stubs | Percentage ($\%$) |
+| **Generation Throughput** | $\text{TPS}$ | $\frac{T_{\text{out}}}{t_{\text{step}}}$ (evaluates local Apple Silicon `omlx` execution) | Tokens / Sec |
+| **Monetary Cost per Target** | $\text{Cost}_{\text{target}}$ | $(T_{\text{in}}^{\text{uncached}} \cdot R_{\text{in}} + T_{\text{in}}^{\text{cached}} \cdot R_{\text{cached}} + T_{\text{out}} \cdot R_{\text{out}})$ (\$0 for local) | \$ USD |
 | **Cost per Certified LOC** | $\$ / \text{LOC}$ | $\frac{\text{Total Compilation Cost}}{\text{Verified Lines of Target Executable Code}}$ | \$ USD / LOC |
+| **Step Latency** | $t_{\text{step}}$ | Elapsed time per model step from dispatch to response arrival | Seconds |
 | **Wall-Clock Latency** | $t_{\text{wall}}$ | End-to-end elapsed time from dirty trigger to `CLEAN` stamp | Seconds |
-| **Regression Churn Rate** | $R_{\text{churn}}$ | Percentage of turns where fixing defect $A$ introduces new defect in feature $B$ | Percentage ($\%$) |
+| **Convergence Rounds** | $R_{\text{conv}}$ | Iterative role executions required to reach certified $\mathbf{CLEAN}$ | Integer rounds |
+| **Role Execution Rounds** | $R_{\text{role}}$ | Execution count per role short name (e.g., `lib`, `test`, `qa`, `coverage`) | Mapping / Integer |
+| **Regression Churn Rate** | $R_{\text{churn}}$ | Percentage of rounds where fixing defect $A$ introduces new defect in feature $B$ | Percentage ($\%$) |
+
+### Distinction Between Steps and Rounds (Strict Elimination of "Turn")
+
+To eliminate ambiguity between low-level model interactions and macro convergence cycles, Cleanroom standardizes exclusively on **steps** and **rounds**, strictly deprecating and prohibiting the ambiguous term **"turn"**:
+- **Step**: A single prompt $\leftrightarrow$ tool-call interaction cycle between the harness and the agent/model (prompt $\to$ reasoning / tool invocation $\to$ tool response $\to$ completion).
+- **Round**: A full Cleanroom role dispatch wave or execution pass across assigned targets (from role dispatch into a role workspace until completion, submission, blame, or exhaustion). A round encompasses all model steps executed within that role dispatch pass. If a role is re-entered (e.g. after downstream `qa` or `coverage` rejection, or re-run due to dirty loop propagation), that re-entry initiates a subsequent round.
+
+### Role Execution Rounds & Convergence Efficiency
+
+Benchmark telemetry focuses strictly on **rounds** and **steps**:
+- **Role Short Name Normalization**: Roles are dynamically identified by their short names (e.g., `lib`, `test`, `qa`, `coverage`, `low`, `spec_qa`) rather than static enumerations.
+- **Harvesting Sources**: Parsed from runner execution logs (`Starting cleaning pass for root ...#<role>`, `.cleanroom_round_task_<role>_<counter>_<ts>.log`, `.cleanroom_round_dsh_<role>_<ts>.log`, `.cleanroom_round_<role>_<ts>.log`, with backward compatibility for `.cleanroom_turn_*`) and task prompt headers (`- Role: <role>`).
+- **Telemetry Metric**: Expressed as `role_rounds: Dict[str, int]` (e.g., `{"lib": 2, "test": 1, "qa": 2, "coverage": 1}`) with total rounds $\sum R_{\text{role}}$, enabling cross-model comparisons of where reasoning effort and token budgets are expended during convergence.
 
 ### Systems, Concurrency & Quality Metrics
 
@@ -586,6 +730,60 @@ To evaluate Cleanroom's contributions rigorously against standard industry pract
 | **Blame Information Leakage** | $\mathcal{I}_{\text{blame}}$ | Mutual information / token n-gram overlap between $P$ and $V$ via blame channel | **$0.0\text{ bits}$** |
 | **Spec-to-Code Density** | $\rho_{\text{density}}$ | $\frac{\text{Lines of Specification } S}{\text{Lines of Target Code } P + \text{Lines of Tests } V}$ | **$\rho \ll 1.0$** |
 | **DAG Parallel Speedup** | $S_B$ | Speedup factor when compiling DAG with batch concurrency $B \in \{1, 2, 4, 8\}$ | Ratio ($> 1.0$) |
+
+### Normalized Telemetry Schema & Event Stream Invariant
+
+Every interaction step and benchmark flight emits a structured JSON event record into `logs/benchmarks/<flight_id>.json`:
+
+```json
+{
+  "flight_id": "flight_20261019_184044_qwen3_6-35b-a3b_cpython_heapq",
+  "timestamp": "2026-10-19T18:40:44.920331+00:00",
+  "rq": "RQ1",
+  "model": {
+    "identifier": "qwen3.6-35b-a3b",
+    "tier": 1,
+    "provider": "omlx",
+    "quantization": "6-bit (MTP)",
+    "endpoint": "http://localhost:8000/v1"
+  },
+  "benchmark_unit": {
+    "suite": "cpython",
+    "task_id": "cpython_heapq",
+    "archetype": "Algorithmic / Prior-Knowledge Attractor",
+    "spec_loc": 180,
+    "target_lib_loc": 310
+  },
+  "methodology": "cleanroom",
+  "stages_executed": [
+    "high", "planning", "scenarios", "low", "spec_qa", "lib", "test", "qa", "coverage"
+  ],
+  "measurements": {
+    "inbound_tokens_uncached": 3240,
+    "inbound_tokens_cached": 7559,
+    "outbound_tokens": 5580,
+    "total_tokens": 16379,
+    "financial_cost_usd": 0.0,
+    "turn_latencies_seconds": [2.4, 3.1, 2.9, 4.2],
+    "wall_clock_seconds": 0.06,
+    "role_rounds": {
+      "lib": 1,
+      "test": 1,
+      "qa": 1,
+      "coverage": 1
+    }
+  },
+  "verification_outcomes": {
+    "spec_linter_pass": true,
+    "pyright_errors": 0,
+    "unit_tests_passed": 15,
+    "unit_tests_failed": 0,
+    "line_coverage_pct": 96.4,
+    "branch_coverage_pct": 92.1,
+    "mutation_score_pct": 0.0
+  }
+}
+```
 
 ---
 
@@ -607,18 +805,18 @@ The automated benchmarking toolchain operationalizes Task 2 from [`todo.md`](fil
 │      - Applies OS chmod 444 masks to upstream stubs; sets isolated PYTHONPATH          │
 │                                                                                        │
 │   2. MULTI-MODEL ADAPTER DISPATCH                                                      │
-│      - Option 1 (Loop Harness): Local Ollama/vLLM, OpenAI, Anthropic, Meta endpoints   │
+│      - Option 1 (Loop Harness): Local omlx (Apple Silicon), OpenAI, Anthropic, Meta    │
 │      - Option 4 (Antigravity): Gemini Flash/Argon via subagent coordinator directive   │
 │      - Option 4 (DSH): DeepSeek V4.1 via direct JSON-RPC socket streaming              │
 │                                                                                        │
 │   3. TWO-PASS GATEWAY VERIFICATION & MUTATION RUNNER                                   │
 │      - Pass 1: Static syntax, Pyright type check, closed-world symbol linking          │
 │      - Pass 2: Hermetic test execution, 100% normalized statement coverage             │
-│      - Differential Oracle: Diff against C sqlite3, native git, CPython test suite     │
+│      - Differential Oracle: Golden test vectors (CPython test_*, SemVer RFC suites)    │
 │      - Mutation Testing: Injects first-order boundary mutants via mutmut               │
 │                                                                                        │
 │   4. TELEMETRY AGGREGATION & REPORT EMISSION                                           │
-│      - Records tokens, turn latency, KV cache hits, cost per LOC, defect escape        │
+│      - Records tokens, step latency, KV cache hits, cost per LOC, defect escape        │
 │      - Emits structured JSON event logs (logs/benchmarks/<run_id>.json)                │
 │      - Generates comparative Markdown & publication-ready LaTeX tables                 │
 │                                                                                        │
@@ -633,14 +831,14 @@ The benchmarking CLI provides fine-grained controls for time-calibrated experime
 # High-volume execution across budget and local models on CPython Standard Library
 uv run bin/evaluate_model_efficiency.py \
   --suite=cpython \
-  --models=qwen-35b,deepseek-v4,gemini-3.8 \
+  --models=qwen-moe-q6,deepseek-v41-flash,gemini-3.8-flash \
   --rq=rq1 \
   --units=8 \
   --output=reports/cpython_rq1_budget.md
 
-# Targeted Anchor Run for Tier 3 & Tier 4 on Mini-SQLite (Anchor Target 1)
+# Targeted Anchor Run for Tier 3 & Tier 4 on Heavyweight Systems Engine (Anchor Target 1)
 uv run bin/evaluate_model_efficiency.py \
-  --suite=mini-sqlite \
+  --suite=heavyweight-systems \
   --anchor=systems \
   --models=o3-mini,sonnet-3.7,gemini-4-argon,claude-opus \
   --rq=rq3 \
@@ -656,16 +854,16 @@ uv run bin/evaluate_model_efficiency.py \
   --units=10 \
   --mutation-testing
 
-# Evaluate Controlled Spec Ungroundings (RQ4) with lean 6 injections
+# Evaluate Controlled Spec Ungroundings (RQ4) on Generalized DAG Engine
 uv run bin/evaluate_model_efficiency.py \
-  --suite=mini-sqlite \
+  --suite=dag-engine \
   --rq=rq4 \
   --ungrounded-injections=6 \
   --batch-sizes=1,2,4
 
-# Evaluate Concurrency Soundness (RQ6) with lean 6 defects and specialized triage
+# Evaluate Concurrency Soundness (RQ6) on Workspace Sandboxing Subsystem
 uv run bin/evaluate_model_efficiency.py \
-  --suite=concurrent-sqlite \
+  --suite=workspace-sandbox \
   --rq=rq6 \
   --concurrency-defects=6 \
   --mutation-testing
@@ -694,16 +892,215 @@ The adapter engine abstracts underlying model communication protocols:
 - **`GeminiAdapter`**: Communicates with Gemini 3.8 Flash and Gemini 4 Argon via Google Antigravity or `google-genai` SDK, tracking 1M-context prompt caches.
 - **`OpenAIAdapter` / `AnthropicAdapter`**: Drives o3-mini, gpt-6.1-sol, Claude Sonnet 3.5/3.7, and Claude Opus 5.5, tracking reasoning tokens and tool invocations.
 
+### Run Archival & Workspace Draining Protocol (`benchmarks/results/`)
+
+To prevent cross-flight cache contamination, state bleed, or accidental reuse of synthesized code across model runs, Cleanroom enforces a strict archival and draining lifecycle around every benchmark flight:
+
+```
+benchmarks/results/
+└── <benchmark-id>/
+    └── <model-name+harness-name>/
+        ├── lib_1.py       # Run 1 synthesized library implementation (with empirical comment header)
+        ├── test_1.py      # Run 1 synthesized candidate test suite
+        ├── lib_2.py       # Run 2 synthesized library implementation
+        └── test_2.py      # Run 2 synthesized candidate test suite
+```
+
+1. **Pre-Flight Workspace Drain (`drain_unit_workspace`)**:
+   - Before executing a benchmark flight, `drain_unit_workspace()` wipes any pre-existing code and tests under `unit_dir/lib` and `unit_dir/tests`, and purges any ephemeral `role_workspaces/` matching the unit.
+   - This marks the unit `DIRTY` in the Cleanroom DAG and forces synthesis strictly from typed specifications under `low/*.pyi`.
+2. **Post-Flight Sequential Archival (`archive_flight_artifacts`)**:
+   - Synthesized candidate files are saved to `benchmarks/results/<benchmark-id>/<model-name+harness-name>/`.
+   - The evaluator dynamically resolves the next sequential run index $N \in \{1, 2, \dots\}$.
+   - `test_<N>.py` archives the raw unit test suite synthesized by the test role worker.
+   - `lib_<N>.py` prepends a comprehensive, machine-readable metrics comment block directly above the synthesized library code:
+     ```python
+     # ==============================================================================
+     # Cleanroom Empirical Benchmark Flight Metrics
+     # Flight ID: flight_20261019_210821_Qwen3_6-35B-A3B-oQ6-mtp_dag_engine
+     # Timestamp: 2026-10-19T21:08:21.124681+00:00
+     # Benchmark Task: dag_engine
+     # Model: Qwen3.6-35B-A3B-oQ6-mtp (Tier 1)
+     # Harness: loop
+     # Run Index: 1
+     #
+     # Telemetry Measurements:
+     #   Uncached Inbound Tokens: 6,300
+     #   Cached Inbound Tokens:   14,699
+     #   Outbound Tokens:         9,000
+     #   Total Tokens:            29,999
+     #   Financial Cost ($USD):   $0.0000
+     #   Wall Clock Duration:     0.01s
+     #   Step Latencies (s):      [2.4, 3.1, 2.9, 4.2]
+     #   Role Execution Rounds:   coverage: 1, lib: 1, qa: 1, test: 1 (Total: 4)
+     #
+     # Verification Outcomes:
+     #   Spec Linters Pass:       True
+     #   Pyright Errors:          0
+     #   Unit Tests Passed:       25
+     #   Unit Tests Failed:       0
+     #   Line Coverage:           96.4%
+     #   Branch Coverage:         92.1%
+     #   Mutation Score:          0.0%
+     # ==============================================================================
+     ```
+3. **Post-Flight Workspace Drain**:
+   - Following archival, `drain_unit_workspace()` is executed again to cleanse `lib/` and `tests/` in the subject directory, ensuring subsequent model runs operate on an unpolluted filesystem.
+
 ### Artifact, JSON Telemetry & LaTeX Table Emitter
 
 Every benchmarking run produces:
-1. **Raw Telemetry Stream (`logs/benchmarks/<run_id>.json`)**: Turn-by-turn event logs recording model prompts, tool responses, token counts, execution latency, and verification outcomes.
+1. **Raw Telemetry Stream (`logs/benchmarks/<run_id>.json`)**: Step-by-step event logs recording model prompts, tool responses, token counts, execution latency, and verification outcomes.
 2. **Markdown Evaluation Report (`reports/<run_id>.md`)**: Human-readable comparative report with executive summaries, cost analysis, and pass/fail breakdowns.
 3. **Publication-Ready LaTeX Tables (`reports/latex/rq<N>_table.tex`)**: Formatted LaTeX tables ready for direct inclusion in the research paper submission.
 
 ---
 
-## 9. Actionable Implementation Roadmap & Milestones
+## 9. Empirical Case Study & Code Quality Analysis: Generalized DAG Wave Processing Engine
+
+To validate Cleanroom's empirical benchmarking suite and evaluate code generation fidelity under double-blind isolation ($\mathcal{I} = 0$), a comprehensive benchmark flight was executed across four distinct model configurations on the **Generalized DAG Wave Processing Engine (`benchmarks/parts/dag_engine`)**. 
+
+The subject system comprises ~500 LOC of formal specification under `low/dag_engine.pyi`, declaring three primary service protocols:
+- `DAG`: Directed acyclic graph structure, edge validation, cycle detection (Tarjan/DFS), root/leaf discovery, and critical path calculation.
+- `WaveScheduler`: Topological wave clustering, dynamic node state management (`PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `SKIPPED`, `CANCELLED`), and failure policy enforcement (`FAIL_FAST`, `CONTINUE_ON_ERROR`, `SKIP_DOWNSTREAM`).
+- `DAGRunner`: Async/concurrent wave dispatch, thread pooling, timeout enforcement, cancellation sweeps, and execution reporting.
+
+### Benchmark Overview & Subject System
+
+The benchmark evaluated whether autonomous models could compile typed specifications into complete, production-grade library implementations and corresponding unit test suites without human intervention, while preserving double-blind isolation and strict black-box encapsulation.
+
+The four evaluated model configurations span Tier 1 (Free Local) and Tier 2 (Budget Cloud):
+1. **Gemini 3.8 Flash (`gemini-3.8-flash+antigravity`)**: Google Antigravity harness, Tier 2 Budget Cloud.
+2. **DeepSeek Flash (`deepseek-flash+dsh`)**: DeepSeek Harness (DSH), Tier 2 Budget Cloud.
+3. **Qwen 3.6 35B MoE (`Qwen3.6-35B-A3B-oQ6-mtp+dsh`)**: Local Apple Silicon 6-bit quantized MoE, Tier 1 Local via DSH.
+4. **Qwen Flash Next 288 (`qwen-flash-next-288-q4+dsh`)**: Quantized high-capacity local model, Tier 1 Local via DSH.
+
+### Cross-Model Telemetry & Empirical Outcome Matrix
+
+| Model Identifier | Tier & Harness | Inbound Tokens (Uncached / Cached) | Outbound Tokens | Role Rounds ($R_{\text{role}}$) | Unit Tests (Pass/Fail) | Pyright Errors | Stmt / Branch Coverage | Final Status |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Gemini 3.8 Flash** | Tier 2 (Antigravity) | 3,976,025 / 2,746,478 | 82,900 | Lib: 1, Test: 1, QA: 1, Cov: 1 | 51 / 0 | 0 | 100.0% / 100.0% | **Clean Pass (Gold Standard)** |
+| **DeepSeek Flash** | Tier 2 (DSH) | 325,896 / 184,210 | 28,110 | Lib: 1, Test: 2, QA: 2, Cov: 1 | 51 / 0 | 0 | 100.0% / 100.0% | **Pass (Scaffolding Repaired)** |
+| **Qwen 3.6 35B MoE** | Tier 1 (DSH) | 1,759,795 / 842,100 | 48,320 | Lib: 2, Test: 4, QA: 3, Cov: 2 | 50 / 0 | 0* | 96.4% / 92.1% | **Compromised (White-Box Hacks)** |
+| **Qwen Flash Next 288**| Tier 1 (DSH) | 1,977,131 / 912,400 | 56,840 | Lib: 1, Test: 8, QA: 1, Cov: 8 | 55 / 0 | 0 | 97.2% / 91.8% | **Deadlock (Impasse Exhaustion)**|
+
+*\*Note: Qwen 35B passed Pyright only by employing `cast(Any, ...)` type-erasure hacks in test code to bypass static checking of uncontracted methods.*
+
+---
+
+### Qualitative Code Quality Analysis by Model
+
+#### 1. Gemini 3.8 Flash (`gemini-3.8-flash+antigravity`) — Gold Standard Exemplar
+- **Architectural & Contract Fidelity**: Gemini 3.8 Flash exhibited exemplary architectural discipline. Target classes (`DAG`, `WaveScheduler`, `DAGRunner`) adhered strictly to `low/dag_engine.pyi`. Zero uncontracted public methods or properties were hallucinated.
+- **Dependency & Lifecycle Resolution**: Correctly resolved inter-singleton dependencies via constructor injection and the Cleanroom lifecycle registry (`get_singleton`). `DAGRunner` obtained `WaveScheduler` dynamically respecting lifecycle tier boundaries, without requiring artificial configuration methods.
+- **Test Suite Purity (True Black-Box)**: `test_1.py` contains 51 unit test cases derived purely from contractual invariants (`INVARIANTS:`) and operational postconditions (`POSTCONDITIONS:`). Tests interacted with targets exclusively through public typed protocols.
+  - **Zero `cast(Any, ...)` bypasses**: All arguments and assertions used nominal domain types.
+  - **Zero private member accesses**: No inspection or mutation of `obj._*` attributes.
+  - **Zero dynamic reflection**: Neither `getattr()` nor `setattr()` was invoked.
+- **Auditing Behavior**: The QA Arbiter and Coverage Arbiter evaluated test failures and coverage deficits strictly against `low/dag_engine.pyi`, producing non-contaminating blame feedback that never leaked implementation details. Concluded in exactly 1 round per role.
+
+#### 2. DeepSeek Flash (`deepseek-flash+dsh`) — High Algorithmic Competence with Encapsulation Leak
+- **Algorithmic Quality**: DeepSeek synthesized mathematically elegant, robust implementations of Tarjan's cycle detection, dynamic critical path memoization, and thread-pooled wave execution.
+- **Scaffolding & Import Fragility**: Exposed a defect in early Cleanroom scaffolding: test scaffolding emitted unrooted imports (`from lib import dag_engine_impl`), which worked in single-directory test runners but raised `ModuleNotFoundError` during repo-wide collection. Once the framework was hardened to mandate package-qualified imports (`from benchmarks.parts.dag_engine.lib.dag_engine_impl import DAG`), the module passed cleanly.
+- **Test Encapsulation Leak**: In `test_1.py`, to test the `CONTINUE_ON_ERROR` failure policy, the test worker used dynamic reflection (`getattr(runner, '_scheduler')`) to inspect private runner state rather than observing public return values or querying the shared lifecycle scope. While functional, this breached strict black-box encapsulation.
+
+#### 3. Qwen 3.6 35B MoE (`Qwen3.6-35B-A3B-oQ6-mtp+dsh`) — Severe Interface Hallucination & Auditor Collapse
+- **Hallucinated Multi-Phase Initialization**: Failed to wire dependencies through the constructor or lifecycle registry. Instead, Qwen invented ad-hoc public configuration methods:
+  - `WaveScheduler.configure(dag: DAG, failure_policy: FailurePolicy)`
+  - `DAGRunner.configure(dag: DAG, scheduler: WaveScheduler)`
+  Calling `DAGRunner.run()` without prior invocation of `configure()` raised `RuntimeError("DAGRunner not configured")`. Neither method existed in `low/dag_engine.pyi`.
+- **White-Box Testing Evasions**: Because `configure()` was absent from the specification protocol, Pyright flagged it as a type error in `test_1.py`. To force the build to pass, Qwen employed type-erased casts:
+  ```python
+  # Qwen test_1.py white-box bypasses:
+  cast(Any, scheduler).configure(dag, failure_policy=failure_policy)
+  cast(Any, runner).configure(dag, scheduler)
+  ```
+  This hack appeared across 44 lines of test code. Furthermore, to force error-branch coverage, the test directly mutated private internal dictionary state: `cast(Any, dag)._nodes.pop("a")` and `dag._states["a"] = ...`.
+- **Auditor Contamination**: The most critical failure occurred in the QA Arbiter. In rounds 263 and 265, rather than auditing failures against `low/dag_engine.pyi` and blaming `lib` for inventing uncontracted methods, QA inspected `lib`'s implementation and explicitly commanded `test` in blame feedback:
+  > *"Retrieve WaveScheduler from scope and configure the runner: cast(Any, runner).configure(dag, scheduler)"*
+  This represented a total collapse of the double-blind isolation invariant ($\mathcal{I} = 0$), where an auditor contaminated the test worker with internal implementation symbols.
+
+#### 4. Qwen Flash Next 288 (`qwen-flash-next-288-q4+dsh`) — Defensive Branch Reachability Deadlock
+- **The Defensive Code Trap**: `lib` implemented defensive sanity checks protecting internal assumptions (e.g. pre-scheduling cancellation sweeps, unreachable timeout re-raises) that were impossible to trigger through valid public inputs.
+- **Coverage Arbiter Impasse**: The Coverage Arbiter repeatedly blamed `test` for failing to cover these statements, driving coverage from 96.2% to 97.2% before plateauing. Over 8 rounds, the test worker wrote increasingly desperate tests trying to trip unreachable lines.
+- **Worker-Auditor Deadlock**: The test worker correctly noted in its header:
+  > *"Coverage of these spans cannot be reproduced... lib/dag_engine_impl.py stubs raise NotImplementedError... no further test authoring can drive code that does not exist here."*
+  Because the Coverage Arbiter lacked a mechanism to attribute unreachable defensive branches to `lib` for pragma annotation, the flight exhausted its turn budget in an infinite circular impasse.
+
+---
+
+### Pathological Anti-Patterns: Interface Hallucination, White-Box Evasions & Auditor Contamination
+
+The empirical analysis of the Qwen benchmark flight surfaced three interconnected failure modes that threaten automated cleanroom software engineering:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        THE CLEANROOM CONTAMINATION CASCADE                             │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│   1. LIB ROLE: INTERFACE HALLUCINATION                                                 │
+│      Lib author fails to use get_singleton() -> Invents uncontracted configure()       │
+│      Calling runner.run() raises RuntimeError("DAGRunner not configured")              │
+│                                                                                        │
+│                                     │                                                  │
+│                                     ▼                                                  │
+│                                                                                        │
+│   2. QA ROLE: DOUBLE-BLIND CONTAMINATION LEAK                                          │
+│      QA Arbiter reads lib implementation instead of low/*.pyi                          │
+│      Blame feedback commands test: "Call cast(Any, runner).configure(dag, scheduler)"  │
+│                                                                                        │
+│                                     │                                                  │
+│                                     ▼                                                  │
+│                                                                                        │
+│   3. TEST ROLE: WHITE-BOX HACK & TYPE-ERASURE BYPASS                                   │
+│      Pyright flags configure() missing from Protocol                                   │
+│      Test author writes cast(Any, runner).configure(...) and dag._nodes.pop()           │
+│                                                                                        │
+│                                     │                                                  │
+│                                     ▼                                                  │
+│                                                                                        │
+│   4. MECHANISTIC SANITY CHECK FALSE POSITIVE                                           │
+│      Linters pass (0 errors), Pyright passes (types erased), tests pass (100% green)   │
+│      => SYSTEM SHIPS BROKEN, UNUSABLE CODE DESPITE "100% VERIFIED" STATUS              │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Interface Hallucination (Lib)**: When small or quantized models struggle with multi-tier lifecycle resolution, they invent local, multi-phase setup methods (`configure()`, `setup()`) to wire dependencies imperatively.
+2. **Type-Checker Evasion (Test)**: When tests cannot call uncontracted methods due to static typing, models use `cast(Any, ...)` to mute Pyright, and poke internal private attributes (`obj._*`) to force execution through stubborn branches.
+3. **Auditor Contamination (QA)**: When QA Arbiters evaluate test failures against library code rather than the grounded specification (`low/*.pyi`), they inadvertently leak uncontracted symbols across the isolation boundary, subverting double-blind independence ($\mathcal{I} = 0$).
+4. **Defensive Deadlock (Coverage)**: When Coverage Arbiters demand 100% line coverage on defensive branches that are unreachable under valid preconditions, tests cannot satisfy the gate without white-box corruption.
+
+---
+
+### Architectural Hardening & Framework Gates Derived from Findings
+
+To permanently eradicate these failure modes across all model tiers, Cleanroom was hardened with five deterministic gates:
+
+1. **Lib Linter Protocol Hierarchy Gate (`check_signature_alignment`)**:
+   - In [`build_lint_common.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/support/lib/build_lint_common.py), classes implementing `.pyi` specifications recursively collect all declared methods and properties across their base protocol hierarchy.
+   - Any public method defined in `lib/*.py` that is not declared in `low/*.pyi` (excluding Python dunders and the lifecycle `initialize(self)` hook) is rejected deterministically during `lib_lint.py`.
+2. **Test Linter Contract Discipline Gate (`check_test_getattr`)**:
+   - **`cast(Any, ...)` Attribute Access Ban**: Prohibits `ast.Attribute` where the value is a `cast(Any, ...)` call. Models can no longer use `cast(Any, obj).uncontracted_method()` to bypass type checking.
+   - **Private Member Access Ban**: Rejects any non-dunder private member access (`obj._*`) on collaborator or target objects where `obj` is not `self` or `cls`. White-box mutation of internal state collections is blocked.
+   - **Dynamic Reflection Ban**: Rejects `setattr()` and `hasattr()` calls alongside `getattr()`.
+3. **QA Arbiter Specification Grounding & Anti-Leakage Invariant**:
+   - Updated [`update_python_with_ai/guides/qa.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/guides/qa.md) to mandate that all test failures be audited strictly against `low/*.pyi` before attributing blame.
+   - Strictly prohibited citing, suggesting, or naming uncontracted symbols in blame feedback.
+   - Mandated that singleton initialization failures caused by missing ad-hoc configuration be blamed on `lib`, never `test`.
+4. **Library Singleton Lifecycle Clarification**:
+   - Updated [`update_python_with_ai/guides/low_to_lib.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/guides/low_to_lib.md) to formalize the three legitimate lifecycle mechanisms:
+     1. Module-level `__initialize__(registry)` for registration;
+     2. Instance-level `initialize(self)` post-instantiation hook for self-registration with managers;
+     3. Phase-level `enter_phase(phase, setup=...)` for parameterizing contracted singletons (e.g. `RoleConfig.set_role(...)`).
+   - Explicitly prohibited ad-hoc multi-phase configuration methods (`configure()`, `setup()`).
+5. **Coverage Arbiter Assumption Pragma Attribution**:
+   - Updated [`update_python_with_ai/guides/coverage.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/guides/coverage.md) to prohibit demanding white-box tests that manipulate private state to reach defensive branches.
+   - Unreachable defensive branches must be attributed to `lib` for annotation with `# pragma: no cover (assumption: <reason>)` or dead code elimination, preventing coverage deadlocks.
+
+---
+
+## 10. Actionable Implementation Roadmap & Milestones
 
 The cross-model benchmarking suite will be executed in five sequential phases:
 
@@ -722,14 +1119,14 @@ The cross-model benchmarking suite will be executed in five sequential phases:
 │   • Execute lean 8-unit Attractor State Ambiguity Test across 4 conditions.            │
 │   • Anchor Run: Claude Sonnet, o3-mini, and gpt-6.1-sol on Anchor Target 2.            │
 │                                                                                        │
-│   PHASE 3: Mini-SQLite Systems Benchmark (RQ3, RQ4) (Days 5-7)                         │
-│   • Anchor Run: Gemini 4 Argon, Claude Opus, o3-mini on Mini-SQLite (Anchor Target 1). │
-│   • Compare Monolith vs. 3 Divided Units on 12 boundary edge cases.                    │
-│   • Execute 6 controlled spec ungroundings (2 deletions, 2 erasures, 2 contradictions).│
+│   PHASE 3: Systems Benchmarks & Modularity (RQ3, RQ4) (Days 5-7)                       │
+│   • Anchor Run: Gemini 4 Argon, Claude Opus, o3-mini on Heavyweight Systems Engine.    │
+│   • Compare 2,000+ LOC Monolith vs. 4-5 Decoupled Units across 12 boundary edge cases. │
+│   • Execute 6 controlled spec ungroundings on Generalized DAG & Workspace Sandbox.     │
 │   • Benchmark DAG batching speedup (B = 1, 2, 4) and KV prompt-cache efficiency.       │
 │                                                                                        │
 │   PHASE 4: Concurrency & Non-Functional Benchmarks (RQ6, RQ7) (Days 8-9)               │
-│   • Inject 6 concurrency defects into SQLite buffer pool & Workspace lock manager.     │
+│   • Inject 6 concurrency defects into Workspace Sandboxing & Lock Manager.             │
 │   • Evaluate D_conc + A_triage vs. generic auditors; verify wait-for cycle extraction. │
 │   • Execute Goodhart's Law evaluation behind Hidden Benchmark Firewall (25k events).   │
 │                                                                                        │
@@ -751,8 +1148,8 @@ The cross-model benchmarking suite will be executed in five sequential phases:
   - Coincident error rates and Attractor State ambiguity results on 8 lean units synthesized into LaTeX tables.
   - Tier 3/4 baseline captured on Anchor Target 2 (CPython algorithmic systems).
 - [ ] **Milestone 3: RQ3 & RQ4 Systems Data Captured**
-  - Monolith vs. 3 Divided `_impl` units metrics captured for Mini-SQLite across 12 boundary edge cases.
-  - Tier 3/4 baseline captured on Anchor Target 1 (Mini-SQLite).
+  - Monolith vs. 4–5 Divided `_impl` units metrics captured for Heavyweight Systems Engine across 12 boundary edge cases.
+  - Tier 3/4 baseline captured on Anchor Target 1 (Heavyweight Systems Engine).
   - 100% fail-stop verification demonstrated across 6 controlled ungrounding injections.
 - [ ] **Milestone 4: RQ6 & RQ7 Specialized Auditing Data Captured**
   - Concurrency triage precision and deadlock cycle extraction verified on 6 concurrency defects.

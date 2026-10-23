@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:15:00Z
-# CHANGE: Implement dirtiness_impl
-# CODE_HASH: a224534e93bf
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for dirtiness_impl."""
 
 from __future__ import annotations
@@ -334,7 +325,12 @@ def _get_role_upstream_chain(
         visited.add(r)
         try:
             r_def = reg.resolve_role_definition(r, repo_root=repo_root)
-            all_deps = list(r_def.role_deps) + list(r_def.star_role_deps)
+            all_deps = (
+                list(r_def.role_deps)
+                + list(r_def.feedback_role_deps)
+                + list(r_def.star_role_deps)
+                + list(r_def.silent_role_deps)
+            )
             for d in all_deps:
                 visit(d.split(":")[-1].strip().lower())
         except (LifecycleResolutionError, LookupError):
@@ -387,6 +383,10 @@ def _eval_unit_dirty_internal(
             fb_pat = fb_def.src_pattern
             if not fb_pat:
                 continue
+            dir_prefix = _parse_pattern_info(fb_pat)[0]
+            if dir_prefix and not os.path.isdir(os.path.join(main_root, part_dir, dir_prefix)):
+                if fb_role not in ("lib", "test") and clean_role not in ("qa", "coverage"):
+                    continue
             audited_targets_count += 1
             fb_rel = fb_pat.format(unit_dir=part_dir, unit_name=unit_name)
             fb_full = _resolve_scope_file(fb_rel, ws_root, main_root)
@@ -396,7 +396,7 @@ def _eval_unit_dirty_internal(
             fb_meta = src_metadata.extract_metadata(fb_full)
             if fb_meta is None or not fb_meta.last_changed:
                 reasons.append(
-                    f"Target {fb_rel} missing valid in-band metadata header"
+                    f"Audited target {fb_rel} is uninitialized"
                 )
                 continue
             if fb_meta.feedback:
@@ -446,7 +446,7 @@ def _eval_unit_dirty_internal(
     if not meta:
         return {
             "is_dirty": True,
-            "reasons": [f"Target {target_rel} missing valid in-band metadata header"],
+            "reasons": [f"Target {target_rel} is uninitialized (initial implementation required)"],
         }
     if meta.dirty:
         reasons.append(f"Target explicitly marked DIRTY: {meta.dirty}")
@@ -571,7 +571,7 @@ def _eval_unit_dirty_internal(
 
 
 # Contract: Realizes dirtiness.WorkspaceDirtinessEvaluator in agent_session tier.
-class WorkspaceDirtinessEvaluator:
+class WorkspaceDirtinessEvaluator(dirtiness.WorkspaceDirtinessEvaluator):
     """Evaluates unit dirtiness, resolves companion contracts, and extracts cross-unit dependencies."""
 
     # Contract: Evaluates whether a unit is dirty in directory scope and returns dirty status and reasons.
@@ -611,7 +611,13 @@ class WorkspaceDirtinessEvaluator:
         unit_name: str,
     ) -> Sequence[Tuple[str, str]]:
         return _cross_unit_dependencies(repo_root, part_dir, unit_name)
-
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-21T19:55:00Z
+# CHANGE: Ensure auditor dirtiness checks report missing feedback targets when directory does not exist on disk
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -620,10 +626,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         WorkspaceDirtinessEvaluator,
-        keys=[
-            dirtiness.WorkspaceDirtinessEvaluator,
-            WorkspaceDirtinessEvaluator,
-        ],
+        keys=[dirtiness.WorkspaceDirtinessEvaluator, WorkspaceDirtinessEvaluator],
         tier=agent_session.agent_session,
     )
 

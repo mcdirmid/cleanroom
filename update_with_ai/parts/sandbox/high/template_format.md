@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-06T00:52:26Z
-CHANGE: import commonmark_ext and declare delegated token patterns
-CODE_HASH: d3b3c391fcba
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # template_format interface component
 
 imports: session
@@ -35,3 +27,10 @@ When formatting template text, the template formatter:
 - Evaluates conditional blocks and line-suffix conditionals based on the truthiness of their condition keys in the parameters, including enclosed content when true or absent from parameters and omitting content when false.
 
 - Repeats loop blocks and line-suffix loops across items when the collection key resolves to a sequence in the parameters, binding loop item variables during repetition.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-06T00:52:26Z
+CHANGE: import commonmark_ext and declare delegated token patterns
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

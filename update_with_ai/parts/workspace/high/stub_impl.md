@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T17:55:00Z
-CHANGE: Define stub_impl implementation specification
-CODE_HASH: bf4aee6ffef9
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # stub_impl implementation component
 
 imports: session, role_registry, stub
@@ -34,3 +26,10 @@ The realization:
 - Matches relative file paths against declared patterns of roles in stub role dependencies.
 
 - Inspects file headers to verify Cleanroom test stub marker headers.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T17:55:00Z
+CHANGE: Define stub_impl implementation specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

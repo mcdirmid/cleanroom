@@ -1,11 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-05T04:26:30Z
-# CHANGE: new file
-# CODE_HASH: 26aa7cc69588
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
-# --- END CLEANROOM METADATA ---
-
 r"""
 ## External Mechanics & API Documentation
 
@@ -50,3 +42,10 @@ def find_placeholders(text: str) -> list[str]:
     return PLACEHOLDER_PATTERN.findall(text)
 ```
 """
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-05T04:26:30Z
+# CHANGE: new file
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# --- END CLEANROOM METADATA ---

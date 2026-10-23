@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:26:00Z
-# CHANGE: Align configured guide delivery, milestone advancement, and failure reporting contracts
-# CODE_HASH: 8948e9f16fed
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Sandbox guide delivery low-level interface specification."""
 
 from typing import NewType, Optional, Protocol
-from framework import operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import node_config
@@ -20,7 +12,7 @@ InitialPrimer = NewType("InitialPrimer", str)
 
 
 @singleton_type("agent_session")
-class GuideDelivery(InTier[AgentSessionTier], Protocol):
+class GuideDelivery(Singleton[AgentSessionTier], Protocol):
     """Delivers the instructions of a configured guide progressively and gates progression behind verification checks."""
 
     @property
@@ -88,3 +80,10 @@ class GuideDelivery(InTier[AgentSessionTier], Protocol):
         - WHEN verification fails, MUST report the verification failure instructions.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:26:00Z
+# CHANGE: Align configured guide delivery, milestone advancement, and failure reporting contracts
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

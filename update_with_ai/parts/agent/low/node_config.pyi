@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:06:20Z
-# CHANGE: Canonicalize role, session config, bound file, blame target, and message typing and terminology
-# CODE_HASH: 48bbdd66dabb
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Agent node config low-level interface specification."""
 
 from dataclasses import dataclass
 from typing import Any, List, Mapping, NewType, Optional, Protocol, Sequence, Set, Tuple
-from framework import data_type, operation, poly_type, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, poly_type, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import dag_storage
@@ -111,7 +103,7 @@ class PerNodeInfo:
 
 
 @singleton_type("agent_session")
-class RoleConfig(InTier[AgentSessionTier], Protocol):
+class RoleConfig(Singleton[AgentSessionTier], Protocol):
     """Provides the role, nodes, and version of the agent session."""
 
     @property
@@ -152,7 +144,7 @@ class RoleConfig(InTier[AgentSessionTier], Protocol):
 
 
 @singleton_type("agent_session")
-class NodeConfig(InTier[AgentSessionTier], Protocol):
+class NodeConfig(Singleton[AgentSessionTier], Protocol):
     """Provides the resolved configuration parameters of the active session."""
 
     @property
@@ -229,3 +221,10 @@ class NodeConfig(InTier[AgentSessionTier], Protocol):
     def per_node_info_by_node(self) -> Mapping[dag_storage.DagNode, PerNodeInfo]:
         """Mapping each active node to its per node info."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:06:20Z
+# CHANGE: Canonicalize role, session config, bound file, blame target, and message typing and terminology
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

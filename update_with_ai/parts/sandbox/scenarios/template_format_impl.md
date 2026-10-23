@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:56Z
-CHANGE: Author sandbox template_format_impl concrete scenarios
-CODE_HASH: 84418897cfeb
--->
-
 # Concrete scenarios for `template_format_impl` (implementation)
 
 Scenarios 1 through 12 restate the caller observations of the interface scenarios and add, beside
@@ -315,3 +308,9 @@ template text holds the line "# Status" followed by the line "Report 42 of 7.".
    unchanged.
    Realized by: the component's own scan for angle-bracket placeholder tokens and comment directive
    markers, which finds neither in that text.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:56Z
+CHANGE: Author sandbox template_format_impl concrete scenarios
+-->

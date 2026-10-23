@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:30:00Z
-CHANGE: Update run_control_impl planning specification
-CODE_HASH: e77cc4692ab8
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # run_control_impl implementation component
 
 ## Intent
@@ -31,9 +23,12 @@ By providing atomic failure handling for out-of-order execution, preventing adva
 - Verification results are outdated before initial evaluation. [verification_outdated_initially]
 - Verification results are outdated when the target read-write file hash has changed since previous evaluation. [verification_outdated_on_hash_change]
 - Verification check execution is omitted when target file hashes have not changed since previous evaluation. [omit_checks_when_hashes_match]
+- The run controller exposes whether the latest verification evaluation passed. [expose_is_passed]
+- The run controller exposes whether target file hashes are unchanged since the last evaluation. [expose_is_unchanged]
+- The run controller exposes aggregated diagnostic output from failing verification checks. [expose_diagnostic_output]
 - The check files tool shares the constant suppression key "check_files". [share_check_files_suppression_key]
-- When target file hashes have not changed, the check files tool reminds the agent that verification status is unchanged. [remind_verification_unchanged]
-- When verification fails, the check files tool presents sanitized diagnostic feedback alongside verification failure instructions. [present_sanitized_feedback_on_check_failure]
+- When target file hashes have not changed and verification is passing, the check files tool reminds the agent that verification status is unchanged. [remind_verification_unchanged]
+- When verification fails, the check files tool presents sanitized diagnostic feedback alongside verification failure instructions regardless of whether target file hashes changed. [present_sanitized_feedback_on_check_failure]
 - When verification passes, the check files tool produces a response presenting passing results. [present_passing_results_on_check_success]
 - The advance tool shares the constant suppression key "advance". [share_advance_suppression_key]
 - When verification is failing on the first step, the advance tool repeats primer and summary content through guide delivery. [advance_repeats_primer_on_first_step_failure]
@@ -52,7 +47,7 @@ By providing atomic failure handling for out-of-order execution, preventing adva
 ### Woven Contracts
 
 - Session outcome tools are installed during controller initialization, restricting the advance tool strictly to guide step mode. [initialize_session_tools_on_entry, install_submit_tool, install_fail_tool, install_check_files_tool, install_get_work_tool, install_advance_tool_conditional, expose_session_verification_checks, run_control: [initialize_session_tools_on_entry, unconditionally_install_session_tools, install_advance_tool_when_step_mode]]
-- Verification results are evaluated sequentially and cached against target file hashes, reusing cached evaluations when files remain unchanged. [cache_verification_with_file_hash, evaluate_verification_checks_sequentially, verification_outdated_initially, verification_outdated_on_hash_change, omit_checks_when_hashes_match, run_control: [cache_verification_results, reuse_cached_verification_outcome]]
+- Verification results are evaluated sequentially and cached against target file hashes, exposing pass/fail status, hash stability, and diagnostic output while reusing cached evaluations when files remain unchanged. [cache_verification_with_file_hash, evaluate_verification_checks_sequentially, verification_outdated_initially, verification_outdated_on_hash_change, omit_checks_when_hashes_match, expose_is_passed, expose_is_unchanged, expose_diagnostic_output, run_control: [cache_verification_results, reuse_cached_verification_outcome, expose_is_passed, expose_is_unchanged, expose_diagnostic_output]]
 - The check files tool executes verification across modified workspace files, presenting sanitized failure diagnostics or passing results. [present_sanitized_feedback_on_check_failure, present_passing_results_on_check_success, remind_verification_unchanged, share_check_files_suppression_key, run_control: [check_files_evaluates_checks, check_files_presents_outcomes, check_files_fails_on_verification_failure]]
 - The advance tool gates step progression behind passing verification, guiding the agent to run verification checks or submit completed work. [advance_repeats_primer_on_first_step_failure, advance_reminds_call_check_files, advance_specifies_check_files_followup, advance_delivers_next_step_on_pass, advance_fails_reminding_submit_when_modified, advance_specifies_submit_followup_when_unmodified, share_advance_suppression_key, guide_delivery: [advance_step_passed_supplied, advance_step_diagnostics_supplied]]
 - The get work tool orchestrates batch acquisition from graph storage, template materialization via dag storage, conditional blame tool installation, and session initialization. [get_work_fails_when_open_nodes_remain, get_work_obtains_dirty_nodes, get_work_produces_idle_response, get_work_materializes_templates_via_storage, get_work_returns_primer_with_guide_file, get_work_returns_primer_with_advance_prompt, install_blame_tool_when_targets_exist, dag_storage: [materialize_node_template]]
@@ -80,3 +75,10 @@ By providing atomic failure handling for out-of-order execution, preventing adva
 
 - Resolution of active targets from command line arguments or session state.
   - Grounded: [coordinate: [session_target_registry, default_target_resolution]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-21T22:00:00Z
+LAST_CHANGED: 2026-10-21T22:00:00Z
+CHANGE: Present diagnostic feedback on verification failure regardless of whether target file hashes changed
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

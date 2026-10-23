@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:09:19Z
-CHANGE: Author loop-phase conversation concrete scenarios
-CODE_HASH: 6099dd1983b6
--->
-
 # Concrete scenarios for `loop_conversation` (interface)
 
 ## Scenario 1 — Appending tool executions and correlating their responses
@@ -82,3 +75,9 @@ scope_a.".
    the output "0 files".
    Observed: the first response is replaced in place by a stub marking it superseded, and the only
    superseded entry in the request is that stub at the position of the first response.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:09:19Z
+CHANGE: Author loop-phase conversation concrete scenarios
+-->

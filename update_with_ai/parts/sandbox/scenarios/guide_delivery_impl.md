@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:17:20Z
-CHANGE: Author sandbox guide_delivery_impl concrete scenarios
-CODE_HASH: 6b00e684a52a
--->
-
 # Concrete scenarios for `guide_delivery_impl` (implementation)
 
 Scenarios 1 through 7 restate the caller observations of the interface scenarios and add, beside
@@ -269,3 +262,9 @@ the line "Read widget/contracts/widget.md and confirm the declared field.".
    as the summary, captures the section whose title begins with `Verification failure`, and excludes
    sections whose titles begin with `Summary`, `Lint checks`, or `Verification failure` from the step
    sections.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:17:20Z
+CHANGE: Author sandbox guide_delivery_impl concrete scenarios
+-->

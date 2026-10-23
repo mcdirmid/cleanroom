@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-10T05:00:00Z
-LAST_CHANGED: 2026-10-10T21:56:00Z
-CHANGE: codify single triage chain, outlier scenario handling, materiality tests, blame format, and calibration rules
-CODE_HASH: 9a5d3f114c22
--->
-
 # Guide: Specification QA Arbiter
 
 ## Summary
@@ -82,7 +75,7 @@ Auditing follows a strict normative triage chain: if a behavior is absent from h
 ## Defect diagnosis, calibration, and blame feedback
 
 - [ ] Calibration rule: before declaring a novel class of defect, the arbiter compares against a reference unit carrying `SPEC_QA_AUDIT`
-- [ ] Single agent blame per turn: only one agent (`high`, `planning`, or `low`) is blamed for a unit in a given turn
+- [ ] Single agent blame per round: only one agent (`high`, `planning`, or `low`) is blamed for a unit in a given round
 - [ ] Blame feedback paragraph format: the explanation is strictly a single paragraph containing no newline characters, formatted as: plane $\to$ section/member $\to$ omitted behavior in that plane's vocabulary $\to$ evidence (quoted clause or verbatim linter diagnostic)
 - [ ] Blame feedback length is targeted at approximately 120 words and strictly under 200 words
 - [ ] Quoting linter output verbatim as evidence in blame feedback is permitted and encouraged
@@ -99,3 +92,10 @@ Auditing follows a strict normative triage chain: if a behavior is absent from h
 - [ ] Prescriptive feedback — telling the blamed agent exact replacement text instead of stating the observable omission
 - [ ] Premature submission — submitting a unit before completing both mechanical and semantic audits across all planes
 - [ ] Truncated work inspection — reviewing only partial `get_work` output instead of capturing all ready and blocked items
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-10T05:00:00Z
+LAST_CHANGED: 2026-10-10T21:56:00Z
+CHANGE: codify single triage chain, outlier scenario handling, materiality tests, blame format, and calibration rules
+CODE_HASH: 9a5d3f114c22
+-->

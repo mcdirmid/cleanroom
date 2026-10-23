@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Consolidate the acyclicity assumption and state halting and completion as declarative invariants
-CODE_HASH: c6d224f360b8
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # cleaner interface component
 
 imports: dag_storage, node_cleaner
@@ -27,3 +19,10 @@ A loop cleaner can clean a target node using a supplied node cleaner, cleaning d
 A caller guarantees that the target node roots an acyclic subgraph, because checking whether a subgraph is acyclic is out of scope.
 
 Cleaning dirty nodes halts when the node cleaner communicates that processing cannot continue, and concludes once every node in the subgraph rooted at the target node is clean.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Consolidate the acyclicity assumption and state halting and completion as declarative invariants
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

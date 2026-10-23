@@ -1,11 +1,5 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:30:00Z
-# CHANGE: Delegate submission tools to submission
-# CODE_HASH: 8219977c5078
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from support.lib.lifecycle import Singleton
 from typing import Any, Mapping, Optional, Protocol, Sequence, Set
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 import update_with_ai.parts.agent.lib.file_alias as file_alias
@@ -26,7 +20,7 @@ from .submission import (
 
 
 # Contract: CheckFilesTool protocol - inspects verification checks across active files.
-class CheckFilesTool(tool_provider.Tool, Protocol):
+class CheckFilesTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
     # Contract: Tool.name - returns 'check_files'.
     @property
     def name(self) -> tool_provider.ToolName:
@@ -43,7 +37,7 @@ class CheckFilesTool(tool_provider.Tool, Protocol):
 
 
 # Contract: AdvanceTool protocol - advances progressive guide steps upon passing verification.
-class AdvanceTool(tool_provider.Tool, Protocol):
+class AdvanceTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
     # Contract: Tool.name - returns 'advance'.
     @property
     def name(self) -> tool_provider.ToolName:
@@ -60,7 +54,7 @@ class AdvanceTool(tool_provider.Tool, Protocol):
 
 
 # Contract: GetWorkTool protocol - retrieves active dirty nodes for processing and materializes startup templates.
-class GetWorkTool(tool_provider.Tool, Protocol):
+class GetWorkTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
     # Contract: GetWorkTool.execute_tool - acquires dirty nodes for execution, formats task primer, and installs relevant tools.
     def execute_tool(
         self,
@@ -72,7 +66,7 @@ class GetWorkTool(tool_provider.Tool, Protocol):
 
 
 # Contract: RunController protocol - coordinates session termination tools and verification caching.
-class RunController(Protocol):
+class RunController(Singleton[AgentSessionTier], Protocol):
     # Contract: RunController.initialize - initializes session outcome tools upon agent session entry.
     def initialize(self) -> None:
         ...
@@ -89,6 +83,27 @@ class RunController(Protocol):
     ) -> Mapping[dag_storage.DagNode, Set[file_alias.BoundFile]]:
         ...
 
+    # Contract: RunController.is_passed - exposes whether the latest verification evaluation passed.
+    @property
+    def is_passed(self) -> bool:
+        ...
+
+    # Contract: RunController.is_unchanged - exposes whether target file hashes are unchanged since the last verification evaluation.
+    @property
+    def is_unchanged(self) -> bool:
+        ...
+
+    # Contract: RunController.diagnostic_output - exposes aggregated diagnostic output from failing verification checks.
+    @property
+    def diagnostic_output(self) -> str:
+        ...
+
     # Contract: RunController.update_verification - updates and caches verification results if outdated.
     def update_verification(self) -> None:
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:30:00Z
+# CHANGE: Delegate submission tools to submission
+# --- END CLEANROOM METADATA ---

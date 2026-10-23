@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:17:14Z
-CHANGE: Author control verification_impl concrete scenarios
-CODE_HASH: 0a878b8adf1f
--->
-
 # Concrete scenarios for `verification_impl` (implementation)
 
 Scenarios 1 through 5 restate the caller observations of the interface scenarios and add, beside
@@ -158,3 +151,9 @@ target's files have not been modified since a previous failing evaluation.
    an unchanged file state.
    Realized by: the component's own file hash cache, which stored the failing outcome with the
    recorded file hashes at the previous evaluation and therefore returns it without execution.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:17:14Z
+CHANGE: Author control verification_impl concrete scenarios
+-->

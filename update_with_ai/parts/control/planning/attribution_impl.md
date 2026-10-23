@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 1bda378bf292
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # attribution_impl implementation component
 
 ## Intent
@@ -61,3 +53,10 @@ The implementation matches blame strings against upstream file aliases, validate
   - Grounded: [failure_propagation]
 - In-band source metadata extraction and feedback formatting on disk.
   - Grounded: [src_metadata: [source_metadata_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

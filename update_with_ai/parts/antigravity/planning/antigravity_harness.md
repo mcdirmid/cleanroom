@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T19:15:00Z
-CHANGE: author antigravity_harness planning specification
-CODE_HASH: 3c642f6aaee0
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # antigravity_harness interface component
 
 ## Intent
@@ -54,3 +46,10 @@ Autonomous multi-agent execution requires reliable dispatch into isolated role w
   - Grounded: [subagent_harness: [harness_registry_service]]
 - Subagent turn execution, transcript parsing, and rate card calculation logic.
   - Deferred: Realized by the antigravity harness implementation component.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-13T19:15:00Z
+CHANGE: author antigravity_harness planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

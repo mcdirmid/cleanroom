@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:30:00Z
-CHANGE: Concrete scenarios for submission_impl
-CODE_HASH: a0fe0dac0fbd
--->
-
 # Concrete scenarios for `submission_impl` (implementation)
 
 Scenarios 1 through 7 restate caller observations from the interface scenarios alongside their realizations.
@@ -114,3 +107,9 @@ Given: the agent has entered the session for role alpha in `/ws/alpha_scope_a`, 
 1. The agent executes the submit tool with the resolve target `widget/src/widget.py`.
    Observed: the request fails with the message explaining that workspace files must be modified to address feedback or fail must be called, accompanied by a reminder to modify workspace files to address feedback or call fail, and without a change summary reminder.
    Realized by: relaying rejection feedback from `coordinate` and generating a feedback resolution reminder.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:30:00Z
+CHANGE: Concrete scenarios for submission_impl
+-->

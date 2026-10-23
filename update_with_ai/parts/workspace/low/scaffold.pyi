@@ -1,32 +1,26 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:50:00Z
-# CHANGE: Author scaffold low-level specification
-# CODE_HASH: 59a612cfd721
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for scaffold."""
 
 from typing import Optional, Protocol
-from framework import operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import cleanroom_files_ext
 import roles
 
 
 @singleton_type("agent_session")
-class WorkspaceScaffolder(InTier[AgentSessionTier], Protocol):
+class WorkspaceScaffolder(Singleton[AgentSessionTier], Protocol):
     """Service scaffolding runner tools, metadata, instructions, and target skeletons."""
 
     @operation
-    def deploy_runner_zipapps(self, bin_dir: str) -> None:
+    def deploy_runner_zipapps(self, bin_dir: str, role_def: Optional[roles.RoleDefinition] = None, can_blame: bool = True) -> None:
         """Packages executable runner tools into the specified bin directory.
 
         POSTCONDITIONS:
         - MUST create bin_dir if absent.
-        - MUST package runner zipapps for get_work, check_files, submit, blame, feedback, and fail tools with executable permissions (0o755).
+        - MUST package runner zipapps for get_work, check_files, submit, and fail tools with executable permissions (0o755).
+        - WHEN can_blame is True or role_def declares feedback capability or auditor tags, MUST package runner zipapps for blame and feedback tools.
+        - WHEN can_blame is False or role_def lacks feedback capability, MUST omit blame and feedback tools and remove any existing blame or feedback executables.
         - MUST remove stale coverage script if present in bin_dir.
         """
         ...
@@ -61,7 +55,7 @@ class WorkspaceScaffolder(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST write AGENTS.md in workspace_dir with 0o644 permissions.
-        - MUST include boundary rules, contamination tripwires, terminal command restrictions, fail-stop protocols, and role-tailored workflow instructions.
+        - MUST include boundary rules, contamination tripwires, permitted in-workspace shell commands and native harness tools while mandating round resolution through prescribed bin/ tools (omitting blame for roles without feedback capability), cleanroom compilation stub isolation rules for roles declaring stub dependencies, fail-stop protocols, role-tailored workflow instructions, and model-contingent payload ceiling protection for local or output-constrained models while omitting it for cloud models.
         """
         ...
 
@@ -99,3 +93,10 @@ class WorkspaceScaffolder(InTier[AgentSessionTier], Protocol):
         - WHEN neither is true, MUST set permissions to 0o644.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-20T22:50:00Z
+# LAST_CHANGED: 2026-10-20T22:50:00Z
+# CHANGE: Tailor deploy_runner_zipapps and write_role_agents_guide to role feedback capability and stub dependencies
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

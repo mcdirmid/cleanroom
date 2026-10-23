@@ -1,15 +1,6 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:56:35Z
-# CHANGE: Prune the uncontracted public 'messages' property so the implementation exposes only the conversation operations declared by the grounding specification
-# CODE_HASH: 43acfa91915e
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 # Requirements specified in conversation_impl.pyi
 import json
-from typing import Any, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 from update_with_ai.parts.agent.lib.session import session as agent_session
 from update_with_ai.parts.loop.lib import conversation
 from update_with_ai.parts.sandbox.lib import tool_provider
@@ -22,38 +13,17 @@ from support.lib.lifecycle import (
 # Contract: Buffer limit of up to three most recent responses sharing suppression keys.
 _SUPPRESSION_BUFFER_LIMIT = 3
 
-# Contract: File path parameter names preserved in superseded tool calls.
-_PATH_PARAM_NAMES = frozenset(
-    {
-        "path",
-        "target_file",
-        "targetfile",
-        "file",
-        "file_alias",
-        "file_path",
-        "filepath",
-        "file_name",
-        "filename",
-    }
-)
-
-
-def _is_path_param(name: str) -> bool:
-    normalized = name.lower().replace("-", "_")
-    return (
-        normalized in _PATH_PARAM_NAMES
-        or normalized.endswith("_path")
-        or normalized.endswith("_file")
-    )
-
 
 # Contract: Conversation realizes OpenAI provider role schema formatting, stubbing, and synthetic call injection in the agent session tier.
-class Conversation(conversation.Conversation, Singleton):
+class Conversation(conversation.Conversation):
     tier = agent_session
 
     def __init__(self) -> None:
         self._messages: List[conversation.ConversationMessage] = []
         self._suppression_keys: List[Optional[tool_provider.SuppressionKey]] = []
+        self._retained_reminders: Dict[
+            tool_provider.SuppressionKey, tool_provider.ToolReminder
+        ] = {}
 
     # Contract: Conversation.initialize - initializes conversation history, pairing unprompted responses with synthetic calls.
     def initialize(
@@ -61,6 +31,7 @@ class Conversation(conversation.Conversation, Singleton):
     ) -> None:
         self._messages = []
         self._suppression_keys = []
+        self._retained_reminders = {}
         for msg in initial_messages:
             if msg.role == conversation.MessageRole("tool"):
                 has_assistant_call = any(
@@ -101,7 +72,7 @@ class Conversation(conversation.Conversation, Singleton):
         self._messages.append(message)
         self._suppression_keys.append(None)
 
-    # Contract: Conversation.append_tool_response - appends tool response, replacing preceding suppressed responses with stubs beyond buffer limit.
+    # Contract: Conversation.append_tool_response - appends tool response, deleting preceding suppressed responses and their tool calls beyond the buffer limit.
     def append_tool_response(
         self,
         tool_response: tool_provider.ToolResponse,
@@ -140,98 +111,13 @@ class Conversation(conversation.Conversation, Singleton):
             )
             self._suppression_keys.append(None)
 
-
-        # Contract: MUST retain reminders on stubs and inherit them when omitted.
+        # Contract: MUST retain reminders from deleted responses and inherit them when omitted.
         effective_reminder = tool_response.reminder
         if tool_response.suppression_key is not None:
-            if effective_reminder is None:
-                for i in range(len(self._messages) - 1, -1, -1):
-                    if (
-                        self._suppression_keys[i] == tool_response.suppression_key
-                        and self._messages[i].reminder is not None
-                    ):
-                        effective_reminder = self._messages[i].reminder
-                        break
-
-            # Contract: MUST retain a buffer of up to three most recent responses sharing suppression keys.
-            matching_indices = [
-                i
-                for i in range(len(self._messages))
-                if self._suppression_keys[i] == tool_response.suppression_key
-                and not self._messages[i].is_stub
-            ]
-
-            keep_preceding = _SUPPRESSION_BUFFER_LIMIT - 1
-            num_to_stub = max(0, len(matching_indices) - keep_preceding)
-            indices_to_stub = matching_indices[:num_to_stub]
-
-            # Contract: MUST replace preceding responses beyond the buffer limit with stubs.
-            for old_idx in indices_to_stub:
-                old_msg = self._messages[old_idx]
-                self._messages[old_idx] = conversation.ConversationMessage(
-                    role=old_msg.role,
-                    content=conversation.ConversationContent("[Superseded]"),
-                    tool_call_id=old_msg.tool_call_id,
-                    tool_name=old_msg.tool_name,
-                    reminder=old_msg.reminder,
-                    is_stub=True,
-                )
-                if old_msg.tool_call_id:
-                    for j in range(old_idx - 1, -1, -1):
-                        if (
-                            self._messages[j].role
-                            == conversation.MessageRole("assistant")
-                            and self._messages[j].tool_call_id == old_msg.tool_call_id
-                        ):
-                            asst_msg = self._messages[j]
-                            new_tool_args: Optional[
-                                conversation.SerializedArguments
-                            ] = asst_msg.tool_arguments
-                            if asst_msg.tool_arguments:
-                                try:
-                                    parsed = json.loads(str(asst_msg.tool_arguments))
-                                    if isinstance(parsed, dict):
-                                        elided: dict[str, Any] = {}
-                                        for k, v in parsed.items():
-                                            # Contract: MUST preserve file path parameters and non-string arguments in superseded tool calls.
-                                            if _is_path_param(k) or not isinstance(
-                                                v, str
-                                            ):
-                                                elided[k] = v
-                                            else:
-                                                # Contract: MUST replace other string arguments with a stub marker in superseded tool calls.
-                                                elided[k] = "[STUB]"
-                                        new_tool_args = (
-                                            conversation.SerializedArguments(
-                                                json.dumps(elided, sort_keys=True)
-                                            )
-                                        )
-                                    else:
-                                        new_tool_args = conversation.SerializedArguments(
-                                            "{}"
-                                        )  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
-                                except (
-                                    json.JSONDecodeError,
-                                    TypeError,
-                                ):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
-                                    new_tool_args = conversation.SerializedArguments(
-                                        "{}"
-                                    )  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
-                            else:
-                                new_tool_args = conversation.SerializedArguments(
-                                    "{}"
-                                )  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
-
-                            self._messages[j] = conversation.ConversationMessage(
-                                role=asst_msg.role,
-                                content=asst_msg.content,
-                                tool_call_id=asst_msg.tool_call_id,
-                                tool_name=asst_msg.tool_name,
-                                reminder=asst_msg.reminder,
-                                tool_arguments=new_tool_args,
-                                is_stub=True,
-                            )
-                            break
+            if effective_reminder is not None:
+                self._retained_reminders[tool_response.suppression_key] = effective_reminder
+            else:
+                effective_reminder = self._retained_reminders.get(tool_response.suppression_key)
 
         # Contract: Append tool response with effective reminder; preserve responses with unmatched suppression keys intact.
         self._messages.append(
@@ -246,6 +132,45 @@ class Conversation(conversation.Conversation, Singleton):
             )
         )
         self._suppression_keys.append(tool_response.suppression_key)
+
+        # Contract: MUST retain a buffer of up to three most recent responses sharing suppression keys.
+        # Contract: MUST delete preceding responses and their correlating assistant tool calls beyond the buffer limit.
+        if tool_response.suppression_key is not None:
+            matching_tool_indices = [
+                i
+                for i in range(len(self._messages))
+                if self._suppression_keys[i] == tool_response.suppression_key
+            ]
+            if len(matching_tool_indices) > _SUPPRESSION_BUFFER_LIMIT:
+                num_to_delete = len(matching_tool_indices) - _SUPPRESSION_BUFFER_LIMIT
+                tool_indices_to_delete = matching_tool_indices[:num_to_delete]
+                indices_to_remove = set(tool_indices_to_delete)
+
+                for tool_idx in tool_indices_to_delete:
+                    old_msg = self._messages[tool_idx]
+                    rem = old_msg.reminder
+                    if rem is not None:
+                        self._retained_reminders[tool_response.suppression_key] = rem
+                    if old_msg.tool_call_id:
+                        for j in range(tool_idx - 1, -1, -1):
+                            if (
+                                self._messages[j].role
+                                == conversation.MessageRole("assistant")
+                                and self._messages[j].tool_call_id == old_msg.tool_call_id
+                            ):
+                                indices_to_remove.add(j)
+                                break
+
+                self._messages = [
+                    m
+                    for i, m in enumerate(self._messages)
+                    if i not in indices_to_remove
+                ]
+                self._suppression_keys = [
+                    k
+                    for i, k in enumerate(self._suppression_keys)
+                    if i not in indices_to_remove
+                ]
 
     # Contract: Conversation.get_model_request - assembles model request formatted according to OpenAI role schemas, including active reminders.
     def get_model_request(self) -> conversation.ModelRequest:
@@ -270,7 +195,13 @@ class Conversation(conversation.Conversation, Singleton):
                 )
             )
         return conversation.ModelRequest(messages=formatted)
-
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-21T12:45:00Z
+# CHANGE: Delete superseded tool calls and responses beyond buffer limit instead of stubbing arguments
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

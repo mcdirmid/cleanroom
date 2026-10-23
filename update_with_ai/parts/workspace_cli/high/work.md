@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-18T01:30:00Z
-CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
-CODE_HASH: 137092e219c3
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # work interface component
 
 imports: session, cleanroom_files_ext
@@ -14,7 +6,7 @@ imports: session, cleanroom_files_ext
 
 The work interface component defines data types and operational contracts for discovering ready and blocked tasks, evaluating in-scope dirtiness, and managing pending work queues within directory-scoped role workspaces.
 
-Autonomous agents operating without subgraphs or full DAG models require accurate, directory-scoped work discovery to determine which targets need cleaning, which are blocked by upstream prerequisites, and when turns can terminate cleanly. Guessing work status or scanning files ad-hoc wastes context tokens, causes out-of-order execution, and results in premature turn termination. The work interface component establishes contracts for querying ready tasks by role tier depth, inspecting pending work buffers, computing actionable next steps, and tracking pending targets across turns.
+Autonomous agents operating without subgraphs or full DAG models require accurate, directory-scoped work discovery to determine which targets need cleaning, which are blocked by upstream prerequisites, and when rounds can terminate cleanly. Guessing work status or scanning files ad-hoc wastes context tokens, causes out-of-order execution, and results in premature round termination. The work interface component establishes contracts for querying ready tasks by role tier depth, inspecting pending work buffers, computing actionable next steps, and tracking pending targets across rounds.
 
 **Out of scope:** The work interface component does not commission workspace directories, transfer source files, or execute test commands; these are handled by other components.
 
@@ -29,6 +21,8 @@ A *work queue summary* record encapsulates the overall state of a directory scop
 An agent session's *workspace work manager* evaluates and presents actionable work items for role workspaces.
 
 The workspace work manager:
+
+- Discovers package unit names and declared module dependencies from high-level specifications or filesystem stems within a part directory.
 
 - Evaluates dirty targets and topological readiness across a specified directory scope, discovering ready and blocked work items by role tier depth without requiring a subgraph, bounding presented ready items when a batch size is specified, evaluating intra-unit upstream contract dependencies for producer roles from declared role dependencies and cross-unit dependencies from declared star role dependencies for dirty tracking, evaluating a target as dirty when any star role dependency changes, and materializing starter templates through graph storage for missing ready target files.
 
@@ -47,3 +41,10 @@ The workspace work manager:
 - Clears the pending work buffer file when all targets in scope evaluate clean.
 
 - Formulates structured work queue summaries detailing ready targets, dirty reasons, prerequisite blockers, and actionable next steps for the active role.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

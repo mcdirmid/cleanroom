@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:25:00Z
-# CHANGE: Define metadata_asm library implementation
-# CODE_HASH: ac603acd403f
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry, get_default_registry
@@ -28,3 +21,9 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         constituent.__initialize__(reg)
 
 _initialize_ = __initialize__
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T17:25:00Z
+# CHANGE: Define metadata_asm library implementation
+# --- END CLEANROOM METADATA ---

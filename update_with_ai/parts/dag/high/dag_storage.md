@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T01:51:09Z
-CHANGE: Complete the operation inventory, scope out low-level operations correctly, and bind the dirty reason and message-clearing semantics
-CODE_HASH: 700cd79d46dd
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # dag_storage interface component
 
 ## Purpose
@@ -43,3 +35,10 @@ Marking a node dirty removes the node's clean status and records the reason the 
 Marking a subgraph clean materializes missing templates and marks the target node and every reachable dependency of the target node clean in graph storage.
 
 Materializing a template for a node writes initial template content to disk when the node's source artifact is missing, preserving an existing source artifact without overwriting it.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T01:51:09Z
+CHANGE: Complete the operation inventory, scope out low-level operations correctly, and bind the dirty reason and message-clearing semantics
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

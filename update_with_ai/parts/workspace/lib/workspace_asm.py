@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:04:06Z
-# CHANGE: Delegate assembly initialization through CONSTITUENTS instead of re-registering each constituent singleton inline
-# CODE_HASH: 2b8e0ccd5cd5
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry
@@ -36,3 +29,9 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
 
 
 _initialize_ = __initialize__
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:04:06Z
+# CHANGE: Delegate assembly initialization through CONSTITUENTS instead of re-registering each constituent singleton inline
+# --- END CLEANROOM METADATA ---

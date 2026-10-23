@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T21:45:00Z
-# CHANGE: author antigravity_coordinator_impl unit tests
-# CODE_HASH: b7c2197c9313
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for antigravity_coordinator_impl."""
 
 from __future__ import annotations
@@ -90,6 +81,7 @@ class AntigravityCoordinatorImplTest(unittest.TestCase):
             self.assertIn("STRICT BOUNDARY INVARIANT", skill_doc.content)
             self.assertIn("Workspace: inherit", skill_doc.content)
             self.assertIn("PROHIBITED", skill_doc.content)
+            self.assertIn("UNRESOLVED ROUND REMINDER", skill_doc.content)
 
     def test_format_dispatch_directive(self) -> None:
         """Scenario 3: Verifies formatting a RoleDispatch into a SubagentDispatchSpec."""
@@ -115,6 +107,17 @@ class AntigravityCoordinatorImplTest(unittest.TestCase):
             self.assertIn("bin/blame", spec.prompt)
             self.assertIn("bin/fail", spec.prompt)
             self.assertIn("Nodes ready:", spec.prompt)
+
+            dispatch_with_reminder = subagent_coordinator.RoleDispatch(
+                role_name="test",
+                workspace_dir="/tmp/test_workspace",
+                dir_scope="pkg_a",
+                ready_targets=("tests/foo_test.py",),
+                task_prompt="CRITICAL REMINDER: Unresolved targets must be concluded.",
+            )
+            spec_reminder = generator.format_dispatch_directive(dispatch_with_reminder, model="flash")
+            self.assertIn("CRITICAL REMINDER: Unresolved targets must be concluded.", spec_reminder.prompt)
+            self.assertIn("Execute autonomous Cleanroom round", spec_reminder.prompt)
 
     def test_parse_wake_notification_json(self) -> None:
         """Scenario 4: Verifies parsing structured JSON wake notification message."""
@@ -151,3 +154,11 @@ class AntigravityCoordinatorImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T21:45:00Z
+# CHANGE: author antigravity_coordinator_impl unit tests
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_workspace scenarios
-CODE_HASH: 228e3b8d6685
--->
-
 # antigravity_workspace scenarios
 
 ## Scenario 1 — Generating workspace isolation rules
@@ -27,3 +20,9 @@ Given: a configured role workspace with isolation files.
 
 1. The configurer inspects the configured workspace.
    Observed: a confinement report lists all generated boundary file paths and reports clean confinement status.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T21:45:00Z
+CHANGE: author antigravity_workspace scenarios
+-->

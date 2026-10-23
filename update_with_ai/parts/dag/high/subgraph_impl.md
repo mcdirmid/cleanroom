@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T01:39:02Z
-CHANGE: Remove interface-restated catalogs and retain only implementation-specific ordering and batching mechanics
-CODE_HASH: 67d2e86d33fa
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # subgraph_impl implementation component
 
 imports: dag_config, dag_storage
@@ -30,3 +22,10 @@ The target subgraph is complete if, but only if, every indexed node is clean in 
 The next ready batch draws from the indexed topological order, beginning at the earliest dirty node whose dependencies in the target subgraph are clean in dag storage, and extends over the contiguous nodes that share the first node's role address. A node whose dependencies in the target subgraph are neither clean nor already collected into the same batch leaves the batch before that node. The batch never exceeds the batch size of a system's dag config, and is an empty sequence when no dirty node in the target subgraph has all of its dependencies in the target subgraph clean in dag storage.
 
 Recording a visit for a batch advances the visit count of each node in the batch, failing when any node exceeds the node visit limit of a system's dag config.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Remove interface-restated catalogs and retain only implementation-specific ordering and batching mechanics
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

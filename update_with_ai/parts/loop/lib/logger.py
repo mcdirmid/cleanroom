@@ -1,11 +1,5 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-09T02:18:06Z
-# CHANGE: Align with logger.pyi specification
-# CODE_HASH: 8e8c85722687
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from support.lib.lifecycle import Singleton, SystemTier
 from typing import NewType, Protocol
 from dataclasses import dataclass
 
@@ -25,7 +19,13 @@ class RunnerLogEvent:
     transcript: EventTranscript
 
 
-class RunnerLogger(Protocol):
+class RunnerLogger(Singleton[SystemTier], Protocol):
     # Contract: consume execution log event, writing single-line summary to stdout and verbose transcript to file
     def consume(self, event: RunnerLogEvent) -> None:
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-09T02:18:06Z
+# CHANGE: Align with logger.pyi specification
+# --- END CLEANROOM METADATA ---

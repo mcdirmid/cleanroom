@@ -1,16 +1,7 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:04:02Z
-# CHANGE: Schedule directory-scoped dirty nodes from the role configuration node set when storage exposes no enumeration, and tolerate lifecycle resolution failures in role precedence
-# CODE_HASH: d25daba1f784
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 import os
 import tomllib
-from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 from support.lib.lifecycle import (
     LifecycleRegistry,
     LifecycleResolutionError,
@@ -23,32 +14,92 @@ from update_with_ai.parts.dag.lib import dag_storage, subgraph
 from . import work_scheduler
 
 
-def _extract_unit_info(node: dag_storage.DagNode) -> Tuple[str, str]:
-    target = node.unit_address
-    if ":" in target:
-        pkg, unit = target.split(":", 1)
-        pkg = pkg.lstrip("/").strip()
-        unit = unit.strip()
-        return pkg, unit
-    return "", target
+def _get_role_definitions() -> Dict[str, Any]:
+    try:
+        cfg: Any = get_singleton(node_config.NodeConfig)
+        if cfg is not None and hasattr(cfg, "role_definitions"):
+            r_defs = cfg.role_definitions
+            if isinstance(r_defs, dict) and r_defs:
+                return r_defs
+    except (LifecycleResolutionError, KeyError, AttributeError, RuntimeError):
+        pass
+    try:
+        from update_with_ai.parts.workspace.lib import role_registry
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        return {r.role_name: r for r in reg.list_roles()}
+    except Exception:
+        pass
+    return {}
+
+
+def _role_src_pattern(role_def: Any) -> str:
+    if hasattr(role_def, "src_pattern"):
+        return str(role_def.src_pattern or "")
+    if isinstance(role_def, dict):
+        return str(role_def.get("src_pattern") or "")
+    return ""
+
+
+def _role_name(role_def: Any, default: str = "") -> str:
+    if hasattr(role_def, "role_name"):
+        return str(role_def.role_name or default)
+    if isinstance(role_def, dict):
+        return str(role_def.get("role_name") or default)
+    return default
+
+
+def _role_audit_tag(role_def: Any) -> Optional[str]:
+    if hasattr(role_def, "audit_tag"):
+        return role_def.audit_tag
+    if isinstance(role_def, dict):
+        return role_def.get("audit_tag")
+    return None
+
+
+def _role_feedback_deps(role_def: Any) -> Sequence[str]:
+    if hasattr(role_def, "feedback_role_deps"):
+        return role_def.feedback_role_deps or ()
+    if isinstance(role_def, dict):
+        return role_def.get("feedback_role_deps") or ()
+    return ()
+
+
+def _bound_file_path(bound_file: Any) -> str:
+    if hasattr(bound_file, "workspace_path") and bound_file.workspace_path is not None:
+        ws_path = bound_file.workspace_path
+        return str(ws_path.path if hasattr(ws_path, "path") else ws_path)
+    if hasattr(bound_file, "relative_path"):
+        return str(bound_file.relative_path)
+    return str(bound_file)
 
 
 def _node_display_alias(node: dag_storage.DagNode) -> str:
-    """Returns a user/agent-facing file alias for a node, avoiding raw Bazel target addresses."""
+    try:
+        from . import coordinate
+        coord = get_singleton(coordinate.SessionCoordinator)
+        if coord is not None:
+            return coord.get_alias_for_node(node)
+    except Exception:
+        pass
+
     try:
         cfg = get_singleton(node_config.NodeConfig)
-        if getattr(cfg, "src_file_alias_by_node", None) and node in cfg.src_file_alias_by_node:
-            return str(cfg.src_file_alias_by_node[node])
-        for bt_set in getattr(cfg, "blame_targets_by_node", {}).values():
-            for bt in bt_set:
-                if getattr(bt, "owning_node", None) == node:
-                    return str(getattr(bt, "relative_path", bt))
-        for ro in getattr(cfg, "read_only_files", ()):
-            if getattr(ro, "owning_node", None) == node:
-                return str(getattr(ro, "relative_path", ro))
-        for rw in getattr(cfg, "read_write_files", ()):
-            if getattr(rw, "owning_node", None) == node:
-                return str(getattr(rw, "relative_path", rw))
+        if cfg is not None:
+            if hasattr(cfg, "src_file_alias_by_node") and cfg.src_file_alias_by_node and node in cfg.src_file_alias_by_node:
+                return str(cfg.src_file_alias_by_node[node])
+            if hasattr(cfg, "blame_targets_by_node") and cfg.blame_targets_by_node:
+                for bt_set in cfg.blame_targets_by_node.values():
+                    for bt in bt_set:
+                        if hasattr(bt, "owning_node") and bt.owning_node == node:
+                            return str(bt.relative_path if hasattr(bt, "relative_path") else bt)
+            if hasattr(cfg, "read_only_files") and cfg.read_only_files:
+                for ro in cfg.read_only_files:
+                    if hasattr(ro, "owning_node") and ro.owning_node == node:
+                        return str(ro.relative_path if hasattr(ro, "relative_path") else ro)
+            if hasattr(cfg, "read_write_files") and cfg.read_write_files:
+                for rw in cfg.read_write_files:
+                    if hasattr(rw, "owning_node") and rw.owning_node == node:
+                        return str(rw.relative_path if hasattr(rw, "relative_path") else rw)
     except Exception:
         pass
 
@@ -63,36 +114,27 @@ def _node_display_alias(node: dag_storage.DagNode) -> str:
         pkg, unit_name = "", addr
 
     role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
-    try:
-        cfg = get_singleton(node_config.NodeConfig)
-        role_defs = getattr(cfg, "role_definitions", {})
-        if role in role_defs:
-            r_def = role_defs[role]
-            src_pat = getattr(r_def, "src_pattern", "") or (
-                r_def.get("src_pattern") if isinstance(r_def, dict) else ""
-            )
-            if src_pat:
-                formatted = src_pat.replace("{unit_dir}", pkg).replace(
-                    "{unit_name}", unit_name
-                ).strip("/")
-                if formatted:
-                    return formatted
-    except Exception:
-        pass
+    role_defs = _get_role_definitions()
+    if role in role_defs:
+        src_pat = _role_src_pattern(role_defs[role])
+        if src_pat:
+            formatted = src_pat.replace("{unit_dir}", pkg).replace(
+                "{unit_name}", unit_name
+            ).strip("/")
+            if formatted:
+                return formatted
 
-    if role == "test":
-        return f"{pkg}/tests/{unit_name}_test.py" if pkg else f"tests/{unit_name}_test.py"
-    if role == "lib":
-        return f"{pkg}/lib/{unit_name}.py" if pkg else f"lib/{unit_name}.py"
-    if role == "low":
-        return f"{pkg}/low/{unit_name}.pyi" if pkg else f"low/{unit_name}.pyi"
-    if role == "high":
-        return f"{pkg}/high/{unit_name}.md" if pkg else f"high/{unit_name}.md"
-    if role == "planning":
-        return f"{pkg}/planning/{unit_name}.md" if pkg else f"planning/{unit_name}.md"
-    if role == "scenario":
-        return f"{pkg}/scenarios/{unit_name}.md" if pkg else f"scenarios/{unit_name}.md"
     return f"{pkg}/{unit_name}" if pkg else unit_name
+
+
+def _extract_unit_info(node: dag_storage.DagNode) -> Tuple[str, str]:
+    target = node.unit_address
+    if ":" in target:
+        pkg, unit = target.split(":", 1)
+        pkg = pkg.lstrip("/").strip()
+        unit = unit.strip()
+        return pkg, unit
+    return "", target
 
 
 def _is_auditor_node(node: dag_storage.DagNode) -> bool:
@@ -107,7 +149,7 @@ def _is_auditor_node(node: dag_storage.DagNode) -> bool:
     return role_name in ("qa", "coverage", "spec_qa", "auditor", "audit")
 
 
-class WorkScheduler(work_scheduler.WorkScheduler, Singleton):
+class WorkScheduler(work_scheduler.WorkScheduler):
     """Discovers ready tasks across subgraph or directory scope using dynamic role precedence."""
 
     tier = agent_session.agent_session
@@ -155,29 +197,17 @@ class WorkScheduler(work_scheduler.WorkScheduler, Singleton):
         """Determines precedence rank for a role address dynamically."""
         clean = role_address.split(":")[-1].strip().lower()
         role_deps: Dict[str, Sequence[str]] = {}
-        try:
-            cfg = get_singleton(node_config.NodeConfig)
-            if cfg is not None:
-                for r_name, r_cfg in getattr(cfg, "role_definitions", {}).items():
-                    rd = list(getattr(r_cfg, "role_deps", ()))
-                    rd += list(getattr(r_cfg, "feedback_role_deps", ()))
-                    rd += list(getattr(r_cfg, "silent_role_deps", ()))
-                    rd += [s for s in getattr(r_cfg, "star_role_deps", ()) if s.split(":")[-1] != r_name]
-                    role_deps[r_name] = rd
-        except (LifecycleResolutionError, KeyError, AttributeError, RuntimeError):
-            pass
-        if not role_deps:
-            try:
-                from update_with_ai.parts.workspace.lib import role_registry
-                reg = get_singleton(role_registry.WorkspaceRegistry)
-                for r in reg.list_roles():
-                    rd = [d.split(":")[-1] for d in r.role_deps]
-                    rd += [d.split(":")[-1] for d in r.feedback_role_deps]
-                    rd += [d.split(":")[-1] for d in r.silent_role_deps]
-                    rd += [s.split(":")[-1] for s in r.star_role_deps if s.split(":")[-1] != r.role_name]
-                    role_deps[r.role_name] = rd
-            except (LifecycleResolutionError, LookupError, ImportError, AttributeError):
-                pass
+        role_defs = _get_role_definitions()
+        for r_name, r_cfg in role_defs.items():
+            rd = list(r_cfg.role_deps if hasattr(r_cfg, "role_deps") else ())
+            rd += list(r_cfg.feedback_role_deps if hasattr(r_cfg, "feedback_role_deps") else ())
+            rd += list(r_cfg.silent_role_deps if hasattr(r_cfg, "silent_role_deps") else ())
+            rd += [
+                s
+                for s in (r_cfg.star_role_deps if hasattr(r_cfg, "star_role_deps") else ())
+                if s.split(":")[-1] != r_name
+            ]
+            role_deps[r_name] = rd
         if not role_deps:
             return 999
         ranks = self.compute_role_precedence(role_deps)
@@ -188,8 +218,9 @@ class WorkScheduler(work_scheduler.WorkScheduler, Singleton):
     ) -> List[dag_storage.DagNode]:
         """Scans the directory scope for dirty nodes whose upstream dependencies are clean."""
         norm_scope = dir_scope.strip().strip("/")
+        storage_any: Any = storage
         known_nodes: Set[dag_storage.DagNode] = set(
-            getattr(storage, "all_nodes", set()) or set()
+            (storage_any.all_nodes if hasattr(storage_any, "all_nodes") else set()) or set()
         )
         try:
             known_nodes.update(get_singleton(node_config.RoleConfig).nodes)
@@ -305,14 +336,15 @@ class WorkScheduler(work_scheduler.WorkScheduler, Singleton):
                     break
             return base + ".pyi"
 
+        n_cfg_any: Any = n_cfg
         is_auditor = bool(
-            getattr(n_cfg, "audit_tag", None)
-            or not getattr(n_cfg, "source_pattern", None)
+            (n_cfg_any.audit_tag if hasattr(n_cfg_any, "audit_tag") else None)
+            or not (n_cfg_any.source_pattern if hasattr(n_cfg_any, "source_pattern") else None)
             or not source_alias
         )
         if is_auditor:
             for ro in n_cfg.read_only_files:
-                ro_path = getattr(ro, "relative_path", str(ro))
+                ro_path = _bound_file_path(ro)
                 if ro_path.endswith(".pyi") and not ro_path.endswith("guide.pyi"):
                     return ro_path
             return f"low/{unit_name}.pyi"
@@ -328,7 +360,7 @@ class WorkScheduler(work_scheduler.WorkScheduler, Singleton):
 
         if source_alias.endswith(".pyi"):
             for ro in n_cfg.read_only_files:
-                ro_path = getattr(ro, "relative_path", str(ro))
+                ro_path = _bound_file_path(ro)
                 if ro_path.endswith(".md") and not ro_path.endswith("guide.md"):
                     ro_stem = os.path.splitext(os.path.basename(ro_path))[0]
                     if ro_stem == target_stem:
@@ -344,7 +376,7 @@ class WorkScheduler(work_scheduler.WorkScheduler, Singleton):
             return source_alias.replace("requirements/", "high/")
 
         for ro in n_cfg.read_only_files:
-            ro_path = getattr(ro, "relative_path", str(ro))
+            ro_path = _bound_file_path(ro)
             if (
                 ro_path.endswith(".md")
                 and not ro_path.endswith("guide.md")
@@ -375,7 +407,7 @@ class WorkScheduler(work_scheduler.WorkScheduler, Singleton):
         for n in nodes:
             if _is_auditor_node(n):
                 blame_targets = [
-                    getattr(bt, "relative_path", str(bt))
+                    _bound_file_path(bt)
                     for bt in n_cfg.blame_targets_by_node.get(n, ())
                 ]
                 grounding_file = self._resolve_grounding_file(n, "", n_cfg)
@@ -413,7 +445,8 @@ class WorkScheduler(work_scheduler.WorkScheduler, Singleton):
                     m, (dag_storage.ChangeMessage, dag_storage.FeedbackMessage)
                 ):
                     return m.content
-                return getattr(m, "content", "")
+                m_any: Any = m
+                return str(m_any.content) if hasattr(m_any, "content") else ""
 
             messages_sorted = sorted(
                 storage.get_messages(n),
@@ -500,6 +533,13 @@ class WorkScheduler(work_scheduler.WorkScheduler, Singleton):
             )
 
         return "\n\n".join(p for p in parts if p).strip()
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:04:02Z
+# CHANGE: Schedule directory-scoped dirty nodes from the role configuration node set when storage exposes no enumeration, and tolerate lifecycle resolution failures in role precedence
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

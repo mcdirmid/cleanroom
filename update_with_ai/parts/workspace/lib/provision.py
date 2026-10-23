@@ -1,19 +1,14 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-06T22:55:00Z
-# CHANGE: new file
-# CODE_HASH: 1d6d0e4c1345
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for provision."""
 
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 
 from typing import Optional, Protocol
 from . import role_registry
 
 
-class WorkspaceProvisioner(Protocol):
+class WorkspaceProvisioner(Singleton[AgentSessionTier], Protocol):
     """Service commissioning and decommissioning isolated role workspaces."""
 
     # Contract: MUST commission an isolated role workspace with permission boundaries, runner tools, and AGENTS.md.
@@ -65,3 +60,9 @@ class WorkspaceProvisioner(Protocol):
         dir_scope: str,
         repo_root: Optional[str] = None,
     ) -> int: ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-06T22:55:00Z
+# CHANGE: new file
+# --- END CLEANROOM METADATA ---

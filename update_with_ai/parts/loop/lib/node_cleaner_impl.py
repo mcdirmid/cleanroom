@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T06:10:36Z
-# CHANGE: Record the blame explanation as the feedback message content instead of the blamed target label, and present the session role through the contracted role config key so the services that read RoleConfig observe it
-# CODE_HASH: f91876eecc09
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 import os
 import traceback
 from typing import Any, Optional, Sequence, Set, Tuple, cast
@@ -168,8 +159,8 @@ def _matches_blame_target(bf: Any, target_str: str) -> bool:
         return False
 
     # Unit address / label matching
-    owning = getattr(bf, "owning_node", None)
-    unit_addr = str(getattr(owning, "unit_address", "") or "") if owning else ""
+    owning = bf.owning_node if hasattr(bf, "owning_node") else None
+    unit_addr = str(owning.unit_address or "") if (owning and hasattr(owning, "unit_address")) else ""
     if unit_addr:
         if target_clean == unit_addr or stripped_target == unit_addr:
             return True
@@ -186,10 +177,12 @@ def _matches_blame_target(bf: Any, target_str: str) -> bool:
             return True
 
     # Path matching (relative_path, workspace_path, short_name)
-    rel_path = str(getattr(bf, "relative_path", "") or "")
-    ws_path_obj = getattr(bf, "workspace_path", None)
-    ws_path = str(getattr(ws_path_obj, "path", "") or "") if ws_path_obj else ""
-    short = str(getattr(bf, "short_name", "") or "")
+    rel_path = str(bf.relative_path or "") if hasattr(bf, "relative_path") else ""
+    ws_path_obj = bf.workspace_path if hasattr(bf, "workspace_path") else None
+    ws_path = str(ws_path_obj.path or "") if (ws_path_obj and hasattr(ws_path_obj, "path")) else (str(ws_path_obj) if ws_path_obj else "")
+    short = str(bf.short_name or "") if hasattr(bf, "short_name") else ""
+    if not rel_path and not ws_path and not short and isinstance(bf, str):
+        rel_path = bf
 
     candidate_paths = [p for p in (rel_path, ws_path, short) if p]
     for p in candidate_paths:
@@ -220,7 +213,7 @@ def _matches_blame_target(bf: Any, target_str: str) -> bool:
     return False
 
 
-class NodeCleaner(node_cleaner.NodeCleaner, Singleton):
+class NodeCleaner(node_cleaner.NodeCleaner):
     tier = system
 
     def __init__(self) -> None:
@@ -410,9 +403,11 @@ class NodeCleaner(node_cleaner.NodeCleaner, Singleton):
             if meta_mgr is None:
                 return False
             if node_cfg is not None:
-                for rw_file in getattr(node_cfg, "read_write_files", []):
-                    if getattr(rw_file, "owning_node", None) == node:
-                        ws_path = str(rw_file.workspace_path.path)
+                rw_files = node_cfg.read_write_files if hasattr(node_cfg, "read_write_files") else ()
+                for rw_file in rw_files:
+                    owning = rw_file.owning_node if hasattr(rw_file, "owning_node") else None
+                    if owning == node:
+                        ws_path = str(rw_file.workspace_path.path) if (hasattr(rw_file, "workspace_path") and hasattr(rw_file.workspace_path, "path")) else str(rw_file.workspace_path)
                         disk_path = str(Path(ws_root) / ws_path) if ws_root else ws_path
                         if os.path.isfile(disk_path) and meta_mgr.is_code_modified(disk_path):
                             return True
@@ -434,7 +429,7 @@ class NodeCleaner(node_cleaner.NodeCleaner, Singleton):
 
 
 # Contract: LoopCleaner realizes dependency-first topological cleaning and visit recording using DagSubgraph.
-class LoopCleaner(cleaner.LoopCleaner, Singleton):
+class LoopCleaner(cleaner.LoopCleaner):
     tier = system
 
     def __init__(self) -> None:
@@ -457,17 +452,19 @@ class LoopCleaner(cleaner.LoopCleaner, Singleton):
                 return False
 
         return subgraph.is_complete()
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T06:10:36Z
+# CHANGE: Record the blame explanation as the feedback message content instead of the blamed target label, and present the session role through the contracted role config key so the services that read RoleConfig observe it
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        LoopCleaner,
-        keys=[LoopCleaner, cleaner.LoopCleaner],
-        tier=system,
-    )
     reg.register_singleton(
         _RoleConfig,
         keys=[_RoleConfig, node_config.RoleConfig],
@@ -476,6 +473,11 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         NodeCleaner,
         keys=[NodeCleaner, node_cleaner.NodeCleaner],
+        tier=system,
+    )
+    reg.register_singleton(
+        LoopCleaner,
+        keys=[LoopCleaner, cleaner.LoopCleaner],
         tier=system,
     )
 

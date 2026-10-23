@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T17:50:00Z
-CHANGE: Delegate substantive command workflows to commands
-CODE_HASH: f912594c7be7
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # cli_tool_impl implementation component
 
 imports: session, commands
@@ -30,3 +22,10 @@ The realization:
 - Builds argument parsers and dispatches command execution across the work, check files, submit, blame, feedback, fail, coverage, commission, and refresh system subcommands, supporting repository root overrides for blame, fail, and coverage, and delegating execution to the workspace command handler.
 
 - Normalizes integer exit codes and error handling across dispatched commands, guaranteeing execution operates within the agent session lifecycle tier.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T17:50:00Z
+CHANGE: Delegate substantive command workflows to commands
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

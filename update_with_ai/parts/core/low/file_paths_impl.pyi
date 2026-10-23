@@ -1,15 +1,7 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:06:14Z
-# CHANGE: Ground path mechanics on host filesystem operations and contract empty path rejection
-# CODE_HASH: a36b48ae4048
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """File paths implementation low-level specification."""
 
 import os
-from framework import operation, override, singleton_type
+from support.lib.framework import operation, override, singleton_type
 import file_paths
 
 
@@ -86,3 +78,10 @@ class FilePathManager(file_paths.FilePathManager):
           and encapsulates the normalized result in a file_paths.AbsolutePath record.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:06:14Z
+# CHANGE: Ground path mechanics on host filesystem operations and contract empty path rejection
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

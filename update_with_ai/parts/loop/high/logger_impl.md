@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T12:35:00Z
-CHANGE: Present single-line event summaries to standard output without timestamps or event names
-CODE_HASH: adde451fcaa5
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # logger_impl implementation component
 
 implements: logger
@@ -23,3 +15,10 @@ Unbuffered write guarantees preserve diagnostic logs even when processes encount
 The transcript log destination resolves from a configured environment variable, defaulting to `agent_loop.log` when no destination is configured. The transcript log file is truncated at opening so that each execution session starts with a clean transcript log.
 
 Standard output lines present single-line event summaries for live terminal visibility without timestamps or event names. Transcript log entries append verbose records with immediate flushing after each write, preserving unbuffered persistence across unexpected crashes.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T12:35:00Z
+CHANGE: Present single-line event summaries to standard output without timestamps or event names
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

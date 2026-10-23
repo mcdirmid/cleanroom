@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-09T22:20:00Z
-CHANGE: Record change summary during clean status transition without appending dirty change message
-CODE_HASH: 15b5444ed474
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # submit_impl implementation component
 
 ## Intent
@@ -63,3 +55,10 @@ The implementation evaluates verification results from the verification evaluato
   - Grounded: [caller input, submission_gating]
 - Source metadata header extraction and mutation on disk.
   - Grounded: [src_metadata: [source_metadata_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-09T22:20:00Z
+CHANGE: Record change summary during clean status transition without appending dirty change message
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

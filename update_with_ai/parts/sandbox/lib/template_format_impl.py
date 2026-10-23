@@ -1,16 +1,7 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-09T04:43:52Z
-# CHANGE: Eliminate unreachable negation branches in _eval_condition
-# CODE_HASH: ebb362ce98cd
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 import re
 from typing import Any, List, Mapping, Optional, Sequence, Tuple
 from support.lib.lifecycle import (
-    InTier,
+
     LifecycleRegistry,
     Singleton,
     get_default_registry,
@@ -35,6 +26,7 @@ def _lookup_path(path: str, context: Mapping[str, Any]) -> Tuple[bool, Any]:
             else:
                 return False, None
         elif hasattr(curr, part):
+            # Legitimate reflection: dynamically resolve dot-delimited template placeholder paths
             curr = getattr(curr, part)
         else:
             return False, None
@@ -147,7 +139,7 @@ def _render_lines(lines: Sequence[str], context: Mapping[str, Any]) -> List[str]
     return output
 
 
-class TemplateFormatter(template_format.TemplateFormatter, InTier[AgentSessionTier], Singleton):
+class TemplateFormatter(template_format.TemplateFormatter):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -166,6 +158,13 @@ class TemplateFormatter(template_format.TemplateFormatter, InTier[AgentSessionTi
             res += "\n"
         res = re.sub(r"\n{3,}", "\n\n", res)
         return template_format.FormattedText(res)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-09T04:43:52Z
+# CHANGE: Eliminate unreachable negation branches in _eval_condition
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -174,7 +173,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         TemplateFormatter,
-        keys=[TemplateFormatter, template_format.TemplateFormatter, InTier[AgentSessionTier]],
+        keys=[TemplateFormatter, template_format.TemplateFormatter],
         tier=agent_session,
     )
 

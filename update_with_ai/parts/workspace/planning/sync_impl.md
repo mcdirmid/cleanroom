@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T17:45:00Z
-CHANGE: align AGENTS.md refresh planning with in-workspace file inspection and terminal command restrictions
-CODE_HASH: 3483c1084b61
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # sync_impl implementation component
 
 ## Intent
@@ -18,7 +10,7 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 - The workspace synchronizer copies newer upstream files from main to workspace setting 0o444 permissions on contracts and updating unmodified writable targets with 0o644 permissions while projecting metadata headers with ephemeral code hashes and deleting missing files. [copy_upstream_files_with_perms]
 - The workspace synchronizer delegates test stub synchronization for stub role dependencies to workspace provisioning. [sync_stub_role_dependencies]
-- The workspace synchronizer recopies project configurations, guides, and linters into the workspace, delegating runner deployment, role guide regeneration, and test stub synchronization to workspace provisioning without altering targets. [recopy_system_files_fast]
+- The workspace synchronizer recopies project configurations, promoted methodology assets (`./support/lib/`, `./guides/`, `./templates/`, `./cleanroom_roles.toml`, `./pyright_spec.json`), and linters belonging exclusively to the active methodology binding into the workspace root without scanning or mirroring unbound repository root directories, delegating runner deployment, role guide regeneration, and test stub synchronization to workspace provisioning without altering targets. [recopy_system_files_fast]
 - The workspace synchronizer computes on-disk SHA-256 code hashes and extracts in-band metadata to identify modified files. [evaluate_target_file_modifications]
 - The workspace synchronizer compares main repository code hashes against workspace baselines to detect concurrent edits. [compare_main_and_workspace_hashes]
 - The workspace synchronizer copies validated target files into the canonical repository, stripping ephemeral code hashes, and updates in-band clean timestamps. [copy_validated_files_to_main]
@@ -54,3 +46,10 @@ Distributing work across disjoint workspaces introduces data synchronization rac
   - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Filesystem reading, writing, and permission manipulation.
   - Grounded: [workspace_pull_algorithms, workspace_harvest_algorithms]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-22T13:50:00Z
+LAST_CHANGED: 2026-10-22T13:50:00Z
+CHANGE: Restrict system file refreshing exclusively to bound methodology package assets
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

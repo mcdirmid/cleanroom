@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:23:51Z
-CHANGE: Keep the guard realization within its declared imports closure
-CODE_HASH: ae3aecc83cef
--->
-
 # Concrete scenarios for `loop_guard_impl` (implementation)
 
 Scenarios 1 through 5 restate the caller observations of the interface scenarios and add, beside
@@ -46,17 +39,24 @@ once, producing no reminder because one execution is not a repetition.
    Realized by: the component's own warning threshold of 2 repetitions over its consecutive
    identical-execution counter, the invocation signature it derives from the tool name and the
    serialized arguments of the `read_file` response through `tool_provider`, and the component's own
-   reminder construction, whose advisory text states that repeated tool execution will reveal no
-   new information until session read-write files are updated and that repeating the call without
-   modifying files will trigger fatal loop termination.
+   reminder construction, whose advisory text directs the agent to modify files using the session's
+   editing tool through `file_editor` or conclude the round with blame or fail, states that repeated
+   tool execution will reveal no new information until session read-write files are updated, and
+   warns that repeating the call without modifying files will trigger fatal loop termination.
 
 ### Scenario 3 — Identical tool executions reaching the fatal threshold
 
 Given: the loop guard's warning threshold is 2 consecutive repetitions and its fatal threshold for
-an agent session is 3 consecutive repetitions, and the tool manager has returned the `read_file`
+an agent session is 4 consecutive repetitions, and the tool manager has returned the `read_file`
 response for `/ws/alpha_scope_a/widget.md` twice, having produced one loop reminder.
 
 1. The tool manager returns the `read_file` response for `/ws/alpha_scope_a/widget.md` a third
+   time.
+   Observed: the guard produces a second loop reminder.
+   Realized by: the component's own warning threshold comparison over the same consecutive
+   identical-execution counter, and the component's own reminder construction.
+
+2. The tool manager returns the `read_file` response for `/ws/alpha_scope_a/widget.md` a fourth
    time.
    Observed: the guard produces a loop failure whose explanation communicates that the agent
    session has terminated, and no further loop reminder is produced for that execution.
@@ -67,7 +67,7 @@ response for `/ws/alpha_scope_a/widget.md` twice, having produced one loop remin
 ### Scenario 4 — Edits to the same file and line range
 
 Given: the loop guard's warning threshold is 2 consecutive repetitions and its fatal threshold is
-3 consecutive repetitions, and the agent session is editing the unit widget's contract with the
+4 consecutive repetitions, and the agent session is editing the unit widget's contract with the
 `edit_file` tool.
 
 1. The tool manager returns the `edit_file` response for `/ws/alpha_scope_a/widget.md` at lines 12
@@ -75,7 +75,7 @@ Given: the loop guard's warning threshold is 2 consecutive repetitions and its f
    Observed: the guard produces no loop reminder and reports no loop failure.
    Realized by: the component's own coordinate-span counter, which begins a new run of one
    repetition for the file-and-line-range span recorded from the response's tool call arguments
-   through `tool_provider`.
+   through `tool_provider` and identified using the session's editing tool through `file_editor`.
 
 2. The tool manager returns the `edit_file` response for the same file at the same line range 12
    through 18.
@@ -85,6 +85,12 @@ Given: the loop guard's warning threshold is 2 consecutive repetitions and its f
 
 3. The tool manager returns the `edit_file` response for the same file at the same line range 12
    through 18 a third time.
+   Observed: the guard produces a second loop reminder.
+   Realized by: the component's own warning threshold comparison over that coordinate-span counter,
+   and the component's own reminder construction.
+
+4. The tool manager returns the `edit_file` response for the same file at the same line range 12
+   through 18 a fourth time.
    Observed: the guard produces a loop failure whose explanation communicates that the agent
    session has terminated.
    Realized by: the component's own fatal threshold comparison over the coordinate-span counter, and
@@ -93,7 +99,7 @@ Given: the loop guard's warning threshold is 2 consecutive repetitions and its f
 ### Scenario 5 — Forward progress clears the repetition tracking
 
 Given: the loop guard's warning threshold is 2 consecutive repetitions and its fatal threshold is
-3 consecutive repetitions, and the tool manager has returned the `read_file` response for
+4 consecutive repetitions, and the tool manager has returned the `read_file` response for
 `/ws/alpha_scope_a/widget.md` twice, having produced one loop reminder.
 
 1. The tool manager returns the `read_file` response for `/ws/alpha_scope_a/gadget.md`, which
@@ -194,3 +200,9 @@ session beta, and the session alpha counters hold two consecutive executions of 
    session.
    Realized by: the component's own per-session repeated-execution state, addressed by the agent
    session tier that bounds the execution, conversation, and ephemeral state of an agent.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-21T20:00:00Z
+LAST_CHANGED: 2026-10-21T20:00:00Z
+CHANGE: Reflect directive to modify files or conclude round in reminder realization
+-->

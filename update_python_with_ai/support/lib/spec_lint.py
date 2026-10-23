@@ -50,7 +50,7 @@ def find_all_parts_dirs() -> list[Path]:
     if not ROOT.exists():
         return dirs
     for entry in sorted(ROOT.iterdir()):
-        if entry.is_dir() and not entry.name.startswith(".") and entry.name != "staging":
+        if entry.is_dir() and not entry.name.startswith("."):
             p = entry / "parts"
             if p.is_dir():
                 cfg = p / "cleanroom.toml"

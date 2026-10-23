@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T18:50:00Z
-CHANGE: Author scaffold planning specification
-CODE_HASH: ed8935367a85
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # scaffold interface component
 
 ## Intent
@@ -22,7 +14,7 @@ Commissioned role workspaces require specialized executable tooling, in-band con
 
 - The workspace scaffolder packages executable runner tools into the workspace bin directory with execute permissions. [deploy_runner_zipapps]
 - The workspace scaffolder writes role configuration into cleanroom_files_ext.ROLE_DESCRIPTOR_FILE in the workspace root. [write_role_metadata]
-- The workspace scaffolder synthesizes role-tailored AGENTS.md instructions in the workspace root. [write_role_agents_instructions]
+- The workspace scaffolder synthesizes role-tailored AGENTS.md instructions in the workspace root, establishing operational constraints and model-contingent payload ceiling protection. [write_role_agents_instructions]
 - The workspace scaffolder synthesizes starter skeleton files for declared writable target files absent from disk. [create_missing_target_skeletons]
 - The workspace scaffolder writes text files with explicit permissions. [write_file_with_permissions]
 
@@ -46,3 +38,10 @@ Commissioned role workspaces require specialized executable tooling, in-band con
   - Deferred: Provided by workspace scaffolder implementation.
 - Formatting and serialization of role metadata and AGENTS.md instructions.
   - Deferred: Provided by workspace scaffolder implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-20T22:12:00Z
+CHANGE: Author scaffold planning specification with model-contingent AGENTS.md guide synthesis
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

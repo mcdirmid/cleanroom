@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:42:33Z
-# CHANGE: Keep declared direct dependencies propagating when their manifest cannot be discovered, synthesizing only the fallback definition and reserving non-propagation for declared silent and promptless pass-through dependencies
-# CODE_HASH: a8ea782fbeb8
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 import os
 import re
 import sys
@@ -28,7 +19,7 @@ from support.lib.lifecycle import (
 )
 
 
-class UvManifestLoader(manifest_loader.UvManifestLoader, Singleton):
+class UvManifestLoader(manifest_loader.UvManifestLoader):
     tier = system
 
     def __init__(self) -> None:
@@ -465,6 +456,7 @@ class UvManifestLoader(manifest_loader.UvManifestLoader, Singleton):
         self, storage: Any, node: dag_storage.DagNode
     ) -> None:
         """Synthesizes a promptless node definition for a dependency without a manifest."""
+        # Legitimate reflection: optional capability detection on dynamic storage backend
         store_definition = getattr(storage, "store_node_definition", None)
         if callable(store_definition):
             store_definition(
@@ -550,6 +542,13 @@ class UvManifestLoader(manifest_loader.UvManifestLoader, Singleton):
                     for fb_label in manifest.feedback_dependencies
                 }
                 storage_any.store_feedback_dependencies(node, fb_nodes)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:42:33Z
+# CHANGE: Keep declared direct dependencies propagating when their manifest cannot be discovered, synthesizing only the fallback definition and reserving non-propagation for declared silent and promptless pass-through dependencies
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

@@ -5,7 +5,9 @@ import argparse
 import importlib
 import json
 import os
+from pathlib import Path
 import shutil
+import subprocess
 import sys
 from typing import Any, Sequence
 
@@ -40,19 +42,7 @@ def _get_roots() -> list[str]:
     while curr and curr != os.path.dirname(curr):
         cfg = os.path.join(curr, ".cleanroom_role.json")
         if os.path.isfile(cfg):
-            env_main = os.environ.get("CLEANROOM_MAIN_ROOT")
-            if env_main and os.path.isdir(env_main):
-                roots.append(env_main)
-            parent = os.path.dirname(curr)
-            if os.path.basename(parent) == "role_workspaces":
-                p_root = os.path.dirname(parent)
-                ws_base = os.path.basename(curr)
-                for entry in sorted(os.listdir(p_root), key=len, reverse=True):
-                    if entry != "role_workspaces" and ws_base.startswith(f"{entry}_"):
-                        cand = os.path.join(p_root, entry)
-                        if os.path.isdir(cand):
-                            roots.append(cand)
-                            break
+            # In an isolated role workspace, curr is the sole root. Main root is isolated from sys.path.
             roots.append(curr)
             break
         if os.path.isfile(os.path.join(curr, "pyproject.toml")) or os.path.isfile(os.path.join(curr, "cleanroom.toml")):
@@ -93,7 +83,7 @@ for _r in _get_roots():
             if _dir_scope and _entry == _dir_scope:
                 continue
             if not _entry.startswith((".", "bazel-", "venv")):
-                for _sub in ("tools", "workspace"):
+                for _sub in ("workspace_cli", "tools", "workspace"):
                     if cli_tool_impl is None:
                         _cand_tool = os.path.join(_r, _entry, "parts", _sub, "lib", "cli_tool_impl.py")
                         if os.path.isfile(_cand_tool) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
@@ -129,31 +119,19 @@ if cli_tool_impl is None:
         try:
             cli_tool_impl = importlib.import_module("update_with_ai.parts.workspace.lib.cli_tool_impl")
         except ImportError:
-            try:
-                cli_tool_impl = importlib.import_module("parts.workspace_cli.lib.cli_tool_impl")
-            except ImportError:
-                try:
-                    cli_tool_impl = importlib.import_module("parts.workspace.lib.cli_tool_impl")
-                except ImportError:
-                    pass
+            pass
 
 if commands_impl is None:
     try:
         from update_with_ai.parts.workspace_cli.lib import commands_impl
     except ImportError:
-        try:
-            commands_impl = importlib.import_module("parts.workspace_cli.lib.commands_impl")
-        except ImportError:
-            pass
+        pass
 
 if pending_impl is None:
     try:
         from update_with_ai.parts.workspace_cli.lib import pending_impl
     except ImportError:
-        try:
-            pending_impl = importlib.import_module("parts.workspace_cli.lib.pending_impl")
-        except ImportError:
-            pass
+        pass
 
 if cli_tool_impl is None:
     raise ImportError("Failed to locate cli_tool_impl module across discovered Cleanroom roots")
@@ -334,11 +312,11 @@ Your sole, monomaniacal mission is coordinating multi-agent DAG convergence acro
    - Check active subagents using `manage_subagents` with action `list`.
    - Obtain the workspace directory for the role from `workspace_dirs[<role>]`.
    - If an active worker for that role already exists, wake it using `send_message`:
-     "Ready nodes detected in global DAG. Your assigned role workspace directory is '<workspace_dir>'. Set Cwd to '<workspace_dir>' for all tool calls. Immediately run bin/get_work to acquire pending ready nodes. Consult your workspace AGENTS.md and role guide, perform role verification via bin/check_files, resolve nodes via bin/submit, bin/blame, or bin/fail, and drain all ready nodes before completing. You are strictly restricted to running bin/ tools. If success is impossible, run bin/fail <target> '<reason>' and report FAILED: <target> - <reason>."
+     "Ready nodes detected in global DAG. Your assigned role workspace directory is '<workspace_dir>'. Set Cwd to '<workspace_dir>' for all tool calls. Immediately run bin/get_work to acquire pending ready nodes. Consult your workspace AGENTS.md and role guide, perform role verification via bin/check_files, resolve nodes via bin/submit, bin/blame, or bin/fail, and drain all ready nodes before completing. If success is impossible, run bin/fail <target> '<reason>' and report FAILED: <target> - <reason>."
    - If no active worker for that role exists, spawn it via `invoke_subagent`:
      - TypeName: "cleanroom_worker"
      - Role: "Cleanroom <Role> Worker"
-     - Prompt: "You are an autonomous Cleanroom '<role>' worker for scope '<scope>'. Your assigned role workspace directory is '<workspace_dir>'. You must operate strictly inside your assigned role workspace directory, setting Cwd to '<workspace_dir>' for all tool calls. You are STRICTLY RESTRICTED to running prescribed bin/ executables (bin/get_work, bin/check_files, bin/submit, bin/blame, bin/fail); running arbitrary commands (python, bash, find, grep, etc.) is strictly forbidden. Immediately run bin/get_work to acquire pending ready nodes. Consult your workspace AGENTS.md and role guide, perform role verification via bin/check_files, resolve nodes via bin/submit, bin/blame, or bin/fail, and drain all ready nodes before completing. If success is impossible or an unresolvable impasse occurs, execute bin/fail <target> '<reason>' and report FAILED: <target> - <reason>."
+     - Prompt: "You are an autonomous Cleanroom '<role>' worker for scope '<scope>'. Your assigned role workspace directory is '<workspace_dir>'. You must operate strictly inside your assigned role workspace directory, setting Cwd to '<workspace_dir>' for all tool calls. You may use standard shell commands (cat, grep, find, etc.) and native tools strictly within your workspace, but all target verification and round resolution must proceed through the prescribed bin/ executables (bin/get_work, bin/check_files, bin/submit, bin/blame, bin/fail). Immediately run bin/get_work to acquire pending ready nodes. Consult your workspace AGENTS.md and role guide, perform role verification via bin/check_files, resolve nodes via bin/submit, bin/blame, or bin/fail, and drain all ready nodes before completing. If success is impossible or an unresolvable impasse occurs, execute bin/fail <target> '<reason>' and report FAILED: <target> - <reason>."
    - (Note: if `invoke_subagent` reports cleanroom_worker not found, call `define_subagent` with name "cleanroom_worker", write tools enabled, and retry).
 6. REACTIVE SLEEP:
    After dispatching or waking the ready role workers, STOP calling tools and wait for worker completion messages. Do NOT poll, loop, or sleep.
@@ -379,15 +357,17 @@ inheritMcp: false
 
 You are an autonomous Cleanroom role worker executing strictly inside your assigned role workspace directory.
 
-## COMMAND RESTRICTION TRIPWIRE (Strictly Enforced):
-You are strictly permitted to run ONLY the prescribed workspace binaries:
+## PERMITTED TOOLS & SHELL COMMANDS:
+You are fully permitted to run standard shell utilities and scripts (`cat`, `grep`, `find`, `python`, etc.) or native tools strictly WITHIN your assigned role workspace directory (`.`) to inspect files, run local diagnostics, and complete your tasks.
+Git operations (`git checkout`, `git restore`, `git reset`, etc.) and accessing files outside your workspace remain strictly prohibited.
+
+## MANDATORY WORKFLOW BINARIES:
+All Cleanroom target resolution must proceed through the prescribed workspace binaries:
 - `bin/get_work`
 - `bin/check_files`
 - `bin/submit`
 - `bin/blame`
 - `bin/fail`
-
-Executing ANY other command or script (including but not limited to `python`, `python3`, `bash`, `sh`, `find`, `grep`, `git`, `cat`, or inspecting zipapps/executables) is STRICTLY FORBIDDEN and constitutes an immediate contamination / abort violation.
 
 ## UNRESOLVABLE IMPASSE & FAILURE PROTOCOL:
 If you determine that success is not possible (e.g. unreachable code under test, contradictory specification contracts, or dead ends that blame cannot resolve):
@@ -453,6 +433,91 @@ def ensure_antigravity_plugin_installed() -> str:
         f.write(WORKER_AGENT_MD.strip() + "\n")
 
     return plugin_dir
+
+
+def dispatch_antigravity_coordination(
+    target_display: str,
+    mode: str = "message",
+    model: str = "flash",
+) -> bool:
+    """Dispatches coordination to the Antigravity Desktop App via agentapi.
+
+    If mode == "message", sends a high-priority reactive message to the active
+    conversation (via ANTIGRAVITY_CONVERSATION_ID).
+    If mode == "new-conversation", spawns a dedicated conversation tab in the desktop app.
+
+    Returns True if successfully dispatched via agentapi, False otherwise.
+    """
+    if mode == "none":
+        return False
+
+    exe = os.environ.get("ANTIGRAVITY_AGENTAPI_EXE")
+    conv_id = os.environ.get("ANTIGRAVITY_CONVERSATION_ID")
+
+    # Resolve agentapi executable
+    agentapi_cmd: list[str] = []
+    if exe:
+        agentapi_cmd = [exe, "agentapi"]
+    else:
+        found = shutil.which("agentapi")
+        if not found:
+            for cand in [
+                Path.home() / ".gemini" / "antigravity" / "bin" / "agentapi",
+                Path.home() / ".gemini" / "antigravity-ide" / "bin" / "agentapi",
+            ]:
+                if cand.is_file() and os.access(cand, os.X_OK):
+                    found = str(cand)
+                    break
+        if found:
+            agentapi_cmd = [found]
+
+    if not agentapi_cmd:
+        return False
+
+    prompt = f"Clean all dirty nodes in {target_display} using cleanroom_coordinator."
+
+    if mode == "message":
+        if not conv_id:
+            return False
+        cmd = list(agentapi_cmd) + [
+            "send-message",
+            f"--title=Cleanroom Coordination [{target_display}]",
+            conv_id,
+            prompt,
+        ]
+    elif mode == "new-conversation":
+        tier = "flash"
+        if "pro" in model.lower():
+            tier = "pro"
+        elif "lite" in model.lower():
+            tier = "flash_lite"
+        cmd = list(agentapi_cmd) + [
+            "new-conversation",
+            f"--model={tier}",
+            f"--title=Cleanroom Coordinator: {target_display}",
+            "--",
+            prompt,
+        ]
+    else:
+        return False
+
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        if res.returncode == 0:
+            action_desc = (
+                f"Reactive wakeup message sent to conversation {conv_id}"
+                if mode == "message"
+                else "New coordinator conversation spawned"
+            )
+            print(f"[Antigravity Desktop IPC] {action_desc}.")
+            return True
+        else:
+            err = res.stderr.strip() or res.stdout.strip()
+            print(f"[Antigravity Desktop IPC] Warning: agentapi failed (code {res.returncode}): {err}", file=sys.stderr)
+            return False
+    except Exception as e:
+        print(f"[Antigravity Desktop IPC] Warning: agentapi invocation failed: {e}", file=sys.stderr)
+        return False
 
 
 def ensure_dsh_skill_installed() -> str | None:
@@ -894,10 +959,7 @@ def _find_subagent_tool_mod(target_scope: str | None, args_list: list[str]) -> A
         try:
             from update_with_ai.parts.subagent.lib import subagent_tool_impl as subagent_tool_mod
         except ImportError:
-            try:
-                subagent_tool_mod = importlib.import_module("parts.subagent.lib.subagent_tool_impl")
-            except ImportError:
-                pass
+            pass
     return subagent_tool_mod
 
 
@@ -1208,7 +1270,7 @@ def run_orchestrate(
     parser.add_argument(
         "--model",
         default=None,
-        help="Model configuration or profile name (e.g. default, deepseek-v41-flash, gemini-3.8-flash).",
+        help="Model configuration or profile name (e.g. default, deepseek-flash, gemini-flash).",
     )
     parser.add_argument(
         "--action",
@@ -1232,7 +1294,7 @@ def run_orchestrate(
         "--batch-size",
         type=int,
         default=None,
-        help="Maximum targets dispatched per role turn.",
+        help="Maximum targets dispatched per role round.",
     )
     parser.add_argument(
         "--timeout",
@@ -1265,6 +1327,12 @@ def run_orchestrate(
         "--headless",
         action="store_true",
         help="Force headless execution even on antigravity harness.",
+    )
+    parser.add_argument(
+        "--antigravity-dispatch",
+        choices=["message", "new-conversation", "none"],
+        default="message",
+        help="Antigravity Desktop IPC dispatch mode when harness is antigravity.",
     )
     parser.add_argument(
         "extra_args",
@@ -1399,17 +1467,14 @@ def run_orchestrate(
         print(f"Commissioning/verifying {len(declared_roles)} role workspaces{model_hint}...")
         commissioned_dirs = []
         for r in declared_roles:
-            ws_dir = reg.compute_workspace_dir(r.role_name, dir_scope=scope, repo_root=root)
-            if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
-                ws_info = prov.commission(
-                    role_name=r.role_name,
-                    dir_scope=scope,
-                    repo_root=root,
-                    model=model_to_bind,
-                )
-                commissioned_dirs.append((r.role_name, ws_info.workspace_dir))
-            else:
-                commissioned_dirs.append((r.role_name, ws_dir))
+            ws_info = prov.commission(
+                role_name=r.role_name,
+                dir_scope=scope,
+                repo_root=root,
+                model=model_to_bind,
+                reset=True,
+            )
+            commissioned_dirs.append((r.role_name, ws_info.workspace_dir))
         parent_ws_dir = os.path.dirname(commissioned_dirs[0][1]) if commissioned_dirs else ""
         print(f"[OK] All {len(commissioned_dirs)} role workspaces ready in {parent_ws_dir}.")
 
@@ -1427,10 +1492,20 @@ def run_orchestrate(
         role_hint = f" up to {target_role}" if target_role else ""
         target_display = target_input if is_unit else f"{scope}{role_hint}"
         queue_hint = f" {target_input}" if is_unit else (f" {target_role}" if target_role else "")
+
+        # Attempt Antigravity Desktop IPC dispatch
+        dispatch_mode = getattr(parsed, "antigravity_dispatch", "message")
+        if dispatch_mode != "none":
+            dispatch_antigravity_coordination(
+                target_display=target_display,
+                mode=dispatch_mode,
+                model=model_to_bind or "flash",
+            )
+
         print("\n" + "=" * 72)
         print("AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE:")
         print("The 'cleanroom_coordinator' subagent definition is installed and ready.")
-        print("Immediately invoke the coordinator subagent in this turn:")
+        print("Immediately invoke the coordinator subagent in this step:")
         print("  invoke_subagent(")
         print("    Subagents=[{")
         print('      "TypeName": "cleanroom_coordinator",')
@@ -1454,12 +1529,75 @@ def run_clean_cli(argv: list[str]) -> int:
 
 def main_clean(argv: list[str] | None = None) -> int:
     args_list = list(argv) if argv is not None else sys.argv[1:]
+    if "--repo-root" in args_list:
+        try:
+            rr_idx = args_list.index("--repo-root")
+            if rr_idx + 1 < len(args_list):
+                os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(args_list[rr_idx + 1])
+        except (ValueError, IndexError):
+            pass
     return run_clean_cli(args_list)
 
 
 def main_orchestrate(argv: list[str] | None = None) -> int:
     args_list = list(argv) if argv is not None else sys.argv[1:]
+    if "--repo-root" in args_list:
+        try:
+            rr_idx = args_list.index("--repo-root")
+            if rr_idx + 1 < len(args_list):
+                os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(args_list[rr_idx + 1])
+        except (ValueError, IndexError):
+            pass
     return run_orchestrate(args_list)
+
+
+def run_benchmark_cli(argv: list[str]) -> int:
+    normalized_argv: list[str] = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg.startswith("--model="):
+            normalized_argv.append("--models=" + arg.split("=", 1)[1])
+        elif arg == "--model" and i + 1 < len(argv):
+            normalized_argv.append("--models")
+            normalized_argv.append(argv[i + 1])
+            i += 1
+        else:
+            normalized_argv.append(arg)
+        i += 1
+
+    for r in _get_roots():
+        if not os.path.isdir(r):
+            continue
+        try:
+            for entry in os.listdir(r):
+                if entry.startswith((".", "bazel-", "venv")):
+                    continue
+                cand = os.path.join(r, entry, "parts", "benchmark", "lib", "benchmark_impl.py")
+                if os.path.isfile(cand):
+                    mod = importlib.import_module(f"{entry}.parts.benchmark.lib.benchmark_impl")
+                    if hasattr(mod, "main"):
+                        return int(mod.main(normalized_argv))
+        except OSError:
+            pass
+
+    print(
+        "Error: Failed to locate benchmark component (parts/benchmark/lib/benchmark_impl.py) across discovered Cleanroom package roots.",
+        file=sys.stderr,
+    )
+    return 1
+
+
+def main_benchmark(argv: list[str] | None = None) -> int:
+    args_list = list(argv) if argv is not None else sys.argv[1:]
+    if "--repo-root" in args_list:
+        try:
+            rr_idx = args_list.index("--repo-root")
+            if rr_idx + 1 < len(args_list):
+                os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(args_list[rr_idx + 1])
+        except (ValueError, IndexError):
+            pass
+    return run_benchmark_cli(args_list)
 
 
 def run_commission_cli(argv: list[str]) -> int:
@@ -1501,7 +1639,7 @@ def run_commission_cli(argv: list[str]) -> int:
         "--model",
         "-m",
         default=None,
-        help="Model profile to bind (e.g. default, deepseek-v41-flash, gemini-3.8-flash).",
+        help="Model profile to bind (e.g. default, deepseek-flash, gemini-flash).",
     )
     parser.add_argument(
         "--harness",
@@ -1546,9 +1684,11 @@ def run_commission_cli(argv: list[str]) -> int:
         if not role_name and s_role:
             role_name = s_role
         elif not role_name:
-            is_dir_target = (
-                os.path.isdir(os.path.join(root, dir_scope or "", "parts"))
-                or (dir_scope in ("staging", "update_with_ai", "update_python_with_ai"))
+            is_dir_target = bool(
+                dir_scope and (
+                    os.path.isdir(os.path.join(root, dir_scope, "parts"))
+                    or os.path.isdir(os.path.join(root, dir_scope))
+                )
             )
             if is_dir_target:
                 role_name = s_scope
@@ -1787,6 +1927,7 @@ positional arguments:
   <command>
     clean               Converge targets or scope clean (default: --harness loop)
     orchestrate         Orchestrate Cleanroom multi-agent convergence across role workspaces
+    benchmark           Run empirical model efficiency and verification benchmark suites
     work-queue (queue)  Inspect Cleanroom DAG work queue for ready and blocked nodes
     dirty               Mark target or scope dirty in DAG storage
     mark-clean          Mark target or scope clean in DAG metadata without running LLM loop
@@ -1813,27 +1954,7 @@ options:
 
 
 def main(argv: list[str] | None = None) -> int:
-    asm_modules = (
-        "parts.systems.lib.cleanroom_asm",
-        "parts.core.lib.file_paths_impl",
-        "parts.control.lib.control_asm",
-        "parts.metadata.lib.metadata_asm",
-        "parts.workspace_cli.lib.workspace_cli_asm",
-        "parts.workspace_cli.lib.cli_tool_impl",
-        "parts.workspace.lib.workspace_asm",
-        "parts.subagent.lib.subagent_asm",
-        "parts.subagent.lib.subagent_tool_impl",
-        "parts.antigravity.lib.antigravity_asm",
-        "parts.dsh.lib.dsh_asm",
-    )
-    for mod_name in asm_modules:
-        try:
-            mod = importlib.import_module(mod_name)
-            if hasattr(mod, "__initialize__"):
-                mod.__initialize__()
-        except (ImportError, AttributeError):
-            pass
-
+    discovered_pkgs: list[str] = []
     for _r in _get_roots():
         if not os.path.isdir(_r):
             continue
@@ -1843,29 +1964,41 @@ def main(argv: list[str] | None = None) -> int:
                     continue
                 if not _entry.startswith((".", "bazel-", "venv")):
                     if os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
-                        for sub in (
-                            "systems.lib.cleanroom_asm",
-                            "core.lib.file_paths_impl",
-                            "control.lib.control_asm",
-                            "storage.lib.metadata_asm",
-                            "tools.lib.workspace_cli_asm",
-                            "tools.lib.cli_tool_impl",
-                            "workspace.lib.workspace_asm",
-                            "subagent.lib.subagent_asm",
-                            "subagent.lib.subagent_tool_impl",
-                            "antigravity.lib.antigravity_asm",
-                            "dsh.lib.dsh_asm",
-                        ):
-                            try:
-                                mod = importlib.import_module(f"{_entry}.parts.{sub}")
-                                if hasattr(mod, "__initialize__"):
-                                    mod.__initialize__()
-                            except (ImportError, AttributeError):
-                                pass
+                        if _entry not in discovered_pkgs:
+                            discovered_pkgs.append(_entry)
         except OSError:
             pass
 
+    for _pkg in list(dict.fromkeys(discovered_pkgs + ["update_with_ai", "parts"])):
+        for sub in (
+            "systems.lib.cleanroom_asm",
+            "core.lib.file_paths_impl",
+            "control.lib.control_asm",
+            "metadata.lib.metadata_asm",
+            "workspace_cli.lib.workspace_cli_asm",
+            "workspace_cli.lib.cli_tool_impl",
+            "workspace.lib.workspace_asm",
+            "subagent.lib.subagent_asm",
+            "subagent.lib.subagent_tool_impl",
+            "antigravity.lib.antigravity_asm",
+            "dsh.lib.dsh_asm",
+        ):
+            for mod_path in (f"{_pkg}.parts.{sub}", f"parts.{sub}"):
+                try:
+                    mod = importlib.import_module(mod_path)
+                    if hasattr(mod, "__initialize__"):
+                        mod.__initialize__()
+                except Exception:
+                    pass
+
     args_list = list(argv) if argv is not None else sys.argv[1:]
+    if "--repo-root" in args_list:
+        try:
+            rr_idx = args_list.index("--repo-root")
+            if rr_idx + 1 < len(args_list):
+                os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(args_list[rr_idx + 1])
+        except (ValueError, IndexError):
+            pass
     # Re-install agent files each time cleanroom is executed
     ensure_antigravity_plugin_installed()
 
@@ -1907,6 +2040,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args_list[0] == "orchestrate":
         return run_orchestrate(args_list[1:])
+
+    if args_list[0] in ("benchmark", "evaluate"):
+        return run_benchmark_cli(args_list[1:])
 
     if args_list[0] in ("commission",):
         return run_commission_cli(args_list[1:])

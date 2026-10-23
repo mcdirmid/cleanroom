@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: 5960b952b494
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # node_config_impl implementation component
 
 imports: agent_config, dag_storage, file_paths, manifest_loader
@@ -58,3 +50,10 @@ The alias manager:
 - Converts path strings into file aliases by matching relative paths to the corresponding file aliases, producing an unbound file when a relative path is unmapped.
 
 - Sanitizes output text by masking occurrences of workspace root path prefixes and execution root path prefixes, replacing each matching host path with a relative workspace path.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

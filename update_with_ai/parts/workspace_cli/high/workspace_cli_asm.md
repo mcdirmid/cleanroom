@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T19:43:57Z
-LAST_CHANGED: 2026-10-11T04:09:45Z
-CHANGE: Removed the agent_session import: it was contributed solely by coverage_impl, which is now system-tier, and is no longer imported by any constituent.
-CODE_HASH: 45d5b7ccd58b
-SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
--->
-
 # workspace_cli_asm assembly component
 
 assembles: coverage_impl, check_impl, commands_impl, dirtiness_impl, pending_impl, cli_tool_impl, work_impl
@@ -23,3 +15,10 @@ Cleanroom role workspaces and developer CLI commands require standard access to 
 ## Types and Behavior
 
 The workspace_cli_asm assembly component aggregates the implementations of the tool coverage, workspace tool, and workspace work interfaces, providing a unified assembly for role workspace tool execution, work queue discovery, and module coverage evaluation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T19:43:57Z
+LAST_CHANGED: 2026-10-11T04:09:45Z
+CHANGE: Removed the agent_session import: it was contributed solely by coverage_impl, which is now system-tier, and is no longer imported by any constituent.
+SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
+-->

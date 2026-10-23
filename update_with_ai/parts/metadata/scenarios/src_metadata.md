@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:12:01Z
-CHANGE: Author control src_metadata concrete scenarios
-CODE_HASH: 1ed050c44e90
--->
-
 # Concrete scenarios for `src_metadata` (interface)
 
 ## Scenario 1 — Reading the metadata, code body, and modification status of a clean file
@@ -127,3 +120,41 @@ Given: a Python file with `# --- CLEANROOM METADATA ---` line comments and a Mar
 
 3. The caller invokes the module-level procedural facade `mark_clean` on both files.
    Observed: both files on disk record updated last cleaned timestamps preserving their format-specific comment delimiter styles.
+
+## Scenario 8 — Role audit tagging, auditor role classification, content serialization, and UTC timestamping
+
+Given: role `spec_qa`, role `lib`, and a valid `FileMetadata` record.
+
+1. The caller computes the audit tag for role `spec_qa`.
+   Observed: returns `SPEC_QA_AUDIT`.
+
+2. The caller checks whether role `spec_qa` is an auditor role.
+   Observed: returns true.
+
+3. The caller checks whether role `lib` is an auditor role.
+   Observed: returns false.
+
+4. The caller formats the `FileMetadata` record as Python comment lines and parses the resulting string.
+   Observed: parsing recovers a `FileMetadata` record with equivalent fields.
+
+5. The caller requests the current UTC timestamp.
+   Observed: returns an ISO-8601 formatted timestamp string ending in `Z`.
+
+## Scenario 9 — Evaluating whether proposed content edits alter in-band cleanroom metadata
+
+Given: an original source file content carrying a valid in-band cleanroom metadata block.
+
+1. The caller checks proposed content where only the source code body was modified and the metadata block remains identical.
+   Observed: returns false, indicating metadata was not altered.
+
+2. The caller checks proposed content where a line inside the metadata block was modified or the block was deleted.
+   Observed: returns true, indicating metadata was altered.
+
+3. Given an original source file without metadata, the caller checks proposed content containing cleanroom metadata delimiters or a metadata block.
+   Observed: returns true, indicating metadata was injected.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-20T22:32:00Z
+CHANGE: Add scenario for metadata alteration evaluation
+-->

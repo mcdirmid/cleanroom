@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:05:55Z
-CHANGE: Author dag_config interface scenarios
-CODE_HASH: ef336986e5ab
--->
-
 # Concrete scenarios for `dag_config` (interface)
 
 ## Scenario 1 — Reading the traversal limits
@@ -45,3 +38,9 @@ Given: no ambient configuration is active.
 
 2. The caller reads the batch size.
    Observed: the read fails explicitly rather than reporting a silent fallback size.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:05:55Z
+CHANGE: Author dag_config interface scenarios
+-->

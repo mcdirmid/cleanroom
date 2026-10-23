@@ -1,10 +1,4 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:09:58Z
-# CHANGE: Use the real cross-part file alias module for the declared interface field types instead of a private fallback container
-# CODE_HASH: 17f30c9d6a4a
-# --- END CLEANROOM METADATA ---
-
+from support.lib.lifecycle import Singleton, SystemTier
 from dataclasses import dataclass
 from typing import NewType, Optional, Protocol, Sequence
 from update_with_ai.parts.agent.lib import file_alias
@@ -33,7 +27,7 @@ class TargetManifest:
     verification_success_message: Optional[str] = None
 
 
-class UvManifestLoader(Protocol):
+class UvManifestLoader(Singleton[SystemTier], Protocol):
     # Contract: retrieve target manifest for a node
     def retrieve_manifest(
         self, node: dag_storage.DagNode
@@ -41,3 +35,9 @@ class UvManifestLoader(Protocol):
 
     # Contract: resolve manifests into target nodes, definitions, and prompts
     def load_manifest(self, node: dag_storage.DagNode) -> None: ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:09:58Z
+# CHANGE: Use the real cross-part file alias module for the declared interface field types instead of a private fallback container
+# --- END CLEANROOM METADATA ---

@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-10-14T08:35:00Z
-# CHANGE: prevent full blame critique duplication in dirty reason when unacted feedback is present
-# CODE_HASH: eeda090d349b
-# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for work_impl."""
 
 from __future__ import annotations
@@ -16,7 +7,7 @@ import fnmatch
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from support.lib.lifecycle import (
     LifecycleRegistry,
@@ -99,6 +90,7 @@ def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
     return {}
 
 
+# Contract: __orphan__ - MUST discover unit names and dependencies from high-level specifications or filesystem stems in a part directory.
 get_part_units = _get_part_units
 
 
@@ -238,7 +230,12 @@ def _get_role_upstream_chain(
 
     def dfs(r: str) -> None:
         r_def = reg.resolve_role_definition(r, repo_root=repo_root)
-        dep_labels = list(r_def.role_deps) + list(r_def.feedback_role_deps) + list(r_def.star_role_deps)
+        dep_labels = (
+            list(r_def.role_deps)
+            + list(r_def.feedback_role_deps)
+            + list(r_def.star_role_deps)
+            + list(r_def.silent_role_deps)
+        )
         for d in dep_labels:
             d_name = d.split(":")[-1]
             if d_name != r and d_name not in visited:
@@ -252,10 +249,7 @@ def _get_role_upstream_chain(
 
 
 # Contract: WorkspaceWorkManager realizes work discovery across directory scopes and pending buffer tracking in agent_session tier.
-class WorkspaceWorkManager(
-    work.WorkspaceWorkManager,
-    Singleton,
-):
+class WorkspaceWorkManager(work.WorkspaceWorkManager):
     """Realizes work discovery across directory scopes and pending buffer tracking."""
 
     tier = agent_session.agent_session
@@ -406,7 +400,7 @@ class WorkspaceWorkManager(
 
             # Check 3: Inter-unit module dependencies
             transitive_deps = get_transitive_deps(uname)
-            roles_to_check = upstream_roles
+            roles_to_check = [r for r in upstream_roles if not _is_auditor_role(r, repo_root=repo_root)]
             for dep_u in sorted(transitive_deps):
                 dep_part = all_units.get(dep_u, part_dir)
                 dep_ctype = _classify_unit_type(dep_u)
@@ -438,7 +432,7 @@ class WorkspaceWorkManager(
                         continue
                     star_cand = star_pat.format(unit_dir=dep_pkg, unit_name=dep_u)
                     cand = star_cand
-                    # Fallback from implementation unit to interface unit (_impl suffix stripping) if star dependency candidate file is missing.
+                    # Contract: Resolves companion interface contracts without the _impl suffix for any implementation unit ending in _impl when expanding star role dependencies.
                     if not os.path.isfile(os.path.join(repo_root, star_cand)) and dep_u.endswith("_impl"):
                         iface_cand = star_pat.format(unit_dir=dep_pkg, unit_name=dep_u[:-5])
                         if os.path.isfile(os.path.join(repo_root, iface_cand)):
@@ -597,6 +591,20 @@ class WorkspaceWorkManager(
             target_path, workspace_dir, role_name=role_name
         )
 
+    # Contract: MUST discover unit names and dependencies from high-level specifications or filesystem stems in a part directory.
+    def get_part_units(
+        self,
+        repo_root: str,
+        part_dir: str,
+    ) -> Mapping[str, Sequence[str]]:
+        return _get_part_units(repo_root, part_dir)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-18T19:13:51Z
+# LAST_CHANGED: 2026-10-19T16:30:00Z
+# CHANGE: evaluate role upstream prerequisites across silent role dependencies
+# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

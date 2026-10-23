@@ -1,11 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 8edb781a884e
-# SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
-# --- END CLEANROOM METADATA ---
-
 """
 ## External Mechanics & API Documentation
 
@@ -63,3 +55,10 @@ def load_role_definitions(content: str) -> Mapping[str, Any]:
     return data["roles"]
 ```
 """
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-07T00:00:00Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+# --- END CLEANROOM METADATA ---

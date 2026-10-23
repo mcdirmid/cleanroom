@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T17:50:00Z
-# CHANGE: Define commands_impl low-level implementation specification
-# CODE_HASH: a9484d347801
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for commands_impl."""
 
 from typing import Optional
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import cleanroom_files_ext
 import commands
@@ -25,10 +17,7 @@ import coverage
 
 
 @singleton_type("agent_session")
-class WorkspaceCommandHandler(
-    commands.WorkspaceCommandHandler,
-    InTier[AgentSessionTier],
-):
+class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
     """Realizes substantive domain operations for Cleanroom role workspaces.
 
     GROUNDING:
@@ -84,7 +73,8 @@ class WorkspaceCommandHandler(
         """Verifies and submits target to canonical main repository.
 
         GROUNDING:
-        - Validates target, executes role verification checks unless bypassed, delegates submission to
+        - Enforces that modified target files have been checked via check_files since modification unless bypassed,
+          validates target, executes role verification checks unless bypassed, delegates submission to
           submit.SubmissionCoordinator, appends submission message to cleanroom_files_ext.CLEANROOM_LOG_FILE
           in the directory containing parts, clears target via pending.WorkspacePendingManager.remove_pending_target,
           and updates local file.
@@ -102,9 +92,11 @@ class WorkspaceCommandHandler(
         """Attributes defect critique to culprit target in main repository.
 
         GROUNDING:
-        - Validates single-paragraph critique, delegates attribution to
+        - Enforces that modified workspace targets have been checked via check_files since modification,
+          validates single-paragraph critique, delegates attribution to
           attribution.AttributionCoordinator, appends blame message to
           cleanroom_files_ext.CLEANROOM_LOG_FILE in the directory containing parts,
+          records the blamed target in cleanroom_files_ext.BLAME_BUFFER_FILE in the workspace root,
           and clears target from pending work via pending.WorkspacePendingManager.
         """
         ...
@@ -120,7 +112,8 @@ class WorkspaceCommandHandler(
         """Marks target dirty and records failure feedback diagnostics.
 
         GROUNDING:
-        - Delegates failure marking and diagnostics recording to
+        - Enforces that modified target files have been checked via check_files since modification,
+          delegates failure marking and diagnostics recording to
           attribution.AttributionCoordinator, and clears target from pending work
           via pending.WorkspacePendingManager.
         """
@@ -196,3 +189,9 @@ def __orphan__() -> None:
     """
     ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-20T21:10:00Z
+# CHANGE: Record blamed target into workspace blame buffer in run_blame
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:13Z
-CHANGE: Author agent node_storage interface scenarios
-CODE_HASH: 79fe2cf4ceec
--->
-
 # Concrete scenarios for `agent_storage` (interface)
 
 ## Scenario 1 — A manifest declaring no targets
@@ -116,3 +109,9 @@ Given: no file named `parts/widget/targets.json` exists in the workspace.
    caller asks again.
    Observed: the request fails explicitly, naming the malformed manifest text, and no node
    definition is provided.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:13Z
+CHANGE: Author agent node_storage interface scenarios
+-->

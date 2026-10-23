@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:14:22Z
-CHANGE: Author workspace sync_impl concrete scenarios
-CODE_HASH: b8ff635770a2
--->
-
 # Concrete scenarios for `sync_impl` (implementation)
 
 Scenarios 1 through 8 restate the caller observations of the interface scenarios and add, beside
@@ -86,10 +79,10 @@ changed the tool runner, the project configuration, and the guide file
 `guides/alpha_guide.md`.
 
 1. The synchronizer refreshes the non-parts system files for alpha.
-   Observed: the workspace tool runner, project configuration, and guide hold the canonical
+   Observed: the workspace tool runner, project configuration, promoted methodology assets (`./support/lib/`, `./guides/`, `./templates/`, `./cleanroom_roles.toml`, `./pyright_spec.json`), and guide hold the canonical
    content, and the locally modified alpha source for widget is untouched.
    Realized by: the component's own system file refresh, which recopies project
-   configurations and guides while skipping every in-scope source file, and delegation of runner
+   configurations, promoted methodology assets belonging exclusively to the active methodology binding, and guides while skipping every in-scope source file and without copying unbound repository root directories, and delegation of runner
    deployment, role guide regeneration, and test stub synchronization to `provision`.
 
 ### Scenario 6 — Harvesting validated targets and an auditor audit
@@ -180,3 +173,9 @@ changed.
    `widget local`.
    Realized by: role guide regeneration delegated to `provision`, which rewrites only the guide file and
    leaves every in-scope source file alone.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-22T13:50:00Z
+LAST_CHANGED: 2026-10-22T13:50:00Z
+CHANGE: Restrict system file refreshing exclusively to bound methodology package assets
+-->

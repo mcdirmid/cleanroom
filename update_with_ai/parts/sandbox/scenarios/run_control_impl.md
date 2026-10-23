@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T11:27:00Z
-CHANGE: Remove max batch size parameter from get work tool
-CODE_HASH: b30fb9cb5f97
--->
-
 # Concrete scenarios for `run_control_impl` (implementation)
 
 Scenarios 1 through 17 restate the caller observations of the interface scenarios and add, beside
@@ -523,3 +516,9 @@ Given: the agent enters a session for role alpha in `/ws/alpha_scope_a`, no targ
 1. The agent executes the get work tool without arguments.
    Observed: the dirty node is retrieved as an active node and the blame tool is installed in the session tools.
    Realized by: the component's own get work execution checking node config for blame targets across active nodes and installing `BlameTool` into `tool_provider`.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T11:27:00Z
+CHANGE: Remove max batch size parameter from get work tool
+-->

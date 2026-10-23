@@ -1,17 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T11:59:00Z
-# CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
-# CODE_HASH: e1ad87c4e3b7
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Sequence, Set, cast
 from support.lib.lifecycle import (
-    InTier,
+
     LifecycleRegistry,
     Singleton,
     get_default_registry,
@@ -33,7 +24,7 @@ from . import tool_provider
 # Requirements specified in run_control_impl.pyi
 
 
-class CheckFilesTool(run_control.CheckFilesTool, InTier[AgentSessionTier], Singleton):
+class CheckFilesTool(run_control.CheckFilesTool):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -62,9 +53,9 @@ class CheckFilesTool(run_control.CheckFilesTool, InTier[AgentSessionTier], Singl
         run_ctrl = get_singleton(run_control.RunController)
         run_ctrl.update_verification()
 
-        if getattr(run_ctrl, "_is_unchanged", False):
+        if run_ctrl.is_unchanged and run_ctrl.is_passed:
             return tool_provider.ToolResponse(
-                is_failed=not getattr(run_ctrl, "_passed", True),
+                is_failed=False,
                 is_terminated=False,
                 content=tool_provider.ToolResponseContent("Verification status is unchanged."),
                 reminder=tool_provider.ToolReminder(
@@ -72,8 +63,8 @@ class CheckFilesTool(run_control.CheckFilesTool, InTier[AgentSessionTier], Singl
                 ),
             )
 
-        if not getattr(run_ctrl, "_passed", True):
-            raw_diag = getattr(run_ctrl, "_diagnostic_output", "")
+        if not run_ctrl.is_passed:
+            raw_diag = run_ctrl.diagnostic_output
             alias_mgr = get_singleton(file_alias.AliasManager)
             sanitized_diag = str(alias_mgr.sanitize_text(file_alias.UnsanitizedText(raw_diag)))
             node_cfg = get_singleton(node_config.NodeConfig)
@@ -98,7 +89,7 @@ class CheckFilesTool(run_control.CheckFilesTool, InTier[AgentSessionTier], Singl
         node_cfg = get_singleton(node_config.NodeConfig)
         success_msg = (
             str(node_cfg.verification_success_message)
-            if getattr(node_cfg, "verification_success_message", None)
+            if node_cfg.verification_success_message
             else "All verification checks passed."
         )
         return tool_provider.ToolResponse(
@@ -108,7 +99,7 @@ class CheckFilesTool(run_control.CheckFilesTool, InTier[AgentSessionTier], Singl
         )
 
 
-class AdvanceTool(run_control.AdvanceTool, InTier[AgentSessionTier], Singleton):
+class AdvanceTool(run_control.AdvanceTool):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -138,8 +129,8 @@ class AdvanceTool(run_control.AdvanceTool, InTier[AgentSessionTier], Singleton):
         run_ctrl.update_verification()
 
         guide_deliv = get_singleton(guide_delivery.GuideDelivery)
-        if not getattr(run_ctrl, "_passed", True):
-            raw_diag = getattr(run_ctrl, "_diagnostic_output", "")
+        if not run_ctrl.is_passed:
+            raw_diag = run_ctrl.diagnostic_output
             resp = guide_deliv.advance_step(
                 verification_passed=False,
                 failure_diagnostics=node_config.VerificationDiagnostic(raw_diag),
@@ -200,7 +191,7 @@ class AdvanceTool(run_control.AdvanceTool, InTier[AgentSessionTier], Singleton):
 
 
 
-class GetWorkTool(run_control.GetWorkTool, InTier[AgentSessionTier], Singleton):
+class GetWorkTool(run_control.GetWorkTool):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -248,14 +239,15 @@ class GetWorkTool(run_control.GetWorkTool, InTier[AgentSessionTier], Singleton):
                 content=tool_provider.ToolResponseContent("No dirty nodes are ready. Workspace is clean."),
             )
 
-        prompts = [t.task_prompt for t in schedule.tasks if getattr(t, "task_prompt", None)]
+        prompts = [t.task_prompt for t in schedule.tasks if t.task_prompt]
         task_prompt = "\n\n".join(prompts) if prompts else "Dirty nodes acquired for processing."
 
         node_cfg = get_singleton(node_config.NodeConfig)
-        guide_deliv = get_singleton(guide_delivery.GuideDelivery)
-        init_guide = getattr(guide_deliv, "initialize", None)
-        if callable(init_guide):
-            init_guide()
+        guide_deliv: Any = get_singleton(guide_delivery.GuideDelivery)
+        if hasattr(guide_deliv, "initialize"):
+            init_guide = guide_deliv.initialize
+            if callable(init_guide):
+                init_guide()
         formatter = get_singleton(template_format.TemplateFormatter)
 
         template_parameters = {
@@ -270,16 +262,9 @@ class GetWorkTool(run_control.GetWorkTool, InTier[AgentSessionTier], Singleton):
 
         guide_file = node_cfg.guide_file
         guide_alias = str(guide_file.relative_path) if guide_file is not None else ""
-        # Fallback scan over read_only_files for an .md file to infer guide_alias when guide_file is not set.
-        if not guide_alias:
-            for read_only_file in node_cfg.read_only_files:
-                candidate_alias = str(getattr(read_only_file, "relative_path", read_only_file))
-                if candidate_alias.endswith(".md"):
-                    guide_alias = candidate_alias
-                    break
         if guide_alias and guide_alias not in primer_text:
             primer_text = f"{primer_text}\n\nRead {guide_alias} for alignment guidance."
-        if node_cfg.guide and getattr(node_cfg.guide, "summary", None):
+        if node_cfg.guide and node_cfg.guide.summary:
             guide_summary = str(node_cfg.guide.summary).strip()
             if guide_summary and guide_summary not in primer_text:
                 primer_text = f"{primer_text}\n\n{guide_summary}"
@@ -318,7 +303,7 @@ class GetWorkTool(run_control.GetWorkTool, InTier[AgentSessionTier], Singleton):
         )
 
 
-class RunController(run_control.RunController, InTier[AgentSessionTier], Singleton):
+class RunController(run_control.RunController):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -352,6 +337,21 @@ class RunController(run_control.RunController, InTier[AgentSessionTier], Singlet
             node: set(bound_files)
             for node, bound_files in node_cfg.blame_targets_by_node.items()
         }
+
+    # Contract: RunController.is_passed - exposes whether the latest verification evaluation passed.
+    @property
+    def is_passed(self) -> bool:
+        return self._passed
+
+    # Contract: RunController.is_unchanged - exposes whether target file hashes are unchanged since the last verification evaluation.
+    @property
+    def is_unchanged(self) -> bool:
+        return self._is_unchanged
+
+    # Contract: RunController.diagnostic_output - exposes aggregated diagnostic output from failing verification checks.
+    @property
+    def diagnostic_output(self) -> str:
+        return self._diagnostic_output
 
     # Contract: RunController.update_verification - updates and caches verification results alongside target file hashes sequentially when outdated.
     def update_verification(self) -> None:
@@ -389,6 +389,13 @@ class RunController(run_control.RunController, InTier[AgentSessionTier], Singlet
 
         self._passed = all_passed
         self._diagnostic_output = "\n".join(diag_parts).strip()
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T11:59:00Z
+# CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -397,22 +404,22 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         CheckFilesTool,
-        keys=[CheckFilesTool, run_control.CheckFilesTool, InTier[AgentSessionTier]],
+        keys=[CheckFilesTool, run_control.CheckFilesTool],
         tier=agent_session,
     )
     reg.register_singleton(
         AdvanceTool,
-        keys=[AdvanceTool, run_control.AdvanceTool, InTier[AgentSessionTier]],
+        keys=[AdvanceTool, run_control.AdvanceTool],
         tier=agent_session,
     )
     reg.register_singleton(
         GetWorkTool,
-        keys=[GetWorkTool, run_control.GetWorkTool, InTier[AgentSessionTier]],
+        keys=[GetWorkTool, run_control.GetWorkTool],
         tier=agent_session,
     )
     reg.register_singleton(
         RunController,
-        keys=[RunController, run_control.RunController, InTier[AgentSessionTier]],
+        keys=[RunController, run_control.RunController],
         tier=agent_session,
     )
 

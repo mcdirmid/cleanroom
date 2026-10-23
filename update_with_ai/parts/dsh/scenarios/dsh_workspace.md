@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T20:00:00Z
-CHANGE: author dsh_workspace scenarios
-CODE_HASH: c8781858c47c
--->
-
 # dsh_workspace scenarios
 
 ## Scenario 1 — Customizing role agent documentation with boundary constraints
@@ -27,3 +20,19 @@ Given: workspace configuration has completed for role_a in workspace_dir_a.
 
 1. The configurer returns configuration status.
    Observed: a confinement report containing workspace_dir_a, role_a, configured file paths, and success status is returned.
+
+## Scenario 4 — Customizing role agent documentation with model-contingent directives
+
+Given: a provisioned role workspace directory with a local or output-constrained model specification.
+
+1. The configurer customizes role agent documentation for a local or constrained model.
+   Observed: `AGENTS.md` contains incremental authoring and payload ceiling protection directives instructing the worker to avoid monolithic tool calls.
+
+2. The configurer customizes role agent documentation for a cloud model.
+   Observed: `AGENTS.md` omits incremental authoring advice.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-20T22:12:00Z
+CHANGE: author model-contingent AGENTS.md customization scenario
+-->

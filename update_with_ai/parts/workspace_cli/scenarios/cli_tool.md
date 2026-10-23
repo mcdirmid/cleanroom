@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:15:14Z
-CHANGE: Update Scenario 10 for dynamic directory scope
-CODE_HASH: c5469fba6677
--->
-
 # Concrete scenarios for `cli_tool` (interface)
 
 ## Scenario 1 — Running the work subcommand
@@ -112,3 +105,9 @@ Given: scope_a declares multiple roles in its methodology configuration, and no 
 
 1. The caller runs the commission subcommand with the all flag for scope_a (`commission --all scope_a`).
    Observed: role workspaces for all declared roles within scope_a are created and registered, mapping the positional scope parameter as directory scope rather than a role name, and the exit code is zero.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T21:15:14Z
+CHANGE: Update Scenario 10 for dynamic directory scope
+-->

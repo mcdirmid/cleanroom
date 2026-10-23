@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:55:00Z
-# CHANGE: Author unit tests for dsh_telemetry_impl
-# CODE_HASH: 32cb6df4b30a
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for dsh_telemetry_impl."""
 
 from __future__ import annotations
@@ -27,6 +18,8 @@ from update_with_ai.parts.dsh.lib import dsh_telemetry, dsh_telemetry_impl
 
 
 class MockDshRpcHandler(http.server.BaseHTTPRequestHandler):
+    recorded_calls: list[tuple[str, Any]] = []
+
     def log_message(self, format: str, *args: Any) -> None:
         pass
 
@@ -40,6 +33,7 @@ class MockDshRpcHandler(http.server.BaseHTTPRequestHandler):
 
         method = req_data.get("method") or ""
         payload_args = req_data.get("payload", {}).get("args", {})
+        MockDshRpcHandler.recorded_calls.append((method, payload_args))
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -116,6 +110,7 @@ class MockDshRpcHandler(http.server.BaseHTTPRequestHandler):
 
 class DshTelemetryImplTest(unittest.TestCase):
     def setUp(self) -> None:
+        MockDshRpcHandler.recorded_calls.clear()
         self.test_dir = tempfile.mkdtemp()
         self.registry = LifecycleRegistry()
         dsh_telemetry_impl.__initialize__(self.registry)
@@ -247,12 +242,12 @@ class DshTelemetryImplTest(unittest.TestCase):
         parser = dsh_telemetry_impl.DshTelemetryParser()
         self.assertFalse(parser.is_desktop_server_available(os.path.join(self.test_dir, "empty", "sessions")))
 
-    def test_dispatch_turn_rpc_success(self) -> None:
-        """Scenario 5: Dispatches role turn over RPC bridge and returns valid task handle."""
+    def test_dispatch_round_rpc_success(self) -> None:
+        """Scenario 5: Dispatches role round over RPC bridge and returns valid task handle."""
         sessions_dir = os.path.join(self.test_dir, "harness", "sessions")
         self._create_mock_cookies_db(sessions_dir, self.server_port)
         parser = dsh_telemetry_impl.DshTelemetryParser()
-        handle = parser.dispatch_turn_rpc(
+        handle = parser.dispatch_round_rpc(
             workspace_dir=self.test_dir,
             role_name="lib",
             prompt_text="Implement contracts",
@@ -262,12 +257,12 @@ class DshTelemetryImplTest(unittest.TestCase):
         assert handle is not None
         self.assertTrue(handle.startswith("dsh_rpc::"))
 
-    def test_dispatch_turn_rpc_server_unavailable(self) -> None:
-        """Scenario 5: Returns None when dispatching role turn to unavailable server."""
+    def test_dispatch_round_rpc_server_unavailable(self) -> None:
+        """Scenario 5: Returns None when dispatching role round to unavailable server."""
         sessions_dir = os.path.join(self.test_dir, "harness", "sessions")
         self._create_mock_cookies_db(sessions_dir, 65530)
         parser = dsh_telemetry_impl.DshTelemetryParser()
-        handle = parser.dispatch_turn_rpc(
+        handle = parser.dispatch_round_rpc(
             workspace_dir=self.test_dir,
             role_name="lib",
             prompt_text="Implement contracts",
@@ -275,14 +270,14 @@ class DshTelemetryImplTest(unittest.TestCase):
         )
         self.assertIsNone(handle)
 
-    def test_poll_turn_rpc_status_flows(self) -> None:
-        """Scenario 6: Polls active, completed, and error turn status records over RPC bridge."""
+    def test_poll_round_rpc_status_flows(self) -> None:
+        """Scenario 6: Polls active, completed, and error round status records over RPC bridge."""
         sessions_dir = os.path.join(self.test_dir, "harness", "sessions")
         self._create_mock_cookies_db(sessions_dir, self.server_port)
         parser = dsh_telemetry_impl.DshTelemetryParser()
 
         # 1. Active / running status
-        h_run = parser.dispatch_turn_rpc(
+        h_run = parser.dispatch_round_rpc(
             workspace_dir=self.test_dir,
             role_name="lib",
             prompt_text="Work",
@@ -290,7 +285,7 @@ class DshTelemetryImplTest(unittest.TestCase):
             sessions_dir=sessions_dir,
         )
         assert h_run is not None
-        st_run = parser.poll_turn_rpc(h_run, sessions_dir=sessions_dir)
+        st_run = parser.poll_round_rpc(h_run, sessions_dir=sessions_dir)
         self.assertTrue(st_run.is_active)
         self.assertFalse(st_run.is_completed)
         self.assertIsNotNone(st_run.metrics)
@@ -298,7 +293,7 @@ class DshTelemetryImplTest(unittest.TestCase):
         self.assertEqual(st_run.metrics.input_tokens, 100)
 
         # 2. Completed status
-        h_done = parser.dispatch_turn_rpc(
+        h_done = parser.dispatch_round_rpc(
             workspace_dir=self.test_dir,
             role_name="lib",
             prompt_text="Work",
@@ -306,7 +301,7 @@ class DshTelemetryImplTest(unittest.TestCase):
             sessions_dir=sessions_dir,
         )
         assert h_done is not None
-        st_done = parser.poll_turn_rpc(h_done, sessions_dir=sessions_dir)
+        st_done = parser.poll_round_rpc(h_done, sessions_dir=sessions_dir)
         self.assertFalse(st_done.is_active)
         self.assertTrue(st_done.is_completed)
         self.assertIsNotNone(st_done.metrics)
@@ -314,7 +309,7 @@ class DshTelemetryImplTest(unittest.TestCase):
         self.assertEqual(st_done.metrics.input_tokens, 200)
 
         # 3. Error status
-        h_err = parser.dispatch_turn_rpc(
+        h_err = parser.dispatch_round_rpc(
             workspace_dir=self.test_dir,
             role_name="lib",
             prompt_text="Work",
@@ -322,14 +317,48 @@ class DshTelemetryImplTest(unittest.TestCase):
             sessions_dir=sessions_dir,
         )
         assert h_err is not None
-        st_err = parser.poll_turn_rpc(h_err, sessions_dir=sessions_dir)
+        st_err = parser.poll_round_rpc(h_err, sessions_dir=sessions_dir)
         self.assertFalse(st_err.is_active)
         self.assertTrue(st_err.is_completed)
         self.assertIn("Simulated RPC execution error", st_err.error or "")
 
         # 4. Unknown task handle
-        st_unk = parser.poll_turn_rpc("invalid_handle", sessions_dir=sessions_dir)
+        st_unk = parser.poll_round_rpc("invalid_handle", sessions_dir=sessions_dir)
         self.assertFalse(st_unk.is_active)
         self.assertTrue(st_unk.is_completed)
         self.assertIn("Unknown task handle", st_unk.error or "")
 
+    def test_dispatch_round_rpc_selects_resolved_model(self) -> None:
+        """Scenario 5: Resolves model profile name to exact provider model string on session/selectModel."""
+        sessions_dir = os.path.join(self.test_dir, "harness", "sessions")
+        self._create_mock_cookies_db(sessions_dir, self.server_port)
+        cfg_path = os.path.join(self.test_dir, "model_configs.toml")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write(
+                "[models.my-moe]\n"
+                'model = "Qwen3.6-35B-A3B-oQ6-mtp"\n'
+                'provider = "mlx"\n'
+            )
+        parser = dsh_telemetry_impl.DshTelemetryParser()
+        handle = parser.dispatch_round_rpc(
+            workspace_dir=self.test_dir,
+            role_name="lib",
+            prompt_text="Implement contracts",
+            sessions_dir=sessions_dir,
+            model_name="my-moe",
+        )
+        self.assertIsNotNone(handle)
+        select_calls = [args for meth, args in MockDshRpcHandler.recorded_calls if meth == "session/selectModel"]
+        self.assertTrue(len(select_calls) > 0)
+        req = select_calls[-1].get("request", {})
+        self.assertEqual(req.get("provider"), "omlx")
+        self.assertEqual(req.get("model"), "Qwen3.6-35B-A3B-oQ6-mtp")
+
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:55:00Z
+# CHANGE: Author unit tests for dsh_telemetry_impl
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

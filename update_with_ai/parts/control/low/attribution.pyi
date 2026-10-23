@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:36:57Z
-# CHANGE: Add source attribution marking and file-level blame contracts; drop return-type restatements
-# CODE_HASH: bb10bc3c3889
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for attribution."""
 
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol, Sequence
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import node_config
@@ -36,7 +28,7 @@ class AttributionOutcome:
 
 
 @singleton_type("agent_session")
-class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
+class AttributionCoordinator(Singleton[AgentSessionTier], Protocol):
     """Coordinator that routes defect feedback and records failure states."""
 
     @operation
@@ -126,3 +118,10 @@ class AttributionCoordinator(InTier[AgentSessionTier], Protocol):
         - MUST resolve blame target values via alias resolution, exact path match, or normalized relative path suffix matching.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:36:57Z
+# CHANGE: Add source attribution marking and file-level blame contracts; drop return-type restatements
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

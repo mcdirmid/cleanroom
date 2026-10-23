@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:37:03Z
-# CHANGE: Add conditional endpoint, credential, and token bound contracts
-# CODE_HASH: fdd074302969
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """OpenAI configuration low-level interface specification."""
 
 from typing import NewType, Optional, Protocol
-from framework import singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 
 ModelName = NewType("ModelName", str)
 BaseUrl = NewType("BaseUrl", str)
@@ -21,7 +13,7 @@ MaxTokens = NewType("MaxTokens", int)
 
 
 @singleton_type("system")
-class OpenAIConfig(InTier[SystemTier], Protocol):
+class OpenAIConfig(Singleton[SystemTier], Protocol):
     """System service providing connection coordinates and model parameters for language model requests."""
 
     @property
@@ -65,3 +57,10 @@ class OpenAIConfig(InTier[SystemTier], Protocol):
         - WHEN token generation is constrained, MUST provide the max tokens upper bound.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:37:03Z
+# CHANGE: Add conditional endpoint, credential, and token bound contracts
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

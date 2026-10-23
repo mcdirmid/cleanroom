@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T17:55:00Z
-CHANGE: Define stub_impl planning specification
-CODE_HASH: 8f4bbbdb8f4d
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # stub_impl implementation component
 
 ## Intent
@@ -46,3 +38,10 @@ Operating test subagents in hermetic role workspaces requires robust stub synthe
 
 - Role definition resolution and stub dependency pattern matching.
   - Grounded: [role_registry: [workspace_registry_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T17:55:00Z
+CHANGE: Define stub_impl planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

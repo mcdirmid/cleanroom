@@ -1,18 +1,10 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:37:04Z
-# CHANGE: Declare coverage evaluator system tier and align record and executable line contracts
-# CODE_HASH: 245d6d8e6a09
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for coverage."""
 
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Sequence, Set, Tuple
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 
 
 @data_type
@@ -52,7 +44,7 @@ class ModuleCoverage:
 
 
 @singleton_type("system")
-class CoverageEvaluator(InTier[SystemTier], Protocol):
+class CoverageEvaluator(Singleton[SystemTier], Protocol):
     """Coordinates statement coverage measurement and report generation for library modules."""
 
     @operation
@@ -165,3 +157,10 @@ class CoverageEvaluator(InTier[SystemTier], Protocol):
         - WHEN an update log path is specified, MUST write the formatted coverage report to that log file.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:37:04Z
+# CHANGE: Declare coverage evaluator system tier and align record and executable line contracts
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

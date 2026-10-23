@@ -1,11 +1,6 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:30:00Z
-# CHANGE: Define submission interface
-# CODE_HASH: 4fa76fb7a570
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 
 from typing import Any, Mapping, NewType, Optional, Protocol
 
@@ -54,7 +49,7 @@ class ResolveTool(tool_provider.Tool, Protocol):
 
 
 # Contract: SubmitTool protocol - marks an active node complete upon passing verification and documenting changes.
-class SubmitTool(ResolveTool, Protocol):
+class SubmitTool(ResolveTool, Singleton[AgentSessionTier], Protocol):
     # Contract: SubmitTool.change_summary_parameter - parameter describing modifications made during the task.
     @property
     def change_summary_parameter(
@@ -73,7 +68,7 @@ class SubmitTool(ResolveTool, Protocol):
 
 
 # Contract: FailTool protocol - terminates session execution in failure.
-class FailTool(ResolveTool, Protocol):
+class FailTool(ResolveTool, Singleton[AgentSessionTier], Protocol):
     # Contract: FailTool.explanation_parameter - parameter explaining the reason for failure.
     @property
     def explanation_parameter(
@@ -92,7 +87,7 @@ class FailTool(ResolveTool, Protocol):
 
 
 # Contract: BlameTool protocol - attributes failure to an upstream prerequisite.
-class BlameTool(ResolveTool, Protocol):
+class BlameTool(ResolveTool, Singleton[AgentSessionTier], Protocol):
     # Contract: BlameTool.blame_target_parameter - parameter identifying the blamed upstream dependency.
     @property
     def blame_target_parameter(
@@ -115,3 +110,9 @@ class BlameTool(ResolveTool, Protocol):
         ],
     ) -> tool_provider.ToolResponse:
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:30:00Z
+# CHANGE: Define submission interface
+# --- END CLEANROOM METADATA ---

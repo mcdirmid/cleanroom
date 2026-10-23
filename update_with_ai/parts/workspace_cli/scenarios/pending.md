@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:40:00Z
-CHANGE: Define pending interface scenarios
-CODE_HASH: 8c6a84025634
--->
-
 # Concrete scenarios for `pending` (interface)
 
 ## Scenario 1 — Tracking and clearing pending work
@@ -37,3 +30,8 @@ Given: an assigned pending target in a role workspace whose local header lacks `
 1. The caller checks `is_pending_target_dirty`.
    Observed: resolves the canonical file from the main repository and returns `False`.
 
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T17:40:00Z
+CHANGE: Define pending interface scenarios
+-->

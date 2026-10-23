@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:09:47Z
-CHANGE: Author tools coverage concrete scenarios
-CODE_HASH: a0a3865f5de9
--->
-
 # Concrete scenarios for `coverage` (interface)
 
 ## Scenario 1 — The coverage record of one module
@@ -96,3 +89,9 @@ configured threshold is 80 percent, and the designated coverage log file
 2. The caller asks again after the module reports 90 percent.
    Observed: the report states that the 80 percent threshold was met, the log file is rewritten
    with the new report, and the exit status indicates the threshold was met.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:09:47Z
+CHANGE: Author tools coverage concrete scenarios
+-->

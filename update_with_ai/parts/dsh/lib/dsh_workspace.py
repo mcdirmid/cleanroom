@@ -1,13 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-13T20:00:00Z
-# CHANGE: author dsh_workspace interface library
-# CODE_HASH: 849255e9caca
-# --- END CLEANROOM METADATA ---
-
 """Interface specification for dsh_workspace."""
 
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
@@ -32,7 +27,7 @@ class DshWorkspaceConfinementReport:
 
 
 # Contract: DshWorkspaceConfigurer protocol defining configure_role_workspace.
-class DshWorkspaceConfigurer(Protocol):
+class DshWorkspaceConfigurer(Singleton[AgentSessionTier], Protocol):
     """Establishes DeepSeek Harness boundary hints and Cordis overlay patches in role workspaces."""
 
     # Contract: MUST configure role agent documentation and Cordis overlay patch, and return report.
@@ -45,3 +40,9 @@ class DshWorkspaceConfigurer(Protocol):
     ) -> DshWorkspaceConfinementReport:
         """Configures role agent documentation and Cordis overlay patch for DeepSeek Harness."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-13T20:00:00Z
+# CHANGE: author dsh_workspace interface library
+# --- END CLEANROOM METADATA ---

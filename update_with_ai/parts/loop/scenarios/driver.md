@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:09:19Z
-CHANGE: Author loop-phase driver concrete scenarios
-CODE_HASH: dadb52c87ed3
--->
-
 # Concrete scenarios for `loop_driver` (interface)
 
 ## Scenario 1 — A response with no tool execution does not stop the run
@@ -90,3 +83,9 @@ tool execution has terminated the conversation.
    execution producing a termination outcome.
    Observed: the second run halts with an unexpected failure naming the conversation limit of 8
    turns, and no loop outcome is produced for the second run.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:09:19Z
+CHANGE: Author loop-phase driver concrete scenarios
+-->

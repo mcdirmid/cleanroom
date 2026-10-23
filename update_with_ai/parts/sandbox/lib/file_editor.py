@@ -1,11 +1,5 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:03:47Z
-# CHANGE: Prune the unused Set import that the grounding specification does not declare
-# CODE_HASH: 971e42e5e86b
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from support.lib.lifecycle import Singleton
 from typing import Any, Mapping, NewType, Optional, Protocol, Union
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 import update_with_ai.parts.agent.lib.file_alias as file_alias
@@ -25,7 +19,7 @@ FileHash = NewType('FileHash', str)
 
 AllowMultiple = NewType('AllowMultiple', bool)
 
-class EditingTool(tool_provider.Tool, Protocol):
+class EditingTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
     # Contract: Name of the editing tool.
     @property
     def name(self) -> tool_provider.ToolName:
@@ -45,8 +39,23 @@ class EditingTool(tool_provider.Tool, Protocol):
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
         ...
 
+    # Contract: Parameter identifying the target read-write file.
+    @property
+    def path_parameter(self) -> tool_provider.ToolParameter[file_alias.FileAlias, str]:
+        ...
 
-class EditManager(Protocol):
+    # Contract: Optional parameter specifying the start line boundary.
+    @property
+    def start_line_parameter(self) -> tool_provider.ToolParameter[Optional[LineNumber], int]:
+        ...
+
+    # Contract: Optional parameter specifying the end line boundary.
+    @property
+    def end_line_parameter(self) -> tool_provider.ToolParameter[Optional[LineNumber], int]:
+        ...
+
+
+class EditManager(Singleton[AgentSessionTier], Protocol):
     # Contract: Exposes whether workspace file modifications occurred during the session.
     @property
     def has_modifications(self) -> bool:
@@ -79,7 +88,7 @@ class EditManager(Protocol):
         ...
 
 
-class ReplaceFileContentTool(EditingTool, Protocol):
+class ReplaceFileContentTool(EditingTool, Singleton[AgentSessionTier], Protocol):
     # Contract: Installs replace file content tool into session ToolManager.
     def initialize(self) -> None:
         ...
@@ -117,3 +126,9 @@ class ReplaceFileContentTool(EditingTool, Protocol):
     # Contract: Replaces target content with replacement content within bounded range.
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:03:47Z
+# CHANGE: Prune the unused Set import that the grounding specification does not declare
+# --- END CLEANROOM METADATA ---

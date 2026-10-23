@@ -1,23 +1,15 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-04T23:01:55Z
-# CHANGE: new file
-# CODE_HASH: a8f4475e75da
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Sandbox file reader low-level interface specification."""
 
 from typing import Any, Mapping, Optional, Protocol, Set, Union
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import tool_provider
 
 
 @singleton_type("agent_session")
-class ReadManager(InTier[AgentSessionTier], Protocol):
+class ReadManager(Singleton[AgentSessionTier], Protocol):
     """Regulates workspace file reading."""
 
     @property
@@ -58,7 +50,7 @@ class ReadManager(InTier[AgentSessionTier], Protocol):
 
 
 @singleton_type("agent_session")
-class ViewFileTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
+class ViewFileTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
     """Reads file content."""
 
     @property
@@ -121,7 +113,7 @@ class ViewFileTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
 
 
 @singleton_type("agent_session")
-class SearchTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
+class SearchTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
     """Searches pattern matches across the session's read-only and read-write files."""
 
     @property
@@ -181,3 +173,10 @@ class SearchTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
         - MUST discover pattern matches across read-only and read-write files.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-04T23:01:55Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

@@ -1,18 +1,10 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: 0420d4f97c75
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for coordinate."""
 
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping, Optional, Protocol, Sequence
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import attribution
 import submit
@@ -48,7 +40,7 @@ class ControlDispatchOutcome:
 
 
 @singleton_type("agent_session")
-class SessionCoordinator(InTier[AgentSessionTier], Protocol):
+class SessionCoordinator(Singleton[AgentSessionTier], Protocol):
     """Central coordinator facade managing session state and dispatching actions."""
 
     @property
@@ -151,3 +143,10 @@ class SessionCoordinator(InTier[AgentSessionTier], Protocol):
     ) -> ControlDispatchOutcome:
         """Dispatches task failure recording."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-07T00:11:26Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

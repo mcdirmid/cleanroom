@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-05T04:26:30Z
-CHANGE: new file
-CODE_HASH: 0fe8160481e2
--->
-
 # json_ext external component
 
 ## Purpose
@@ -30,3 +23,9 @@ Grounding gaps covered include:
 - Truncated token and bracket repair: Identifies JSON text truncated by token exhaustion or generation limits, salvaging valid data by balancing unclosed string quotes, resolving dangling escape sequences, stripping trailing commas, and closing unclosed braces and brackets in correct reverse nesting order.
 
 - Malformed payload detection and fallback: Recognizes unrecoverable or malformed payloads lacking object opening markers, falling back to an empty object representation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-05T04:26:30Z
+CHANGE: new file
+-->

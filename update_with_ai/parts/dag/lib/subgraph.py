@@ -1,18 +1,12 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:59:21Z
-# CHANGE: Remove generated scaffold markers and document the declared subgraph operations with their conditional postconditions
-# CODE_HASH: e7cd5665aee4
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from support.lib.lifecycle import Singleton, SystemTier
 
 from typing import Protocol, Sequence
 
 from .dag_storage import DagNode
 
 # Contract: DagSubgraph protocol modeling an active execution subgraph rooted at a target node.
-class DagSubgraph(Protocol):
+class DagSubgraph(Singleton[SystemTier], Protocol):
     """System service modeling an active execution subgraph rooted at a target node."""
 
     # Contract: Sets the active execution subgraph target node.
@@ -70,3 +64,9 @@ class DagSubgraph(Protocol):
         - MUST enforce execution iteration limits across recorded node visits.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T04:59:21Z
+# CHANGE: Remove generated scaffold markers and document the declared subgraph operations with their conditional postconditions
+# --- END CLEANROOM METADATA ---

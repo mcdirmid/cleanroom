@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:40:00Z
-# CHANGE: Implement pending_impl
-# CODE_HASH: b3a44a466a4c
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 import json
 import os
@@ -22,7 +13,7 @@ from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.metadata.lib import src_metadata
 from update_with_ai.parts.workspace.lib import role_registry
-from . import pending, work
+from . import dirtiness, pending, work
 
 # Contract: Relative filename for pending work tracking buffer.
 PENDING_WORK_FILE = ".cleanroom_pending_work.json"
@@ -111,7 +102,7 @@ def materialize_starter_template(
 
 
 # Contract: Realizes pending buffer tracking, target removal, and dirty checks in agent_session tier.
-class WorkspacePendingManager(pending.WorkspacePendingManager, Singleton):
+class WorkspacePendingManager(pending.WorkspacePendingManager):
     """Realizes pending buffer tracking, target removal, and dirty checks."""
 
     tier = agent_session.agent_session
@@ -271,25 +262,31 @@ class WorkspacePendingManager(pending.WorkspacePendingManager, Singleton):
             return False
 
         try:
-            work_mgr = get_singleton(work.WorkspaceWorkManager)
-            eval_fn = getattr(work_mgr, "_eval_unit_dirty", None)
-            if callable(eval_fn):
-                return bool(eval_fn(workspace_dir, part_dir, unit_name, eval_role, m_root))
+            dirt_mgr = get_singleton(dirtiness.WorkspaceDirtinessEvaluator)
+            return dirt_mgr.evaluate_unit_dirty(workspace_dir, part_dir, unit_name, eval_role, m_root).is_dirty
         except (LifecycleResolutionError, LookupError):
             pass
         return False
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T17:40:00Z
+# CHANGE: Implement pending_impl
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         WorkspacePendingManager,
-        keys=[
-            WorkspacePendingManager,
-            pending.WorkspacePendingManager,
-        ],
+        keys=[WorkspacePendingManager, pending.WorkspacePendingManager],
+        tier=WorkspacePendingManager.tier,
     )
 
 
 _initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

@@ -1,15 +1,7 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: bca872dec6f9
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Cleanroom target implementation low-level specification."""
 
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 from update_with_ai.parts.dag.lib import dag_storage
 from . import target
 import dag_storage
@@ -17,7 +9,7 @@ import file_paths
 
 
 @singleton_type("system")
-class UvTarget(target.UvTarget, InTier[SystemTier]):
+class UvTarget(target.UvTarget):
     """Realizes Cleanroom label canonicalization and package directory resolution.
 
     GROUNDING:
@@ -61,3 +53,10 @@ class UvTarget(target.UvTarget, InTier[SystemTier]):
         - Invokes target_labels_ext.resolve_package_dir to convert the DagNode package coordinate into a relative workspace path anchored via file_paths.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-07T00:00:00Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

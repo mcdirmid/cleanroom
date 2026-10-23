@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:30:00Z
-CHANGE: Define submission_impl planning specification
-CODE_HASH: ae56b844dc13
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # submission_impl implementation component
 
 ## Intent
@@ -75,3 +67,10 @@ By providing atomic failure handling for out-of-order execution, preventing subm
   - Grounded: [src_metadata: [source_metadata_service]]
 - Determination of remaining guide steps.
   - Grounded: [guide_delivery: [steps_remaining_status]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:30:00Z
+CHANGE: Define submission_impl planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

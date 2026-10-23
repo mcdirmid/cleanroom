@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: b50c4ff3475d
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # work_scheduler_impl implementation component
 
 imports: session, dag_storage, subgraph, node_config, agent_config
@@ -40,3 +32,10 @@ When discovering ready tasks:
 - When formatting task prompts for auditor sessions, the work scheduler lists configured blame targets against grounding specifications, states that all workspace files are read-only, directs running check_files to verify each target, submitting when checks pass, and blaming culprit files with critiques when checks fail.
 
 - When formatting task prompts for multi-node sessions, the work scheduler instructs the agent to specify target parameters using file paths.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

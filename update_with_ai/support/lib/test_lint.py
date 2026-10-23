@@ -29,6 +29,7 @@ from build_lint_common import (
     compute_test_derived_info,
     check_syntax,
     check_test_dry_run,
+    check_test_getattr,
     check_test_impl_imports,
     check_test_imports,
     check_test_mocks,
@@ -176,8 +177,6 @@ def extract_requirements_from_pyi(
 def generate_test_skeleton(
     pyi_path: str, stem: str, impl_stem: str, lib_pkg: str
 ) -> str:
-    if not impl_stem.endswith("_impl"):
-        return ""
     try:
         with open(pyi_path, "r", encoding="utf-8") as f:
             pyi_content = f.read()
@@ -186,6 +185,7 @@ def generate_test_skeleton(
         tree = ast.Module(body=[], type_ignores=[])
 
     impl_classes: list[str] = []
+    impl_functions: list[str] = []
     has_singleton = False
     is_impl = impl_stem.endswith("_impl")
 
@@ -205,6 +205,11 @@ def generate_test_skeleton(
                         dec_name = dec.func.attr
                 if dec_name == "singleton_type":
                     has_singleton = True
+        elif (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and not node.name.startswith("_")
+        ):
+            impl_functions.append(node.name)
 
     reqs = extract_requirements_from_pyi(pyi_path)
 
@@ -220,15 +225,18 @@ def generate_test_skeleton(
     if is_impl or has_singleton:
         lines.append("from support.lib.lifecycle import LifecycleRegistry, enter_phase")
 
-    if impl_classes:
-        lines.append(f"from lib.{impl_stem} import (")
-        for c in sorted(impl_classes):
-            lines.append(f"    {c},")
+    pkg_prefix = lib_pkg.replace("/", ".").replace("\\", ".").strip(".") if lib_pkg else "lib"
+
+    all_symbols = sorted(impl_classes + impl_functions)
+    if all_symbols:
+        lines.append(f"from {pkg_prefix}.{impl_stem} import (")
+        for sym in all_symbols:
+            lines.append(f"    {sym},")
         if is_impl:
             lines.append("    __initialize__,")
         lines.append(")")
     elif is_impl:
-        lines.append(f"from lib.{impl_stem} import __initialize__")
+        lines.append(f"from {pkg_prefix}.{impl_stem} import __initialize__")
 
     lines.append("")
     lines.append(f"class {test_cls_name}(unittest.TestCase):")
@@ -240,26 +248,27 @@ def generate_test_skeleton(
         lines.append("    def test_initialization(self) -> None:")
         lines.append('        """CUJ: Verify initial component presence."""')
         lines.append("        self.assertIsNotNone(self.registry)")
-        if impl_classes:
-            classes_str = ", ".join(sorted(impl_classes))
-            lines.append(f"        for cls in [{classes_str}]:")
-            lines.append("            self.assertIsNotNone(cls)")
-            lines.append(
-                "        # Singletons are resolved within an active phase scope:"
-            )
-            lines.append(
-                "        # with enter_phase(agent_session, registry=self.registry) as scope:"
-            )
-            lines.append(
-                f"        #     instance = scope.get_singleton({sorted(impl_classes)[0]})"
-            )
+        if all_symbols:
+            symbols_str = ", ".join(all_symbols)
+            lines.append(f"        for sym in [{symbols_str}]:")
+            lines.append("            self.assertIsNotNone(sym)")
+            if impl_classes:
+                lines.append(
+                    "        # Singletons are resolved within an active phase scope:"
+                )
+                lines.append(
+                    "        # with enter_phase(agent_session, registry=self.registry) as scope:"
+                )
+                lines.append(
+                    f"        #     instance = scope.get_singleton({sorted(impl_classes)[0]})"
+                )
     else:
         lines.append("    def test_initialization(self) -> None:")
         lines.append('        """CUJ: Verify initial component presence."""')
-        if impl_classes:
-            classes_str = ", ".join(sorted(impl_classes))
-            lines.append(f"        for cls in [{classes_str}]:")
-            lines.append("            self.assertIsNotNone(cls)")
+        if all_symbols:
+            symbols_str = ", ".join(all_symbols)
+            lines.append(f"        for sym in [{symbols_str}]:")
+            lines.append("            self.assertIsNotNone(sym)")
         else:
             lines.append("        self.assertTrue(True)")
 
@@ -276,6 +285,67 @@ def generate_test_skeleton(
     lines.append("")
 
     return "\n".join(lines)
+
+
+def _resolve_lib_dir(module_path: str, lib_pkg: str | None = None) -> str:
+    if lib_pkg and os.path.isdir(lib_pkg):
+        return os.path.abspath(lib_pkg)
+    abs_mod = os.path.abspath(module_path)
+    parent = os.path.dirname(os.path.dirname(abs_mod))
+    cand = os.path.join(parent, "lib")
+    if os.path.isdir(cand) or not lib_pkg:
+        return cand
+    if os.path.isdir(lib_pkg):
+        return os.path.abspath(lib_pkg)
+    return cand
+
+
+def ensure_companion_lib_scaffolded(
+    module_path: str,
+    impl_stem: str,
+    pyi_path: str | None,
+    raw_deps: list[str],
+    lib_pkg: str | None = None,
+) -> None:
+    if not pyi_path or not os.path.isfile(pyi_path):
+        return
+    lib_dir = _resolve_lib_dir(module_path, lib_pkg)
+    lib_file = os.path.join(lib_dir, f"{impl_stem}.py")
+    if os.path.isfile(lib_file):
+        try:
+            content = read_text(lib_file).strip()
+            if content and "<TargetClass>" not in content:
+                try:
+                    from lib_lint import is_uninitialized_module
+                except ImportError:
+                    from update_python_with_ai.support.lib.lib_lint import (
+                        is_uninitialized_module,
+                    )
+                if not is_uninitialized_module(content):
+                    return
+        except (ImportError, OSError):
+            return
+
+    try:
+        from lib_lint import generate_asm_content, generate_lib_skeleton
+    except ImportError:
+        try:
+            from update_python_with_ai.support.lib.lib_lint import (
+                generate_asm_content,
+                generate_lib_skeleton,
+            )
+        except ImportError:
+            return
+
+    try:
+        os.makedirs(lib_dir, exist_ok=True)
+        if impl_stem.endswith("_asm"):
+            skeleton = generate_asm_content(lib_dir, raw_deps, spec_file=pyi_path)
+        else:
+            skeleton = generate_lib_skeleton(pyi_path, impl_stem)
+        write_text(lib_file, skeleton)
+    except (OSError, SyntaxError, ValueError):
+        pass
 
 
 def main() -> int:
@@ -342,7 +412,7 @@ def main() -> int:
             if repo_root:
                 args.lib_pkg = os.path.relpath(lib_dir, repo_root).replace("\\", "/")
             else:
-                args.lib_pkg = lib_dir
+                args.lib_pkg = "lib"
         else:
             args.lib_pkg = "lib"
 
@@ -361,7 +431,10 @@ def main() -> int:
         args.pyi = pyi_path
 
     if args.scaffold:
-        if pyi_path and os.path.isfile(pyi_path) and impl_stem.endswith("_impl"):
+        ensure_companion_lib_scaffolded(
+            args.module_path, impl_stem, pyi_path, deps, lib_pkg=args.lib_pkg
+        )
+        if pyi_path and os.path.isfile(pyi_path):
             skeleton = generate_test_skeleton(pyi_path, stem, impl_stem, args.lib_pkg)
             if skeleton:
                 if dir_name:
@@ -369,22 +442,26 @@ def main() -> int:
                 write_text(args.module_path, skeleton)
                 return 0
         sys.stderr.write(
-            f"test_lint: Cannot scaffold {args.module_path}: specification .pyi not found\n"
+            f"Cannot scaffold {args.module_path}: specification .pyi not found\n"
         )
         return 1
 
     if args.build_path is None:
         if not os.path.isfile(args.module_path):
-            sys.stderr.write(f"test_lint: File not found: {args.module_path}\n")
+            sys.stderr.write(f"File not found: {args.module_path}\n")
             return 1
         mod_content = read_text(args.module_path)
         if pyi_path and is_uninitialized_test_module(mod_content):
-            sys.stderr.write(f"test_lint: {args.module_path} is uninitialized\n")
+            sys.stderr.write(
+                f"{args.module_path} is uninitialized (missing unittest.TestCase class and test methods). Consult your Companion Guide (update_python_with_ai/guides/low_to_test.md) for required structure.\n"
+            )
             return 1
     elif os.path.isfile(args.module_path):
         mod_content = read_text(args.module_path)
         if pyi_path and is_uninitialized_test_module(mod_content):
-            sys.stderr.write(f"test_lint: {args.module_path} is uninitialized\n")
+            sys.stderr.write(
+                f"{args.module_path} is uninitialized (missing unittest.TestCase class and test methods). Consult your Companion Guide (update_python_with_ai/guides/low_to_test.md) for required structure.\n"
+            )
             return 1
 
     if args.build_path is None:
@@ -413,12 +490,14 @@ def main() -> int:
                 args.module_path,
                 sorted(allowed_deps),
                 extra_allowed=[impl_stem],
+                lib_pkg=args.lib_pkg,
             )
             all_errors = (
                 check_test_imports(args.lib_pkg, args.module_path)
                 + check_test_impl_imports(args.lib_pkg, args.module_path)
                 + check_test_mocks(args.module_path)
                 + check_test_structure(args.module_path)
+                + check_test_getattr(args.module_path)
                 + undeclared_errors
             )
 
@@ -502,12 +581,12 @@ def main() -> int:
                         pass
                     else:
                         sys.stderr.write(
-                            f"test_lint: Cannot update read-only BUILD file: {args.build_path} (missing deps: {sorted(missing)})\n"
+                            f"Cannot update read-only BUILD file: {args.build_path} (missing deps: {sorted(missing)})\n"
                         )
                         return 1
                 else:
                     sys.stderr.write(
-                        f"test_lint: Cannot update read-only BUILD file: {args.build_path} ({e})\n"
+                        f"Cannot update read-only BUILD file: {args.build_path} ({e})\n"
                     )
                     return 1
     else:
@@ -588,12 +667,12 @@ def main() -> int:
                         pass
                     else:
                         sys.stderr.write(
-                            f"test_lint: Cannot update read-only BUILD file: {args.build_path} (missing deps: {sorted(missing)})\n"
+                            f"Cannot update read-only BUILD file: {args.build_path} (missing deps: {sorted(missing)})\n"
                         )
                         return 1
                 else:
                     sys.stderr.write(
-                        f"test_lint: Cannot update read-only BUILD file: {args.build_path} ({e})\n"
+                        f"Cannot update read-only BUILD file: {args.build_path} ({e})\n"
                     )
                     return 1
 
@@ -613,12 +692,14 @@ def main() -> int:
             args.module_path,
             sorted(allowed_deps),
             extra_allowed=[impl_stem],
+            lib_pkg=args.lib_pkg,
         )
         all_errors = (
             check_test_imports(args.lib_pkg, args.module_path)
             + check_test_impl_imports(args.lib_pkg, args.module_path)
             + check_test_mocks(args.module_path)
             + check_test_structure(args.module_path)
+            + check_test_getattr(args.module_path)
             + undeclared_errors
         )
 
@@ -627,6 +708,9 @@ def main() -> int:
                 sys.stderr.write(err + "\n")
             return 1
 
+        ensure_companion_lib_scaffolded(
+            args.module_path, impl_stem, pyi_path, deps, lib_pkg=args.lib_pkg
+        )
         dry_run_errors = check_test_dry_run(args.lib_pkg, args.module_path)
         if dry_run_errors:
             for err in dry_run_errors:

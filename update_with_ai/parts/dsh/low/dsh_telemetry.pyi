@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T18:55:00Z
-# CHANGE: Author dsh_telemetry interface low-level specification
-# CODE_HASH: 024b1259a460
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for dsh_telemetry."""
 
 from dataclasses import dataclass
 from typing import Optional, Protocol
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 
 
@@ -39,12 +31,12 @@ class DshSessionTokenMetrics:
 
 @data_type
 @dataclass(frozen=True)
-class DshRpcTurnStatus:
-    """Turn execution status and metrics returned from the DeepSeek Harness JSON-RPC bridge.
+class DshRpcRoundStatus:
+    """Round execution status and metrics returned from the DeepSeek Harness JSON-RPC bridge.
 
     Args:
-        is_active: Whether the turn is actively executing.
-        is_completed: Whether the turn finished execution.
+        is_active: Whether the round is actively executing.
+        is_completed: Whether the round finished execution.
         error: Optional error message if execution failed.
         metrics: Accumulated token metrics.
     """
@@ -55,8 +47,11 @@ class DshRpcTurnStatus:
     metrics: Optional[DshSessionTokenMetrics] = None
 
 
+DshRpcTurnStatus = DshRpcRoundStatus
+
+
 @singleton_type("agent_session")
-class DshTelemetryParser(InTier[AgentSessionTier], Protocol):
+class DshTelemetryParser(Singleton[AgentSessionTier], Protocol):
     """Parses DeepSeek Harness session storage archives and event streams for token metrics."""
 
     @operation
@@ -116,6 +111,24 @@ class DshTelemetryParser(InTier[AgentSessionTier], Protocol):
         ...
 
     @operation
+    def dispatch_round_rpc(
+        self,
+        workspace_dir: str,
+        role_name: str,
+        prompt_text: str,
+        session_id: Optional[str] = None,
+        sessions_dir: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Dispatches a role round over the local JSON-RPC bridge to the central DeepSeek Harness server.
+
+        POSTCONDITIONS:
+        - MUST ensure workspace registration and create or resume session on the server.
+        - MUST enqueue the prompt task and return a task handle, or None if unreachable.
+        """
+        ...
+
+    @operation
     def dispatch_turn_rpc(
         self,
         workspace_dir: str,
@@ -125,11 +138,19 @@ class DshTelemetryParser(InTier[AgentSessionTier], Protocol):
         sessions_dir: Optional[str] = None,
         model_name: Optional[str] = None,
     ) -> Optional[str]:
-        """Dispatches a role turn over the local JSON-RPC bridge to the central DeepSeek Harness server.
+        """Dispatches a role round over the local JSON-RPC bridge (backwards-compatible alias for dispatch_round_rpc)."""
+        ...
+
+    @operation
+    def poll_round_rpc(
+        self,
+        task_handle: str,
+        sessions_dir: Optional[str] = None,
+    ) -> DshRpcRoundStatus:
+        """Polls active round status over the local JSON-RPC bridge.
 
         POSTCONDITIONS:
-        - MUST ensure workspace registration and create or resume session on the server.
-        - MUST enqueue the prompt task and return a task handle, or None if unreachable.
+        - MUST query round execution status from the central server and return DshRpcRoundStatus.
         """
         ...
 
@@ -139,9 +160,12 @@ class DshTelemetryParser(InTier[AgentSessionTier], Protocol):
         task_handle: str,
         sessions_dir: Optional[str] = None,
     ) -> DshRpcTurnStatus:
-        """Polls active turn status over the local JSON-RPC bridge.
-
-        POSTCONDITIONS:
-        - MUST query turn execution status from the central server and return DshRpcTurnStatus.
-        """
+        """Polls active round status over the local JSON-RPC bridge (backwards-compatible alias for poll_round_rpc)."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T18:55:00Z
+# CHANGE: Author dsh_telemetry interface low-level specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

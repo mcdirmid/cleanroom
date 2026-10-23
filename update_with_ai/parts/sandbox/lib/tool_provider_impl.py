@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:03:46Z
-# CHANGE: Name the installed tool registry per the grounding, copy it for the installed-tools view, list installed tools in stable sorted order, and report conversion diagnostics from the declared message member
-# CODE_HASH: 9c506123a9e3
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 from typing import Any, Dict, Mapping, Optional, Set, cast
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
@@ -16,7 +7,7 @@ from . import tool_provider
 
 # Requirements specified in tool_provider_impl.pyi
 
-class ToolManager(tool_provider.ToolManager, Singleton):
+class ToolManager(tool_provider.ToolManager):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -107,7 +98,7 @@ class ToolManager(tool_provider.ToolManager, Singleton):
         return tool.execute_tool(actual_bindings)
 
 
-class AliasManagerType(tool_provider.AliasManagerType, Singleton):
+class AliasManagerType(tool_provider.AliasManagerType):
     tier = agent_session
 
     # Contract: ParameterType.actual_type - returns FileAlias type.
@@ -130,6 +121,13 @@ class AliasManagerType(tool_provider.AliasManagerType, Singleton):
             )
         alias_mgr = get_singleton(file_alias.AliasManager)
         return alias_mgr.to_alias(wire_value)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:03:46Z
+# CHANGE: Name the installed tool registry per the grounding, copy it for the installed-tools view, list installed tools in stable sorted order, and report conversion diagnostics from the declared message member
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

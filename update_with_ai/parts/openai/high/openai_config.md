@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Declare the openai config system lifecycle tier
-CODE_HASH: 9d43f0bc9e82
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # openai_config interface component
 
 ## Purpose
@@ -33,3 +25,10 @@ The openai config provides:
 - A *temperature* specifying the sampling temperature for model requests.
 
 - A *max tokens* upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Declare the openai config system lifecycle tier
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

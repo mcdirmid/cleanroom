@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Make step advancement declarative and split the parsing paragraph
-CODE_HASH: f272c5e064d6
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # guide_delivery_impl implementation component
 
 imports: tool_provider, file_alias, node_config
@@ -42,3 +34,10 @@ Advancing a step when verification fails:
 - Emits a response combining the current step section content introduced by `Now check carefully:` with any configured verification failure instructions and the failure diagnostics, without advancing to subsequent sections when a step section is currently active.
 
 When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Make step advancement declarative and split the parsing paragraph
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:45Z
-CHANGE: Author loop cleaner concrete scenarios
-CODE_HASH: f04621c12cff
--->
-
 # Concrete scenarios for `loop_cleaner` (interface)
 
 ## Scenario 1 — A subgraph that is already clean
@@ -77,3 +70,9 @@ target for widget is dirty because the beta-role target for gadget changed at 20
 1. The caller cleans the alpha-role target for widget using the supplied alpha node cleaner.
    Observed: the supplied node cleaner is asked only for the alpha-role target for widget, which is
    clean afterwards, and cleaning concludes without asking for the beta-role target for gadget.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:45Z
+CHANGE: Author loop cleaner concrete scenarios
+-->

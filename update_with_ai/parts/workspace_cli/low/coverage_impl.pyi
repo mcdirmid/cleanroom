@@ -1,25 +1,14 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T04:15:46Z
-# CHANGE: State the coverage evaluator as a system service on the system tier
-# CODE_HASH: 266ec49bb6f9
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for coverage_impl."""
 
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 import coverage
 
 
 @singleton_type("system")
-class CoverageEvaluator(
-    coverage.CoverageEvaluator,
-    InTier[SystemTier],
-):
+class CoverageEvaluator(coverage.CoverageEvaluator):
     """Realizes the system coverage evaluator as a system service.
 
     GROUNDING:
@@ -146,9 +135,10 @@ class CoverageEvaluator(
         """Measures single-target statement coverage by executing the companion test suite under execution tracing.
 
         GROUNDING:
-        - Clears the sys.modules entries of the measured module and injects the local
-          package directories of the implementation and test files into sys.path before
-          execution, then runs the companion unittest suite under trace instrumentation
+        - Clears the sys.modules entries of the measured module, test module, and library
+          package namespaces, and injects the local part package and constituent directories
+          of the implementation and test files into sys.path before execution, then runs the
+          companion unittest suite under trace instrumentation
           through trace.Trace, mutating a per-invocation mapping of implementation file
           paths to executed line numbers from the trace callback and capturing suite import
           and execution failures into coverage.ModuleCoverage.test_error with
@@ -187,3 +177,10 @@ class CoverageEvaluator(
           pathlib filesystem operations declared by the filesystem_ext external boundary.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-19T17:15:00Z
+# CHANGE: Inject local part package root into module search paths and purge package namespaces to prevent cross-workspace module shadowing
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

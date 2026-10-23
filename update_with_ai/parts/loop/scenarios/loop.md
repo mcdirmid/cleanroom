@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:43Z
-CHANGE: Author loop loop concrete scenarios
-CODE_HASH: 5994d14ea6b8
--->
-
 # Concrete scenarios for `loop` (interface)
 
 ## Scenario 1 — A cleaning pass over a subgraph that is already clean
@@ -91,3 +84,9 @@ Given: the beta-role target for sprocket is clean with last cleaned timestamp 20
 
 1. The caller injects an empty feedback message into the beta-role target for sprocket.
    Observed: the beta-role target for sprocket is dirty and holds an unacted feedback message.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:43Z
+CHANGE: Author loop loop concrete scenarios
+-->

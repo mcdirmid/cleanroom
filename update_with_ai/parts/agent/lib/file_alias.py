@@ -1,11 +1,6 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:59:25Z
-# CHANGE: Realize the orphan postcondition that a file alias displays itself by its relative path, and drop the dead tier import and scaffold markers
-# CODE_HASH: b6d1964c53b4
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from .session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 from typing import NewType, Protocol, Type
 from dataclasses import dataclass
 import update_with_ai.parts.dag.lib.dag_storage as dag_storage
@@ -54,7 +49,7 @@ class UnboundFile(FileAlias):
     pass
 
 
-class AliasManager(Protocol):
+class AliasManager(Singleton[AgentSessionTier], Protocol):
     # Contract: The workspace root directory for the agent session.
     @property
     def workspace_root(self) -> file_paths.WorkspaceRoot:
@@ -67,3 +62,9 @@ class AliasManager(Protocol):
     # Contract: MUST sanitize text by masking occurrences of relative workspace paths with file alias relative paths.
     def sanitize_text(self, text: UnsanitizedText) -> SanitizedText:
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T04:59:25Z
+# CHANGE: Realize the orphan postcondition that a file alias displays itself by its relative path, and drop the dead tier import and scaffold markers
+# --- END CLEANROOM METADATA ---

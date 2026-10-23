@@ -19,6 +19,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "tqdm>=4.66.0",
     "openai>=1.0.0",
+    "pytest-timeout>=2.3.0",
 ]
 
 [project.scripts]
@@ -27,15 +28,17 @@ cleanroom-loop = "update_with_ai.support.lib.cleanroom_uv_runner:main"
 cleanroom_loop = "update_with_ai.support.lib.cleanroom_uv_runner:main"
 clean = "update_with_ai.support.lib.cleanroom_role_tool:main_clean"
 orchestrate = "update_with_ai.support.lib.cleanroom_role_tool:main_orchestrate"
+benchmark = "update_with_ai.support.lib.cleanroom_role_tool:main_benchmark"
 
 [tool.hatch.build.targets.wheel]
-packages = ["update_with_ai", "update_python_with_ai"]
+packages = ["update_with_ai", "update_python_with_ai", "benchmarks"]
 
 [tool.pytest.ini_options]
 testpaths = [
     "update_with_ai/parts",
     "update_with_ai/support/tests",
     "update_python_with_ai/support/tests",
+    "benchmarks/parts",
 ]
 norecursedirs = [
     ".git",
@@ -48,11 +51,17 @@ pythonpath = [
     ".",
     "update_with_ai",
     "update_python_with_ai",
+    "benchmarks",
 ]
 python_files = ["*_test.py", "test_*.py"]
+timeout = 60
+timeout_method = "signal"
 addopts = []
 
 [tool.pyright]
+extraPaths = [
+    "update_python_with_ai",
+]
 exclude = [
     "**/node_modules",
     "**/__pycache__",

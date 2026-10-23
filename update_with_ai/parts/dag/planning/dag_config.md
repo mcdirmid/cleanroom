@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:58:44Z
-CHANGE: Scope batch size to a cleaning batch and contract node visit limit enforcement
-CODE_HASH: 5bcaa73822d0
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # dag_config interface component
 
 ## Intent
@@ -42,3 +34,10 @@ By exposing explicit visit counts and role batching bounds, the component provid
 
 - Operational limit configuration parameters from system environment or configuration models.
   - Deferred: Provided by system runtime configuration.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:58:44Z
+CHANGE: Scope batch size to a cleaning batch and contract node visit limit enforcement
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

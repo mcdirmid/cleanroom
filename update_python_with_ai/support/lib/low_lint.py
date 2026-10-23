@@ -43,7 +43,7 @@ def find_all_parts_dirs() -> list[Path]:
     if not ROOT.exists():
         return dirs
     for entry in sorted(ROOT.iterdir()):
-        if entry.is_dir() and not entry.name.startswith(".") and entry.name != "staging":
+        if entry.is_dir() and not entry.name.startswith("."):
             p = entry / "parts"
             if p.is_dir():
                 cfg = p / "cleanroom.toml"
@@ -501,6 +501,30 @@ def lint_low_file(file_path: Path) -> list[str]:
                             break
                 except OSError:
                     pass
+
+    if is_impl:
+        class_defs = [s for s in tree.body if isinstance(s, ast.ClassDef)]
+        if class_defs:
+            has_singleton = any(
+                any(
+                    (
+                        d.id
+                        if isinstance(d, ast.Name)
+                        else (
+                            d.func.id
+                            if isinstance(d, ast.Call) and isinstance(d.func, ast.Name)
+                            else ""
+                        )
+                    )
+                    == "singleton_type"
+                    for d in c.decorator_list
+                )
+                for c in class_defs
+            )
+            if not has_singleton:
+                errors.append(
+                    f"{fname}:1: error: implementation specification defining classes must declare at least one '@singleton_type' service; an _impl component with no singletons has nothing to test"
+                )
 
     for stmt in tree.body:
         if isinstance(stmt, (ast.Import, ast.ImportFrom)):

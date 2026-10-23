@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-18T01:30:00Z
-CHANGE: support optional target unit boundary in orchestrate CLI arguments
-CODE_HASH: 93fb466020ff
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # subagent_tool_impl implementation component
 
 imports: session, subagent_coordinator, subagent_harness, subagent_tool
@@ -25,6 +17,13 @@ Multi-agent coordination requires command-line entrypoints for triggering wave d
 
 The subagent tool runner realization implements command execution, command-line argument parsing, and diagnostic formatting for subagent orchestration.
 
-The realization parses command-line arguments, prepending the default orchestrate subcommand when omitted from arguments, including directory scope, optional target role boundary, optional target unit boundary, harness platform, model identifier, maximum waves, batch size constraints, execution timeout limits, conversation token limits, and maximum unproductive turn limits. A module entrypoint runs the tool runner within an agent session phase.
+The realization parses command-line arguments, prepending the default orchestrate subcommand when omitted from arguments, including directory scope, optional target role boundary, optional target unit boundary, harness platform, model identifier, maximum waves, batch size constraints, execution timeout limits, conversation token limits, and maximum unproductive round limits. A module entrypoint runs the tool runner within an agent session phase.
 
-The realization resolves the execution harness adapter through the harness resolver with configured timeout and token limits, dispatches dynamic supervision with optional unproductive turn limits to the coordinator until convergence, and prints execution metrics.
+The realization resolves the execution harness adapter through the harness resolver with configured timeout and token limits, dispatches dynamic supervision with optional unproductive round limits to the coordinator until convergence, and prints execution metrics.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-20T10:00:00Z
+CHANGE: Standardize terminology on unproductive round limits, deprecating turn terminology
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

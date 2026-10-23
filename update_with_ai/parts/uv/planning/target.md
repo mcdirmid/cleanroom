@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: 46a2ee39be5e
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # target interface component
 
 ## Intent
@@ -44,3 +36,10 @@ By normalizing target strings and deriving package directories, the component en
   - Deferred: Delegated to target_labels_ext in implementation.
 - Translation of canonical package identifiers into workspace-relative paths.
   - Deferred: Delegated to target_labels_ext and file_paths in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

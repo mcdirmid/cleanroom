@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:17:16Z
-CHANGE: Author control coordinate concrete scenarios
-CODE_HASH: ed263389ca63
--->
-
 # Concrete scenarios for `coordinate` (interface)
 
 ## Scenario 1 — Dispatching work and populating the open targets
@@ -135,3 +128,9 @@ the gadget field`.
    Observed: a control dispatch outcome reporting that the failure was recorded and carrying the
    explanation `the widget contract does not declare the gadget field`, and the alpha-role target
    for unit widget no longer among the remaining open targets.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:17:16Z
+CHANGE: Author control coordinate concrete scenarios
+-->

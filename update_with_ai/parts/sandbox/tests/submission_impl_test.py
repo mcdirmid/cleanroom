@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:35:00Z
-# CHANGE: Add unit tests for submission_impl
-# CODE_HASH: 0233309698f6
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 import unittest
 from typing import Any, Mapping, Optional, Sequence, Set
@@ -299,14 +290,27 @@ class MockRunController:
             node_cfg = get_singleton(node_config.NodeConfig)
             return {
                 node: set(bound_files)
-                for node, bound_files in getattr(node_cfg, "blame_targets_by_node", {}).items()
+                for node, bound_files in node_cfg.blame_targets_by_node.items()
             }
         except Exception:
             return {}
 
     def initialize(self) -> None:
         self._passed = True
+        self._is_unchanged = False
         self._diagnostic_output = ""
+
+    @property
+    def is_passed(self) -> bool:
+        return self._passed
+
+    @property
+    def is_unchanged(self) -> bool:
+        return self._is_unchanged
+
+    @property
+    def diagnostic_output(self) -> str:
+        return self._diagnostic_output
 
     def update_verification(self) -> None:
         all_passed = True
@@ -642,3 +646,12 @@ class SandboxSubmissionImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:35:00Z
+# CHANGE: Add unit tests for submission_impl
+# CODE_HASH: 0233309698f6
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

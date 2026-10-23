@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:23:52Z
-CHANGE: Restrict reused scenarios to the declared imports closure and renumber
-CODE_HASH: 756989ea38c7
--->
-
 # Concrete scenarios for `uv_node_config_impl` (implementation)
 
 Scenarios 1 through 27 restate the caller observations of the interface scenarios and add, beside
@@ -647,3 +640,9 @@ configuration supplies the step mode policy; and the session feedback is the mes
    Observed: active, and the session guide file and the task guide of the widget node are provided.
    Realized by: the component's own step mode activation, which supplies the session guide file and
    the single active node's task guide, and the feedback messages `dag_storage` holds.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:23:52Z
+CHANGE: Restrict reused scenarios to the declared imports closure and renumber
+-->

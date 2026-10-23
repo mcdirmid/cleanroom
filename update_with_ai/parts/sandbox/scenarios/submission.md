@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:30:00Z
-CHANGE: Concrete scenarios for submission
-CODE_HASH: cd877cabcc1b
--->
-
 # Concrete scenarios for `submission` (interface)
 
 ## Scenario 1 — Submitting the last open target with change documentation
@@ -95,3 +88,9 @@ Given: the agent has entered the session for role alpha in `/ws/alpha_scope_a`, 
 
 1. The agent executes the submit tool specifying the target argument `parts/widget/widget_spec.md`.
    Observed: the target argument is resolved against declared role targets, and the submission is accepted.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:30:00Z
+CHANGE: Concrete scenarios for submission
+-->

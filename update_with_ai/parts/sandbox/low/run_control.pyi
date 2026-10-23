@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T18:30:00Z
-# CHANGE: Update run_control low-level interface specification
-# CODE_HASH: 9c66ccd0b853
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Sandbox run control low-level interface specification."""
 
 from typing import Any, Mapping, Optional, Protocol, Sequence, Set
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import node_config
@@ -19,7 +11,7 @@ import tool_provider
 
 
 @singleton_type("agent_session")
-class CheckFilesTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
+class CheckFilesTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
     """Tool that inspects verification checks across active files."""
 
     @property
@@ -56,7 +48,7 @@ class CheckFilesTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
 
 
 @singleton_type("agent_session")
-class AdvanceTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
+class AdvanceTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
     """Tool that advances progressive guide steps upon passing verification."""
 
     @property
@@ -89,7 +81,7 @@ class AdvanceTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
 
 
 @singleton_type("agent_session")
-class GetWorkTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
+class GetWorkTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
     """Tool that retrieves active dirty nodes for processing."""
 
     @operation
@@ -115,7 +107,7 @@ class GetWorkTool(tool_provider.Tool, InTier[AgentSessionTier], Protocol):
 
 
 @singleton_type("agent_session")
-class RunController(InTier[AgentSessionTier], Protocol):
+class RunController(Singleton[AgentSessionTier], Protocol):
     """Coordinates session termination tools and verification caching."""
 
     @operation
@@ -142,6 +134,33 @@ class RunController(InTier[AgentSessionTier], Protocol):
         """Exposes per-node blame targets eligible for defect attribution."""
         ...
 
+    @property
+    def is_passed(self) -> bool:
+        """Exposes whether the latest verification evaluation passed.
+
+        POSTCONDITIONS:
+        - MUST return True when all verification checks passed, or False otherwise.
+        """
+        ...
+
+    @property
+    def is_unchanged(self) -> bool:
+        """Exposes whether target file hashes are unchanged since the last evaluation.
+
+        POSTCONDITIONS:
+        - MUST return True when target file hashes are unchanged, or False otherwise.
+        """
+        ...
+
+    @property
+    def diagnostic_output(self) -> str:
+        """Exposes aggregated diagnostic output from failing verification checks.
+
+        POSTCONDITIONS:
+        - MUST return aggregated diagnostic text from failing verification checks.
+        """
+        ...
+
     @operation
     def update_verification(self) -> None:
         """Updates and caches verification results if outdated.
@@ -151,3 +170,10 @@ class RunController(InTier[AgentSessionTier], Protocol):
         - WHEN no workspace files have been updated, MUST reuse cached verification outcome.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T18:30:00Z
+# CHANGE: Update run_control low-level interface specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

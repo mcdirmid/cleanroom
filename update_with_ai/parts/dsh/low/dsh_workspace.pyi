@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-13T20:00:00Z
-# CHANGE: author dsh_workspace interface low-level specification
-# CODE_HASH: 9b74bc618e72
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for dsh_workspace."""
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 
 
@@ -34,7 +26,7 @@ class DshWorkspaceConfinementReport:
 
 
 @singleton_type("agent_session")
-class DshWorkspaceConfigurer(InTier[AgentSessionTier], Protocol):
+class DshWorkspaceConfigurer(Singleton[AgentSessionTier], Protocol):
     """Customizes role workspace instructions, boundary constraints, and overlay patches for DeepSeek Harness."""
 
     @operation
@@ -49,8 +41,16 @@ class DshWorkspaceConfigurer(InTier[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST ensure role agent documentation instructs DeepSeek Harness agents never to access or mutate files outside the provisioned workspace root.
-        - MUST embed command execution constraints in role agent documentation restricting shell usage strictly to the five prescribed workspace binaries.
+        - MUST embed command execution constraints in role agent documentation permitting in-workspace shell commands and native harness tools while mandating round resolution through prescribed bin/ tools.
+        - MUST incorporate model-contingent incremental authoring directives into role agent documentation when configured for local or output-constrained models, omitting them for cloud models.
         - MUST generate Cordis overlay patch file configuring model routing, resolving declared model configuration profiles to their underlying model identifiers, and non-interactive permissions.
         - MUST return DshWorkspaceConfinementReport documenting configured files.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-20T22:12:00Z
+# CHANGE: Incorporate model-contingent payload ceiling directives into dsh_workspace low-level specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-08T00:45:00Z
-CHANGE: Define src_storage_impl high-level specification
-CODE_HASH: 27f86d3143f6
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # src_storage_impl implementation component
 
 imports: file_paths, src_metadata
@@ -66,3 +58,10 @@ Marking a subgraph clean in dag storage materializes missing templates and marks
 Materializing a template for a node writes configured template content or executes its configured role template command to populate its declared source file when that file is missing from the workspace root, without overwriting an existing file.
 
 Recording a feedback message against a dependency target node updates the source file in-band metadata header of that target node in place, appending an unacted feedback entry carrying the current timestamp, the blaming node address, and the feedback explanation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-08T00:45:00Z
+CHANGE: Define src_storage_impl high-level specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

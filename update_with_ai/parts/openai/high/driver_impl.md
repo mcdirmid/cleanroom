@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T12:07:00Z
-CHANGE: Rebuild completion tools payload on each turn from currently installed tools
-CODE_HASH: bde0fa1dd656
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # driver_impl implementation component
 
 imports: agent_config, json_ext, conversation, guard, openai_config, openai_ext, logger, tool_provider
@@ -37,7 +29,7 @@ When repairing a truncated invocation:
 
 When a model completion response fails with an incomplete tool call error, the loop driver appends an actionable recovery notice directing smaller edits and continues the turn loop, halting with an unexpected failure when consecutive truncation failures repeat.
 
-The loop driver logs an event to the runner logger for every turn request, completion, and tool result. Each event carries a compact summary containing the turn identifier, the conversation token size rounded to the nearest thousand tokens, the percentage of tokens cached on the last turn from the model response usage fields, the tool call names and arguments or text response previews, and the tool execution status naming the file read or written with its timestamp without inlining file content. Corrective reminders appear in the transcript when present.
+The loop driver logs an event to the runner logger for every turn request, completion, and tool result. Each event carries a compact summary containing the turn identifier, the conversation token size rounded to the nearest thousand tokens, the percentage of tokens cached on the last turn from the model response usage fields, the tool call names and arguments or text response previews, and the tool execution status naming the file read or written with its timestamp without inlining file content. The completion transcript records output tokens parsed from model response usage fields and elapsed turn duration across the model completion request when present. Corrective reminders appear in the transcript when present.
 
 Evaluating a tool invocation with the loop guard:
 
@@ -54,3 +46,10 @@ When agent configuration requests follow-up injection, a tool response specifyin
 When a model response produces no tool executions, the loop driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
 
 When interaction turns reach the conversation limit from the agent configuration, the loop driver halts execution with an unexpected failure indicating that the conversation limit was reached.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T12:07:00Z
+CHANGE: Rebuild completion tools payload on each turn from currently installed tools
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

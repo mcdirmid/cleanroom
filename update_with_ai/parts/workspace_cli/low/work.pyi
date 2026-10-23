@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-18T01:30:00Z
-# CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
-# CODE_HASH: e7ab0563410b
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for work."""
 
 from dataclasses import dataclass
-from typing import Optional, Protocol, Sequence
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from typing import Mapping, Optional, Protocol, Sequence
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import cleanroom_files_ext
 
@@ -58,7 +50,7 @@ class WorkQueueSummary:
 
 
 @singleton_type("agent_session")
-class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
+class WorkspaceWorkManager(Singleton[AgentSessionTier], Protocol):
     """Evaluates dirtiness and task readiness across directory scopes."""
 
     @operation
@@ -178,3 +170,32 @@ class WorkspaceWorkManager(InTier[AgentSessionTier], Protocol):
         - MUST return existing readable contract paths relative to workspace root.
         """
         ...
+
+    @operation
+    def get_part_units(
+        self,
+        repo_root: str,
+        part_dir: str,
+    ) -> Mapping[str, Sequence[str]]:
+        """Discovers package unit names and dependencies from specifications or filesystem stems.
+
+        POSTCONDITIONS:
+        - MUST discover unit names and dependencies from high-level specifications or filesystem stems in a part directory.
+        """
+        ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for package unit discovery routines.
+
+    POSTCONDITIONS:
+    - MUST discover unit names and dependencies from high-level specifications or filesystem stems in a part directory.
+    """
+    ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-18T01:30:00Z
+# CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

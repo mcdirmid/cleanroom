@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T01:39:02Z
-CHANGE: Introduce runner logger as a named service and declare its system lifecycle tier
-CODE_HASH: c2968b6f7d4c
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # logger interface component
 
 ## Purpose
@@ -21,3 +13,10 @@ Running multi-turn agent passes without observable logging hides failures and co
 A *runner log event* is a record of an observable execution event that provides an *event name*, a single-line *summary*, and a verbose *transcript representation*.
 
 A system's *runner logger* consumes runner log events, writing compact single-line summaries to standard output and full verbose records to a transcript log file.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Introduce runner logger as a named service and declare its system lifecycle tier
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

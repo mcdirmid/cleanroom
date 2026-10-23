@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:16:07Z
-CHANGE: Declare the coverage evaluator system tier and align record and executable line statements
-CODE_HASH: c0588cbfb443
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # coverage interface component
 
 ## Intent
@@ -54,3 +46,10 @@ Validating implementation cleanliness requires verifying that every executable s
   - Deferred: Provided by coverage evaluator implementation.
 - Python trace execution and test suite error capture.
   - Deferred: Provided by coverage evaluator implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:16:07Z
+CHANGE: Declare the coverage evaluator system tier and align record and executable line statements
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

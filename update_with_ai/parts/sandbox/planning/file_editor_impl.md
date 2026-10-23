@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T04:08:18Z
-CHANGE: Reject editing tool replacements that alter the cleanroom metadata header
-CODE_HASH: 73f154f9c734
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_editor_impl implementation component
 
 ## Intent
@@ -48,6 +40,7 @@ Furthermore, the implementation tracks revision counters and emits structured di
 - When an end line is provided, tool execution fails if the end line is less than one. [fail_when_end_line_less_than_one]
 - When an end line is provided, tool execution fails if the end line exceeds the total line count. [fail_when_end_line_exceeds_line_count]
 - When a start line and an end line are provided, tool execution fails if the start line exceeds the end line. [fail_when_start_exceeds_end]
+- The start line and end line parameters convert wire integers and integer string values into line numbers, rejecting non-integer wire values. [convert_line_number_parameters]
 - Tool execution matches target content using exact matching. [match_target_content_exactly]
 - When exact matching finds zero occurrences and allow multiple is false, tool execution falls back to line-by-line whitespace-stripped matching. [fallback_whitespace_stripped_matching]
 - Whitespace-stripped fallback succeeds if and only if exactly one unique line window matches after stripping leading and trailing whitespace from each line. [whitespace_fallback_succeeds_on_single_match]
@@ -58,9 +51,14 @@ Furthermore, the implementation tracks revision counters and emits structured di
 - When allow multiple is true, tool execution replaces all occurrences of target content within the search window. [replace_all_matches_when_allow_multiple]
 - When target content matches multiple locations and allow multiple is false, failure feedback indicates the first two matching line numbers to assist in narrowing the replacement region and directs the agent to include more surrounding lines in target content or to specify start line and end line. [feedback_first_two_matching_lines]
 - When target content is not found in the search window but exists elsewhere in the file, failure feedback indicates the line numbers where target content was located. [feedback_relocated_lines_when_outside_range]
+- The allow multiple parameter converts wire booleans and boolean string values into an allow multiple choice. [convert_allow_multiple_parameter]
 - The can write operation fails when the target path is not a declared read-write file. [can_write_fails_when_not_read_write]
 - When a declared read-write file is supplied, the can write operation records the file edit. [can_write_records_file_edit]
 - When a declared read-write file is supplied, the can write operation produces a successful response indicating write access is permitted. [can_write_produces_success_response]
+- The replace file content tool tracks consecutive failed replacement attempts during the session, resetting the counter upon any successful file replacement. [track_consecutive_failed_replacements]
+- When consecutive replacement attempts reach two failures, tool execution produces a warning reminder advising the agent of repeated edit failure. [warn_at_two_consecutive_failed_replacements]
+- When consecutive replacement attempts reach two failures and the target file is present, tool execution designates a follow-up execution of the session's file viewing tool targeting the read-write file with reasoning text indicating that actual file contents must be inspected before attempting further replacements. [designate_follow_up_view_at_two_failed_replacements]
+- When consecutive replacement attempts reach four failures, tool execution produces a terminating failure response communicating session failure. [terminate_at_four_consecutive_failed_replacements]
 
 ### Woven Contracts
 
@@ -71,7 +69,9 @@ Furthermore, the implementation tracks revision counters and emits structured di
 - Target content matching attempts exact matching first, falling back to whitespace-tolerant matching when single replacements are requested. [match_target_content_exactly, fallback_whitespace_stripped_matching, whitespace_fallback_succeeds_on_single_match]
 - Ambiguous or missing target content triggers detailed line location diagnostics to guide correction. [fail_when_not_found_single, fail_when_multiple_matches_single, feedback_first_two_matching_lines, feedback_relocated_lines_when_outside_range]
 - Successful replacements update the filesystem, advance the update revision, and emit reminders to verify syntax with check files. [write_updated_content_on_success, create_missing_parent_dirs_on_success, record_writes_occurred_on_success, remind_call_check_files, increment_revision_on_file_update, share_replace_file_content_suppression_key, file_editor: [replace_content_in_line_range, replace_multiple_when_permitted]]
+- Consecutive failed replacement attempts trigger a warning reminder and a follow-up file view at two failures, and terminal failure when reaching four failures. [track_consecutive_failed_replacements, warn_at_two_consecutive_failed_replacements, designate_follow_up_view_at_two_failed_replacements, terminate_at_four_consecutive_failed_replacements, file_editor: [warn_failed_replacement_at_two, follow_up_view_at_two_failed_replacements, fail_replacement_at_four_failures], file_reader: [view_file_reads_content], tool_provider: [predict_follow_up]]
 - Workspace file writes tracking reflects whether workspace file contents differ from their in-band code hash. [compare_current_against_code_hash, file_editor: [expose_workspace_writes_occurred, writes_occurred_true_on_diff, writes_occurred_false_on_match]]
+- The allow multiple parameter converts wire booleans and boolean strings into an allow multiple choice, rejecting invalid wire values. [convert_allow_multiple_parameter, tool_provider: [convert_wire_val]]
 
 ## Grounding
 
@@ -90,6 +90,8 @@ Furthermore, the implementation tracks revision counters and emits structured di
   - Grounded: [node_config: [node_configuration_service], write_access_validation]
 - Tracking of file read and edit history in session state.
   - Grounded: [update_revision_tracking, writes_occurred_status]
+- Tracking of consecutive failed replacement attempts and follow-up view dispatch.
+  - Grounded: [content_replacement, file_reader: [view_file_capability], tool_provider: [tool_response_generation]]
 
 ### Knowledge Requirements
 
@@ -97,3 +99,10 @@ Furthermore, the implementation tracks revision counters and emits structured di
   - Grounded: [filesystem_ext: [filesystem_operations]]
 - In-band code hash evaluation.
   - Grounded: [src_metadata: [source_metadata_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-21T21:20:00Z
+LAST_CHANGED: 2026-10-21T21:20:00Z
+CHANGE: Ground consecutive failed replacement tracking with follow-up file view at two failures and fatal termination at four failures
+SPEC_QA_AUDIT: 2026-10-21T21:20:00Z
+-->

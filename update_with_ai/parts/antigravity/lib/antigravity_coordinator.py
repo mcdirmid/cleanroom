@@ -1,17 +1,10 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T21:45:00Z
-# CHANGE: author antigravity_coordinator interface library
-# CODE_HASH: c68c051c4d86
-# --- END CLEANROOM METADATA ---
-
 """Interface specification for antigravity_coordinator."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
-from support.lib.lifecycle import InTier
+from support.lib.lifecycle import Singleton
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 from update_with_ai.parts.subagent.lib import subagent_coordinator
 
@@ -75,7 +68,7 @@ class WakeNotificationMessage:
 
 
 # Contract: AntigravityCoordinatorGenerator generates coordinator skills and formats Antigravity subagent dispatch directives.
-class AntigravityCoordinatorGenerator(InTier[AgentSessionTier], Protocol):
+class AntigravityCoordinatorGenerator(Singleton[AgentSessionTier], Protocol):
     """Generates coordinator skills and formats Antigravity subagent dispatch directives."""
 
     # Contract: AntigravityCoordinatorGenerator.generate_coordinator_skill - generates zero-execution coordinator skill document.
@@ -103,3 +96,8 @@ class AntigravityCoordinatorGenerator(InTier[AgentSessionTier], Protocol):
         """Parses completion message text into a structured wake notification."""
         ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T21:45:00Z
+# CHANGE: author antigravity_coordinator interface library
+# --- END CLEANROOM METADATA ---

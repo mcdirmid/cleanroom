@@ -1,19 +1,14 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:25:18Z
-# CHANGE: Prune the uncontracted get_workspace_tool_runner module function and its lifecycle import so the interface holds only the declared runner protocol, restore the declared directory scope default, and carry the grounding specification's postconditions into the protocol docstrings
-# CODE_HASH: a61a0558b455
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for cli_tool."""
 
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 
 from typing import Optional, Protocol, Sequence
 
 
 # Contract: WorkspaceToolRunner protocol coordinates command-line subagent tool execution for role workspaces.
-class WorkspaceToolRunner(Protocol):
+class WorkspaceToolRunner(Singleton[AgentSessionTier], Protocol):
     """Coordinates command-line subagent tool execution for role workspaces."""
 
     # Contract: Parses arguments and dispatches command execution, returning exit code.
@@ -111,6 +106,8 @@ class WorkspaceToolRunner(Protocol):
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
         all_roles: bool = False,
+        reset: bool = False,
+        model: Optional[str] = None,
     ) -> int:
         """Commissions an isolated role workspace or all workspaces in a directory scope."""
         ...
@@ -124,3 +121,9 @@ class WorkspaceToolRunner(Protocol):
     ) -> int:
         """Refreshes system files, bin tools, configs, and guides across role workspaces."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:25:18Z
+# CHANGE: Prune the uncontracted get_workspace_tool_runner module function and its lifecycle import so the interface holds only the declared runner protocol, restore the declared directory scope default, and carry the grounding specification's postconditions into the protocol docstrings
+# --- END CLEANROOM METADATA ---

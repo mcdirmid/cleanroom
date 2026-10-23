@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:17:17Z
-CHANGE: Author control src_storage_impl concrete scenarios
-CODE_HASH: 3a1d23682463
--->
-
 # Concrete scenarios for `src_storage_impl` (implementation)
 
 Scenarios 1 through 27 restate the caller observations of the interface scenarios of both
@@ -580,3 +573,9 @@ was marked clean at 2026-01-02T03:00:00Z.
    Realized by: the same forward dirty evaluation, which now finds the non-silent sprocket
    dependency's last changed timestamp strictly newer than the node's clean timestamp, and
    synthesizes the change message describing the dependency update.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:17:17Z
+CHANGE: Author control src_storage_impl concrete scenarios
+-->

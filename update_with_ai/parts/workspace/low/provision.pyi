@@ -1,23 +1,15 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T03:37:01Z
-# CHANGE: Align role workspace commissioning, permissions, and runner deployment contracts
-# CODE_HASH: db56695ed05f
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for provision."""
 
 from typing import Optional, Protocol
-from framework import operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import cleanroom_files_ext
 import role_registry
 
 
 @singleton_type("agent_session")
-class WorkspaceProvisioner(InTier[AgentSessionTier], Protocol):
+class WorkspaceProvisioner(Singleton[AgentSessionTier], Protocol):
     """Service creating and configuring isolated, directory-scoped role workspaces."""
 
     @operation
@@ -33,8 +25,8 @@ class WorkspaceProvisioner(InTier[AgentSessionTier], Protocol):
         """Commissions an isolated role workspace with permission boundaries.
 
         POSTCONDITIONS:
-        - MUST resolve the role definition for the requested role and directory scope.
-        - MUST create the workspace directory tree including a bin directory.
+        - MUST resolve the role definition for the requested role and directory scope, and resolve the bound methodology package declared by the target scope's cleanroom_files_ext.CLEANROOM_CONFIG_FILE.
+        - MUST create the workspace directory tree including a bin directory, copying only target scope files and promoted assets belonging to the bound methodology package, while strictly ignoring unbound repository root directories.
         - WHEN reset is true, MUST clear stale pending work buffers in the workspace.
         - MUST copy writable target files with 0o644 permissions, projecting metadata headers to only retain CHANGE and FEEDBACK fields with an ephemeral CODE_HASH while omitting LAST_CLEANED, LAST_CHANGED, and audit tags.
         - MUST copy upstream contract dependencies with 0o444 permissions, projecting metadata headers to only retain CHANGE and FEEDBACK fields while omitting LAST_CLEANED, LAST_CHANGED, and audit tags.
@@ -111,7 +103,7 @@ class WorkspaceProvisioner(InTier[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - MUST resolve the role definition for role_name.
         - MUST write AGENTS.md in workspace_dir with 0o644 permissions.
-        - MUST include boundary rules, contamination tripwires, terminal command restrictions, fail-stop protocols, and role-tailored workflow instructions.
+        - MUST include boundary rules, contamination tripwires, permitted in-workspace shell commands and native harness tools while mandating round resolution through prescribed bin/ tools, fail-stop protocols, and role-tailored workflow instructions.
         """
         ...
 
@@ -132,3 +124,10 @@ class WorkspaceProvisioner(InTier[AgentSessionTier], Protocol):
         - MUST return the count of synchronized or updated stub files.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-22T13:50:00Z
+# LAST_CHANGED: 2026-10-22T13:50:00Z
+# CHANGE: Restrict workspace provisioning exclusively to target scope and bound methodology package assets
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

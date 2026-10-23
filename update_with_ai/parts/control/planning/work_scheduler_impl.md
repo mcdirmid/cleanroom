@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: e7ca026634d8
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # work_scheduler_impl implementation component
 
 ## Intent
@@ -56,3 +48,10 @@ Computing role depth dynamically replaces fragile static dictionaries. The imple
 
 - Filtering and scanning candidate nodes within subgraphs or directory path patterns.
   - Grounded: [subgraph: [dag_subgraph_service], dag_storage: [dag_storage_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

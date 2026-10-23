@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-09T02:54:02Z
-# CHANGE: Inspect message field on PathValidationError instead of str(ctx.exception)
-# CODE_HASH: 86753e1b71b9
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for file_paths_impl per its grounding specification."""
 
 from __future__ import annotations
@@ -93,3 +84,11 @@ if __name__ == "__main__":
 
 # Untested requirements:
 # None
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-09T02:54:02Z
+# CHANGE: Inspect message field on PathValidationError instead of str(ctx.exception)
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

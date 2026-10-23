@@ -1,16 +1,11 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:40:00Z
-# CHANGE: Define pending interface
-# CODE_HASH: 0ac03f0d71d0
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 from typing import Optional, Protocol, Sequence
 
 
 # Contract: WorkspacePendingManager protocol tracks active pending tasks and buffer persistence within role workspaces.
-class WorkspacePendingManager(Protocol):
+class WorkspacePendingManager(Singleton[AgentSessionTier], Protocol):
     """Tracks active pending tasks and buffer persistence within role workspaces."""
 
     # Contract: Reads target paths from local pending work buffer.
@@ -34,3 +29,8 @@ class WorkspacePendingManager(Protocol):
         role_name: Optional[str] = None,
     ) -> bool: ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T17:40:00Z
+# CHANGE: Define pending interface
+# --- END CLEANROOM METADATA ---

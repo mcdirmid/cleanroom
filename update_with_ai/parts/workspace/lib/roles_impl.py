@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Implement roles_impl
-# CODE_HASH: 47aa58960ee1
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for roles_impl."""
 
 from __future__ import annotations
@@ -377,7 +368,7 @@ def _load_roles_from_methodology(
 
 
 # Contract: Realizes roles.RoleResolver singleton.
-class RoleResolver(roles.RoleResolver, Singleton):
+class RoleResolver(roles.RoleResolver):
     """Realizes role configuration resolution and constraint verification."""
 
     tier = agent_session.agent_session
@@ -545,6 +536,13 @@ class RoleResolver(roles.RoleResolver, Singleton):
                     return list(scope_roles.values())
         all_roles = self._get_roles(repo_root)
         return list(all_roles.values())
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:45:00Z
+# CHANGE: Implement roles_impl
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

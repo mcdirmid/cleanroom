@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-18T01:30:00Z
-# CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
-# CODE_HASH: 6671444c12c2
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for work_impl."""
 
-from typing import Optional, Sequence
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from typing import Mapping, Optional, Sequence
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import work
 import dirtiness
@@ -23,10 +15,7 @@ import cleanroom_files_ext
 
 
 @singleton_type("agent_session")
-class WorkspaceWorkManager(
-    work.WorkspaceWorkManager,
-    InTier[AgentSessionTier],
-):
+class WorkspaceWorkManager(work.WorkspaceWorkManager):
     """Realizes work discovery across directory scopes and pending buffer tracking.
 
     GROUNDING:
@@ -126,7 +115,8 @@ class WorkspaceWorkManager(
         - Scans part directories in scope, evaluates auditor units across all feedback role dependencies,
           evaluates producer units across intra-unit role dependencies and star role dependencies,
           bounds candidates to target_unit and its transitive dependencies when specified,
-          checks dependencies, sorts ready tasks topologically, and materializes starter templates via
+          checks upstream prerequisite roles across role dependencies, feedback role dependencies, star role dependencies, and silent role dependencies,
+          sorts ready tasks topologically, and materializes starter templates via
           dag_storage.DagStorage.materialize_template for missing ready files.
         """
         ...
@@ -189,7 +179,23 @@ class WorkspaceWorkManager(
           role_registry.RoleDefinition.star_role_deps entry into the resolved sequence,
           discovering the dynamically defined star-role contracts through
           role_registry.WorkspaceRegistry.list_roles for the active role.
-        - Resolves both cases without any synthetic fallback role, path, or contract entry.
+        - Resolves companion interface contracts without the _impl suffix for any implementation unit ending in _impl when expanding star role dependencies, without any synthetic fallback role.
+        """
+        ...
+
+    @operation
+    def get_part_units(
+        self,
+        repo_root: str,
+        part_dir: str,
+    ) -> Mapping[str, Sequence[str]]:
+        """Discovers package unit names and dependencies from specifications or filesystem stems.
+
+        GROUNDING:
+        - Parses high/*.md specs for imports/implements/assembles metadata, falling back to filesystem stems.
+
+        POSTCONDITIONS:
+        - MUST discover unit names and dependencies from high-level specifications or filesystem stems in a part directory.
         """
         ...
 
@@ -202,3 +208,9 @@ def __orphan__() -> None:
     """
     ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-19T16:30:00Z
+# CHANGE: evaluate role upstream prerequisites across silent role dependencies
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

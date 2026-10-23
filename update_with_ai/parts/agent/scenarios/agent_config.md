@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:13Z
-CHANGE: Author agent agent_config interface scenarios
-CODE_HASH: aac149bd3deb
--->
-
 # Concrete scenarios for `agent_config` (interface)
 
 ## Scenario 1 — Reading the execution parameters
@@ -125,3 +118,9 @@ Given: the startup read and delta output policies are both active, the session d
    startup read policy and the follow-up injection policy and leaves the delta output policy
    inactive.
    Observed: inactive, so the selected mode reports the complete file content instead of the change.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:13Z
+CHANGE: Author agent agent_config interface scenarios
+-->

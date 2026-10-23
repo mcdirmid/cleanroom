@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:17:20Z
-CHANGE: Author sandbox guide_delivery concrete scenarios
-CODE_HASH: 36f8a1aa0ac8
--->
-
 # Concrete scenarios for `guide_delivery` (interface)
 
 ## Scenario 1 — Parsing a guide out of content carrying a summary, a checklist, and two milestones
@@ -146,3 +139,9 @@ been delivered.
    Observed: the response reports the failure diagnostics "sprocket/src/sprocket.py still holds
    sprocket_height = 10", reports no verification failure instructions, delivers no step section
    content, and the guide delivery still reports that steps remain.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:17:20Z
+CHANGE: Author sandbox guide_delivery concrete scenarios
+-->

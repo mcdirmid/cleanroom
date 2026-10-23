@@ -1,13 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Delegate role configuration to roles
-# CODE_HASH: 2392622b3367
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for role_registry."""
 
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
@@ -37,7 +32,7 @@ class WorkspaceDescriptor:
 
 
 # Contract: WorkspaceRegistry protocol resolves role specifications and tracks commissioned workspaces.
-class WorkspaceRegistry(Protocol):
+class WorkspaceRegistry(Singleton[AgentSessionTier], Protocol):
     """Registry resolving role specifications and tracking commissioned workspaces."""
 
     # Contract: Discovers canonical repository root from filesystem environment or current working directory.
@@ -95,3 +90,9 @@ class WorkspaceRegistry(Protocol):
     ) -> Sequence[WorkspaceDescriptor]:
         """Loads all active workspace descriptors from active session memory and provisioned role workspaces."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:45:00Z
+# CHANGE: Delegate role configuration to roles
+# --- END CLEANROOM METADATA ---

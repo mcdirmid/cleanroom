@@ -1,22 +1,15 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-17T12:00:00Z
-# LAST_CHANGED: 2026-10-17T12:00:00Z
-# CHANGE: align model_config_impl with app_info_ext and credentials fallback
-# CODE_HASH: e359e2b99da0
-# --- END CLEANROOM METADATA ---
-
 """Cleanroom UV model and runtime configuration implementation low-level specification."""
 
 from typing import Optional
-from framework import override, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import override, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 import agent_config
 import dag_config
 import openai_config
 
 
 @singleton_type("system")
-class AgentConfig(agent_config.AgentConfig, InTier[SystemTier]):
+class AgentConfig(agent_config.AgentConfig):
     """Loads agent execution parameters from TOML configuration or environment defaults.
 
     GROUNDING:
@@ -86,7 +79,7 @@ class AgentConfig(agent_config.AgentConfig, InTier[SystemTier]):
 
 
 @singleton_type("system")
-class DagConfig(dag_config.DagConfig, InTier[SystemTier]):
+class DagConfig(dag_config.DagConfig):
     """Loads DAG traversal limits from TOML configuration or environment defaults.
 
     GROUNDING:
@@ -116,7 +109,7 @@ class DagConfig(dag_config.DagConfig, InTier[SystemTier]):
 
 
 @singleton_type("system")
-class OpenAIConfig(openai_config.OpenAIConfig, InTier[SystemTier]):
+class OpenAIConfig(openai_config.OpenAIConfig):
     """Loads OpenAI connection and hyperparameter settings from TOML configuration or environment variables.
 
     GROUNDING:
@@ -190,3 +183,9 @@ class OpenAIConfig(openai_config.OpenAIConfig, InTier[SystemTier]):
         - Reads maximum token generation ceiling from TOML configuration when specified.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-17T12:00:00Z
+# LAST_CHANGED: 2026-10-17T12:00:00Z
+# CHANGE: align model_config_impl with app_info_ext and credentials fallback
+# --- END CLEANROOM METADATA ---

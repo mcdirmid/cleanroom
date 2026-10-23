@@ -1,9 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-13T20:00:00Z
-# LAST_CHANGED: 2026-10-13T20:00:00Z
-# CHANGE: author dsh_asm unit tests
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for dsh_asm."""
 
 from __future__ import annotations
@@ -36,3 +30,9 @@ class DshAsmTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-13T20:00:00Z
+# LAST_CHANGED: 2026-10-13T20:00:00Z
+# CHANGE: author dsh_asm unit tests
+# --- END CLEANROOM METADATA ---

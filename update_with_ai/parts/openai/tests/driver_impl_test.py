@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T12:05:00Z
-# CHANGE: Verify completion requests reflect tools installed dynamically across turns
-# CODE_HASH: 9ec8b0e09d0b
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for driver_impl aligned with grounding specifications."""
 
 import json
@@ -41,7 +32,7 @@ from update_with_ai.parts.openai.lib.driver_impl import (
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.openai.lib.openai_config import OpenAIConfig
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
-from update_with_ai.parts.agent.lib.session import session as agent_session
+from update_with_ai.parts.agent.lib.session import agent_session
 from update_with_ai.parts.loop.lib.logger import RunnerLogEvent, RunnerLogger
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     FollowUpToolCall,
@@ -275,8 +266,10 @@ class DummyUsage:
         self,
         prompt_tokens: Optional[int] = None,
         cached_tokens: Optional[int] = None,
+        completion_tokens: Optional[int] = None,
     ) -> None:
         self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
         self.prompt_tokens_details = (
             DummyPromptTokensDetails(cached_tokens=cached_tokens)
             if cached_tokens is not None
@@ -776,7 +769,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             # Check that dummy_tool was executed with partial line deleted and TRUNCATED_1_ inserted with 4 spaces indent
             self.assertEqual(len(executed_bindings), 1)
             b = executed_bindings[0]
-            names_to_vals = {getattr(p, "name", str(p)): v for p, v in b.items()}
+            names_to_vals = {p.name if isinstance(p, ToolParameter) else str(p): v for p, v in b.items()}
             self.assertEqual(names_to_vals["target_content"], "old")
             self.assertEqual(names_to_vals["target_file"], "foo.py")
             expected_repl = (
@@ -898,7 +891,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertEqual(len(executed_bindings), 2)
             # First write: ends with \n, appends with 4 spaces indent and TRUNCATED_1_
             b1 = {
-                getattr(p, "name", str(p)): v for p, v in executed_bindings[0].items()
+                p.name if isinstance(p, ToolParameter) else str(p): v for p, v in executed_bindings[0].items()
             }
             self.assertEqual(
                 b1["replacement_content"],
@@ -906,7 +899,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             )
             # Second write: ends with \n, appends with 8 spaces indent and TRUNCATED_2_
             b2 = {
-                getattr(p, "name", str(p)): v for p, v in executed_bindings[1].items()
+                p.name if isinstance(p, ToolParameter) else str(p): v for p, v in executed_bindings[1].items()
             }
             self.assertEqual(
                 b2["replacement_content"],
@@ -999,7 +992,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertTrue(outcome.response.is_terminated)
 
             self.assertEqual(len(executed_bindings), 1)
-            b = {getattr(p, "name", str(p)): v for p, v in executed_bindings[0].items()}
+            b = {p.name if isinstance(p, ToolParameter) else str(p): v for p, v in executed_bindings[0].items()}
             self.assertEqual(
                 b["replacement_content"],
                 'raise NotImplementedError("TRUNCATED_1_")\n',
@@ -1484,11 +1477,11 @@ class OpenAIDriverImplTest(unittest.TestCase):
         tc2 = DummyToolCall(id="c2", name="finish", arguments="{}")
         comp1 = DummyCompletion(
             [DummyChoice(DummyMessage(None, tool_calls=[tc1]))],
-            usage=DummyUsage(prompt_tokens=1000, cached_tokens=800),
+            usage=DummyUsage(prompt_tokens=1000, cached_tokens=800, completion_tokens=150),
         )
         comp2 = DummyCompletion(
             [DummyChoice(DummyMessage(None, tool_calls=[tc2]))],
-            usage=DummyUsage(prompt_tokens=2200, cached_tokens=1100),
+            usage=DummyUsage(prompt_tokens=2200, cached_tokens=1100, completion_tokens=75),
         )
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
@@ -1522,6 +1515,15 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertIn("2", req_events[1].summary)
             self.assertIn("1K", req_events[1].summary)
             self.assertIn("80", req_events[1].summary)
+
+            comp_events = [
+                e for e in self.logger.events if e.event_name == "model_completion"
+            ]
+            self.assertEqual(len(comp_events), 2)
+            self.assertIn("Output tokens: 150", comp_events[0].transcript)
+            self.assertIn("Duration:", comp_events[0].transcript)
+            self.assertIn("Output tokens: 75", comp_events[1].transcript)
+            self.assertIn("Duration:", comp_events[1].transcript)
 
     @patch("update_with_ai.parts.openai.lib.driver_impl.OpenAI")
     def test_tool_execution_file_read_and_write_logged_without_inlining_content(
@@ -1655,6 +1657,42 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertEqual(
                 self.history.messages[3].content, "Followup tool executed."
             )
+
+    @patch("update_with_ai.parts.openai.lib.driver_impl.OpenAI")
+    def test_follow_up_tool_call_advancing_clears_repetition(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        """CUJ: Dispatching follow-up tool call with advancing tool clears repetition in loop guard without error."""
+        self.model_cfg.inject_followups = True
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        tc = DummyToolCall(id="call_initial", name="initial_tool", arguments="{}")
+        comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
+        mock_client.chat.completions.create.return_value = comp
+
+        follow_up = FollowUpToolCall(
+            tool_name=ToolName("advance"),
+            wire_parameter_bindings={},
+            reasoning_text=ReasoningText("Advancing guide step."),
+        )
+        self.tool_mgr.responses["initial_tool"] = ToolResponse(
+            is_failed=False,
+            is_terminated=False,
+            content=ToolResponseContent("Initial tool executed."),
+            follow_up_tool_call=follow_up,
+        )
+        self.tool_mgr.responses["advance"] = ToolResponse(
+            is_failed=False,
+            is_terminated=True,
+            content=ToolResponseContent("Guide step advanced."),
+        )
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(LoopDriver)
+            outcome = runner.run()
+            self.assertTrue(outcome.response.is_terminated)
+            self.assertEqual(outcome.response.content, "Guide step advanced.")
 
     @patch("update_with_ai.parts.openai.lib.driver_impl.OpenAI")
     def test_follow_up_tool_call_not_dispatched_when_inject_followups_disabled(
@@ -2192,3 +2230,11 @@ if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements: None
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-19T19:42:00Z
+# CHANGE: Add test for advancing follow-up tool call clearing repetition
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

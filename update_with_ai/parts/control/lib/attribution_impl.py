@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:03:55Z
-# CHANGE: Record failure diagnostics and force dirty state through graph storage in fail_target, mark blamed culprits dirty in blame_target, resolve culprit files through the alias manager, and synchronize blamed source metadata headers
-# CODE_HASH: 261bdc4ce83d
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 import json
 import os
@@ -26,6 +17,119 @@ from update_with_ai.parts.agent.lib import file_alias, node_config, agent_sessio
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.metadata.lib import src_metadata
 from . import attribution
+
+
+def _get_role_definitions() -> Dict[str, Any]:
+    try:
+        cfg: Any = get_singleton(node_config.NodeConfig)
+        if cfg is not None and hasattr(cfg, "role_definitions"):
+            r_defs = cfg.role_definitions
+            if isinstance(r_defs, dict) and r_defs:
+                return r_defs
+    except (LifecycleResolutionError, KeyError, AttributeError, RuntimeError):
+        pass
+    try:
+        from update_with_ai.parts.workspace.lib import role_registry
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        return {r.role_name: r for r in reg.list_roles()}
+    except Exception:
+        pass
+    return {}
+
+
+def _role_src_pattern(role_def: Any) -> str:
+    if hasattr(role_def, "src_pattern"):
+        return str(role_def.src_pattern or "")
+    if isinstance(role_def, dict):
+        return str(role_def.get("src_pattern") or "")
+    return ""
+
+
+def _role_name(role_def: Any, default: str = "") -> str:
+    if hasattr(role_def, "role_name"):
+        return str(role_def.role_name or default)
+    if isinstance(role_def, dict):
+        return str(role_def.get("role_name") or default)
+    return default
+
+
+def _role_audit_tag(role_def: Any) -> Optional[str]:
+    if hasattr(role_def, "audit_tag"):
+        return role_def.audit_tag
+    if isinstance(role_def, dict):
+        return role_def.get("audit_tag")
+    return None
+
+
+def _role_feedback_deps(role_def: Any) -> Sequence[str]:
+    if hasattr(role_def, "feedback_role_deps"):
+        return role_def.feedback_role_deps or ()
+    if isinstance(role_def, dict):
+        return role_def.get("feedback_role_deps") or ()
+    return ()
+
+
+def _bound_file_path(bound_file: Any) -> str:
+    if hasattr(bound_file, "workspace_path") and bound_file.workspace_path is not None:
+        ws_path = bound_file.workspace_path
+        return str(ws_path.path if hasattr(ws_path, "path") else ws_path)
+    if hasattr(bound_file, "relative_path"):
+        return str(bound_file.relative_path)
+    return str(bound_file)
+
+
+def _node_display_alias(node: dag_storage.DagNode) -> str:
+    try:
+        from . import coordinate
+        coord = get_singleton(coordinate.SessionCoordinator)
+        if coord is not None:
+            return coord.get_alias_for_node(node)
+    except Exception:
+        pass
+
+    try:
+        cfg = get_singleton(node_config.NodeConfig)
+        if cfg is not None:
+            if hasattr(cfg, "src_file_alias_by_node") and cfg.src_file_alias_by_node and node in cfg.src_file_alias_by_node:
+                return str(cfg.src_file_alias_by_node[node])
+            if hasattr(cfg, "blame_targets_by_node") and cfg.blame_targets_by_node:
+                for bt_set in cfg.blame_targets_by_node.values():
+                    for bt in bt_set:
+                        if hasattr(bt, "owning_node") and bt.owning_node == node:
+                            return str(bt.relative_path if hasattr(bt, "relative_path") else bt)
+            if hasattr(cfg, "read_only_files") and cfg.read_only_files:
+                for ro in cfg.read_only_files:
+                    if hasattr(ro, "owning_node") and ro.owning_node == node:
+                        return str(ro.relative_path if hasattr(ro, "relative_path") else ro)
+            if hasattr(cfg, "read_write_files") and cfg.read_write_files:
+                for rw in cfg.read_write_files:
+                    if hasattr(rw, "owning_node") and rw.owning_node == node:
+                        return str(rw.relative_path if hasattr(rw, "relative_path") else rw)
+    except Exception:
+        pass
+
+    addr = str(node.unit_address).strip()
+    if ":" in addr:
+        pkg, unit_name = addr.split(":", 1)
+        pkg = pkg.lstrip("/").strip()
+    elif "/" in addr:
+        pkg, unit_name = addr.rsplit("/", 1)
+        pkg = pkg.lstrip("/").strip()
+    else:
+        pkg, unit_name = "", addr
+
+    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
+    role_defs = _get_role_definitions()
+    if role in role_defs:
+        src_pat = _role_src_pattern(role_defs[role])
+        if src_pat:
+            formatted = src_pat.replace("{unit_dir}", pkg).replace(
+                "{unit_name}", unit_name
+            ).strip("/")
+            if formatted:
+                return formatted
+
+    return f"{pkg}/{unit_name}" if pkg else unit_name
 
 
 def _copy_file_with_perms(
@@ -83,17 +187,16 @@ def _resolve_file_role(file_path: str, repo_root: Optional[str] = None) -> str:
     norm = file_path.replace("\\", "/")
     fname = os.path.basename(norm)
     parent = os.path.basename(os.path.dirname(norm))
-    cfg = get_singleton(node_config.NodeConfig)
-    role_defs = getattr(cfg, "role_definitions", {})
+    role_defs = _get_role_definitions()
     if not role_defs:
         raise KeyError("No role definitions available in NodeConfig")
     for role in role_defs.values():
-        src_pat = getattr(role, "src_pattern", "")
+        src_pat = _role_src_pattern(role)
         if not src_pat:
             continue
         d_name, pfx, sfx = _parse_pattern_info(src_pat)
         if parent == d_name and fname.startswith(pfx) and fname.endswith(sfx):
-            return getattr(role, "role_name", "")
+            return _role_name(role)
     raise ValueError(f"Unrecognized role for file path: {file_path}")
 
 
@@ -107,11 +210,11 @@ def _parse_unit_from_file_path(file_path: str, repo_root: str) -> Tuple[str, str
     )
     fname = os.path.basename(rel)
     role_name = _resolve_file_role(rel, repo_root=repo_root)
-    cfg = get_singleton(node_config.NodeConfig)
-    role_def = getattr(cfg, "role_definitions", {}).get(role_name)
+    role_defs = _get_role_definitions()
+    role_def = role_defs.get(role_name)
     if role_def is None:
         raise KeyError(f"Role '{role_name}' not found in NodeConfig.role_definitions")
-    src_pat = getattr(role_def, "src_pattern", "")
+    src_pat = _role_src_pattern(role_def)
     _, pfx, sfx = _parse_pattern_info(src_pat)
     unit_name = fname
     if pfx and unit_name.startswith(pfx):
@@ -129,59 +232,11 @@ def _resolve_bound_file_path(blame_string: str) -> Optional[str]:
     except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
         return None
     if isinstance(alias, file_alias.BoundFile):
-        workspace_path = getattr(alias, "workspace_path", None)
-        if workspace_path is not None:
-            return str(getattr(workspace_path, "path", workspace_path))
-        return str(getattr(alias, "relative_path", "")) or None
+        return _bound_file_path(alias)
     return None
 
 
-def _node_display_alias(node: dag_storage.DagNode) -> str:
-    """Returns a user/agent-facing file alias for a node, avoiding raw Bazel target addresses."""
-    try:
-        cfg = get_singleton(node_config.NodeConfig)
-        if getattr(cfg, "src_file_alias_by_node", None) and node in cfg.src_file_alias_by_node:
-            return str(cfg.src_file_alias_by_node[node])
-        for bt_set in getattr(cfg, "blame_targets_by_node", {}).values():
-            for bt in bt_set:
-                if getattr(bt, "owning_node", None) == node:
-                    return str(getattr(bt, "relative_path", bt))
-        for ro in getattr(cfg, "read_only_files", ()):
-            if getattr(ro, "owning_node", None) == node:
-                return str(getattr(ro, "relative_path", ro))
-        for rw in getattr(cfg, "read_write_files", ()):
-            if getattr(rw, "owning_node", None) == node:
-                return str(getattr(rw, "relative_path", rw))
-    except Exception:
-        pass
-
-    addr = str(node.unit_address).strip()
-    if ":" in addr:
-        pkg, unit_name = addr.split(":", 1)
-        pkg = pkg.lstrip("/").strip()
-    elif "/" in addr:
-        pkg, unit_name = addr.rsplit("/", 1)
-        pkg = pkg.lstrip("/").strip()
-    else:
-        pkg, unit_name = "", addr
-
-    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
-    if role == "test":
-        return f"{pkg}/tests/{unit_name}_test.py" if pkg else f"tests/{unit_name}_test.py"
-    if role == "lib":
-        return f"{pkg}/lib/{unit_name}.py" if pkg else f"lib/{unit_name}.py"
-    if role == "low":
-        return f"{pkg}/low/{unit_name}.pyi" if pkg else f"low/{unit_name}.pyi"
-    if role == "high":
-        return f"{pkg}/high/{unit_name}.md" if pkg else f"high/{unit_name}.md"
-    if role == "planning":
-        return f"{pkg}/planning/{unit_name}.md" if pkg else f"planning/{unit_name}.md"
-    if role == "scenario":
-        return f"{pkg}/scenarios/{unit_name}.md" if pkg else f"scenarios/{unit_name}.md"
-    return f"{pkg}/{unit_name}" if pkg else unit_name
-
-
-class AttributionCoordinator(attribution.AttributionCoordinator, Singleton):
+class AttributionCoordinator(attribution.AttributionCoordinator):
     """Coordinates upstream blame attribution, single-paragraph validation, and failure cascades."""
 
     tier = agent_session.agent_session
@@ -197,9 +252,9 @@ class AttributionCoordinator(attribution.AttributionCoordinator, Singleton):
             alias = get_singleton(file_alias.AliasManager).to_alias(val_str)
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             alias = None
-        alias_path = str(getattr(alias, "relative_path", "")) if alias is not None else ""
+        alias_path = str(alias.relative_path if hasattr(alias, "relative_path") else "") if alias is not None else ""
         for bound in targets:
-            bound_path = str(getattr(bound, "relative_path", ""))
+            bound_path = str(bound.relative_path if hasattr(bound, "relative_path") else "")
             if val is not None and bound == val:
                 return bound
             if alias is not None and bound == alias:
@@ -212,15 +267,17 @@ class AttributionCoordinator(attribution.AttributionCoordinator, Singleton):
             suffix_matches = [
                 bound
                 for bound in targets
-                if getattr(bound, "relative_path", "").endswith("/" + norm_v)
-                or norm_v.endswith("/" + getattr(bound, "relative_path", "").lstrip("/"))
+                if (
+                    str(bound.relative_path if hasattr(bound, "relative_path") else "").endswith("/" + norm_v)
+                    or norm_v.endswith("/" + str(bound.relative_path if hasattr(bound, "relative_path") else "").lstrip("/"))
+                )
             ]
             if len(suffix_matches) == 1:
                 return suffix_matches[0]
             base_matches = [
                 bound
                 for bound in targets
-                if os.path.basename(getattr(bound, "relative_path", ""))
+                if os.path.basename(str(bound.relative_path if hasattr(bound, "relative_path") else ""))
                 == os.path.basename(norm_v)
             ]
             if len(base_matches) == 1:
@@ -253,11 +310,11 @@ class AttributionCoordinator(attribution.AttributionCoordinator, Singleton):
         if blame_target_node not in upstream_nodes:
             try:
                 cfg = get_singleton(node_config.NodeConfig)
-                targets = list(getattr(cfg, "blame_targets_by_node", {}).get(source_node, set()))
+                targets = list(cfg.blame_targets_by_node.get(source_node, set()) if (cfg and hasattr(cfg, "blame_targets_by_node")) else set())
             except Exception:
                 targets = []
             if targets:
-                allowed = ", ".join(f"`{getattr(t, 'relative_path', t)}`" for t in targets)
+                allowed = ", ".join(f"`{t.relative_path if hasattr(t, 'relative_path') else t}`" for t in targets)
             else:
                 allowed = ", ".join(f"`{_node_display_alias(n)}`" for n in upstream_nodes)
             return attribution.AttributionOutcome(
@@ -267,18 +324,15 @@ class AttributionCoordinator(attribution.AttributionCoordinator, Singleton):
             )
 
         # 2b. Feedback configuration validation
-        try:
-            cfg = get_singleton(node_config.NodeConfig)
-            role_defs = getattr(cfg, "role_definitions", {})
-        except (LifecycleResolutionError, KeyError, AttributeError, RuntimeError):
-            role_defs = {}
+        role_defs = _get_role_definitions()
         src_role = str(source_node.role_address).split(":")[-1].strip().lower()
         tgt_role = str(blame_target_node.role_address).split(":")[-1].strip().lower()
         if role_defs and src_role in role_defs:
             src_def = role_defs[src_role]
+            raw_fb = _role_feedback_deps(src_def)
             fb_deps = [
                 d.split(":")[-1].strip().lower()
-                for d in (getattr(src_def, "feedback_role_deps", None) or (src_def.get("feedback_role_deps") if isinstance(src_def, dict) else ()) or ())
+                for d in (raw_fb or ())
             ]
             if tgt_role not in fb_deps:
                 return attribution.AttributionOutcome(
@@ -444,45 +498,15 @@ class AttributionCoordinator(attribution.AttributionCoordinator, Singleton):
         main_dep_path = os.path.join(main_root, os.path.relpath(dep_path, ref_root))
 
         # Validate that caller is configured to deliver feedback to blamed_role
-        try:
-            cfg = get_singleton(node_config.NodeConfig)
-            role_defs = getattr(cfg, "role_definitions", {})
-        except (LifecycleResolutionError, KeyError, AttributeError, RuntimeError):
-            role_defs = {}
-        # Fallback filesystem search for cleanroom_roles.toml or cleanroom_python_roles.toml when NodeConfig is unregistered.
-        if not role_defs:
-            roles_toml = None
-            for cand in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
-                p = os.path.join(main_root, cand)
-                if os.path.isfile(p):
-                    roles_toml = p
-                    break
-            if not roles_toml:
-                for entry in os.listdir(main_root):
-                    pkg = os.path.join(main_root, entry)
-                    if os.path.isdir(pkg) and not entry.startswith((".", "bazel-", "venv")):
-                        for cand in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
-                            p = os.path.join(pkg, cand)
-                            if os.path.isfile(p):
-                                roles_toml = p
-                                break
-                    if roles_toml:
-                        break
-            if roles_toml and os.path.isfile(roles_toml):
-                try:
-                    with open(roles_toml, "rb") as tf:
-                        r_data = tomllib.load(tf)
-                    role_defs = r_data.get("roles", {})
-                except (tomllib.TOMLDecodeError, OSError):
-                    role_defs = {}
-
+        role_defs = _get_role_definitions()
         caller_clean = str(caller).split(":")[-1].strip().lower()
         blamed_clean = str(blamed_role).split(":")[-1].strip().lower()
         if role_defs and caller_clean in role_defs:
             c_def = role_defs[caller_clean]
+            raw_fb = _role_feedback_deps(c_def)
             fb_deps = [
                 d.split(":")[-1].strip().lower()
-                for d in (getattr(c_def, "feedback_role_deps", None) or (c_def.get("feedback_role_deps") if isinstance(c_def, dict) else ()) or ())
+                for d in (raw_fb or ())
             ]
             if blamed_clean not in fb_deps:
                 return attribution.AttributionOutcome(
@@ -577,6 +601,13 @@ class AttributionCoordinator(attribution.AttributionCoordinator, Singleton):
             message=f"Marked failure on {target_to_mutate}: added DIRTY tag and updated LAST_CLEANED.",
             affected_nodes=[],
         )
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:03:55Z
+# CHANGE: Record failure diagnostics and force dirty state through graph storage in fail_target, mark blamed culprits dirty in blame_target, resolve culprit files through the alias manager, and synchronize blamed source metadata headers
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

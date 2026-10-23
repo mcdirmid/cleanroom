@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T18:30:00Z
-# CHANGE: Define submission_impl low-level realization specification
-# CODE_HASH: 2ce5f708b3d4
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Sandbox submission realization low-level specification."""
 
 from typing import Any, Mapping, Optional, Sequence, Set
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import node_config
@@ -23,9 +15,7 @@ import tool_provider
 
 
 @singleton_type("agent_session")
-class SubmitTool(
-    submission.SubmitTool, InTier[AgentSessionTier]
-):
+class SubmitTool(submission.SubmitTool):
     """Realizes clean task submission gated by verification and documentation.
 
     GROUNDING:
@@ -81,9 +71,7 @@ class SubmitTool(
 
 
 @singleton_type("agent_session")
-class FailTool(
-    submission.FailTool, InTier[AgentSessionTier]
-):
+class FailTool(submission.FailTool):
     """Realizes task failure termination.
 
     GROUNDING:
@@ -130,9 +118,7 @@ class FailTool(
 
 
 @singleton_type("agent_session")
-class BlameTool(
-    submission.BlameTool, InTier[AgentSessionTier]
-):
+class BlameTool(submission.BlameTool):
     """Realizes defect attribution to upstream prerequisites.
 
     GROUNDING:
@@ -201,3 +187,10 @@ class BlameTool(
           coordinate.SessionCoordinator.open_targets to set the termination state.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T18:30:00Z
+# CHANGE: Define submission_impl low-level realization specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

@@ -1,15 +1,8 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-10T19:40:00Z
-LAST_CHANGED: 2026-10-10T21:50:00Z
-CHANGE: Clarify that cleanroom metadata headers are managed automatically by submit
-CODE_HASH: 39a48fd392b1
--->
-
 # Guide: High-Level to Scenario Alignment
 
 ## Summary
 
-The artifact is a scenario file (`scenarios/<name>.md`) restating the caller-observable behaviour of a component as concrete interaction sequences, submitted via `submit(target="<target_file>", change_summary="...")` (in single-target sessions, target may be omitted). Submitting an unchanged file rejects a change summary, whereas modifying content requires one. In-band metadata headers (`LAST_CLEANED`, `LAST_CHANGED`, `CODE_HASH`) are tool-maintained automatically upon `submit(change_summary=...)`; direct edits to metadata headers are prohibited and rejected by editing tools. Seed files materialize as bootstrap templates containing scaffolding and comments that must be completely replaced. In multi-node sessions, multiple scenario files are processed together by package-relative alias path. The artifact conforms to this guide and `design-docs/concrete_scenario_validation.md`.
+The artifact is a scenario file (`scenarios/<name>.md`) restating the caller-observable behaviour of a component as concrete interaction sequences, submitted via `submit(target="<target_file>", change_summary="...")` (in single-target sessions, target may be omitted). Submitting an unchanged file rejects a change summary, whereas modifying content requires one. In-band metadata blocks at the bottom of the file (`LAST_CLEANED`, `LAST_CHANGED`, `CODE_HASH`) are tool-maintained automatically upon `submit(change_summary=...)`; direct edits to metadata blocks are prohibited and rejected by editing tools. Seed files materialize as bootstrap templates containing scaffolding and comments that must be completely replaced. In multi-node sessions, multiple scenario files are processed together by package-relative alias path. The artifact conforms to this guide and `design-docs/concrete_scenario_validation.md`.
 
 A scenario pairs a numbered title with a `Given:` state and numbered steps. The state holds only what is true before the first step; every step is one interaction with the component; an interface step records the observation that must hold afterwards, and an implementation step records that observation immediately followed by its realization beside it as part of the same numbered step. Interface scenarios cover only the component's specification, naming no collaborators or code symbols. Implementation scenarios restate only the interface(s) the component implements under `## Reused from the interface`, token-for-token identical to the interface scenario file with an immediate `Realized by:` line per step, placing additional scenarios under `## Implementation-only`. Interface scenarios are written before implementation scenarios in the same sitting; editing an interface re-dirties its implementation and star dependents. When a specification names a type without operations, unstated preconditions are supplied in `Given:` and marked as inferred; an absent capability or contradictory requirement is blamed on `high/<name>.md`.
 
@@ -94,5 +87,12 @@ A scenario pairs a numbered title with a `Given:` state and numbered steps. The 
 - [ ] Consequence steps — creating redundant numbered steps that merely report the consequence of an earlier action
 - [ ] Vacuous assertions — stating that untouched entries remain unchanged when the collection is empty
 - [ ] Inconsistent headings — using en-dashes or hyphens instead of literal em-dashes (`—`) in scenario headers
-- [ ] Stale metadata headers — hand-editing `CODE_HASH` or metadata lines instead of letting tools maintain them
+- [ ] Stale metadata blocks — hand-editing `CODE_HASH` or metadata lines instead of letting tools maintain them
 - [ ] Retaining template scaffolding — leaving `Bootstrap:` comments or `<component type>` markers in submitted files
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-10T19:40:00Z
+LAST_CHANGED: 2026-10-10T21:50:00Z
+CHANGE: Clarify that cleanroom metadata headers are managed automatically by submit
+CODE_HASH: 39a48fd392b1
+-->

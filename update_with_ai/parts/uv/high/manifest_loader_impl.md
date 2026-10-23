@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: 4dea3fba3f90
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # manifest_loader_impl implementation component
 
 imports: node_storage, cleanroom_files_ext, dag_storage, file_paths, manifest_ext, target
@@ -52,3 +44,10 @@ The uv manifest loader:
 - Registers declared direct dependencies, feedback dependencies, and non-propagating silent dependencies in node storage.
 
 - Synthesizes empty node definitions for referenced dependency targets that lack a manifest.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

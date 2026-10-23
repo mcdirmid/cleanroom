@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:17:14Z
-CHANGE: Author control verification concrete scenarios
-CODE_HASH: 5350bfa9dbdc
--->
-
 # Concrete scenarios for `verification` (interface)
 
 ## Scenario 1 — Evaluating one target whose check fails amid compiler noise
@@ -65,3 +58,9 @@ Given: the session has no active target, and no verification check is configured
 
 1. The agent evaluates the verification checks of every active target in the session.
    Observed: no verification result is reported, and no check is run.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:17:14Z
+CHANGE: Author control verification concrete scenarios
+-->

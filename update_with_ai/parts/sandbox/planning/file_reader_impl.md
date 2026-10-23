@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:10:58Z
-CHANGE: Remove the contradicted search tool omission statement
-CODE_HASH: 7c2614cc4dfb
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_reader_impl implementation component
 
 ## Intent
@@ -69,3 +61,10 @@ By formatting lines with right-aligned line numbers, filtering metadata paragrap
 
 - Formatting line numbered output with metadata filtering and template rendering.
   - Grounded: [template_format: [template_formatting], file_alias: [alias_mapping]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:10:58Z
+CHANGE: Remove the contradicted search tool omission statement
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

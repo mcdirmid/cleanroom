@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:49:12Z
-# CHANGE: Register the NodeConfig collaborator exposing the configured guide and verify initialize obtains it
-# CODE_HASH: 63718cfe092a
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for guide_delivery_impl per its grounding specification."""
 
 from __future__ import annotations
@@ -15,7 +6,7 @@ import unittest
 from typing import List, Optional
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.agent.lib.session import session as agent_session
+from update_with_ai.parts.agent.lib.session import agent_session
 from update_with_ai.parts.agent.lib import file_alias, node_config
 from update_with_ai.parts.sandbox.lib import guide_delivery, tool_provider
 from update_with_ai.parts.sandbox.lib.guide_delivery_impl import (
@@ -270,3 +261,12 @@ if __name__ == "__main__":
 
 # Untested requirements:
 # None
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:49:12Z
+# CHANGE: Register the NodeConfig collaborator exposing the configured guide and verify initialize obtains it
+# CODE_HASH: 63718cfe092a
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

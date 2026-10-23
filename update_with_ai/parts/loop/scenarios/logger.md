@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T12:35:00Z
-CHANGE: Update scenarios to reflect standard output carrying event summary text without event name prefixes
-CODE_HASH: f48b92c4432b
--->
-
 # Concrete scenarios for `logger` (interface)
 
 ## Scenario 1 — Consuming one execution event
@@ -71,3 +64,9 @@ representation is 500 lines long.
 1. The caller consumes that event.
    Observed: standard output gains exactly one single-line summary carrying the text compiled widget in 8 seconds, and the transcript log gains one record
    whose text is all 500 lines of the transcript representation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T12:35:00Z
+CHANGE: Update scenarios to reflect standard output carrying event summary text without event name prefixes
+-->

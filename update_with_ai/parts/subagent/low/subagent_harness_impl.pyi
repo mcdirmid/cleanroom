@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T11:00:00Z
-# CHANGE: turn down support for goose, supporting only antigravity and dsh
-# CODE_HASH: 4bba3c5eea8f
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for subagent_harness_impl."""
 
 from typing import Mapping, Optional, Sequence
-from framework import operation, override, poly_type, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, poly_type, singleton_type
+from support.lib.lifecycle import Singleton
 import session as agent_session
 import subagent_coordinator
 import subagent_harness
@@ -36,8 +28,8 @@ class CommandHarnessAdapter(
         """Constructs instructional task prompt for the role subagent.
 
         GROUNDING:
-        - Formulates task prompt with role, directory scope, assigned targets, guide instructions,
-          check-files verification, and cleanroom_role_tool submit and blame commands.
+        - Formulates task prompt with role, directory scope, assigned targets, constraints against
+          scratch tests or unassigned file modifications, check-files verification, and cleanroom_role_tool submit and blame commands.
         """
         ...
 
@@ -54,21 +46,21 @@ class CommandHarnessAdapter(
 
     @operation
     @override
-    def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
-        """Awaits subagent turn completion and returns outcome result.
+    def await_role(self, task_handle: str) -> subagent_coordinator.RoleRoundResult:
+        """Awaits subagent round completion and returns outcome result.
 
         GROUNDING:
         - Awaits process completion without mandatory timeout unless configured, reads blame records,
           computes submitted targets via pending work buffer difference, parses token metrics from
           process logs via regex patterns and rate multipliers, inspects log tail on non-zero exit for
-          failure diagnostics, and constructs RoleTurnResult.
+          failure diagnostics, and constructs RoleRoundResult.
         """
         ...
 
     @operation
     @override
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
-        """Polls subagent turn execution without blocking.
+    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+        """Polls subagent round execution without blocking.
 
         GROUNDING:
         - Checks subprocess status via poll(), returning None if still running,
@@ -88,10 +80,7 @@ class CommandHarnessAdapter(
 
 
 @singleton_type("agent_session")
-class HarnessRegistry(
-    subagent_harness.HarnessRegistry,
-    InTier[agent_session.AgentSessionTier],
-):
+class HarnessRegistry(subagent_harness.HarnessRegistry):
     """Realizes harness registry and resolution for external agent platforms.
 
     GROUNDING:
@@ -138,3 +127,10 @@ class HarnessRegistry(
 
 
 HarnessResolver = HarnessRegistry
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-19T17:15:00Z
+# CHANGE: Instruct role subagents to edit only assigned targets, rely solely on check_files, and refrain from scratch tests
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

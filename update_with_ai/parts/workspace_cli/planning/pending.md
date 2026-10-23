@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:40:00Z
-CHANGE: Define pending planning specification
-CODE_HASH: 1a60f6aad6e5
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # pending interface component
 
 ## Intent
@@ -30,7 +22,7 @@ Operating command-line subagents inside isolated role workspaces requires durabl
 
 ### Woven Contracts
 
-- When managing active tasks in a role workspace, the pending manager records assigned targets, tracks pending state across turns, removes completed targets upon submission or blame, and verifies whether pending targets remain dirty before allowing new work discovery. [set_pending_work_targets, get_pending_work_targets, remove_pending_target_path, is_pending_target_dirty_disk, track_implicit_role_dirtiness, materialize_pending_target_template]
+- When managing active tasks in a role workspace, the pending manager records assigned targets, tracks pending state across rounds, removes completed targets upon submission or blame, and verifies whether pending targets remain dirty before allowing new work discovery. [set_pending_work_targets, get_pending_work_targets, remove_pending_target_path, is_pending_target_dirty_disk, track_implicit_role_dirtiness, materialize_pending_target_template]
 - When all assigned targets evaluate clean, the pending manager clears the pending work buffer file. [clear_pending_work_buffer]
 
 ## Grounding
@@ -46,3 +38,10 @@ Operating command-line subagents inside isolated role workspaces requires durabl
   - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Persistence and evaluation of pending target lists on disk.
   - Deferred: Provided by workspace pending manager implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T17:40:00Z
+CHANGE: Define pending planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

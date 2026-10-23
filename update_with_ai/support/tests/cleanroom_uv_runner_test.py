@@ -28,15 +28,24 @@ from update_with_ai.support.lib import cleanroom_uv_runner
 
 
 class CleanroomUvRunnerTest(unittest.TestCase):
+    target_scope: str = ""
+
     @classmethod
     def setUpClass(cls) -> None:
         cleanroom_asm.__initialize__()
         cls.loader = get_singleton(manifest_loader.UvManifestLoader)
         cls.repo_root = _repo_root
+        for entry in sorted(os.listdir(_repo_root)):
+            if entry.startswith((".", "bazel-", "venv")):
+                continue
+            cand = os.path.join(_repo_root, entry, "parts", "sandbox")
+            if os.path.isdir(cand):
+                cls.target_scope = entry
+                break
 
     def test_resolve_scope_entire_scope(self) -> None:
         nodes = cleanroom_uv_runner.resolve_scope_nodes(
-            "staging", self.repo_root, self.loader
+            self.target_scope, self.repo_root, self.loader
         )
         self.assertIsNotNone(nodes)
         assert nodes is not None
@@ -48,7 +57,7 @@ class CleanroomUvRunnerTest(unittest.TestCase):
 
     def test_resolve_scope_part(self) -> None:
         nodes = cleanroom_uv_runner.resolve_scope_nodes(
-            "staging/parts/sandbox", self.repo_root, self.loader
+            f"{self.target_scope}/parts/sandbox", self.repo_root, self.loader
         )
         self.assertIsNotNone(nodes)
         assert nodes is not None
@@ -56,22 +65,22 @@ class CleanroomUvRunnerTest(unittest.TestCase):
         roles = {n.role_address for n in nodes}
         self.assertIn("scenario", roles)
         for n in nodes:
-            self.assertTrue(n.unit_address.startswith("//staging/parts/sandbox:"))
+            self.assertTrue(n.unit_address.startswith(f"//{self.target_scope}/parts/sandbox:"))
 
     def test_resolve_scope_part_role(self) -> None:
         nodes = cleanroom_uv_runner.resolve_scope_nodes(
-            "staging/parts/sandbox/lib", self.repo_root, self.loader
+            f"{self.target_scope}/parts/sandbox/lib", self.repo_root, self.loader
         )
         self.assertIsNotNone(nodes)
         assert nodes is not None
         self.assertEqual(len(nodes), 15)
         for n in nodes:
-            self.assertTrue(n.unit_address.startswith("//staging/parts/sandbox:"))
+            self.assertTrue(n.unit_address.startswith(f"//{self.target_scope}/parts/sandbox:"))
             self.assertEqual(n.role_address, "lib")
 
     def test_resolve_scope_single_file(self) -> None:
         nodes = cleanroom_uv_runner.resolve_scope_nodes(
-            "staging/parts/sandbox/lib/file_reader_impl.py",
+            f"{self.target_scope}/parts/sandbox/lib/file_reader_impl.py",
             self.repo_root,
             self.loader,
         )
@@ -79,13 +88,13 @@ class CleanroomUvRunnerTest(unittest.TestCase):
         assert nodes is not None
         self.assertEqual(len(nodes), 1)
         self.assertEqual(
-            nodes[0].unit_address, "//staging/parts/sandbox:file_reader_impl"
+            nodes[0].unit_address, f"//{self.target_scope}/parts/sandbox:file_reader_impl"
         )
         self.assertEqual(nodes[0].role_address, "lib")
 
     def test_resolve_scope_label_target_returns_none(self) -> None:
         nodes = cleanroom_uv_runner.resolve_scope_nodes(
-            "//staging/parts/systems:cleanroom_asm#coverage",
+            f"//{self.target_scope}/parts/systems:cleanroom_asm#coverage",
             self.repo_root,
             self.loader,
         )
@@ -93,7 +102,7 @@ class CleanroomUvRunnerTest(unittest.TestCase):
 
     def test_resolve_scope_part_explicit_role(self) -> None:
         nodes = cleanroom_uv_runner.resolve_scope_nodes(
-            "//staging/parts/sandbox#spec_qa",
+            f"//{self.target_scope}/parts/sandbox#spec_qa",
             self.repo_root,
             self.loader,
         )
@@ -101,12 +110,12 @@ class CleanroomUvRunnerTest(unittest.TestCase):
         assert nodes is not None
         self.assertEqual(len(nodes), 15)
         for n in nodes:
-            self.assertTrue(n.unit_address.startswith("//staging/parts/sandbox:"))
+            self.assertTrue(n.unit_address.startswith(f"//{self.target_scope}/parts/sandbox:"))
             self.assertEqual(n.role_address, "spec_qa")
 
     def test_resolve_scope_up_to_role(self) -> None:
         nodes = cleanroom_uv_runner.resolve_scope_nodes(
-            "staging/parts/sandbox",
+            f"{self.target_scope}/parts/sandbox",
             self.repo_root,
             self.loader,
             up_to_role="low",
@@ -121,11 +130,36 @@ class CleanroomUvRunnerTest(unittest.TestCase):
         self.assertNotIn("test", roles)
 
     def test_run_cleanroom_target_mark_clean_scope(self) -> None:
-        ret = cleanroom_uv_runner.run_cleanroom_target(
-            target_str="staging/parts/sandbox/lib",
-            action="mark-clean",
-        )
-        self.assertEqual(ret, 0)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with open(os.path.join(tmp_dir, "cleanroom.toml"), "w", encoding="utf-8") as f:
+                f.write('methodology = "//pkg"\n')
+            pkg_dir = os.path.join(tmp_dir, "pkg")
+            parts_dir = os.path.join(pkg_dir, "parts", "sample")
+            high_dir = os.path.join(parts_dir, "high")
+            lib_dir = os.path.join(parts_dir, "lib")
+            os.makedirs(high_dir, exist_ok=True)
+            os.makedirs(lib_dir, exist_ok=True)
+
+            roles_src = os.path.abspath(os.path.join(self.repo_root, "update_python_with_ai/cleanroom_roles.toml"))
+            if os.path.isfile(roles_src):
+                shutil.copyfile(roles_src, os.path.join(pkg_dir, "cleanroom_roles.toml"))
+
+            with open(os.path.join(high_dir, "sample.md"), "w", encoding="utf-8") as f:
+                f.write("# Sample High Level Spec\n\n```python\n# Component: implementation\n```\n")
+            with open(os.path.join(lib_dir, "sample.py"), "w", encoding="utf-8") as f:
+                f.write("# sample implementation\n")
+
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(tmp_dir)
+                ret = cleanroom_uv_runner.run_cleanroom_target(
+                    target_str="pkg/parts/sample/lib",
+                    action="mark-clean",
+                    workspace_dir=tmp_dir,
+                )
+                self.assertEqual(ret, 0)
+            finally:
+                os.chdir(orig_cwd)
 
     def test_mark_clean_skips_clean_node(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -197,7 +231,7 @@ class CleanroomUvRunnerTest(unittest.TestCase):
 
                 # Third mark-clean should clean the dirty node and clear the dirty tag
                 ret3 = cleanroom_uv_runner.run_cleanroom_target(
-                    target_str="pkg/parts/sample/lib",
+                    target_str="//pkg/parts/sample:sample#lib",
                     action="mark-clean",
                     workspace_dir=tmp_dir,
                 )

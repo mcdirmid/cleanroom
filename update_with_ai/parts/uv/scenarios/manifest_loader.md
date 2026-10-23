@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:20:02Z
-CHANGE: Author uv manifest_loader interface scenarios
-CODE_HASH: 390d05791c53
--->
-
 # Concrete scenarios for `uv_manifest_loader` (interface)
 
 ## Scenario 1 — Retrieving the manifest of one declared target
@@ -75,3 +68,9 @@ role alpha target does not propagate.
 1. The caller asks the uv manifest loader to resolve the alpha-role target for widget.
    Observed: the node definition of the alpha-role target for widget records no edge, and no other
    node definition is synthesized.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:20:02Z
+CHANGE: Author uv manifest_loader interface scenarios
+-->

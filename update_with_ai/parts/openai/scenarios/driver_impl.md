@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:12:27Z
-CHANGE: Author openai driver_impl concrete scenarios
-CODE_HASH: 1af31d618d94
--->
-
 # Concrete scenarios for `openai_driver_impl` (implementation)
 
 Scenarios 1 through 5 restate the caller observations of the interface scenarios and add, beside
@@ -105,10 +98,11 @@ and the reasoning text "the contract still reports the stale line count".
 2. The follow-up execution returns its response.
    Observed: the response is appended to the conversation correlated with the follow-up tool call,
    the conversation records the reasoning text "the contract still reports the stale line count",
+   repetition tracking in the loop guard is cleared when the follow-up tool modifies a file or advances the guide step,
    and the turn loop continues.
    Realized by: the component's own append through `loop_conversation` of a synthetic assistant
    invocation carrying the reasoning text as preceding thought, followed immediately by the
-   response of the follow-up call, and the component's own continuation of the turn loop.
+   response of the follow-up call, its own clearing of repetition tracking through `loop_guard`, and the component's own continuation of the turn loop.
 
 ### Scenario 5 — Runaway repetition and the conversation limit
 
@@ -223,13 +217,15 @@ reports 1024 prompt tokens of which 512 are cached and 300 completion tokens, an
    completion, and one event for the tool result; the completion event's summary carries the turn
    identifier 2, a conversation token size of 4000 rounded to the nearest thousand, a cached
    percentage of 50 from the usage fields, and the tool call name `read_file` with its arguments;
+   the completion event transcript records the output tokens from the completion response;
    and the tool result event's summary names the file `/ws/alpha_scope_a/widget.md` with the
    timestamp 2026-01-02T03:04:05Z and does not inline the file content.
    Realized by: the component's own runner log events for every turn request, completion, and tool
    result, consumed by `logger`; the compact summary built from the conversation size held
    by `loop_conversation`, the usage fields parsed by `openai_ext`, and the tool outcome from
-   `tool_provider`; and the component's own inclusion of corrective reminders in the transcript
-   when the loop guard supplies one.
+   `tool_provider`; the completion transcript recording output tokens and elapsed turn duration;
+   and the component's own inclusion of corrective reminders in the transcript when the loop guard
+   supplies one.
 
 ### Scenario 10 — Repetition tracking cleared by productive execution
 
@@ -243,3 +239,10 @@ response that writes the workspace file `/ws/alpha_scope_a/widget.md`.
    Realized by: the component's own judgement that the execution modified a workspace file,
    followed by its own clearing of repetition tracking through `loop_guard`; the append of the
    response through `loop_conversation`; and the component's own continuation of the turn loop.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-19T19:42:00Z
+CHANGE: Clarify follow-up execution clearing loop guard repetition
+SPEC_QA_AUDIT: 2026-10-19T19:42:00Z
+-->

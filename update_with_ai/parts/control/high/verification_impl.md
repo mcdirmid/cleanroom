@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 6b4f52f74a91
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # verification_impl implementation component
 
 imports: session, node_config, dag_storage, file_alias
@@ -36,3 +28,10 @@ When evaluating verification checks:
 - The verification evaluator marks the verification result as failing when any verification check exits with a non-zero exit code or writes failure diagnostics, capturing the error output, stripping compiler diagnostic noise lines that begin with build progress indicators or load banners, and storing the failing outcome in the file hash cache.
 
 - The verification evaluator marks the verification result as passed when every verification check completes with exit code zero, capturing any standard output, stripping compiler diagnostic noise, and caching the passing outcome alongside the current file hashes.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

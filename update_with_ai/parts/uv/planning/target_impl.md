@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: 7e1b2e547773
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # target_impl implementation component
 
 ## Intent
@@ -46,3 +38,10 @@ By delegating label normalization and package resolution to the target_labels_ex
   - Grounded: [target_labels_ext: [uv_target_label_parsing]]
 - Relative package directory extraction anchored to the workspace root.
   - Grounded: [target_labels_ext: [uv_package_directory_resolution], file_paths: [path_resolution_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

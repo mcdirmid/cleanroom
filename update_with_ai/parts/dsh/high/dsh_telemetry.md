@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:55:00Z
-CHANGE: Author dsh_telemetry interface specification
-CODE_HASH: c71df9d19da5
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # dsh_telemetry interface component
 
 imports: session
@@ -24,7 +16,7 @@ Accurate accounting of token consumption and live session visibility across auto
 
 A *dsh token metrics* record captures uncached prompt tokens, cached prompt tokens, completion tokens, total tokens, model name, and monetary expenditure in USD parsed from DeepSeek Harness session storage or event streams.
 
-A *dsh rpc turn status* record captures active execution status, completed status, failure error details, and cumulative token metrics parsed from DeepSeek Harness JSON-RPC turn events.
+A *dsh rpc round status* record captures active execution status, completed status, failure error details, and cumulative token metrics parsed from DeepSeek Harness JSON-RPC round events.
 
 The *dsh telemetry parser* of an agent session extracts token metrics from event streams or session storage archives, calculates token expenditure, and synchronizes active sessions with the DeepSeek Harness Desktop application.
 
@@ -38,6 +30,13 @@ The dsh telemetry parser:
 
 - Evaluates whether an active DeepSeek Harness Desktop application or background server is reachable over the local RPC bridge.
 
-- Dispatches role turns over the local RPC bridge by ensuring workspace registration, creating or resuming sessions, and enqueueing prompt tasks without local file lock contention.
+- Dispatches role rounds over the local RPC bridge by ensuring workspace registration, creating or resuming sessions, and enqueueing prompt tasks without local file lock contention.
 
-- Polls active turn status over the local RPC bridge until turn quiescence.
+- Polls active round status over the local RPC bridge until round quiescence.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:55:00Z
+CHANGE: Author dsh_telemetry interface specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

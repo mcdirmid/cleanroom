@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T04:40:32Z
-# CHANGE: Record the failing target's own FAILED state when dispatching fail
-# CODE_HASH: 177e94e8c651
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for coordinate_impl."""
 
 from typing import Any, Optional, Sequence
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import node_config
@@ -24,10 +16,7 @@ import subgraph
 
 
 @singleton_type("agent_session")
-class SessionCoordinator(
-    coordinate.SessionCoordinator,
-    InTier[AgentSessionTier],
-):
+class SessionCoordinator(coordinate.SessionCoordinator):
     """Implementation of session coordinator facade.
 
     GROUNDING:
@@ -228,3 +217,10 @@ class SessionCoordinator(
           coordinate.TargetState.FAILED.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T04:40:32Z
+# CHANGE: Record the failing target's own FAILED state when dispatching fail
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

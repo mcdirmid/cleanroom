@@ -1,23 +1,16 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:21:58Z
-# CHANGE: Canonicalize warning-of-two and fatal thresholds and split reminder content statements
-# CODE_HASH: 86baa7b3771e
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Loop guard implementation low-level specification."""
 
 from typing import Any, Mapping, Optional, Union
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
+import file_editor
 import guard
 import tool_provider
 
 
 @singleton_type("agent_session")
-class LoopGuard(guard.LoopGuard, InTier[AgentSessionTier]):
+class LoopGuard(guard.LoopGuard):
     """Realizes threshold-based repetition tracking for tools and line-bounded file edits.
 
     GROUNDING:
@@ -37,6 +30,9 @@ class LoopGuard(guard.LoopGuard, InTier[AgentSessionTier]):
       tool_provider.ToolManager.execute_tool and tool_provider.Tool.execute_tool members execute the
       tool calls the session loop submits for repetition evaluation, grounding the inherited
       consecutive tool signature tracking requirement on tool_provider:[tool_execution_capability].
+    - Discovers the session's editing tool and its coordinate parameters from the editing tool
+      capability of file_editor, grounding the inherited identification of the session's editing
+      tool requirement on file_editor:[editing_tool_capability].
     - Materializes guard.LoopReminder for advisory repetition feedback and guard.LoopFailure
       for the fatal failure communicating session failure, and clears the counters through
       guard.LoopGuard.reset whenever a tool execution demonstrates forward progress.
@@ -62,6 +58,9 @@ class LoopGuard(guard.LoopGuard, InTier[AgentSessionTier]):
         - Builds the call signature of the observed execution from tool_name and arguments, then
           compares that signature with the predecessor recorded in the sequence of consecutive call
           signatures so identical tool executions with identical arguments are tracked as a streak.
+        - Identifies whether the evaluated execution corresponds to the session's editing tool through
+          file_editor.EditingTool, and extracts the target file identity and line range using the path,
+          start line, and end line parameter descriptors declared by the editing tool.
         - Reads the file identity and line range of an edit invocation out of the argument bindings
           and compares them with the recorded file and line range span, so the edit streak extends
           only while both the target file and the line range are unchanged.
@@ -74,7 +73,11 @@ class LoopGuard(guard.LoopGuard, InTier[AgentSessionTier]):
 
         POSTCONDITIONS:
         - MUST track consecutive executions of identical tools with identical arguments.
-        - MUST track consecutive edits to the same file and line range.
+        - MUST track consecutive edits to the same file and line range using the session's editing tool
+          identified through file_editor.EditingTool.
+        - WHEN consecutive identical tool executions reach the warning threshold of two repetitions,
+          MUST produce a loop reminder directing the agent to modify files using the session's editing
+          tool or conclude the round with blame or fail.
         - WHEN consecutive identical tool executions reach the warning threshold of two repetitions,
           MUST produce a loop reminder advising the agent that no new information will be revealed
           until session read-write files are updated.
@@ -108,3 +111,10 @@ class LoopGuard(guard.LoopGuard, InTier[AgentSessionTier]):
         - MUST clear the recorded consecutive call signatures and file and line range span.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-21T20:00:00Z
+# LAST_CHANGED: 2026-10-21T20:00:00Z
+# CHANGE: Identify session editing tool through file_editor.EditingTool for edit tracking and reminder direction
+# SPEC_QA_AUDIT: 2026-10-21T20:00:00Z
+# --- END CLEANROOM METADATA ---

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:01:17Z
-CHANGE: Add role address tie-break and unsatisfied dependency batch termination; drop planning front-matter
-CODE_HASH: 743347071182
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # subgraph_impl implementation component
 
 ## Intent
@@ -60,3 +52,10 @@ By breaking topological sorting ties first by role tier depth and then by unit a
   - Grounded: [dag_storage: [dag_storage_service], dag_config: [dag_configuration_limits]]
 - Visit count tracking and limit enforcement raising unexpected failures when exceeded.
   - Grounded: [dag_config: [dag_configuration_limits]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:01:17Z
+CHANGE: Add role address tie-break and unsatisfied dependency batch termination; drop planning front-matter
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

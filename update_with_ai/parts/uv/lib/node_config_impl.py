@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:10:00Z
-# CHANGE: Resolve declared feedback dependencies into per-node blame targets and read-only files, include the guide target manifest source file in guide candidates, construct workspace paths through the declared frozen constructors, derive role-aware dependency fallbacks, prune uncontracted members and dead override state, and register the alias manager with the realized parameterized key
-# CODE_HASH: 01341ac51e9b
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 import json
 import os
 import re
@@ -230,23 +221,6 @@ def _dependency_source_paths(dep_label: str, dep_manifest: Optional[Any]) -> Lis
     if m is not None and m.source_file:
         return [str(m.source_file)]
 
-    root = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
-    loader = _safe_get_singleton(manifest_loader.UvManifestLoader)
-    pkg = _extract_pkg(dep_node)
-    clean_role = role_part.strip().lower()
-    if loader is not None and hasattr(loader, "_get_methodology_roles"):
-        try:
-            _, roles_dict = loader._get_methodology_roles(root, pkg)
-            r_cfg = roles_dict.get(clean_role)
-            if r_cfg and r_cfg.get("src_pattern"):
-                unit_name = unit_part.split(":")[-1].split("/")[-1]
-                pat = r_cfg["src_pattern"].format(unit_dir=pkg, unit_name=unit_name)
-                if pat.startswith(pkg + "/") or pat.startswith(pkg + "\\"):
-                    pat = pat[len(pkg) + 1 :]
-                return [pat]
-        except Exception:
-            pass
-
     return []
 
 
@@ -367,15 +341,12 @@ def _load_per_node_info(n: dag_storage.DagNode) -> node_config.PerNodeInfo:
     )
 
 
-class NodeConfig(node_config.NodeConfig, Singleton):
+class NodeConfig(node_config.NodeConfig):
     tier = agent_session
 
     def __init__(self) -> None:
         self._per_node_cache: Dict[dag_storage.DagNode, node_config.PerNodeInfo] = {}
         self._cached_version: int = -1
-
-    def initialize(self) -> None:
-        self._sync_cache()
 
     def _sync_cache(self) -> None:
         role_cfg = _safe_get_singleton(node_config.RoleConfig)
@@ -484,7 +455,7 @@ _WORKSPACE_PATTERN: re.Pattern[str] = re.compile(
 )
 
 
-class AliasManager(file_alias.AliasManager, Singleton):
+class AliasManager(file_alias.AliasManager):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -498,9 +469,6 @@ class AliasManager(file_alias.AliasManager, Singleton):
         self._workspace_root: file_paths.WorkspaceRoot = file_paths.WorkspaceRoot(
             path=file_paths.PathString(os.path.normpath(str(root)))
         )
-
-    def initialize(self) -> None:
-        self._sync_cache()
 
     def _sync_cache(self) -> None:
         role_cfg, n_cfg = _safe_get_singleton(node_config.RoleConfig), _safe_get_singleton(node_config.NodeConfig)
@@ -518,11 +486,6 @@ class AliasManager(file_alias.AliasManager, Singleton):
         if n_cfg.guide_file is not None:
             self._aliases[n_cfg.guide_file.relative_path] = n_cfg.guide_file
         self._cached_version = role_cfg.version
-
-    @property
-    def actual_type(self) -> Type[file_alias.FileAlias]: return file_alias.FileAlias
-    @property
-    def wire_type(self) -> Type[str]: return str
 
     # Contract: convert path string to file alias (BoundFile if matched, UnboundFile otherwise)
     def to_alias(self, path: str) -> file_alias.FileAlias:
@@ -546,6 +509,13 @@ class AliasManager(file_alias.AliasManager, Singleton):
     # Contract: configured absolute workspace root path
     @property
     def workspace_root(self) -> file_paths.WorkspaceRoot: return self._workspace_root
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:10:00Z
+# CHANGE: Resolve declared feedback dependencies into per-node blame targets and read-only files, include the guide target manifest source file in guide candidates, construct workspace paths through the declared frozen constructors, derive role-aware dependency fallbacks, prune uncontracted members and dead override state, and register the alias manager with the realized parameterized key
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

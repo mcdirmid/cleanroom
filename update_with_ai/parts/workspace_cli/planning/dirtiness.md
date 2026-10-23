@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:15:00Z
-CHANGE: Define dirtiness planning specification
-CODE_HASH: 29c505eaa484
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # dirtiness interface component
 
 ## Intent
@@ -44,3 +36,10 @@ Determining whether a unit in a Cleanroom pipeline needs rebuilding or verificat
   - Deferred: Provided by workspace dirtiness evaluator implementation.
 - Scope file resolution and dirtiness evaluation mechanics.
   - Deferred: Provided by workspace dirtiness evaluator implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:15:00Z
+CHANGE: Define dirtiness planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

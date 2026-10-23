@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:20:05Z
-CHANGE: Author uv loop_impl concrete scenarios
-CODE_HASH: bb4eb8c52e1a
--->
-
 # Concrete scenarios for `uv_loop_impl` (implementation)
 
 Scenarios 1 through 31 restate the caller observations of the interface scenarios and add, beside
@@ -512,3 +505,9 @@ and no transcript log exists yet.
    both nodes.
    Realized by: execution telemetry and event streaming through `logger`, whose events the
    component's own topological pass through `loop_cleaner` emits.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:20:05Z
+CHANGE: Author uv loop_impl concrete scenarios
+-->

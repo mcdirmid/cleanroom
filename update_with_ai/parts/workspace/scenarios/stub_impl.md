@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:55:00Z
-CHANGE: Define stub_impl concrete scenarios
-CODE_HASH: 14a8d2f31bcb
--->
-
 # Concrete scenarios for `stub_impl` (implementation)
 
 ## Scenario 1 — AST test stub generation and validation
@@ -23,3 +16,9 @@ Given: a destination test stub file whose timestamp is older than the source `.p
 
 1. The synthesizer executes `sync_all_stub_deps`.
    Observed: the destination stub is re-generated with updated signatures and permissions set to read-only (`0o444`).
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T17:55:00Z
+CHANGE: Define stub_impl concrete scenarios
+-->

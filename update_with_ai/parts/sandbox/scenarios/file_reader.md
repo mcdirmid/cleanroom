@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:12:00Z
-CHANGE: Author sandbox file_reader concrete scenarios
-CODE_HASH: cc6e4ebec450
--->
-
 # Concrete scenarios for `file_reader` (interface)
 
 ## Scenario 1 — Viewing a declared read-only file
@@ -66,3 +59,9 @@ positive" and `widget.py` as a read-write file holding the line "value = 1".
 
 2. The caller searches the session's files for the pattern "sprocket".
    Observed: the search reports no matches.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:12:00Z
+CHANGE: Author sandbox file_reader concrete scenarios
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-09T22:20:00Z
-CHANGE: Record change summary during clean status transition without appending dirty change message
-CODE_HASH: 3f376f45cb7a
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # submit_impl implementation component
 
 imports: session, dag_storage, node_config, verification, file_alias, src_metadata
@@ -50,3 +42,10 @@ When submitting a file target:
 - The submission coordinator submits an auditor role by rejecting test files, resolving the audited implementation and companion test files, stamping in-band audit tags directly in the canonical repository, constructing an audit outcome message formatted with the audit tag, and synchronizing the updated files back to the role workspace.
 
 - The submission coordinator submits a producer role by verifying write permissions and active directory scope patterns, requiring a change summary exactly when code was modified against the ephemeral code hash, stripping the code hash when copying back to the main repository, updating in-band change metadata directly in the canonical repository, constructing an outcome message formatted with a change summary or clean status, and synchronizing the updated files back to the role workspace with refreshed ephemeral code hashes.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-09T22:20:00Z
+CHANGE: Record change summary during clean status transition without appending dirty change message
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

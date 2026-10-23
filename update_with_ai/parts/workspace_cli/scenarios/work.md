@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:06:09Z
-CHANGE: Align work interface scenarios with the high-level specification
-CODE_HASH: c919433ec3bd
--->
-
 # Concrete scenarios for `work` (interface)
 
 ## Scenario 1 — Taking a missing unit from nothing to clean
@@ -80,3 +73,9 @@ Given: scope_a contains multiple ready units for role alpha, and the pending wor
 
 2. The agent submits the presented target and asks for work in scope_a as role alpha with batch size one again.
    Observed: the previous target is clean, the next ready item is presented, and the remaining count decrements.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:06:09Z
+CHANGE: Align work interface scenarios with the high-level specification
+-->

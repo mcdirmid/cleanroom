@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:43:03Z
-# CHANGE: Verify the warning-threshold reminder at two repetitions and search for the unmandated fatal threshold instead of fixing it at five repetitions
-# CODE_HASH: 959ccc6f971e
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for guard_impl aligned with grounding specifications."""
 
 import unittest
@@ -22,13 +13,13 @@ from update_with_ai.parts.loop.lib.guard_impl import (
     LoopGuard as LoopGuardImpl,
     __initialize__,
 )
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.agent.lib.session import AgentSessionTier
-from update_with_ai.parts.sandbox.lib import tool_provider
+from support.lib.lifecycle import LifecycleRegistry, Singleton, enter_phase
+from update_with_ai.parts.agent.lib.session import session as agent_session
+from update_with_ai.parts.sandbox.lib import file_editor, tool_provider
 
 
 class DummyParameterType:
-    tier = AgentSessionTier
+    tier = agent_session
     actual_type = str
     wire_type = str
 
@@ -52,10 +43,67 @@ def _make_bindings(
     return {k: tool_provider.SomeParameterActualType(v) for k, v in d.items()}
 
 
+class DummyEditingTool(file_editor.EditingTool, Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        self._path_param = _make_param("path")
+        self._start_param = _make_param("start_line")
+        self._end_param = _make_param("end_line")
+
+    @property
+    def name(self) -> tool_provider.ToolName:
+        return tool_provider.ToolName("custom_editor")
+
+    @property
+    def description(self) -> tool_provider.ToolDescription:
+        return tool_provider.ToolDescription("Custom editing tool")
+
+    @property
+    def parameters(
+        self,
+    ) -> Mapping[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]]:
+        return {
+            tool_provider.ParameterName("path"): self._path_param,
+            tool_provider.ParameterName("start_line"): self._start_param,
+            tool_provider.ParameterName("end_line"): self._end_param,
+        }
+
+    def execute_tool(
+        self,
+        actual_parameter_bindings: Mapping[
+            tool_provider.ToolParameter[Any, Any],
+            tool_provider.SomeParameterActualType,
+        ],
+    ) -> tool_provider.ToolResponse:
+        return tool_provider.ToolResponse(
+            is_failed=False,
+            is_terminated=False,
+            content=tool_provider.ToolResponseContent("edited"),
+        )
+
+    @property
+    def path_parameter(self) -> tool_provider.ToolParameter[Any, Any]:
+        return self._path_param
+
+    @property
+    def start_line_parameter(self) -> tool_provider.ToolParameter[Any, Any]:
+        return self._start_param
+
+    @property
+    def end_line_parameter(self) -> tool_provider.ToolParameter[Any, Any]:
+        return self._end_param
+
+
 class LoopGuardImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
+        self.registry.register_singleton(
+            DummyEditingTool,
+            keys=[DummyEditingTool, file_editor.EditingTool],
+            tier=agent_session,
+        )
 
     def test_dataclasses(self) -> None:
         """CUJ: Instantiating LoopReminder and LoopFailure records."""
@@ -80,11 +128,16 @@ class LoopGuardImplTest(unittest.TestCase):
 
                 # Call 2 -> LoopReminder at the warning threshold of two repetitions.
                 # Requirement: WHEN consecutive identical tool executions reach the warning threshold of two repetitions, MUST produce a loop reminder.
-                # Requirement: WHEN consecutive identical tool executions reach the warning threshold of two repetitions, MUST warn that repeating without modifying files will trigger fatal termination.
+                # Requirement: WHEN consecutive identical tool executions reach the warning threshold of two repetitions, MUST produce a loop reminder directing the agent to modify files or conclude the round with blame or fail.
+                # Requirement: WHEN consecutive identical tool executions reach the warning threshold of two repetitions, MUST warn through that loop reminder that repeating without modifying files will trigger fatal termination.
                 res2 = guard.evaluate(tool_name, bindings)
                 self.assertIsInstance(res2, LoopReminder)
                 assert isinstance(res2, LoopReminder)
                 self.assertTrue(res2.feedback)
+                self.assertIn("ACTION REQUIRED", str(res2.feedback))
+                self.assertIn("custom_editor", str(res2.feedback))
+                self.assertIn("blame", str(res2.feedback))
+                self.assertIn("fail", str(res2.feedback))
 
                 # Continued identical executions eventually reach the fatal threshold, whose numeric value
                 # is not mandated, producing a loop failure.
@@ -95,17 +148,19 @@ class LoopGuardImplTest(unittest.TestCase):
                     repetitions += 1
                     res = guard.evaluate(tool_name, bindings)
                 self.assertIsInstance(res, LoopFailure)
+                self.assertEqual(repetitions, 4)
 
     def test_consecutive_edits_threshold(self) -> None:
         """CUJ: Tracking consecutive edits to the same target."""
         with enter_phase("system", registry=self.registry):
             with enter_phase("agent_session", registry=self.registry) as scope:
                 guard = scope.get_singleton(LoopGuard)
-                p_path = _make_param("path")
-                p_start = _make_param("start_line")
-                p_end = _make_param("end_line")
+                edit_tool = scope.get_singleton(file_editor.EditingTool)
+                p_path = edit_tool.path_parameter
+                p_start = edit_tool.start_line_parameter
+                p_end = edit_tool.end_line_parameter
                 bindings = _make_bindings({p_path: "target.py", p_start: 1, p_end: 10})
-                tool_name = tool_provider.ToolName("replace_file_content")
+                tool_name = edit_tool.name
 
                 # Call 1 -> None
                 self.assertIsNone(guard.evaluate(tool_name, bindings))
@@ -124,6 +179,7 @@ class LoopGuardImplTest(unittest.TestCase):
                     repetitions += 1
                     res = guard.evaluate(tool_name, bindings)
                 self.assertIsInstance(res, LoopFailure)
+                self.assertEqual(repetitions, 4)
 
     def test_record_progress_resets_counters(self) -> None:
         """CUJ: Forward progress resets consecutive repetition counters."""
@@ -166,3 +222,11 @@ if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements: None
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-21T20:00:00Z
+# LAST_CHANGED: 2026-10-21T20:00:00Z
+# CHANGE: Test loop reminder feedback with dynamic session editing tool resolution
+# COVERAGE_AUDIT: 2026-10-21T20:00:00Z
+# QA_AUDIT: 2026-10-21T20:00:00Z
+# --- END CLEANROOM METADATA ---

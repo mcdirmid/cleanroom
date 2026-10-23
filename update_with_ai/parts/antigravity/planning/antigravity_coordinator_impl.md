@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_coordinator_impl planning specification
-CODE_HASH: 1c1e4108a5f8
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # antigravity_coordinator_impl implementation component
 
 ## Intent
@@ -20,9 +12,9 @@ Automated coordination requires precise prompt construction, dynamic workspace p
 
 ### Contracts
 
-- The realization formats the skill markdown containing frontmatter and zero-execution coordination instructions. [render_skill_markdown]
+- The realization formats the skill markdown containing frontmatter and zero-execution coordination instructions including unresolved worker reminder directives. [render_skill_markdown]
 - The realization asserts that the generated skill enforces workspace directory pinning. [verify_workspace_pinning]
-- The realization maps role dispatch directives into subagent dispatch payloads. [map_dispatch_directive]
+- The realization maps role dispatch directives into subagent dispatch payloads incorporating coordinator reminders when present. [map_dispatch_directive]
 - The realization deserializes structured status, submitted targets, blamed targets, and failure diagnostics from subagent message text. [deserialize_wake_message]
 - The realization creates the workspace-local rules directory and writes isolation boundary rules. [write_boundary_rules_file]
 - The realization formats role guidance instructions incorporating verification gates and submission protocols. [write_guidance_instruction_file]
@@ -54,3 +46,10 @@ Automated coordination requires precise prompt construction, dynamic workspace p
   - Grounded: [subagent_coordinator: [subagent_coordinator_service]]
 - Role definition resolution services.
   - Grounded: [role_registry: [workspace_registry_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T21:45:00Z
+CHANGE: author antigravity_coordinator_impl planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

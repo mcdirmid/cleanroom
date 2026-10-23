@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:25:00Z
-CHANGE: Define check_impl planning specification
-CODE_HASH: f0ad43d2e8b1
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # check_impl implementation component
 
 ## Intent
@@ -16,8 +8,8 @@ Operating command-line subagents in isolated role workspaces requires robust dev
 
 ### Contracts
 
-- The workspace checker pulls inbound changes from the canonical main workspace during work execution, verifies whether prior dirty targets remain pending in the role workspace via the pending manager, resolves batch size and feedback throttling limits, evaluates ready and blocked items from the work manager, records the bounded batch of pending targets via the pending manager, presents exclusively the assigned ready targets without extraneous remaining or blocked queue details, throttling unacted feedback reasons exceeding maximum character limits, and formats actionable next steps. [execute_workspace_get_work]
-- The workspace checker resolves the active role and target files during check files execution, regenerates a missing target file from its starter template for roles that declare source patterns and upstream dependencies before verification, executes the corresponding static linting, type-checking, or test rules, surfaces warning notifications and unacted feedback items when targets carrying unaddressed feedback pass static verification checks to alert agents that static checks do not verify runtime behavior or test assertions, formats clean diagnostic outcomes, and returns the verification exit status. [execute_workspace_check_files]
+- The workspace checker pulls inbound changes from the canonical main workspace during work execution, verifies whether prior dirty targets remain pending in the role workspace via the pending manager, resolves batch size and feedback throttling limits, evaluates ready and blocked items from the work manager, records the bounded batch of pending targets via the pending manager, presents exclusively the assigned ready targets without extraneous remaining or blocked queue details, throttling unacted feedback reasons exceeding maximum character limits, resolves the companion guide declared for the active role from the role registry, and formats actionable next steps including specification contracts and the companion guide to follow for presented and pending targets, directing the worker to conclude the round immediately without further tools when only blocked targets remain. [execute_workspace_get_work]
+- The workspace checker resolves the active role, target files, and active model failure limits during check files execution, extracting max_failures from the active model configuration (defaulting to 5 for local engines and 100 for non-local models) and propagating failure limits to test execution runners, regenerates a missing target file from its starter template for roles that declare source patterns and upstream dependencies before verification, executes the corresponding static linting, type-checking, or test rules assembling the verification execution environment bounded strictly to the active role workspace directory and its constituent package directories, isolating verification from the canonical repository root in PYTHONPATH and sys.path, enforcing an execution timeout on verification commands to prevent blocked or hung sub-processes from stalling the workspace developer loop and reporting verification failure when execution expires, records verification execution records and file hashes in the workspace to gate subsequent modifications, surfaces warning notifications and unacted feedback items when targets carrying unaddressed feedback pass static verification checks to alert agents that static checks do not verify runtime behavior or test assertions, formats clean diagnostic outcomes, and returns the verification exit status. [execute_workspace_check_files]
 
 ### Woven Contracts
 
@@ -49,3 +41,10 @@ Operating command-line subagents in isolated role workspaces requires robust dev
   - Grounded: [sync: [workspace_pull_service]]
 - Submission target resolution and verification.
   - Grounded: [submit: [file_submission_gating_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-21T21:50:00Z
+LAST_CHANGED: 2026-10-21T21:50:00Z
+CHANGE: Enforce execution timeout on check_files verification commands
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:44Z
-CHANGE: Author loop node_cleaner concrete scenarios
-CODE_HASH: 7d91ae4a3984
--->
-
 # Concrete scenarios for `loop_node_cleaner` (interface)
 
 ## Scenario 1 — No dirty node shares the role
@@ -51,3 +44,9 @@ other node cleaning addresses the widget source file.
 
 1. The alpha node cleaner cleans the dirty nodes that share role alpha.
    Observed: processing cannot continue, and the alpha-role target for widget is still dirty.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:44Z
+CHANGE: Author loop node_cleaner concrete scenarios
+-->

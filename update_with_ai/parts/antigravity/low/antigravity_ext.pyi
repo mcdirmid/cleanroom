@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-12T21:45:00Z
-# CHANGE: author antigravity_ext external low-level specification
-# CODE_HASH: 42d29709579c
-# --- END CLEANROOM METADATA ---
-
 """
 ## External Mechanics & API Documentation
 
@@ -73,3 +66,9 @@ def parse_transcript_line(line: str) -> Dict[str, Any]:
     }
 ```
 """
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-12T21:45:00Z
+# CHANGE: author antigravity_ext external low-level specification
+# --- END CLEANROOM METADATA ---

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T17:45:00Z
-CHANGE: align AGENTS.md planning with in-workspace file inspection and terminal command restrictions
-CODE_HASH: ed27c745bdd4
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # provision_impl implementation component
 
 ## Intent
@@ -17,15 +9,15 @@ Provisioning isolated role workspaces requires precise file-level permission con
 ### Contracts
 
 - The workspace provisioner creates directory structures including bin and target package folders. [make_workspace_dirs]
-- The workspace provisioner creates the role workspace working tree by copying workspace roots, project configurations, and build definitions while configuring type-checking to cover the workspace without directory exclusions. [create_workspace_working_tree]
+- The workspace provisioner creates the role workspace working tree by copying workspace roots, project configurations, and build definitions, resolving the target scope's bound methodology package from cleanroom.toml, and projecting only active methodology runtime support, companion guides, templates, and configurations to the workspace root while strictly ignoring unbound repository root directories and configuring type-checking to cover the workspace without directory exclusions. [create_workspace_working_tree]
 - The workspace provisioner creates a missing target skeleton when a declared writable target file does not yet exist on disk. [create_missing_target_skeleton]
 - The workspace provisioner copies files with permissions set to 0o644 for writable targets, projecting in-band metadata to expose only change, feedback, and ephemeral code hash attributes. [copy_file_with_write_perms]
-- The workspace provisioner copies files with permissions set to 0o444 for read-only contracts. [copy_file_with_read_perms]
+- The workspace provisioner copies files with permissions set to 0o444 for read-only contracts, copying runtime libraries into root support directories while strictly excluding internal methodology oracles, AST linters, and role runners. [copy_file_with_read_perms]
 - The workspace provisioner applies explicit read-only, writable, or executable permissions when copying or writing files. [apply_file_permissions]
 - The workspace provisioner synthesizes read-only test stubs with NotImplementedError from companion specifications for stub role dependencies. [synthesize_stub_role_dependencies]
-- The workspace provisioner creates executable zipapps containing __main__.py invoking cleanroom_role_tool. [package_runner_zipapps]
+- The workspace provisioner creates self-contained executable zipapps containing compiled .pyc bytecode and source modules for cleanroom_role_tool, build_lint_common, and role verification linters. [package_runner_zipapps]
 - The workspace provisioner writes role metadata JSON containing role identity and directory scope to cleanroom_files_ext.ROLE_DESCRIPTOR_FILE without exposing host paths, supporting optional model execution profile settings. [serialize_role_descriptor]
-- The workspace provisioner formats AGENTS.md markdown with role constraints, strict boundary rules, a contamination tripwire (with permitted in-workspace code inspection), a terminal command execution restriction tripwire, instructions for acting on blame and feedback (including target change header inspection before auditor blame delivery), a fail-stop reporting protocol with unresolvable impasse handling via bin/fail, and tool execution instructions. [format_role_agents_markdown]
+- The workspace provisioner formats AGENTS.md markdown with role constraints, strict boundary rules, a contamination tripwire for out-of-bounds files, permitted in-workspace shell and harness tool execution, instructions for acting on blame and feedback (including target change header inspection before auditor blame delivery), a fail-stop reporting protocol with unresolvable impasse handling via bin/fail, and mandatory round resolution instructions. [format_role_agents_markdown]
 
 ### Woven Contracts
 
@@ -59,3 +51,10 @@ Provisioning isolated role workspaces requires precise file-level permission con
   - Grounded: [scaffold: [workspace_scaffolding_service]]
 - In-band metadata extraction, projection, and ephemeral code hash generation.
   - Grounded: [src_metadata: [source_metadata_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-22T13:50:00Z
+LAST_CHANGED: 2026-10-22T13:50:00Z
+CHANGE: Restrict workspace provisioning exclusively to target scope and bound methodology package assets
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

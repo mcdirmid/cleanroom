@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:15:00Z
-CHANGE: Define dirtiness interface scenarios
-CODE_HASH: 76ef5e0369ab
--->
-
 # Concrete scenarios for `dirtiness` (interface)
 
 ## Scenario 1 — Evaluating producer unit dirtiness across implicit and star dependencies
@@ -41,3 +34,8 @@ Given: a role workspace containing a projected target file whose metadata header
 1. The caller evaluates unit dirtiness via `evaluate_unit_dirty`.
    Observed: inspects canonical lifecycle metadata from the main repository, determines the unit is not dirty, and reports dirty status `False`.
 
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:15:00Z
+CHANGE: Define dirtiness interface scenarios
+-->

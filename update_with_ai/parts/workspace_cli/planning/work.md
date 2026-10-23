@@ -1,16 +1,8 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-10T19:00:00Z
-CHANGE: factor implicit role dirtiness and star role dependency dirtiness contracts
-CODE_HASH: 65e774a60b5c
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # work interface component
 
 ## Intent
 
-Autonomous agents operating without subgraphs or full DAG models require accurate, directory-scoped work discovery to determine which targets need cleaning, which are blocked by upstream prerequisites, and when turns can terminate cleanly. Guessing work status or scanning files ad-hoc wastes context tokens, causes out-of-order execution, and results in premature turn termination. The work interface component establishes contracts for querying ready tasks using dynamic role precedence, inspecting pending work buffers, computing actionable next steps, and tracking pending targets across turns.
+Autonomous agents operating without subgraphs or full DAG models require accurate, directory-scoped work discovery to determine which targets need cleaning, which are blocked by upstream prerequisites, and when rounds can terminate cleanly. Guessing work status or scanning files ad-hoc wastes context tokens, causes out-of-order execution, and results in premature round termination. The work interface component establishes contracts for querying ready tasks using dynamic role precedence, inspecting pending work buffers, computing actionable next steps, and tracking pending targets across rounds.
 
 ## Factored Contracts
 
@@ -38,10 +30,11 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
 - The workspace work manager evaluates target dirtiness using implicit role dependencies. [track_implicit_role_dirtiness]
 - The workspace work manager marks a target dirty upon any star role dependency modification. [flag_star_dependency_dirtiness]
 - The workspace work manager computes role work queues by discovering dirty units and sorting ready units topologically. [compute_role_work_queue_targets]
+- The workspace work manager discovers package unit names and declared module dependencies from high-level specifications or filesystem stems within a part directory. [discover_package_part_units]
 
 ### Woven Contracts
 
-- When discovering work in a role workspace, the manager checks pending work status, discovers directory scope work if unblocked, bounds presented ready items when configured, resolves companion contracts, filters cross-unit dependencies according to star and silent role rules, tracks implicit role dirtiness, flags star dependency dirtiness, materializes starter templates for missing ready files, records ready targets, and formats diagnostic outputs. [check_pending_work_status, discover_directory_scope_work, bound_ready_items_by_batch_size, resolve_unit_contract_files, filter_role_dependencies, track_implicit_role_dirtiness, flag_star_dependency_dirtiness, enforce_strict_role_resolution, materialize_ready_target_templates, record_ready_targets_buffer, format_work_queue_diagnostics]
+- When discovering work in a role workspace, the manager checks pending work status, discovers directory scope work if unblocked, bounds presented ready items when configured, resolves companion contracts, filters cross-unit dependencies according to star and silent role rules, tracks implicit role dirtiness, flags star dependency dirtiness, materializes starter templates for missing ready files, records ready targets, formats diagnostic outputs, and discovers part units. [check_pending_work_status, discover_directory_scope_work, bound_ready_items_by_batch_size, resolve_unit_contract_files, filter_role_dependencies, track_implicit_role_dirtiness, flag_star_dependency_dirtiness, enforce_strict_role_resolution, materialize_ready_target_templates, record_ready_targets_buffer, format_work_queue_diagnostics, discover_package_part_units]
 - When all targets in scope evaluate clean, the manager clears the pending work buffer and indicates clean status. [clear_pending_work_buffer, discover_directory_scope_work]
 - When a target is resolved, the work manager removes the target from the pending buffer, evaluates implicit role dirtiness, and checks whether any pending work remains dirty. [remove_pending_target_path, track_implicit_role_dirtiness, is_pending_target_dirty_disk]
 
@@ -60,3 +53,10 @@ Autonomous agents operating without subgraphs or full DAG models require accurat
   - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Persistence and evaluation of pending target lists on disk.
   - Deferred: Provided by workspace work manager implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-10T19:00:00Z
+CHANGE: factor implicit role dirtiness and star role dependency dirtiness contracts
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

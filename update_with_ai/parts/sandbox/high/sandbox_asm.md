@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T19:43:57Z
-LAST_CHANGED: 2026-10-14T18:30:00Z
-CHANGE: Assemble submission_impl and implement submission
-CODE_HASH: a85a5a45ff31
-SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
--->
-
 # sandbox_asm assembly component
 
 assembles: file_editor_impl, file_reader_impl, guide_delivery_impl, run_control_impl, submission_impl, template_format_impl, tool_provider_impl
@@ -23,3 +15,10 @@ Autonomous agents operating on source workspaces require isolated environments t
 ## Types and Behavior
 
 The sandbox_asm assembly component aggregates the implementations of the sandbox file reader, sandbox file editor, sandbox run control, sandbox submission, sandbox guide delivery, tool provider, and template format interfaces, providing a unified assembly for agent session tools, workspace safety guardrails, instruction delivery, and run control verification.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T19:43:57Z
+LAST_CHANGED: 2026-10-14T18:30:00Z
+CHANGE: Assemble submission_impl and implement submission
+SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
+-->

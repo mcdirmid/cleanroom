@@ -1,11 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T19:43:57Z
-# LAST_CHANGED: 2026-10-14T17:25:00Z
-# CHANGE: Define metadata_asm low-level specification
-# CODE_HASH: dcd65a08f205
-# SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
-# --- END CLEANROOM METADATA ---
-
 """Assembly specification for metadata_asm."""
 
 
@@ -17,3 +9,10 @@ def __initialize__() -> None:
     - src_storage_impl
     """
     ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T19:43:57Z
+# LAST_CHANGED: 2026-10-14T17:25:00Z
+# CHANGE: Define metadata_asm low-level specification
+# SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
+# --- END CLEANROOM METADATA ---

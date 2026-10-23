@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:00:56Z
-CHANGE: Align alias manager parameter conversion typing with the high-level contract and drop planning front-matter
-CODE_HASH: b9d477c8ef32
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_alias interface component
 
 ## Intent
@@ -55,3 +47,10 @@ By acting as a converter for tool parameters, the alias manager maps wire-level 
 
 - Workspace root absolute path and session declared file boundaries.
   - Deferred: Configured from agent session and file paths in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:00:56Z
+CHANGE: Align alias manager parameter conversion typing with the high-level contract and drop planning front-matter
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

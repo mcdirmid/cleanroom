@@ -1,25 +1,14 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Define roles_impl low-level specification
-# CODE_HASH: a6441977c532
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for roles_impl."""
 
 from typing import Optional, Sequence
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import roles
 
 
 @singleton_type("agent_session")
-class RoleResolver(
-    roles.RoleResolver,
-    InTier[AgentSessionTier],
-):
+class RoleResolver(roles.RoleResolver):
     """Realizes role configuration parsing, constraint verification, and methodology resolution.
 
     GROUNDING:
@@ -72,3 +61,9 @@ def __orphan__() -> None:
     """
     ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:45:00Z
+# CHANGE: Define roles_impl low-level specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

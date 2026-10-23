@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_tool_impl unit tests
-# CODE_HASH: caf14b5ec7f0
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for subagent_tool_impl."""
 
 from __future__ import annotations
@@ -35,7 +26,9 @@ class FakeCoordinator:
     def __init__(self, converged: bool = True) -> None:
         self.converged = converged
         self.last_target_role: Optional[str] = None
+        self.last_max_unproductive_rounds: Optional[int] = None
         self.last_max_unproductive_turns: Optional[int] = None
+        self.last_target_node: Optional[str] = None
 
     def compute_execution_waves(
         self,
@@ -60,9 +53,15 @@ class FakeCoordinator:
         model_name: Optional[str] = None,
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
+        max_unproductive_rounds: Optional[int] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         self.last_target_role = target_role
-        self.last_max_unproductive_turns = max_unproductive_turns
+        self.last_max_unproductive_rounds = (
+            max_unproductive_rounds
+            if max_unproductive_rounds is not None
+            else max_unproductive_turns
+        )
+        self.last_max_unproductive_turns = self.last_max_unproductive_rounds
         self.last_target_node = target_node
         return subagent_coordinator.OrchestrationSummary(
             is_converged=self.converged,
@@ -98,10 +97,10 @@ class FakeHarnessResolver:
             def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
                 return "dummy"
 
-            def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
-                return subagent_coordinator.RoleTurnResult(role="test", status="clean")
+            def await_role(self, task_handle: str) -> subagent_coordinator.RoleRoundResult:
+                return subagent_coordinator.RoleRoundResult(role="test", status="clean")
 
-            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
                 return self.await_role(task_handle)
 
             def interrupt_role(self, task_handle: str) -> None:
@@ -168,13 +167,18 @@ class SubagentToolImplTest(unittest.TestCase):
             self.assertEqual(status, 0)
             self.assertEqual(self.fake_coord.last_target_role, "qa")
 
-    def test_execute_command_orchestrate_with_max_unproductive_turns(self) -> None:
-        """Scenario 4: Verifies execute_command parses --max-unproductive-turns argument."""
+    def test_execute_command_orchestrate_with_max_unproductive_rounds(self) -> None:
+        """Scenario 4: Verifies execute_command parses --max-unproductive-rounds and --max-unproductive-turns arguments."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(subagent_tool.SubagentToolRunner)
-            status = runner.execute_command(["orchestrate", "staging", "--max-unproductive-turns", "8", "--simulation"])
+            status = runner.execute_command(["orchestrate", "staging", "--max-unproductive-rounds", "8", "--simulation"])
             self.assertEqual(status, 0)
-            self.assertEqual(self.fake_coord.last_max_unproductive_turns, 8)
+            self.assertEqual(self.fake_coord.last_max_unproductive_rounds, 8)
+
+            # Test backwards compatibility with --max-unproductive-turns
+            status2 = runner.execute_command(["orchestrate", "staging", "--max-unproductive-turns", "6", "--simulation"])
+            self.assertEqual(status2, 0)
+            self.assertEqual(self.fake_coord.last_max_unproductive_rounds, 6)
 
     def test_execute_command_orchestrate_with_target_unit(self) -> None:
         """Scenario 5: Verifies execute_command parses --target argument and forwards to coordinator."""
@@ -197,3 +201,10 @@ class SubagentToolImplTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T21:00:00Z
+# CHANGE: author subagent_tool_impl unit tests
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:19:48Z
-# CHANGE: Align loop driver turn, correlation, reminder, and termination contracts
-# CODE_HASH: d64f6418d1e5
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Loop driver low-level interface specification."""
 
 from dataclasses import dataclass
 from typing import Protocol
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import conversation
 import tool_provider
@@ -31,7 +23,7 @@ class LoopOutcome:
 
 
 @singleton_type("agent_session")
-class LoopDriver(InTier[AgentSessionTier], Protocol):
+class LoopDriver(Singleton[AgentSessionTier], Protocol):
     """Coordinates the turn loop, model request dispatch, and tool execution for an agent session."""
 
     @operation
@@ -56,3 +48,10 @@ class LoopDriver(InTier[AgentSessionTier], Protocol):
         - WHEN the conversation limit is exceeded, MUST halt with an unexpected failure.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:19:48Z
+# CHANGE: Align loop driver turn, correlation, reminder, and termination contracts
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

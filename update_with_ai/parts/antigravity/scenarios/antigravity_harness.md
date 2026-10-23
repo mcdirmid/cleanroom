@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T19:15:00Z
-CHANGE: author antigravity_harness scenarios
-CODE_HASH: 9793534a1679
--->
-
 # antigravity_harness scenarios
 
 ## Scenario 1 — Executing role turn in role workspace
@@ -48,3 +41,9 @@ Given: an agent session with an active harness registry.
 
 1. The harness manager initializes.
    Observed: the Antigravity harness adapter factory is installed in the harness registry under platform name antigravity.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-13T19:15:00Z
+CHANGE: author antigravity_harness scenarios
+-->

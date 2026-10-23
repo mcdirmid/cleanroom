@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:16:14Z
-CHANGE: Name the session attribution coordinator typing
-CODE_HASH: 8a210cb58237
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # attribution interface component
 
 ## Intent
@@ -61,3 +53,10 @@ Defect attribution allows agents encountering irrecoverable upstream flaws to se
   - Deferred: Delegated to DagStorage in implementation.
 - In-band source metadata extraction and feedback formatting.
   - Grounded: [src_metadata: [source_metadata_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:16:14Z
+CHANGE: Name the session attribution coordinator typing
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

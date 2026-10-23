@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T08:35:00Z
-CHANGE: Add Scenario 15 for throttling unacted feedback reasons by max_feedback_chars
-CODE_HASH: b038811fbddc
--->
-
 # Concrete scenarios for `cli_tool_impl` (implementation)
 
 Scenarios 1 through 9 restate the caller observations of the interface scenarios and add, beside
@@ -227,3 +220,9 @@ Given: role alpha is active in scope_a, and the canonical repository root is `/r
 1. The caller runs the blame subcommand against `beta/high/beta.md` with `--repo-root /repo` and the critique `the refusal names no target`.
    Observed: the blame attribution is executed with the repository root override, operating within the agent session lifecycle tier, and the exit code is zero.
    Realized by: the component's CLI parser supporting repository root overrides for blame, fail, and coverage, and automatic session tier context scoping.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T08:35:00Z
+CHANGE: Add Scenario 15 for throttling unacted feedback reasons by max_feedback_chars
+-->

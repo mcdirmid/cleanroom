@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:50:00Z
-# CHANGE: Delegate workspace scaffolding to scaffold
-# CODE_HASH: a9bb36672a7b
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for provision_impl."""
 
 from __future__ import annotations
@@ -20,7 +11,103 @@ from typing import List, Optional, Sequence
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.metadata.lib import src_metadata
-from . import provision, role_registry, scaffold, stub
+from . import provision, role_registry, roles, scaffold, stub
+
+
+def _find_methodology_for_scope(root: str, dir_scope: str) -> Optional[str]:
+    """Finds methodology binding from cleanroom.toml within dir_scope or upward."""
+    if not dir_scope:
+        return None
+    scope_dir = os.path.join(root, dir_scope)
+    root_abs = os.path.abspath(root)
+
+    import tomllib
+    cand = os.path.join(scope_dir, "cleanroom.toml")
+    if os.path.isfile(cand):
+        try:
+            with open(cand, "rb") as f:
+                data = tomllib.load(f)
+            meth = data.get("methodology")
+            if meth and isinstance(meth, str):
+                return meth.strip()
+        except (OSError, tomllib.TOMLDecodeError):
+            pass
+
+    if os.path.isdir(scope_dir):
+        try:
+            for entry in os.listdir(scope_dir):
+                sub = os.path.join(scope_dir, entry)
+                if os.path.isdir(sub) and not entry.startswith((".", "bazel-", "venv")):
+                    sub_cand = os.path.join(sub, "cleanroom.toml")
+                    if os.path.isfile(sub_cand):
+                        try:
+                            with open(sub_cand, "rb") as f:
+                                data = tomllib.load(f)
+                            meth = data.get("methodology")
+                            if meth and isinstance(meth, str):
+                                return meth.strip()
+                        except (OSError, tomllib.TOMLDecodeError):
+                            pass
+        except OSError:
+            pass
+
+    curr = os.path.abspath(scope_dir)
+    while curr and curr.startswith(root_abs) and curr != root_abs:
+        cand = os.path.join(curr, "cleanroom.toml")
+        if os.path.isfile(cand):
+            try:
+                with open(cand, "rb") as f:
+                    data = tomllib.load(f)
+                meth = data.get("methodology")
+                if meth and isinstance(meth, str):
+                    return meth.strip()
+            except (OSError, tomllib.TOMLDecodeError):
+                pass
+        curr_parent = os.path.dirname(curr)
+        if curr == curr_parent:
+            break
+        curr = curr_parent
+
+    return None
+
+
+def _resolve_active_methodology_pkg(
+    resolved_root: str,
+    dir_scope: str,
+    role_def: Optional[roles.RoleDefinition] = None,
+) -> Optional[str]:
+    """Dynamically resolves the active methodology package directory name without hardcoding."""
+    meth = _find_methodology_for_scope(resolved_root, dir_scope)
+    if meth:
+        clean = meth.lstrip("./").lstrip("/")
+        if os.path.isdir(os.path.join(resolved_root, clean)):
+            return clean
+
+    if role_def and role_def.guide_path:
+        for seg in role_def.guide_path.replace("\\", "/").split("/"):
+            if seg and seg != "guides" and os.path.isdir(os.path.join(resolved_root, seg)):
+                return seg
+            if seg == "guides":
+                break
+
+    if role_def and role_def.template:
+        for seg in role_def.template.replace("\\", "/").split("/"):
+            if seg and seg != "templates" and os.path.isdir(os.path.join(resolved_root, seg)):
+                return seg
+            if seg == "templates":
+                break
+
+    if dir_scope:
+        top_scope = dir_scope.strip("/").split("/")[0]
+        cand_pkg = os.path.join(resolved_root, top_scope)
+        if os.path.isdir(cand_pkg) and (
+            os.path.isdir(os.path.join(cand_pkg, "support"))
+            or os.path.isdir(os.path.join(cand_pkg, "guides"))
+            or os.path.isdir(os.path.join(cand_pkg, "templates"))
+        ):
+            return top_scope
+
+    return None
 
 
 def _project_for_role_workspace(content: str, filename: str, is_writable: bool) -> str:
@@ -49,7 +136,7 @@ def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
         with open(src, "r", encoding="utf-8") as f:
             content = f.read()
         projected = _project_for_role_workspace(content, os.path.basename(src), is_writable=is_writable)
-        write_file_with_perms(dst, projected, readonly=not is_writable)
+        _write_file_with_perms(dst, projected, readonly=not is_writable)
     except (UnicodeDecodeError, OSError):
         copy_file_with_perms(src, dst, readonly=not is_writable)
 
@@ -58,8 +145,15 @@ BLAME_BUFFER_FILE = ".cleanroom_blame_buffer.json"
 PENDING_WORK_FILE = ".cleanroom_pending_work.json"
 
 
-# Contract: __orphan__ - writes a file with specific content and permissions
-def write_file_with_perms(
+def _is_runtime_support_library(fname: str) -> bool:
+    """Returns True if file is a user-facing runtime API or type stub, excluding internal oracles."""
+    base = fname.lower()
+    if "lint" in base or "tool" in base or "runner" in base or base.startswith("app_info"):
+        return False
+    return fname.endswith((".py", ".pyi", ".bzl", ".toml"))
+
+
+def _write_file_with_perms(
     path: str, content: str, readonly: bool = False, executable: bool = False
 ) -> None:
     """Writes a file with specific content and permissions."""
@@ -78,6 +172,9 @@ def write_file_with_perms(
         os.chmod(path, mode)
     except OSError:
         pass
+
+
+write_file_with_perms = _write_file_with_perms
 
 
 def copy_file_with_perms(
@@ -113,6 +210,8 @@ def _find_matching_files(root_dir: str, patterns: Sequence[str]) -> List[str]:
         for f in files:
             full_path = os.path.join(r, f)
             rel_path = os.path.relpath(full_path, root_dir)
+            if "support" in rel_path.split(os.sep)[:-1]:
+                continue
             if any(
                 fnmatch.fnmatch(rel_path, p)
                 or fnmatch.fnmatch(rel_path, f"*/{p}")
@@ -124,10 +223,7 @@ def _find_matching_files(root_dir: str, patterns: Sequence[str]) -> List[str]:
     return results
 
 
-class WorkspaceProvisioner(
-    provision.WorkspaceProvisioner,
-    Singleton,
-):
+class WorkspaceProvisioner(provision.WorkspaceProvisioner):
     """Realizes role workspace directory provisioning, permissions, and runner deployment."""
 
     tier = agent_session.agent_session
@@ -241,6 +337,14 @@ class WorkspaceProvisioner(
                             os.remove(fp)
             except OSError:
                 pass
+            cleanroom_dir = os.path.join(workspace_dir, ".cleanroom")
+            if os.path.isdir(cleanroom_dir):
+                dsh_sess = os.path.join(cleanroom_dir, "dsh_session_id.txt")
+                if os.path.isfile(dsh_sess):
+                    try:
+                        os.remove(dsh_sess)
+                    except OSError:
+                        pass
 
         os.makedirs(workspace_dir, exist_ok=True)
         bin_dir = os.path.join(workspace_dir, "bin")
@@ -299,6 +403,9 @@ class WorkspaceProvisioner(
             if os.path.isfile(guide_src):
                 guide_dst = os.path.join(workspace_dir, role_def.guide_path)
                 copy_file_with_perms(guide_src, guide_dst, readonly=True)
+                root_guide_dst = os.path.join(workspace_dir, "guides", os.path.basename(role_def.guide_path))
+                if not os.path.isfile(root_guide_dst):
+                    copy_file_with_perms(guide_src, root_guide_dst, readonly=True)
 
         for cfg_name in (
             "pyproject.toml",
@@ -307,6 +414,7 @@ class WorkspaceProvisioner(
             "cleanroom_python_roles.toml",
             "model_configs.toml",
             "uv.lock",
+            ".python-version",
         ):
             cfg_src = os.path.join(resolved_root, cfg_name)
             if os.path.isfile(cfg_src):
@@ -334,6 +442,17 @@ class WorkspaceProvisioner(
                     'testpaths = ["."]',
                     ptext,
                 )
+                if "pythonpath" in ptext:
+                    ptext = re.sub(
+                        r'pythonpath\s*=\s*\[[^\]]*\]',
+                        'pythonpath = ["."]',
+                        ptext,
+                    )
+                elif "[tool.pytest.ini_options]" in ptext:
+                    ptext = ptext.replace(
+                        "[tool.pytest.ini_options]",
+                        '[tool.pytest.ini_options]\npythonpath = ["."]',
+                    )
                 with open(ws_pyproject, "w", encoding="utf-8") as f:
                     f.write(ptext)
                 try:
@@ -343,32 +462,93 @@ class WorkspaceProvisioner(
             except OSError:
                 pass
 
-        if os.path.isdir(resolved_root):
-            try:
-                for entry in os.listdir(resolved_root):
-                    pkg_dir = os.path.join(resolved_root, entry)
-                    if not os.path.isdir(pkg_dir) or entry.startswith((".", "bazel-", "venv")):
-                        continue
-                    for rname in os.listdir(pkg_dir):
-                        if rname.endswith((".toml", ".json")):
-                            r_src = os.path.join(pkg_dir, rname)
-                            if os.path.isfile(r_src):
-                                r_dst = os.path.join(workspace_dir, entry, rname)
-                                copy_file_with_perms(r_src, r_dst, readonly=True)
-                    s_lib = os.path.join(pkg_dir, "support", "lib")
-                    if os.path.isdir(s_lib):
-                        d_lib = os.path.join(workspace_dir, entry, "support", "lib")
-                        os.makedirs(d_lib, exist_ok=True)
-                        for fname in os.listdir(s_lib):
-                            if fname.endswith((".py", ".pyi", ".bzl", ".toml")):
-                                sf = os.path.join(s_lib, fname)
-                                df = os.path.join(d_lib, fname)
-                                if os.path.isfile(sf):
-                                    copy_file_with_perms(sf, df, readonly=True)
-            except OSError:
-                pass
+        active_pkg = _resolve_active_methodology_pkg(resolved_root, dir_scope, role_def)
+        target_pkgs = [active_pkg] if active_pkg else []
 
-        scaffolder.deploy_runner_zipapps(bin_dir)
+        for entry in target_pkgs:
+            pkg_dir = os.path.join(resolved_root, entry)
+            if not os.path.isdir(pkg_dir):
+                continue
+            for rname in os.listdir(pkg_dir):
+                if rname.endswith((".toml", ".json")):
+                    r_src = os.path.join(pkg_dir, rname)
+                    if os.path.isfile(r_src):
+                        r_dst = os.path.join(workspace_dir, rname)
+                        copy_file_with_perms(r_src, r_dst, readonly=True)
+            guides_dir = os.path.join(pkg_dir, "guides")
+            if os.path.isdir(guides_dir):
+                d_guides = os.path.join(workspace_dir, "guides")
+                os.makedirs(d_guides, exist_ok=True)
+                for gf in os.listdir(guides_dir):
+                    gsf = os.path.join(guides_dir, gf)
+                    gdf = os.path.join(d_guides, gf)
+                    if os.path.isfile(gsf):
+                        copy_file_with_perms(gsf, gdf, readonly=True)
+            tmpl_dir = os.path.join(pkg_dir, "templates")
+            if os.path.isdir(tmpl_dir):
+                d_tmpl = os.path.join(workspace_dir, "templates")
+                os.makedirs(d_tmpl, exist_ok=True)
+                for tf in os.listdir(tmpl_dir):
+                    tsf = os.path.join(tmpl_dir, tf)
+                    tdf = os.path.join(d_tmpl, tf)
+                    if os.path.isfile(tsf):
+                        copy_file_with_perms(tsf, tdf, readonly=True)
+            s_lib = os.path.join(pkg_dir, "support", "lib")
+            if os.path.isdir(s_lib):
+                d_support = os.path.join(workspace_dir, "support")
+                d_lib = os.path.join(d_support, "lib")
+                os.makedirs(d_lib, exist_ok=True)
+                pkg_support = os.path.join(workspace_dir, entry, "support")
+                pkg_lib = os.path.join(pkg_support, "lib")
+                os.makedirs(pkg_lib, exist_ok=True)
+                s_init = os.path.join(pkg_dir, "support", "__init__.py")
+                if os.path.isfile(s_init):
+                    copy_file_with_perms(s_init, os.path.join(d_support, "__init__.py"), readonly=True)
+                    copy_file_with_perms(s_init, os.path.join(pkg_support, "__init__.py"), readonly=True)
+                lib_init = os.path.join(s_lib, "__init__.py")
+                if os.path.isfile(lib_init):
+                    copy_file_with_perms(lib_init, os.path.join(d_lib, "__init__.py"), readonly=True)
+                    copy_file_with_perms(lib_init, os.path.join(pkg_lib, "__init__.py"), readonly=True)
+                import py_compile
+                for fname in os.listdir(s_lib):
+                    sf = os.path.join(s_lib, fname)
+                    if not os.path.isfile(sf):
+                        continue
+                    if _is_runtime_support_library(fname):
+                        df = os.path.join(d_lib, fname)
+                        copy_file_with_perms(sf, df, readonly=True)
+                        pkg_df = os.path.join(pkg_lib, fname)
+                        copy_file_with_perms(sf, pkg_df, readonly=True)
+                    elif fname.endswith(".py"):
+                        stale_py = os.path.join(d_lib, fname)
+                        if os.path.isfile(stale_py):
+                            try:
+                                os.remove(stale_py)
+                            except OSError:
+                                pass
+                        stale_pkg_py = os.path.join(pkg_lib, fname)
+                        if os.path.isfile(stale_pkg_py):
+                            try:
+                                os.remove(stale_pkg_py)
+                            except OSError:
+                                pass
+                        df_pyc = os.path.join(d_lib, fname + "c")
+                        pkg_df_pyc = os.path.join(pkg_lib, fname + "c")
+                        try:
+                            py_compile.compile(sf, df_pyc, optimize=2, doraise=True)
+                            try:
+                                os.chmod(df_pyc, 0o444)
+                            except OSError:
+                                pass
+                            py_compile.compile(sf, pkg_df_pyc, optimize=2, doraise=True)
+                            try:
+                                os.chmod(pkg_df_pyc, 0o444)
+                            except OSError:
+                                pass
+                        except Exception:
+                            pass
+
+        scaffolder.deploy_runner_zipapps(bin_dir, role_def=role_def)
 
         resolved_batch_size: Optional[int] = None
         resolved_max_feedback_chars: Optional[int] = None
@@ -419,6 +599,13 @@ class WorkspaceProvisioner(
         )
         registry.record_workspace(descriptor, resolved_root)
         return descriptor
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-20T23:45:00Z
+# LAST_CHANGED: 2026-10-20T23:45:00Z
+# CHANGE: Promote active methodology runtime support, guides, templates, and configurations to role workspace root
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

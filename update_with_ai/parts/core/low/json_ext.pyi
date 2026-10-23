@@ -1,11 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-05T04:26:30Z
-# CHANGE: new file
-# CODE_HASH: bbb5da1a8ad1
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
-# --- END CLEANROOM METADATA ---
-
 """
 ## External Mechanics & API Documentation
 
@@ -143,3 +135,10 @@ def repair_truncated_json(raw: str) -> str:
     return "{}"
 ```
 """
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-05T04:26:30Z
+# CHANGE: new file
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# --- END CLEANROOM METADATA ---

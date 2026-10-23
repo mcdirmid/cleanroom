@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Define roles low-level specification
-# CODE_HASH: 734ecf984d33
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for roles."""
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 
 
@@ -72,7 +64,7 @@ class RoleDefinition:
 
 
 @singleton_type("agent_session")
-class RoleResolver(InTier[AgentSessionTier], Protocol):
+class RoleResolver(Singleton[AgentSessionTier], Protocol):
     """Resolver loading role configurations and validating declaration rules."""
 
     @operation
@@ -115,3 +107,10 @@ class RoleResolver(InTier[AgentSessionTier], Protocol):
         - MUST return a role definition for every declared role.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:45:00Z
+# CHANGE: Define roles low-level specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

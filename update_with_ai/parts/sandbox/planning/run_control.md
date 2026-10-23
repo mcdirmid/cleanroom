@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:30:00Z
-CHANGE: Update run_control planning specification
-CODE_HASH: 087db9ad276b
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # run_control interface component
 
 ## Intent
@@ -28,6 +20,9 @@ By providing dedicated tools for verification inspection, milestone advancement,
 - The run controller exposes verification checks that validate session criteria. [expose_verification_checks]
 - The run controller caches verification evaluation results alongside target node file hashes. [cache_verification_results]
 - The run controller reuses cached verification outcomes when no workspace files have been updated. [reuse_cached_verification_outcome]
+- The run controller exposes whether the latest verification evaluation passed. [expose_is_passed]
+- The run controller exposes whether target file hashes are unchanged since the last evaluation. [expose_is_unchanged]
+- The run controller exposes aggregated diagnostic output from failing verification checks. [expose_diagnostic_output]
 - The check files tool updates verification results when results are outdated. [check_files_updates_outdated_results]
 - The check files tool evaluates verification checks across open targets and modified workspace files. [check_files_evaluates_checks]
 - The check files tool presents aggregated verification outcomes to the agent. [check_files_presents_outcomes]
@@ -46,7 +41,7 @@ By providing dedicated tools for verification inspection, milestone advancement,
 ### Woven Contracts
 
 - Session outcome tools are initialized upon session entry, unconditionally installing termination and verification tools while gating the advance tool behind step mode and blame tool behind blame targets. [initialize_session_tools_on_entry, unconditionally_install_session_tools, install_advance_tool_when_step_mode, install_blame_tool_when_targets_exist, tool_provider: [install_tools]]
-- The check files tool evaluates session verification checks, caching results against file hashes and reporting outcomes or failures. [expose_verification_checks, cache_verification_results, reuse_cached_verification_outcome, check_files_updates_outdated_results, check_files_evaluates_checks, check_files_presents_outcomes, check_files_tracks_tested_hashes, check_files_fails_on_verification_failure, node_config: [session_config_verification_checks]]
+- The check files tool evaluates session verification checks, caching results against file hashes and reporting outcomes or failures. [expose_verification_checks, cache_verification_results, reuse_cached_verification_outcome, expose_is_passed, expose_is_unchanged, expose_diagnostic_output, check_files_updates_outdated_results, check_files_evaluates_checks, check_files_presents_outcomes, check_files_tracks_tested_hashes, check_files_fails_on_verification_failure, node_config: [session_config_verification_checks]]
 - In guide step mode, the advance tool coordinates progressive milestone advancement through guide delivery upon passing verification. [install_advance_tool_when_step_mode, advance_tool_coordinates_step_progression]
 - The get work tool retrieves ready dirty nodes, materializes starter templates, delivers session prompts, installs the blame tool if blame targets exist, and initiates step guidance when configured. [get_work_retrieves_dirty_nodes, get_work_materializes_templates, get_work_delivers_task_prompt, get_work_specifies_advance_followup_in_step_mode, install_blame_tool_when_targets_exist, tool_provider: [call_by_name]]
 
@@ -68,3 +63,10 @@ By providing dedicated tools for verification inspection, milestone advancement,
   - Deferred: Requires command execution in implementation.
 - Access to guide delivery to manage milestone transitions.
   - Deferred: Requires guide delivery in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:30:00Z
+CHANGE: Update run_control planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

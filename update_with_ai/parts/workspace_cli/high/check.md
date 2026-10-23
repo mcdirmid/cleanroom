@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:25:00Z
-CHANGE: Define check interface specification
-CODE_HASH: e82318bcee3b
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # check interface component
 
 imports: session
@@ -28,4 +20,11 @@ The workspace checker:
 
 - Evaluates dirty work in the local role workspace, presenting bounded batches of ready targets without extraneous remaining or blocked queue details, throttling unacted feedback reasons exceeding maximum character limits when configured, and returning an integer exit code.
 
-- Executes role-specific verification checks, linters, and type checking for specified or pending target files, configuring PYTHONPATH in the execution environment to include the package root and constituent support libraries, regenerating missing target files from starter templates before verification for roles with source patterns and upstream dependencies, surfacing unacted feedback warnings when targets carrying unaddressed feedback pass static verification, and returning the verification exit code.
+- Executes role-specific verification checks, linters, and type checking for specified or pending target files, recording verification execution records and target file hashes to gate subsequent submissions, blame attributions, or failure markings for modified files, configuring PYTHONPATH in the execution environment to include the package root and constituent support libraries, enforcing an execution timeout on verification commands to prevent blocked or hung sub-processes from stalling the workspace developer loop, regenerating missing target files from starter templates before verification for roles with source patterns and upstream dependencies, surfacing unacted feedback warnings when targets carrying unaddressed feedback pass static verification, and returning the verification exit code.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-21T21:50:00Z
+LAST_CHANGED: 2026-10-21T21:50:00Z
+CHANGE: Enforce execution timeout on check_files verification commands
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

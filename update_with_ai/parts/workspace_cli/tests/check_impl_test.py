@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-10-14T18:25:00Z
-# CHANGE: Unit tests for check_impl
-# CODE_HASH: 9ab273a5225a
-# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for check_impl aligned with low-level specifications."""
 
 from __future__ import annotations
@@ -14,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -255,9 +247,35 @@ class WorkspaceCheckImplTest(unittest.TestCase):
                 "reasons": ["spec changed"],
             }
         ]
-        ret = self.checker.run_get_work(dir_scope="pkg")
+        import io
+        from unittest.mock import patch
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            ret = self.checker.run_get_work(dir_scope="pkg")
+            out = mock_out.getvalue()
         self.assertEqual(ret, 1)
         self.assertEqual(len(self.fake_pending.pending), 1)
+        self.assertIn("Companion Guide to Follow:", out)
+        self.assertIn("guides/lib.md", out)
+
+    def test_run_get_work_blocked_items_directs_round_conclusion(self) -> None:
+        self.fake_work.ready_items = []
+        self.fake_work.blocked_items = [
+            {
+                "role": "lib",
+                "target_file": "pkg/parts/foo/lib/foo.py",
+                "contract_files": [],
+                "reasons": ["waiting on upstream"],
+                "blocked_reasons": ["low specification missing"],
+            }
+        ]
+        import io
+        from unittest.mock import patch
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            ret = self.checker.run_get_work(dir_scope="pkg")
+            out = mock_out.getvalue()
+        self.assertEqual(ret, 0)
+        self.assertIn("BLOCKED (Waiting on prerequisites):", out)
+        self.assertIn("Conclude your round immediately without executing additional tools", out)
 
     def test_run_check_files_no_targets(self) -> None:
         ret = self.checker.run_check_files()
@@ -271,7 +289,185 @@ class WorkspaceCheckImplTest(unittest.TestCase):
 
         ret = self.checker.run_check_files(target=target_file)
         self.assertEqual(ret, 0)
+        self.assertTrue(self.checker.is_checked_since_modification(self.test_dir, target_file))
+
+    def test_run_check_files_prioritizes_workspace_pythonpath(self) -> None:
+        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# sample implementation\n")
+
+        self.role_lib = role_registry.RoleDefinition(
+            role_name="lib",
+            guide_path="guides/lib.md",
+            writable_file_patterns=["*/lib/*.py"],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            src_pattern="{unit_dir}/lib/{unit_name}.py",
+            role_deps=["low"],
+            verify_template="echo OK",
+            verification_success_message="Verified {unit_name}",
+            active_component_types=["interface", "implementation"],
+        )
+        self.fake_reg.roles = [self.role_lib]
+        fake_main_root = os.path.join(self.test_dir, "canonical_main")
+        os.makedirs(fake_main_root, exist_ok=True)
+        self.fake_reg.repo_root = fake_main_root
+
+        captured_env: dict[str, str] = {}
+        original_run = subprocess.run
+
+        def mock_run(cmd, **kwargs):
+            if "env" in kwargs:
+                captured_env.update(kwargs["env"])
+            return original_run("echo OK", shell=True, capture_output=True, text=True)
+
+        from unittest.mock import patch
+        with patch("subprocess.run", side_effect=mock_run):
+            ret = self.checker.run_check_files(target=target_file)
+
+        self.assertEqual(ret, 0)
+        self.assertIn("PYTHONPATH", captured_env)
+        pypaths = [os.path.realpath(p) for p in captured_env["PYTHONPATH"].split(os.pathsep)]
+        ws_real = os.path.realpath(self.test_dir)
+        main_real = os.path.realpath(fake_main_root)
+        self.assertIn(ws_real, pypaths)
+        self.assertNotIn(main_real, pypaths)
+
+    def test_run_check_files_propagates_max_failures_for_local_model(self) -> None:
+        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# sample implementation\n")
+
+        cfg_path = os.path.join(self.test_dir, "model_configs.toml")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write(
+                'default = "qwen-moe-q6"\n'
+                '[models.qwen-moe-q6]\n'
+                'model = "Qwen3.6-35B-A3B-oQ6-mtp"\n'
+                'tier = 1\n'
+                'max_failures = 5\n'
+            )
+
+        role_lib = role_registry.RoleDefinition(
+            role_name="lib",
+            guide_path="guides/lib.md",
+            writable_file_patterns=["*/lib/*.py"],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            src_pattern="{unit_dir}/lib/{unit_name}.py",
+            role_deps=["low"],
+            verify_template="uv run pytest {unit_dir}/tests/{unit_name}_test.py",
+            verification_success_message="Verified {unit_name}",
+            active_component_types=["interface", "implementation"],
+        )
+        self.fake_reg.roles = [role_lib]
+
+        captured_env: dict[str, str] = {}
+        original_run = subprocess.run
+
+        def mock_run(cmd: Any, **kwargs: Any) -> Any:
+            if "env" in kwargs:
+                captured_env.update(kwargs["env"])
+            return original_run("echo OK", shell=True, capture_output=True, text=True)
+
+        from unittest.mock import patch
+        with patch("subprocess.run", side_effect=mock_run):
+            ret = self.checker.run_check_files(target=target_file)
+
+        self.assertEqual(ret, 0)
+        self.assertIn("PYTEST_ADDOPTS", captured_env)
+        self.assertIn("--maxfail=5", captured_env["PYTEST_ADDOPTS"])
+
+    def test_run_check_files_defaults_max_failures_for_cloud_model(self) -> None:
+        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# sample implementation\n")
+
+        cfg_path = os.path.join(self.test_dir, "model_configs.toml")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write(
+                'default = "cloud-model"\n'
+                '[models.cloud-model]\n'
+                'model = "cloud-model"\n'
+                'tier = 2\n'
+            )
+
+        role_lib = role_registry.RoleDefinition(
+            role_name="lib",
+            guide_path="guides/lib.md",
+            writable_file_patterns=["*/lib/*.py"],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            src_pattern="{unit_dir}/lib/{unit_name}.py",
+            role_deps=["low"],
+            verify_template="uv run pytest {unit_dir}/tests/{unit_name}_test.py",
+            verification_success_message="Verified {unit_name}",
+            active_component_types=["interface", "implementation"],
+        )
+        self.fake_reg.roles = [role_lib]
+
+        captured_env: dict[str, str] = {}
+        original_run = subprocess.run
+
+        def mock_run(cmd: Any, **kwargs: Any) -> Any:
+            if "env" in kwargs:
+                captured_env.update(kwargs["env"])
+            return original_run("echo OK", shell=True, capture_output=True, text=True)
+
+        from unittest.mock import patch
+        with patch("subprocess.run", side_effect=mock_run):
+            ret = self.checker.run_check_files(target=target_file)
+
+        self.assertEqual(ret, 0)
+        self.assertIn("PYTEST_ADDOPTS", captured_env)
+        self.assertIn("--maxfail=100", captured_env["PYTEST_ADDOPTS"])
+
+    def test_run_check_files_times_out(self) -> None:
+        """CUJ: Check files handles verification command timeout gracefully."""
+        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# sample implementation\n")
+
+        role_lib = role_registry.RoleDefinition(
+            role_name="lib",
+            guide_path="guides/lib.md",
+            writable_file_patterns=["*/lib/*.py"],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            src_pattern="{unit_dir}/lib/{unit_name}.py",
+            role_deps=["low"],
+            verify_template="sleep 100",
+            verification_success_message="Verified {unit_name}",
+            active_component_types=["interface", "implementation"],
+        )
+        self.fake_reg.roles = [role_lib]
+
+        from unittest.mock import patch
+        def mock_timeout(cmd: Any, **kwargs: Any) -> Any:
+            raise subprocess.TimeoutExpired(cmd=cmd, timeout=1.0)
+
+        with patch("subprocess.run", side_effect=mock_timeout):
+            ret = self.checker.run_check_files(target=target_file)
+
+        self.assertEqual(ret, 1)
+        rec_file = os.path.join(self.test_dir, ".cleanroom", ".last_check_files.json")
+        self.assertTrue(os.path.isfile(rec_file))
+        with open(rec_file, "r", encoding="utf-8") as f:
+            records = json.load(f)
+        self.assertFalse(records[os.path.realpath(target_file)]["passed"])
 
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-18T19:13:51Z
+# LAST_CHANGED: 2026-10-14T18:25:00Z
+# CHANGE: Unit tests for check_impl
+# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-17T18:00:00Z
-LAST_CHANGED: 2026-10-17T18:00:00Z
-CHANGE: Disallow white-box test exemptions and require contracts for all test-imported symbols
-CODE_HASH: uncontracted04
--->
-
 # Guide: Uncontracted Code Identification, Specification Alignment, and Remediation
 
 ## Summary
@@ -88,3 +81,10 @@ Remediation evaluates each uncontracted inventory entry against strict decision 
 - [ ] Static type checkers report zero errors and zero warnings across all packages
 - [ ] Complete unit test suites execute cleanly with zero test failures
 - [ ] The temporary inventory document (`uncontracted_code_inventory.md`) is removed once full repository verification succeeds
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-17T18:00:00Z
+LAST_CHANGED: 2026-10-17T18:00:00Z
+CHANGE: Disallow white-box test exemptions and require contracts for all test-imported symbols
+CODE_HASH: uncontracted04
+-->

@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Delegate role configuration resolution to roles
-# CODE_HASH: 525d3d9ca3b4
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for role_registry_impl."""
 
 from __future__ import annotations
@@ -119,7 +110,7 @@ def _fallback_to_ambient_working_directory() -> str:
 
 
 # Contract: Realizes role_registry.WorkspaceRegistry singleton.
-class WorkspaceRegistry(role_registry.WorkspaceRegistry, Singleton):
+class WorkspaceRegistry(role_registry.WorkspaceRegistry):
     """Realizes role configuration resolution and active workspace tracking."""
 
     tier = agent_session.agent_session
@@ -297,6 +288,13 @@ class WorkspaceRegistry(role_registry.WorkspaceRegistry, Singleton):
                 del self._workspaces[key]
                 removed = True
         return removed
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:45:00Z
+# CHANGE: Delegate role configuration resolution to roles
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-09T22:20:00Z
-CHANGE: Record change summary during clean status transition without appending dirty change message
-CODE_HASH: 0433704faf59
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # submit interface component
 
 imports: session, dag_storage, cleanroom_files_ext
@@ -41,3 +33,10 @@ The submission coordinator:
 - Submits an auditor file target in a repository workspace by validating the target against test file submission prohibitions, discovering role context and directory scope from workspace manifest metadata when executed in an isolated workspace, and updating in-band audit tags in the canonical repository.
 
 - Submits a producer file target in a repository workspace by validating the target against read-only permissions and directory scope patterns, discovering role context and directory scope from workspace manifest metadata when executed in an isolated workspace, requiring a change summary exactly when source code was modified, updating in-band change metadata in the canonical repository, and stripping ephemeral code hashes when committing files to the main repository.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-09T22:20:00Z
+CHANGE: Record change summary during clean status transition without appending dirty change message
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

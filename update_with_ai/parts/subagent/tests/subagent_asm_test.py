@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T21:00:00Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_asm unit tests
-# CODE_HASH: 456789abcdef
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for subagent_asm."""
 
 from __future__ import annotations
@@ -42,3 +35,9 @@ class SubagentAsmTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-12T21:00:00Z
+# LAST_CHANGED: 2026-10-12T21:00:00Z
+# CHANGE: author subagent_asm unit tests
+# --- END CLEANROOM METADATA ---

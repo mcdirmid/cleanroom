@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:55:49Z
-# CHANGE: Reject producer file targets outside directory scope
-# CODE_HASH: 373a2e9c9afc
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for submit."""
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence, Tuple
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import cleanroom_files_ext
 import dag_storage
@@ -32,7 +24,7 @@ class SubmissionOutcome:
 
 
 @singleton_type("agent_session")
-class SubmissionCoordinator(InTier[AgentSessionTier], Protocol):
+class SubmissionCoordinator(Singleton[AgentSessionTier], Protocol):
     """Coordinator that validates preconditions and commits clean submissions."""
 
     @operation
@@ -96,3 +88,10 @@ class SubmissionCoordinator(InTier[AgentSessionTier], Protocol):
     ) -> Tuple[str, str, str]:
         """Parses part directory, unit name, and role name from file path."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:55:49Z
+# CHANGE: Reject producer file targets outside directory scope
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

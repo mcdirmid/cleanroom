@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T01:39:02Z
-CHANGE: Restore cleaned metadata and tighten purpose rationale to two paragraphs
-CODE_HASH: d17c245878e4
--->
-
 # topological_order_ext external component
 
 ## Purpose
@@ -32,3 +25,9 @@ Grounding gaps covered include:
 - Cycle behavior: A dependency edge that closes a cycle is not followed. Ordering terminates, each declared item is emitted exactly once, and no error is raised, so a caller that needs cycles reported detects them separately rather than relying on the order.
 
 - Single emission: Every declared item appears exactly once, whether it declares dependencies, is declared as a dependency, or neither.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Restore cleaned metadata and tighten purpose rationale to two paragraphs
+-->

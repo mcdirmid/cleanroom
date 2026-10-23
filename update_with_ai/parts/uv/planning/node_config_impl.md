@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: d26c03ec64b5
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # node_config_impl implementation component
 
 ## Intent
@@ -91,3 +83,10 @@ By resolving per-node metadata from target manifests, aggregating session parame
   - Grounded: [manifest_loader: [manifest_loading_service], dag_storage: [dag_storage_service]]
 - Generating relative file aliases and sanitizing host path occurrences.
   - Grounded: [file_paths: [typed_path_construction, path_resolution_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

@@ -1,26 +1,15 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: e52dc8902ba9
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for src_metadata_impl."""
 
 from pathlib import Path
 from typing import Dict, Optional
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 import src_metadata
 import src_metadata_ext
 
 
 @singleton_type("system")
-class SourceMetadataCoordinator(
-    src_metadata.SourceMetadataCoordinator,
-    InTier[SystemTier],
-):
+class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
     """Implementation of source metadata coordinator.
 
     GROUNDING:
@@ -137,8 +126,8 @@ class SourceMetadataCoordinator(
         """Updates or injects in-band metadata block within content string.
 
         GROUNDING:
-        - Grounded via boundary slicing, header formatting, insertion point determination
-          below shebang or frontmatter lines, and trailing newline preservation.
+        - Grounded via boundary slicing, block formatting, placement at the bottom of the content string,
+          and trailing newline preservation.
         """
         ...
 
@@ -267,3 +256,10 @@ class SourceMetadataCoordinator(
         - Grounded via update_metadata with clear_audits set to True.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-07T00:11:26Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

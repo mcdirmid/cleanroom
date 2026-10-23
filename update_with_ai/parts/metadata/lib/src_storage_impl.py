@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:04:03Z
-# CHANGE: Name the private backing mappings per the grounding, make the audit helpers private, and synthesize the change and feedback diagnostics that mark a node dirty
-# CODE_HASH: 9d7c29b7eebc
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 import os
 from pathlib import Path
 import subprocess
@@ -43,7 +34,7 @@ class _RoleDefFallback:
         self.src_pattern = src_pattern
 
 
-class AgentStorage(node_storage.AgentStorage, Singleton):
+class AgentStorage(node_storage.AgentStorage):
     tier = system
 
     def __init__(self) -> None:
@@ -60,14 +51,10 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
 
     def _get_manifest_loader(self) -> Optional[Any]:
         try:
-            reg = get_default_registry()
+            from update_with_ai.parts.uv.lib import manifest_loader
             scope = get_active_scope() or get_ambient_system_scope()
-            for proto in getattr(reg, "_prototypes", {}).values():
-                for desc in getattr(proto, "_descriptors", []):
-                    if getattr(desc.impl, "__name__", "") in ("UvManifestLoader", "BazelManifestLoader"):
-                        if desc.impl is not None:
-                            return scope.get(desc.impl)
-        except (LookupError, AttributeError, TypeError, ValueError, KeyError):
+            return scope.get(manifest_loader.UvManifestLoader)
+        except (LifecycleResolutionError, LookupError, AttributeError, TypeError, ValueError, KeyError, ImportError):
             pass
         return None
 
@@ -534,7 +521,7 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
                 except (tomllib.TOMLDecodeError, OSError):
                     pass
 
-        if role_def and getattr(role_def, "template_command", ""):
+        if role_def and role_def.template_command:
             unit_str = str(node.unit_address).strip()
             unit_stem = os.path.splitext(os.path.basename(unit_str))[0]
             unit_name = unit_stem[:-5] if unit_stem.endswith("_test") else unit_stem
@@ -548,7 +535,7 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
                     rel_p = os.path.relpath(rel_p, bwd_str)
                 p_dir = os.path.dirname(rel_p)
                 sub_dir = ""
-                if role_def and getattr(role_def, "src_pattern", ""):
+                if role_def and role_def.src_pattern:
                     clean = role_def.src_pattern.replace("{unit_dir}/", "").replace("{unit_dir}\\", "")
                     if "/" in clean:
                         sub_dir = clean.split("/", 1)[0]
@@ -616,7 +603,7 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
         tmpl_content = ""
         if manifest_loader is not None:
             m = manifest_loader.retrieve_manifest(node)
-            if m is not None and getattr(m, "template", None) is not None:
+            if m is not None and m.template is not None:
                 tmpl_str = str(m.template)
                 tmpl_candidates = [
                     tmpl_str,
@@ -671,7 +658,7 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
             if main_repo and main_repo not in roots:
                 roots.append(main_repo)
             cands = []
-            if role_def and getattr(role_def, "template", ""):
+            if role_def and role_def.template:
                 t_spec = role_def.template
                 for r in roots:
                     cands.append(os.path.join(r, t_spec))
@@ -748,6 +735,13 @@ class AgentStorage(node_storage.AgentStorage, Singleton):
         self._messages.setdefault(node, set()).add(
             dag_storage.ChangeMessage(content=dag_storage.MessageContent("dirty"))
         )
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:04:03Z
+# CHANGE: Name the private backing mappings per the grounding, make the audit helpers private, and synthesize the change and feedback diagnostics that mark a node dirty
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

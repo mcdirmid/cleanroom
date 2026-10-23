@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Remove the contradicting omission statement, name the regex pattern parameter type, and split run-on paragraphs
-CODE_HASH: 225eea1f78de
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_reader_impl implementation component
 
 imports: session, filesystem_ext, tool_provider, file_alias, node_config, template_format, file_editor, file_paths
@@ -48,3 +40,10 @@ Search tool execution:
 - Facilitates contract and reference discovery by searching across read-only files in the filesystem, providing matched line contents and line numbers sanitized to mask host paths.
 
 - Enforces edit safety by searching across read-write files in the filesystem and stating that matches were found but cannot be displayed, preventing unanchored edits without reading the target file directly through the view file tool.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Remove the contradicting omission statement, name the regex pattern parameter type, and split run-on paragraphs
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

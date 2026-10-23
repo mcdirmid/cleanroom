@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-10T19:16:19Z
-# CHANGE: new file
-# CODE_HASH: 7cae80fadeff
-# --- END CLEANROOM METADATA ---
-
 """
 ## External Mechanics & API Documentation
 
@@ -50,3 +43,9 @@ def dependency_order(items, dependencies):
     return order
 ```
 """
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-10T19:16:19Z
+# CHANGE: new file
+# --- END CLEANROOM METADATA ---

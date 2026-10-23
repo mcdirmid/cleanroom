@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_workspace interface specification
-CODE_HASH: 83721aa83409
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # antigravity_workspace interface component
 
 imports: session
@@ -33,3 +25,10 @@ When configuring a role workspace:
 - The antigravity workspace configurer generates role guidance documentation directing the agent to use local bin scripts for acquiring and submitting work.
 
 - The antigravity workspace configurer produces a confinement report documenting all configured boundary files.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T21:45:00Z
+CHANGE: author antigravity_workspace interface specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

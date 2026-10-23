@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T17:55:00Z
-CHANGE: Define stub planning specification
-CODE_HASH: cdda05c3db16
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # stub interface component
 
 ## Intent
@@ -42,3 +34,10 @@ Test authoring subagents require concrete Python module files to import when wri
   - Grounded: [role_registry: [workspace_registry_service]]
 - AST parsing and file generation of test stubs on disk.
   - Deferred: Provided by workspace stub synthesizer implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T17:55:00Z
+CHANGE: Define stub planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

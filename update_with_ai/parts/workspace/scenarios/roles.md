@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Define roles concrete scenarios
-CODE_HASH: a49ff88e65e7
--->
-
 # Concrete scenarios for `roles` (interface)
 
 ## Scenario 1 — Resolving a declared role and an undeclared role
@@ -30,3 +23,9 @@ Given: a repository package `//subpkg` declares methodology `//tools/cleanroom` 
 
 1. The caller resolves `//subpkg:builder`.
    Observed: the resolved definition identifies `builder` and reports role address `//subpkg:builder`.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:45:00Z
+CHANGE: Define roles concrete scenarios
+-->

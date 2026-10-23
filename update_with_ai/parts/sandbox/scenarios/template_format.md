@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:56Z
-CHANGE: Author sandbox template_format concrete scenarios
-CODE_HASH: 8bc7835f5324
--->
-
 # Concrete scenarios for `template_format` (interface)
 
 ## Scenario 1 — Substituting bound keys and preserving absent ones
@@ -181,3 +174,9 @@ template text is "<endif>".
 1. The agent formats the template text "<endif>" using the parameters.
    Observed: the formatted text is "widget", because a parameter placeholder token is substituted
    whatever its key is named.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:56Z
+CHANGE: Author sandbox template_format concrete scenarios
+-->

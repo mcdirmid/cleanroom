@@ -1,15 +1,7 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:19:47Z
-# CHANGE: Align node cleaner continuation and unaddressable failure contracts
-# CODE_HASH: 06bdccaa38dd
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Loop node cleaner low-level interface specification."""
 
 from typing import Protocol, Sequence
-from framework import operation, poly_type
+from support.lib.framework import operation, poly_type
 import dag_storage
 
 
@@ -37,3 +29,10 @@ class NodeCleaner(Protocol):
         - WHEN cleaning does not fail for nodes that no other node cleaning can address, MUST return true.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:19:47Z
+# CHANGE: Align node cleaner continuation and unaddressable failure contracts
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

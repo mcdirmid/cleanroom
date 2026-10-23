@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:50:00Z
-# CHANGE: Implement scaffold_impl
-# CODE_HASH: 9da3c834344a
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for scaffold_impl."""
 
 from __future__ import annotations
@@ -14,6 +5,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import sys
 import zipfile
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -137,16 +129,27 @@ def _missing_target_skeleton(
     unit_dir: str,
     unit_name: str,
     role_def: roles.RoleDefinition,
+    workspace_dir: Optional[str] = None,
 ) -> Optional[str]:
     """Synthesizes starter skeleton content for a declared writable target file."""
     if role_def.template:
-        template_path = os.path.join(repo_root, role_def.template)
-        if os.path.isfile(template_path):
-            try:
-                with open(template_path, "r", encoding="utf-8") as f:
-                    return f.read()
-            except (OSError, UnicodeDecodeError):
-                return None
+        template_candidates: List[str] = []
+        if workspace_dir:
+            template_candidates.append(os.path.join(workspace_dir, role_def.template))
+            template_candidates.append(
+                os.path.join(workspace_dir, "templates", os.path.basename(role_def.template))
+            )
+        template_candidates.append(os.path.join(repo_root, role_def.template))
+        template_candidates.append(
+            os.path.join(repo_root, "templates", os.path.basename(role_def.template))
+        )
+        for tcand in template_candidates:
+            if os.path.isfile(tcand):
+                try:
+                    with open(tcand, "r", encoding="utf-8") as f:
+                        return f.read()
+                except (OSError, UnicodeDecodeError):
+                    pass
     if not rel_path.endswith(".py"):
         return None
     pyi_path = _find_spec_pyi(
@@ -167,6 +170,7 @@ def _missing_target_skeleton(
                 if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
                     try:
                         mod = importlib.import_module(f"{entry}.support.lib.lib_lint")
+                        # Legitimate reflection: optional plugin hook discovery on dynamically imported module
                         generate_lib_skeleton = getattr(mod, "generate_lib_skeleton", None)
                         if generate_lib_skeleton is not None:
                             break
@@ -203,28 +207,184 @@ def _create_missing_target_skeletons(
         ):
             continue
         skeleton = _missing_target_skeleton(
-            repo_root, rel_path, unit_dir, unit_name, role_def
+            repo_root, rel_path, unit_dir, unit_name, role_def, workspace_dir=workspace_dir
         )
         if skeleton is None:
             continue
-        write_file_with_perms(
-            os.path.join(workspace_dir, rel_path), skeleton, readonly=False
-        )
+        dst_path = os.path.join(workspace_dir, rel_path)
+        write_file_with_perms(dst_path, skeleton, readonly=False)
         created.append(rel_path)
+        if rel_path.endswith(".py"):
+            curr_p = os.path.dirname(dst_path)
+            ws_root_clean = os.path.abspath(workspace_dir)
+            while curr_p and curr_p != ws_root_clean and curr_p.startswith(ws_root_clean):
+                p_init = os.path.join(curr_p, "__init__.py")
+                if not os.path.isfile(p_init):
+                    write_file_with_perms(p_init, "", readonly=False)
+                curr_p = os.path.dirname(curr_p)
     return created
 
 
-def package_runner_zipapps(bin_dir: str) -> None:
+def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
+    """Compiles cleanroom support modules to optimized .pyc bytecode for runner zipapps."""
+    pycs: dict[str, bytes] = {}
+    support_dirs: list[str] = []
+
+    repo_root = os.environ.get("CLEANROOM_MAIN_ROOT")
+    if not repo_root or not os.path.isdir(repo_root):
+        ws_dir = os.path.dirname(bin_dir)
+        parent = os.path.dirname(ws_dir)
+        if os.path.basename(parent) == "role_workspaces":
+            p_root = os.path.dirname(parent)
+            ws_base = os.path.basename(ws_dir)
+            try:
+                for entry in sorted(os.listdir(p_root), key=len, reverse=True):
+                    if entry != "role_workspaces" and ws_base.startswith(f"{entry}_"):
+                        cand = os.path.join(p_root, entry)
+                        if os.path.isdir(cand):
+                            repo_root = cand
+                            break
+            except OSError:
+                pass
+    if not repo_root or not os.path.isdir(repo_root):
+        try:
+            cand = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+            if os.path.isdir(cand) and (os.path.isfile(os.path.join(cand, "cleanroom.toml")) or os.path.isfile(os.path.join(cand, "pyproject.toml"))):
+                repo_root = cand
+        except Exception:
+            pass
+
+    if repo_root and os.path.isdir(repo_root):
+        try:
+            for sub in os.listdir(repo_root):
+                sl = os.path.join(repo_root, sub, "support", "lib")
+                if os.path.isdir(sl) and sl not in support_dirs:
+                    support_dirs.append(sl)
+        except OSError:
+            pass
+
+    # From sys.path
+    for p in sys.path:
+        if p and os.path.isdir(p):
+            try:
+                for entry in os.listdir(p):
+                    sl = os.path.join(p, entry, "support", "lib")
+                    if os.path.isdir(sl) and sl not in support_dirs:
+                        support_dirs.append(sl)
+            except OSError:
+                pass
+
+    import py_compile
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        empty_init = os.path.join(td, "empty__init__.py")
+        with open(empty_init, "w") as f:
+            f.write("")
+        empty_pyc = os.path.join(td, "empty__init__.pyc")
+        py_compile.compile(empty_init, empty_pyc, optimize=2)
+        with open(empty_pyc, "rb") as f:
+            empty_init_bytes = f.read()
+
+        pycs["support/__init__.pyc"] = empty_init_bytes
+        pycs["support/lib/__init__.pyc"] = empty_init_bytes
+        pycs["update_with_ai/__init__.pyc"] = empty_init_bytes
+        pycs["update_with_ai/parts/__init__.pyc"] = empty_init_bytes
+        pycs["parts/__init__.pyc"] = empty_init_bytes
+
+        for sdir in support_dirs:
+            try:
+                pkg_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(sdir))))
+                if pkg_name:
+                    pycs[f"{pkg_name}/__init__.pyc"] = empty_init_bytes
+                    pycs[f"{pkg_name}/support/__init__.pyc"] = empty_init_bytes
+                    pycs[f"{pkg_name}/support/lib/__init__.pyc"] = empty_init_bytes
+
+                for fname in os.listdir(sdir):
+                    if fname.endswith(".py"):
+                        mod_name = fname[:-3]
+                        arcname_pyc = f"{mod_name}.pyc"
+                        arcname_py = f"{mod_name}.py"
+                        src_path = os.path.join(sdir, fname)
+                        dst_pyc = os.path.join(td, f"{mod_name}_{len(pycs)}.pyc")
+                        try:
+                            py_compile.compile(src_path, dst_pyc, optimize=2, doraise=True)
+                            with open(dst_pyc, "rb") as pf:
+                                pyc_bytes = pf.read()
+                            is_lifecycle = (fname == "lifecycle.py")
+                            is_canonical_lifecycle = is_lifecycle and os.path.getsize(src_path) > 1000
+                            if not is_lifecycle or is_canonical_lifecycle or arcname_py not in pycs:
+                                try:
+                                    with open(src_path, "rb") as sf:
+                                        pycs[arcname_py] = sf.read()
+                                except Exception:
+                                    pass
+                            if not is_lifecycle or is_canonical_lifecycle or arcname_pyc not in pycs:
+                                pycs[arcname_pyc] = pyc_bytes
+                                pycs[f"support/lib/{arcname_pyc}"] = pyc_bytes
+                            if pkg_name:
+                                pycs[f"{pkg_name}/support/lib/{arcname_pyc}"] = pyc_bytes
+                        except Exception:
+                            pass
+            except OSError:
+                pass
+
+        # Collect and compile all update_with_ai library modules
+        try:
+            if repo_root and os.path.isdir(repo_root):
+                parts_root = os.path.join(repo_root, "update_with_ai", "parts")
+                if os.path.isdir(parts_root):
+                    for root, _, files in os.walk(parts_root):
+                        if "/lib" in root or root.endswith("/lib"):
+                            rel_long = os.path.relpath(root, repo_root).replace(os.sep, "/")
+                            rel_short = os.path.relpath(root, os.path.join(repo_root, "update_with_ai")).replace(os.sep, "/")
+                            long_segs = rel_long.split("/")
+                            for i in range(1, len(long_segs)):
+                                k = "/".join(long_segs[:i]) + "/__init__.pyc"
+                                if k not in pycs:
+                                    pycs[k] = empty_init_bytes
+                            short_segs = rel_short.split("/")
+                            for i in range(1, len(short_segs)):
+                                k = "/".join(short_segs[:i]) + "/__init__.pyc"
+                                if k not in pycs:
+                                    pycs[k] = empty_init_bytes
+
+                            for f in files:
+                                if f.endswith(".py"):
+                                    src = os.path.join(root, f)
+                                    dst_pyc = os.path.join(td, f"part_mod_{len(pycs)}.pyc")
+                                    try:
+                                        py_compile.compile(src, dst_pyc, optimize=2, doraise=True)
+                                        with open(dst_pyc, "rb") as pf:
+                                            pyc_data = pf.read()
+                                            pycs[f"{rel_long}/{f}c"] = pyc_data
+                                            pycs[f"{rel_short}/{f}c"] = pyc_data
+                                    except Exception:
+                                        pass
+        except Exception:
+            pass
+    return pycs
+
+
+def package_runner_zipapps(bin_dir: str, can_blame: bool = True) -> None:
     """Packages runner zipapps into bin_dir with executable permissions."""
     os.makedirs(bin_dir, exist_ok=True)
     tools = {
         "get_work": "get_work",
         "check_files": "check_files",
         "submit": "submit",
-        "blame": "blame",
-        "feedback": "blame",
         "fail": "fail",
     }
+    if can_blame:
+        tools["blame"] = "blame"
+        tools["feedback"] = "blame"
+    else:
+        for b_name in ("blame", "feedback"):
+            bp = os.path.join(bin_dir, b_name)
+            if os.path.isfile(bp):
+                try:
+                    os.remove(bp)
+                except OSError:
+                    pass
     cov_path = os.path.join(bin_dir, "coverage")
     # Contract: Removes stale coverage script if present in bin_dir.
     if os.path.isfile(cov_path):
@@ -232,6 +392,9 @@ def package_runner_zipapps(bin_dir: str) -> None:
             os.remove(cov_path)
         except OSError:
             pass
+
+    pycs = _collect_and_compile_runner_pycs(bin_dir)
+
     for tool_name, cmd in tools.items():
         tool_path = os.path.join(bin_dir, tool_name)
         runner_code = f'''import json
@@ -257,51 +420,14 @@ while ws_dir and ws_dir != os.path.dirname(ws_dir):
         break
     ws_dir = os.path.dirname(ws_dir)
 
-search_roots = [ws_dir, curr]
 if main_root:
-    search_roots.append(main_root)
-for root in search_roots:
-    if root and os.path.isdir(root):
-        if root not in sys.path:
-            sys.path.insert(0, root)
-        try:
-            for entry in os.listdir(root):
-                pkg_dir = os.path.join(root, entry)
-                if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
-                    sup_lib = os.path.join(pkg_dir, "support", "lib")
-                    if os.path.isdir(sup_lib):
-                        if pkg_dir not in sys.path:
-                            sys.path.insert(0, pkg_dir)
-                        if sup_lib not in sys.path:
-                            sys.path.insert(0, sup_lib)
-        except OSError:
-            pass
+    os.environ["CLEANROOM_MAIN_ROOT"] = main_root
 
-try:
-    import cleanroom_role_tool
-except ImportError:
-    import importlib
-    cleanroom_role_tool = None
-    for root in search_roots:
-        if not root or not os.path.isdir(root):
-            continue
-        try:
-            for entry in os.listdir(root):
-                pkg_dir = os.path.join(root, entry)
-                if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
-                    if os.path.isdir(os.path.join(pkg_dir, "support", "lib")):
-                        try:
-                            cleanroom_role_tool = importlib.import_module(f"{{entry}}.support.lib.cleanroom_role_tool")
-                            break
-                        except ImportError:
-                            pass
-        except OSError:
-            pass
-        if cleanroom_role_tool is not None:
-            break
-    if cleanroom_role_tool is None:
-        raise
+if curr and os.path.isdir(curr):
+    if curr not in sys.path:
+        sys.path.insert(0, curr)
 
+import cleanroom_role_tool
 if __name__ == "__main__":
     sys.exit(cleanroom_role_tool.main(["{cmd}"] + sys.argv[1:]))
 '''
@@ -309,6 +435,8 @@ if __name__ == "__main__":
             f.write(b"#!/usr/bin/env python3\n")
             with zipfile.ZipFile(f, "w", compression=zipfile.ZIP_DEFLATED) as z:
                 z.writestr("__main__.py", runner_code)
+                for arcname, pyc_bytes in pycs.items():
+                    z.writestr(arcname, pyc_bytes)
         try:
             os.chmod(tool_path, 0o755)
         except OSError:
@@ -356,7 +484,33 @@ def write_role_agents_md(
     """Generates role AGENTS.md instructions in the workspace."""
     agents_path = os.path.join(workspace_dir, "AGENTS.md")
     is_auditor = not role_def.writable_file_patterns
+    can_blame = bool(role_def.feedback_role_deps or role_def.audit_tag or not role_def.writable_file_patterns)
+    has_stubs = bool(role_def.stub_role_deps)
     guide = role_def.guide_path
+    if role_def.guide_path:
+        promoted_guide = os.path.join(workspace_dir, "guides", os.path.basename(role_def.guide_path))
+        if os.path.isfile(promoted_guide):
+            guide = f"guides/{os.path.basename(role_def.guide_path)}"
+        elif os.path.isfile(os.path.join(workspace_dir, role_def.guide_path)):
+            guide = role_def.guide_path
+
+    meta_path = os.path.join(workspace_dir, ".cleanroom_role.json")
+    is_constrained = False
+    if os.path.isfile(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta_data = json.load(f)
+            model_val = str(meta_data.get("model", "")).lower()
+            if any(k in model_val for k in ("qwen", "mlx", "local", "ollama")):
+                is_constrained = True
+        except Exception:
+            pass
+
+    constrained_bullet = ""
+    if is_constrained:
+        constrained_bullet = (
+            "- **Incremental Authoring (Output Token Ceiling Protection)**: Your engine enforces a strict output token ceiling (e.g. 8K tokens). Emitting a massive monolithic file (>400 lines or >4,000 tokens) in a single tool call truncates output mid-generation, corrupting tool envelopes and causing fatal harness crashes. You MUST author extensive implementations or test suites incrementally in staged passes: write a minimal skeleton with core tests/methods first, verify with `bin/check_files`, and then incrementally append or edit remaining tests or methods in separate focused steps.\n"
+        )
 
     if is_auditor:
         workflow = f"""1. Run `bin/get_work` to synchronize with main and inspect pending dirty units.
@@ -366,7 +520,7 @@ def write_role_agents_md(
 5. If checks pass: Submit verification stamp via `bin/submit <target_file>`.
 6. If checks fail: Deliver blame attribution via `bin/blame <culprit_file> "<explanation>"`. Your critique MUST reference the author's `# CHANGE:` attempt and explain specifically why the attempted fix did not resolve the defect or what remains broken (DO NOT merely complain in chat without blaming, and DO NOT recycle identical blame text without considering what changed).
 7. If target cannot be certified or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
-8. Immediately call `bin/get_work` again to drain remaining units until the queue is empty.
+8. Call `bin/get_work` to inspect remaining units. If all ready targets are resolved or only blocked targets remain, STOP and conclude your round immediately without calling further tools.
 """
         feedback_section = """## Delivering Blame & Feedback (Auditor Role Requirements)
 - **Inspect `# CHANGE:` Commit Headers**: Before delivering blame, you MUST inspect the `# CHANGE:` metadata header at the top of the target file (`lib/*.py` or `tests/*_test.py`) using your file-reading tools. The `# CHANGE:` header explains what the author attempted to fix in response to previous feedback.
@@ -377,13 +531,21 @@ def write_role_agents_md(
   - NEVER recycle identical blame critiques across verification rounds without examining what changed. Tailor your feedback to what remains unaddressed.
 - **Actionable Attribution**: Blame the exact culprit file (`lib/*.py` or `tests/*_test.py`). If both implementation and tests are defective, blame each culprit file with specific critiques."""
     else:
+        blame_step = ""
+        if can_blame:
+            blame_step = "5. If upstream contracts are defective: Deliver blame attribution via `bin/blame <culprit_contract> \"<explanation>\"`.\n"
+            step_fail_num = "6"
+            step_stop_num = "7"
+        else:
+            step_fail_num = "5"
+            step_stop_num = "6"
+
         workflow = f"""1. Run `bin/get_work` to inspect and pull pending work and review any unacted feedback.
 2. Follow companion guide `{guide}` to author or update targets in scope, resolving any feedback.
 3. Run verification checks: `bin/check_files [target_file]`
 4. If checks pass and all feedback is resolved: Submit completed targets via `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>` if unmodified).
-5. If upstream contracts are defective: Deliver blame attribution via `bin/blame <culprit_contract> "<explanation>"`.
-6. If success is impossible or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
-7. Immediately call `bin/get_work` again to drain remaining units until the queue is empty.
+{blame_step}{step_fail_num}. If success is impossible or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
+{step_stop_num}. Call `bin/get_work` to inspect remaining units. If all ready targets are resolved or only blocked targets remain, STOP and conclude your round immediately without calling further tools.
 """
         feedback_section = """## Acting on Blame & Feedback (Author Role Requirements)
 - **`bin/check_files` ONLY verifies static types and syntax**: It does NOT execute tests or verify runtime logic.
@@ -392,9 +554,45 @@ def write_role_agents_md(
 - **How to resolve feedback**:
   1. Read the feedback critique in `bin/get_work` carefully to identify the runtime defect.
   2. Inspect the low-level contracts (`low/*.pyi`) and the failing test cases (`tests/*_test.py`) to examine expected behaviors, assertions, and mocks.
-  3. Modify the code in `lib/*.py` so that runtime execution satisfies the contracts and passes the tests.
+  3. Modify your assigned target files in scope so that runtime execution satisfies the contracts and passes the tests.
   4. Run `bin/check_files` to verify clean static compilation and typing.
   5. Submit via `bin/submit <target_file> "<summary>"` with a clear change summary explaining how the fix resolves the feedback."""
+
+    stub_section = ""
+    if has_stubs:
+        stub_section = """
+## Cleanroom Compilation Stubs (DO NOT Edit or Assert Stub Errors)
+Any library files under `lib/*.py` imported from role dependencies in this workspace are intentional Cleanroom compilation stubs (`CLEANROOM TEST STUB v4`).
+- **Read-Only Stubs for Type-Checking**: These stubs exist solely to provide method signatures and symbols so that your code passes static type-checking and syntax verification via `bin/check_files`.
+- **Stub Errors are Normal in This Workspace**: Stubs raise `NotImplementedError` when called because the actual implementation executes in downstream verification, NOT in this workspace.
+- **DO NOT EDIT STUBS**: You are strictly prohibited from editing or attempting to implement `lib/*.py`.
+- **DO NOT ASSERT STUB ERRORS**: Never write tests expecting or asserting `NotImplementedError` or stub error outcomes. Author tests that verify the real behavioral contracts, postconditions, and invariants specified in `low/*.pyi`.
+"""
+
+    if can_blame:
+        resolution_rules = """- **ZERO TOLERANCE FOR COMPLAINING OR IDLING IN CHAT**: When `bin/check_files` fails, stopping with conversational commentary, explaining why output did not change, or complaining without executing `bin/blame` is STRICTLY PROHIBITED. Conversational complaints do not mutate build state, and upstream authoring roles cannot inspect chat transcripts.
+- **Actionable Blame Delivery**: When checks fail due to defects in library code, test code, or upstream specifications, you MUST execute `bin/blame <culprit_file> "<actionable critique>"` immediately. Auditors can blame both the lib and test files if both contain defects.
+- **Submission on Success**: When checks pass, you MUST execute `bin/submit <target_file>` immediately.
+- **Fail on Impasse**: If you reach an unresolvable impasse where neither submit nor blame applies, execute `bin/fail <target_file> "<reason>"` immediately.
+- **Never end a round while ready targets remain unresolved. When all ready targets are resolved or only blocked targets remain, conclude your round immediately without further tool calls.**"""
+        resolution_methods = "(`bin/submit`, `bin/blame`, or `bin/fail`)"
+        workflow_binaries_blame = "- `bin/blame` — Attribute blame and return defective targets to upstream roles.\n"
+        round_res_line = "Never attempt to manually commit, push, or copy files across workspace boundaries; round resolution must always occur via `bin/submit`, `bin/blame`, or `bin/fail`."
+        runner_tools_list = "`get_work`, `check_files`, `submit`, `blame`, `fail`"
+        fail_stop_tools = "`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/submit`, `bin/fail`"
+        metadata_tools = "(`bin/submit`, `bin/blame`, `bin/fail`)"
+        test_failure_action = "`bin/blame`, `bin/fail`, or code edits"
+    else:
+        resolution_rules = """- **Submission on Success**: When checks pass and all feedback is addressed, you MUST execute `bin/submit <target_file> "<summary>"` immediately.
+- **Fail on Impasse**: If you reach an unresolvable impasse where success is impossible, execute `bin/fail <target_file> "<reason>"` immediately.
+- **Never end a round while ready targets remain unresolved. When all ready targets are resolved or only blocked targets remain, conclude your round immediately without further tool calls.**"""
+        resolution_methods = "(`bin/submit` or `bin/fail`)"
+        workflow_binaries_blame = ""
+        round_res_line = "Never attempt to manually commit, push, or copy files across workspace boundaries; round resolution must always occur via `bin/submit` or `bin/fail`."
+        runner_tools_list = "`get_work`, `check_files`, `submit`, `fail`"
+        fail_stop_tools = "`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/fail`"
+        metadata_tools = "(`bin/submit` or `bin/fail`)"
+        test_failure_action = "code edits or `bin/fail`"
 
     content = f"""# Cleanroom Role Instructions: {role_def.role_name.capitalize()}
 
@@ -402,43 +600,53 @@ def write_role_agents_md(
 - Role: `{role_def.role_name}`
 - Directory Scope: `{dir_scope}`
 - Companion Guide: `{guide}`
+{stub_section}
+## Continuous Tool Execution & Operational Rules
+- **Continuous Tool Execution (No Idling or Dangling Colons)**: You are an autonomous agent step runner. You must ALWAYS invoke a tool in every step. Never output conversational text, explanations, or sentences ending in colons without invoking tools in the same step. Every step MUST execute a tool call.
+- **Ground Truth First (Oracle Diagnostics Over Prose)**: Always run `bin/check_files <target>` to establish deterministic ground truth errors before writing or editing code. Do NOT speculate, guess, or infer defects from prose descriptions before checking oracle output.
+- **Targeted Reads Over Full Dumps**: Never dump or read entire large files repeatedly. Use grep to locate symbols, or read narrow line ranges using offset and limit parameters.
+- **Restricted Targets**: Edit ONLY your assigned target files. Do NOT create scratch tests, temporary test scripts, or auxiliary test runners.
+- **No Runner Binary Inspection or Linter Hunting**: Runner executables in `bin/` ({runner_tools_list}) are encapsulated self-contained tools. Do NOT search for internal linters (`*_lint.py`, `test_lint`, `build_lint`), and do NOT attempt to read, disassemble, decompile, or run inspection utilities (`file`, `strings`, `unzip`, `head`, `od`, `xxd`) on `bin/` executables. All required structural rules and conventions are documented in your Companion Guide.
+- **Standard Terminology**:
+  - **Step**: A single prompt ↔ tool-call interaction cycle between an agent/model and the runtime.
+  - **Round**: A full Cleanroom role dispatch wave or execution pass across assigned targets until submission, blame, or exhaustion.
+{constrained_bullet}
+## Mandatory Target Resolution (Do NOT End Round Without Resolving)
+Every ready target acquired via `bin/get_work` MUST be explicitly resolved before concluding your round:
+{resolution_rules}
 
-## Mandatory Target Resolution (Do NOT End Turn Without Resolving)
-Every pending target acquired via `bin/get_work` MUST be explicitly resolved before concluding your turn:
-- **ZERO TOLERANCE FOR COMPLAINING OR IDLING IN CHAT**: When `bin/check_files` fails, stopping with conversational commentary, explaining why output did not change, or complaining without executing `bin/blame` is STRICTLY PROHIBITED. Conversational complaints do not mutate build state, and upstream authoring roles cannot inspect chat transcripts.
-- **Actionable Blame Delivery**: When checks fail due to defects in library code, test code, or upstream specifications, you MUST execute `bin/blame <culprit_file> "<actionable critique>"` immediately. Auditors can blame both the lib and test files if both contain defects.
-- **Submission on Success**: When checks pass, you MUST execute `bin/submit <target_file>` immediately.
-- **Fail on Impasse**: If you reach an unresolvable impasse where neither submit nor blame applies, execute `bin/fail <target_file> "<reason>"` immediately.
-- **Never end a turn or stop tool usage while pending units remain unresolved.**
+## Round Conclusion Protocol
+Once all ready targets have been resolved {resolution_methods}, or when `bin/get_work` indicates that only blocked targets remain (or no ready targets exist):
+- **STOP IMMEDIATELY**: Do NOT execute any further tool calls.
+- **DO NOT CALL `bin/get_work` OR `bin/check_files` IN A LOOP**: Repeatedly running tools when there are no ready targets wastes steps and triggers impasse warnings.
+- **Conclude the Round**: Output a concise summary of the resolved actions and end your round.
 
 ## Strict Boundary Rules (Zero Exceptions)
 1. **Workspace Boundary**: All commands and tool invocations MUST execute strictly within this workspace directory (`.`). You are strictly prohibited from passing any other directory as `Cwd` or running commands outside this workspace.
 2. **Git Operations Prohibited**: This is a projected cleanroom workspace, not a git repository. Never invoke `git` commands (`git checkout`, `git restore`, `git reset`, etc.) under any circumstances.
 3. **Main Repository Inviolability**: The main workspace is strictly read-only and off-limits to direct agent actions. All interaction with main occurs exclusively through the prescribed `bin/` tools.
-4. **Metadata Inviolability & Projection**: DO NOT EDIT METADATA. Never manually edit `# --- CLEANROOM METADATA ---` or `<!-- CLEANROOM METADATA -->` headers. Use only tools (`bin/submit`, `bin/blame`, `bin/fail`). In-band metadata headers in role workspace files are projected to show only change, feedback, and ephemeral code hash fields; canonical lifecycle timestamps (such as LAST_CLEANED, LAST_CHANGED, and audit tags) are maintained exclusively in the main repository and managed by `bin/submit`. Do not expect or attempt to add LAST_CLEANED or LAST_CHANGED in workspace files. Do NOT report files as "flagged for missing LAST_CLEANED" or assume they are clean just because static checks pass. When a file is dirty, perform thorough semantic verification against contracts and test suites.
+4. **Metadata Inviolability & Projection**: DO NOT EDIT METADATA. Never manually edit `# --- CLEANROOM METADATA ---` or `<!-- CLEANROOM METADATA -->` headers. Use only tools {metadata_tools}. In-band metadata headers in role workspace files are projected to show only change, feedback, and ephemeral code hash fields; canonical lifecycle timestamps (such as LAST_CLEANED, LAST_CHANGED, and audit tags) are maintained exclusively in the main repository and managed by `bin/submit`. Do not expect or attempt to add LAST_CLEANED or LAST_CHANGED in workspace files. Do NOT report files as "flagged for missing LAST_CLEANED" or assume they are clean just because static checks pass. When a file is dirty, perform thorough semantic verification against contracts and test suites.
 
 ## In-Workspace File Reading & Inspection (Fully Permitted & Required)
-You ARE permitted and expected to read files WITHIN your assigned role workspace directory (`.`) using your host file-reading tools (e.g. `view_file`, `read_file`, or IDE inspection):
-- **Inspect Specifications**: Read low-level interface specifications (`low/*.pyi`) and guides to understand contracted behavior and requirements.
-- **Inspect Test Suites**: Read test files (`tests/*_test.py`) to examine assertions, failure expectations, test structures, and mocks.
+You ARE permitted and expected to read and inspect files WITHIN your assigned role workspace directory (`.`) using your host environment's native tools or standard shell commands (`cat`, `grep`, `find`, etc.):
+- **Inspect Specifications**: Read low-level interface specifications (`low/*.pyi`) and contracts to understand required classes, functions, invariants, and postconditions.
+- **Inspect Companion Guide**: Read your assigned companion guide (`{guide}`) for document layout, type patterns, mock structures, and required conventions. Your companion guide is your authoritative format reference—do NOT search for other files in the workspace for formatting examples.
+- **Inspect Test Suites**: Read test files (`tests/*_test.py`) when diagnosing failures to examine assertions, failure expectations, and mocks.
 - **Inspect Implementation Code**: Read implementation code (`lib/*.py`) to triage failures, locate exact function names and defective line numbers, and inspect the `# CHANGE:` commit header to understand how the author attempted to address previous blame.
 The Contamination Tripwire applies strictly to reading files OUTSIDE this workspace. Reading any file within `.` is 100% safe, encouraged, and required for thorough diagnosis.
 
-## Command Execution Tripwire (Restricted Binaries Only)
-**ZERO TOLERANCE FOR UNAPPROVED COMMANDS.**
+## In-Workspace Execution & Permitted Commands
+You ARE permitted to run standard shell utilities and scripts (`cat`, `grep`, `find`, `python`, etc.) or native harness tools strictly WITHIN this workspace directory (`.`) to inspect files, run local diagnostics, and complete your tasks.
+Git operations (`git checkout`, `git restore`, `git reset`, etc.) and accessing files outside this workspace remain strictly prohibited.
 
-In the terminal / shell, you are strictly permitted to run ONLY the prescribed workspace binaries:
-- `bin/get_work`
-- `bin/check_files`
-- `bin/submit`
-- `bin/blame`
-- `bin/fail`
+## Mandatory Cleanroom Workflow Binaries
+All Cleanroom target resolution must proceed through the prescribed workspace binaries:
+- `bin/get_work` — Discover pending units and tasks.
+- `bin/check_files` — Run static verification, linting, and type checking on targets.
+- `bin/submit` — Submit verified targets to main.
+{workflow_binaries_blame}- `bin/fail` — Report an unresolvable impasse.
 
-Executing ANY other command, shell script, or binary in the terminal (including but not limited to `python`, `python3`, `bash`, `sh`, `find`, `grep`, `git`, `cat`, or inspecting zipapps/executables) is STRICTLY PROHIBITED. (Note: Using your host environment's native file-viewing tool to read local files in this workspace is NOT a shell command and is fully permitted). If you execute any unapproved terminal command:
-1. **YOU ARE PERMANENTLY CONTAMINATED.**
-2. **ALL WORK MUST CEASE IMMEDIATELY.**
-3. **IMMEDIATE ABORT**: Report the unapproved command execution to the user and stop all tool usage:
-   > `CRITICAL CONTAMINATION: I executed an unapproved command outside the prescribed bin/ tools ([command]). This session is compromised and terminated.`
+{round_res_line}
 
 ## Contamination Tripwire (Poison Pill)
 **ZERO TOLERANCE FOR READING OUT-OF-BOUNDS FILES.**
@@ -454,7 +662,7 @@ This is an absolute tripwire for out-of-bounds files. There are NO exceptions fo
 {feedback_section}
 
 ## Fail-Stop & Reporting Protocol (Do NOT Self-Heal)
-If any cleanroom binary (`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/submit`, `bin/fail`) fails due to:
+If any cleanroom binary ({fail_stop_tools}) fails due to:
 - A Python exception or traceback (e.g., `ModuleNotFoundError`, `ImportError`, `AttributeError`)
 - A build, type check, or test execution failure
 - A missing support file, template error, or dependency issue
@@ -465,7 +673,7 @@ If any cleanroom binary (`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/su
 - **DO NOT** attempt alternate execution paths outside `bin/`.
 - **REPORT IMMEDIATELY**: Output the exact command that failed and its verbatim error/traceback to the user, state what dependency or file appears to be missing, and wait for human instruction.
 
-NOTE: Verification test failures (e.g. `[FAIL] Verification failed` output from tests or linters on code under test) are NORMAL test results to be acted upon via `bin/blame`, `bin/fail`, or code edits, NOT infrastructure crashes. Fail-Stop applies ONLY to internal tool crashes, tracebacks, or missing tooling/dependencies.
+NOTE: Verification test failures (e.g. `[FAIL] Verification failed` output from tests or linters on code under test) are NORMAL test results to be acted upon via {test_failure_action}, NOT infrastructure crashes. Fail-Stop applies ONLY to internal tool crashes, tracebacks, or missing tooling/dependencies.
 
 ## Unresolvable Impasse & Failure Protocol
 If you determine that success is not possible (e.g. unreachable code under test, contradictory specification contracts, or dead ends that blame cannot resolve):
@@ -486,17 +694,21 @@ If you determine that success is not possible (e.g. unreachable code under test,
 
 
 # Contract: Realizes scaffold.WorkspaceScaffolder singleton.
-class WorkspaceScaffolder(
-    scaffold.WorkspaceScaffolder,
-    Singleton,
-):
+class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
     """Realizes runner zipapp packaging, role metadata, guide synthesis, and starter skeletons."""
 
     tier = agent_session.agent_session
 
     # Contract: Packages runner zipapps into bin_dir with executable permissions.
-    def deploy_runner_zipapps(self, bin_dir: str) -> None:
-        package_runner_zipapps(bin_dir)
+    def deploy_runner_zipapps(
+        self,
+        bin_dir: str,
+        role_def: Optional[roles.RoleDefinition] = None,
+        can_blame: bool = True,
+    ) -> None:
+        if role_def is not None:
+            can_blame = bool(role_def.feedback_role_deps or role_def.audit_tag or not role_def.writable_file_patterns)
+        package_runner_zipapps(bin_dir, can_blame=can_blame)
 
     # Contract: Writes role configuration metadata (.cleanroom_role.json) in workspace root.
     def write_role_metadata(
@@ -549,6 +761,13 @@ class WorkspaceScaffolder(
         executable: bool = False,
     ) -> None:
         write_file_with_perms(dst, content, readonly=readonly, executable=executable)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-20T23:45:00Z
+# LAST_CHANGED: 2026-10-20T23:45:00Z
+# CHANGE: Resolve companion guides and starter templates from workspace root and main repository
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

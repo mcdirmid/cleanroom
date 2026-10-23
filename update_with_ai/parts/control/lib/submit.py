@@ -1,11 +1,6 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:20:44Z
-# CHANGE: Remove the undeclared module-level resolution wrappers so the interface holds only the declared outcome type and coordinator protocol; callers now resolve the coordinator singleton directly
-# CODE_HASH: 6fe1a425f019
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence, Tuple
 from update_with_ai.parts.dag.lib import dag_storage
@@ -24,7 +19,7 @@ class SubmissionOutcome:
     message: str
 
 
-class SubmissionCoordinator(Protocol):
+class SubmissionCoordinator(Singleton[AgentSessionTier], Protocol):
     """Validates submission gating rules and resolves clean nodes."""
 
     # Contract: Submits target node after validating gating rules; rejects on failed verification, uncleaned in-batch dependency, summary/modification mismatch, or unaddressed feedback; marks node clean in graph storage.
@@ -59,3 +54,9 @@ class SubmissionCoordinator(Protocol):
     def parse_unit_from_file_path(
         self, file_path: str, repo_root: str
     ) -> Tuple[str, str, str]: ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:20:44Z
+# CHANGE: Remove the undeclared module-level resolution wrappers so the interface holds only the declared outcome type and coordinator protocol; callers now resolve the coordinator singleton directly
+# --- END CLEANROOM METADATA ---

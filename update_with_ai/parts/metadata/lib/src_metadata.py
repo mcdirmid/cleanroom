@@ -1,11 +1,5 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:40:00Z
-# CHANGE: Separate interface and forwarding from realization
-# CODE_HASH: 1dadd82533ae
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from support.lib.lifecycle import Singleton, SystemTier
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import os
@@ -13,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 
-# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+# Contract: __orphan__ - MUST derive canonical audit tag strings from role names.
 def get_audit_tag(role_name: str) -> str:
     """Computes auditor tag dynamically: uppercase role name + _AUDIT."""
     clean = role_name.split(":")[-1].strip().upper()
@@ -73,30 +67,34 @@ def _load_role_definitions() -> Dict[str, Any]:
     return {}
 
 
-# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+# Contract: __orphan__ - MUST evaluate whether a role name denotes an auditor role.
 def is_auditor_role(role_name: str) -> bool:
     """Checks whether a role is an auditor dynamically without hardcoded role names."""
     clean = role_name.split(":")[-1].strip().lower()
     try:
-        from support.lib.lifecycle import get_singleton
+        from support.lib.lifecycle import Singleton, SystemTier, get_singleton
         from update_with_ai.parts.workspace.lib import role_registry
         reg = get_singleton(role_registry.WorkspaceRegistry)
         r_def = reg.resolve_role_definition(clean)
-        return not r_def.writable_file_patterns or bool(getattr(r_def, "audit_tag", None))
+        return not r_def.writable_file_patterns or bool(r_def.audit_tag)
     except Exception:
         pass
     try:
-        from support.lib.lifecycle import get_singleton
+        from support.lib.lifecycle import Singleton, SystemTier, get_singleton
         from update_with_ai.parts.agent.lib import node_config
-        cfg = get_singleton(node_config.NodeConfig)
-        role_defs = getattr(cfg, "role_definitions", {})
+        cfg: Any = get_singleton(node_config.NodeConfig)
+        role_defs = cfg.role_definitions if hasattr(cfg, "role_definitions") else {}
         if clean in role_defs:
-            r_def = role_defs[clean]
-            return bool(
-                getattr(r_def, "is_auditor", False)
-                or getattr(r_def, "audit_tag", None)
-                or not getattr(r_def, "src_pattern", "")
-            )
+            r_def: Any = role_defs[clean]
+            if isinstance(r_def, dict):
+                audit_tag = r_def.get("audit_tag")
+                src_pat = str(r_def.get("src_pattern", "") or "")
+                is_aud = bool(r_def.get("is_auditor", False))
+            else:
+                audit_tag = r_def.audit_tag if hasattr(r_def, "audit_tag") else None
+                src_pat = str(r_def.src_pattern or "") if hasattr(r_def, "src_pattern") else ""
+                is_aud = bool(r_def.is_auditor) if hasattr(r_def, "is_auditor") else False
+            return bool(is_aud or audit_tag or not src_pat)
     except Exception:
         pass
     role_defs = _load_role_definitions()
@@ -121,7 +119,7 @@ class FileMetadata:
 
 
 # Contract: SourceMetadataCoordinator protocol for parsing, hashing, and mutating in-band source metadata.
-class SourceMetadataCoordinator(Protocol):
+class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
     """Protocol for parsing, hashing, and mutating in-band source metadata."""
 
     # Contract: Extracts in-band metadata record from content string.
@@ -161,6 +159,14 @@ class SourceMetadataCoordinator(Protocol):
     def is_code_modified(
         self,
         file_path: Path | str,
+    ) -> bool: ...
+
+    # Contract: Evaluates whether new content alters, corrupts, deletes, or injects in-band metadata.
+    def is_metadata_altered(
+        self,
+        original_content: str,
+        new_content: str,
+        filename_or_ext: str,
     ) -> bool: ...
 
     # Contract: Updates or injects in-band metadata block within content string.
@@ -252,7 +258,7 @@ class SourceMetadataCoordinator(Protocol):
     ) -> None: ...
 
 
-# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+# Contract: __orphan__ - module-level helper evaluating Markdown format convention.
 def _is_html_comment_format(path_or_ext: str) -> bool:
     ext = os.path.splitext(path_or_ext)[1].lower()
     return ext == ".md"
@@ -261,25 +267,10 @@ def _is_html_comment_format(path_or_ext: str) -> bool:
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def _find_header_insertion_index(lines: List[str], is_html: bool) -> int:
     """Determines line index where metadata block should be inserted when missing."""
-    if not lines:
-        return 0
-
-    if is_html:
-        if lines[0].strip() == "---":
-            for i in range(1, len(lines)):
-                if lines[i].strip() == "---":
-                    return i + 1
-        return 0
-
-    idx = 0
-    if idx < len(lines) and lines[idx].startswith("#!"):
-        idx += 1
-    if idx < len(lines) and ("coding:" in lines[idx] or "coding=" in lines[idx]):
-        idx += 1
-    return idx
+    return len(lines)
 
 
-# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+# Contract: __orphan__ - module-level helper extracting block boundary range.
 def _extract_block_boundaries(
     lines: List[str], is_html: bool
 ) -> Optional[Tuple[int, int]]:
@@ -303,7 +294,7 @@ def _extract_block_boundaries(
     return None
 
 
-# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+# Contract: __orphan__ - MUST parse in-band metadata block content into FileMetadata records.
 def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
     """Parses raw metadata block lines into FileMetadata."""
     last_cleaned: Optional[str] = None
@@ -373,7 +364,7 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
     )
 
 
-# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+# Contract: __orphan__ - MUST format FileMetadata records into comment lines for supported languages.
 def format_metadata_block(meta: FileMetadata, is_html: bool) -> List[str]:
     """Formats a FileMetadata record into comment block lines."""
     ch = meta.change_summary or ""
@@ -422,25 +413,12 @@ def format_metadata_block(meta: FileMetadata, is_html: bool) -> List[str]:
     return lines
 
 
-_coordinator_override: Optional[SourceMetadataCoordinator] = None
-
-
-def set_source_metadata_coordinator(
-    coord: Optional[SourceMetadataCoordinator],
-) -> None:
-    """Sets or clears override coordinator instance."""
-    global _coordinator_override
-    _coordinator_override = coord
-
-
 def _get_coordinator() -> SourceMetadataCoordinator:
-    if _coordinator_override is not None:
-        return _coordinator_override
     try:
-        from support.lib.lifecycle import get_singleton
+        from support.lib.lifecycle import Singleton, SystemTier, get_singleton
         return get_singleton(SourceMetadataCoordinator)
     except Exception:
-        from support.lib.lifecycle import get_default_registry
+        from support.lib.lifecycle import Singleton, SystemTier, get_default_registry
         desc = get_default_registry().find_descriptor(SourceMetadataCoordinator)
         if desc is None:
             from . import metadata_asm
@@ -454,7 +432,7 @@ def _get_coordinator() -> SourceMetadataCoordinator:
         raise
 
 
-# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+# Contract: __orphan__ - MUST return the current UTC timestamp formatted as an ISO-8601 string.
 def current_utc_timestamp() -> str:
     """Returns current UTC timestamp truncated to seconds with trailing Z."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -490,6 +468,19 @@ def compute_file_code_hash(file_path: Path | str) -> Optional[str]:
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def is_code_modified(file_path: Path | str) -> bool:
     return _get_coordinator().is_code_modified(file_path)
+
+
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+def is_metadata_altered(
+    original_content: str,
+    new_content: str,
+    filename_or_ext: str,
+) -> bool:
+    return _get_coordinator().is_metadata_altered(
+        original_content=original_content,
+        new_content=new_content,
+        filename_or_ext=filename_or_ext,
+    )
 
 
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
@@ -605,3 +596,9 @@ def stamp_audit(file_path: Path | str, role_name: str) -> None:
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def clear_audits(file_path: Path | str) -> None:
     _get_coordinator().clear_audits(file_path)
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-20T22:32:00Z
+# CHANGE: Expose is_metadata_altered on SourceMetadataCoordinator and module facade
+# --- END CLEANROOM METADATA ---

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:55:00Z
-CHANGE: Define stub interface scenarios
-CODE_HASH: 3e93b1a5ea7e
--->
-
 # Concrete scenarios for `stub` (interface)
 
 ## Scenario 1 — Synthesizing read-only test stubs from typing specifications
@@ -27,3 +20,9 @@ Given: a candidate relative path `parts/agent/lib/foo.py` and a role definition 
 
 1. The caller queries whether the path is a stub dependency file.
    Observed: the method returns true.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T17:55:00Z
+CHANGE: Define stub interface scenarios
+-->

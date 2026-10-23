@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_harness interface low-level specification
-# CODE_HASH: 3bbd2d379c23
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for subagent_harness."""
 
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Protocol, Sequence
-from framework import data_type, operation, poly_type, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, poly_type, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import subagent_coordinator
 
@@ -36,13 +28,13 @@ class CommandHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         POSTCONDITIONS:
         - MUST record initial pending targets from workspace pending work buffer.
         - MUST spawn subagent process matching configured command template within workspace directory.
-        - MUST return unique task handle tracking the running turn.
+        - MUST return unique task handle tracking the running round.
         """
         ...
 
     @operation
-    def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
-        """Awaits subagent turn completion and returns outcome result.
+    def await_role(self, task_handle: str) -> subagent_coordinator.RoleRoundResult:
+        """Awaits subagent round completion and returns outcome result.
 
         POSTCONDITIONS:
         - MUST await process completion without mandatory timeout unless an explicit limit is configured.
@@ -51,16 +43,16 @@ class CommandHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         - MUST determine submitted targets by set difference with remaining pending items.
         - MUST extract token usage metrics and compute rate-card costs from execution logs.
         - WHEN a process exits with non-zero status, MUST capture failure diagnostics from the tail of the log.
-        - MUST return synthesized RoleTurnResult.
+        - MUST return synthesized RoleRoundResult.
         """
         ...
 
     @operation
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
-        """Polls subagent turn execution without blocking.
+    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+        """Polls subagent round execution without blocking.
 
         POSTCONDITIONS:
-        - WHEN subagent process has terminated, MUST return role turn result.
+        - WHEN subagent process has terminated, MUST return role round result.
         - WHEN subagent process is still running, MUST return None without blocking or termination.
         """
         ...
@@ -98,7 +90,7 @@ class HarnessAdapterFactory(Protocol):
 
 
 @singleton_type("agent_session")
-class HarnessRegistry(InTier[AgentSessionTier], Protocol):
+class HarnessRegistry(Singleton[AgentSessionTier], Protocol):
     """Maintains installed platform harness adapter factories and resolves adapters."""
 
     @property
@@ -140,3 +132,10 @@ class HarnessRegistry(InTier[AgentSessionTier], Protocol):
 
 
 HarnessResolver = HarnessRegistry
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-12T21:00:00Z
+# CHANGE: author subagent_harness interface low-level specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

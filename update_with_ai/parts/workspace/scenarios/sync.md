@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:14:21Z
-CHANGE: Author workspace sync concrete scenarios
-CODE_HASH: 41e4afe93a12
--->
-
 # Concrete scenarios for `sync` (interface)
 
 ## Scenario 1 — The sync result of an operation that moved nothing
@@ -106,3 +99,9 @@ step restates the first`; `/repo/beta/high/beta.md` exists with a last cleaned t
 
 2. The synchronizer flushes again with the buffer still gone.
    Observed: a sync result reporting no flushed blames, with `/repo/beta/high/beta.md` unchanged.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:14:21Z
+CHANGE: Author workspace sync concrete scenarios
+-->

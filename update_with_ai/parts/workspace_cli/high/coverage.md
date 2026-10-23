@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T04:09:00Z
-CHANGE: Removed the unused agent_session import and its delegation clause: the low-level specification places the coverage evaluator under the system lifecycle tier with no agent_session member, so the interface now declares no imports.
-CODE_HASH: b999cce9061f
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # coverage interface component
 
 ## Purpose
@@ -29,3 +21,10 @@ The coverage evaluator measures single-target statement coverage by executing th
 The coverage evaluator formats missing statement lines into compact comma-separated range strings and contiguous span ranges, and formats structured coverage reports presenting missing statement spans, source code context lines, presentation span clamping when output exceeds limits, and actionable guidance for defect attribution.
 
 The coverage evaluator enforces configured coverage thresholds, reporting whether coverage targets are met and writing formatted reports to the designated coverage log files.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T04:09:00Z
+CHANGE: Removed the unused agent_session import and its delegation clause: the low-level specification places the coverage evaluator under the system lifecycle tier with no agent_session member, so the interface now declares no imports.
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

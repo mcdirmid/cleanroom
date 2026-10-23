@@ -1,11 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-06T14:35:00Z
-# CHANGE: new file
-# CODE_HASH: 084faf4f2adf
-# SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
-# --- END CLEANROOM METADATA ---
-
 r"""
 ## External Mechanics & API Documentation
 
@@ -32,11 +24,11 @@ The `src_metadata_ext` external component specifies the grammar, comment convent
   # --- END CLEANROOM METADATA ---
   ```
 
-**Header Placement Rules**
+**Metadata Block Placement Rules**
 
-1. Placed at the top of the file.
-2. In executable scripts with a shebang (`#!/usr/bin/...`) or encoding directive (`# -*- coding: ... -*-`), placed immediately below those directives.
-3. In Markdown documents with YAML frontmatter (`---`), placed immediately below the closing frontmatter delimiter.
+1. Positioned at the bottom of the file following the source code or markdown body, separated by a blank line.
+2. Preserves line numbers of the underlying source code so diagnostics, compiler errors, pytest tracebacks, and coverage reports do not drift when metadata fields are added or modified.
+3. For extraction backward compatibility, blocks positioned anywhere in the file (top or bottom) are recognized and parsed.
 
 **Grammar & Fields**
 
@@ -75,3 +67,10 @@ FEEDBACK_PREFIX = "FEEDBACK:"
 FEEDBACK_ITEM_PATTERN = re.compile(r"^-\s*(?:\[.*?\]:\s*)?(.*)$")
 ```
 """
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-06T14:35:00Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-09T21:19:01Z
+# --- END CLEANROOM METADATA ---

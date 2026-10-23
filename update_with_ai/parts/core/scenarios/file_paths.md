@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:09:08Z
-CHANGE: Author core file_paths concrete scenarios
-CODE_HASH: aa7797f97445
--->
-
 # Concrete scenarios for `file_paths` (interface)
 
 ## Scenario 1 — An absolute path for a file at the filesystem root
@@ -70,3 +63,9 @@ alpha_scope_a held in place of an absolute workspace root.
    alpha_scope_a.
    Observed: the resolution is refused, because the supplied root does not name a location from
    the filesystem root.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:09:08Z
+CHANGE: Author core file_paths concrete scenarios
+-->

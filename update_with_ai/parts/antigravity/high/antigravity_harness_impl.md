@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T19:15:00Z
-CHANGE: support non-blocking child process polling in antigravity harness realization
-CODE_HASH: 965ffd692a7b
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # antigravity_harness_impl implementation component
 
 imports: session, antigravity_ext, antigravity_harness, subagent_coordinator, subagent_harness
@@ -38,3 +30,10 @@ When executing a role turn:
 - The realization collects submitted targets (extracting submission completion tags from process standard output), blamed targets from blame buffers, and execution status into role turn results.
 
 - The realization terminates active child processes when execution limits are exceeded.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-13T19:15:00Z
+CHANGE: support non-blocking child process polling in antigravity harness realization
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

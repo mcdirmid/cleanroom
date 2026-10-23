@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T11:27:00Z
-CHANGE: Remove max batch size parameter from get work tool
-CODE_HASH: 9a598a65676a
--->
-
 # Concrete scenarios for `run_control` (interface)
 
 ## Scenario 1 — Installing the session tools while step mode is inactive
@@ -244,3 +237,9 @@ Given: the agent enters a session for role alpha in `/ws/alpha_scope_a`, the act
 
 1. The agent executes the get work tool without arguments.
    Observed: the dirty node is retrieved as an active node, and the delivered task prompt references `alpha_guide.md` as the resolved guide.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T11:27:00Z
+CHANGE: Remove max batch size parameter from get work tool
+-->

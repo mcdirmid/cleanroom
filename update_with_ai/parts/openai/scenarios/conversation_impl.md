@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:12:27Z
-CHANGE: Author openai conversation_impl concrete scenarios
-CODE_HASH: 9c6bf567dd0e
--->
-
 # Concrete scenarios for `openai_conversation_impl` (implementation)
 
 Scenarios 1 through 5 restate the caller observations of the interface scenarios and add, beside
@@ -71,9 +64,7 @@ with output "1 replacement" and the suppression key `symbol_lookup`.
    Realized by: the component's own stub construction, which keeps the tool name and the reminder
    of the superseded response; the component's own argument replacement in the correlating
    assistant invocation, which keeps every parameter key and every non-string value, preserves
-   file path parameters, and replaces every other string value with a stub marker retaining the
-   trailing characters within the supersede arg keep limit that `agent_config` resolves from the
-   agent session configuration; and JSON serialization mechanics through `json_ext`.
+   file path parameters, and replaces every other string value with a stub marker (`<tool_name> stubbed`, such as `edit_file stubbed`); and JSON serialization mechanics through `json_ext`.
 
 ### Scenario 3 — Changing the initial messages before the session runs
 
@@ -133,43 +124,37 @@ response.
 
 1. The tool manager returns four responses in order, each carrying the suppression key
    `workspace_scan`, with the outputs "13 files", "0 files", "7 files", and "2 files".
-   Observed: the response with output "13 files" is replaced in place by a stub marking it
-   superseded, the responses with outputs "0 files", "7 files", and "2 files" appear intact in the
-   model request, and that stub is the only superseded entry.
+   Observed: the oldest response with output "13 files" and its correlating assistant tool call are
+   deleted from the conversation, while the responses with outputs "0 files", "7 files", and "2
+   files" appear intact in the model request.
    Realized by: the component's own suppression-key buffer, which retains the three most recent
-   responses sharing `workspace_scan` and replaces every older response beyond that limit with a
-   stub.
+   responses sharing `workspace_scan` and deletes every older response beyond that limit along with
+   its correlating assistant tool call.
 
 2. The tool manager returns a fifth response carrying the suppression key `workspace_scan` with
    the output "5 files".
-   Observed: the responses with outputs "13 files" and "0 files" are both stubs marking them
-   superseded, and the responses with outputs "7 files", "2 files", and "5 files" appear intact.
+   Observed: the oldest remaining response with output "0 files" and its correlating assistant tool
+   call are also deleted from the conversation, and the responses with outputs "7 files", "2 files",
+   and "5 files" appear intact.
    Realized by: the same buffer, now holding the three most recent responses for `workspace_scan`
-   and having superseded the two oldest.
+   after deleting the two oldest responses and their correlating assistant tool calls.
 
-### Scenario 7 — Preserving the shape of the superseded arguments
+### Scenario 7 — Deleting superseded tool calls and responses
 
 Given: the conversation holds an assistant message carrying the tool call identifier `call_31` for
 `edit_file` with the serialized arguments
-`{"path": "/ws/alpha_scope_a/widget.md", "old": "widget note alpha", "new": "widget note beta",
-"replace_all": true, "count": 3}` and the response for `call_31` with output "1 replacement" and
-the suppression key `widget_edit`, and the supersede arg keep limit of the agent session
-configuration is 4.
+`{"path": "/ws/alpha_scope_a/widget.md", "old": "widget note alpha", "new": "widget note beta"}`
+and the response for `call_31` with output "1 replacement" and the suppression key `widget_edit`,
+followed by three more edits sharing the suppression key `widget_edit`.
 
-1. The tool manager returns a response carrying the suppression key `widget_edit` with the output
-   "0 replacements", and the agent asks the conversation for the model request.
-   Observed: the stub replaces the superseded response; its correlating assistant invocation keeps
-   the parameter names `path`, `old`, `new`, `replace_all`, and `count`; the parameter `path`
-   still carries `/ws/alpha_scope_a/widget.md`; the parameter `replace_all` still carries the
-   value true and the parameter `count` still carries the value 3; and the parameters `old` and
-   `new` carry stub markers retaining the trailing 4 characters `lpha` and `beta`.
-   Realized by: the component's own argument replacement over the correlating invocation, which
-   keeps every parameter key and every non-string value, preserves file path parameters, and
-   replaces each other string value with a stub marker retaining the trailing characters within
-   the supersede arg keep limit that `agent_config` resolves from the agent session configuration;
-   and JSON serialization mechanics through `json_ext`.
+1. When the fourth response carrying the suppression key `widget_edit` is appended, the agent asks
+   the conversation for the model request.
+   Observed: the oldest response for `call_31` and its correlating assistant invocation carrying
+   `call_31` are completely deleted from the model request, and neither appears in the request.
+   Realized by: the component's own deletion of superseded responses and their correlating assistant
+   tool calls beyond the retention buffer limit.
 
-### Scenario 8 — Reminders carried by stubs and inherited by new responses
+### Scenario 8 — Reminders carried across deleted responses and inherited by new responses
 
 Given: the conversation has been initialized with the user message "Clean the unit widget in
 scope_a.", and the tool manager returns a response carrying the suppression key `workspace_scan`,
@@ -178,12 +163,12 @@ the output "13 files", and the reminder "read the modified files before editing 
 1. That response is appended, a second response carrying the same suppression key
    `workspace_scan`, the output "0 files", and no reminder is appended, and the agent asks for the
    model request.
-   Observed: the stub replacing the first response carries the reminder "read the modified files
-   before editing again", the second response inherits that same reminder, and the assembled
-   request formats the reminder on both the stub and the second response.
-   Realized by: the component's own reminder retention on the superseded stub, its own inheritance
-   of that reminder by a newly appended response that omits one, and the visible tool message
-   content assembled from the notes, content, and reminders that `tool_provider` supplies.
+   Observed: the first response carries the reminder "read the modified files before editing again",
+   the second response inherits that same reminder, and the assembled request formats the reminder
+   on the second response even if older responses are subsequently deleted.
+   Realized by: the component's own reminder retention across deleted responses, its own
+   inheritance of that reminder by a newly appended response that omits one, and the visible tool
+   message content assembled from the notes, content, and reminders that `tool_provider` supplies.
 
 ### Scenario 9 — A synthetic invocation for an unprompted response
 
@@ -213,3 +198,10 @@ output "13 files", and the tool manager returns a response carrying the suppress
    anywhere in the request.
    Realized by: the component's own suppression-key buffer, which supersedes only responses
    sharing the key of the arriving response and preserves responses with unmatched keys intact.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-21T12:45:00Z
+CHANGE: Delete superseded tool calls and responses beyond buffer limit instead of stubbing arguments
+SPEC_QA_AUDIT: 2026-10-21T12:45:00Z
+-->

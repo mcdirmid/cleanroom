@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:00:00Z
-CHANGE: author subagent_harness_impl planning specification
-CODE_HASH: 466dcc16ecaf
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # subagent_harness_impl implementation component
 
 ## Intent
@@ -26,15 +18,15 @@ The subagent_harness_impl implementation component realizes the command harness 
 - The realization executes the configured subagent command template with workspace directory and prompt substitutions, configuring context token compaction limits in the environment. [execute_subagent_command_template]
 - The realization monitors subagent process lifecycle, enforcing configured timeout limits when specified. [monitor_subagent_process_lifecycle]
 - The realization inspects the blame buffer file for reported upstream defects. [inspect_blame_buffer_records]
-- The realization computes submitted targets from the set difference of pre-turn and post-turn pending work items. [compute_submitted_work_targets]
+- The realization computes submitted targets from the set difference of pre-round and post-round pending work items. [compute_submitted_work_targets]
 - The realization extracts token metrics from log output and calculates financial costs. [tally_log_token_metrics]
-- The realization synthesizes role turn results containing status, submitted items, blamed items, telemetry, and error diagnostics. [formulate_turn_outcome_result]
+- The realization synthesizes role round results containing status, submitted items, blamed items, telemetry, and error diagnostics. [formulate_turn_outcome_result]
 - The realization installs platform adapter factories into the harness registry mapping. [register_platform_harness_adapter]
 - The realization resolves harness adapters via registered platform factories, custom command templates, or simulation mode. [resolve_platform_command_templates]
 
 ### Woven Contracts
 
-- When executing a role subagent turn, the realization constructs role prompts, captures pre-execution pending targets, executes the subagent command template, monitors process lifecycle, inspects blame buffers, computes submitted targets, tallies token metrics, and formulates turn outcome results. [construct_role_workflow_prompt, capture_pre_execution_pending_work, execute_subagent_command_template, monitor_subagent_process_lifecycle, inspect_blame_buffer_records, compute_submitted_work_targets, tally_log_token_metrics, formulate_turn_outcome_result, subagent_harness: [format_subagent_task_prompt, capture_initial_pending_targets, spawn_subagent_process, await_subagent_process_lifecycle, inspect_workspace_blame_buffer, determine_submitted_targets, extract_process_token_telemetry, synthesize_role_turn_result], subagent_coordinator: [dispatch_concurrent_role_workers, poll_active_role_workers]]
+- When executing a role subagent round, the realization constructs role prompts, captures pre-execution pending targets, executes the subagent command template, monitors process lifecycle, inspects blame buffers, computes submitted targets, tallies token metrics, and formulates turn outcome results. [construct_role_workflow_prompt, capture_pre_execution_pending_work, execute_subagent_command_template, monitor_subagent_process_lifecycle, inspect_blame_buffer_records, compute_submitted_work_targets, tally_log_token_metrics, formulate_turn_outcome_result, subagent_harness: [format_subagent_task_prompt, capture_initial_pending_targets, spawn_subagent_process, await_subagent_process_lifecycle, inspect_workspace_blame_buffer, determine_submitted_targets, extract_process_token_telemetry, synthesize_role_turn_result], subagent_coordinator: [dispatch_concurrent_role_workers, poll_active_role_workers]]
 
 ## Grounding
 
@@ -53,5 +45,12 @@ The subagent_harness_impl implementation component realizes the command harness 
 
 ### Knowledge Requirements
 
-- Coordinator harness adapter protocols and turn result types.
+- Coordinator harness adapter protocols and round result types.
   - Grounded: [subagent_coordinator: [subagent_coordinator_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-19T17:15:00Z
+CHANGE: Instruct role subagents to edit only assigned targets, rely solely on check_files, and refrain from scratch tests
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: 17d1ee3d255e
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # manifest_loader interface component
 
 ## Intent
@@ -68,3 +60,10 @@ By synthesizing unit specifications and role definitions into target records, tr
   - Deferred: Evaluated in manifest_loader_impl during target record synthesis.
 - Populating target definitions, source file paths, and dependency edges in agent and dag storage.
   - Deferred: Delegated to node_storage and dag_storage in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

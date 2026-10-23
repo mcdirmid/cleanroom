@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Canonicalize change message terminology and split the loop operation list into declarative statements
-CODE_HASH: 49107bb04a64
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # loop interface component
 
 imports: dag_storage
@@ -31,3 +23,10 @@ The loop executes a cleaning pass over an acyclic subgraph rooted at a target no
 The loop also marks all nodes in an acyclic subgraph clean, materializing missing source files from declared templates, initializing timestamps and default change descriptions, and clearing unacted feedback.
 
 The loop marks a target node dirty by removing its last cleaned timestamp from in-band source metadata, injects a caller-supplied feedback message into a target node, and records a caller-supplied change message on a target node in graph storage, updating in-band source metadata and dynamically invalidating downstream dependencies.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Canonicalize change message terminology and split the loop operation list into declarative statements
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

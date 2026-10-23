@@ -100,15 +100,21 @@ class SystemTier(RootTier):
         super().__init__(name=name, parent=None)
 
 
-class InTier[T: LifecycleTier](Protocol):
-    """Marker protocol indicating membership in a specific lifecycle tier.
+@runtime_checkable
+class Singleton[T: LifecycleTier](Protocol):
+    """Protocol representing a singleton service scoped to a lifecycle tier.
 
-    Active services inheriting InTier[TierType] statically declare that they belong
-    to TierType (e.g. InTier[SystemTier]), allowing static analysis, IDEs, and Groundtalk
-    solvers to reason about singleton visibility and collaborator reachability.
+    Active services inheriting Singleton[TierType] statically declare that they belong
+    to TierType (e.g. Singleton[SystemTier]), allowing static analysis, IDEs, and Cleanroom
+    tools to reason about singleton visibility and collaborator reachability.
     """
 
     pass
+
+
+# Backwards compatibility alias during migration
+InTier = Singleton
+Initializable = Singleton
 
 
 system: SystemTier = SystemTier("system")
@@ -137,21 +143,7 @@ def _resolve_tier(val: LifecycleTier | str) -> LifecycleTier:
     raise TypeError(f"Expected LifecycleTier or str, got {type(val).__name__}")
 
 
-class Singleton:
-    """Base class for all singletons, combining tier declaration and lifecycle initialization."""
 
-    tier: LifecycleTier
-
-    def __init__(self, tier: Optional[LifecycleTier | str] = None) -> None:
-        if tier is not None:
-            self.tier = _resolve_tier(tier)
-
-    def initialize(self) -> None:
-        """Initializes the singleton instance after zero-argument creation. Default is empty."""
-        pass
-
-
-Initializable = Singleton
 
 
 class _InitState(Enum):
@@ -327,10 +319,11 @@ _active_scope: ContextVar[Optional[LifecycleScope]] = ContextVar(
 )
 
 # Guarantee module identity across import alias variations
-# (support.lib.lifecycle, update_python_with_ai.support.lib.lifecycle, update_with_ai.support.lib.lifecycle)
+# (support.lib.lifecycle, update_python_with_ai.support.lib.lifecycle)
 import types as _types
 
 _MODULE_ALIASES = (
+    "lifecycle",
     "support.lib.lifecycle",
     "update_python_with_ai.support.lib.lifecycle",
     "update_with_ai.support.lib.lifecycle",
@@ -360,9 +353,9 @@ if _this_module is not None:
             setattr(current, path_parts[-1], mod)
 
     for _alias in _MODULE_ALIASES:
-        if _alias not in sys.modules:
-            sys.modules[_alias] = _this_module
-        _ensure_module_tree(_alias.split("."), _this_module)
+        sys.modules[_alias] = _this_module
+        if "." in _alias:
+            _ensure_module_tree(_alias.split("."), _this_module)
 
 
 def get_default_registry() -> LifecycleRegistry:

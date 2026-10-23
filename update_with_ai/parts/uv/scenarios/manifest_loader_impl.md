@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:23:51Z
-CHANGE: Restrict reused scenarios to the declared imports closure
-CODE_HASH: 4c0d15db21ff
--->
-
 # Concrete scenarios for `uv_manifest_loader_impl` (implementation)
 
 Scenarios 1 through 13 restate the caller observations of the interface scenarios and add, beside
@@ -332,3 +325,9 @@ Given: role test declares a verification success message template `{unit_name}_t
 1. The caller asks the uv manifest loader for the manifest of the test-role target for widget.
    Observed: the manifest's verification success message is `widget_test.py passed static checks.`.
    Realized by: the component's own evaluation of the role verification success message template parameterized with unit metadata.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:23:51Z
+CHANGE: Restrict reused scenarios to the declared imports closure
+-->

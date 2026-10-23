@@ -1,17 +1,10 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-07T05:04:27Z
-LAST_CHANGED: 2026-10-10T21:52:00Z
-CHANGE: Clarify that cleanroom metadata headers are managed automatically by submit
-CODE_HASH: 7bf214d4ec11
--->
-
 # Guide: Planning to Low-Level Specification Alignment
 
 ## Summary
 
-The artifact is a Low-Level Python stub specification (`low/<name>.pyi` or `low/<name>_impl.pyi`) that structurally formalizes `planning/<name>.md`, submitted via `submit(target="<target_file>", change_summary="...")`. In multi-node sessions, multiple low-level specs are processed together by package-relative alias path. Cleanroom metadata headers (under `# --- CLEANROOM METADATA ---`) are managed automatically by Cleanroom tooling upon `submit(change_summary=...)`; direct edits to metadata headers are prohibited and rejected by editing tools. Authority hierarchy: when planning or high-level specifications and a low-level file disagree, the low-level file is wrong and must align with upstream specifications. External specifications (`low/<name>_ext.pyi`) formalize foreign API documentation, usage snippets, and mechanics from `high/<name>_ext.md` into module docstrings without AST code. Assembly specifications (`low/<name>_asm.pyi`) directly mirror assembly instructions from `high/<name>_asm.md` without standalone planning canvases, defining `__initialize__()` with `CONSTITUENTS:` guaranteeing that every constituent implementation is registered into the lifecycle.
+The artifact is a Low-Level Python stub specification (`low/<name>.pyi` or `low/<name>_impl.pyi`) that structurally formalizes `planning/<name>.md`, submitted via `submit(target="<target_file>", change_summary="...")`. In multi-node sessions, multiple low-level specs are processed together by package-relative alias path. Cleanroom metadata blocks at the bottom of the file (under `# --- CLEANROOM METADATA ---` and `# --- END CLEANROOM METADATA ---`) are managed automatically by Cleanroom tooling upon `submit(change_summary=...)`; direct edits to metadata blocks are prohibited and rejected by editing tools. Authority hierarchy: when planning or high-level specifications and a low-level file disagree, the low-level file is wrong and must align with upstream specifications. External specifications (`low/<name>_ext.pyi`) formalize foreign API documentation, usage snippets, and mechanics from `high/<name>_ext.md` into module docstrings without AST code. Assembly specifications (`low/<name>_asm.pyi`) directly mirror assembly instructions from `high/<name>_asm.md` without standalone planning canvases, defining `__initialize__()` with `CONSTITUENTS:` guaranteeing that every constituent implementation is registered into the lifecycle.
 
-Classes, type parameters, properties, operations, and tier memberships materialize in the AST. Types, records, and variants use domain-qualified compound names (e.g. `CommandResult`, `QueryFilter`, `WidgetPayload`). Planning contract requirements are assigned to type invariants (`INVARIANTS:`), caller prerequisites (`PRECONDITIONS:`), and operation outcomes (`POSTCONDITIONS:`). Interface stubs (`low/<name>.pyi`) define abstract protocols without collaborator names. Implementation stubs (`low/<name>_impl.pyi`) maintain 1:1 class parity and full member-level parity with their interfaces, and synthesize planning grounding into natural language arguments under `GROUNDING:` citing valid collaborator classes and methods. A specification may name a concrete file literal only if that file is its own artifact, named in its own planning; knowledge of external file formats, host markers, or shared state files must go through an imported `_ext` external specification. Verification is conducted by the `spec_qa` auditor role.
+Classes, type parameters, properties, operations, and tier memberships materialize in the AST. Types, records, and variants use domain-qualified compound names (e.g. `CommandResult`, `QueryFilter`, `WidgetPayload`). Planning contract requirements are assigned to type invariants (`INVARIANTS:`), caller prerequisites (`PRECONDITIONS:`), and operation outcomes (`POSTCONDITIONS:`). Classes decorated with `@poly_type` are purely abstract and cannot be refined by a poly type with the same short name (though they may be extended by other poly types to create new abstract object types); only singletons and data types can be instantiated in production code, while poly types can be instantiated in tests only to supply collaborator instances needed to test singletons. An `_impl` component with no singletons has nothing to test, and every `_impl.pyi` defining classes must declare at least one `@singleton_type` service. Interface stubs (`low/<name>.pyi`) define abstract protocols without collaborator names. Implementation stubs (`low/<name>_impl.pyi`) maintain 1:1 class parity and full member-level parity with their interfaces, and synthesize planning grounding into natural language arguments under `GROUNDING:` citing valid collaborator classes and methods. A specification may name a concrete file literal only if that file is its own artifact, named in its own planning; knowledge of external file formats, host markers, or shared state files must go through an imported `_ext` external specification. Verification is conducted by the `spec_qa` auditor role.
 
 > META: "Low-level specifications translate Planning Canvas specifications into formal Python interface stubs, type-level tier hierarchies, atomic contracts, and implementation grounding arguments under GROUNDING: without relational Datalog syntax."
 
@@ -25,7 +18,9 @@ Classes, type parameters, properties, operations, and tier memberships materiali
 - [ ] External specification stubs (`<name>_ext.pyi`) contain strictly a module docstring with `## External Mechanics & API Documentation`, `## Build Dependencies`, and `## Usage Snippets` sections without Python AST code
 - [ ] Top-level `__orphan__()` and `__initialize__()` take no parameters, return `None`, have no decorators, and contain strictly a docstring followed by `...`
 - [ ] Top-level `__orphan__()` docstrings contain strictly a summary and `POSTCONDITIONS:`; `__initialize__()` docstrings contain strictly a summary and `CONSTITUENTS:`
-- [ ] Every class definition is decorated with exactly one structural kind decorator from `framework`: `@singleton_type`, `@poly_type`, `@data_type`, or `@variant`
+- [ ] Every class definition is decorated with exactly one structural kind decorator from `support.lib.framework`: `@singleton_type`, `@poly_type`, `@data_type`, or `@variant`
+- [ ] In implementation specifications (`<name>_impl.pyi`) defining classes, at least one class is decorated with `@singleton_type`
+- [ ] Classes decorated with `@poly_type` do not refine a base poly type with the same short name (poly types can only be extended by other poly types with distinct names to create new abstract object types)
 - [ ] `@singleton_type` classes designate active services or tier definitions, expressing subordinate tier membership through `InTier[TierType]`
 - [ ] `@poly_type`, `@data_type`, and `@variant` decorators take no arguments
 - [ ] Subordinate lifecycle tiers inherit from `ChildTierOf[ParentTier]` where `ParentTier` is a declared `LifecycleTier` type
@@ -42,7 +37,7 @@ Classes, type parameters, properties, operations, and tier memberships materiali
 
 ## Document layout and imports
 
-- [ ] Specifications import structural decorators (`singleton_type`, `poly_type`, `data_type`, `variant`, `operation`, `override`) from `framework`
+- [ ] Specifications import structural decorators (`singleton_type`, `poly_type`, `data_type`, `variant`, `operation`, `override`) from `support.lib.framework`
 - [ ] Specifications import lifecycle tier primitives (`ChildTierOf`, `RootTier`, `SystemTier`, `InTier`, `get_tier`) from `support.lib.lifecycle`
 - [ ] Imported types from sibling or external specifications use direct symbol imports or module imports
 - [ ] Implementation specifications (`<name>_impl.pyi`) import implemented interface modules directly (`import <module>`) and preserve 1:1 class name and member parity
@@ -58,8 +53,13 @@ Classes, type parameters, properties, operations, and tier memberships materiali
 - [ ] Members of a lifecycle tier express tier membership by inheriting `InTier[TierType]` on their class definition
 - [ ] Interfaces define lifecycle tiers as static types rather than runtime factory values
 - [ ] Open multiton capabilities or polymorphic actions map to `@poly_type` without lifecycle arguments
+- [ ] Classes decorated with `@poly_type` are purely abstract and cannot be refined by a poly type with the same short name, though they can be extended by other poly types to create new abstract object types
+- [ ] Only singletons (`@singleton_type`) and data types (`@data_type`, `@variant`) can be instantiated in production code
+- [ ] Poly types can be instantiated in tests only to test singletons that need instances of poly types to be tested with
+- [ ] Implementation specifications (`<name>_impl.pyi`) defining classes must declare at least one `@singleton_type` service; an `_impl` component with no singletons has nothing to test
 - [ ] Passive entities, value objects, structural records, and messages map to `@data_type`
 - [ ] Discriminated sub-classifications and closed sum-type branches map to `@variant` subclassing their base data type
+- [ ] Subtyped data types and sum-type branches preserve Python dataclass inheritance ordering: classes extending a base `@data_type` must not declare non-default fields if an inherited field has a default value
 - [ ] Leaf `@data_type` and `@variant` classes declare `@dataclass(frozen=True)` and define state directly as typed dataclass fields documented under `Args:`
 - [ ] Data types never inherit from active singleton services; a data type may extend a stateless `@poly_type` protocol provided all requirements are satisfied
 
@@ -113,3 +113,11 @@ Classes, type parameters, properties, operations, and tier memberships materiali
 - [ ] Missing `@operation` decorator on non-property methods
 - [ ] Missing type annotations on operation parameters or return types
 - [ ] Using `pass` or executable logic in member bodies instead of `...`
+- [ ] Default field inheritance conflict — declaring non-default fields on a subclass extending a base `@data_type` that has fields with default values
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-07T05:04:27Z
+LAST_CHANGED: 2026-10-10T21:52:00Z
+CHANGE: Clarify that cleanroom metadata headers are managed automatically by submit
+CODE_HASH: 7bf214d4ec11
+-->

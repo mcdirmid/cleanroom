@@ -1,10 +1,4 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 6a6efd33ddca
-# --- END CLEANROOM METADATA ---
-
+from support.lib.lifecycle import Singleton, SystemTier
 from dataclasses import dataclass
 from typing import NewType, Protocol
 from update_with_ai.parts.core.lib import file_paths
@@ -19,7 +13,7 @@ class NodeDirectory(file_paths.WorkspacePath):
     pass
 
 
-class UvTarget(Protocol):
+class UvTarget(Singleton[SystemTier], Protocol):
     # Contract: normalize arbitrary target identifier string into a canonical node
     def normalize_target(
         self, target_identifier: TargetIdentifier
@@ -27,3 +21,9 @@ class UvTarget(Protocol):
 
     # Contract: extract workspace package directory of a node
     def extract_node_dir(self, node: dag_storage.DagNode) -> NodeDirectory: ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-07T00:00:00Z
+# CHANGE: new file
+# --- END CLEANROOM METADATA ---

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 406a0d0cf290
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # coordinate interface component
 
 imports: session, dag_storage, subgraph, verification, work_scheduler, submit, attribution
@@ -35,3 +27,10 @@ The session coordinator dispatches work scheduling across either an execution su
 The session coordinator dispatches verification checking, evaluating a specific target file when a target path is supplied or every open target when no target is supplied.
 
 The session coordinator dispatches target submission, validating preconditions and change summary rules before marking targets clean, and dispatches blame attribution and task failure, routing defect feedback to culprits and recording failure diagnostics.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

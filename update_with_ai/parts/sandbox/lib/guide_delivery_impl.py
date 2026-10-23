@@ -1,15 +1,6 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:03:51Z
-# CHANGE: Add the declared initialize operation and rewrite step advancement into explicit pass, exhausted-steps and verification-failure branches that re-present the active milestone
-# CODE_HASH: d71c880efd6a
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from typing import List, Optional
 from support.lib.lifecycle import (
-    InTier,
+
     LifecycleRegistry,
     Singleton,
     get_default_registry,
@@ -69,7 +60,7 @@ def _parse_guide_markdown(content: str) -> node_config.NodeGuide:
     )
 
 
-class GuideDelivery(guide_delivery.GuideDelivery, InTier[AgentSessionTier], Singleton):
+class GuideDelivery(guide_delivery.GuideDelivery):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -151,6 +142,13 @@ class GuideDelivery(guide_delivery.GuideDelivery, InTier[AgentSessionTier], Sing
                 "\n\n".join(part for part in parts if part)
             ),
         )
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:03:51Z
+# CHANGE: Add the declared initialize operation and rewrite step advancement into explicit pass, exhausted-steps and verification-failure branches that re-present the active milestone
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -159,7 +157,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         GuideDelivery,
-        keys=[GuideDelivery, guide_delivery.GuideDelivery, InTier[AgentSessionTier]],
+        keys=[GuideDelivery, guide_delivery.GuideDelivery],
         tier=agent_session,
     )
 

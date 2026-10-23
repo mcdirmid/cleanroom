@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T19:43:56Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_asm assembly specification
-CODE_HASH: e53d48a58b7f
-SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
--->
-
 # antigravity_asm assembly component
 
 assembles: antigravity_coordinator_impl, antigravity_harness_impl
@@ -25,3 +17,10 @@ Integrating Cleanroom with Google Antigravity requires coordinated assembly of w
 The antigravity_asm assembly component aggregates the implementations of the antigravity workspace, antigravity coordinator, and antigravity harness interfaces, providing a unified assembly for Google Antigravity integration.
 
 The antigravity assembly initializes its constituent implementations recursively and registers every singleton service with the agent session lifecycle tier.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T19:43:56Z
+LAST_CHANGED: 2026-10-12T21:45:00Z
+CHANGE: author antigravity_asm assembly specification
+SPEC_QA_AUDIT: 2026-10-15T19:43:56Z
+-->

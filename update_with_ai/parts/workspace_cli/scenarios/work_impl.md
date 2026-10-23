@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:06:09Z
-CHANGE: Align work_impl scenarios with the high-level specification
-CODE_HASH: b30243460916
--->
-
 # Concrete scenarios for `work_impl` (implementation)
 
 Scenarios 1 through 6 restate the caller observations of the interface scenarios and add, beside
@@ -73,9 +66,10 @@ beta precedes role alpha in role precedence.
    Observed: the alpha-role task for widget is among the blocked items and not among the ready
    items, and its blocked reason names the dirty beta-role prerequisite for the same unit.
    Realized by: role configuration lookups through `role_registry` for alpha's upstream
-   roles; `work_scheduler` for directory-scoped dependency checking and precedence; and
-   in-band source metadata extraction through `src_metadata` for the beta-role target's
-   dirtiness.
+   roles, including role dependencies, feedback role dependencies, star role dependencies, and
+   silent role dependencies; `work_scheduler` for directory-scoped dependency checking and
+   precedence; and in-band source metadata extraction through `src_metadata` for the beta-role
+   target's dirtiness.
 
 2. The agent brings the beta-role target for widget clean and asks again.
    Observed: the alpha-role task for widget is now ready.
@@ -210,3 +204,9 @@ prerequisite sprocket is dirty.
    Realized by: the component's own pending buffer write, the queue compiled from
    `work_scheduler` with the directory scope, dependency and contract lookups through
    `role_registry`, and dirtiness reasons from `src_metadata`.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-19T16:30:00Z
+CHANGE: evaluate role upstream prerequisites across silent role dependencies
+-->

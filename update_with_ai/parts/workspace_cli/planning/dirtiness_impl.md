@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-18T01:30:00Z
-CHANGE: evaluate producer intra-unit dependencies from declared role dependencies and cross-unit dependencies from star role dependencies
-CODE_HASH: 642d55e58899
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # dirtiness_impl implementation component
 
 ## Intent
@@ -16,8 +8,8 @@ Evaluating whether a target file in a role workspace is dirty requires deep sema
 
 ### Contracts
 
-- The workspace dirtiness evaluator inspects the target file corresponding to the unit and role, resolving candidate files from the canonical repository root first when available to inspect authoritative lifecycle timestamps rather than local projected workspace files, determining whether the file is absent, unparseable, or modified after its last cleaned timestamp. [inspect_target_file_dirtiness]
-- The workspace dirtiness evaluator inspects the in-band metadata across every feedback role target configured for an active auditor role, evaluating the unit as dirty when a feedback target is missing, lacks the required role audit attribute, or has been modified after its audit timestamp. [inspect_auditor_feedback_targets]
+- The workspace dirtiness evaluator inspects the target file corresponding to the unit and role, resolving candidate files from the canonical repository root first when available to inspect authoritative lifecycle timestamps rather than local projected workspace files, determining whether the file is absent, unparseable, or modified after its last cleaned timestamp, reporting uninitialized targets as requiring initial implementation rather than citing internal in-band metadata terminology. [inspect_target_file_dirtiness]
+- The workspace dirtiness evaluator inspects the in-band metadata across every feedback role target configured for an active auditor role, evaluating the unit as dirty when a feedback target is missing, uninitialized, lacks the required role audit attribute, or has been modified after its audit timestamp. [inspect_auditor_feedback_targets]
 - The workspace dirtiness evaluator evaluates intra-unit upstream contract dependencies for producer roles from declared role dependencies, and evaluates cross-unit dependencies from declared star role dependencies, evaluating the target as dirty when an upstream dependency or a star role dependency has been modified more recently than the last cleaned timestamp of the target. [inspect_producer_role_and_star_deps]
 - The workspace dirtiness evaluator resolves companion upstream specification contract files and interface definitions for candidate targets using dynamic role definitions, avoiding peer implementation file leakage. [discover_companion_contract_files]
 - The workspace dirtiness evaluator extracts cross-unit dependencies by filtering out silent cross-role dependencies and expanding star-role specification contracts dynamically defined for the active role. [resolve_cross_unit_dependencies]
@@ -50,3 +42,10 @@ Evaluating whether a target file in a role workspace is dirty requires deep sema
   - Grounded: [src_metadata: [source_metadata_service]]
 - Role definition resolution and pattern matching.
   - Grounded: [role_registry: [workspace_registry_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: Report uninitialized targets as requiring initial implementation without exposing internal metadata terminology
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

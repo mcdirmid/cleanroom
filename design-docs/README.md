@@ -54,7 +54,7 @@
 - **Key Concepts**:
   - Continuous prose with selective, single-level standalone bullet paragraphs.
   - Italics as lightweight semantic markers (`*term*`) introducing domain entities, properties, states, variants, and operations.
-  - Lifecycle tiers (`*system*`, `*agent session*`, `*turn*`) governing service scope and custody.
+  - Lifecycle tiers (`*system*`, `*agent session*`, `*step*`) governing service scope and custody.
 - **Reference**: [`high_level_spec_format.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/high_level_spec_format.md)
 
 ### Stage 2: Concrete Scenarios (`scenarios/*.md`)
@@ -129,8 +129,9 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 
 1. **Option 4: Subagent-Driven Cleanroom Workspaces (Primary Orchestration)**:
    - Autonomous multi-agent architecture driving pre-confined workspaces via a **Zero-Execution Coordinator**.
-   - Uniform support across **Google Antigravity** and **DeepSeek Harness (`dsh`)** (Goose support turned down and decommissioned).
-   - Built on canonical Cleanroom parts: `update_with_ai/parts/subagent/` (generic DAG coordinator and command harness) and platform parts (`parts/antigravity/` and `parts/dsh/` completed with direct JSON-RPC server orchestration and `dsh_telemetry`).
+   - Uniform support across **Google Antigravity** (with native desktop `agentapi` reactive IPC & headless tab dispatch) and **DeepSeek Harness (`dsh`)** (with direct JSON-RPC server reconciliation and `dsh_telemetry`; Goose support turned down and decommissioned).
+   - Dynamic parallel wave clustering (`lib` + `test`), downstream synchronization barriers, closed-loop blame defect propagation, and automatic workspace cancellation teardown.
+   - Built on canonical Cleanroom parts: `update_with_ai/parts/subagent/` (generic DAG coordinator and command harness) and platform parts (`parts/antigravity/` and `parts/dsh/`).
    - Detailed technical architecture in [`design.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md) Section 2; operational status in [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md).
 2. **Option 3: Subagentless Cleanroom Workspaces**:
    - Sibling workspace directories (`../role_workspaces/<workspace-name>_<role>_<dir>`) running independent conversational sessions in Antigravity or any IDE.
@@ -138,7 +139,7 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
    - Detailed technical architecture in [`design.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md) Section 2; operational status in [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md).
 3. **Option 1: Custom Loop Cleanroom**:
    - In-process autonomous runner driving OpenAI or Gemini APIs (`update_with_ai/parts/systems/uv_cleanroom_asm`).
-   - Traverses dependency graph nodes in topological order (`loop_cleaner.py`), running isolated turn loops (`loop_driver.py`) with repetition guards (`loop_guard.py`).
+   - Traverses dependency graph nodes in topological order (`loop_cleaner.py`), running isolated step loops (`loop_driver.py`) with repetition guards (`loop_guard.py`).
    - Production engine for headless continuous integration and batch cleaning via `uv run cleanroom clean --harness loop`.
    - Detailed technical architecture in [`design.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md) Section 2; operational status in [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md).
 4. **Option 2 (Archived Post-Mortem): Antigravity FastMCP Subagents**:
@@ -158,7 +159,8 @@ Cleanroom supports distinct cleaning paradigms, each optimized for different ope
 - **[Markdown Template Format & System Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/template_format.md)** (`template_format.md`): CommonMark HTML comment template directives (`<!-- if -->`, `<!-- for -->`, `<var>`).
 
 ### 4.2 Master Architecture, Technical Design & Roadmap
-- **[Cleanroom System Architecture & Technical Design](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md)** (`design.md`): Authoritative technical design specification covering execution paradigms (Options 1, 3, 4 and Option 2 post-mortem), physical sibling workspaces (`chmod 444`), in-band source metadata schema, logless auditor roles, specification grounding, native Python packaging (`pyproject.toml` + `uv`), and multi-harness telemetry.
+- **[Cleanroom System Architecture & Technical Design](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md)** (`design.md`): Authoritative technical design specification covering execution paradigms (Options 1, 3, 4 and Option 2 post-mortem), multi-wave orchestration barriers and cancellation teardown, physical sibling workspaces (`chmod 444`), in-band source metadata schema, logless auditor roles, specification grounding, native Python packaging (`pyproject.toml` + `uv`), DeepSeek Harness JSON-RPC streaming, and native Google Antigravity Desktop `agentapi` reactive IPC.
+- **[Cleanroom Subsystems & Modular Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/modular_subsystems_architecture.md)** (`modular_subsystems_architecture.md`): Architectural analysis of Cleanroom's 7 reusable subsystems, dependency audit post-mortem, strictly acyclic 5-layer greenfield architecture (10 standalone libraries), and phased migration roadmap.
 - **[Cleanroom Architecture, Execution Paradigms, Progress & Master Roadmap](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md)** (`todo.md`): Operational master document covering system execution status, completed milestones, verification metrics, quick CLI reference, and prioritized forward development roadmap.
 
 ### 4.3 Research & Foundational Specification Language

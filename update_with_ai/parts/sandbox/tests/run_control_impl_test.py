@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T11:59:00Z
-# CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
-# CODE_HASH: b4b1e2912957
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for run_control_impl per its grounding specification."""
 
 from __future__ import annotations
@@ -150,13 +141,20 @@ class MockToolManager:
             param = tool.parameters[param_name]
             try:
                 actual_bindings[param] = param.parameter_type.convert(wire_val)
-            except (tool_provider.ParameterConversionError, ValueError, TypeError) as e:
-                msg = getattr(e, "message", str(e))
+            except tool_provider.ParameterConversionError as e:
                 return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=tool_provider.ToolResponseContent(
-                        f"Error: Invalid argument for parameter '{param_name}': {msg}"
+                        f"Error: Invalid argument for parameter '{param_name}': {e.message}"
+                    ),
+                )
+            except (ValueError, TypeError) as e:
+                return tool_provider.ToolResponse(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=tool_provider.ToolResponseContent(
+                        f"Error: Invalid argument for parameter '{param_name}': {e}"
                     ),
                 )
         return tool.execute_tool(actual_bindings)
@@ -176,7 +174,7 @@ class MockEditManager:
     def set_file_hash(self, h: str, file: Optional[Any] = None) -> None:
         new_hash = file_editor.FileHash(h)
         if file is not None:
-            key = str(file.relative_path) if hasattr(file, "relative_path") else str(file)
+            key = str(file.relative_path) if isinstance(file, file_alias.FileAlias) else str(file)
             self.file_hashes[key] = new_hash
         else:
             self._current_hash = new_hash
@@ -189,7 +187,7 @@ class MockEditManager:
 
     def file_hash(self, file: Any) -> file_editor.FileHash:
         self.hashed_files.append(file)
-        key = str(file.relative_path) if hasattr(file, "relative_path") else str(file)
+        key = str(file.relative_path) if isinstance(file, file_alias.FileAlias) else str(file)
         return self.file_hashes.get(key, self._current_hash)
 
     def can_write(self, path: Any) -> tool_provider.ToolResponse:
@@ -380,7 +378,7 @@ class MockSessionCoordinator:
         alias: Any,
         state: coordinate.TargetState = coordinate.TargetState.OPEN,
     ) -> None:
-        alias_str = str(alias.relative_path) if hasattr(alias, "relative_path") else str(alias)
+        alias_str = str(alias.relative_path) if isinstance(alias, file_alias.FileAlias) else str(alias)
         if state == coordinate.TargetState.OPEN and node not in self.open_targets:
             self.open_targets.append(node)
         self.target_states[node] = state
@@ -397,7 +395,7 @@ class MockSessionCoordinator:
         return self.open_targets[0] if self.open_targets else None
 
     def get_node_for_alias(self, alias: Any) -> Optional[dag_storage.DagNode]:
-        if hasattr(alias, "relative_path"):
+        if isinstance(alias, file_alias.FileAlias):
             alias_str = str(alias.relative_path)
         else:
             alias_str = str(alias)
@@ -454,9 +452,9 @@ class MockSessionCoordinator:
             role_def = self.node_config.role_definitions.get(role_clean)
             if role_def is not None:
                 is_auditor = bool(
-                    getattr(role_def, "is_auditor", False)
-                    or getattr(role_def, "audit_tag", None)
-                    or not getattr(role_def, "src_pattern", "")
+                    role_def.is_auditor
+                    or role_def.audit_tag
+                    or not role_def.src_pattern
                 )
 
         summary_str = str(change_summary or "").strip()
@@ -480,7 +478,7 @@ class MockSessionCoordinator:
                     remaining_open_targets=list(self.open_targets),
                 )
             if not has_modifications and self.node_config is not None:
-                has_feedback = bool(getattr(self.node_config, "feedback", None))
+                has_feedback = bool(self.node_config.feedback)
                 if target is not None and self.storage is not None:
                     node_msgs = self.storage.get_messages(target)
                     if any(isinstance(m, dag_storage.FeedbackMessage) for m in node_msgs):
@@ -488,11 +486,10 @@ class MockSessionCoordinator:
                 if (
                     not has_feedback
                     and target is not None
-                    and hasattr(self.node_config, "per_node_info_by_node")
                     and self.node_config.per_node_info_by_node
                 ):
                     info = self.node_config.per_node_info_by_node.get(target)
-                    if info and getattr(info, "feedback", None):
+                    if info and info.feedback:
                         has_feedback = True
                 if has_feedback:
                     return coordinate.ControlDispatchOutcome(
@@ -527,12 +524,12 @@ class MockSessionCoordinator:
                 self.open_targets.remove(target)
         if blame_target_alias and self.storage is not None:
             blamed_node = self.get_node_for_alias(blame_target_alias)
-            if not blamed_node and hasattr(self, "node_config") and self.node_config:
+            if not blamed_node and self.node_config is not None:
                 for targets in self.node_config.blame_targets_by_node.values():
                     for t in targets:
-                        t_alias: Any = getattr(t, "alias", t)
-                        if hasattr(t_alias, "relative_path") and str(t_alias.relative_path) == str(blame_target_alias):
-                            blamed_node = getattr(t, "owning_node", None)
+                        rel = t.relative_path if isinstance(t, file_alias.FileAlias) else str(t)
+                        if str(rel) == str(blame_target_alias):
+                            blamed_node = t.owning_node if isinstance(t, file_alias.BoundFile) else None
                             break
             if blamed_node:
                 msg = dag_storage.FeedbackMessage(
@@ -796,6 +793,26 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.mock_session_coordinator.is_cached = True
             second_resp = tool.execute_tool({})
             self.assertIsNotNone(second_resp.content)
+            self.assertIn("Verification status is unchanged", str(second_resp.content))
+
+    def test_check_files_tool_unchanged_hashes_still_presents_diagnostics_on_failure(self) -> None:
+        """Postcondition: WHEN target file hashes have not changed but verification is failing, MUST present diagnostics."""
+        node = _make_node("unit1")
+        self.mock_storage.mark_node_dirty(node)
+        self.mock_session_coordinator.register_node(node, "pkg/unit1.py")
+        check = MockVerificationCheck(passed=False, diagnostic="pytest failed on test_foo")
+        self.mock_node_config.verification_checks = [check]
+        self.mock_session_coordinator.verification_result = False
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            tool = scope.get_singleton(CheckFilesTool)
+            first_resp = tool.execute_tool({})
+            self.assertTrue(first_resp.is_failed)
+            self.assertIn("pytest failed on test_foo", str(first_resp.content))
+            self.mock_session_coordinator.is_cached = True
+            second_resp = tool.execute_tool({})
+            self.assertTrue(second_resp.is_failed)
+            self.assertIn("pytest failed on test_foo", str(second_resp.content))
+            self.assertNotIn("Verification status is unchanged", str(second_resp.content))
 
     def test_check_files_tool_presents_configured_verification_success_message(self) -> None:
         """Postcondition: CheckFilesTool presenting configured verification success messages."""
@@ -1039,6 +1056,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             controller = scope.get_singleton(RunController)
             self.assertEqual(list(controller.verification_checks), [])
             controller.update_verification()
+            self.assertTrue(controller.is_passed)
+            self.assertFalse(controller.is_unchanged)
+            self.assertEqual(controller.diagnostic_output, "")
 
     def test_get_work_tool_installs_blame_when_blame_targets_exist(self) -> None:
         """Postcondition: WHEN ready dirty nodes obtained and blame targets exist, MUST install blame tool."""
@@ -1157,3 +1177,12 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T11:59:00Z
+# CHANGE: Install advance tool and specify follow-up execution when guide step mode is active in get work tool
+# CODE_HASH: b4b1e2912957
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

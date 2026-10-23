@@ -1,17 +1,10 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-13T20:00:00Z
-# CHANGE: author dsh_harness_impl implementation low-level specification
-# CODE_HASH: 8ce8d11bf0f5
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for dsh_harness_impl."""
 
 from typing import Any, Optional
-from framework import operation, override, poly_type, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, poly_type, singleton_type
+from support.lib.lifecycle import Singleton
 import session as agent_session
+import cleanroom_files_ext
 import dsh_ext
 import dsh_harness
 import dsh_telemetry
@@ -28,7 +21,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
     - Launches dsh headless CLI processes bound to dispatch.workspace_dir with Cordis overlay
       patches, tracks initial pending targets via work.WorkspaceWorkManager,
       awaits completion, extracts token telemetry via DshTelemetryParser, inspects blame buffers,
-      and returns subagent_coordinator.RoleTurnResult objects.
+      and returns subagent_coordinator.RoleRoundResult objects.
     """
 
     @operation
@@ -41,10 +34,14 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
         GROUNDING:
         - Prepares role-tailored task prompts distinguishing auditor roles from authoring roles,
-          records initial pending targets seeded from ready targets via work,
+          incorporates coordinator reminder directives when provided in role dispatch directives,
+          directs workers to read AGENTS.md in the workspace root and discover work via get_work without inlining target lists or writing pending buffers to disk prior to worker execution,
+          instructs authoring roles to edit only assigned target files, rely solely on check_files,
+          and refrain from implementing scratch tests or auxiliary files,
+          derives initial pending targets in task memory from assigned ready targets or disk pending work without writing pending buffers to disk prior to worker execution,
           evaluates server reachability via dsh_telemetry,
-          dispatches over the local RPC bridge when reachable to stream progress to the desktop UI without file lock contention,
-          or executes the dsh CLI process bound to dispatch.workspace_dir using headless profile and overlay patches conforming to dsh_ext when unreachable,
+          dispatches over the local RPC bridge when reachable with retry backoff to stream progress to the desktop UI without file lock contention (failing cleanly without attempting incompatible headless CLI fallback resumption),
+          or executes the dsh CLI process bound to dispatch.workspace_dir using headless profile and overlay patches conforming to dsh_ext when the server is absent,
           and returns task handle.
         """
         ...
@@ -54,15 +51,16 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
     def await_role(
         self,
         task_handle: str,
-    ) -> subagent_coordinator.RoleTurnResult:
-        """Awaits DeepSeek Harness subagent turn completion and returns outcome result.
+    ) -> subagent_coordinator.RoleRoundResult:
+        """Awaits DeepSeek Harness subagent round completion and returns outcome result.
 
         GROUNDING:
-        - Awaits RPC turn completion or process termination without mandatory timeout unless configured, computes buffer
-          differences seeded from ready targets via work, inspects blame buffers and
-          turn logs for attributed defects, scrapes active session identifiers from event logs and
-          saves to .cleanroom/dsh_session_id.txt, assigns unresolved status when zero targets are submitted or blamed,
-          parses session telemetry via dsh_telemetry, and constructs subagent_coordinator.RoleTurnResult.
+        - Awaits RPC round completion or process termination without mandatory timeout unless configured, computes buffer
+          differences seeded from ready targets or disk pending work via work, inspects cleanroom_files_ext.BLAME_BUFFER_FILE and
+          candidate cleanroom logs across workspace root and scoped directories for attributed defects and action records matching change, clean, submitted, and audit records, scrapes active session identifiers from event logs and
+          saves to .cleanroom/dsh_session_id.txt (resetting session on failure), assigns unresolved status when zero targets are submitted or blamed,
+          tracks session token baselines across rounds, calculates incremental round deltas from cumulative session metrics across persistent session rounds to prevent double-counting (evicting baselines upon failed rounds or session reset),
+          parses session telemetry via dsh_telemetry, and constructs subagent_coordinator.RoleRoundResult.
         """
         ...
 
@@ -71,12 +69,12 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
     def poll_role(
         self,
         task_handle: str,
-    ) -> Optional[subagent_coordinator.RoleTurnResult]:
-        """Polls DeepSeek Harness subagent turn execution without blocking.
+    ) -> Optional[subagent_coordinator.RoleRoundResult]:
+        """Polls DeepSeek Harness subagent round execution without blocking.
 
         GROUNDING:
         - Polls process status via poll(), returning None if still running,
-          or processing blame records, buffer differences, and session telemetry upon completion.
+          or processing cleanroom_files_ext.BLAME_BUFFER_FILE and candidate cleanroom logs across workspace root and scoped directories, buffer differences, and session telemetry upon completion.
         """
         ...
 
@@ -95,10 +93,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
 
 @singleton_type("agent_session")
-class DshHarnessManager(
-    dsh_harness.DshHarnessManager,
-    InTier[agent_session.AgentSessionTier],
-):
+class DshHarnessManager(dsh_harness.DshHarnessManager):
     """Realizes management of DeepSeek Harness execution adapters and telemetry parsing.
 
     GROUNDING:
@@ -144,3 +139,10 @@ class DshHarnessManager(
         - Returns a singleton or reusable instance of DshTelemetryParser.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-20T22:50:00Z
+# LAST_CHANGED: 2026-10-20T23:45:00Z
+# CHANGE: Derive pending_before from ready targets or disk, search scoped cleanroom logs, and match change and clean action records
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

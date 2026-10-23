@@ -7,6 +7,7 @@ import shutil
 import stat
 import sys
 import tempfile
+from typing import Any
 import unittest
 
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
@@ -36,6 +37,8 @@ compute_role_work_queue = cleanroom_role_tool.compute_role_work_queue
 
 
 class CleanroomRoleToolTest(unittest.TestCase):
+    phase_cm: Any = None
+
     def setUp(self) -> None:
         from update_with_ai.parts.workspace.lib import workspace_asm
         from support.lib.lifecycle import enter_phase
@@ -56,6 +59,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.test_dir = os.path.realpath(tempfile.mkdtemp())
         self.fake_repo = os.path.join(self.test_dir, "fake_repo")
         os.makedirs(self.fake_repo, exist_ok=True)
+        os.environ["BUILD_WORKSPACE_DIRECTORY"] = self.fake_repo
         with open(os.path.join(self.fake_repo, "cleanroom.toml"), "w", encoding="utf-8") as f:
             f.write('methodology = "//update_python_with_ai"\n')
         roles_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../update_python_with_ai/cleanroom_roles.toml"))
@@ -64,12 +68,16 @@ class CleanroomRoleToolTest(unittest.TestCase):
             py_dir = os.path.join(self.fake_repo, "update_python_with_ai")
             os.makedirs(py_dir, exist_ok=True)
             shutil.copyfile(roles_src, os.path.join(py_dir, "cleanroom_roles.toml"))
+            sup_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../update_python_with_ai/support"))
+            if os.path.isdir(sup_src):
+                shutil.copytree(sup_src, os.path.join(py_dir, "support"), dirs_exist_ok=True)
         self.orig_cwd = os.getcwd()
 
     def tearDown(self) -> None:
-        if hasattr(self, "phase_cm"):
+        if self.phase_cm is not None:
             self.phase_cm.__exit__(None, None, None)
         os.chdir(self.orig_cwd)
+        os.environ.pop("BUILD_WORKSPACE_DIRECTORY", None)
         for root, dirs, files in os.walk(self.test_dir):
             for d in dirs:
                 try:
@@ -95,6 +103,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             low_file,
             last_cleaned="2026-10-04T12:00:00Z",
             last_changed="2026-10-04T12:00:00Z",
+            audits={"SPEC_QA_AUDIT": "2026-10-04T12:00:00Z"},
         )
 
         lib_ws = commission_workspace(
@@ -136,7 +145,11 @@ class CleanroomRoleToolTest(unittest.TestCase):
         ret_no_sum = cleanroom_role_tool.main(["submit", target])
         self.assertEqual(ret_no_sum, 1)
 
-        # 2. Modified/new file submitted WITH summary -> succeeds (ret=0)
+        # 2. Must run check_files on modified file before submitting with summary
+        ret_chk = cleanroom_role_tool.main(["check_files", target])
+        self.assertEqual(ret_chk, 0)
+
+        # 3. Modified/new file submitted WITH summary -> succeeds (ret=0)
         ret = cleanroom_role_tool.main(["submit", target, "Implemented config parser"])
         self.assertEqual(ret, 0)
 
@@ -215,7 +228,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.assertIn("QA_AUDIT", main_meta.audits)
 
     def test_blame_command_direct_mutation(self) -> None:
-        """Verifies blaming directly mutates upstream contract in main without buffer."""
+        """Verifies blaming directly mutates upstream contract in main and records blame buffer."""
         part_dir = os.path.join(self.fake_repo, "staging/parts/agent")
         os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
 
@@ -267,9 +280,9 @@ class CleanroomRoleToolTest(unittest.TestCase):
         )
         self.assertEqual(ret, 0)
 
-        # No buffer written
+        # Blame buffer written in workspace root for harnesses to observe
         buf_path = os.path.join(spec_qa_ws, ".cleanroom_blame_buffer.json")
-        self.assertFalse(os.path.isfile(buf_path))
+        self.assertTrue(os.path.isfile(buf_path))
 
         # Directly mutated in main
         meta_low = src_metadata.extract_metadata(low_f)
@@ -468,6 +481,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             "<!-- CLEANROOM METADATA\n"
             "LAST_CLEANED: 2026-10-04T12:00:00Z\n"
             "LAST_CHANGED: 2026-10-04T12:00:00Z\n"
+            "SPEC_QA_AUDIT: 2026-10-04T12:00:00Z\n"
             "-->\n"
         )
         os.makedirs(os.path.join(part_dir, "high"), exist_ok=True)
@@ -482,6 +496,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             low_base,
             last_cleaned="2026-10-04T12:00:00Z",
             last_changed="2026-10-04T12:00:00Z",
+            audits={"SPEC_QA_AUDIT": "2026-10-04T12:00:00Z"},
         )
         # derived low is dirty (missing last_cleaned)
         with open(low_derived, "w", encoding="utf-8") as f:
@@ -512,6 +527,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             low_derived,
             last_cleaned="2026-10-04T12:00:00Z",
             last_changed="2026-10-04T12:00:00Z",
+            audits={"SPEC_QA_AUDIT": "2026-10-04T12:00:00Z"},
         )
         ready2, blocked2 = compute_role_work_queue(
             "lib", "staging", self.fake_repo
@@ -533,6 +549,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             low_file,
             last_cleaned="2026-10-04T12:00:00Z",
             last_changed="2026-10-04T12:00:00Z",
+            audits={"SPEC_QA_AUDIT": "2026-10-04T12:00:00Z"},
         )
 
         lib_ws = commission_workspace(
@@ -559,6 +576,8 @@ class CleanroomRoleToolTest(unittest.TestCase):
         ws_lib = os.path.join(lib_ws, "staging/parts/agent/lib/config.py")
         with open(ws_lib, "w", encoding="utf-8") as f:
             f.write("def get_config() -> str: return 'ok'\n")
+        ret_chk = cleanroom_role_tool.main(["check_files", "staging/parts/agent/lib/config.py"])
+        self.assertEqual(ret_chk, 0)
         ret_sub = cleanroom_role_tool.main(
             ["submit", "staging/parts/agent/lib/config.py", "implemented get_config"]
         )
@@ -574,6 +593,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             low_file,
             last_cleaned="2099-01-01T00:00:00Z",
             last_changed="2099-01-01T00:00:00Z",
+            audits={"SPEC_QA_AUDIT": "2099-01-01T00:00:00Z"},
         )
         ret3 = cleanroom_role_tool.main(["get_work"])
         self.assertEqual(ret3, 1)
@@ -738,7 +758,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         out = StringIO()
         with contextlib.redirect_stdout(out):
             ret = cleanroom_role_tool.main([
-                "orchestrate", "staging", "planning", "--repo-root", self.fake_repo
+                "orchestrate", "staging", "planning", "--repo-root", self.fake_repo, "--antigravity-dispatch", "none"
             ])
         self.assertEqual(ret, 0)
         output = out.getvalue()
@@ -748,11 +768,11 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.assertTrue(os.path.isdir(os.path.join(plan_ws, "bin")))
 
         # 2. When clean -> orchestrate decommissions provisioned workspaces
-        os.remove(high_file)
+        shutil.rmtree(os.path.join(self.fake_repo, "staging/parts/agent"), ignore_errors=True)
         out2 = StringIO()
         with contextlib.redirect_stdout(out2):
             ret2 = cleanroom_role_tool.main([
-                "orchestrate", "staging", "planning", "--repo-root", self.fake_repo
+                "orchestrate", "staging", "planning", "--repo-root", self.fake_repo, "--antigravity-dispatch", "none"
             ])
         self.assertEqual(ret2, 0)
         output2 = out2.getvalue()
@@ -816,6 +836,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
             low_file,
             last_cleaned="2026-10-04T12:00:00Z",
             last_changed="2026-10-04T12:00:00Z",
+            audits={"SPEC_QA_AUDIT": "2026-10-04T12:00:00Z"},
         )
 
         rel_path = "staging/parts/agent/low/feedback_target.pyi"
@@ -1130,6 +1151,58 @@ class CleanroomRoleToolTest(unittest.TestCase):
                     content = f.read()
                 self.assertIn("Autonomous Coordinator", content)
                 self.assertNotIn("/Users/seanmcdirmid", content)
+
+    def test_dispatch_antigravity_coordination_message(self) -> None:
+        """Verifies dispatch_antigravity_coordination invokes agentapi send-message."""
+        from unittest.mock import patch, MagicMock
+        with patch.dict(os.environ, {
+            "ANTIGRAVITY_AGENTAPI_EXE": "/fake/bin/language_server",
+            "ANTIGRAVITY_CONVERSATION_ID": "conv-456",
+        }):
+            mock_proc = MagicMock(returncode=0, stdout="", stderr="")
+            with patch("subprocess.run", return_value=mock_proc) as mock_run:
+                res = cleanroom_role_tool.dispatch_antigravity_coordination("my_scope", mode="message")
+                self.assertTrue(res)
+                mock_run.assert_called_once()
+                cmd = mock_run.call_args[0][0]
+                self.assertEqual(cmd[0], "/fake/bin/language_server")
+                self.assertEqual(cmd[1], "agentapi")
+                self.assertEqual(cmd[2], "send-message")
+                self.assertIn("--title=Cleanroom Coordination [my_scope]", cmd)
+                self.assertIn("conv-456", cmd)
+                self.assertIn("Clean all dirty nodes in my_scope using cleanroom_coordinator.", cmd)
+
+    def test_dispatch_antigravity_coordination_new_conversation(self) -> None:
+        """Verifies dispatch_antigravity_coordination spawns new conversation tab."""
+        from unittest.mock import patch, MagicMock
+        with patch.dict(os.environ, {
+            "ANTIGRAVITY_AGENTAPI_EXE": "/fake/bin/language_server",
+        }):
+            mock_proc = MagicMock(returncode=0, stdout="", stderr="")
+            with patch("subprocess.run", return_value=mock_proc) as mock_run:
+                res = cleanroom_role_tool.dispatch_antigravity_coordination("my_scope", mode="new-conversation", model="gemini-pro")
+                self.assertTrue(res)
+                mock_run.assert_called_once()
+                cmd = mock_run.call_args[0][0]
+                self.assertEqual(cmd[0], "/fake/bin/language_server")
+                self.assertEqual(cmd[1], "agentapi")
+                self.assertEqual(cmd[2], "new-conversation")
+                self.assertIn("--model=pro", cmd)
+                self.assertIn("--title=Cleanroom Coordinator: my_scope", cmd)
+                self.assertIn("--", cmd)
+                self.assertIn("Clean all dirty nodes in my_scope using cleanroom_coordinator.", cmd)
+
+    def test_dispatch_antigravity_coordination_disabled_or_missing(self) -> None:
+        """Verifies dispatch_antigravity_coordination handles none and missing env gracefully."""
+        self.assertFalse(cleanroom_role_tool.dispatch_antigravity_coordination("my_scope", mode="none"))
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(cleanroom_role_tool.dispatch_antigravity_coordination("my_scope", mode="message"))
+
+    def test_benchmark_subcommand(self) -> None:
+        """Verifies cleanroom benchmark command dispatches properly with arguments."""
+        ret = cleanroom_role_tool.main(["benchmark", "--suite=dag-engine", "--models=deepseek-flash", "--harness=dsh", "--dry-run"])
+        self.assertEqual(ret, 0)
 
 
 if __name__ == "__main__":

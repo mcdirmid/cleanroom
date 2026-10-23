@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T04:07:59Z
-CHANGE: Add the missing inherited deferred requirement for target manifest discovery and in-band metadata parsing
-CODE_HASH: 578503f4b274
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # src_storage_impl implementation component
 
 ## Intent
@@ -99,3 +91,10 @@ By storing clean status, change summaries, and feedback directly within source f
   - Grounded: [src_metadata: [source_metadata_service], file_paths: [path_resolution_service]]
 - Updating in-band metadata timestamps, feedback, and change descriptions.
   - Grounded: [src_metadata: [source_metadata_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T04:07:59Z
+CHANGE: Add the missing inherited deferred requirement for target manifest discovery and in-band metadata parsing
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

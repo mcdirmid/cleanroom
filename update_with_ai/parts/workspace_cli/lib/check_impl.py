@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-10-14T18:25:00Z
-# CHANGE: Implement check_impl
-# CODE_HASH: 2069569f1858
-# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for check_impl."""
 
 from __future__ import annotations
@@ -25,7 +16,7 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
-from update_with_ai.parts.agent.lib import session as agent_session
+from update_with_ai.parts.agent.lib import node_config, session as agent_session
 from update_with_ai.parts.control.lib import submit
 from update_with_ai.parts.workspace.lib import (
     provision,
@@ -46,16 +37,78 @@ def is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     return bool(r_def.audit_tag or not r_def.src_pattern)
 
 
-def copy_file_with_perms(
-    src: str,
-    dst: str,
-    readonly: bool = False,
-    executable: bool = False,
-) -> None:
-    """Copies file content and applies exact permissions, delegating to WorkspaceProvisioner."""
-    get_singleton(provision.WorkspaceProvisioner).copy_file_with_permissions(
-        src, dst, readonly=readonly, executable=executable
-    )
+def record_check_executed(ws_root: str, target_path: str, passed: bool) -> None:
+    """Records file verification execution and content hash in .cleanroom/.last_check_files.json."""
+    cleanroom_dir = os.path.join(ws_root, ".cleanroom")
+    os.makedirs(cleanroom_dir, exist_ok=True)
+    rec_file = os.path.join(cleanroom_dir, ".last_check_files.json")
+    records: Dict[str, Any] = {}
+    if os.path.isfile(rec_file):
+        try:
+            with open(rec_file, "r", encoding="utf-8") as f:
+                records = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            records = {}
+    norm_path = os.path.realpath(target_path)
+    mtime = os.path.getmtime(target_path) if os.path.isfile(target_path) else 0.0
+    import hashlib
+    content_hash = ""
+    if os.path.isfile(target_path):
+        try:
+            with open(target_path, "rb") as f:
+                content_hash = hashlib.sha256(f.read()).hexdigest()
+        except OSError:
+            content_hash = ""
+    rec = {
+        "mtime": mtime,
+        "content_hash": content_hash,
+        "passed": passed,
+    }
+    records[norm_path] = rec
+    try:
+        rel_path = os.path.relpath(norm_path, ws_root)
+        records[rel_path] = rec
+    except ValueError:
+        pass
+    try:
+        with open(rec_file, "w", encoding="utf-8") as f:
+            json.dump(records, f, indent=2)
+    except OSError:
+        pass
+
+
+def _is_checked_since_modification(ws_root: str, target_path: str) -> bool:
+    """Returns True if the target has been checked via check_files since its last modification."""
+    rec_file = os.path.join(ws_root, ".cleanroom", ".last_check_files.json")
+    if not os.path.isfile(rec_file):
+        return False
+    try:
+        with open(rec_file, "r", encoding="utf-8") as f:
+            records = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return False
+    norm_path = os.path.realpath(target_path)
+    rel_path = ""
+    try:
+        rel_path = os.path.relpath(norm_path, ws_root)
+    except ValueError:
+        pass
+    rec = records.get(norm_path) or (records.get(rel_path) if rel_path else None)
+    if not rec:
+        return False
+    if not os.path.isfile(target_path):
+        return True
+    import hashlib
+    try:
+        with open(target_path, "rb") as f:
+            cur_hash = hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return False
+    rec_hash = rec.get("content_hash", "")
+    if rec_hash:
+        return bool(cur_hash == rec_hash)
+    cur_mtime = os.path.getmtime(target_path)
+    return bool(cur_mtime <= rec.get("mtime", 0.0))
 
 
 def _extract_unacted_feedback(file_path: str) -> List[str]:
@@ -125,7 +178,7 @@ def _resolve_main_root(
     return os.path.realpath(reg.discover_repository_root(ws_root))
 
 
-def compute_role_work_queue(
+def _compute_role_work_queue(
     role_name: str,
     dir_scope: str,
     repo_root: str,
@@ -142,14 +195,24 @@ def compute_role_work_queue(
         stem = os.path.splitext(os.path.basename(it.target_file))[0]
         if stem.endswith("_test"):
             stem = stem[:-5]
+        dirtiness_reasons = (
+            it.dirtiness_reasons
+            if hasattr(it, "dirtiness_reasons")
+            else (it.reasons if hasattr(it, "reasons") else ())
+        )
+        dependency_files = (
+            it.dependency_files
+            if hasattr(it, "dependency_files")
+            else (it.dependencies if hasattr(it, "dependencies") else ())
+        )
+        contract_files = it.contract_files if hasattr(it, "contract_files") else ()
         return {
             "unit_name": stem,
             "role": it.role_name,
             "target_file": it.target_file,
-            "reasons": list(it.dirtiness_reasons),
-            "dependencies": list(it.dependency_files),
-            "contract_files": list(it.contract_files),
-            "blocked_reasons": list(it.blocked_reasons),
+            "reasons": list(dirtiness_reasons or ()),
+            "contract_files": list(contract_files or ()),
+            "dependencies": list(dependency_files or ()),
         }
 
     return [_to_dict(it) for it in ready_items], [_to_dict(it) for it in blocked_items]
@@ -172,8 +235,7 @@ def _find_agent_node_config_module() -> Any:
 
 
 def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
-    node_cfg_mod = _find_agent_node_config_module()
-    node_cfg_cls = getattr(node_cfg_mod, "NodeConfig", None) if node_cfg_mod else None
+    node_cfg_cls = node_config.NodeConfig
     cfg = None
     if node_cfg_cls is not None:
         try:
@@ -211,21 +273,75 @@ def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
                 self.per_node_info_by_node = {}
 
         cli_cfg = CliNodeConfig(role_defs)
-        keys: List[Any] = [CliNodeConfig]
-        if node_cfg_cls is not None:
-            keys.append(node_cfg_cls)
+        keys: List[Any] = [CliNodeConfig, node_config.NodeConfig]
         reg.register_instance(
             cli_cfg,
             keys=keys,
             tier=agent_session.agent_session,
         )
     else:
-        if not hasattr(cfg, "role_definitions") or not getattr(cfg, "role_definitions", None):
-            setattr(cfg, "role_definitions", role_defs)
+        cfg_any: Any = cfg
+        if not hasattr(cfg_any, "role_definitions") or not cfg_any.role_definitions:
+            setattr(cfg_any, "role_definitions", role_defs)
+
+
+def _resolve_active_model_entry(
+    meta: Optional[Dict[str, Any]],
+    ws_root: str,
+    main_root: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Resolves active model configuration entry from model_configs.toml."""
+    search_roots = [main_root, ws_root] if main_root else [ws_root]
+    for s_root in search_roots:
+        if not s_root:
+            continue
+        model_cfg_path = os.path.join(s_root, "model_configs.toml")
+        if os.path.isfile(model_cfg_path):
+            try:
+                import tomllib
+                with open(model_cfg_path, "rb") as mf:
+                    m_data = tomllib.load(mf)
+                target_model = (meta.get("model") if meta else None) or m_data.get("default")
+                if target_model and "models" in m_data and target_model in m_data["models"]:
+                    return m_data["models"][target_model]
+            except Exception:
+                pass
+    return None
+
+
+def _resolve_effective_max_failures(
+    meta: Optional[Dict[str, Any]],
+    ws_root: str,
+    main_root: Optional[str] = None,
+) -> int:
+    """Resolves effective max test failures threshold, defaulting to 5 for local engines and 100 for non-local."""
+    if meta and meta.get("max_failures") is not None:
+        try:
+            return int(meta["max_failures"])
+        except (ValueError, TypeError):
+            pass
+
+    m_entry = _resolve_active_model_entry(meta, ws_root, main_root)
+    if m_entry is not None:
+        mf_val = m_entry.get("max_failures")
+        if mf_val is not None:
+            try:
+                return int(mf_val)
+            except (ValueError, TypeError):
+                pass
+        tier_val = m_entry.get("tier")
+        prov = str(m_entry.get("provider", "")).lower()
+        base_url = str(m_entry.get("base_url", "")).lower()
+        is_local = tier_val == 1 or prov == "mlx" or "8000" in base_url or "localhost" in base_url
+        return 5 if is_local else 100
+
+    tier_val = meta.get("tier") if meta else None
+    is_local = tier_val == 1
+    return 5 if is_local else 100
 
 
 # Contract: Realizes work discovery and file verification for role workspaces in agent_session tier.
-class WorkspaceChecker(check.WorkspaceChecker, Singleton):
+class WorkspaceChecker(check.WorkspaceChecker):
     """Executes work discovery and file verification for role workspaces."""
 
     tier = agent_session.agent_session
@@ -283,6 +399,16 @@ class WorkspaceChecker(check.WorkspaceChecker, Singleton):
                 f"Warning: Canonical main workspace '{main_root}' is not an accessible directory. Inbound sync skipped.\n"
             )
 
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        role_guide_path: Optional[str] = None
+        if role_name:
+            try:
+                r_def = reg.resolve_role_definition(role_name, repo_root=main_root)
+                if r_def and r_def.guide_path:
+                    role_guide_path = r_def.guide_path
+            except Exception:
+                pass
+
         if meta and not force:
             pending_targets = pending_mgr.get_pending_work(ws_root)
             if pending_targets:
@@ -300,6 +426,9 @@ class WorkspaceChecker(check.WorkspaceChecker, Singleton):
                     print(f"Pending dirty target(s) from previous get_work call:")
                     for pt in still_dirty:
                         print(f"  • {pt}")
+                        if role_guide_path:
+                            print(f"      Companion Guide to Follow:")
+                            print(f"        - {role_guide_path}")
                         contracts = work_mgr.resolve_contract_files(
                             pt, ws_root, role_name=role_name
                         )
@@ -309,7 +438,7 @@ class WorkspaceChecker(check.WorkspaceChecker, Singleton):
                                 print(f"        - {c}")
                     print(
                         f"\n MANDATORY ACTION REQUIRED:\n"
-                        f"Every pending target MUST be resolved using one of the following commands before calling get_work or concluding the turn.\n"
+                        f"Every pending target MUST be resolved using one of the following commands before calling get_work or concluding the round.\n"
                         f"Outputting conversational commentary, complaining that check_files did not change, or repeating checks without resolving targets is prohibited.\n"
                     )
                     if is_auditor_role(role_name):
@@ -338,7 +467,7 @@ class WorkspaceChecker(check.WorkspaceChecker, Singleton):
         eval_root = (
             main_root if (meta and main_root and os.path.isdir(main_root)) else ws_root
         )
-        ready_items, blocked_items = compute_role_work_queue(
+        ready_items, blocked_items = _compute_role_work_queue(
             role_name, d_scope, eval_root
         )
 
@@ -365,30 +494,16 @@ class WorkspaceChecker(check.WorkspaceChecker, Singleton):
                 effective_max_feedback_chars = int(meta["max_feedback_chars"])
             except (ValueError, TypeError):
                 pass
-        search_roots = [main_root, ws_root] if main_root else [ws_root]
-        for s_root in search_roots:
-            if not s_root:
-                continue
-            model_cfg_path = os.path.join(s_root, "model_configs.toml")
-            if os.path.isfile(model_cfg_path):
-                try:
-                    import tomllib
-                    with open(model_cfg_path, "rb") as mf:
-                        m_data = tomllib.load(mf)
-                    target_model = (meta.get("model") if meta else None) or m_data.get("default")
-                    if target_model and "models" in m_data and target_model in m_data["models"]:
-                        m_entry = m_data["models"][target_model]
-                        if effective_batch_size is None:
-                            b_val = m_entry.get("batch_size")
-                            if b_val is not None:
-                                effective_batch_size = int(b_val)
-                        if effective_max_feedback_chars is None:
-                            fb_chars = m_entry.get("max_feedback_chars")
-                            if fb_chars is not None:
-                                effective_max_feedback_chars = int(fb_chars)
-                        break
-                except Exception:
-                    pass
+        m_entry = _resolve_active_model_entry(meta, ws_root, main_root)
+        if m_entry is not None:
+            if effective_batch_size is None:
+                b_val = m_entry.get("batch_size")
+                if b_val is not None:
+                    effective_batch_size = int(b_val)
+            if effective_max_feedback_chars is None:
+                fb_chars = m_entry.get("max_feedback_chars")
+                if fb_chars is not None:
+                    effective_max_feedback_chars = int(fb_chars)
 
         total_ready = len(ready_items)
         remaining_count = 0
@@ -407,6 +522,17 @@ class WorkspaceChecker(check.WorkspaceChecker, Singleton):
             print("  READY FOR EXECUTION (Prerequisites satisfied):")
             for item in presented_items:
                 print(f"    • {item['target_file']} ({item['role']})")
+                item_guide = role_guide_path
+                if item.get("role") and item["role"] != role_name:
+                    try:
+                        ir_def = reg.resolve_role_definition(item["role"], repo_root=main_root)
+                        if ir_def and ir_def.guide_path:
+                            item_guide = ir_def.guide_path
+                    except Exception:
+                        pass
+                if item_guide:
+                    print(f"      Companion Guide to Follow:")
+                    print(f"        - {item_guide}")
                 if item.get("reasons"):
                     print("      Dirty Reasons:")
                     for r in item["reasons"]:
@@ -450,19 +576,27 @@ class WorkspaceChecker(check.WorkspaceChecker, Singleton):
             try:
                 reg = get_singleton(role_registry.WorkspaceRegistry)
                 r_def = reg.resolve_role_definition(role_name, repo_root=main_root)
-                has_feedback = bool(getattr(r_def, "feedback_role_deps", ()))
+                has_feedback = bool(r_def.feedback_role_deps if hasattr(r_def, "feedback_role_deps") else ())
             except Exception:
                 has_feedback = is_auditor_role(role_name)
 
-        if is_auditor_role(role_name):
+        if not presented_items and blocked_items:
+            print(
+                "\nACTIONABLE NEXT STEP: All ready targets for this role round are resolved or waiting on upstream prerequisites. Conclude your round immediately without executing additional tools.\n"
+            )
+        elif not presented_items and not ready_items:
+            print(
+                "\nACTIONABLE NEXT STEP: No targets are currently pending or ready for this role. Conclude your round immediately without executing additional tools.\n"
+            )
+        elif is_auditor_role(role_name):
             blame_clause = "; if defects exist, run 'bin/blame <culprit_file> \"<critique>\"'" if has_feedback else ""
             print(
-                f"\nACTIONABLE NEXT STEP: Run 'bin/check_files' to verify target. If clean, run 'bin/submit <target_file>' to attest {role_name.upper()}_AUDIT{blame_clause}.\n"
+                f"\nACTIONABLE NEXT STEP: Run 'bin/check_files' immediately to verify targets. If clean, run 'bin/submit <target_file>' to attest {role_name.upper()}_AUDIT{blame_clause} (or 'bin/fail <target_file> \"<reason>\"' on unresolvable impasse).\n"
             )
         else:
             blame_clause = " (or 'bin/blame <culprit_contract> \"<critique>\"' if upstream contract is defective)" if has_feedback else " (or 'bin/submit <file>' if no changes)"
             print(
-                f"\nACTIONABLE NEXT STEP: Implement changes, verify with 'bin/check_files', then run 'bin/submit <file> \"<summary>\"'{blame_clause}.\n"
+                f"\nACTIONABLE NEXT STEP: Read contracts and companion guide, implement changes, verify with 'bin/check_files', then run 'bin/submit <file> \"<summary>\"'{blame_clause} (or 'bin/fail <target_file> \"<reason>\"' on unresolvable impasse).\n"
             )
         return 1 if ready_items else 0
 
@@ -514,6 +648,7 @@ class WorkspaceChecker(check.WorkspaceChecker, Singleton):
             return 0
 
         failed_count = 0
+        effective_max_failures = _resolve_effective_max_failures(meta, ws_root, main_root)
         submit_coord = get_singleton(submit.SubmissionCoordinator)
         for cand in targets_to_check:
             target_path, unit_name = submit_coord.resolve_submit_target(
@@ -558,64 +693,98 @@ class WorkspaceChecker(check.WorkspaceChecker, Singleton):
             if not cmd_tmpl or cmd_tmpl.strip().startswith("#"):
                 print(f"[OK] No verification check required for {active_unit} in role {role_name}.")
             else:
-                formatted_cmd = cmd_tmpl.format(unit_dir=part_dir, unit_name=active_unit)
+                formatted_cmd = cmd_tmpl.format(
+                    unit_dir=part_dir,
+                    unit_name=active_unit,
+                    max_failures=effective_max_failures,
+                    maxfail_arg=f"--maxfail={effective_max_failures}",
+                )
                 env = dict(os.environ)
+                if "pytest" in cmd_tmpl or "pytest" in formatted_cmd:
+                    existing_addopts = env.get("PYTEST_ADDOPTS", "")
+                    if "--maxfail" not in existing_addopts and "--maxfail" not in formatted_cmd:
+                        env["PYTEST_ADDOPTS"] = (
+                            f"{existing_addopts} --maxfail={effective_max_failures}".strip()
+                        )
                 env["BUILD_WORKSPACE_DIRECTORY"] = ws_root
                 if "UV_PROJECT" not in env and main_root:
                     env["UV_PROJECT"] = main_root
-                # Dynamic PYTHONPATH assembly scanning for directory entries containing support/lib.
-                pypaths = [ws_root, main_root]
-                for root_cand in (main_root, ws_root):
+                # Dynamic PYTHONPATH assembly strictly bounded to role workspace, isolating from canonical root.
+                pypaths: list[str] = []
+                for root_cand in (ws_root,):
                     if not root_cand or not os.path.isdir(root_cand):
                         continue
-                    if part_dir:
-                        pd_full = os.path.join(root_cand, part_dir)
-                        if os.path.isdir(pd_full):
-                            pypaths.append(pd_full)
+                    if root_cand not in pypaths:
+                        pypaths.append(root_cand)
                     try:
                         for entry in os.listdir(root_cand):
                             pkg_dir = os.path.join(root_cand, entry)
+                            if main_root:
+                                mr_clean = os.path.abspath(main_root)
+                                pd_clean = os.path.abspath(pkg_dir)
+                                if pd_clean == mr_clean or pd_clean.startswith(mr_clean + os.sep):
+                                    continue
                             if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv", "__pycache__")):
-                                sup_lib = os.path.join(pkg_dir, "support", "lib")
-                                if os.path.isdir(sup_lib):
+                                if pkg_dir not in pypaths:
                                     pypaths.append(pkg_dir)
+                                sup_lib = os.path.join(pkg_dir, "support", "lib")
+                                if os.path.isdir(sup_lib) and sup_lib not in pypaths:
                                     pypaths.append(sup_lib)
                     except OSError:
                         pass
                 if "PYTHONPATH" in env:
-                    pypaths.append(env["PYTHONPATH"])
+                    for p in env["PYTHONPATH"].split(os.pathsep):
+                        p_clean = os.path.abspath(p)
+                        if main_root:
+                            mr_clean = os.path.abspath(main_root)
+                            if p_clean == mr_clean or p_clean.startswith(mr_clean + os.sep):
+                                continue
+                        if p and p not in pypaths:
+                            pypaths.append(p)
                 env["PYTHONPATH"] = os.pathsep.join(pypaths)
                 env["PATH"] = os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
 
 
-                res = subprocess.run(
-                    formatted_cmd,
-                    shell=True,
-                    cwd=ws_root,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                )
-                if res.returncode != 0:
+                cmd_timeout = float(os.environ.get("CLEANROOM_VERIFY_TIMEOUT", "60.0"))
+                try:
+                    res = subprocess.run(
+                        formatted_cmd,
+                        shell=True,
+                        cwd=ws_root,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        timeout=cmd_timeout,
+                    )
+                    if res.returncode != 0:
+                        print(
+                            f"[FAIL] Verification failed for {active_unit}:\n{res.stdout}\n{res.stderr}".strip()
+                        )
+                        unit_failed = True
+                    else:
+                        if r_def.verification_success_message:
+                            try:
+                                msg = r_def.verification_success_message.format(
+                                    unit_name=active_unit, unit_dir=part_dir
+                                )
+                            except (KeyError, ValueError, IndexError):
+                                msg = r_def.verification_success_message
+                            print(f"[OK] {msg}")
+                        else:
+                            print(f"[OK] Verification passed for {active_unit}")
+                except subprocess.TimeoutExpired as exc:
+                    out_text = (exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or ""))
+                    err_text = (exc.stderr.decode() if isinstance(exc.stderr, bytes) else (exc.stderr or ""))
                     print(
-                        f"[FAIL] Verification failed for {active_unit}:\n{res.stdout}\n{res.stderr}".strip()
+                        f"[FAIL] Verification timed out after {cmd_timeout:.1f}s for {active_unit}:\n{out_text}\n{err_text}".strip()
                     )
                     unit_failed = True
-                else:
-                    if r_def.verification_success_message:
-                        try:
-                            msg = r_def.verification_success_message.format(
-                                unit_name=active_unit, unit_dir=part_dir
-                            )
-                        except (KeyError, ValueError, IndexError):
-                            msg = r_def.verification_success_message
-                        print(f"[OK] {msg}")
-                    else:
-                        print(f"[OK] Verification passed for {active_unit}")
 
             if unit_failed:
                 failed_count += 1
+                record_check_executed(ws_root, target_path, passed=False)
             else:
+                record_check_executed(ws_root, target_path, passed=True)
                 print(f"[PASSED] All verification checks passed for '{active_unit}'.")
                 unacted_fb = _extract_unacted_feedback(target_path)
                 if unacted_fb:
@@ -627,6 +796,30 @@ class WorkspaceChecker(check.WorkspaceChecker, Singleton):
                     )
 
         return 1 if failed_count > 0 else 0
+
+    # Contract: Returns True if the target has been checked via check_files since its last modification.
+    def is_checked_since_modification(
+        self,
+        ws_root: str,
+        target_path: str,
+    ) -> bool:
+        return _is_checked_since_modification(ws_root, target_path)
+
+    # Contract: Records file verification execution and content hash in .cleanroom/.last_check_files.json.
+    def record_check_executed(
+        self,
+        ws_root: str,
+        target_path: str,
+        passed: bool,
+    ) -> None:
+        record_check_executed(ws_root, target_path, passed)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-18T19:13:51Z
+# LAST_CHANGED: 2026-10-20T21:10:00Z
+# CHANGE: Direct immediate round conclusion in actionable next step when only blocked targets remain
+# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

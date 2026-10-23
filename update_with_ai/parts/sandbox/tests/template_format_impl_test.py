@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-09T04:44:11Z
-# CHANGE: Assert missing attributes on parameter objects leave placeholders unrendered
-# CODE_HASH: c65de8ced2c4
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for template_format_impl per its grounding specification."""
 
 from __future__ import annotations
@@ -15,7 +6,7 @@ import unittest
 from typing import Any, Dict, List, Mapping
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.agent.lib.session import session as agent_session
+from update_with_ai.parts.agent.lib.session import agent_session
 from update_with_ai.parts.sandbox.lib import template_format
 from update_with_ai.parts.sandbox.lib.template_format_impl import (
     TemplateFormatter,
@@ -355,3 +346,12 @@ if __name__ == "__main__":
 
 # Untested requirements:
 # None
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-09T04:44:11Z
+# CHANGE: Assert missing attributes on parameter objects leave placeholders unrendered
+# CODE_HASH: c65de8ced2c4
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

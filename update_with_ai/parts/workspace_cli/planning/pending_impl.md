@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:40:00Z
-CHANGE: Define pending_impl planning specification
-CODE_HASH: 20963c47961f
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # pending_impl implementation component
 
 ## Intent
@@ -53,3 +45,10 @@ Operating command-line subagents in isolated workspaces requires durable file-ba
   - Grounded: [role_registry: [workspace_registry_service]]
 - File reading and writing on the filesystem.
   - Grounded: [pending_work_buffer_mechanics]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T17:40:00Z
+CHANGE: Define pending_impl planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

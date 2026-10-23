@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:44:40Z
-# CHANGE: Make follow-up tool call reasoning text a required member rather than optional
-# CODE_HASH: 8dff0b8eeacd
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Tool provider low-level interface specification."""
 
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, NewType, Optional, Protocol, Sequence, Set, Tuple
-from framework import data_type, operation, override, poly_type, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, override, poly_type, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 
@@ -106,6 +98,7 @@ class IdentityParameterType[T](ParameterType[T, T]):
 
         POSTCONDITIONS:
         - MUST convert wire values to python values without failure.
+        - WHEN wire_value is a string convertible to target_type, MUST convert wire_value to target_type.
         - MUST never raise ParameterConversionError.
         """
         ...
@@ -298,7 +291,7 @@ class ToolResponse:
 
 
 @singleton_type("agent_session")
-class ToolManager(InTier[AgentSessionTier], Protocol):
+class ToolManager(Singleton[AgentSessionTier], Protocol):
     """Session service that maintains and executes tools."""
 
     @property
@@ -345,7 +338,7 @@ class ToolManager(InTier[AgentSessionTier], Protocol):
 @singleton_type("agent_session")
 class AliasManagerType(
     ParameterType[file_alias.FileAlias, str],
-    InTier[AgentSessionTier],
+    Singleton[AgentSessionTier],
     Protocol,
 ):
     """Adapts the session alias manager to provide file alias parameter conversion."""
@@ -377,3 +370,10 @@ class AliasManagerType(
         - MUST convert wire strings to file aliases via the session alias manager.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:44:40Z
+# CHANGE: Make follow-up tool call reasoning text a required member rather than optional
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:10:52Z
-CHANGE: Remove stale template initialization lead-in and the unsupported edit manager write statement
-CODE_HASH: 33ead2a8ff31
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_editor interface component
 
 ## Intent
@@ -18,7 +10,7 @@ By tracking file modifications, revision numbers, and the most recently accessed
 
 ### Typing
 
-- An editing tool is a tool that writes to a read-write file.
+- An editing tool is a tool that writes to a read-write file, declaring target path and line range parameters.
 - The replace file content tool specifies a read-write file target parameter.
 - The replace file content tool specifies target content and replacement content parameters.
 - The replace file content tool specifies start line and end line range parameters.
@@ -45,12 +37,16 @@ By tracking file modifications, revision numbers, and the most recently accessed
 - The replace file content tool replaces multiple occurrences when multiple replacements are permitted. [replace_multiple_when_permitted]
 - Workspace file writes occurred is true when file contents differ from their in-band code hash. [writes_occurred_true_on_diff]
 - Workspace file writes occurred is false when file contents match their in-band code hash. [writes_occurred_false_on_match]
+- When consecutive replacement attempts fail, the replace file content tool issues a warning reminder at two consecutive failures. [warn_failed_replacement_at_two]
+- When consecutive replacement attempts reach two failures and the target file is present, the replace file content tool designates a follow-up tool call to view the target file using the session's file viewing tool. [follow_up_view_at_two_failed_replacements]
+- When consecutive replacement attempts reach four failures, the replace file content tool terminates with failure. [fail_replacement_at_four_failures]
 
 ### Woven Contracts
 
 - Recording file reads updates the tracked last read or edited file in the session. [record_read_supplied, track_last_read_or_edited, record_file_read_op]
 - Recording file edits updates the tracked last read or edited file in the session. [record_edit_supplied, track_last_read_or_edited, record_file_edit_op]
 - The replace file content tool is installed for the agent session to replace target content within the designated line range, applying whitespace-tolerant fallback or delta formatting while guarding in-band metadata. [install_replace_file_content_tool, replace_content_in_line_range, whitespace_normalized_matching, reject_metadata_tampering, append_edit_delta_diff, replace_multiple_when_permitted, tool_provider: [call_by_name, call_with_python_bindings]]
+- Consecutive failed replacement attempts trigger a warning reminder and a follow-up file view at two failures, and terminal failure when reaching four failures. [warn_failed_replacement_at_two, follow_up_view_at_two_failed_replacements, fail_replacement_at_four_failures, file_reader: [view_file_reads_content], tool_provider: [predict_follow_up]]
 - Workspace file writes status reflects whether current workspace file contents differ from their in-band code hash. [edit_mgr_tracks_session_edits, expose_workspace_writes_occurred, writes_occurred_true_on_diff, writes_occurred_false_on_match]
 
 ## Grounding
@@ -61,6 +57,7 @@ By tracking file modifications, revision numbers, and the most recently accessed
 - Validates write access for declared read-write files. [write_access_validation]
 - Replaces file content within bounded line ranges. [content_replacement]
 - Tracks sequential file update revisions. [update_revision_tracking]
+- Exposes the session's editing tool. [editing_tool_capability]
 
 ### Knowledge Requirements
 
@@ -70,3 +67,12 @@ By tracking file modifications, revision numbers, and the most recently accessed
   - Deferred: Requires session configuration inspection in implementation.
 - Tracking of file read and edit history in session state.
   - Deferred: Requires session state tracking in implementation.
+- Tracking of consecutive failed replacement attempts and follow-up view dispatch.
+  - Deferred: Requires session state tracking and follow-up call construction in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-21T21:20:00Z
+LAST_CHANGED: 2026-10-21T21:20:00Z
+CHANGE: Factor contracts for consecutive failed replacement warning, follow-up view, and fatal failure
+SPEC_QA_AUDIT: 2026-10-21T21:20:00Z
+-->

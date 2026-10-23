@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:49:07Z
-# CHANGE: Preserve responses with unmatched suppression keys intact
-# CODE_HASH: aec8de82b0ba
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """OpenAI conversation implementation low-level specification."""
 
 from typing import Sequence
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import conversation
 import tool_provider
@@ -20,9 +12,7 @@ import openai_ext
 
 
 @singleton_type("agent_session")
-class Conversation(
-    conversation.Conversation, InTier[AgentSessionTier]
-):
+class Conversation(conversation.Conversation):
     """Realizes OpenAI provider role schema formatting, stubbing, and synthetic call injection.
 
     GROUNDING:
@@ -70,7 +60,7 @@ class Conversation(
         tool_name: tool_provider.ToolName,
         tool_arguments: conversation.SerializedArguments,
     ) -> None:
-        """Appends tool response, replacing preceding suppressed responses with stubs.
+        """Appends tool response, deleting preceding suppressed responses and their tool calls beyond the buffer limit.
 
         Args:
             tool_response: Response produced by tool execution.
@@ -79,15 +69,13 @@ class Conversation(
             tool_arguments: Serialized arguments passed to the tool.
 
         GROUNDING:
-        - Grounded via buffer tracking per suppression key, stubbing superseded tool responses
-          and correlating assistant arguments while preserving file paths and non-string values.
+        - Grounded via buffer tracking per suppression key, deleting older responses and their correlating
+          assistant tool calls beyond the buffer limit while retaining reminders.
 
         POSTCONDITIONS:
         - MUST retain a buffer of up to three most recent responses sharing suppression keys.
-        - MUST replace preceding responses beyond the buffer limit with stubs.
-        - MUST preserve file path parameters and non-string arguments in superseded tool calls.
-        - MUST replace other string arguments with a stub marker in superseded tool calls.
-        - MUST retain reminders on stubs and inherit them when omitted.
+        - MUST delete preceding responses and their correlating assistant tool calls beyond the buffer limit.
+        - MUST retain reminders from deleted responses and inherit them when omitted.
         - MUST preserve responses with unmatched suppression keys intact.
         """
         ...
@@ -109,3 +97,10 @@ class Conversation(
         - MUST include active reminders and tool execution notes in visible content.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-21T12:45:00Z
+# CHANGE: Delete superseded tool calls and responses beyond buffer limit instead of stubbing arguments
+# SPEC_QA_AUDIT: 2026-10-21T12:45:00Z
+# --- END CLEANROOM METADATA ---

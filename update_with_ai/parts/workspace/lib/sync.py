@@ -1,13 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:04:11Z
-# CHANGE: Prune the surplus public copy helper from the interface so it holds only the sync result and synchronizer protocol
-# CODE_HASH: 62c1357b69e0
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for sync."""
 
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
@@ -32,7 +27,7 @@ class SyncResult:
 
 
 # Contract: WorkspaceSynchronizer coordinates bi-directional synchronization and blame flushing.
-class WorkspaceSynchronizer(Protocol):
+class WorkspaceSynchronizer(Singleton[AgentSessionTier], Protocol):
     """Coordinates bi-directional synchronization and blame flushing."""
 
     # Contract: Pulls updated upstream contracts and source files into role workspace.
@@ -68,3 +63,9 @@ class WorkspaceSynchronizer(Protocol):
     def flush_blame_buffer(
         self, workspace_dir: str, main_root: str
     ) -> Sequence[str]: ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:04:11Z
+# CHANGE: Prune the surplus public copy helper from the interface so it holds only the sync result and synchronizer protocol
+# --- END CLEANROOM METADATA ---

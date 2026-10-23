@@ -1,11 +1,6 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-06T10:45:00Z
-# CHANGE: new file
-# CODE_HASH: 0c94c4366bfa
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol, Sequence
 from update_with_ai.parts.agent.lib import file_alias
@@ -27,7 +22,7 @@ class AttributionOutcome:
     affected_nodes: Sequence[dag_storage.DagNode]
 
 
-class AttributionCoordinator(Protocol):
+class AttributionCoordinator(Singleton[AgentSessionTier], Protocol):
     """Routes defect feedback to culprits and records failure states."""
 
     # Contract: Attributes defect to upstream dependency; rejects if not upstream, role disallowed, has newlines, or in-batch dependencies not clean; records feedback, marks dirty and failed.
@@ -71,3 +66,9 @@ class AttributionCoordinator(Protocol):
     def match_blame_target(
         self, node: dag_storage.DagNode, val: Any, val_str: str
     ) -> Optional[file_alias.BoundFile]: ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-06T10:45:00Z
+# CHANGE: new file
+# --- END CLEANROOM METADATA ---

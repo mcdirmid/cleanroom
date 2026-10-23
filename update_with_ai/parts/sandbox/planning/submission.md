@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:30:00Z
-CHANGE: Define submission planning specification
-CODE_HASH: 9d9a558c2701
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # submission interface component
 
 ## Intent
@@ -53,3 +45,10 @@ By providing dedicated tools for clean submission, failure attribution, and defe
 
 - Tracking of open targets and dispatch of submission and failure outcomes.
   - Deferred: Requires session coordinator in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:30:00Z
+CHANGE: Define submission planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

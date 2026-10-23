@@ -1,11 +1,5 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:03:45Z
-# CHANGE: Make the follow-up tool call reasoning text a required member as the grounding specification declares
-# CODE_HASH: fa1eb422d183
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from support.lib.lifecycle import Singleton
 from typing import Any, Callable, Mapping, NewType, Optional, Protocol, Sequence, Set, Tuple, cast
 from dataclasses import dataclass
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
@@ -81,6 +75,25 @@ class IdentityParameterType[T](ParameterType[T, T]):
 
     # Contract: Converts a wire type value to actual type.
     def convert(self, wire_value: T) -> T:
+        if isinstance(wire_value, str):
+            if self.target_type is bool:
+                lowered = wire_value.strip().lower()
+                if lowered in ("true", "1"):
+                    return cast(T, True)
+                if lowered in ("false", "0"):
+                    return cast(T, False)
+            elif self.target_type is int:
+                try:
+                    return cast(T, int(wire_value.strip()))
+                except (ValueError, TypeError):
+                    pass
+            elif self.target_type is float:
+                try:
+                    return cast(T, float(wire_value.strip()))
+                except (ValueError, TypeError):
+                    pass
+        elif isinstance(wire_value, self.target_type):
+            return wire_value
         return wire_value
 
 
@@ -129,7 +142,7 @@ class MappingParameterType[KeyActualT, ValActualT, ValWireT](ParameterType[Mappi
 
 
 # Contract: AliasManagerType protocol - adapts session alias manager to provide file alias parameter conversion.
-class AliasManagerType(ParameterType[file_alias.FileAlias, str], Protocol):
+class AliasManagerType(ParameterType[file_alias.FileAlias, str], Singleton[AgentSessionTier], Protocol):
     # Contract: Data type produced by the converter.
     @property
     def actual_type(self) -> type[file_alias.FileAlias]:
@@ -207,7 +220,7 @@ class ToolResponse:
 
 
 # Contract: ToolManager protocol - session service that maintains and executes tools.
-class ToolManager(Protocol):
+class ToolManager(Singleton[AgentSessionTier], Protocol):
     # Contract: Exposes installed tools as a mapping.
     @property
     def installed_tools(self) -> Mapping[ToolName, Tool]:
@@ -223,3 +236,9 @@ class ToolManager(Protocol):
     def execute_tool(self, name: ToolName, wire_parameter_bindings: Mapping[ParameterName, WireType]) -> ToolResponse:
         # TODO_execute_tool_body
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:03:45Z
+# CHANGE: Make the follow-up tool call reasoning text a required member as the grounding specification declares
+# --- END CLEANROOM METADATA ---

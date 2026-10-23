@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:17:15Z
-CHANGE: Author control work_scheduler concrete scenarios
-CODE_HASH: d0681d268f5a
--->
-
 # Concrete scenarios for `work_scheduler` (interface)
 
 ## Scenario 1 — Discovering one ready task inside a target subgraph
@@ -104,3 +97,9 @@ sprocket is dirty and depends on the alpha-role node for unit gadget.
 1. The agent asks for work in the target subgraph.
    Observed: an empty work schedule, because no dirty node in the target subgraph has every
    dependency in the target subgraph clean.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:17:15Z
+CHANGE: Author control work_scheduler concrete scenarios
+-->

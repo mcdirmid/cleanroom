@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:00:55Z
-CHANGE: Align node definition, manifest-backed storage, and dirty evaluation with the high-level contract and drop planning front-matter
-CODE_HASH: 9fc82ec13625
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # node_storage interface component
 
 ## Intent
@@ -46,3 +38,10 @@ By extending dag storage with manifest-backed node definitions and prompt metada
 
 - Target manifest discovery and in-band source file metadata parsing.
   - Deferred: Provided by storage implementation using manifest readers and src_metadata_ext.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:00:55Z
+CHANGE: Align node definition, manifest-backed storage, and dirty evaluation with the high-level contract and drop planning front-matter
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

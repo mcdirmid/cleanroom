@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:12:00Z
-CHANGE: Reject editing tool replacements that alter the cleanroom metadata header
-CODE_HASH: 6dff0f75ba57
--->
-
 # Concrete scenarios for `file_editor_impl` (implementation)
 
 Scenarios 1 through 7 restate the caller observations of the interface scenarios and add, beside
@@ -274,3 +267,21 @@ metadata header followed by source code.
    Observed: the tool fails, reminding the agent that cleanroom metadata is managed automatically by
    submit, and `widget.py` remains unchanged.
    Realized by: metadata boundary evaluation through `src_metadata`, and the component's own refusal.
+
+### Scenario 14 — Consecutive failed replacements triggering warning, follow-up view, and fatal failure
+
+Given: the agent session declares `widget.py` as a read-write file holding the single line "value = 1".
+
+1. The caller invokes the replace file content tool with target content "missing_text" twice consecutively.
+   Observed: both invocations fail, and the second failure produces a warning reminder advising of repeated edit failure and designates a follow-up tool call to view `widget.py` using the session's file viewing tool.
+   Realized by: the component's own consecutive failure counter, its warning reminder construction, and follow-up tool call designation through `tool_provider` targeting the session's file viewing tool from `file_reader`.
+
+2. The caller invokes the replace file content tool with target content "missing_text" two more times consecutively.
+   Observed: on the fourth consecutive failed replacement, the tool terminates with a fatal failure.
+   Realized by: the component's own consecutive failure counter reaching four, and the component's own terminating failure response construction.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-21T21:20:00Z
+LAST_CHANGED: 2026-10-21T21:20:00Z
+CHANGE: Realize consecutive failed replacement tracking with follow-up file view at two failures and fatal failure at four
+-->

@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-13T20:00:00Z
-# CHANGE: author dsh_workspace_impl unit tests
-# CODE_HASH: e03f1768a620
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for dsh_workspace_impl."""
 
 from __future__ import annotations
@@ -43,14 +34,15 @@ class FakeWorkspaceRegistry:
                 guide_path=f"guides/{clean}.md",
                 writable_file_patterns=[],
                 readonly_file_patterns=[],
-                feedback_role_deps=[],
+                feedback_role_deps=["lib", "test"],
+                audit_tag=f"{clean.upper()}_AUDIT",
             )
         return role_registry.RoleDefinition(
             role_name=clean,
             guide_path=f"guides/{clean}.md",
             writable_file_patterns=[f"{clean}/*"],
             readonly_file_patterns=[],
-            feedback_role_deps=[],
+            feedback_role_deps=["planning"] if clean in ("low", "scenarios") else [],
         )
 
 
@@ -100,6 +92,8 @@ class DshWorkspaceImplTest(unittest.TestCase):
             self.assertIn("bin/submit", agents_content)
             self.assertIn("bin/blame", agents_content)
             self.assertIn("bin/fail", agents_content)
+            self.assertIn("ROUND CONCLUSION PROTOCOL", agents_content)
+            self.assertNotIn("INCREMENTAL AUTHORING", agents_content)
 
             # Validate patch content
             self.assertTrue(os.path.isfile(patch_path))
@@ -108,6 +102,12 @@ class DshWorkspaceImplTest(unittest.TestCase):
             self.assertIn("danger-full-access", patch_content)
             self.assertIn("policy: never", patch_content)
             self.assertIn("id: todo", patch_content)
+            self.assertIn("id: tool-todo", patch_content)
+            self.assertIn("id: tool-workflow", patch_content)
+            self.assertIn("id: tool-subagent", patch_content)
+            self.assertIn("id: skill-office", patch_content)
+            self.assertIn("id: tool-web", patch_content)
+            self.assertIn("id: tool-ask-user", patch_content)
             self.assertIn("disabled: true", patch_content)
             self.assertIn("deepseek-official", patch_content)
             self.assertIn("deepseek-flash", patch_content)
@@ -132,6 +132,13 @@ class DshWorkspaceImplTest(unittest.TestCase):
             self.assertIn("provider: omlx", patch_content)
             self.assertIn("model: Qwen3.6-35B-A3B-oQ6-mtp", patch_content)
             self.assertNotIn("reasoningEffort: high", patch_content)
+
+            agents_md_path = os.path.join(self.test_dir, "AGENTS.md")
+            self.assertTrue(os.path.isfile(agents_md_path))
+            with open(agents_md_path, "r", encoding="utf-8") as f:
+                agents_content = f.read()
+            self.assertIn("INCREMENTAL AUTHORING", agents_content)
+            self.assertIn("OUTPUT TOKEN CEILING PROTECTION", agents_content)
 
     def test_configure_role_workspace_auditor_rule(self) -> None:
         """Requirement: MUST incorporate auditor non-editing rules into AGENTS.md for auditor roles."""
@@ -171,6 +178,29 @@ class DshWorkspaceImplTest(unittest.TestCase):
             self.assertIn("model: Qwen3.6-35B-A3B-oQ6-mtp", patch_content)
             self.assertNotIn("my-custom-qwen", patch_content)
 
+    def test_configure_role_workspace_without_blame(self) -> None:
+        """Requirement: MUST omit bin/blame from instructions for roles without feedback capability."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            configurer = scope.get_singleton(dsh_workspace.DshWorkspaceConfigurer)
+            report = configurer.configure_role_workspace(
+                workspace_dir=self.test_dir,
+                role_name="lib",
+                model_name="deepseek-flash",
+            )
+            agents_md_path = os.path.join(self.test_dir, "AGENTS.md")
+            with open(agents_md_path, "r", encoding="utf-8") as f:
+                agents_content = f.read()
+            self.assertNotIn("bin/blame", agents_content)
+            self.assertIn("bin/submit or bin/fail", agents_content)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-20T22:12:00Z
+# CHANGE: Test model-contingent payload ceiling protection in customized AGENTS.md
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

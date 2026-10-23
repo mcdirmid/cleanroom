@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T04:11:44Z
-CHANGE: Drop the removed agent_session realization from the coverage record scenario
-CODE_HASH: 44a7968742d1
--->
-
 # Concrete scenarios for `coverage_impl` (implementation)
 
 Scenarios 1 through 8 restate the caller observations of the interface scenarios and add, beside
@@ -160,3 +153,9 @@ statement.
    missing lines, with no division failure.
    Realized by: the component's own syntax tree filtering, which leaves an empty candidate line
    sequence, and its own record construction over an empty denominator.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T04:11:44Z
+CHANGE: Drop the removed agent_session realization from the coverage record scenario
+-->

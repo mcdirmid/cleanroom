@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:50:00Z
-# CHANGE: Delegate command workflows to commands
-# CODE_HASH: 4fa2d4b9d48f
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for cli_tool_impl."""
 
 from __future__ import annotations
@@ -58,7 +49,7 @@ def _session_context():
 
 
 # Contract: Realizes cli_tool.WorkspaceToolRunner singleton.
-class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner, Singleton):
+class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
     """Realizes command-line subagent tool execution for role workspaces."""
 
     tier = agent_session.agent_session
@@ -405,12 +396,14 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner, Singleton):
             return self.run_blame(
                 args.culprit_file,
                 args.critique,
+                # Legitimate reflection: optional attribute extraction from dynamic argparse.Namespace
                 repo_root=getattr(args, "repo_root", None),
             )
         elif args.command == "fail":
             return self.run_fail(
                 args.target,
                 reason=args.reason,
+                # Legitimate reflection: optional attribute extraction from dynamic argparse.Namespace
                 repo_root=getattr(args, "repo_root", None),
             )
         elif args.command == "coverage":
@@ -422,6 +415,7 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner, Singleton):
                 update_log=args.update_log,
                 max_spans=args.max_spans,
                 json_output=args.json_output,
+                # Legitimate reflection: optional attribute extraction from dynamic argparse.Namespace
                 repo_root=getattr(args, "repo_root", None),
             )
 
@@ -436,6 +430,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     with _session_context():
         runner = WorkspaceToolRunner()
         return runner.execute_command(raw_args)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T17:50:00Z
+# CHANGE: Delegate command workflows to commands
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

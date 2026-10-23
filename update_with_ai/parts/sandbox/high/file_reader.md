@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Split the read manager capabilities into declarative statements
-CODE_HASH: d610347ba20d
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_reader interface component
 
 imports: session, file_alias, tool_provider
@@ -29,3 +21,10 @@ The read manager can also *check read access* for a workspace path, confirming a
 An agent session's *view file tool* reads the content of a file specified by its file alias path parameter.
 
 An agent session's *search tool* searches pattern matches across the session's read-only and read-write files according to its regex pattern parameter.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Split the read manager capabilities into declarative statements
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,13 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Define roles interface component
-# CODE_HASH: 63c2557ee0fe
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for roles."""
 
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
@@ -70,7 +65,7 @@ class RoleDefinition:
 
 
 # Contract: RoleResolver protocol loads role configurations and validates declaration rules.
-class RoleResolver(Protocol):
+class RoleResolver(Singleton[AgentSessionTier], Protocol):
     """Resolver loading role configurations and validating declaration rules."""
 
     # Contract: Resolves role definition from role name or qualified address, validating dependency constraints.
@@ -91,3 +86,9 @@ class RoleResolver(Protocol):
     ) -> Sequence[RoleDefinition]:
         """Loads and resolves all role definitions declared in the repository or bound methodology configuration."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:45:00Z
+# CHANGE: Define roles interface component
+# --- END CLEANROOM METADATA ---

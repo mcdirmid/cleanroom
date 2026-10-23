@@ -1,18 +1,10 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-06T14:35:00Z
-CHANGE: new file
-CODE_HASH: 9323ea38ec30
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # src_metadata_impl implementation component
 
 ## Intent
 
 The src_metadata_impl implementation component provides concrete algorithms for multi-format comment boundary detection, structured key-value header parsing, SHA-256 code hashing, and in-place document serialization.
 
-The implementation isolates comment delimiters according to file extensions, locates header boundaries skipping shebangs or frontmatter, computes truncated twelve-character digests of extracted code bodies, and updates or injects comment headers into source documents.
+The implementation isolates comment delimiters according to file extensions, locates comment boundaries within source files, computes truncated twelve-character digests of extracted code bodies, and updates or appends comment blocks at the bottom of source documents.
 
 ## Factored Contracts
 
@@ -25,7 +17,7 @@ The implementation isolates comment delimiters according to file extensions, loc
 - The source metadata coordinator digests UTF-8 encoded code bodies using SHA-256. [digest_code_body]
 - The source metadata coordinator compares current code digest against recorded code hash. [compare_code_digests]
 - The source metadata coordinator formats file metadata records into comment lines. [format_header_lines]
-- The source metadata coordinator locates header insertion positions below initial directives. [locate_insertion_index]
+- The source metadata coordinator locates block insertion positions at the bottom of documents. [locate_insertion_index]
 - The source metadata coordinator writes serialized content to disk with parent directory creation. [write_file_content]
 - The source metadata coordinator advances last cleaned timestamp to current UTC time. [advance_cleaned_timestamp]
 
@@ -33,7 +25,7 @@ The implementation isolates comment delimiters according to file extensions, loc
 
 - When extracting metadata from text or disk, the coordinator detects comment boundaries and parses header fields into a file metadata record. [detect_html_delimiters, detect_hash_delimiters, parse_header_fields, src_metadata: [extract_metadata_content, extract_metadata_disk]]
 - When checking for code modifications, the coordinator extracts the code body, computes the SHA-256 digest, and compares the digest against the recorded code hash. [slice_code_body, digest_code_body, compare_code_digests, src_metadata: [compute_code_hash_value, evaluate_code_modified]]
-- When rewriting or updating metadata, the coordinator formats the header lines, replaces or inserts the block, and writes the content to disk. [format_header_lines, locate_insertion_index, write_file_content, src_metadata: [rewrite_metadata_text, update_metadata_disk]]
+- When rewriting or updating metadata, the coordinator formats the block lines, appends or updates the block at the bottom of the file, and writes the content to disk. [format_header_lines, locate_insertion_index, write_file_content, src_metadata: [rewrite_metadata_text, update_metadata_disk]]
 
 ## Grounding
 
@@ -55,3 +47,10 @@ The implementation isolates comment delimiters according to file extensions, loc
 
 - Current UTC timestamp generation for metadata updates.
   - Grounded: [caller input, source_metadata_manipulation]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-06T14:35:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:04:00Z
-# CHANGE: Resolve auditor classification locally through the declared source metadata dependency, honour the declared directory scope default, and resolve unspecified submission targets through the alias manager and bound workspace paths
-# CODE_HASH: be132c0046c4
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 import json
 import os
@@ -27,6 +18,119 @@ from update_with_ai.parts.metadata.lib import src_metadata
 from . import submit, verification
 
 
+def _get_role_definitions() -> Dict[str, Any]:
+    try:
+        cfg: Any = get_singleton(node_config.NodeConfig)
+        if cfg is not None and hasattr(cfg, "role_definitions"):
+            r_defs = cfg.role_definitions
+            if isinstance(r_defs, dict) and r_defs:
+                return r_defs
+    except (LifecycleResolutionError, KeyError, AttributeError, RuntimeError):
+        pass
+    try:
+        from update_with_ai.parts.workspace.lib import role_registry
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        return {r.role_name: r for r in reg.list_roles()}
+    except Exception:
+        pass
+    return {}
+
+
+def _role_src_pattern(role_def: Any) -> str:
+    if hasattr(role_def, "src_pattern"):
+        return str(role_def.src_pattern or "")
+    if isinstance(role_def, dict):
+        return str(role_def.get("src_pattern") or "")
+    return ""
+
+
+def _role_name(role_def: Any, default: str = "") -> str:
+    if hasattr(role_def, "role_name"):
+        return str(role_def.role_name or default)
+    if isinstance(role_def, dict):
+        return str(role_def.get("role_name") or default)
+    return default
+
+
+def _role_audit_tag(role_def: Any) -> Optional[str]:
+    if hasattr(role_def, "audit_tag"):
+        return role_def.audit_tag
+    if isinstance(role_def, dict):
+        return role_def.get("audit_tag")
+    return None
+
+
+def _role_feedback_deps(role_def: Any) -> Sequence[str]:
+    if hasattr(role_def, "feedback_role_deps"):
+        return role_def.feedback_role_deps or ()
+    if isinstance(role_def, dict):
+        return role_def.get("feedback_role_deps") or ()
+    return ()
+
+
+def _bound_file_path(bound_file: Any) -> str:
+    if hasattr(bound_file, "workspace_path") and bound_file.workspace_path is not None:
+        ws_path = bound_file.workspace_path
+        return str(ws_path.path if hasattr(ws_path, "path") else ws_path)
+    if hasattr(bound_file, "relative_path"):
+        return str(bound_file.relative_path)
+    return str(bound_file)
+
+
+def _node_display_alias(node: dag_storage.DagNode) -> str:
+    try:
+        from . import coordinate
+        coord = get_singleton(coordinate.SessionCoordinator)
+        if coord is not None:
+            return coord.get_alias_for_node(node)
+    except Exception:
+        pass
+
+    try:
+        cfg = get_singleton(node_config.NodeConfig)
+        if cfg is not None:
+            if hasattr(cfg, "src_file_alias_by_node") and cfg.src_file_alias_by_node and node in cfg.src_file_alias_by_node:
+                return str(cfg.src_file_alias_by_node[node])
+            if hasattr(cfg, "blame_targets_by_node") and cfg.blame_targets_by_node:
+                for bt_set in cfg.blame_targets_by_node.values():
+                    for bt in bt_set:
+                        if hasattr(bt, "owning_node") and bt.owning_node == node:
+                            return str(bt.relative_path if hasattr(bt, "relative_path") else bt)
+            if hasattr(cfg, "read_only_files") and cfg.read_only_files:
+                for ro in cfg.read_only_files:
+                    if hasattr(ro, "owning_node") and ro.owning_node == node:
+                        return str(ro.relative_path if hasattr(ro, "relative_path") else ro)
+            if hasattr(cfg, "read_write_files") and cfg.read_write_files:
+                for rw in cfg.read_write_files:
+                    if hasattr(rw, "owning_node") and rw.owning_node == node:
+                        return str(rw.relative_path if hasattr(rw, "relative_path") else rw)
+    except Exception:
+        pass
+
+    addr = str(node.unit_address).strip()
+    if ":" in addr:
+        pkg, unit_name = addr.split(":", 1)
+        pkg = pkg.lstrip("/").strip()
+    elif "/" in addr:
+        pkg, unit_name = addr.rsplit("/", 1)
+        pkg = pkg.lstrip("/").strip()
+    else:
+        pkg, unit_name = "", addr
+
+    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
+    role_defs = _get_role_definitions()
+    if role in role_defs:
+        src_pat = _role_src_pattern(role_defs[role])
+        if src_pat:
+            formatted = src_pat.replace("{unit_dir}", pkg).replace(
+                "{unit_name}", unit_name
+            ).strip("/")
+            if formatted:
+                return formatted
+
+    return f"{pkg}/{unit_name}" if pkg else unit_name
+
+
 def _alias_manager_workspace_root() -> Optional[str]:
     """Resolves the session workspace root declared by the alias manager."""
     try:
@@ -35,7 +139,7 @@ def _alias_manager_workspace_root() -> Optional[str]:
         return None
     if workspace_root is None:
         return None
-    return str(getattr(workspace_root, "path", workspace_root)) or None
+    return str(workspace_root.path if hasattr(workspace_root, "path") else workspace_root) or None
 
 
 def _alias_manager_bound_path(target: str) -> Optional[str]:
@@ -45,9 +149,7 @@ def _alias_manager_bound_path(target: str) -> Optional[str]:
     except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
         return None
     if isinstance(alias, file_alias.BoundFile):
-        workspace_path = getattr(alias, "workspace_path", None)
-        if workspace_path is not None:
-            return str(getattr(workspace_path, "path", workspace_path))
+        return _bound_file_path(alias)
     return None
 
 
@@ -174,17 +276,16 @@ def _resolve_file_role(file_path: str, repo_root: Optional[str] = None) -> str:
     norm = file_path.replace("\\", "/")
     fname = os.path.basename(norm)
     parent = os.path.basename(os.path.dirname(norm))
-    cfg = get_singleton(node_config.NodeConfig)
-    role_defs = getattr(cfg, "role_definitions", {})
+    role_defs = _get_role_definitions()
     if not role_defs:
         raise KeyError("No role definitions available in NodeConfig")
     for role in role_defs.values():
-        src_pat = getattr(role, "src_pattern", "")
+        src_pat = _role_src_pattern(role)
         if not src_pat:
             continue
         d_name, pfx, sfx = _parse_pattern_info(src_pat)
         if parent == d_name and fname.startswith(pfx) and fname.endswith(sfx):
-            return getattr(role, "role_name", "")
+            return _role_name(role)
     raise ValueError(f"Unrecognized role for file path: {file_path}")
 
 
@@ -198,11 +299,11 @@ def _parse_unit_from_file_path(file_path: str, repo_root: str) -> Tuple[str, str
     )
     fname = os.path.basename(rel)
     role_name = _resolve_file_role(rel, repo_root=repo_root)
-    cfg = get_singleton(node_config.NodeConfig)
-    role_def = getattr(cfg, "role_definitions", {}).get(role_name)
+    role_defs = _get_role_definitions()
+    role_def = role_defs.get(role_name)
     if role_def is None:
         raise KeyError(f"Role '{role_name}' not found in NodeConfig.role_definitions")
-    src_pat = getattr(role_def, "src_pattern", "")
+    src_pat = _role_src_pattern(role_def)
     _, pfx, sfx = _parse_pattern_info(src_pat)
     unit_name = fname
     if pfx and unit_name.startswith(pfx):
@@ -228,12 +329,11 @@ def _resolve_submit_target(
         except (KeyError, ValueError, OSError):
             pass
         clean_role = role_name.split(":")[-1].strip().lower()
-        cfg = get_singleton(node_config.NodeConfig)
-        role_defs = getattr(cfg, "role_definitions", {})
+        role_defs = _get_role_definitions()
         role_def = role_defs.get(clean_role)
         stem = os.path.splitext(os.path.basename(cand_path))[0]
         if role_def:
-            src_pat = getattr(role_def, "src_pattern", "")
+            src_pat = _role_src_pattern(role_def)
             if src_pat:
                 _, pfx, sfx = _parse_pattern_info(src_pat)
                 sfx_no_ext = os.path.splitext(sfx)[0] if sfx else ""
@@ -244,14 +344,13 @@ def _resolve_submit_target(
         return cand_path, stem
 
     clean_role = role_name.split(":")[-1].strip().lower()
-    cfg = get_singleton(node_config.NodeConfig)
-    role_defs = getattr(cfg, "role_definitions", {})
+    role_defs = _get_role_definitions()
     role_def = role_defs.get(clean_role)
     if role_def is None:
         raise KeyError(f"Role '{clean_role}' not found in NodeConfig.role_definitions")
 
     stem = os.path.splitext(os.path.basename(target_str))[0]
-    src_pat = getattr(role_def, "src_pattern", "")
+    src_pat = _role_src_pattern(role_def)
     _, pfx, sfx = _parse_pattern_info(src_pat)
     sfx_no_ext = os.path.splitext(sfx)[0] if sfx else ""
     if sfx_no_ext and stem.endswith(sfx_no_ext):
@@ -260,14 +359,15 @@ def _resolve_submit_target(
         stem = stem[len(pfx) :]
 
     part_dirs = _find_part_dirs(repo_root, dir_scope)
-    is_auditor = bool(getattr(role_def, "audit_tag", None) or not src_pat)
+    is_auditor = bool(_role_audit_tag(role_def) or not src_pat)
 
     for pd in part_dirs:
         if is_auditor:
-            fb_deps = [d.split(":")[-1] for d in getattr(role_def, "feedback_role_deps", ())]
+            raw_fb = _role_feedback_deps(role_def)
+            fb_deps = [d.split(":")[-1] for d in (raw_fb or ())]
             if fb_deps:
                 fb_def = role_defs.get(fb_deps[0])
-                fb_pat = getattr(fb_def, "src_pattern", "") if fb_def else ""
+                fb_pat = _role_src_pattern(fb_def) if fb_def else ""
                 if fb_pat:
                     cand = os.path.realpath(
                         os.path.join(
@@ -290,75 +390,13 @@ def _resolve_submit_target(
     return None, None
 
 
-def _node_display_alias(node: dag_storage.DagNode) -> str:
-    """Returns a user/agent-facing file alias for a node, avoiding raw Bazel target addresses."""
-    try:
-        cfg = get_singleton(node_config.NodeConfig)
-        if getattr(cfg, "src_file_alias_by_node", None) and node in cfg.src_file_alias_by_node:
-            return str(cfg.src_file_alias_by_node[node])
-        for bt_set in getattr(cfg, "blame_targets_by_node", {}).values():
-            for bt in bt_set:
-                if getattr(bt, "owning_node", None) == node:
-                    return str(getattr(bt, "relative_path", bt))
-        for ro in getattr(cfg, "read_only_files", ()):
-            if getattr(ro, "owning_node", None) == node:
-                return str(getattr(ro, "relative_path", ro))
-        for rw in getattr(cfg, "read_write_files", ()):
-            if getattr(rw, "owning_node", None) == node:
-                return str(getattr(rw, "relative_path", rw))
-    except Exception:
-        pass
-
-    addr = str(node.unit_address).strip()
-    if ":" in addr:
-        pkg, unit_name = addr.split(":", 1)
-        pkg = pkg.lstrip("/").strip()
-    elif "/" in addr:
-        pkg, unit_name = addr.rsplit("/", 1)
-        pkg = pkg.lstrip("/").strip()
-    else:
-        pkg, unit_name = "", addr
-
-    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
-    try:
-        cfg = get_singleton(node_config.NodeConfig)
-        role_defs = getattr(cfg, "role_definitions", {})
-        if role in role_defs:
-            r_def = role_defs[role]
-            src_pat = getattr(r_def, "src_pattern", "") or (
-                r_def.get("src_pattern") if isinstance(r_def, dict) else ""
-            )
-            if src_pat:
-                formatted = src_pat.replace("{unit_dir}", pkg).replace(
-                    "{unit_name}", unit_name
-                ).strip("/")
-                if formatted:
-                    return formatted
-    except Exception:
-        pass
-
-    if role == "test":
-        return f"{pkg}/tests/{unit_name}_test.py" if pkg else f"tests/{unit_name}_test.py"
-    if role == "lib":
-        return f"{pkg}/lib/{unit_name}.py" if pkg else f"lib/{unit_name}.py"
-    if role == "low":
-        return f"{pkg}/low/{unit_name}.pyi" if pkg else f"low/{unit_name}.pyi"
-    if role == "high":
-        return f"{pkg}/high/{unit_name}.md" if pkg else f"high/{unit_name}.md"
-    if role == "planning":
-        return f"{pkg}/planning/{unit_name}.md" if pkg else f"planning/{unit_name}.md"
-    if role == "scenario":
-        return f"{pkg}/scenarios/{unit_name}.md" if pkg else f"scenarios/{unit_name}.md"
-    return f"{pkg}/{unit_name}" if pkg else unit_name
-
-
 def _is_auditor_node(node: dag_storage.DagNode) -> bool:
     """Checks whether the node's role is classified as an auditor role."""
     role_clean = node.role_address.split(":")[-1].strip().lower()
     return src_metadata.is_auditor_role(role_clean)
 
 
-class SubmissionCoordinator(submit.SubmissionCoordinator, Singleton):
+class SubmissionCoordinator(submit.SubmissionCoordinator):
     """Coordinates submission gating, change summary rules, and graph status mutation."""
 
     tier = agent_session.agent_session
@@ -412,7 +450,8 @@ class SubmissionCoordinator(submit.SubmissionCoordinator, Singleton):
 
         # 3. Session feedback check
         cfg = get_singleton(node_config.NodeConfig)
-        if getattr(cfg, "feedback", None) and not has_modifications:
+        has_feedback = bool(cfg.feedback) if hasattr(cfg, "feedback") else False
+        if has_feedback and not has_modifications:
             return submit.SubmissionOutcome(
                 accepted=False,
                 message="Error: Session feedback is present but no workspace files were modified. You must modify workspace files to address feedback before submitting, or call fail if the feedback cannot be resolved.",
@@ -488,13 +527,13 @@ class SubmissionCoordinator(submit.SubmissionCoordinator, Singleton):
             except Exception:
                 main_root = os.path.realpath(ws_root)
 
-        cfg = get_singleton(node_config.NodeConfig)
-        role_defs = getattr(cfg, "role_definitions", {})
+        role_defs = _get_role_definitions()
         role_def = role_defs.get(clean_role)
         if role_def is None:
             raise KeyError(f"Role '{clean_role}' not found in NodeConfig.role_definitions")
-        src_pat = getattr(role_def, "src_pattern", "")
-        is_auditor = bool(getattr(role_def, "audit_tag", None) or not src_pat)
+        src_pat = _role_src_pattern(role_def)
+        role_audit_tag = _role_audit_tag(role_def)
+        is_auditor = bool(role_audit_tag or not src_pat)
 
         # Auditor role submit: reject direct submission of verification/test files
         if is_auditor:
@@ -531,15 +570,16 @@ class SubmissionCoordinator(submit.SubmissionCoordinator, Singleton):
 
         # --- AUDITOR ROLE SUBMIT ---
         if is_auditor:
-            audit_tag = getattr(role_def, "audit_tag", None) or f"{clean_role.upper()}_AUDIT"
+            audit_tag = _role_audit_tag(role_def) or f"{clean_role.upper()}_AUDIT"
             ref_root = ws_root if target_path.startswith(ws_root) else main_root
             part_dir, u_name, _ = _parse_unit_from_file_path(target_path, ref_root)
             active_unit = u_name or unit_name
 
             targets_to_audit: List[str] = []
-            for fb_role in [d.split(":")[-1] for d in getattr(role_def, "feedback_role_deps", ())]:
+            role_fb_deps = _role_feedback_deps(role_def)
+            for fb_role in [d.split(":")[-1] for d in role_fb_deps]:
                 fb_def = role_defs.get(fb_role)
-                fb_pat = getattr(fb_def, "src_pattern", "") if fb_def else ""
+                fb_pat = _role_src_pattern(fb_def) if fb_def else ""
                 if fb_pat:
                     fb_cand = os.path.join(
                         main_root,
@@ -588,8 +628,9 @@ class SubmissionCoordinator(submit.SubmissionCoordinator, Singleton):
             )
 
         # 2. Enforce active directory scope matching
-        if role_def.src_pattern:
-            active_dir, active_pfx, active_sfx = _parse_pattern_info(role_def.src_pattern)
+        src_pat_str = _role_src_pattern(role_def)
+        if src_pat_str:
+            active_dir, active_pfx, active_sfx = _parse_pattern_info(src_pat_str)
             if active_dir:
                 fname = os.path.basename(target_path)
                 parent = os.path.basename(os.path.dirname(target_path))
@@ -649,6 +690,13 @@ class SubmissionCoordinator(submit.SubmissionCoordinator, Singleton):
         if ws_root != main_root and os.path.isfile(main_file):
             _copy_projected_file(main_file, target_path, is_writable=True)
         return submit.SubmissionOutcome(accepted=True, message=msg)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:04:00Z
+# CHANGE: Resolve auditor classification locally through the declared source metadata dependency, honour the declared directory scope default, and resolve unspecified submission targets through the alias manager and bound workspace paths
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

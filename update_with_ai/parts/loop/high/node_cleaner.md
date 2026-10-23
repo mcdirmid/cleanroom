@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Name the node cleaning capability canonically and state the continuation invariant declaratively
-CODE_HASH: 8207d6f64baf
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # node_cleaner interface component
 
 imports: dag_storage
@@ -23,3 +15,10 @@ Multi-step build and agent workflows execute heterogeneous tasks, such as code g
 A polymorphic *node cleaner* cleans the dirty nodes that share a role.
 
 A node cleaner can *clean nodes*, communicating whether processing should *continue*. Processing cannot continue only when cleaning fails for nodes that no other node cleaning can address; otherwise processing continues.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Name the node cleaning capability canonically and state the continuation invariant declaratively
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

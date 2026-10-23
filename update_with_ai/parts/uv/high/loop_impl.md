@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: 04904f08a22e
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # loop_impl implementation component
 
 imports: cleanroom_files_ext, dag_storage, cleaner, node_cleaner, logger, manifest_loader
@@ -46,3 +38,10 @@ When recording feedback:
 When recording changes:
 
 - Records a caller-supplied change message against a target node in graph storage, clearing the last cleaned timestamp and updating the change summary to dynamically invalidate downstream dependencies, and appends the change message to the cleanroom log file in the directory containing the parts.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

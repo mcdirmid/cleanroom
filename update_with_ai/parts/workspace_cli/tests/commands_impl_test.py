@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:50:00Z
-# CHANGE: Unit tests for commands_impl
-# CODE_HASH: 687490b6e6c6
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for commands_impl aligned with low-level specifications."""
 
 from __future__ import annotations
@@ -308,6 +299,9 @@ class FakeCoverageEvaluator:
 class FakeWorkspaceChecker:
     tier = "agent_session"
 
+    def __init__(self) -> None:
+        self.checked: set[str] = set()
+
     def run_get_work(
         self,
         dir_scope: Optional[str] = None,
@@ -322,7 +316,26 @@ class FakeWorkspaceChecker:
         target: Optional[str] = None,
         repo_root: Optional[str] = None,
     ) -> int:
+        if target:
+            self.checked.add(os.path.realpath(target))
+            self.checked.add(target)
         return 0
+
+    def record_check_executed(
+        self,
+        ws_root: str,
+        target_path: str,
+        passed: bool,
+    ) -> None:
+        self.checked.add(os.path.realpath(target_path))
+        self.checked.add(target_path)
+
+    def is_checked_since_modification(
+        self,
+        ws_root: str,
+        target_path: str,
+    ) -> bool:
+        return os.path.realpath(target_path) in self.checked or target_path in self.checked
 
 
 class WorkspaceCommandsImplTest(unittest.TestCase):
@@ -427,7 +440,24 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
             f.write("# sample\n")
         self.fake_pending.pending = [target_file]
 
+        # Rejected without no_verify when modified without running check_files
+        ret_no_check = self.cmd_handler.run_submit(target_file, summary="test change")
+        self.assertEqual(ret_no_check, 1)
+
+        # Bypassed with no_verify=True
         ret = self.cmd_handler.run_submit(target_file, summary="test change", no_verify=True)
+        self.assertEqual(ret, 0)
+        self.assertNotIn(target_file, self.fake_pending.pending)
+
+    def test_run_submit_verified_after_modification(self) -> None:
+        target_file = os.path.join(self.test_dir, "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w") as f:
+            f.write("# sample\n")
+        self.fake_pending.pending = [target_file]
+
+        self.fake_check.record_check_executed(self.test_dir, target_file, passed=True)
+        ret = self.cmd_handler.run_submit(target_file, summary="test change")
         self.assertEqual(ret, 0)
         self.assertNotIn(target_file, self.fake_pending.pending)
 
@@ -442,6 +472,33 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
         self.assertEqual(ret, 0)
         self.assertNotIn(culprit, self.fake_pending.pending)
 
+        buf_path = os.path.join(self.test_dir, commands_impl.BLAME_BUFFER_FILE)
+        self.assertTrue(os.path.isfile(buf_path))
+        with open(buf_path, "r", encoding="utf-8") as f:
+            entries = json.load(f)
+        self.assertTrue(any(e.get("target") == culprit.lstrip("/") for e in entries))
+
+    def test_run_blame_gated_when_workspace_modified(self) -> None:
+        culprit = os.path.join(self.test_dir, "low", "foo.pyi")
+        os.makedirs(os.path.dirname(culprit), exist_ok=True)
+        with open(culprit, "w") as f:
+            f.write("# spec\n")
+
+        my_target = os.path.join(self.test_dir, "lib", "foo.py")
+        os.makedirs(os.path.dirname(my_target), exist_ok=True)
+        with open(my_target, "w") as f:
+            f.write("# modified code\n")
+        self.fake_pending.pending = [culprit, my_target]
+
+        # Rejects blame while local modified target has not been checked
+        ret_blocked = self.cmd_handler.run_blame(culprit, "Contract mismatch error")
+        self.assertEqual(ret_blocked, 1)
+
+        # After check_files is run on local target, blame succeeds
+        self.fake_check.record_check_executed(self.test_dir, my_target, passed=False)
+        ret_ok = self.cmd_handler.run_blame(culprit, "Contract mismatch error")
+        self.assertEqual(ret_ok, 0)
+
     def test_run_fail(self) -> None:
         target_file = os.path.join(self.test_dir, "lib", "foo.py")
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
@@ -449,6 +506,12 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
             f.write("# sample\n")
         self.fake_pending.pending = [target_file]
 
+        # Rejects fail when modified without running check_files
+        ret_blocked = self.cmd_handler.run_fail(target_file, reason="Verification error")
+        self.assertEqual(ret_blocked, 1)
+
+        # Once checked via check_files, fail succeeds
+        self.fake_check.record_check_executed(self.test_dir, target_file, passed=False)
         ret = self.cmd_handler.run_fail(target_file, reason="Verification error")
         self.assertEqual(ret, 0)
         self.assertNotIn(target_file, self.fake_pending.pending)
@@ -461,3 +524,11 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
         ret = self.cmd_handler.run_commission(role_name="lib", dir_scope="pkg")
         self.assertEqual(ret, 0)
         self.assertEqual(len(self.fake_prov.commissioned), 1)
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T17:50:00Z
+# CHANGE: Unit tests for commands_impl
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

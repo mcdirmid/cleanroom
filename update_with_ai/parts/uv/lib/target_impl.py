@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 2771081c3327
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 import os
 from typing import Optional
 from . import target
@@ -20,7 +11,7 @@ from support.lib.lifecycle import (
 )
 
 
-class UvTarget(target.UvTarget, Singleton):
+class UvTarget(target.UvTarget):
     tier = system
 
     def __init__(self) -> None:
@@ -139,6 +130,13 @@ class UvTarget(target.UvTarget, Singleton):
             unit = unit[2:]
         package_part = unit.split(":")[0] if ":" in unit else unit
         return target.NodeDirectory(path=file_paths.PathString(package_part))
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-07T00:00:00Z
+# CHANGE: new file
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

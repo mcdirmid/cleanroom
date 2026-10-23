@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-08T18:30:00Z
-CHANGE: document stub role dependencies synchronization in pull and refresh contracts
-CODE_HASH: 4b7d4b812c10
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # sync interface component
 
 imports: session, cleanroom_files_ext
@@ -37,3 +29,10 @@ The workspace synchronizer:
 - Harvests modified writable files and attested audits from a role workspace back to the canonical main repository, validating in-band code hashes so that modifications are non-empty and non-conflicting before writes are applied, and stripping code hashes from target files when committing changes back to the canonical main repository.
 
 - Flushes buffered blame feedback recorded in the local blame buffers into the culprit contract files in the canonical main repository, appending unacted feedback blocks in-band and advancing the last cleaned timestamps.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-08T18:30:00Z
+CHANGE: document stub role dependencies synchronization in pull and refresh contracts
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

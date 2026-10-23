@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:14Z
-CHANGE: Author agent node_config interface scenarios
-CODE_HASH: 2edcb8d7679d
--->
-
 # Concrete scenarios for `agent_node_config` (interface)
 
 ## Scenario 1 — The files the session restricts to reading
@@ -136,3 +129,9 @@ names the execution version 1.
 4. The caller updates the sequence of nodes being cleaned to name no node.
    Observed: the sequence names no node, and the execution version is 4 because the cleaned nodes
    changed.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:14Z
+CHANGE: Author agent node_config interface scenarios
+-->

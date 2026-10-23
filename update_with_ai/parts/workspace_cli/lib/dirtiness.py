@@ -1,11 +1,6 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:15:00Z
-# CHANGE: Define dirtiness interface
-# CODE_HASH: 9b3f4c81bae6
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence, Tuple
 
@@ -29,7 +24,7 @@ class UnitDirtinessResult:
 
 
 # Contract: WorkspaceDirtinessEvaluator protocol evaluates unit dirtiness, resolves companion contracts, and extracts cross-unit dependencies.
-class WorkspaceDirtinessEvaluator(Protocol):
+class WorkspaceDirtinessEvaluator(Singleton[AgentSessionTier], Protocol):
     """Evaluates unit dirtiness, resolves companion contracts, and extracts cross-unit dependencies."""
 
     # Contract: Evaluates whether a unit is dirty in directory scope and returns dirty status and reasons.
@@ -59,3 +54,8 @@ class WorkspaceDirtinessEvaluator(Protocol):
         unit_name: str,
     ) -> Sequence[Tuple[str, str]]: ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:15:00Z
+# CHANGE: Define dirtiness interface
+# --- END CLEANROOM METADATA ---

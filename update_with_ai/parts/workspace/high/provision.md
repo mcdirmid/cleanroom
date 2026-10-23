@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-08T18:30:00Z
-CHANGE: document stub role dependencies synthesis in commissioning contract
-CODE_HASH: 55adae21bff5
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # provision interface component
 
 imports: session, cleanroom_files_ext, role_registry
@@ -26,7 +18,7 @@ An agent session's *workspace provisioner* creates and configures directory-scop
 
 The workspace provisioner:
 
-- Commissions an isolated role workspace for a specified role and directory scope, creating the workspace directory structure, configuring role metadata, and registering the workspace in the persistent registry.
+- Commissions an isolated role workspace for a specified role and directory scope, creating the workspace directory structure, configuring role metadata, resolving the bound methodology package declared by the target scope, provisioning only the target scope directory and the promoted assets of the bound methodology package, strictly ignoring unbound repository root directories, and registering the workspace in the persistent registry.
 
 - Copies the declared writable files of the role with read-write permissions, projecting in-band metadata to expose only change, feedback, and ephemeral code hash attributes, and copies upstream contract dependencies with read-only permissions, preventing in-place clobbering of upstream specifications.
 
@@ -37,3 +29,10 @@ The workspace provisioner:
 - Deploys executable runner tools into the `bin/` directory of the workspace, packaging the work, submit, blame, fail, and coverage runners as executable scripts with execution permissions.
 
 - Writes workspace role configuration into a hidden role descriptor file recording role identity and optional model profile settings without exposing host repository paths, configures test runner isolation to restrict test discovery to the local workspace, and synthesizes a role-tailored `AGENTS.md` guide file establishing agent constraints and tool invocation workflows.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-22T13:50:00Z
+LAST_CHANGED: 2026-10-22T13:50:00Z
+CHANGE: Restrict workspace provisioning exclusively to target scope and bound methodology package assets
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

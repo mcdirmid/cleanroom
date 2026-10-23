@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: b6a3b3abdbfc
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Cleanroom manifest loader implementation low-level specification."""
 
 from typing import Optional
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 from update_with_ai.parts.dag.lib import dag_storage
 from . import manifest_loader
 import node_storage
@@ -21,9 +13,7 @@ import target
 
 
 @singleton_type("system")
-class UvManifestLoader(
-    manifest_loader.UvManifestLoader, InTier[SystemTier]
-):
+class UvManifestLoader(manifest_loader.UvManifestLoader):
     """Realizes role manifest loading, node resolution, and graph construction.
 
     GROUNDING:
@@ -84,3 +74,10 @@ class UvManifestLoader(
         - Discovers and parses TargetManifest records via retrieve_manifest, populating node definitions and prompt metadata into node_storage and registering dependency relationships into dag_storage.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-07T00:00:00Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:12:02Z
-CHANGE: Author control attribution concrete scenarios
-CODE_HASH: be57302a3b64
--->
-
 # Concrete scenarios for `attribution` (interface)
 
 ## Scenario 1 — Blaming one eligible upstream dependency among several
@@ -121,3 +114,9 @@ role alpha, whose verification failed with the diagnostics
    `the widget field type is not accepted` as an unacted feedback item and is marked dirty; and the
    local role workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` carries the same
    updated content.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:12:02Z
+CHANGE: Author control attribution concrete scenarios
+-->

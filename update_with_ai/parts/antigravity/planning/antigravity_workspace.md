@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_workspace planning specification
-CODE_HASH: 49f7cae802f4
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # antigravity_workspace interface component
 
 ## Intent
@@ -41,3 +33,10 @@ Autonomous agents operating within shared project environments can inadvertently
   - Grounded: [session: [agent_session_tier_provision]]
 - Workspace isolation rule writing and confinement reporting logic.
   - Deferred: Realized by the antigravity workspace implementation component.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T21:45:00Z
+CHANGE: author antigravity_workspace planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

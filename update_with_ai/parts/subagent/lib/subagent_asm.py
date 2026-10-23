@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_asm assembly module
-# CODE_HASH: b47e9b176c83
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 
 from typing import Optional
@@ -30,3 +23,9 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
 
 
 _initialize_ = __initialize__
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T21:00:00Z
+# CHANGE: author subagent_asm assembly module
+# --- END CLEANROOM METADATA ---

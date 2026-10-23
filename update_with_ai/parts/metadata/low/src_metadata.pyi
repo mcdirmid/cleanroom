@@ -1,19 +1,10 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-07T00:11:26Z
-# CHANGE: new file
-# CODE_HASH: 6cb6c4d3e377
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
-
 """Low-level interface specification for src_metadata."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 
 
 @data_type
@@ -41,7 +32,7 @@ class FileMetadata:
 
 
 @singleton_type("system")
-class SourceMetadataCoordinator(InTier[SystemTier], Protocol):
+class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
     """Coordinator that parses, hashes, and mutates in-band source metadata."""
 
     @operation
@@ -125,6 +116,23 @@ class SourceMetadataCoordinator(InTier[SystemTier], Protocol):
         ...
 
     @operation
+    def is_metadata_altered(
+        self,
+        original_content: str,
+        new_content: str,
+        filename_or_ext: str,
+    ) -> bool:
+        """Evaluates whether new content alters, corrupts, deletes, or injects in-band metadata relative to original content.
+
+        POSTCONDITIONS:
+        - When original content contains metadata and new content deletes or alters the metadata block, MUST return True.
+        - When original content contains metadata and new content preserves the identical metadata block, MUST return False.
+        - When original content contains no metadata and new content introduces metadata delimiters or a metadata block, MUST return True.
+        - When original content contains no metadata and new content contains no metadata delimiters or block, MUST return False.
+        """
+        ...
+
+    @operation
     def rewrite_metadata_in_text(
         self,
         content: str,
@@ -147,8 +155,8 @@ class SourceMetadataCoordinator(InTier[SystemTier], Protocol):
 
         POSTCONDITIONS:
         - MUST update specified fields while preserving existing unmodified fields.
-        - When existing metadata block present, MUST replace block in-place.
-        - When existing metadata block absent, MUST insert block below shebang or frontmatter.
+        - When existing metadata block present, MUST update block, placing it at the bottom of the content string.
+        - When existing metadata block absent, MUST append block at the bottom of the content string.
         - MUST preserve trailing newline status of original content.
         """
         ...
@@ -279,7 +287,18 @@ def __orphan__() -> None:
 
     POSTCONDITIONS:
     - MUST delegate module-level procedural queries and mutations to the active SourceMetadataCoordinator singleton.
-    - MUST expose module-level functions for metadata extraction, code body isolation, code hashing, modification checks, and lifecycle updates.
+    - MUST expose module-level functions for metadata extraction, code body isolation, code hashing, modification checks, metadata alteration checks, and lifecycle updates.
+    - MUST derive canonical audit tag strings from role names.
+    - MUST evaluate whether a role name denotes an auditor role.
+    - MUST parse in-band metadata block content into FileMetadata records.
+    - MUST format FileMetadata records into comment lines for supported languages.
+    - MUST return the current UTC timestamp formatted as an ISO-8601 string.
     """
     ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-20T22:32:00Z
+# CHANGE: Contract is_metadata_altered on SourceMetadataCoordinator and module facade
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

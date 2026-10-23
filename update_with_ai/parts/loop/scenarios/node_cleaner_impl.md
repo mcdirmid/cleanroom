@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:11:44Z
-CHANGE: Author loop node_cleaner_impl concrete scenarios
-CODE_HASH: 809c2aa071b1
--->
-
 # Concrete scenarios for `loop_node_cleaner_impl` (implementation)
 
 Scenarios 1 through 5 restate the caller observations of the interface scenarios and add, beside
@@ -165,3 +158,9 @@ retry.
    Realized by: `logger` for the logged failure; the component's own retry of the session
    phase; and the component's own propagation of the second failure, which leaves the node dirty in
    `dag_storage`.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:11:44Z
+CHANGE: Author loop node_cleaner_impl concrete scenarios
+-->

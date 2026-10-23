@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:15:00Z
-# CHANGE: Unit tests for dirtiness_impl
-# CODE_HASH: 458aa45c1797
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for dirtiness_impl aligned with low-level specifications."""
 
 import os
@@ -105,6 +96,24 @@ class WorkspaceDirtinessImplTest(unittest.TestCase):
         )
         self.assertTrue(res.is_dirty)
         self.assertTrue(any("does not exist" in r for r in res.dirtiness_reasons))
+
+    def test_evaluate_unit_dirty_uninitialized_target(self) -> None:
+        part_dir = os.path.join(self.test_dir, "parts", "foo")
+        lib_dir = os.path.join(part_dir, "lib")
+        os.makedirs(lib_dir, exist_ok=True)
+        target_file = os.path.join(lib_dir, "bar.py")
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# Cleanroom library template without metadata header\n")
+        res = self.evaluator.evaluate_unit_dirty(
+            ws_root=self.test_dir,
+            part_dir="parts/foo",
+            unit_name="bar",
+            eval_role="lib",
+            repo_root=self.test_dir,
+        )
+        self.assertTrue(res.is_dirty)
+        self.assertTrue(any("is uninitialized (initial implementation required)" in r for r in res.dirtiness_reasons))
+        self.assertFalse(any("in-band metadata header" in r for r in res.dirtiness_reasons))
 
     def test_evaluate_unit_dirty_metadata_clean(self) -> None:
         part_dir = os.path.join(self.test_dir, "parts", "foo")
@@ -263,3 +272,10 @@ class WorkspaceDirtinessImplTest(unittest.TestCase):
         self.assertFalse(res.is_dirty)
         self.assertEqual(res.dirtiness_reasons, ())
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:15:00Z
+# CHANGE: Unit tests for dirtiness_impl
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

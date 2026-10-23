@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T04:05:48Z
-# CHANGE: Align implementation with every interface operation: file target submission and resolution
-# CODE_HASH: b844c483848c
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for submit_impl."""
 
 from typing import Optional, Sequence, Tuple
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import node_config
@@ -21,10 +13,7 @@ import src_metadata
 
 
 @singleton_type("agent_session")
-class SubmissionCoordinator(
-    submit.SubmissionCoordinator,
-    InTier[AgentSessionTier],
-):
+class SubmissionCoordinator(submit.SubmissionCoordinator):
     """Implementation of submission coordinator.
 
     GROUNDING:
@@ -119,3 +108,10 @@ class SubmissionCoordinator(
           decomposing the file path into its part directory, unit name, and role name.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T04:05:48Z
+# CHANGE: Align implementation with every interface operation: file target submission and resolution
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

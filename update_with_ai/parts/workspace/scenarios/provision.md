@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:14:20Z
-CHANGE: Author workspace provision concrete scenarios
-CODE_HASH: 5bd17de4c43d
--->
-
 # Concrete scenarios for `provision` (interface)
 
 ## Scenario 1 — Commissioning an isolated role workspace
@@ -96,3 +89,9 @@ Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a`.
 
 1. The provisioner commissions the alpha workspace.
    Observed: test runner configuration in the workspace root restricts test discovery paths strictly to the local workspace `tests/` directory.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:14:20Z
+CHANGE: Author workspace provision concrete scenarios
+-->

@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T18:25:00Z
-# CHANGE: Define check_impl low-level implementation specification
-# CODE_HASH: 30d2d82bbc05
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for check_impl."""
 
 from typing import Optional
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import submit
 import check
@@ -20,11 +12,8 @@ import sync
 import work
 
 
-@singleton_type
-class WorkspaceChecker(
-    check.WorkspaceChecker,
-    InTier[AgentSessionTier],
-):
+@singleton_type("agent_session")
+class WorkspaceChecker(check.WorkspaceChecker):
     """Realizes work discovery and file verification for role workspaces.
 
     GROUNDING:
@@ -52,7 +41,9 @@ class WorkspaceChecker(
         """Evaluates dirty work in local workspace and prints ready tasks.
 
         GROUNDING:
-        - Evaluates dirty work using work.WorkspaceWorkManager.compute_role_work_queue
+        - Evaluates dirty work using work.WorkspaceWorkManager.compute_role_work_queue,
+          formats ready and blocked items with actionable next steps directing immediate
+          round conclusion when zero ready targets remain and blocked targets are pending,
           and records pending targets using pending.WorkspacePendingManager.set_pending_work.
         """
         ...
@@ -67,7 +58,39 @@ class WorkspaceChecker(
         """Executes role-specific verification checks, linters, and type checking for targets.
 
         GROUNDING:
-        - Resolves target via submit.SubmissionCoordinator.resolve_submit_target and
-          executes verification checks from role_registry.RoleDefinition.
+        - Resolves target via submit.SubmissionCoordinator.resolve_submit_target,
+          extracts max_failures from active model configuration (defaulting to 5 for local engines and 100 for non-local models) and propagates failure limits to test execution runners,
+          assembles verification environment bounded strictly to the active role workspace and its constituent package directories, isolating verification from the canonical repository root in PYTHONPATH and sys.path,
+          enforces an execution timeout on verification commands to prevent blocked sub-processes from stalling the workspace developer loop,
+          executes verification checks from role_registry.RoleDefinition, and
+          records verification execution records and target file hashes in the workspace.
         """
         ...
+
+    @operation
+    @override
+    def is_checked_since_modification(
+        self,
+        ws_root: str,
+        target_path: str,
+    ) -> bool:
+        """Returns True if the target has been verified via check_files since its last modification."""
+        ...
+
+    @operation
+    @override
+    def record_check_executed(
+        self,
+        ws_root: str,
+        target_path: str,
+        passed: bool,
+    ) -> None:
+        """Records file verification execution and content hash in the workspace."""
+        ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-21T21:50:00Z
+# LAST_CHANGED: 2026-10-21T21:50:00Z
+# CHANGE: Enforce execution timeout on check_files verification commands
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

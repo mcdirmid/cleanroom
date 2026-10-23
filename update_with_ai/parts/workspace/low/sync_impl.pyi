@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:45:00Z
-# CHANGE: align AGENTS.md refresh low spec with in-workspace file inspection and terminal command restrictions
-# CODE_HASH: 22fc959096c1
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for sync_impl."""
 
 from typing import Sequence
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import sync
 import role_registry
@@ -20,10 +12,7 @@ import cleanroom_files_ext
 
 
 @singleton_type("agent_session")
-class WorkspaceSynchronizer(
-    sync.WorkspaceSynchronizer,
-    InTier[AgentSessionTier],
-):
+class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
     """Realizes two-phase harvesting, inbound pulling, system file refresh, and blame flushing.
 
     GROUNDING:
@@ -85,8 +74,8 @@ class WorkspaceSynchronizer(
         - Resolves the canonical repository root and role context of the synchronized workspace
           through role_registry.WorkspaceRegistry.discover_repository_root and
           role_registry.WorkspaceDescriptor before recopying system files from that root.
-        - Recopies project configurations, guides, and linters from main into the workspace
-          using provision.WorkspaceProvisioner.copy_file_with_permissions without altering writable targets.
+        - Recopies project configurations, promoted methodology assets (./support/lib/, ./guides/, ./templates/, cleanroom_files_ext.CLEANROOM_ROLES_FILE, ./pyright_spec.json) belonging exclusively to the active methodology binding, and linters from main into the workspace root
+          using provision.WorkspaceProvisioner.copy_file_with_permissions without scanning or copying unbound repository root directories and without altering writable targets.
         - Delegates runner packaging to provision.WorkspaceProvisioner.deploy_runner_zipapps,
           role guide regeneration to provision.WorkspaceProvisioner.write_role_agents_guide,
           and test stub synchronization to provision.WorkspaceProvisioner.sync_test_stubs.
@@ -140,3 +129,10 @@ class WorkspaceSynchronizer(
           returns the culprit paths receiving feedback.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-22T13:50:00Z
+# LAST_CHANGED: 2026-10-22T13:50:00Z
+# CHANGE: Restrict system file refreshing exclusively to bound methodology package assets
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

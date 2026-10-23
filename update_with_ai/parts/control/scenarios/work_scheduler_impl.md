@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:17:15Z
-CHANGE: Author control work_scheduler_impl concrete scenarios
-CODE_HASH: ec936d4d43f8
--->
-
 # Concrete scenarios for `work_scheduler_impl` (implementation)
 
 Scenarios 1 through 7 restate the caller observations of the interface scenarios and add, beside
@@ -240,3 +233,9 @@ node for unit gadget; neither node is an auditor role.
    Observed: the prompt contains `When submitting or failing completed units, specify target as the file path.`
    Realized by: the component's own multi-node task prompt synthesis, which instructs file path
    target specification rather than exposing raw unit addresses.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:17:15Z
+CHANGE: Author control work_scheduler_impl concrete scenarios
+-->

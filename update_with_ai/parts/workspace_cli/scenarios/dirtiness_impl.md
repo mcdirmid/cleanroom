@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:15:00Z
-CHANGE: Define dirtiness_impl concrete scenarios
-CODE_HASH: d2855c7e99e9
--->
-
 # Concrete scenarios for `dirtiness_impl` (implementation)
 
 ## Scenario 1 — Producer unit dirtiness with star role dependencies
@@ -31,3 +24,15 @@ Given: a target file in a role workspace whose metadata lacks `LAST_CLEANED`, wh
 1. The caller invokes `evaluate_unit_dirty`.
    Observed: resolves the candidate file from the canonical repository root first, finding valid lifecycle timestamps, and reports dirty `False`.
 
+## Scenario 4 — Uninitialized target file dirtiness evaluation
+
+Given: a scaffolded target file without an in-band metadata header in a role workspace.
+
+1. The caller invokes `evaluate_unit_dirty`.
+   Observed: returns dirty `True` and lists that the target is uninitialized requiring initial implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-20T13:20:00Z
+CHANGE: Add scenario for uninitialized target file dirtiness evaluation
+-->

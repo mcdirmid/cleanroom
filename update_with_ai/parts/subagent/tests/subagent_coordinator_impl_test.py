@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_coordinator_impl unit tests
-# CODE_HASH: 3777a0383a21
-# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for subagent_coordinator_impl."""
 
 from __future__ import annotations
@@ -15,7 +6,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
 from update_with_ai.parts.agent.lib import session as agent_session
@@ -46,6 +37,9 @@ class FakeWorkspaceProvisioner:
         dir_scope: str,
         repo_root: Optional[str] = None,
         custom_dest: Optional[str] = None,
+        reset: bool = False,
+        model: Optional[str] = None,
+        **kwargs: Any,
     ) -> role_registry.WorkspaceDescriptor:
         self.commissioned.append((role_name, dir_scope))
         ws_dir = custom_dest or f"/repo/cleanroom/.workspaces/{role_name}_{dir_scope}"
@@ -160,7 +154,7 @@ class FakeWorkspaceWorkManager:
 class FakeHarnessAdapter:
     """Test double implementing HarnessAdapter protocol."""
 
-    def __init__(self, scripted_results: Optional[Dict[str, subagent_coordinator.RoleTurnResult]] = None) -> None:
+    def __init__(self, scripted_results: Optional[Dict[str, subagent_coordinator.RoleRoundResult]] = None) -> None:
         self.scripted_results = scripted_results or {}
         self.dispatches: List[subagent_coordinator.RoleDispatch] = []
         self.interrupted: List[str] = []
@@ -169,18 +163,18 @@ class FakeHarnessAdapter:
         self.dispatches.append(dispatch)
         return f"handle_{dispatch.role_name}"
 
-    def await_role(self, task_handle: str) -> subagent_coordinator.RoleTurnResult:
+    def await_role(self, task_handle: str) -> subagent_coordinator.RoleRoundResult:
         if task_handle in self.scripted_results:
             return self.scripted_results[task_handle]
         role = task_handle.replace("handle_", "")
-        return subagent_coordinator.RoleTurnResult(
+        return subagent_coordinator.RoleRoundResult(
             role=role,
             status="clean",
             submitted_targets=("target.py",),
             telemetry=subagent_coordinator.TokenUsage(100, 50, 20, 170, 0.001),
         )
 
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
         return self.await_role(task_handle)
 
     def interrupt_role(self, task_handle: str) -> None:
@@ -360,7 +354,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                 return super().dispatch_role(dispatch)
 
         harness = ConvergenceHarness({
-            "handle_lib": subagent_coordinator.RoleTurnResult(
+            "handle_lib": subagent_coordinator.RoleRoundResult(
                 role="lib",
                 status="clean",
                 submitted_targets=("lib/unit.py",),
@@ -379,7 +373,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.assertAlmostEqual(summary.total_telemetry.cost_usd, 0.005)
 
     def test_early_termination_upon_role_failure(self) -> None:
-        """Scenario 5: Execution terminates early when a subagent turn reports failure."""
+        """Scenario 5: Execution terminates early when a subagent round reports failure."""
         fake_reg = FakeWorkspaceRegistry([self.spec_role_high, self.spec_role_low])
         fake_work = FakeWorkspaceWorkManager({
             "high": (([_make_item("high/unit.md", "high")], ())),
@@ -389,7 +383,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         harness = FakeHarnessAdapter({
-            "handle_high": subagent_coordinator.RoleTurnResult(
+            "handle_high": subagent_coordinator.RoleRoundResult(
                 role="high",
                 status="failed",
                 failure_reason="Syntax error in spec",
@@ -419,13 +413,13 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                 return super().dispatch_role(dispatch)
 
         harness = AggregationHarness({
-            "handle_lib": subagent_coordinator.RoleTurnResult(
+            "handle_lib": subagent_coordinator.RoleRoundResult(
                 role="lib",
                 status="clean",
                 submitted_targets=("lib/unit.py",),
                 telemetry=subagent_coordinator.TokenUsage(1000, 500, 200, 1700, 0.015),
             ),
-            "handle_test": subagent_coordinator.RoleTurnResult(
+            "handle_test": subagent_coordinator.RoleRoundResult(
                 role="test",
                 status="clean",
                 submitted_targets=("tests/unit_test.py",),
@@ -531,7 +525,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                     return "h_high"
 
             harness = CleanupHarness({
-                "h_high": subagent_coordinator.RoleTurnResult(
+                "h_high": subagent_coordinator.RoleRoundResult(
                     role="high",
                     status="clean",
                     submitted_targets=("high/unit.md",),
@@ -558,13 +552,13 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         poll_calls = 0
 
         class PollingHarness(FakeHarnessAdapter):
-            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
                 nonlocal poll_calls
                 poll_calls += 1
                 if poll_calls < 2:
                     return None
                 fake_work.queue_data["high"] = ((), ())
-                return subagent_coordinator.RoleTurnResult(
+                return subagent_coordinator.RoleRoundResult(
                     role="high",
                     status="clean",
                     submitted_targets=("high/unit.md",),
@@ -588,16 +582,16 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
         self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
-        class SingleTurnHarness(FakeHarnessAdapter):
-            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+        class SingleRoundHarness(FakeHarnessAdapter):
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
                 fake_work.queue_data["high"] = ((), ())
-                return subagent_coordinator.RoleTurnResult(
+                return subagent_coordinator.RoleRoundResult(
                     role="high",
                     status="clean",
                     submitted_targets=("high/unit.md",),
                 )
 
-        harness = SingleTurnHarness()
+        harness = SingleRoundHarness()
 
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
@@ -605,8 +599,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.assertTrue(summary.is_converged)
             self.assertEqual(fake_work.last_target_unit, "//pkg_a/parts/mod:unit#high")
 
-    def test_orchestrate_halts_upon_consecutive_unproductive_turns(self) -> None:
-        """Scenario 10: Halting orchestration upon consecutive unproductive turn impasse."""
+    def test_orchestrate_halts_upon_consecutive_unproductive_rounds(self) -> None:
+        """Scenario 10: Halting orchestration upon consecutive unproductive round impasse."""
         fake_reg = FakeWorkspaceRegistry([self.spec_role_high])
         fake_work = FakeWorkspaceWorkManager({
             "high": (([_make_item("high/unit.md", "high")], ())),
@@ -615,8 +609,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         class UnproductiveHarness(FakeHarnessAdapter):
-            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
-                return subagent_coordinator.RoleTurnResult(
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                return subagent_coordinator.RoleRoundResult(
                     role="high",
                     status="unresolved",
                     submitted_targets=(),
@@ -631,14 +625,16 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                 "pkg_a",
                 harness,
                 poll_interval=0.001,
-                max_unproductive_turns=2,
+                max_unproductive_rounds=2,
             )
             self.assertFalse(summary.is_converged)
-            self.assertIn("made no progress (0 submitted, 0 blamed) for 2 consecutive turns", summary.status_message)
+            self.assertIn("made no progress (0 submitted, 0 blamed) for 2 consecutive rounds", summary.status_message)
             self.assertEqual(summary.total_waves, 2)
+            self.assertEqual(harness.dispatches[0].task_prompt, "")
+            self.assertIn("CRITICAL REMINDER", harness.dispatches[1].task_prompt)
 
-    def test_orchestrate_unproductive_turns_defaults_to_five(self) -> None:
-        """Scenario 10: Unconfigured max_unproductive_turns defaults to 5 turns before halting."""
+    def test_orchestrate_unproductive_rounds_defaults_to_five(self) -> None:
+        """Scenario 10: Unconfigured max_unproductive_rounds defaults to 5 rounds before halting."""
         fake_reg = FakeWorkspaceRegistry([self.spec_role_high])
         fake_work = FakeWorkspaceWorkManager({
             "high": (([_make_item("high/unit.md", "high")], ())),
@@ -647,8 +643,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
         class UnproductiveHarness(FakeHarnessAdapter):
-            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
-                return subagent_coordinator.RoleTurnResult(
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                return subagent_coordinator.RoleRoundResult(
                     role="high",
                     status="unresolved",
                     submitted_targets=(),
@@ -665,16 +661,104 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                 poll_interval=0.001,
             )
             self.assertFalse(summary.is_converged)
-            self.assertIn("made no progress (0 submitted, 0 blamed) for 5 consecutive turns", summary.status_message)
+            self.assertIn("made no progress (0 submitted, 0 blamed) for 5 consecutive rounds", summary.status_message)
             self.assertEqual(summary.total_waves, 5)
 
-    def test_resolve_model_parameters_extracts_unproductive_turns(self) -> None:
-        """Requirement: MUST resolve batch size, timeout, and max unproductive turns from model configuration."""
+    def test_orchestrate_unproductive_rounds_suppressed_when_targets_resolved(self) -> None:
+        """Scenario 10 & 12: MUST suppress unproductive rounds and scolding reminders when assigned targets are resolved in repository."""
+        fake_reg = FakeWorkspaceRegistry([self.spec_role_high])
+        fake_work = FakeWorkspaceWorkManager({
+            "high": (([_make_item("high/unit.md", "high")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        class ResolvingUnproductiveHarness(FakeHarnessAdapter):
+            def __init__(self, work_mgr: FakeWorkspaceWorkManager) -> None:
+                super().__init__()
+                self.work_mgr = work_mgr
+
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                # Simulate harness failing to recognize submission (0 submitted, 0 blamed),
+                # but target was actually cleaned/resolved in the repository during the round
+                self.work_mgr.queue_data["high"] = ((), ())
+                return subagent_coordinator.RoleRoundResult(
+                    role="high",
+                    status="unresolved",
+                    submitted_targets=(),
+                    blamed_targets=(),
+                )
+
+        harness = ResolvingUnproductiveHarness(fake_work)
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate(
+                "pkg_a",
+                harness,
+                poll_interval=0.001,
+                max_unproductive_rounds=2,
+            )
+            self.assertTrue(summary.is_converged)
+            self.assertEqual(summary.total_waves, 1)
+            self.assertEqual(harness.dispatches[0].task_prompt, "")
+
+    def test_orchestrate_unproductive_rounds_resets_and_omits_reminder_when_resolved(self) -> None:
+        """Scenario 10 & 12: MUST reset unproductive count and omit reminder on subsequent dispatch when resolved."""
+        fake_reg = FakeWorkspaceRegistry([self.spec_role_high])
+        fake_work = FakeWorkspaceWorkManager({
+            "high": ([_make_item("high/unit_a.md", "high")], ()),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        call_count = [0]
+
+        class MultiRoundResolvingHarness(FakeHarnessAdapter):
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    # Unit A was resolved, now Unit B is ready
+                    fake_work.queue_data["high"] = ([_make_item("high/unit_b.md", "high")], ())
+                    return subagent_coordinator.RoleRoundResult(
+                        role="high",
+                        status="unresolved",
+                        submitted_targets=(),
+                        blamed_targets=(),
+                    )
+                else:
+                    # Unit B is submitted
+                    fake_work.queue_data["high"] = ((), ())
+                    return subagent_coordinator.RoleRoundResult(
+                        role="high",
+                        status="clean",
+                        submitted_targets=("high/unit_b.md",),
+                        blamed_targets=(),
+                    )
+
+        harness = MultiRoundResolvingHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate(
+                "pkg_a",
+                harness,
+                poll_interval=0.001,
+                max_unproductive_rounds=2,
+            )
+            self.assertTrue(summary.is_converged)
+            self.assertEqual(summary.total_waves, 2)
+            # Dispatch 2 must NOT have the critical reminder scolding directive
+            self.assertEqual(harness.dispatches[0].task_prompt, "")
+            self.assertEqual(harness.dispatches[1].task_prompt, "")
+
+    def test_resolve_model_parameters_extracts_unproductive_rounds(self) -> None:
+        """Requirement: MUST resolve batch size, timeout, and max unproductive rounds from model configuration."""
         tmp_dir = tempfile.mkdtemp()
         try:
             cfg_file = os.path.join(tmp_dir, "model_configs.toml")
             with open(cfg_file, "w", encoding="utf-8") as f:
-                f.write('max_unproductive_turns = 7\n\n[models.moe_model]\nbatch_size = 4\nconversation_max_tokens = 45000\nmax_unproductive_turns = 12\n')
+                f.write('max_unproductive_rounds = 7\n\n[models.moe_model]\nbatch_size = 4\nconversation_max_tokens = 45000\nmax_unproductive_rounds = 12\n')
 
             batch, tokens, unprod = resolve_model_parameters(tmp_dir, "moe_model")
             self.assertEqual(batch, 4)
@@ -727,12 +811,12 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                 dispatched_order.append(dispatch.role_name)
                 return f"h_{dispatch.role_name}"
 
-            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
                 role = task_handle.replace("h_", "")
                 if role == "high":
                     fake_work.queue_data["high"] = ((), ())
                     fake_work.queue_data["planning"] = (([_make_item(t, "planning") for t in planning_targets], ()))
-                    return subagent_coordinator.RoleTurnResult(
+                    return subagent_coordinator.RoleRoundResult(
                         role="high",
                         status="clean",
                         submitted_targets=high_targets,
@@ -741,7 +825,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                 elif role == "planning":
                     fake_work.queue_data["planning"] = ((), ())
                     fake_work.queue_data["low"] = (([_make_item(t, "low") for t in low_targets], ()))
-                    return subagent_coordinator.RoleTurnResult(
+                    return subagent_coordinator.RoleRoundResult(
                         role="planning",
                         status="clean",
                         submitted_targets=planning_targets,
@@ -751,7 +835,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                     fake_work.queue_data["low"] = ((), ())
                     fake_work.queue_data["lib"] = (([_make_item(t, "lib") for t in lib_targets], ()))
                     fake_work.queue_data["test"] = (([_make_item(t, "test") for t in test_targets], ()))
-                    return subagent_coordinator.RoleTurnResult(
+                    return subagent_coordinator.RoleRoundResult(
                         role="low",
                         status="clean",
                         submitted_targets=low_targets,
@@ -762,7 +846,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                     # QA remains blocked until test also completes
                     if not fake_work.queue_data["test"][0]:
                         fake_work.queue_data["qa"] = (([_make_item(t, "qa") for t in qa_targets], ()))
-                    return subagent_coordinator.RoleTurnResult(
+                    return subagent_coordinator.RoleRoundResult(
                         role="lib",
                         status="clean",
                         submitted_targets=lib_targets,
@@ -773,7 +857,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                     # QA unblocks when lib is also clean
                     if not fake_work.queue_data["lib"][0]:
                         fake_work.queue_data["qa"] = (([_make_item(t, "qa") for t in qa_targets], ()))
-                    return subagent_coordinator.RoleTurnResult(
+                    return subagent_coordinator.RoleRoundResult(
                         role="test",
                         status="clean",
                         submitted_targets=test_targets,
@@ -781,7 +865,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                     )
                 elif role == "qa":
                     fake_work.queue_data["qa"] = ((), ())
-                    return subagent_coordinator.RoleTurnResult(
+                    return subagent_coordinator.RoleRoundResult(
                         role="qa",
                         status="clean",
                         submitted_targets=qa_targets,
@@ -825,46 +909,46 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
         self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
-        lib_turns = 0
-        low_turns = 0
+        lib_rounds = 0
+        low_rounds = 0
 
         class BlameHarness(FakeHarnessAdapter):
-            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
-                nonlocal lib_turns, low_turns
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                nonlocal lib_rounds, low_rounds
                 role = task_handle.replace("handle_", "")
                 if role == "high":
                     fake_work.queue_data["high"] = ((), ())
                     fake_work.queue_data["low"] = (([_make_item("low/core.pyi", "low")], ()))
-                    return subagent_coordinator.RoleTurnResult(
+                    return subagent_coordinator.RoleRoundResult(
                         role="high",
                         status="clean",
                         submitted_targets=("high/core.md",),
                     )
                 elif role == "low":
-                    low_turns += 1
+                    low_rounds += 1
                     fake_work.queue_data["low"] = ((), ())
                     fake_work.queue_data["lib"] = (([_make_item("lib/core.py", "lib")], ()))
-                    return subagent_coordinator.RoleTurnResult(
+                    return subagent_coordinator.RoleRoundResult(
                         role="low",
                         status="clean",
                         submitted_targets=("low/core.pyi",),
                     )
                 elif role == "lib":
-                    lib_turns += 1
-                    if lib_turns == 1:
-                        # Turn 1 blames low for missing contract specification
+                    lib_rounds += 1
+                    if lib_rounds == 1:
+                        # Round 1 blames low for missing contract specification
                         fake_work.queue_data["lib"] = (((), [_make_item("lib/core.py", "lib", is_ready=False)]))
                         fake_work.queue_data["low"] = (([_make_item("low/core.pyi", "low")], ()))
-                        return subagent_coordinator.RoleTurnResult(
+                        return subagent_coordinator.RoleRoundResult(
                             role="lib",
                             status="blamed",
                             submitted_targets=(),
                             blamed_targets=("low/core.pyi",),
                         )
                     else:
-                        # Turn 2 completes cleanly after low has been fixed
+                        # Round 2 completes cleanly after low has been fixed
                         fake_work.queue_data["lib"] = ((), ())
-                        return subagent_coordinator.RoleTurnResult(
+                        return subagent_coordinator.RoleRoundResult(
                             role="lib",
                             status="clean",
                             submitted_targets=("lib/core.py",),
@@ -880,8 +964,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.assertTrue(summary.is_converged)
             self.assertEqual(summary.blamed_count, 1)
             self.assertEqual(summary.submitted_count, 4)  # high (1), low (1), low fix (1), lib clean (1)
-            self.assertEqual(low_turns, 2)  # low ran initially and then ran again to fix blame
-            self.assertEqual(lib_turns, 2)  # lib ran, blamed, then ran again to submit
+            self.assertEqual(low_rounds, 2)  # low ran initially and then ran again to fix blame
+            self.assertEqual(lib_rounds, 2)  # lib ran, blamed, then ran again to submit
 
     def test_stress_wave_barriers_block_downstream_until_all_parallel_prerequisites_succeed(self) -> None:
         """Requirement: MUST enforce wave barriers preventing downstream execution until all parallel dependencies succeed."""
@@ -911,12 +995,12 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                         qa_dispatched_too_early = True
                 return super().dispatch_role(dispatch)
 
-            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
                 nonlocal test_poll_count
                 role = task_handle.replace("handle_", "")
                 if role == "lib":
                     fake_work.queue_data["lib"] = ((), ())
-                    return subagent_coordinator.RoleTurnResult(
+                    return subagent_coordinator.RoleRoundResult(
                         role="lib",
                         status="clean",
                         submitted_targets=("lib/unit.py",),
@@ -928,14 +1012,14 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                         return None
                     fake_work.queue_data["test"] = ((), ())
                     fake_work.queue_data["qa"] = (([_make_item("qa/report.md", "qa")], ()))
-                    return subagent_coordinator.RoleTurnResult(
+                    return subagent_coordinator.RoleRoundResult(
                         role="test",
                         status="clean",
                         submitted_targets=("tests/unit_test.py",),
                     )
                 elif role == "qa":
                     fake_work.queue_data["qa"] = ((), ())
-                    return subagent_coordinator.RoleTurnResult(
+                    return subagent_coordinator.RoleRoundResult(
                         role="qa",
                         status="clean",
                         submitted_targets=("qa/report.md",),
@@ -973,7 +1057,7 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
 
             class CancelHarness(FakeHarnessAdapter):
-                def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+                def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
                     # Re-create ws_low as if provisioned during execution
                     os.makedirs(ws_low, exist_ok=True)
                     # Simulate user cancellation via SIGINT (KeyboardInterrupt)
@@ -997,3 +1081,11 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-18T19:13:51Z
+# LAST_CHANGED: 2026-10-20T23:50:00Z
+# CHANGE: Test suppression of unproductive rounds and scolding reminders when assigned targets are resolved
+# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

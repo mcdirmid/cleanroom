@@ -16,6 +16,8 @@ DEFAULT_LOG_FILE: str = f".{APP_NAME}.log"
 DEFAULT_PENDING_WORK_FILE: str = f".{APP_NAME}_pending_work.json"
 DEFAULT_BLAME_BUFFER_FILE: str = f".{APP_NAME}_blame_buffer.json"
 DEFAULT_AUDIT_BUFFER_FILE: str = f".{APP_NAME}_audit_buffer.json"
+DEFAULT_LOCAL_MAX_FAILURES: int = 5
+DEFAULT_MAX_FAILURES: int = 100
 
 
 def get_app_name() -> str:
@@ -78,67 +80,32 @@ def load_credentials() -> dict[str, str]:
     return {}
 
 
-DEFAULT_USER_MODEL_CONFIGS_TOML: str = """# model_configs.toml
-# User-level model configurations for Cleanroom.
+def get_template_model_config_file() -> str:
+    """Returns the canonical filesystem path for the model_configs.toml template."""
+    curr = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.abspath(os.path.join(curr, "..", "..", "templates", "model_configs.toml")),
+        os.path.abspath(os.path.join(curr, "..", "..", "..", "update_python_with_ai", "templates", "model_configs.toml")),
+        os.path.abspath(os.path.join(curr, "..", "..", "..", "templates", "model_configs.toml")),
+    ]
+    for cand in candidates:
+        if os.path.isfile(cand):
+            return cand
+    return candidates[1]
 
-# Per-harness default model selections
-loop_default = "deepseek-v41-flash"
-antigravity_default = "gemini-3.8-flash"
-dsh_default = "deepseek-v41-flash"
-default = "deepseek-v41-flash"
-max_unproductive_turns = 5
 
-[models.deepseek-v41-flash]
-model = "deepseek-flash"
-provider = "deepseek"
-base_url = "https://api.deepseek.com/v1"
-max_iterations = 100
-temperature = 0.7
-timeout_seconds = 120.0
-api_key_env = "DEEPSEEK_API_KEY"
-max_tokens = 8192
-subagent_batch_size = 10
-conversation_max_tokens = 256000
-max_feedback_chars = 4000
-max_unproductive_turns = 5
+def _load_default_user_model_configs_toml() -> str:
+    template_file = get_template_model_config_file()
+    if os.path.isfile(template_file):
+        try:
+            with open(template_file, "r", encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            pass
+    return ""
 
-[models.gemini-3.8-flash]
-model = "gemini-3.8-flash"
-provider = "google"
-max_iterations = 100
-temperature = 0.7
-timeout_seconds = 120.0
-api_key_env = "GEMINI_API_KEY"
-max_tokens = 8192
-subagent_batch_size = 5
-conversation_max_tokens = 256000
-max_feedback_chars = 4000
-max_unproductive_turns = 5
 
-[models.gpt-4o]
-model = "gpt-4o"
-provider = "openai"
-max_iterations = 100
-temperature = 0.7
-timeout_seconds = 120.0
-api_key_env = "OPENAI_API_KEY"
-max_tokens = 4096
-subagent_batch_size = 3
-conversation_max_tokens = 128000
-max_feedback_chars = 2000
-max_unproductive_turns = 5
-
-# --- LOCAL LLM TEMPLATES (Uncomment to enable) ---
-# [models.local-vllm]
-# model = "Qwen/Qwen2.5-Coder-32B-Instruct"
-# base_url = "http://localhost:8000/v1"
-# api_key_env = "OPENAI_API_KEY"
-# max_iterations = 100
-# temperature = 0.7
-# timeout_seconds = 100.0
-# max_tokens = 8192
-# max_unproductive_turns = 10
-"""
+DEFAULT_USER_MODEL_CONFIGS_TOML: str = _load_default_user_model_configs_toml()
 
 DEFAULT_USER_CREDENTIALS_TOML: str = """# credentials.toml
 # Private API authentication credentials for Cleanroom.

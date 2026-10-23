@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_coordinator planning specification
-CODE_HASH: 34adbfde1a2a
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # antigravity_coordinator interface component
 
 ## Intent
@@ -47,3 +39,10 @@ Coordinating multi-agent workflows inside an interactive desktop IDE requires sp
   - Grounded: [subagent_coordinator: [subagent_coordinator_service]]
 - Coordinator skill generation, dispatch formatting, and notification parsing logic.
   - Deferred: Realized by the antigravity coordinator implementation component.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T21:45:00Z
+CHANGE: author antigravity_coordinator planning specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

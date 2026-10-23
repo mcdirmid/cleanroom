@@ -34,8 +34,6 @@ def _setup_python_path() -> None:
             if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
                 sup_lib = os.path.join(pkg_dir, "support", "lib")
                 if os.path.isdir(sup_lib):
-                    if pkg_dir not in sys.path:
-                        sys.path.insert(0, pkg_dir)
                     if sup_lib not in sys.path:
                         sys.path.insert(0, sup_lib)
     except OSError:
@@ -72,16 +70,7 @@ if cleanroom_asm is None:
         from update_with_ai.parts.loop.lib import loop
         from update_with_ai.parts.openai.lib.openai_config import OpenAIConfig
     except ImportError:
-        try:
-            cleanroom_asm = importlib.import_module("parts.systems.lib.cleanroom_asm")
-            target = importlib.import_module("parts.uv.lib.target")
-            manifest_loader = importlib.import_module("parts.uv.lib.manifest_loader")
-            dag_storage = importlib.import_module("parts.dag.lib.dag_storage")
-            loop = importlib.import_module("parts.loop.lib.loop")
-            _openai_cfg_mod = importlib.import_module("parts.openai.lib.openai_config")
-            OpenAIConfig = _openai_cfg_mod.OpenAIConfig
-        except ImportError:
-            raise ImportError("Failed to locate cleanroom_asm across discovered Cleanroom roots")
+        raise ImportError("Failed to locate cleanroom_asm across discovered Cleanroom roots")
 
 def _compute_role_depths(roles_map: Dict[str, Dict[str, Any]]) -> Dict[str, int]:
     """Ranks roles by dependency depth so that upstream roles precede downstream roles."""

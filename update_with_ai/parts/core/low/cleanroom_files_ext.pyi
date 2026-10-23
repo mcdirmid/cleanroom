@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-13T01:30:00Z
-# CHANGE: remove cleanroom_workspaces.json
-# CODE_HASH: 72349ce478e4
-# --- END CLEANROOM METADATA ---
-
 """
 ## External Mechanics & API Documentation
 
@@ -105,3 +98,9 @@ def find_methodology_binding(start_dir: str, stop_root: str) -> Optional[str]:
     return None
 ```
 """
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-13T01:30:00Z
+# CHANGE: remove cleanroom_workspaces.json
+# --- END CLEANROOM METADATA ---

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T12:35:00Z
-CHANGE: Update scenarios to reflect standard output carrying event summary text without timestamps or event names
-CODE_HASH: 5da8d76d019e
--->
-
 # Concrete scenarios for `logger_impl` (implementation)
 
 Scenarios 1 through 6 restate the caller observations of the interface scenarios and add, beside
@@ -160,3 +153,9 @@ transcript representation one line long.
    of finish, and the three records of the earlier execution are gone.
    Realized by: the component's own truncation of the transcript log at opening, which starts
    every execution session with a clean transcript.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T12:35:00Z
+CHANGE: Update scenarios to reflect standard output carrying event summary text without timestamps or event names
+-->

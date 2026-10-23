@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Remove the runner logger dependency from the interface scope and state turn handling declaratively
-CODE_HASH: e571710fc38b
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # driver interface component
 
 imports: session, conversation, tool_provider
@@ -33,3 +25,10 @@ The loop driver appends model responses to the conversation and correlates tool 
 The loop driver evaluates tool executions with the loop guard, injecting loop reminders into the conversation or halting with an unexpected failure on runaway repetition. When a model response contains no tool executions, the loop driver injects a tool reminder into the conversation stating that session progress and conclusion require executing tools, and continues the turn loop.
 
 The loop driver concludes atomically and produces a loop outcome when tool execution produces a termination outcome, and halts with an unexpected failure when that termination indicates a failing outcome or when the conversation limit is exceeded.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Remove the runner logger dependency from the interface scope and state turn handling declaratively
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

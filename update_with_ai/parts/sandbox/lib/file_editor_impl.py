@@ -1,25 +1,17 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T23:15:12Z
-# CHANGE: Reject editing tool replacements that alter the cleanroom metadata header
-# CODE_HASH: e7c5aa5add5b
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 import difflib
 import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Mapping, Optional, Sequence, Set, Union, cast
-from support.lib.lifecycle import InTier, LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 from update_with_ai.parts.agent.lib.session import AgentSessionTier, agent_session
 import update_with_ai.parts.agent.lib.agent_config as agent_config
 import update_with_ai.parts.agent.lib.file_alias as file_alias
 import update_with_ai.parts.agent.lib.node_config as node_config
 import update_with_ai.parts.metadata.lib.src_metadata as src_metadata
 from . import file_editor
+from . import file_reader
 from . import tool_provider
 
 # Requirements specified in file_editor_impl.pyi
@@ -93,36 +85,15 @@ def _is_cleanroom_metadata_altered(
     new_content: str,
     filename: str,
 ) -> bool:
-    is_html = src_metadata._is_html_comment_format(filename)
-    orig_lines = original_content.splitlines()
-    orig_bounds = src_metadata._extract_block_boundaries(orig_lines, is_html)
-    new_lines = new_content.splitlines()
-    new_bounds = src_metadata._extract_block_boundaries(new_lines, is_html)
-
-    if orig_bounds is not None:
-        if new_bounds is None:
-            return True
-        orig_meta = orig_lines[orig_bounds[0] : orig_bounds[1] + 1]
-        new_meta = new_lines[new_bounds[0] : new_bounds[1] + 1]
-        if orig_meta != new_meta:
-            return True
-        if orig_lines[: orig_bounds[0]] != new_lines[: new_bounds[0]]:
-            return True
-    else:
-        if new_bounds is not None:
-            return True
-        for line in new_lines:
-            stripped = line.strip()
-            if (
-                stripped == "# --- CLEANROOM METADATA ---"
-                or stripped == "# --- END CLEANROOM METADATA ---"
-                or (stripped.startswith("<!--") and "CLEANROOM METADATA" in stripped)
-            ):
-                return True
-    return False
+    try:
+        from support.lib.lifecycle import get_singleton
+        coord = get_singleton(src_metadata.SourceMetadataCoordinator)
+        return coord.is_metadata_altered(original_content, new_content, filename)
+    except Exception:
+        return src_metadata.is_metadata_altered(original_content, new_content, filename)
 
 
-class EditManager(file_editor.EditManager, InTier[AgentSessionTier], Singleton):
+class EditManager(file_editor.EditManager):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -268,16 +239,26 @@ class _LineNumberParamType(tool_provider.ParameterType[Optional[file_editor.Line
     def wire_type(self) -> type[int]:
         return int
 
-    def convert(self, wire_value: int) -> Optional[file_editor.LineNumber]:
+    def convert(self, wire_value: Any) -> Optional[file_editor.LineNumber]:
         if wire_value is None:
             return None
-        if not isinstance(wire_value, int) or isinstance(wire_value, bool):
+        if isinstance(wire_value, bool):
             raise tool_provider.ParameterConversionError(
                 message=tool_provider.ConversionErrorMessage(
-                    f"Expected int for line number, got {type(wire_value).__name__}"
+                    "Expected int for line number, got bool"
                 )
             )
-        return file_editor.LineNumber(wire_value)
+        if isinstance(wire_value, int):
+            return file_editor.LineNumber(wire_value)
+        if isinstance(wire_value, str):
+            s = wire_value.strip()
+            if s.isdigit() or (s.startswith("-") and s[1:].isdigit()):
+                return file_editor.LineNumber(int(s))
+        raise tool_provider.ParameterConversionError(
+            message=tool_provider.ConversionErrorMessage(
+                f"Expected int for line number, got {type(wire_value).__name__}"
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -291,20 +272,26 @@ class _AllowMultipleParamType(tool_provider.ParameterType[file_editor.AllowMulti
         return bool
 
     def convert(self, wire_value: bool) -> file_editor.AllowMultiple:
-        if not isinstance(wire_value, bool):
-            raise tool_provider.ParameterConversionError(
-                message=tool_provider.ConversionErrorMessage(
-                    f"Expected bool for allow_multiple, got {type(wire_value).__name__}"
-                )
+        if isinstance(wire_value, bool):
+            return file_editor.AllowMultiple(wire_value)
+        if isinstance(wire_value, str):
+            lowered = wire_value.strip().lower()
+            if lowered in ("true", "1"):
+                return file_editor.AllowMultiple(True)
+            if lowered in ("false", "0"):
+                return file_editor.AllowMultiple(False)
+        raise tool_provider.ParameterConversionError(
+            message=tool_provider.ConversionErrorMessage(
+                f"Expected bool for allow_multiple, got {type(wire_value).__name__}"
             )
-        return file_editor.AllowMultiple(wire_value)
+        )
 
 
-class ReplaceFileContentTool(file_editor.ReplaceFileContentTool, InTier[AgentSessionTier], Singleton):
+class ReplaceFileContentTool(file_editor.ReplaceFileContentTool):
     tier = agent_session
 
     def __init__(self) -> None:
-        pass
+        self._consecutive_failures: int = 0
 
     # Contract: ReplaceFileContentTool.initialize - installs tool into session environment via ToolManager.
     def initialize(self) -> None:
@@ -412,10 +399,51 @@ class ReplaceFileContentTool(file_editor.ReplaceFileContentTool, InTier[AgentSes
         target_file = cast(Any, actual_parameter_bindings.get(self.path_parameter))
 
         def fail(message: str, reminder: Optional[str] = None) -> tool_provider.ToolResponse:
-            return _failure_response(
-                f"{warning}{message}",
-                reminder,
-                _REPLACE_FILE_CONTENT_SUPPRESSION_KEY,
+            self._consecutive_failures += 1
+            if self._consecutive_failures >= 4:
+                return tool_provider.ToolResponse(
+                    is_failed=True,
+                    is_terminated=True,
+                    content=tool_provider.ToolResponseContent(
+                        f"{warning}{message}\nFatal edit failure: 4 consecutive edit attempts failed. Session terminated."
+                    ),
+                    reminder=tool_provider.ToolReminder(
+                        "Fatal edit failure: 4 consecutive edit attempts failed. Session terminated."
+                    ),
+                    suppression_key=_REPLACE_FILE_CONTENT_SUPPRESSION_KEY,
+                )
+
+            follow_up_call: Optional[tool_provider.FollowUpToolCall] = None
+            effective_reminder = reminder
+            if self._consecutive_failures == 2:
+                warning_text = "Warning: 2 consecutive edit attempts have failed. Inspecting file content before retrying."
+                effective_reminder = f"{reminder} ({warning_text})" if reminder else warning_text
+                resolved_target = target_file
+                if resolved_target is None:
+                    resolved_target = edit_mgr.last_read_or_edited_file
+                if resolved_target is not None:
+                    try:
+                        view_tool = get_singleton(file_reader.ViewFileTool)
+                        path_str = str(resolved_target.relative_path)
+                        follow_up_call = tool_provider.FollowUpToolCall(
+                            tool_name=view_tool.name,
+                            wire_parameter_bindings={
+                                view_tool.path_parameter.name: path_str
+                            },
+                            reasoning_text=tool_provider.ReasoningText(
+                                f"Editing '{path_str}' failed repeatedly, so I must view the current file content to inspect actual line contents."
+                            ),
+                        )
+                    except Exception:
+                        pass
+
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=tool_provider.ToolResponseContent(f"{warning}{message}"),
+                reminder=tool_provider.ToolReminder(effective_reminder) if effective_reminder is not None else None,
+                suppression_key=_REPLACE_FILE_CONTENT_SUPPRESSION_KEY,
+                follow_up_tool_call=follow_up_call,
             )
 
         if target_file is None:
@@ -586,6 +614,7 @@ class ReplaceFileContentTool(file_editor.ReplaceFileContentTool, InTier[AgentSes
                 "Cleanroom metadata is managed automatically by submit.",
             )
 
+        self._consecutive_failures = 0
         disk_path.parent.mkdir(parents=True, exist_ok=True)
         disk_path.write_text(new_content, encoding="utf-8")
 
@@ -604,6 +633,13 @@ class ReplaceFileContentTool(file_editor.ReplaceFileContentTool, InTier[AgentSes
             ),
             suppression_key=_REPLACE_FILE_CONTENT_SUPPRESSION_KEY,
         )
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-21T20:00:00Z
+# LAST_CHANGED: 2026-10-21T20:00:00Z
+# CHANGE: Register ReplaceFileContentTool under file_editor.EditingTool key
+# COVERAGE_AUDIT: 2026-10-21T20:00:00Z
+# QA_AUDIT: 2026-10-21T20:00:00Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -612,12 +648,12 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         EditManager,
-        keys=[EditManager, file_editor.EditManager, InTier[AgentSessionTier]],
+        keys=[EditManager, file_editor.EditManager],
         tier=agent_session,
     )
     reg.register_singleton(
         ReplaceFileContentTool,
-        keys=[ReplaceFileContentTool, file_editor.ReplaceFileContentTool, InTier[AgentSessionTier]],
+        keys=[ReplaceFileContentTool, file_editor.ReplaceFileContentTool, file_editor.EditingTool],
         tier=agent_session,
     )
 

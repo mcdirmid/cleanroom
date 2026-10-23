@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T12:00:00Z
-CHANGE: update subagent tool impl scenarios for dynamic supervision and options
-CODE_HASH: 7059c6ce17f1
--->
-
 # subagent_tool_impl scenarios
 
 ### Scenario 1 — Running the orchestrate command via dynamic queue supervision
@@ -31,10 +24,16 @@ Given: scope_a has unblocked roles across multiple development stages.
    Observed: the coordinator executes supervision only up to the target role, ignoring downstream stages.
    Realized by: the component's orchestrate CLI parsing extracting the target role argument and passing it to the coordinator.
 
-### Scenario 4 — Configuring batch size, execution timeout, context token, and unproductive turn limits
+### Scenario 4 — Configuring batch size, execution timeout, context token, and unproductive round limits
 
 Given: scope_a has unblocked roles and ready work targets.
 
-1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, `--max-context-tokens 100000`, and `--max-unproductive-turns 8`.
-   Observed: the coordinator and harness adapter receive the configured batch size, timeout, context compaction, and unproductive turn limits.
-   Realized by: the component's CLI options parsing `--batch-size`, `--timeout`, `--max-context-tokens`, and `--max-unproductive-turns` and propagating them to harness resolution and coordinator options.
+1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, `--max-context-tokens 100000`, and `--max-unproductive-rounds 8`.
+   Observed: the coordinator and harness adapter receive the configured batch size, timeout, context compaction, and unproductive round limits.
+   Realized by: the component's CLI options parsing `--batch-size`, `--timeout`, `--max-context-tokens`, and `--max-unproductive-rounds` (or `--max-unproductive-turns`) and propagating them to harness resolution and coordinator options.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-13T12:00:00Z
+CHANGE: update subagent tool impl scenarios for dynamic supervision and options
+-->

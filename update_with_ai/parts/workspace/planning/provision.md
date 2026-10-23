@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-11T03:16:22Z
-CHANGE: Name the provisioner typing and contract workspace commissioning
-CODE_HASH: 55dd865decfa
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # provision interface component
 
 ## Intent
@@ -52,3 +44,10 @@ Uncontrolled read-write access across an entire codebase leads to accidental cro
   - Deferred: Provided by workspace provisioner implementation.
 - Runner zipapp deployment, role metadata serialization, and guide scaffolding services.
   - Deferred: Provided by workspace provisioner implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-11T03:16:22Z
+CHANGE: Name the provisioner typing and contract workspace commissioning
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

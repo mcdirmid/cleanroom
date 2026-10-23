@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:10:51Z
-CHANGE: Add default value binding, unknown tool failure, and response return to tool execution contracts
-CODE_HASH: fffd183c8ffa
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # tool_provider_impl implementation component
 
 ## Intent
@@ -55,3 +47,10 @@ To facilitate robust interaction across dynamic agent environments, the implemen
 
 - Execution of tools by name with parameter binding conversion and diagnostic error handling.
   - Grounded: [private_tool_storage, tool_provider: [wire_value_conversion, tool_execution_capability, tool_response_generation]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:10:51Z
+CHANGE: Add default value binding, unknown tool failure, and response return to tool execution contracts
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

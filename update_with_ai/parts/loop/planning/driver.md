@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:07:01Z
-CHANGE: Remove the runner logger dependency from interface scope and complete turn handling statements
-CODE_HASH: 7f5018202dc1
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # driver interface component
 
 ## Intent
@@ -59,3 +51,10 @@ By driving iterative turns, executing follow-up actions, and enforcing turn caps
   - Deferred: Implemented by model driver in provider implementation.
 - Loop guard monitoring of repetitive tool executions.
   - Deferred: Coordinated with loop guard in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:07:01Z
+CHANGE: Remove the runner logger dependency from interface scope and complete turn handling statements
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

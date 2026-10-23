@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T03:48:25Z
-# CHANGE: Register synthesized pass-through definitions as non-propagating graph dependencies
-# CODE_HASH: d383f1f2a4e5
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Cleanroom manifest loader low-level interface specification."""
 
 from dataclasses import dataclass
 from typing import NewType, Optional, Protocol, Sequence
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 from update_with_ai.parts.agent.lib import file_alias
 from update_with_ai.parts.agent.lib import node_storage
 from update_with_ai.parts.dag.lib import dag_storage
@@ -56,7 +48,7 @@ class TargetManifest:
 
 
 @singleton_type("system")
-class UvManifestLoader(InTier[SystemTier], Protocol):
+class UvManifestLoader(Singleton[SystemTier], Protocol):
     """Discovers and translates workspace role definitions into runtime graph structures and node definitions."""
 
     @operation
@@ -91,3 +83,10 @@ class UvManifestLoader(InTier[SystemTier], Protocol):
         - WHEN synthesizing promptless pass-through node definitions because a unit component type is not active for a role, MUST register the synthesized definitions as graph dependencies that do not propagate changes.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T03:48:25Z
+# CHANGE: Register synthesized pass-through definitions as non-propagating graph dependencies
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

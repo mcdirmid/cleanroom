@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:59:56Z
-# CHANGE: Model node dirtiness from in-band metadata state instead of message presence and keep clear_messages from altering dirtiness
-# CODE_HASH: bdc74286bb5d
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for node_cleaner_impl aligned with grounding specifications."""
 
 from dataclasses import dataclass
@@ -179,10 +170,11 @@ class MockConversation:
         tool_name: str,
         tool_arguments: str,
     ) -> None:
+        resp_content = tool_response if isinstance(tool_response, str) else str(tool_response)
         self._messages.append(
             ConversationMessage(
                 role=MessageRole("tool"),
-                content=ConversationContent(str(getattr(tool_response, "content", ""))),
+                content=ConversationContent(resp_content or ""),
                 tool_call_id=ToolCallId(tool_call_id) if tool_call_id else None,
                 tool_name=cast(Any, tool_name) if tool_name else None,
             )
@@ -741,3 +733,11 @@ class MockBatchCleaner:
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:59:56Z
+# CHANGE: Model node dirtiness from in-band metadata state instead of message presence and keep clear_messages from altering dirtiness
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

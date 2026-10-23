@@ -1,21 +1,13 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T18:25:00Z
-# CHANGE: Define check low-level interface specification
-# CODE_HASH: 394cf61af1af
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for check."""
 
 from typing import Optional, Protocol
-from framework import operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 
 
 @singleton_type
-class WorkspaceChecker(InTier[AgentSessionTier], Protocol):
+class WorkspaceChecker(Singleton[AgentSessionTier], Protocol):
     """Executes work discovery and file verification for role workspaces."""
 
     @operation
@@ -46,7 +38,34 @@ class WorkspaceChecker(InTier[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - When a target file for a regenerable role is missing or deleted, MUST regenerate it from starter template.
         - MUST configure PYTHONPATH in the execution environment to include the target package root and constituent support libraries.
+        - MUST record verification execution records and target file hashes in the workspace to gate subsequent submit, blame, and fail commands.
         - WHEN verification checks pass on a target carrying unacted feedback, MUST surface the unacted feedback items with an explicit reminder that static checks do not verify runtime behavior or feedback resolution.
         - MUST execute verification checks and return exit code.
         """
         ...
+
+    @operation
+    def is_checked_since_modification(
+        self,
+        ws_root: str,
+        target_path: str,
+    ) -> bool:
+        """Returns True if the target has been verified via check_files since its last modification."""
+        ...
+
+    @operation
+    def record_check_executed(
+        self,
+        ws_root: str,
+        target_path: str,
+        passed: bool,
+    ) -> None:
+        """Records file verification execution and content hash in the workspace."""
+        ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T18:25:00Z
+# CHANGE: Define check low-level interface specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

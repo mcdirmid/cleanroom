@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:40:00Z
-CHANGE: Define pending_impl implementation specification
-CODE_HASH: 0c322f392b79
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # pending_impl implementation component
 
 imports: session, cleanroom_files_ext, dag_storage, src_metadata, role_registry
@@ -36,3 +28,10 @@ When managing pending target state:
 - The pending manager removes the pending work buffer file completely when cleared.
 
 - The pending manager evaluates whether a pending target remains dirty by checking in-band source metadata across the workspace and main repository, evaluating canonical lifecycle timestamps from the main repository when available, evaluating star-role and feedback dependencies as implicit dependencies, verifying auditor role feedback targets against audit timestamps, and materializing starter templates via graph storage when missing.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T17:40:00Z
+CHANGE: Define pending_impl implementation specification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

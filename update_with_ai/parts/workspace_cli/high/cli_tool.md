@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T08:35:00Z
-CHANGE: throttle unacted feedback reasons by max_feedback_chars in work reports
-CODE_HASH: a6f2f25dc4ab
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # cli_tool interface component
 
 imports: session, cleanroom_files_ext
@@ -37,3 +29,10 @@ The workspace tool runner evaluates statement test coverage across implementatio
 The workspace tool runner evaluates static verification checks, linters, and type checking for specified or pending target files, regenerating a missing target file from its starter template before verification for roles that declare source patterns and upstream dependencies, and surfacing unacted feedback warnings when targets carrying unaddressed feedback pass static verification.
 
 The workspace tool runner commissions isolated role workspaces for specified roles or across all declared roles within a directory scope, dynamically discovering or requiring the directory scope without hardcoded defaults, supporting resetting stale work buffers and stamping model execution profiles, and refreshes system configuration files, bin utilities, and companion guides across the active role workspaces.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T08:35:00Z
+CHANGE: throttle unacted feedback reasons by max_feedback_chars in work reports
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

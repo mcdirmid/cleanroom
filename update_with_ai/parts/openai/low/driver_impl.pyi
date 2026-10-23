@@ -1,15 +1,7 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-12T12:07:00Z
-# CHANGE: Rebuild completion tools payload on each turn from currently installed tools
-# CODE_HASH: a1cc60ea657d
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """OpenAI driver implementation low-level specification."""
 
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import driver
 import agent_config
@@ -21,9 +13,7 @@ import tool_provider
 
 
 @singleton_type("agent_session")
-class LoopDriver(
-    driver.LoopDriver, InTier[AgentSessionTier]
-):
+class LoopDriver(driver.LoopDriver):
     """Realizes language model completion requests, tool dispatch, output continuation, and termination handling.
 
     GROUNDING:
@@ -121,6 +111,7 @@ class LoopDriver(
         - MUST log turn requests, completions, and tool results to the runner logger.
         - MUST format compact log summaries carrying turn identifiers, token size, percentage of
           cached tokens, tool names, arguments, and execution status without inlining file content.
+        - MUST record output tokens and elapsed turn duration in the completion transcript when present.
         - WHEN corrective reminders are present, MUST include them in the logged transcript.
         - WHEN the loop guard produces a loop failure, MUST halt execution with an unexpected
           failure carrying the explanation.
@@ -145,3 +136,10 @@ class LoopDriver(
           execution with an unexpected failure indicating that the conversation limit was reached.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-12T12:07:00Z
+# CHANGE: Rebuild completion tools payload on each turn from currently installed tools
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

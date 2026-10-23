@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:55:00Z
-# CHANGE: Author dsh_telemetry_impl implementation
-# CODE_HASH: 8f9044a93160
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for dsh_telemetry_impl."""
 
 from __future__ import annotations
@@ -319,8 +310,102 @@ def _sync_desktop_session(
         pass
 
 
+def _is_valid_model_config(path: str) -> bool:
+    if not os.path.isfile(path):
+        return False
+    if path.endswith(".toml"):
+        try:
+            try:
+                import tomllib
+            except ImportError:
+                import tomli as tomllib  # type: ignore
+            with open(path, "rb") as f:
+                data = tomllib.load(f)
+            return "models" in data or "default" in data
+        except Exception:
+            return False
+    return True
+
+
+def _find_model_configs_file(workspace_dir: Optional[str] = None) -> Optional[str]:
+    candidates = []
+    if workspace_dir:
+        candidates.append(workspace_dir)
+        candidates.append(os.path.dirname(workspace_dir))
+        candidates.append(os.path.dirname(os.path.dirname(workspace_dir)))
+    candidates.append(os.getcwd())
+    cur = os.path.dirname(os.path.abspath(__file__))
+    while cur and cur != os.path.dirname(cur):
+        candidates.append(cur)
+        cur = os.path.dirname(cur)
+    for c in candidates:
+        for fname in ("model_configs.toml", "cleanroom_models.toml", "cleanroom.toml"):
+            p = os.path.join(c, fname)
+            if _is_valid_model_config(p):
+                return p
+    home = os.path.expanduser("~")
+    for cand in (
+        os.path.join(home, ".config", "cleanroom", "model_configs.toml"),
+        os.path.join(home, ".cleanroom", "model_configs.toml"),
+        os.path.join(home, ".config", "cleanroom", "models.toml"),
+        os.path.join(home, ".cleanroom", "models.toml"),
+    ):
+        if _is_valid_model_config(cand):
+            return cand
+    return None
+
+
+def _resolve_dsh_model_selection(
+    model_name: Optional[str],
+    workspace_dir: Optional[str] = None,
+) -> tuple[str, str, Optional[str]]:
+    """Resolves (provider, model, reasoningEffort) for DSH Desktop session/selectModel."""
+    cfg_model = None
+    cfg_provider = None
+    if model_name:
+        cfg_file = _find_model_configs_file(workspace_dir)
+        if cfg_file:
+            try:
+                try:
+                    import tomllib
+                except ImportError:
+                    import tomli as tomllib  # type: ignore
+                with open(cfg_file, "rb") as f:
+                    data = tomllib.load(f)
+                models_sec = data.get("models", {})
+                clean = model_name.strip()
+                for prefix in ("dsh ", "antigravity ", "models."):
+                    if clean.startswith(prefix):
+                        clean = clean[len(prefix):].strip()
+                target_cfg = None
+                if isinstance(models_sec, dict):
+                    if clean in models_sec:
+                        target_cfg = models_sec[clean]
+                    else:
+                        for k, v in models_sec.items():
+                            if isinstance(v, dict) and (v.get("model") == clean or k.lower() == clean.lower()):
+                                target_cfg = v
+                                break
+                if target_cfg and isinstance(target_cfg, dict):
+                    cfg_model = target_cfg.get("model") or clean
+                    cfg_provider = target_cfg.get("provider")
+            except Exception:
+                pass
+
+    sel_prov = cfg_provider or "deepseek-official"
+    if sel_prov.lower() in ("deepseek", "deepseek-official"):
+        sel_prov = "deepseek-official"
+    elif sel_prov in ("mlx", "omlx"):
+        sel_prov = "omlx"
+
+    sel_model = cfg_model or model_name or "deepseek-flash"
+    if sel_prov == "deepseek-official":
+        return sel_prov, sel_model, "high"
+    return sel_prov, sel_model, None
+
+
 # Contract: Realizes event stream and session storage archive parsing for DeepSeek Harness in agent_session tier.
-class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
+class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
     """Realizes event stream and session storage archive parsing for DeepSeek Harness."""
 
     tier = agent_session.agent_session
@@ -483,7 +568,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
 
     # Contract: MUST ensure workspace registration and create or resume session on the server.
     # MUST enqueue the prompt task and return a task handle, or None if unreachable.
-    def dispatch_turn_rpc(
+    def dispatch_round_rpc(
         self,
         workspace_dir: str,
         role_name: str,
@@ -492,7 +577,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
         sessions_dir: Optional[str] = None,
         model_name: Optional[str] = None,
     ) -> Optional[str]:
-        """Dispatches a role turn over the local JSON-RPC bridge to the central DeepSeek Harness server."""
+        """Dispatches a role round over the local JSON-RPC bridge to the central DeepSeek Harness server."""
         server_info = _discover_desktop_server(sessions_dir)
         if not server_info:
             return None
@@ -503,6 +588,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
         # 1. Discover existing sessions for this workspace in DSH Desktop
         list_res = _call_dsh_rpc(port, cookie_name, cookie_value, "session/list", {"_request": {}}, timeout=2.0)
         actual_session_id: Optional[str] = None
+        items: list[Dict[str, Any]] = []
         if list_res and isinstance(list_res, dict):
             items = list_res.get("result", {}).get("value", {}).get("items", [])
 
@@ -517,15 +603,20 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
                     if it.get("sessionId") == session_id and _is_usable(it):
                         actual_session_id = session_id
                         break
-            # If not found or not passed, look for any usable session matching this cwd
-            if not actual_session_id:
-                for it in items:
-                    if it.get("cwd") == real_ws and _is_usable(it):
-                        actual_session_id = it.get("sessionId")
-                        break
 
         # 2. If no existing session found, ensure workspace registration and create one
         if not actual_session_id:
+            # Clean up stale sessions matching this cwd in DSH Desktop before creating a new one
+            for it in items:
+                if it.get("cwd") == real_ws:
+                    stale_sid = it.get("sessionId")
+                    if stale_sid:
+                        _call_dsh_rpc(
+                            port, cookie_name, cookie_value,
+                            "session/delete",
+                            {"request": {"sessionId": stale_sid}},
+                            timeout=2.0,
+                        )
             _call_dsh_rpc(
                 port, cookie_name, cookie_value,
                 "workspace/create",
@@ -549,6 +640,36 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
                     actual_session_id = create_res.get("result", {}).get("sessionId")
             if not actual_session_id:
                 actual_session_id = session_id or f"dsh-sess-{role_name}-{int(time.time() * 1000)}"
+
+        # Explicitly configure session model selection on DSH Desktop
+        target_model = model_name
+        if not target_model and os.path.isdir(workspace_dir):
+            role_json_path = os.path.join(workspace_dir, ".cleanroom_role.json")
+            if os.path.isfile(role_json_path):
+                try:
+                    with open(role_json_path, "r", encoding="utf-8") as rf:
+                        r_data = json.load(rf)
+                        target_model = r_data.get("model")
+                except Exception:
+                    pass
+
+        if actual_session_id and target_model:
+            sel_prov, sel_model, sel_effort = _resolve_dsh_model_selection(target_model, workspace_dir)
+            sel_req: Dict[str, Any] = {
+                "request": {
+                    "sessionId": actual_session_id,
+                    "provider": sel_prov,
+                    "model": sel_model,
+                }
+            }
+            if sel_effort:
+                sel_req["request"]["reasoningEffort"] = sel_effort
+            _call_dsh_rpc(
+                port, cookie_name, cookie_value,
+                "session/selectModel",
+                sel_req,
+                timeout=2.0,
+            )
 
         # 3. Dispatch prompt over session/prompt
         request_id = str(uuid.uuid4())
@@ -607,13 +728,16 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
         }
         return task_handle
 
-    # Contract: MUST query turn execution status from the central server and return DshRpcTurnStatus.
-    def poll_turn_rpc(
+    # Backward compatibility alias
+    dispatch_turn_rpc = dispatch_round_rpc
+
+    # Contract: MUST query round execution status from the central server and return DshRpcRoundStatus.
+    def poll_round_rpc(
         self,
         task_handle: str,
         sessions_dir: Optional[str] = None,
-    ) -> dsh_telemetry.DshRpcTurnStatus:
-        """Polls active turn status over the local JSON-RPC bridge."""
+    ) -> dsh_telemetry.DshRpcRoundStatus:
+        """Polls active round status over the local JSON-RPC bridge."""
         turn_info = self._active_rpc_turns.get(task_handle)
         session_id = ""
         port = None
@@ -635,7 +759,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
                 session_id = parts[1]
 
         if not session_id:
-            return dsh_telemetry.DshRpcTurnStatus(
+            return dsh_telemetry.DshRpcRoundStatus(
                 is_active=False,
                 is_completed=True,
                 error=f"Unknown task handle '{task_handle}'",
@@ -647,7 +771,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
                 port, cookie_name, cookie_value = server_info
 
         if port is None:
-            return dsh_telemetry.DshRpcTurnStatus(
+            return dsh_telemetry.DshRpcRoundStatus(
                 is_active=False,
                 is_completed=True,
                 error="DeepSeek Harness server is unreachable",
@@ -682,7 +806,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
                         )
 
                     if running:
-                        return dsh_telemetry.DshRpcTurnStatus(
+                        return dsh_telemetry.DshRpcRoundStatus(
                             is_active=True,
                             is_completed=False,
                             metrics=metrics,
@@ -690,7 +814,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
                     else:
                         if not metrics and sessions_dir and workspace_dir:
                             metrics = self.parse_session_storage(sessions_dir, workspace_dir, model_name)
-                        return dsh_telemetry.DshRpcTurnStatus(
+                        return dsh_telemetry.DshRpcRoundStatus(
                             is_active=False,
                             is_completed=True,
                             metrics=metrics,
@@ -723,7 +847,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
                         model_name=model_name or "",
                     )
                 if st in ("running", "active", "busy", "streaming"):
-                    return dsh_telemetry.DshRpcTurnStatus(
+                    return dsh_telemetry.DshRpcRoundStatus(
                         is_active=True,
                         is_completed=False,
                         metrics=metrics,
@@ -731,13 +855,13 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
                 elif st in ("completed", "idle", "finished", "success"):
                     if not metrics and sessions_dir and workspace_dir:
                         metrics = self.parse_session_storage(sessions_dir, workspace_dir, model_name)
-                    return dsh_telemetry.DshRpcTurnStatus(
+                    return dsh_telemetry.DshRpcRoundStatus(
                         is_active=False,
                         is_completed=True,
                         metrics=metrics,
                     )
                 elif st in ("error", "failed"):
-                    return dsh_telemetry.DshRpcTurnStatus(
+                    return dsh_telemetry.DshRpcRoundStatus(
                         is_active=False,
                         is_completed=True,
                         error=str(err) if err else "Execution error",
@@ -754,13 +878,13 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
                         fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
                         fcntl.flock(lf, fcntl.LOCK_UN)
                     metrics = self.parse_session_storage(sessions_dir, workspace_dir, model_name)
-                    return dsh_telemetry.DshRpcTurnStatus(
+                    return dsh_telemetry.DshRpcRoundStatus(
                         is_active=False,
                         is_completed=True,
                         metrics=metrics,
                     )
                 except (BlockingIOError, OSError):
-                    return dsh_telemetry.DshRpcTurnStatus(
+                    return dsh_telemetry.DshRpcRoundStatus(
                         is_active=True,
                         is_completed=False,
                     )
@@ -768,12 +892,21 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser, Singleton):
         metrics = None
         if sessions_dir and workspace_dir:
             metrics = self.parse_session_storage(sessions_dir, workspace_dir, model_name)
-        return dsh_telemetry.DshRpcTurnStatus(
+        return dsh_telemetry.DshRpcRoundStatus(
             is_active=False,
             is_completed=True,
             metrics=metrics,
         )
 
+    # Backward compatibility alias
+    poll_turn_rpc = poll_round_rpc
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:55:00Z
+# CHANGE: Author dsh_telemetry_impl implementation
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

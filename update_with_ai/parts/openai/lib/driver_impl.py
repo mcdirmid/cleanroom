@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T12:05:00Z
-# CHANGE: Rebuild tools payload on each turn to reflect dynamically installed tools
-# CODE_HASH: 890a9034cb50
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 import json
 import time
 from typing import Any, Mapping, Optional, Sequence, Tuple
@@ -173,7 +164,9 @@ def _tool_result_summary(
 
 
 def _find_tool(tool_mgr: Any, fn_name: str) -> Optional[tool_provider.Tool]:
-    tools: Mapping[str, tool_provider.Tool] = getattr(tool_mgr, "installed_tools", {})
+    tools: Mapping[str, tool_provider.Tool] = (
+        tool_mgr.installed_tools if hasattr(tool_mgr, "installed_tools") else {}
+    )
     found: Optional[tool_provider.Tool] = tools.get(fn_name)
     if found is not None: return found
     return next((t for t in tools.values() if str(t.name) == fn_name), None)
@@ -225,11 +218,11 @@ def _make_tool_response(is_failed: bool, is_terminated: bool, content: str, remi
 def _build_actual_bindings(tool: Optional[tool_provider.Tool], args_dict: Mapping[str, Any]) -> Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]:
     res: dict[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType] = {}
     if tool is not None:
-        tool_params = getattr(tool, "parameters", {})
+        tool_params = tool.parameters if hasattr(tool, "parameters") else {}
         for k, v in args_dict.items():
             param = tool_params.get(tool_provider.ParameterName(k))
             if param is not None:
-                pt = getattr(param, "parameter_type", None)
+                pt = param.parameter_type if hasattr(param, "parameter_type") else None
                 if pt is not None:
                     try: res[param] = pt.convert(v)
                     except (ValueError, TypeError, KeyError): res[param] = v
@@ -293,7 +286,7 @@ def _truncated_suppression_key(fn_name: str, args_dict: Optional[Mapping[str, An
 
 
 
-class LoopDriver(driver.LoopDriver, Singleton):
+class LoopDriver(driver.LoopDriver):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -308,7 +301,7 @@ class LoopDriver(driver.LoopDriver, Singleton):
             return
 
         for tc in tool_calls:
-            if not tc or not getattr(tc, "function", None): continue
+            if not tc or not (tc.function if hasattr(tc, "function") else None): continue
             fn_name = tc.function.name or ""
             raw_arguments = tc.function.arguments or ""
             # Contract: Recover truncated tool invocations by repairing unclosed arguments into valid JSON.
@@ -414,14 +407,17 @@ class LoopDriver(driver.LoopDriver, Singleton):
             if client is None:  # pragma: no cover (assumption: the openai dependency is installed in the runtime image)
                 raise RuntimeError("OpenAI client could not be initialized. Please ensure 'openai' is installed and credentials are configured.")
 
+            t0 = time.perf_counter()
+            turn_duration: float = 0.0
             try:
                 # Contract: Bind model parameters from OpenAI configuration into the transmitted request.
                 kw: dict[str, Any] = {"model": openai_cfg.model_name, "messages": messages_payload, "tools": tools_payload or None, "temperature": openai_cfg.temperature, "timeout": float(openai_cfg.timeout)}
                 if openai_cfg.max_tokens is not None: kw["max_tokens"] = openai_cfg.max_tokens
                 completion = client.chat.completions.create(**kw)
+                turn_duration = time.perf_counter() - t0
 
-                err_payload = getattr(completion, "error", None)
-                if not getattr(completion, "choices", None):
+                err_payload = completion.error if hasattr(completion, "error") else None
+                if not (completion.choices if hasattr(completion, "choices") else None):
                     is_incomplete, err_msg = False, ""
                     if isinstance(err_payload, dict):
                         code = err_payload.get("code")
@@ -459,15 +455,18 @@ class LoopDriver(driver.LoopDriver, Singleton):
                 raise RuntimeError(f"Model error: {e}") from e
 
             consecutive_truncations = 0
-            usage = getattr(completion, "usage", None)
+            usage = completion.usage if hasattr(completion, "usage") else None
+            last_turn_completion_tokens: Optional[int] = None
             if usage is not None:
                 if isinstance(usage, dict):
                     last_turn_prompt_tokens = usage.get("prompt_tokens")
                     last_turn_cached_tokens = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
+                    last_turn_completion_tokens = usage.get("completion_tokens")
                 else:
-                    last_turn_prompt_tokens = getattr(usage, "prompt_tokens", None)
-                    details = getattr(usage, "prompt_tokens_details", None)
-                    last_turn_cached_tokens = getattr(details, "cached_tokens", 0) if details is not None else 0
+                    last_turn_prompt_tokens = usage.prompt_tokens if hasattr(usage, "prompt_tokens") else None
+                    details = usage.prompt_tokens_details if hasattr(usage, "prompt_tokens_details") else None
+                    last_turn_cached_tokens = details.cached_tokens if (details is not None and hasattr(details, "cached_tokens")) else 0
+                    last_turn_completion_tokens = usage.completion_tokens if hasattr(usage, "completion_tokens") else None
 
             choice = completion.choices[0]
             finish_reason = choice.finish_reason
@@ -477,29 +476,37 @@ class LoopDriver(driver.LoopDriver, Singleton):
 
             if truncated:
                 for tc in tool_calls:
-                    tc_func = getattr(tc, "function", None)
-                    raw_args = getattr(tc_func, "arguments", "") or "{}" if tc_func else "{}"
+                    tc_func = tc.function if hasattr(tc, "function") else None
+                    raw_args = (tc_func.arguments if (tc_func and hasattr(tc_func, "arguments")) else "") or "{}"
                     raw_args = _repair_json(raw_args)
                     if tc_func is not None:
                         try: tc_func.arguments = raw_args
                         except (AttributeError, TypeError): pass
-                    history.append_message(_conv_msg("assistant", assistant_msg.content or "", getattr(tc, "id", None), getattr(tc_func, "name", "") if tc_func else "", raw_args))
+                    tc_id = tc.id if hasattr(tc, "id") else None
+                    tc_name = tc_func.name if (tc_func and hasattr(tc_func, "name")) else ""
+                    history.append_message(_conv_msg("assistant", assistant_msg.content or "", tc_id, tc_name, raw_args))
                 if not tool_calls:
                     # A length-truncated generation must still be appended as a model response
                     # so that the continuation turn follows the response it continues.
                     history.append_message(_conv_msg("assistant", assistant_msg.content or ""))
             elif tool_calls:
                 for tc in tool_calls:
-                    tc_func = getattr(tc, "function", None)
-                    history.append_message(_conv_msg("assistant", assistant_msg.content or "", getattr(tc, "id", None), getattr(tc_func, "name", "") if tc_func else "", getattr(tc_func, "arguments", "") or "{}" if tc_func else "{}"))
+                    tc_func = tc.function if hasattr(tc, "function") else None
+                    tc_id = tc.id if hasattr(tc, "id") else None
+                    tc_name = tc_func.name if (tc_func and hasattr(tc_func, "name")) else ""
+                    tc_args = (tc_func.arguments if (tc_func and hasattr(tc_func, "arguments")) else "") or "{}"
+                    history.append_message(_conv_msg("assistant", assistant_msg.content or "", tc_id, tc_name, tc_args))
             else:
                 history.append_message(_conv_msg("assistant", assistant_msg.content or ""))
 
             # Contract: Log compact completion summary and transcript to runner logger without inlining file content.
-            call_logs = [
-                _format_tool_call(getattr(getattr(tc, "function", None), "name", "") or "", getattr(getattr(tc, "function", None), "arguments", "") or "")
-                for tc in tool_calls
-            ]
+            def _extract_call_log(tc: Any) -> Tuple[str, str]:
+                tc_func = tc.function if hasattr(tc, "function") else None
+                tc_name = str(tc_func.name if (tc_func and hasattr(tc_func, "name")) else "")
+                tc_args = str(tc_func.arguments if (tc_func and hasattr(tc_func, "arguments")) else "")
+                return _format_tool_call(tc_name, tc_args)
+
+            call_logs = [_extract_call_log(tc) for tc in tool_calls]
             if tool_calls:
                 completion_summary = f"[Turn {turns}] Assistant: {', '.join(log[0] for log in call_logs)}"
                 completion_transcript = f"=== Assistant Response (turn {turns}) ===\nFinish: {finish_reason}\nTool calls:\n" + "\n".join(f"  {log[0]}" for log in call_logs)
@@ -507,6 +514,9 @@ class LoopDriver(driver.LoopDriver, Singleton):
                 content_preview = _truncate_text(assistant_msg.content or "")
                 completion_summary = f"[Turn {turns}] Assistant (text): {json.dumps(content_preview)}"
                 completion_transcript = f"=== Assistant Response (turn {turns}) ===\nFinish: {finish_reason}\nContent: {content_preview}"
+            if last_turn_completion_tokens is not None:
+                completion_transcript += f"\nOutput tokens: {last_turn_completion_tokens}"
+            completion_transcript += f"\nDuration: {turn_duration:.2f}s"
             logger.consume(_log_event("model_completion", completion_summary, completion_transcript))
 
             # Contract: WHEN truncated at generation limit, recover and resume generation with continuation turn.
@@ -522,7 +532,7 @@ class LoopDriver(driver.LoopDriver, Singleton):
 
             # Contract: Dispatches model-invoked tool calls and records each ToolResponse against its originating call identifier.
             for tc in tool_calls:
-                if not tc or not getattr(tc, "function", None): continue
+                if not tc or not (tc.function if hasattr(tc, "function") else None): continue
                 fn_name = tc.function.name or ""
                 fn_args_str = tc.function.arguments or ""
                 try: args_dict = json.loads(fn_args_str, strict=False) if fn_args_str else {}
@@ -577,7 +587,7 @@ class LoopDriver(driver.LoopDriver, Singleton):
                     logger.consume(_log_event("tool_execution", followup_summary, followup_transcript))
                     # Contract: Append follow-up tool response immediately following originating response.
                     _call_append_tool_response(history, followup_response, followup_call_id, str(followup.tool_name), followup_args_json)
-                    self._clear_repetition(guard, followup_response, str(followup.tool_name))
+                    self._clear_repetition(guard_svc, followup_response, str(followup.tool_name))
                     current_response = followup_response
                     current_call_id = followup_call_id
                     if current_response.is_terminated:
@@ -603,7 +613,13 @@ class LoopDriver(driver.LoopDriver, Singleton):
             return
         if tool_name in _EDITING_TOOL_NAMES or tool_name in _ADVANCING_TOOL_NAMES:
             guard.reset()
-
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-19T19:42:00Z
+# CHANGE: Fix guard_svc reference in _clear_repetition for follow-up tool calls
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

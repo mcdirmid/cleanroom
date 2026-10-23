@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:45:00Z
-# CHANGE: align AGENTS.md low spec with in-workspace file inspection and terminal command restrictions
-# CODE_HASH: 578fc117e549
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for provision_impl."""
 
 from typing import Optional
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import cleanroom_files_ext
 import provision
@@ -21,10 +13,7 @@ import src_metadata
 
 
 @singleton_type("agent_session")
-class WorkspaceProvisioner(
-    provision.WorkspaceProvisioner,
-    InTier[AgentSessionTier],
-):
+class WorkspaceProvisioner(provision.WorkspaceProvisioner):
     """Realizes role workspace directory provisioning, permissions, and runner deployment.
 
     GROUNDING:
@@ -54,7 +43,7 @@ class WorkspaceProvisioner(
         """Commissions an isolated role workspace with permission boundaries.
 
         POSTCONDITIONS:
-        - MUST create the role workspace working tree by copying workspace roots, project configurations, and build definitions.
+        - MUST create the role workspace working tree by copying workspace roots, project configurations, and build definitions, resolving the target scope's bound methodology package from cleanroom_files_ext.CLEANROOM_CONFIG_FILE, and projecting only active methodology runtime support libraries, companion guides, starter templates, and configurations directly to the workspace root, while strictly ignoring unbound repository root directories.
         - MUST configure type-checking to cover the workspace without directory exclusions.
         - WHEN a declared writable target file does not yet exist on disk, MUST create a missing target skeleton.
         - WHEN reset is true, MUST clear stale pending work buffers in the workspace.
@@ -66,8 +55,11 @@ class WorkspaceProvisioner(
           role_registry.WorkspaceRegistry.resolve_role_definition and the destination
           working tree through role_registry.WorkspaceRegistry.compute_workspace_dir.
         - Creates the role workspace working tree by copying workspace roots, project
-          configurations, and build definitions into the computed workspace directory and
-          configures type-checking to cover the workspace without directory exclusions.
+          configurations, and build definitions into the computed workspace directory,
+          projecting active methodology runtime support libraries to ./support/lib,
+          companion guides to ./guides, starter templates to ./templates, and
+          configurations (cleanroom_files_ext.CLEANROOM_ROLES_FILE, pyright_spec.json) directly to the workspace root,
+          and configures type-checking to cover the workspace without directory exclusions.
         - Creates a missing target skeleton for a declared writable target file matching
           role_registry.RoleDefinition.writable_file_patterns when that file does not
           yet exist on disk.
@@ -86,8 +78,8 @@ class WorkspaceProvisioner(
           runner entrypoint, writes role metadata containing role identity, directory scope, and
           optional model profile parameters into cleanroom_files_ext.ROLE_DESCRIPTOR_FILE without
           recording host repository paths, and formats AGENTS.md instructions carrying
-          role constraints, strict boundary rules, a contamination tripwire (distinguishing prohibited out-of-bounds files from permitted in-workspace code inspection), a terminal command execution
-          restriction tripwire, instructions for acting on blame and feedback (warning that static checks do not verify runtime behavior or feedback resolution and requiring target change header inspection before auditor blame delivery), a fail-stop reporting protocol with unresolvable impasse handling via bin/fail,
+          role constraints, strict boundary rules, a contamination tripwire (distinguishing prohibited out-of-bounds files from permitted in-workspace code inspection), permitted in-workspace shell commands and native harness tools while mandating round resolution through prescribed bin/ tools,
+          instructions for acting on blame and feedback (warning that static checks do not verify runtime behavior or feedback resolution and requiring target change header inspection before auditor blame delivery), a fail-stop reporting protocol with unresolvable impasse handling via bin/fail,
           and tool execution instructions.
         - Composes the role_registry.WorkspaceDescriptor from the workspace directory,
           main repository root, directory scope, and resolved role_registry.RoleDefinition,
@@ -153,7 +145,7 @@ class WorkspaceProvisioner(
 
         GROUNDING:
         - Resolves role definition and formats AGENTS.md instructions carrying role constraints,
-          boundary rules, contamination tripwires, terminal command restrictions, fail-stop
+          boundary rules, contamination tripwires, permitted in-workspace shell commands and native harness tools while mandating turn resolution through prescribed bin/ tools, fail-stop
           reporting protocols, and tool execution instructions (workspace_filesystem_mechanics).
         """
         ...
@@ -184,3 +176,9 @@ def __orphan__() -> None:
     """
     ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-22T13:50:00Z
+# LAST_CHANGED: 2026-10-22T13:50:00Z
+# CHANGE: Restrict workspace provisioning exclusively to target scope and bound methodology package assets
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

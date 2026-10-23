@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-17T12:00:00Z
-LAST_CHANGED: 2026-10-17T12:00:00Z
-CHANGE: align model_config_impl with app_info_ext and credentials fallback
-CODE_HASH: 65e1dfd3eade
--->
-
 # model_config_impl implementation component
 
 imports: filesystem_ext, app_info_ext
@@ -33,3 +26,9 @@ The agent config provides conversational turn limits and operational policies fo
 The dag config provides node visit bounds and batching limits for graph execution.
 
 When the configuration file or named model entry is absent, execution parameters and authentication credentials fall back to ambient environment variables (such as `OPENAI_MODEL`, `OPENAI_BASE_URL`, and `OPENAI_API_KEY`), the user credentials store, and standard defaults.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-17T12:00:00Z
+LAST_CHANGED: 2026-10-17T12:00:00Z
+CHANGE: align model_config_impl with app_info_ext and credentials fallback
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T08:35:00Z
-CHANGE: throttle unacted feedback reasons by max_feedback_chars in work reports
-CODE_HASH: b180eaf5bd94
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # cli_tool interface component
 
 ## Intent
@@ -48,3 +40,10 @@ Autonomous subagents executing inside isolated Cleanroom role workspaces rely on
   - Grounded: [cleanroom_files_ext: [cleanroom_files_schema]]
 - Dispatch and execution of role workspace commands.
   - Deferred: Provided by workspace tool runner realization.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T08:35:00Z
+CHANGE: throttle unacted feedback reasons by max_feedback_chars in work reports
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

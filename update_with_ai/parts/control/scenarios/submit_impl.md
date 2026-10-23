@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:14:20Z
-CHANGE: Author control submit_impl concrete scenarios
-CODE_HASH: 6fa5b1132390
--->
-
 # Concrete scenarios for `submit_impl` (implementation)
 
 Scenarios 1 through 7 restate the caller observations of the interface scenarios and add, beside
@@ -304,3 +297,8 @@ been modified since the target was last clean.
    Realized by: session feedback check through `agent_node_config`, file modification check through
    `src_metadata`, and the component's own feedback submission gating rule.
 
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:14:20Z
+CHANGE: Author control submit_impl concrete scenarios
+-->

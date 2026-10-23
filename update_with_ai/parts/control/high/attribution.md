@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:45:00Z
-CHANGE: Name the session attribution coordinator and split the multi-concern file attribution bullets
-CODE_HASH: 06c0552dd78a
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # attribution interface component
 
 imports: session, dag_storage, file_alias, node_config, src_metadata
@@ -33,3 +25,10 @@ The attribution coordinator attributes blame by recording a feedback message on 
 The attribution coordinator attributes defect blame to a culprit file in a repository workspace by validating that the critique explanation contains no newline characters and does not exceed configured maximum feedback character limits (defaulting to 2000 characters when unconfigured), resolving the culprit file via alias resolution, exact path matching, or normalized relative path suffix matching against registered blame targets, discovering role context from workspace metadata or execution environment, then invoking a build blame target or appending in-band feedback and dirty markers directly to the culprit file in the canonical repository and synchronizing the updated file back to the local role workspace.
 
 The attribution coordinator records task failure for a file target by appending failure diagnostics and marking dirty status in the canonical repository, discovering role context from workspace metadata or execution environment, then synchronizing the updated file back to the local role workspace.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:45:00Z
+CHANGE: Name the session attribution coordinator and split the multi-concern file attribution bullets
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

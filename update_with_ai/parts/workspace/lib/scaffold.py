@@ -1,24 +1,24 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:50:00Z
-# CHANGE: Define scaffold interface
-# CODE_HASH: 41c5ba626d41
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for scaffold."""
 
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 
 from typing import List, Optional, Protocol
 from . import roles
 
 
 # Contract: WorkspaceScaffolder protocol scaffolds runner tools, metadata, instructions, and target skeletons.
-class WorkspaceScaffolder(Protocol):
+class WorkspaceScaffolder(Singleton[AgentSessionTier], Protocol):
     """Service scaffolding runner tools, metadata, instructions, and target skeletons."""
 
     # Contract: Packages executable runner tools into the specified bin directory with 0o755 permissions.
-    def deploy_runner_zipapps(self, bin_dir: str) -> None: ...
+    def deploy_runner_zipapps(
+        self,
+        bin_dir: str,
+        role_def: Optional[roles.RoleDefinition] = None,
+        can_blame: bool = True,
+    ) -> None: ...
 
     # Contract: Writes role configuration metadata (.cleanroom_role.json) in the workspace root with 0o644 permissions.
     def write_role_metadata(
@@ -57,3 +57,9 @@ class WorkspaceScaffolder(Protocol):
         readonly: bool = False,
         executable: bool = False,
     ) -> None: ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:50:00Z
+# CHANGE: Define scaffold interface
+# --- END CLEANROOM METADATA ---

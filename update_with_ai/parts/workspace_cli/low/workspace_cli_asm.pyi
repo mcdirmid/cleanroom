@@ -1,11 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T19:43:57Z
-# LAST_CHANGED: 2026-10-11T04:15:46Z
-# CHANGE: Move the tools assembly to the system lifecycle tier
-# CODE_HASH: 327aaea97a40
-# SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
-# --- END CLEANROOM METADATA ---
-
 """Assembly specification for workspace_cli_asm."""
 
 
@@ -23,3 +15,10 @@ def __initialize__() -> None:
     """
 
     ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T19:43:57Z
+# LAST_CHANGED: 2026-10-11T04:15:46Z
+# CHANGE: Move the tools assembly to the system lifecycle tier
+# SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
+# --- END CLEANROOM METADATA ---

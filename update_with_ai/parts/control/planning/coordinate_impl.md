@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T04:27:23Z
-CHANGE: Contract dispatch state transitions for submit, blame, and fail with in-batch dependent failure marks
-CODE_HASH: 53361977594d
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # coordinate_impl implementation component
 
 ## Intent
@@ -70,3 +62,10 @@ The implementation maintains session dictionaries mapping dag nodes to their tar
   - Grounded: [file_alias: [alias_mapping]]
 - Synchronization of active session nodes with role configuration.
   - Grounded: [node_config: [node_configuration_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T04:27:23Z
+CHANGE: Contract dispatch state transitions for submit, blame, and fail with in-batch dependent failure marks
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

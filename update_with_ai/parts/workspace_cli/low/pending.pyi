@@ -1,22 +1,14 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T17:40:00Z
-# CHANGE: Define pending interface specification
-# CODE_HASH: 52ed1a94f090
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for pending."""
 
 from typing import Optional, Protocol, Sequence
-from framework import operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import cleanroom_files_ext
 
 
 @singleton_type("agent_session")
-class WorkspacePendingManager(InTier[AgentSessionTier], Protocol):
+class WorkspacePendingManager(Singleton[AgentSessionTier], Protocol):
     """Tracks active pending tasks and buffer persistence within role workspaces."""
 
     @operation
@@ -75,3 +67,10 @@ class WorkspacePendingManager(InTier[AgentSessionTier], Protocol):
         - MUST return true if target is missing, marked dirty, or has unacted feedback.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T17:40:00Z
+# CHANGE: Define pending interface specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

@@ -1,17 +1,10 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T21:45:00Z
-# CHANGE: author antigravity_harness interface library
-# CODE_HASH: 8f1f4068a57b
-# --- END CLEANROOM METADATA ---
-
 """Interface specification for antigravity_harness."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
-from support.lib.lifecycle import InTier
+from support.lib.lifecycle import Singleton
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 from update_with_ai.parts.subagent.lib import subagent_coordinator
 
@@ -78,7 +71,7 @@ class AntigravityHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
 
 
 # Contract: AntigravityHarnessManager manages Antigravity harness execution adapters and transcript parsing services.
-class AntigravityHarnessManager(InTier[AgentSessionTier], Protocol):
+class AntigravityHarnessManager(Singleton[AgentSessionTier], Protocol):
     """Manages Antigravity harness execution adapters and transcript parsing services."""
 
     # Contract: AntigravityHarnessManager.create_harness_adapter - constructs and returns configured Antigravity harness adapter instance.
@@ -104,3 +97,8 @@ class AntigravityHarnessManager(InTier[AgentSessionTier], Protocol):
         """Returns the transcript telemetry parser service."""
         ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T21:45:00Z
+# CHANGE: author antigravity_harness interface library
+# --- END CLEANROOM METADATA ---

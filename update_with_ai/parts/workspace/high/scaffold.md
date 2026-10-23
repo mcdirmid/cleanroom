@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T18:50:00Z
-CHANGE: Author scaffold interface specification
-CODE_HASH: de4a9901dd26
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # scaffold interface component
 
 imports: session, cleanroom_files_ext, roles
@@ -26,12 +18,19 @@ An agent session's *workspace scaffolder* prepares role runner tools, metadata c
 
 The workspace scaffolder:
 
-- Deploys executable runner tools into the `bin/` directory of the workspace, packaging the work, check files, submit, blame, fail, and coverage runners as standalone zipapp executables with execution permissions.
+- Deploys executable runner tools into the `bin/` directory of the workspace, packaging work, check files, submit, and fail runners as standalone zipapp executables with execution permissions, packaging blame only when the role declares feedback capability or auditor tags, and omitting blame for author roles without feedback capability.
 
 - Writes workspace role configuration into a hidden role descriptor file recording role identity, directory scope, and optional model profile settings without exposing host repository paths.
 
-- Synthesizes role-tailored `AGENTS.md` guide instructions in the workspace root, establishing agent constraints, boundary rules, command execution tripwires, in-workspace file inspection permissions, and fail-stop protocols.
+- Synthesizes role-tailored `AGENTS.md` guide instructions in the workspace root, establishing agent constraints, workspace boundary rules, permitted in-workspace shell and harness tool execution, fail-stop protocols, cleanroom compilation stub isolation rules for roles declaring stub dependencies, omission of blame directives for roles without feedback capability, and model-contingent payload ceiling protection for local or output-constrained models while omitting it for cloud models.
 
 - Generates starter skeleton files for declared writable target files that are absent from disk, inspecting companion specifications or role templates.
 
 - Writes text files with explicit permissions (read-only, writable, or executable).
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-20T22:50:00Z
+LAST_CHANGED: 2026-10-20T22:50:00Z
+CHANGE: Tailor runner tools and AGENTS.md to role blame capability and stub dependency isolation
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

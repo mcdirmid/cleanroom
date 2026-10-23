@@ -1,18 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:04:01Z
-# CHANGE: Narrow the broad exception handlers to the failures that can occur, resolve verification checks per node and by role nodes, hash bound workspace paths, and filter compiler diagnostics with compiled patterns including elapsed timing
-# CODE_HASH: 7d67f9e1c851
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 import hashlib
 import os
 import re
 import subprocess
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from support.lib.lifecycle import (
     LifecycleRegistry,
     Singleton,
@@ -22,6 +13,15 @@ from support.lib.lifecycle import (
 from update_with_ai.parts.agent.lib import file_alias, node_config, agent_session
 from update_with_ai.parts.dag.lib import dag_storage
 from . import verification
+
+
+def _bound_file_path(bound_file: Any) -> str:
+    if hasattr(bound_file, "workspace_path") and bound_file.workspace_path is not None:
+        ws_path = bound_file.workspace_path
+        return str(ws_path.path if hasattr(ws_path, "path") else ws_path)
+    if hasattr(bound_file, "relative_path"):
+        return str(bound_file.relative_path)
+    return str(bound_file)
 
 _NOISE_PATTERNS: Tuple[re.Pattern[str], ...] = (
     re.compile(r"^INFO: Analyzed target"),
@@ -51,15 +51,7 @@ def _compute_path_hash(path: str) -> str:
         return ""
 
 
-def _bound_file_path(bound_file: file_alias.BoundFile) -> str:
-    """Resolves the host path text of a declared session bound file."""
-    ws_path = getattr(bound_file, "workspace_path", None)
-    if ws_path is not None:
-        return str(getattr(ws_path, "path", ws_path))
-    return str(getattr(bound_file, "relative_path", bound_file))
-
-
-class VerificationEvaluator(verification.VerificationEvaluator, Singleton):
+class VerificationEvaluator(verification.VerificationEvaluator):
     """Evaluates verification checks and manages diagnostic noise and hash caching."""
 
     tier = agent_session.agent_session
@@ -95,7 +87,7 @@ class VerificationEvaluator(verification.VerificationEvaluator, Singleton):
                 (
                     f
                     for f in cfg.read_write_files
-                    if getattr(f, "owning_node", None) == node
+                    if (f.owning_node if hasattr(f, "owning_node") else None) == node
                 ),
                 key=_bound_file_path,
             )
@@ -160,7 +152,8 @@ class VerificationEvaluator(verification.VerificationEvaluator, Singleton):
                     outputs.append(self.clean_diagnostic_noise(diagnostic_str))
             else:
                 # Fallback shell command execution via subprocess.run when check object lacks verify() method.
-                command = getattr(check, "command", None)
+                check_any: Any = check
+                command = check_any.command if hasattr(check_any, "command") else None
                 if command:
                     try:
                         proc = subprocess.run(
@@ -202,6 +195,13 @@ class VerificationEvaluator(verification.VerificationEvaluator, Singleton):
             self._cached_global_result = result
 
         return result
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:04:01Z
+# CHANGE: Narrow the broad exception handlers to the failures that can occur, resolve verification checks per node and by role nodes, hash bound workspace paths, and filter compiler diagnostics with compiled patterns including elapsed timing
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

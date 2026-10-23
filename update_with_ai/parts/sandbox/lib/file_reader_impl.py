@@ -1,16 +1,7 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:03:50Z
-# CHANGE: Resolve and match both declared path members through the file path manager before reporting access, and use pathlib filesystem operations
-# CODE_HASH: d6b9a4867f14
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 import re
 from pathlib import Path
 from typing import Any, List, Mapping, Optional, Set, Type, Union, cast
-from support.lib.lifecycle import InTier, LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 from update_with_ai.parts.agent.lib.session import AgentSessionTier, agent_session
 import update_with_ai.parts.agent.lib.file_alias as file_alias
 import update_with_ai.parts.agent.lib.node_config as node_config
@@ -22,7 +13,7 @@ from . import tool_provider
 
 # Requirements specified in file_reader_impl.pyi
 
-class ReadManager(file_reader.ReadManager, Singleton):
+class ReadManager(file_reader.ReadManager):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -70,7 +61,7 @@ class ReadManager(file_reader.ReadManager, Singleton):
         )
 
 
-class ViewFileTool(file_reader.ViewFileTool, Singleton):
+class ViewFileTool(file_reader.ViewFileTool):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -200,7 +191,10 @@ class ViewFileTool(file_reader.ViewFileTool, Singleton):
         )
 
 
-class RegexPatternParameterType(tool_provider.ParameterType[file_alias.RegexPattern, str], InTier[AgentSessionTier], Singleton):
+class RegexPatternParameterType(
+    tool_provider.ParameterType[file_alias.RegexPattern, str],
+    Singleton[AgentSessionTier],
+):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -229,7 +223,7 @@ class RegexPatternParameterType(tool_provider.ParameterType[file_alias.RegexPatt
         return file_alias.RegexPattern(wire_value)
 
 
-class SearchTool(file_reader.SearchTool, Singleton):
+class SearchTool(file_reader.SearchTool):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -312,6 +306,13 @@ class SearchTool(file_reader.SearchTool, Singleton):
             is_terminated=False,
             content=tool_provider.ToolResponseContent(output_str),
         )
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:03:50Z
+# CHANGE: Resolve and match both declared path members through the file path manager before reporting access, and use pathlib filesystem operations
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
@@ -330,7 +331,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     )
     reg.register_singleton(
         RegexPatternParameterType,
-        keys=[RegexPatternParameterType, tool_provider.ParameterType[file_alias.RegexPattern, str], InTier[AgentSessionTier]],
+        keys=[RegexPatternParameterType, tool_provider.ParameterType[file_alias.RegexPattern, str]],
         tier=agent_session,
     )
     reg.register_singleton(

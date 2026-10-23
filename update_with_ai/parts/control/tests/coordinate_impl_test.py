@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T19:49:56Z
-# LAST_CHANGED: 2026-10-09T21:45:06Z
-# CHANGE: Verify active nodes sequence synchronization on role config during get work dispatch
-# CODE_HASH: 40904e8266ae
-# COVERAGE_AUDIT: 2026-10-15T19:49:56Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for coordinate_impl."""
 
 import unittest
@@ -332,3 +323,11 @@ class ControlCoordinateImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T19:49:56Z
+# LAST_CHANGED: 2026-10-09T21:45:06Z
+# CHANGE: Verify active nodes sequence synchronization on role config during get work dispatch
+# COVERAGE_AUDIT: 2026-10-15T19:49:56Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

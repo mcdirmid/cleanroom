@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T05:04:27Z
-# LAST_CHANGED: 2026-10-04T02:03:40Z
-# CHANGE: new file
-# CODE_HASH: ea6ea48ecb54
-# --- END CLEANROOM METADATA ---
-
 """Cleanroom Specification Framework Stubs: Structural markers for pure .pyi specifications.
 
 Defines decorator annotations and structural types used in low-level specifications
@@ -76,16 +69,29 @@ def singleton_type(
 
         @singleton_type("system")
         class MyService(InTier[SystemTier]): ...
+
+    Initialization and lifecycle contracts:
+    - Module registration: Implementation modules register singletons via auto-generated
+      module-level `__initialize__(registry=None) -> None`. Classes NEVER define `__initialize__`.
+    - Instance initialization: Singletons initialize their private backing state in
+      standard `__init__(self) -> None` or the inherited lifecycle post-instantiation hook
+      `def initialize(self) -> None:`.
     """
     ...
 
 
 def poly_type(cls: type[T]) -> type[T]:
-    """Marks an active service as an open polymorphic multiton interface.
+    """Marks an open polymorphic interface or abstract protocol.
 
-    Poly types represent open capabilities or stateless interfaces that can have
-    multiple implementations or dynamic resolution. Unlike @singleton_type,
-    @poly_type classes do not declare tier membership via InTier.
+    Poly types represent purely abstract open capabilities or protocols that can have
+    multiple dynamic implementations. Rules:
+    - @poly_type is purely abstract: it cannot be refined by a poly_type with the same short name,
+      but it can be extended by other poly types to create new abstract object types.
+    - Only singletons (@singleton_type) and data types (@data_type, @variant) can be instantiated
+      in production code.
+    - In unit tests, poly types may be instantiated only to test singletons that require
+      instances of poly types to be tested with (e.g. as mock or stub collaborators).
+    - An _impl component with no singletons has nothing to test.
     """
     ...
 
@@ -129,3 +135,10 @@ def override(func: F) -> F:
     of a supertype method, typically in subclass hierarchies.
     """
     ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-07T05:04:27Z
+# LAST_CHANGED: 2026-10-04T02:03:40Z
+# CHANGE: new file
+# CODE_HASH: ea6ea48ecb54
+# --- END CLEANROOM METADATA ---

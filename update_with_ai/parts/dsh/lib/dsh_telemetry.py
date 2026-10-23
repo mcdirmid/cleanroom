@@ -1,13 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:55:00Z
-# CHANGE: Author dsh_telemetry interface
-# CODE_HASH: b9c8cc318dfe
-# --- END CLEANROOM METADATA ---
-
 """Interface specification for dsh_telemetry."""
 
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 
 from dataclasses import dataclass
 from typing import Optional, Protocol
@@ -35,14 +30,14 @@ class DshSessionTokenMetrics:
     model_name: str = ""
 
 
-# Contract: DshRpcTurnStatus data type representing RPC turn execution status and metrics.
+# Contract: DshRpcRoundStatus data type representing RPC round execution status and metrics.
 @dataclass(frozen=True)
-class DshRpcTurnStatus:
-    """Turn execution status and metrics returned from the DeepSeek Harness JSON-RPC bridge.
+class DshRpcRoundStatus:
+    """Round execution status and metrics returned from the DeepSeek Harness JSON-RPC bridge.
 
     Args:
-        is_active: Whether the turn is actively executing.
-        is_completed: Whether the turn finished execution.
+        is_active: Whether the round is actively executing.
+        is_completed: Whether the round finished execution.
         error: Optional error message if execution failed.
         metrics: Accumulated token metrics.
     """
@@ -53,8 +48,12 @@ class DshRpcTurnStatus:
     metrics: Optional[DshSessionTokenMetrics] = None
 
 
+# Backward compatibility alias
+DshRpcTurnStatus = DshRpcRoundStatus
+
+
 # Contract: DshTelemetryParser protocol for parsing session storage, streams, and desktop synchronization.
-class DshTelemetryParser(Protocol):
+class DshTelemetryParser(Singleton[AgentSessionTier], Protocol):
     """Parses DeepSeek Harness session storage archives and event streams for token metrics."""
 
     # Contract: MUST locate session archives under sessions_dir matching workspace_dir and extract token usage with rate card cost.
@@ -90,6 +89,17 @@ class DshTelemetryParser(Protocol):
 
     # Contract: MUST ensure workspace registration and create or resume session on the server.
     # MUST enqueue the prompt task and return a task handle, or None if unreachable.
+    def dispatch_round_rpc(
+        self,
+        workspace_dir: str,
+        role_name: str,
+        prompt_text: str,
+        session_id: Optional[str] = None,
+        sessions_dir: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> Optional[str]: ...
+
+    # Backward compatibility alias for dispatch_round_rpc
     def dispatch_turn_rpc(
         self,
         workspace_dir: str,
@@ -100,9 +110,22 @@ class DshTelemetryParser(Protocol):
         model_name: Optional[str] = None,
     ) -> Optional[str]: ...
 
-    # Contract: MUST query turn execution status from the central server and return DshRpcTurnStatus.
+    # Contract: MUST query round execution status from the central server and return DshRpcRoundStatus.
+    def poll_round_rpc(
+        self,
+        task_handle: str,
+        sessions_dir: Optional[str] = None,
+    ) -> DshRpcRoundStatus: ...
+
+    # Backward compatibility alias for poll_round_rpc
     def poll_turn_rpc(
         self,
         task_handle: str,
         sessions_dir: Optional[str] = None,
     ) -> DshRpcTurnStatus: ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:55:00Z
+# CHANGE: Author dsh_telemetry interface
+# --- END CLEANROOM METADATA ---

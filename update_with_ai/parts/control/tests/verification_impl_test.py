@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:42:42Z
-# CHANGE: Resolve per-node verification checks from NodeConfig.verification_checks_by_node and drop the undeclared MockCheck.command symbol
-# CODE_HASH: f17f4a53988e
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for verification_impl."""
 
 import unittest
@@ -111,3 +102,11 @@ class ControlVerificationImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:42:42Z
+# CHANGE: Resolve per-node verification checks from NodeConfig.verification_checks_by_node and drop the undeclared MockCheck.command symbol
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

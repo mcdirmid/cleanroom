@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-09T21:19:01Z
-# CHANGE: new file
-# CODE_HASH: e330fd93e09b
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry
@@ -38,3 +31,9 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         mod.__initialize__(registry)
 
 _initialize_ = __initialize__
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-09T21:19:01Z
+# CHANGE: new file
+# --- END CLEANROOM METADATA ---

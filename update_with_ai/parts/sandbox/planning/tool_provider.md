@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: b09a9c900eb4
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # tool_provider interface component
 
 ## Intent
@@ -52,7 +44,7 @@ To preserve agent context window capacity across multi-turn interactions, respon
 - Action parameter bindings map tool parameters to actual values. [map_action_bindings]
 - An agent session's tool manager installs tools for the agent session. [install_tools]
 - A parameter type converts wire type values to python type values. [convert_wire_val]
-- An identity parameter type converts wire values to python values without failure. [convert_identity]
+- An identity parameter type converts wire values to python values without failure, converting convertible string wire values to the target type. [convert_identity]
 - A list parameter type converts lists using an element parameter type. [convert_list]
 - A mapping parameter type converts mapping keys with a key parameter type. [convert_mapping_keys]
 - A mapping parameter type converts mapping values with an element parameter type. [convert_mapping_vals]
@@ -107,3 +99,10 @@ To preserve agent context window capacity across multi-turn interactions, respon
   - Deferred: Requires concrete state mutation in implementation.
 - Execution of tools by name with parameter binding conversion and diagnostic error handling.
   - Grounded: [installed_tools_collection, wire_value_conversion, tool_execution_capability, tool_response_generation]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

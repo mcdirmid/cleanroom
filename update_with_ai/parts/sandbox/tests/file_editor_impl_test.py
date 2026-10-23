@@ -27,6 +27,7 @@ from update_with_ai.parts.agent.lib import (
 from update_with_ai.parts.metadata.lib import src_metadata
 from update_with_ai.parts.sandbox.lib import (
     file_editor,
+    file_reader,
     tool_provider,
 )
 from update_with_ai.parts.sandbox.lib.file_editor_impl import (
@@ -210,6 +211,45 @@ class MockSourceMetadataCoordinator:
     def compute_code_hash(self, content: str, filename_or_ext: str) -> str:
         return "123456789012"
 
+    def is_metadata_altered(
+        self, original_content: str, new_content: str, filename_or_ext: str
+    ) -> bool:
+        is_html = filename_or_ext.endswith(".md")
+        lines = original_content.splitlines()
+        new_lines = new_content.splitlines()
+        if is_html:
+            orig_meta = [l for l in lines if "<!--" in l or "-->" in l or "CLEANROOM METADATA" in l or "LAST_CLEANED:" in l or "CHANGE:" in l]
+            new_meta = [l for l in new_lines if "<!--" in l or "-->" in l or "CLEANROOM METADATA" in l or "LAST_CLEANED:" in l or "CHANGE:" in l]
+            return orig_meta != new_meta
+        else:
+            orig_meta = [l for l in lines if "# ---" in l or "# LAST_CLEANED:" in l or "# CHANGE:" in l or "# SPEC_QA_AUDIT:" in l]
+            new_meta = [l for l in new_lines if "# ---" in l or "# LAST_CLEANED:" in l or "# CHANGE:" in l or "# SPEC_QA_AUDIT:" in l]
+            return orig_meta != new_meta
+
+
+class MockViewFileTool:
+    tier = agent_session
+
+    def __init__(self) -> None:
+        self.name = tool_provider.ToolName("view_file")
+        self.description = tool_provider.ToolDescription("View file")
+        self.path_parameter = tool_provider.ToolParameter(
+            name=tool_provider.ParameterName("path"),
+            description=tool_provider.ParameterDescription("Path to view"),
+            parameter_type=cast(Any, None),
+        )
+        self.parameters = {self.path_parameter.name: self.path_parameter}
+
+    def execute_tool(
+        self,
+        actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
+    ) -> tool_provider.ToolResponse:
+        return tool_provider.ToolResponse(
+            is_failed=False,
+            is_terminated=False,
+            content=tool_provider.ToolResponseContent(""),
+        )
+
 
 class SandboxFileEditorImplTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -264,6 +304,11 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         self.registry.register_instance(
             self.mock_src_metadata,
             keys=[src_metadata.SourceMetadataCoordinator],
+            tier=agent_session,
+        )
+        self.registry.register_singleton(
+            MockViewFileTool,
+            keys=[file_reader.ViewFileTool],
             tier=agent_session,
         )
 
@@ -1082,6 +1127,87 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertTrue(resp.is_failed)
             self.assertIn("not found", str(resp.content).lower())
 
+    def test_replace_consecutive_failures_warning_and_follow_up_view(self) -> None:
+        """Postconditions:
+        - WHEN consecutive replacement attempts fail, MUST issue a warning reminder at two consecutive failures.
+        - WHEN consecutive replacement attempts reach two failures and the target file is present, MUST designate a follow-up tool call to view the target file using the session's file viewing tool.
+        - WHEN consecutive replacement attempts reach four failures, MUST terminate with failure.
+        """
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            view_tool = scope.get_singleton(file_reader.ViewFileTool)
+
+            # Failure 1: normal failure, no follow-up
+            res1 = replace_tool.execute_tool(
+                self._bindings(replace_tool, "nonexistent_1", "rep", path=self.read_write_file)
+            )
+            self.assertTrue(res1.is_failed)
+            self.assertFalse(res1.is_terminated)
+            self.assertIsNone(res1.follow_up_tool_call)
+
+            # Failure 2: consecutive failure warning and follow-up view
+            res2 = replace_tool.execute_tool(
+                self._bindings(replace_tool, "nonexistent_2", "rep", path=self.read_write_file)
+            )
+            self.assertTrue(res2.is_failed)
+            self.assertFalse(res2.is_terminated)
+            self.assertIsNotNone(res2.reminder)
+            self.assertIn("Warning: 2 consecutive edit attempts have failed", str(res2.reminder))
+            self.assertIsNotNone(res2.follow_up_tool_call)
+            assert res2.follow_up_tool_call is not None
+            self.assertEqual(res2.follow_up_tool_call.tool_name, view_tool.name)
+            self.assertEqual(
+                res2.follow_up_tool_call.wire_parameter_bindings.get(view_tool.path_parameter.name),
+                str(self.read_write_file.relative_path),
+            )
+
+            # Failure 3: consecutive failure 3, no follow-up
+            res3 = replace_tool.execute_tool(
+                self._bindings(replace_tool, "nonexistent_3", "rep", path=self.read_write_file)
+            )
+            self.assertTrue(res3.is_failed)
+            self.assertFalse(res3.is_terminated)
+            self.assertIsNone(res3.follow_up_tool_call)
+
+            # Failure 4: fatal termination
+            res4 = replace_tool.execute_tool(
+                self._bindings(replace_tool, "nonexistent_4", "rep", path=self.read_write_file)
+            )
+            self.assertTrue(res4.is_failed)
+            self.assertTrue(res4.is_terminated)
+            self.assertIn("Fatal edit failure: 4 consecutive edit attempts failed", str(res4.content))
+
+    def test_replace_consecutive_failures_reset_on_success(self) -> None:
+        """Postcondition: Successful replacement resets consecutive failure tracking."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+
+            # 2 consecutive failures
+            res1 = replace_tool.execute_tool(
+                self._bindings(replace_tool, "nonexistent_1", "rep", path=self.read_write_file)
+            )
+            self.assertTrue(res1.is_failed)
+            res2 = replace_tool.execute_tool(
+                self._bindings(replace_tool, "nonexistent_2", "rep", path=self.read_write_file)
+            )
+            self.assertTrue(res2.is_failed)
+            self.assertIsNotNone(res2.follow_up_tool_call)
+
+            # Successful edit
+            res_ok = replace_tool.execute_tool(
+                self._bindings(replace_tool, "unique_target", "new_unique", path=self.read_write_file)
+            )
+            self.assertFalse(res_ok.is_failed)
+            self.assertFalse(res_ok.is_terminated)
+
+            # Next failure is only failure 1 (no follow-up view, not terminated)
+            res_after = replace_tool.execute_tool(
+                self._bindings(replace_tool, "nonexistent_3", "rep", path=self.read_write_file)
+            )
+            self.assertTrue(res_after.is_failed)
+            self.assertFalse(res_after.is_terminated)
+            self.assertIsNone(res_after.follow_up_tool_call)
+
     def test_replace_file_content_tool_initialize_installs_into_tool_manager(self) -> None:
         """Postcondition: ReplaceFileContentTool.initialize installs replace_file_content into ToolManager."""
         with enter_phase(agent_session, registry=self.registry) as scope:
@@ -1254,8 +1380,14 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertEqual(conv.wire_type, bool)
             self.assertEqual(conv.convert(True), file_editor.AllowMultiple(True))
             self.assertEqual(conv.convert(False), file_editor.AllowMultiple(False))
+            self.assertEqual(conv.convert(cast(Any, "true")), file_editor.AllowMultiple(True))
+            self.assertEqual(conv.convert(cast(Any, "True")), file_editor.AllowMultiple(True))
+            self.assertEqual(conv.convert(cast(Any, "1")), file_editor.AllowMultiple(True))
+            self.assertEqual(conv.convert(cast(Any, "false")), file_editor.AllowMultiple(False))
+            self.assertEqual(conv.convert(cast(Any, "False")), file_editor.AllowMultiple(False))
+            self.assertEqual(conv.convert(cast(Any, "0")), file_editor.AllowMultiple(False))
             with self.assertRaises(tool_provider.ParameterConversionError):
-                conv.convert(cast(Any, "true"))
+                conv.convert(cast(Any, "not_a_bool"))
             with self.assertRaises(tool_provider.ParameterConversionError):
                 conv.convert(cast(Any, 1))
             with self.assertRaises(tool_provider.ParameterConversionError):

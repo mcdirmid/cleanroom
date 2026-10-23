@@ -1,0 +1,248 @@
+# model_configs.toml
+# Native model configuration definitions and rate card catalog for Cleanroom.
+#
+# Cleanroom resolves model configurations from:
+#   1. Explicit override via CLEANROOM_MODEL_CONFIG_FILE or --model-config flag
+#   2. Local workspace repository: ./model_configs.toml
+#   3. User global configuration: ~/.config/cleanroom/model_configs.toml (default)
+#   4. Canonical starter template: update_python_with_ai/templates/model_configs.toml
+#
+# ==============================================================================
+# Global Configuration
+# ==============================================================================
+# default: Default model profile used when none is specified.
+default = "qwen-moe"
+
+# loop_default: Default model profile for the in-process autonomous loop harness.
+loop_default = "qwen-moe"
+
+# antigravity_default: Default model profile for the Google Antigravity harness.
+antigravity_default = "gemini-argon"
+
+# dsh_default: Default model profile for the DeepSeek Harness (DSH).
+dsh_default = "deepseek-flash"
+
+# max_unproductive_rounds: Global circuit breaker limit for consecutive rounds
+# that fail to produce change or progress before aborting.
+max_unproductive_rounds = 5
+
+# ==============================================================================
+# Model Table Schema: [models.<profile-name>]
+# ==============================================================================
+# Each table under [models.<name>] configures an individual model profile.
+#
+# Field Definitions:
+#   model                   (str, required)   : Model identifier string passed to the provider API.
+#   provider                (str, required)   : Provider protocol adapter ("mlx", "omlx", "deepseek", "google", "openai", "anthropic").
+#   tier                    (int, optional)   : Capability tier for benchmark stratification:
+#                                                 1 = Local Engine ($0.00 / free offline)
+#                                                 2 = Budget API (sub-penny with context caching)
+#                                                 3 = Mid-Tier Control (balanced commercial models)
+#                                                 4 = Frontier Ceiling (state-of-the-art capability anchor)
+#   tier_label              (str, optional)   : Human-readable label for the capability tier.
+#   rate_uncached_in        (float, optional) : Inbound cost in USD per 1,000,000 uncached prompt tokens.
+#   rate_cached_in          (float, optional) : Inbound cost in USD per 1,000,000 context-cache hit prompt tokens.
+#   rate_out                (float, optional) : Outbound cost in USD per 1,000,000 completion tokens (including reasoning).
+#   base_url                (str, optional)   : HTTP endpoint base URL for API requests.
+#   api_key_env             (str, optional)   : Name of the environment variable containing the API authentication key.
+#   default_harness         (str, optional)   : Recommended runtime harness for this model ("loop", "dsh", "antigravity").
+#   max_iterations          (int, optional)   : Maximum tool execution iterations per round. Default: 100.
+#   temperature             (float, optional) : Sampling temperature for text generation. Default: 0.7.
+#   timeout_seconds         (float, optional) : Per-request socket or process timeout in seconds.
+#   max_tokens              (int, optional)   : Maximum completion tokens generated per request.
+#   subagent_batch_size     (int, optional)   : Maximum concurrent role subagent dispatches.
+#   conversation_max_tokens (int, optional)   : Context window compaction threshold in tokens.
+#   max_feedback_chars      (int, optional)   : Maximum characters preserved in unacted feedback buffers.
+#   max_unproductive_rounds (int, optional)   : Profile-specific circuit breaker limit for consecutive unproductive rounds.
+# ==============================================================================
+
+# ==============================================================================
+# Model Profiles
+# ==============================================================================
+
+# --- Tier 1: Local Offline Engines ($0.00 / 1M tokens) ---
+
+[models.qwen-moe]
+model = "Qwen3.6-35B-A3B-oQ6-mtp"
+base_url = "http://localhost:8000/v1"
+provider = "mlx"
+tier = 1
+tier_label = "Local Engine"
+rate_uncached_in = 0.0
+rate_cached_in = 0.0
+rate_out = 0.0
+quantization = "oQ6-mtp"
+default_harness = "loop"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 100.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 8000
+batch_size = 1
+subagent_batch_size = 3
+conversation_max_tokens = 96000
+max_feedback_chars = 600
+max_unproductive_rounds = 10
+
+[models.qwen-dense]
+model = "Qwen3.8-27B-MLX-oQ4e-mtp"
+base_url = "http://localhost:8000/v1"
+provider = "mlx"
+tier = 1
+tier_label = "Local Engine"
+rate_uncached_in = 0.0
+rate_cached_in = 0.0
+rate_out = 0.0
+quantization = "oQ4e-mtp"
+default_harness = "loop"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 100.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 2048
+batch_size = 1
+subagent_batch_size = 3
+conversation_max_tokens = 96000
+max_feedback_chars = 600
+max_unproductive_rounds = 10
+
+[models.qwen-flash]
+model = "qwen-flash-next-288-q4"
+base_url = "http://localhost:8000/v1"
+provider = "omlx"
+tier = 1
+tier_label = "Local Engine"
+rate_uncached_in = 0.0
+rate_cached_in = 0.0
+rate_out = 0.0
+quantization = "4bit"
+default_harness = "loop"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 100.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 8000
+batch_size = 1
+subagent_batch_size = 3
+conversation_max_tokens = 96000
+max_feedback_chars = 600
+max_unproductive_rounds = 10
+
+# --- Tier 2: Budget Frontier APIs ---
+
+[models.deepseek-flash]
+model = "deepseek-flash"
+provider = "deepseek"
+base_url = "https://api.deepseek.com/v1"
+tier = 2
+tier_label = "Budget API"
+rate_uncached_in = 0.15
+rate_cached_in = 0.003
+rate_out = 0.60
+default_harness = "dsh"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 120.0
+api_key_env = "DEEPSEEK_API_KEY"
+max_tokens = 8192
+subagent_batch_size = 10
+conversation_max_tokens = 256000
+max_feedback_chars = 4000
+max_unproductive_rounds = 5
+
+[models.gemini-flash]
+model = "gemini-3.8-flash"
+provider = "google"
+tier = 2
+tier_label = "Budget Frontier API"
+rate_uncached_in = 0.10
+rate_cached_in = 0.025
+rate_out = 0.40
+default_harness = "antigravity"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 120.0
+api_key_env = "GEMINI_API_KEY"
+max_tokens = 8192
+subagent_batch_size = 5
+conversation_max_tokens = 256000
+max_feedback_chars = 4000
+max_unproductive_rounds = 5
+
+# --- Tier 3: Mid-Tier Control ---
+
+[models.claude-sonnet]
+model = "claude-3.7-sonnet"
+provider = "anthropic"
+tier = 3
+tier_label = "Mid-Tier Control"
+rate_uncached_in = 3.00
+rate_cached_in = 0.30
+rate_out = 15.00
+default_harness = "loop"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 180.0
+api_key_env = "ANTHROPIC_API_KEY"
+max_tokens = 8192
+subagent_batch_size = 5
+conversation_max_tokens = 200000
+max_feedback_chars = 4000
+max_unproductive_rounds = 5
+
+[models.o3-mini]
+model = "o3-mini"
+provider = "openai"
+base_url = "https://api.openai.com/v1"
+tier = 3
+tier_label = "Mid-Tier Control"
+rate_uncached_in = 1.10
+rate_cached_in = 0.55
+rate_out = 4.40
+default_harness = "loop"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 180.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 16384
+subagent_batch_size = 5
+conversation_max_tokens = 200000
+max_feedback_chars = 4000
+max_unproductive_rounds = 5
+
+[models.gpt-4o]
+model = "gpt-4o"
+provider = "openai"
+base_url = "https://api.openai.com/v1"
+tier = 3
+tier_label = "Mid-Tier Control"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 120.0
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 4096
+subagent_batch_size = 3
+conversation_max_tokens = 128000
+max_feedback_chars = 2000
+max_unproductive_rounds = 5
+
+# --- Tier 4: Frontier Ceilings ---
+
+[models.gemini-argon]
+model = "gemini-4-argon"
+provider = "google"
+tier = 4
+tier_label = "Frontier Ceiling"
+rate_uncached_in = 2.00
+rate_cached_in = 0.50
+rate_out = 10.00
+default_harness = "antigravity"
+max_iterations = 100
+temperature = 0.7
+timeout_seconds = 180.0
+api_key_env = "GEMINI_API_KEY"
+max_tokens = 16384
+subagent_batch_size = 5
+conversation_max_tokens = 256000
+max_feedback_chars = 4000
+max_unproductive_rounds = 5

@@ -98,10 +98,10 @@ Because external boundaries exist **solely to ground other Cleanroom components*
 
 ## 3. Intent Specification (`## Intent`)
 
-Architectural intent, conversational UX motivations, token budget economics, and multi-turn lifecycle rationale are vital for human and LLM comprehension. However, embedding intent directly into behavioral requirements (e.g., *"Executing a tool produces a suppression key to hide prior conversation turns and conserve agent context window capacity"*) creates conflated contracts where verification tools cannot distinguish the binding behavioral guarantee from the architectural justification.
+Architectural intent, conversational UX motivations, token budget economics, and multi-step lifecycle rationale are vital for human and LLM comprehension. However, embedding intent directly into behavioral requirements (e.g., *"Executing a tool produces a suppression key to hide prior conversation steps and conserve agent context window capacity"*) creates conflated contracts where verification tools cannot distinguish the binding behavioral guarantee from the architectural justification.
 
 **Rules for Intent**:
-- The `## Intent` section captures high-level design rationale, domain background, conversational turn minimization, and context management in **continuous prose paragraphs**.
+- The `## Intent` section captures high-level design rationale, domain background, conversational step minimization, and context management in **continuous prose paragraphs**.
 - Sub-headers (`###`) are strictly prohibited under `## Intent`.
 - Factored contracts, grounding specifications, and woven contracts must be completely purged of intent clauses, justification phrases ("in order to", "so that", "to indicate"), and background explanations.
 

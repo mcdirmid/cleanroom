@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:15:00Z
-CHANGE: Define dirtiness interface component
-CODE_HASH: dfcd7e0c4f9b
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # dirtiness interface component
 
 imports: session
@@ -35,3 +27,10 @@ An agent session's *workspace dirtiness evaluator* analyzes units within a direc
 - Resolves the companion upstream specification contracts and interface definitions of target units from role definitions, automatically expanding companion interface contracts for units ending in _impl and guiding downstream implementation and verification without leaking peer implementation code.
 
 - Extracts cross-unit dependencies for a designated unit across declared parts in repository scope.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:15:00Z
+CHANGE: Define dirtiness interface component
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

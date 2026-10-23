@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:45:00Z
-CHANGE: author antigravity_coordinator_impl scenarios
-CODE_HASH: 60c4fda7a422
--->
-
 # antigravity_coordinator_impl scenarios
 
 ### Scenario 1 — Generating zero-execution coordinator skill
@@ -12,7 +5,7 @@ CODE_HASH: 60c4fda7a422
 Given: a cleanroom project repository configured for multi-agent execution.
 
 1. The generator renders the coordinator skill.
-   Observed: a skill document with frontmatter and instructions for DAG evaluation and subagent dispatch is generated.
+   Observed: a skill document with frontmatter and instructions for DAG evaluation, subagent dispatch, and messaging back workers upon unresolved rounds is generated.
    Realized by: the component's markdown template formatting zero-execution instructions and YAML metadata.
 
 ### Scenario 2 — Enforcing workspace pinning requirement
@@ -28,7 +21,7 @@ Given: subagent dispatch instructions are being rendered.
 Given: a role dispatch directive for role_a in workspace_dir_a.
 
 1. The generator formats the dispatch directive into an Antigravity tool specification.
-   Observed: an Antigravity subagent dispatch payload is returned with TypeName, Role, Prompt, and Workspace path.
+   Observed: an Antigravity subagent dispatch payload is returned with TypeName, Role, Prompt (incorporating coordinator reminders when present), and Workspace path.
    Realized by: the component's dispatch mapping constructing parameter dictionaries for `invoke_subagent`.
 
 ### Scenario 4 — Parsing wake notification messages
@@ -38,3 +31,9 @@ Given: a completion message emitted by a role subagent.
 1. The generator parses the message text.
    Observed: action status, submitted targets, blamed targets, and failure diagnostics are extracted into a structured wake notification.
    Realized by: the component's message deserialization parsing JSON payloads or structured text blocks.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T21:45:00Z
+CHANGE: author antigravity_coordinator_impl scenarios
+-->

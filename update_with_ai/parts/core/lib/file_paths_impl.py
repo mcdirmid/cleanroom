@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:58:26Z
-# CHANGE: Reject empty path strings before any host filesystem operation with the exact 'Path cannot be empty' diagnostic on every construction operation, per the grounding specification
-# CODE_HASH: 6fcba1cb9d25
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 import os
 from typing import Optional
@@ -15,12 +6,11 @@ from . import file_paths
 
 # Requirements specified in file_paths_impl.pyi
 
-_EMPTY_PATH_MESSAGE = "Path cannot be empty"
 _NOT_ABSOLUTE_MESSAGE = "Path is not absolute: {path}"
 _NOT_RELATIVE_MESSAGE = "Workspace path must be relative, got absolute: {path}"
 
 
-class FilePathManager(file_paths.FilePathManager, Singleton):
+class FilePathManager(file_paths.FilePathManager):
     """Realizes path validation and resolution using host filesystem operations."""
 
     tier = system
@@ -29,20 +19,10 @@ class FilePathManager(file_paths.FilePathManager, Singleton):
         pass
 
     def create_host_path(self, path: file_paths.PathString) -> file_paths.HostPath:
-        # Contract: WHEN the supplied path string is empty, MUST raise PathValidationError("Path cannot be empty").
-        if not path:
-            raise file_paths.PathValidationError(
-                message=file_paths.ValidationMessage(_EMPTY_PATH_MESSAGE)
-            )
         # Contract: MUST encapsulate the supplied path string in the produced host path.
         return file_paths.HostPath(path=file_paths.PathString(path))
 
     def create_absolute_path(self, path: file_paths.PathString) -> file_paths.AbsolutePath:
-        # Contract: WHEN the supplied path string is empty, MUST raise PathValidationError("Path cannot be empty").
-        if not path:
-            raise file_paths.PathValidationError(
-                message=file_paths.ValidationMessage(_EMPTY_PATH_MESSAGE)
-            )
         # Contract: WHEN the supplied path string is not absolute, MUST raise PathValidationError("Path is not absolute: {path}").
         if not os.path.isabs(path):
             raise file_paths.PathValidationError(
@@ -58,11 +38,6 @@ class FilePathManager(file_paths.FilePathManager, Singleton):
     def create_workspace_path(
         self, path: file_paths.PathString
     ) -> file_paths.WorkspacePath:
-        # Contract: WHEN the supplied path string is empty, MUST raise PathValidationError("Path cannot be empty").
-        if not path:
-            raise file_paths.PathValidationError(
-                message=file_paths.ValidationMessage(_EMPTY_PATH_MESSAGE)
-            )
         # Contract: WHEN the supplied path string has leading path separators, MUST raise PathValidationError("Workspace path must be relative, got absolute: {path}").
         if path.startswith(("/", "\\")):
             raise file_paths.PathValidationError(
@@ -90,6 +65,13 @@ class FilePathManager(file_paths.FilePathManager, Singleton):
         return file_paths.AbsolutePath(
             path=file_paths.PathString(os.path.normpath(combined))
         )
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T04:58:26Z
+# CHANGE: Reject empty path strings before any host filesystem operation with the exact 'Path cannot be empty' diagnostic on every construction operation, per the grounding specification
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

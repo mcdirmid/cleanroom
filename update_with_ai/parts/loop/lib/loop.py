@@ -1,12 +1,6 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:57:55Z
-# CHANGE: Align mark_dirty with the declared ChangeMessage parameter and prune the uncontracted broadcast_change member
-# CODE_HASH: b0ee25671e8a
-# --- END CLEANROOM METADATA ---
-
 # Requirements specified in loop.pyi
 from __future__ import annotations
+from support.lib.lifecycle import Singleton, SystemTier
 from dataclasses import dataclass
 from typing import NewType, Protocol
 from update_with_ai.parts.dag.lib import dag_storage
@@ -22,7 +16,7 @@ class BuildResult:
 
 
 # Contract: Loop system service executes topological build and cleaning passes across workspace nodes.
-class Loop(Protocol):
+class Loop(Singleton[SystemTier], Protocol):
     # Contract: Loop.clean_subgraph - executes a cleaning pass over the acyclic subgraph rooted at a target node.
     def clean_subgraph(self, target: dag_storage.DagNode) -> BuildResult: ...
 
@@ -44,3 +38,8 @@ class Loop(Protocol):
         self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None: ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T04:57:55Z
+# CHANGE: Align mark_dirty with the declared ChangeMessage parameter and prune the uncontracted broadcast_change member
+# --- END CLEANROOM METADATA ---

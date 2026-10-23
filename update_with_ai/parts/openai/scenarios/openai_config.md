@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:12:26Z
-CHANGE: Author openai openai_config concrete scenarios
-CODE_HASH: 2a68079f173a
--->
-
 # Concrete scenarios for `openai_config` (interface)
 
 ## Scenario 1 — Reading the connection coordinates
@@ -95,3 +88,9 @@ Given: no openai config is active for the caller.
 
 3. The caller reads the timeout and the temperature.
    Observed: both reads fail explicitly, and neither the timeout nor the temperature is reported.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:12:26Z
+CHANGE: Author openai openai_config concrete scenarios
+-->

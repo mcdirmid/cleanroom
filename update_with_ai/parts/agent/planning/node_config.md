@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:01:17Z
-CHANGE: Align role and session config typing and canonicalize bound file, blame target, and message terminology; drop planning front-matter
-CODE_HASH: 414587ff3962
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # node_config interface component
 
 ## Intent
@@ -63,3 +55,10 @@ By centralizing role execution versions and providing structured representations
   - Deferred: Provided by session orchestrator in implementation.
 - Read-only and read-write bound file declarations for active session nodes.
   - Deferred: Derived from graph storage targets in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:01:17Z
+CHANGE: Align role and session config typing and canonicalize bound file, blame target, and message terminology; drop planning front-matter
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

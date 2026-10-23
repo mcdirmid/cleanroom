@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: 3ba1ddb8419f
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Cleanroom node config implementation low-level specification."""
 
 from typing import Any, Mapping, Optional, Sequence, Set, Tuple, Type
-from framework import operation, override, poly_type, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, poly_type, singleton_type
+from support.lib.lifecycle import Singleton
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 from update_with_ai.parts.agent.lib import file_alias
 from update_with_ai.parts.agent.lib import node_config
@@ -23,9 +15,7 @@ import manifest_loader
 
 
 @singleton_type("agent_session")
-class NodeConfig(
-    node_config.NodeConfig, InTier[AgentSessionTier]
-):
+class NodeConfig(node_config.NodeConfig):
     """Realizes session configuration by resolving Cleanroom target manifests.
 
     GROUNDING:
@@ -257,9 +247,7 @@ class NodeConfig(
 
 
 @singleton_type("agent_session")
-class AliasManager(
-    file_alias.AliasManager, InTier[AgentSessionTier]
-):
+class AliasManager(file_alias.AliasManager):
     """Realizes minimal file alias resolution and safe path masking.
 
     GROUNDING:
@@ -337,3 +325,9 @@ class CommandVerificationCheck(node_config.VerificationCheck):
         """
         ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-07T00:00:00Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:36:59Z
-# CHANGE: Ground verification caching by file hash and check execution in named collaborators
-# CODE_HASH: 4d9d85b6c414
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for verification_impl."""
 
 from typing import Optional
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import node_config
@@ -19,10 +11,7 @@ import dag_storage
 
 
 @singleton_type("agent_session")
-class VerificationEvaluator(
-    verification.VerificationEvaluator,
-    InTier[AgentSessionTier],
-):
+class VerificationEvaluator(verification.VerificationEvaluator):
     """Implementation of verification evaluator.
 
     GROUNDING:
@@ -67,3 +56,10 @@ class VerificationEvaluator(
           the returned diagnostic string.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:36:59Z
+# CHANGE: Ground verification caching by file hash and check execution in named collaborators
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

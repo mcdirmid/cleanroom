@@ -477,7 +477,7 @@ check "c19 undeclared error diagnostic" "$tmp/c19/err.log" "undeclared dependenc
 # Case 20: empty test module with .pyi grounding spec -> scaffolded with valid test skeleton.
 mkdir -p "$tmp/c20/lib" "$tmp/c20/tests" "$tmp/c20/grounding"
 cat > "$tmp/c20/grounding/worker_impl.pyi" <<'EOF'
-from framework import operation, singleton_type
+from support.lib.framework import operation, singleton_type
 
 @singleton_type('agent_session')
 class Worker:
@@ -536,7 +536,7 @@ check "c20 untested req item 2" "$tmp/c20/tests/worker_impl_test.py" '# - Proces
 # Case 21: test module with <TargetClass> placeholder -> replaced with auto-generated test skeleton.
 mkdir -p "$tmp/c21/lib" "$tmp/c21/tests" "$tmp/c21/grounding"
 cat > "$tmp/c21/grounding/service_impl.pyi" <<'EOF'
-from framework import operation, singleton_type
+from support.lib.framework import operation, singleton_type
 
 @singleton_type('system')
 class Service:
@@ -664,7 +664,7 @@ check "c24 foreign impl error diagnostic" "$tmp/c24/err.log" "test module must o
 # Case 25: pure-Python test_lint invocation on test file with --pyi -> succeeds without creating BUILD.bazel
 mkdir -p "$tmp/c25/lib" "$tmp/c25/tests" "$tmp/c25/low"
 cat > "$tmp/c25/low/worker_impl.pyi" <<'EOF'
-from framework import operation, singleton_type
+from support.lib.framework import operation, singleton_type
 
 @singleton_type('agent_session')
 class Worker:
@@ -705,7 +705,7 @@ fi
 # Case 26: pure-Python test_lint invocation with undeclared import -> fails and creates no BUILD.bazel
 mkdir -p "$tmp/c26/lib" "$tmp/c26/tests" "$tmp/c26/low"
 cat > "$tmp/c26/low/worker_impl.pyi" <<'EOF'
-from framework import operation, singleton_type
+from support.lib.framework import operation, singleton_type
 
 @singleton_type('agent_session')
 class Worker:
@@ -786,6 +786,312 @@ if ( cd "$tmp/c27" && python3 "$bin/test_lint.py" tests/worker_impl_test.py --py
 else
     echo "FAIL: c27 dry-run test collection failed against scaffolded companion lib" >&2
     fail=1
+fi
+
+# Case 28: test module using getattr() -> rejected with contract adherence error
+mkdir -p "$tmp/c28/lib" "$tmp/c28/tests"
+cat > "$tmp/c28/lib/foo.py" <<'EOF'
+class Foo:
+    pass
+EOF
+cat > "$tmp/c28/tests/foo_test.py" <<'EOF'
+import unittest
+from lib.foo import Foo
+
+class FooTest(unittest.TestCase):
+    def test_foo(self):
+        f = Foo()
+        val = getattr(f, "bar", None)
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c28" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/foo_test.py --lib-pkg lib 2>"$tmp/c28/err.log" ); then
+    echo "FAIL: c28 expected failure when getattr() used in test" >&2
+    fail=1
+else
+    if grep -q "test module must not use 'getattr()'" "$tmp/c28/err.log"; then
+        echo "PASS: c28 rejected test using getattr() and reported contract error"
+    else
+        echo "FAIL: c28 did not report getattr error in err.log" >&2
+        cat "$tmp/c28/err.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 29: scoped package test file rejects unrooted lib imports and scaffolding generates scoped imports
+mkdir -p "$tmp/c29/pkg/parts/unit/lib" "$tmp/c29/pkg/parts/unit/tests" "$tmp/c29/pkg/parts/unit/low"
+cat > "$tmp/c29/cleanroom.toml" <<'EOF'
+EOF
+cat > "$tmp/c29/pkg/parts/unit/low/worker_impl.pyi" <<'EOF'
+from support.lib.framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    """
+PURPOSE:
+Worker component.
+
+INHERITED_REQUIREMENTS:
+- [Worker] Processes item.
+"""
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+cat > "$tmp/c29/pkg/parts/unit/lib/worker_impl.py" <<'EOF'
+class Worker:
+    def process_item(self, item: str) -> bool:
+        return True
+def __initialize__(registry=None):
+    pass
+EOF
+# Test scaffolding generates scoped import
+if ( cd "$tmp/c29" && python3 "$bin/test_lint.py" --scaffold pkg/parts/unit/tests/worker_impl_test.py --lib-pkg pkg/parts/unit/lib --pyi pkg/parts/unit/low/worker_impl.pyi ); then
+    echo "PASS: c29 generated scaffold for scoped package"
+else
+    echo "FAIL: c29 failed to generate scaffold for scoped package" >&2
+    fail=1
+fi
+check "c29 scaffold has scoped import" "$tmp/c29/pkg/parts/unit/tests/worker_impl_test.py" 'from pkg\.parts\.unit\.lib\.worker_impl import'
+
+# Write unrooted import (from lib import worker_impl) -> must fail test_lint
+cat > "$tmp/c29/pkg/parts/unit/tests/worker_impl_test.py" <<'EOF'
+import unittest
+from lib import worker_impl
+
+class WorkerImplTest(unittest.TestCase):
+    def test_process(self):
+        pass
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c29" && python3 "$bin/test_lint.py" pkg/parts/unit/tests/worker_impl_test.py --lib-pkg pkg/parts/unit/lib --pyi pkg/parts/unit/low/worker_impl.pyi 2>"$tmp/c29/err.log" ); then
+    echo "FAIL: c29 expected rejection of from lib import in scoped package" >&2
+    fail=1
+else
+    if grep -q "error: import of lib module" "$tmp/c29/err.log"; then
+        echo "PASS: c29 rejected from lib import in scoped package"
+    else
+        echo "FAIL: c29 did not report import error for from lib import" >&2
+        cat "$tmp/c29/err.log" >&2
+        fail=1
+    fi
+fi
+
+# Write unrooted import (from lib.worker_impl import Worker) -> must fail test_lint
+cat > "$tmp/c29/pkg/parts/unit/tests/worker_impl_test.py" <<'EOF'
+import unittest
+from lib.worker_impl import Worker
+
+class WorkerImplTest(unittest.TestCase):
+    def test_process(self):
+        pass
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c29" && python3 "$bin/test_lint.py" pkg/parts/unit/tests/worker_impl_test.py --lib-pkg pkg/parts/unit/lib --pyi pkg/parts/unit/low/worker_impl.pyi 2>"$tmp/c29/err2.log" ); then
+    echo "FAIL: c29 expected rejection of from lib.worker_impl import in scoped package" >&2
+    fail=1
+else
+    if grep -q "error: import of lib module" "$tmp/c29/err2.log"; then
+        echo "PASS: c29 rejected from lib.worker_impl import in scoped package"
+    else
+        echo "FAIL: c29 did not report import error for from lib.worker_impl import" >&2
+        cat "$tmp/c29/err2.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 30: test module using cast(Any, ...).attr -> rejected with contract adherence error
+mkdir -p "$tmp/c30/lib" "$tmp/c30/tests"
+cat > "$tmp/c30/lib/foo.py" <<'EOF'
+class Foo:
+    def execute(self) -> None:
+        pass
+EOF
+cat > "$tmp/c30/tests/foo_test.py" <<'EOF'
+import unittest
+from typing import Any, cast
+from lib.foo import Foo
+
+class FooTest(unittest.TestCase):
+    def test_foo(self):
+        f = Foo()
+        cast(Any, f).configure()
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c30" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/foo_test.py --lib-pkg lib 2>"$tmp/c30/err.log" ); then
+    echo "FAIL: c30 expected failure when cast(Any, ...).attr used in test" >&2
+    fail=1
+else
+    if grep -q "test module must not access attribute or method 'configure' on 'cast(Any, ...)'" "$tmp/c30/err.log"; then
+        echo "PASS: c30 rejected test accessing method on cast(Any, ...) and reported contract error"
+    else
+        echo "FAIL: c30 did not report cast(Any, ...) attribute error in err.log" >&2
+        cat "$tmp/c30/err.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 31: test module accessing private member on target object -> rejected with contract adherence error
+mkdir -p "$tmp/c31/lib" "$tmp/c31/tests"
+cat > "$tmp/c31/lib/foo.py" <<'EOF'
+class Foo:
+    def __init__(self):
+        self._secret = 42
+EOF
+cat > "$tmp/c31/tests/foo_test.py" <<'EOF'
+import unittest
+from lib.foo import Foo
+
+class FooTest(unittest.TestCase):
+    def test_foo(self):
+        f = Foo()
+        val = f._secret
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c31" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/foo_test.py --lib-pkg lib 2>"$tmp/c31/err.log" ); then
+    echo "FAIL: c31 expected failure when private member accessed on target object in test" >&2
+    fail=1
+else
+    if grep -q "test module must not access private member '_secret' on target or collaborator object" "$tmp/c31/err.log"; then
+        echo "PASS: c31 rejected test accessing private member on target and reported contract error"
+    else
+        echo "FAIL: c31 did not report private member error in err.log" >&2
+        cat "$tmp/c31/err.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 32: test module using setattr() -> rejected with contract adherence error
+mkdir -p "$tmp/c32/lib" "$tmp/c32/tests"
+cat > "$tmp/c32/lib/foo.py" <<'EOF'
+class Foo:
+    pass
+EOF
+cat > "$tmp/c32/tests/foo_test.py" <<'EOF'
+import unittest
+from lib.foo import Foo
+
+class FooTest(unittest.TestCase):
+    def test_foo(self):
+        f = Foo()
+        setattr(f, "bar", 123)
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c32" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/foo_test.py --lib-pkg lib 2>"$tmp/c32/err.log" ); then
+    echo "FAIL: c32 expected failure when setattr() used in test" >&2
+    fail=1
+else
+    if grep -q "test module must not use 'setattr()'" "$tmp/c32/err.log"; then
+        echo "PASS: c32 rejected test using setattr() and reported contract error"
+    else
+        echo "FAIL: c32 did not report setattr error in err.log" >&2
+        cat "$tmp/c32/err.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 33: scaffold non-impl module with classes and functions and verify lib import diagnostics
+mkdir -p "$tmp/c33/pkg/parts/unit/lib" "$tmp/c33/pkg/parts/unit/tests" "$tmp/c33/pkg/parts/unit/low"
+cat > "$tmp/c33/cleanroom.toml" <<'EOF'
+EOF
+cat > "$tmp/c33/pkg/parts/unit/low/engine.pyi" <<'EOF'
+from support.lib.framework import operation
+
+class Engine:
+    @operation
+    def run(self) -> None:
+        ...
+
+def create_engine() -> Engine:
+    ...
+EOF
+cat > "$tmp/c33/pkg/parts/unit/lib/engine.py" <<'EOF'
+class Engine:
+    def run(self) -> None:
+        pass
+def create_engine() -> Engine:
+    return Engine()
+EOF
+if ( cd "$tmp/c33" && python3 "$bin/test_lint.py" --scaffold pkg/parts/unit/tests/engine_test.py --lib-pkg pkg/parts/unit/lib --pyi pkg/parts/unit/low/engine.pyi ); then
+    echo "PASS: c33 scaffolded non-impl module"
+else
+    echo "FAIL: c33 failed to scaffold non-impl module" >&2
+    fail=1
+fi
+check "c33 scaffold imported Engine" "$tmp/c33/pkg/parts/unit/tests/engine_test.py" 'Engine,'
+check "c33 scaffold imported create_engine" "$tmp/c33/pkg/parts/unit/tests/engine_test.py" 'create_engine,'
+
+# Write bare import of engine -> check_test_imports directs to pkg-qualified, not undeclared
+cat > "$tmp/c33/pkg/parts/unit/tests/engine_test.py" <<'EOF'
+import unittest
+from engine import Engine
+
+class EngineTest(unittest.TestCase):
+    def test_run(self):
+        pass
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c33" && python3 "$bin/test_lint.py" pkg/parts/unit/tests/engine_test.py --lib-pkg pkg/parts/unit/lib --pyi pkg/parts/unit/low/engine.pyi 2>"$tmp/c33/err.log" ); then
+    echo "FAIL: c33 expected failure on bare import of engine" >&2
+    fail=1
+else
+    if grep -q "error: import of lib module 'engine' must be 'from pkg.parts.unit.lib.engine import ...'" "$tmp/c33/err.log"; then
+        echo "PASS: c33 import error directs to package-qualified path"
+    else
+        echo "FAIL: c33 did not direct to package-qualified path in err.log" >&2
+        cat "$tmp/c33/err.log" >&2
+        fail=1
+    fi
+    if grep -q "undeclared dependency 'engine'" "$tmp/c33/err.log"; then
+        echo "FAIL: c33 should not report local lib module as undeclared dependency" >&2
+        fail=1
+    else
+        echo "PASS: c33 did not falsely report local lib module as undeclared dependency"
+    fi
+fi
+
+# Case 34: test module using hasattr() -> rejected with contract adherence error
+mkdir -p "$tmp/c34/lib" "$tmp/c34/tests"
+cat > "$tmp/c34/lib/foo.py" <<'EOF'
+class Foo:
+    pass
+EOF
+cat > "$tmp/c34/tests/foo_test.py" <<'EOF'
+import unittest
+from lib.foo import Foo
+
+class FooTest(unittest.TestCase):
+    def test_foo(self):
+        f = Foo()
+        val = hasattr(f, "bar")
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c34" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/foo_test.py --lib-pkg lib 2>"$tmp/c34/err.log" ); then
+    echo "FAIL: c34 expected failure when hasattr() used in test" >&2
+    fail=1
+else
+    if grep -q "test module must not use 'hasattr()'" "$tmp/c34/err.log"; then
+        echo "PASS: c34 rejected test using hasattr() and reported contract error"
+    else
+        echo "FAIL: c34 did not report hasattr error in err.log" >&2
+        cat "$tmp/c34/err.log" >&2
+        fail=1
+    fi
 fi
 
 exit "$fail"

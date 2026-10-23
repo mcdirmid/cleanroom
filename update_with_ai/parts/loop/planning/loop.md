@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:05:55Z
-CHANGE: Canonicalize change message terminology and align build result and subgraph clean statements with the high-level contract
-CODE_HASH: d596d4738abf
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # loop interface component
 
 ## Intent
@@ -59,3 +51,10 @@ By managing end-to-end cleaning runs, injecting change and feedback messages, an
   - Deferred: Delegated to loop cleaner in implementation.
 - In-band source metadata mutation for clean and dirty states.
   - Deferred: Delegated to dag storage in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:05:55Z
+CHANGE: Canonicalize change message terminology and align build result and subgraph clean statements with the high-level contract
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

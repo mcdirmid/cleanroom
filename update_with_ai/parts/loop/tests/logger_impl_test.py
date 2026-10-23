@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T12:35:00Z
-# CHANGE: Verify standard output presents single-line event summaries without timestamps or event names
-# CODE_HASH: 4f1faaf49c58
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for logger_impl per its grounding specification."""
 
 from __future__ import annotations
@@ -76,3 +67,11 @@ if __name__ == "__main__":
 
 # Untested requirements:
 # None
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-12T12:35:00Z
+# CHANGE: Verify standard output presents single-line event summaries without timestamps or event names
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-17T12:00:00Z
-# LAST_CHANGED: 2026-10-17T12:00:00Z
-# CHANGE: new external component for application identity and naming
-# CODE_HASH: c298a5cdecf9
-# --- END CLEANROOM METADATA ---
-
 """
 ## External Mechanics & API Documentation
 
@@ -39,6 +32,8 @@ The `app_info_ext` external component specifies application identity, naming con
   Returns the canonical file path for user model definitions (`os.path.join(get_user_config_dir(), "model_configs.toml")`).
 - `get_user_credentials_file() -> str`:
   Returns the canonical file path for private user credentials (`os.path.join(get_user_config_dir(), "credentials.toml")`).
+- `get_template_model_config_file() -> str`:
+  Returns the canonical file path for the starter model configurations template (`templates/model_configs.toml`).
 
 ## Build Dependencies
 
@@ -68,3 +63,9 @@ def inspect_app_environment() -> dict[str, str]:
     }
 ```
 """
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-17T12:00:00Z
+# LAST_CHANGED: 2026-10-17T12:00:00Z
+# CHANGE: new external component for application identity and naming
+# --- END CLEANROOM METADATA ---

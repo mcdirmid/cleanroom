@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:42:12Z
-# CHANGE: Provide dag_storage.DagStorage.add_feedback_message in MockDagStorage and assert FeedbackMessage content/target recording for blame_target and fail_target
-# CODE_HASH: 59dab2d386d0
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for attribution_impl."""
 
 import unittest
@@ -264,3 +255,11 @@ class ControlAttributionImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:42:12Z
+# CHANGE: Provide dag_storage.DagStorage.add_feedback_message in MockDagStorage and assert FeedbackMessage content/target recording for blame_target and fail_target
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

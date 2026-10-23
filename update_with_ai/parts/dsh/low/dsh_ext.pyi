@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-13T20:00:00Z
-# CHANGE: author dsh_ext external low-level specification
-# CODE_HASH: a91ec7ebe767
-# --- END CLEANROOM METADATA ---
-
 """
 ## External Mechanics & API Documentation
 
@@ -31,15 +24,15 @@ The `dsh_ext` external component specifies DeepSeek Harness CLI options, role ag
 **Role Agent Documentation Format (`AGENTS.md`)**
 
 - File Path: `<workspace_dir>/AGENTS.md`
-- Injected automatically into turn context via `@deepseek-ai/dsh-agent-instructions`.
+- Injected automatically into round context via `@deepseek-ai/dsh-agent-instructions`.
 - Enforces strict role workspace boundary confinement and prohibits directory traversal outside the root.
-- Enforces the 5-command restriction tripwire limiting commands to `bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, and `bin/fail`.
+- Embeds command execution guidelines permitting in-workspace shell commands and native harness tools while mandating round resolution through prescribed bin/ tools (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/fail`, and `bin/blame` when feedback capability is declared).
 
 **Session Storage and Telemetry Schema**
 
 - Storage Directory: Discovered via `DSH_SESSIONS_DIR`, `DSH_HOME/harness/sessions`, or platform application support directory (`~/Library/Application Support/dsh-desktop/harness/sessions` on macOS, `~/.config/dsh-desktop/harness/sessions` on Linux), storing `<dir-slug>/<session-id>/session.v4.jsonl.zstd` (with uncompressed `session.v4.jsonl` fallback)
 - Concurrency Lock: `session.lock` inside the active session directory verified non-blockingly via file locking.
-- Active Session ID: `<workspace_dir>/.cleanroom/dsh_session_id.txt` for persisting active session ID across turns.
+- Active Session ID: `<workspace_dir>/.cleanroom/dsh_session_id.txt` for persisting active session ID across rounds, reset upon failed rounds.
 - Structured JSON run event usage fields:
   - `usage.inputTokens`: INTEGER (uncached prompt tokens)
   - `usage.cacheReadTokens`: INTEGER (cached prompt tokens)
@@ -85,3 +78,9 @@ def parse_dsh_stream_line(line: str) -> Optional[Tuple[int, int, int, int]]:
     return None
 ```
 """
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-20T22:50:00Z
+# LAST_CHANGED: 2026-10-20T22:50:00Z
+# CHANGE: Specify session reset only upon failed rounds
+# --- END CLEANROOM METADATA ---

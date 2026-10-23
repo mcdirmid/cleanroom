@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T12:07:00Z
-CHANGE: Rebuild completion tools payload on each turn from currently installed tools
-CODE_HASH: c75cafcce109
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # driver_impl implementation component
 
 ## Intent
@@ -36,6 +28,7 @@ By repairing incomplete code edits using indented sentinel exceptions, supportin
 - When repeated consecutive truncation failures occur, the loop driver halts execution with an unexpected failure. [halt_on_repeated_truncation_failures]
 - The loop driver logs log events for turn requests, completions, and tool results to the runner logger. [log_turn_events_to_runner_logger]
 - The loop driver formats compact summaries with turn identifiers, token size, percentage of cached tokens, tool names, arguments, and execution status without inlining file content. [format_compact_log_summaries]
+- The loop driver records output tokens and elapsed turn duration in the completion transcript when present. [record_output_tokens_and_duration_in_transcript]
 - The loop driver includes corrective reminders in the transcript when present. [include_corrective_reminders_in_transcript]
 - When the loop guard produces a loop failure, execution halts with an unexpected failure carrying the explanation. [halt_on_loop_guard_failure]
 - When the loop guard produces a loop reminder, the loop driver appends the reminder to the conversation. [append_loop_guard_reminder]
@@ -54,7 +47,7 @@ By repairing incomplete code edits using indented sentinel exceptions, supportin
 - Driving turns constructs OpenAI completion payloads from currently installed tools with sorted tools and parameters, transmitting over HTTPS and correlating call results. [transmit_openai_completion_request, bind_model_parameters, order_tools_by_name, order_tool_parameters_by_sequence, correlate_tool_results_with_invocations, openai_config: [provide_model_name, provide_timeout]]
 - Truncated generations are recovered by repairing partial replace file content payloads with indented sentinels raising non implemented errors or terminated with failure responses carrying derived suppression keys before continuation. [recover_truncated_tool_invocations, repair_replace_file_content_with_sentinel, append_sentinel_on_next_line, execute_repaired_tool_to_persist_mods, return_notice_targeting_sentinel, terminate_other_truncated_tool, resume_generation_with_continuation]
 - Incomplete tool call errors prompt actionable recovery guidance for smaller edits across continuation turns or halt upon repeated failures. [append_recovery_notice_on_incomplete_tool_call, continue_turn_on_incomplete_tool_call, halt_on_repeated_truncation_failures]
-- Execution events, token consumption metrics, and compact summaries stream to the runner logger. [log_turn_events_to_runner_logger, format_compact_log_summaries, include_corrective_reminders_in_transcript, logger: [consume_log_events]]
+- Execution events, token consumption metrics, and compact summaries stream to the runner logger. [log_turn_events_to_runner_logger, format_compact_log_summaries, record_output_tokens_and_duration_in_transcript, include_corrective_reminders_in_transcript, logger: [consume_log_events]]
 - Repetition tracking halts on fatal loop failures or injects reminders, while productive modifications reset guard counters. [halt_on_loop_guard_failure, append_loop_guard_reminder, clear_guard_tracking_on_progress, guard: [evaluate_consecutive_tools, clear_repetition_on_progress]]
 - Follow-up tool specifications execute chained tool calls with synthetic prior thought reasoning. [execute_designated_followup_tool, append_synthetic_assistant_with_reasoning, append_followup_response_immediately, tool_provider: [call_by_name]]
 - Tool outcomes govern loop continuation, halting on terminal failures, prompting on missing tool calls, and aborting upon turn limit exhaustion. [continue_on_non_terminating_failure, halt_on_terminating_failure, conclude_on_successful_termination, prompt_tool_invocation_when_none_called, halt_when_turn_limit_reached, driver: [conclude_atomically_on_termination, produce_loop_outcome_on_termination], agent_config: [expose_execution_parameters]]
@@ -80,3 +73,10 @@ By repairing incomplete code edits using indented sentinel exceptions, supportin
   - Grounded: [tool_provider: [tool_execution_capability], conversation: [loop_conversation_service]]
 - Turn count termination enforcement based on agent conversation limit.
   - Grounded: [agent_config: [agent_configuration_parameters]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-12T12:07:00Z
+CHANGE: Rebuild completion tools payload on each turn from currently installed tools
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

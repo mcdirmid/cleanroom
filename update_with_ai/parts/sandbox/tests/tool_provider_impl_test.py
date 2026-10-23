@@ -1,22 +1,13 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-09T03:03:42Z
-# CHANGE: Rewrote tool_provider_impl tests with recording mock Tool, mock ParameterTypes (incl. one raising ParameterConversionError) and missing-note callback; covers install_tool/installed_tools and every execute_tool postcondition: unknown tool, unknown parameter (+reminder), missing required with/without note (+reminder, note receives present params), default binding, conversion error (+reminder), and successful dispatch with converted bindings returning the tool response.
-# CODE_HASH: b4c1e58081f0
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for tool_provider_impl per its grounding specification."""
 
 from __future__ import annotations
 
 import unittest
-from typing import Any, Callable, Dict, List, Mapping, Optional, Set
+from typing import Any, Callable, Dict, List, Mapping, Optional, Set, cast
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib import file_alias
-from update_with_ai.parts.agent.lib.session import session as agent_session
+from update_with_ai.parts.agent.lib.session import agent_session
 from update_with_ai.parts.sandbox.lib import tool_provider
 from update_with_ai.parts.sandbox.lib.tool_provider_impl import (
     AliasManagerType,
@@ -397,9 +388,51 @@ class ToolProviderImplTest(unittest.TestCase):
             with self.assertRaises(tool_provider.ParameterConversionError):
                 alias_type.convert(123)  # type: ignore
 
+    def test_identity_parameter_type_converts_wire_values_and_convertible_strings(self) -> None:
+        """Postcondition: IdentityParameterType converts wire values and convertible string representations without failure."""
+        bool_type = tool_provider.IdentityParameterType(bool)
+        self.assertIs(bool_type.actual_type, bool)
+        self.assertIs(bool_type.wire_type, bool)
+        self.assertIs(bool_type.convert(True), True)
+        self.assertIs(bool_type.convert(False), False)
+        self.assertIs(bool_type.convert(cast(Any, "true")), True)
+        self.assertIs(bool_type.convert(cast(Any, "True")), True)
+        self.assertIs(bool_type.convert(cast(Any, "1")), True)
+        self.assertIs(bool_type.convert(cast(Any, "false")), False)
+        self.assertIs(bool_type.convert(cast(Any, "False")), False)
+        self.assertIs(bool_type.convert(cast(Any, "0")), False)
+        self.assertEqual(bool_type.convert(cast(Any, "unconvertible")), "unconvertible")
+
+        int_type = tool_provider.IdentityParameterType(int)
+        self.assertIs(int_type.actual_type, int)
+        self.assertIs(int_type.wire_type, int)
+        self.assertEqual(int_type.convert(42), 42)
+        self.assertEqual(int_type.convert(cast(Any, "42")), 42)
+        self.assertEqual(int_type.convert(cast(Any, "abc")), "abc")
+
+        float_type = tool_provider.IdentityParameterType(float)
+        self.assertIs(float_type.actual_type, float)
+        self.assertIs(float_type.wire_type, float)
+        self.assertEqual(float_type.convert(3.14), 3.14)
+        self.assertEqual(float_type.convert(cast(Any, "3.14")), 3.14)
+        self.assertEqual(float_type.convert(cast(Any, "xyz")), "xyz")
+
+        str_type = tool_provider.IdentityParameterType(str)
+        self.assertIs(str_type.actual_type, str)
+        self.assertIs(str_type.wire_type, str)
+        self.assertEqual(str_type.convert("hello"), "hello")
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements:
 # None
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-09T03:03:42Z
+# CHANGE: Rewrote tool_provider_impl tests with recording mock Tool, mock ParameterTypes (incl. one raising ParameterConversionError) and missing-note callback; covers install_tool/installed_tools and every execute_tool postcondition: unknown tool, unknown parameter (+reminder), missing required with/without note (+reminder, note receives present params), default binding, conversion error (+reminder), and successful dispatch with converted bindings returning the tool response.
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

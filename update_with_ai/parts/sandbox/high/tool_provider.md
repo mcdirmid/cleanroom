@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 1e72aa5b410a
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # tool_provider interface component
 
 imports: session, file_alias
@@ -28,7 +20,7 @@ Each tool parameter has a name and description so the agent can satisfy them. A 
 
 Each tool parameter has a *parameter type* describing the parameter's *actual type* and *wire type*. A parameter type converts a wire value into the actual value a tool expects, and provides feedback when conversion fails. Wire values are limited to wire strings, wire integers, wire booleans, wire floats, wire lists, and wire mappings.
 
-An *identity parameter type* has identical actual and wire types with trivial conversion that cannot fail. A *list parameter type* converts lists using an element parameter type, while a *mapping parameter type* converts mappings using key and value parameter types. A composite parameter type formed from other parameter types propagates every failure from its constituent parameter types.
+An *identity parameter type* has identical actual and wire types with conversion that cannot fail, converting string wire values to the target Python value when applicable. A *list parameter type* converts lists using an element parameter type, while a *mapping parameter type* converts mappings using key and value parameter types. A composite parameter type formed from other parameter types propagates every failure from its constituent parameter types.
 
 An agent session's *alias manager type* is a parameter type over file aliases that wraps the session's alias manager, converting a wire string to a file alias using the alias manager's to alias capability.
 
@@ -37,3 +29,10 @@ Via the tool manager, an agent can execute a tool by name with *wired parameter 
 A tool call produces a *tool response* providing tool output and communicating whether execution failed with diagnostic feedback or whether the conversation terminates. To manage conversation clutter across turns, a tool response can provide a *suppression key* that supersedes and hides prior conversation responses with the same key.
 
 When a tool call can reliably predict a subsequent tool call that the agent is likely to make, a tool response can designate a *follow-up tool call*. A follow-up tool call specifies the next tool to call, wired parameter bindings for its parameters, and reasoning text articulating from the agent's perspective why the next tool is being called.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: 51bd52609aaf
--->
-
 # target_labels_ext external component
 
 ## Purpose
@@ -26,3 +19,9 @@ Grounding gaps covered include:
 - Package filesystem directory resolution: Translates canonical package identifiers into relative filesystem directory paths, resolves package directory paths against physical workspace root directories, and correctly handles workspace root package targets.
 
 - Target syntax validation: Enforces Cleanroom label character set rules and syntax constraints, validating package path segments and unit names while rejecting malformed or ambiguous label strings.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+-->

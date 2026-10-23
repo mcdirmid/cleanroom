@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-05T04:26:30Z
-CHANGE: new file
-CODE_HASH: 70e774a45a8b
--->
-
 # filesystem_ext external component
 
 ## Purpose
@@ -26,3 +19,9 @@ Grounding gaps covered include:
 - File existence and path inspection: Checks whether files and directories exist at physical host paths, distinguishes regular files from directories, and queries filesystem metadata across operating system platforms.
 
 - Regular expression pattern matching: Recursively traverses directory paths, scans file lines against compiled regular expression patterns, collects matching line numbers and line contents, and reports regular expression compilation errors.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-05T04:26:30Z
+CHANGE: new file
+-->

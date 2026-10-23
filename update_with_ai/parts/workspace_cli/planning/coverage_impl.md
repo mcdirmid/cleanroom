@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T04:12:05Z
-CHANGE: State the coverage evaluator as a system service on the system tier
-CODE_HASH: 76a96ccc8923
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # coverage_impl implementation component
 
 ## Intent
@@ -59,3 +51,10 @@ The implementation traverses abstract syntax trees to identify docstrings, signa
 
 - Target implementation and test path arguments.
   - Grounded: [caller input, coverage_evaluation_service]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-19T17:15:00Z
+CHANGE: Inject local part package root into module search paths and purge package namespaces to prevent cross-workspace module shadowing
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

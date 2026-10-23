@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: 48fd2f167ae1
--->
-
 # manifest_ext external component
 
 ## Purpose
@@ -26,3 +19,9 @@ Grounding gaps covered include:
 - Unit component type classification: Identifies unit component types from specification headers and front-matter clauses across interface, implementation, external boundary, and assembly categories.
 
 - Package directory conventions: Maps canonical unit addresses to expected source locations within standardized Cleanroom package directory trees.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+-->

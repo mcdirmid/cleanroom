@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:36:58Z
-# CHANGE: Ground blame resolution in named collaborators and add file-level blame overrides
-# CODE_HASH: 1ef7accee58d
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for attribution_impl."""
 
 from typing import Any, Optional, Sequence
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import node_config
@@ -20,10 +12,7 @@ import src_metadata
 
 
 @singleton_type("agent_session")
-class AttributionCoordinator(
-    attribution.AttributionCoordinator,
-    InTier[AgentSessionTier],
-):
+class AttributionCoordinator(attribution.AttributionCoordinator):
     """Implementation of attribution coordinator.
 
     GROUNDING:
@@ -161,3 +150,10 @@ class AttributionCoordinator(
           node, returning the matching file_alias.BoundFile.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:36:58Z
+# CHANGE: Ground blame resolution in named collaborators and add file-level blame overrides
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

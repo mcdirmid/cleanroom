@@ -1,11 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-05T04:26:30Z
-# CHANGE: new file
-# CODE_HASH: 149eae7f3033
-# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
-# --- END CLEANROOM METADATA ---
-
 """
 ## External Mechanics & API Documentation
 
@@ -118,3 +110,10 @@ def search_directory_pattern(
     return {"status": "success", "results": results, "truncated": False}
 ```
 """
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-05T04:26:30Z
+# CHANGE: new file
+# LOW_QA_AUDIT: 2026-10-09T21:19:01Z
+# --- END CLEANROOM METADATA ---

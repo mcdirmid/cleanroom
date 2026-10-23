@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-11T03:16:09Z
-CHANGE: Declare synchronizer typing and enforce test stub integrity in refresh
-CODE_HASH: e1f7f39a7146
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # sync interface component
 
 ## Intent
@@ -51,3 +43,10 @@ Operating across isolated role workspaces requires atomic data movement to preve
   - Deferred: Provided by workspace synchronizer implementation.
 - Two-phase conflict detection and atomic file replacement on disk.
   - Deferred: Provided by workspace synchronizer implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-11T03:16:09Z
+CHANGE: Declare synchronizer typing and enforce test stub integrity in refresh
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

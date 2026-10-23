@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:10:58Z
-CHANGE: Contract guide acquisition on session init and passing verification as the advancement prerequisite
-CODE_HASH: b489197d39a1
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # guide_delivery_impl implementation component
 
 ## Intent
@@ -67,3 +59,10 @@ By isolating milestone sections, maintaining current step offsets, and synthesiz
 
 - Delivery of contextual diagnostic guidance on verification failure.
   - Grounded: [step_delivery, primer_recording]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:10:58Z
+CHANGE: Contract guide acquisition on session init and passing verification as the advancement prerequisite
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

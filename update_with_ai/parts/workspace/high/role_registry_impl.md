@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Delegate role configuration resolution to roles
-CODE_HASH: 15fc0baccb9d
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # role_registry_impl implementation component
 
 imports: session, cleanroom_files_ext, roles
@@ -30,3 +22,10 @@ The workspace registry resolves role definitions and lists all declared roles by
 The workspace registry computes a role workspace directory path by combining the parent directory of the repository root with the role name and the directory scope, sanitizing directory delimiters into underscores to produce a collision-free sibling workspace.
 
 The workspace registry tracks active workspace descriptors in memory and discovers provisioned workspaces across the role workspaces directory by reading each workspace's role metadata descriptor. Registering a workspace records the descriptor in memory, and unregistering removes the matching workspace descriptor.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T18:45:00Z
+CHANGE: Delegate role configuration resolution to roles
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

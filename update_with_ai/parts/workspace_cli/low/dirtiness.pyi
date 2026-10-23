@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T18:15:00Z
-# CHANGE: Define dirtiness interface specification
-# CODE_HASH: 557f064c201e
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for dirtiness."""
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence, Tuple
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 
 
@@ -34,7 +26,7 @@ class UnitDirtinessResult:
 
 
 @singleton_type("agent_session")
-class WorkspaceDirtinessEvaluator(InTier[AgentSessionTier], Protocol):
+class WorkspaceDirtinessEvaluator(Singleton[AgentSessionTier], Protocol):
     """Evaluates unit dirtiness, resolves companion contracts, and extracts cross-unit dependencies."""
 
     @operation
@@ -92,3 +84,10 @@ class WorkspaceDirtinessEvaluator(InTier[AgentSessionTier], Protocol):
         - MUST resolve dependency labels into package and unit name pairs.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T18:15:00Z
+# CHANGE: Define dirtiness interface specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:06:36Z
-# CHANGE: Add role address tie-break and unsatisfied dependency batch termination grounding
-# CODE_HASH: 4a92655e8659
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Dag subgraph implementation specification."""
 
 from typing import Sequence
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 from dag_storage import DagNode
 import subgraph
 import dag_config
@@ -18,7 +10,7 @@ import dag_storage
 
 
 @singleton_type("system")
-class DagSubgraph(subgraph.DagSubgraph, InTier[SystemTier]):
+class DagSubgraph(subgraph.DagSubgraph):
     """Coordinates topological subgraph queries and visit bounds across graph storage.
 
     GROUNDING:
@@ -105,3 +97,10 @@ class DagSubgraph(subgraph.DagSubgraph, InTier[SystemTier]):
         - WHEN any node in the batch exceeds the node visit limit obtained from configuration, MUST raise an unexpected failure.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:06:36Z
+# CHANGE: Add role address tie-break and unsatisfied dependency batch termination grounding
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

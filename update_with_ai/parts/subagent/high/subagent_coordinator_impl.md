@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-18T01:30:00Z
-CHANGE: support restricting work discovery and execution to target units and transitive dependencies
-CODE_HASH: b93703556435
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # subagent_coordinator_impl implementation component
 
 imports: session, subagent_coordinator, provision, role_registry, work
@@ -15,7 +7,7 @@ implements: subagent_coordinator
 
 The subagent_coordinator_impl implementation component realizes zero-execution multi-agent workspace coordination, dynamic queue-driven process supervision, fine-grained concurrency, and iterative loop convergence across external harness adapters.
 
-Complex software development methodologies partition work into specialized roles that depend on upstream artifacts. Executing these roles with rigid static waves or hardcoded role assumptions leads to artificial serialization, idle worker capacity, and invalidated context. The subagent_coordinator_impl implementation component formalizes dynamic queue-driven process supervision, fine-grained node concurrency, harness abstraction, turn result aggregation, blame defect propagation, model configuration resolution, and cumulative token rate-card accounting.
+Complex software development methodologies partition work into specialized roles that depend on upstream artifacts. Executing these roles with rigid static waves or hardcoded role assumptions leads to artificial serialization, idle worker capacity, and invalidated context. The subagent_coordinator_impl implementation component formalizes dynamic queue-driven process supervision, fine-grained node concurrency, harness abstraction, round result aggregation, blame defect propagation, model configuration resolution, and cumulative token rate-card accounting.
 
 **Out of scope:** The subagent_coordinator_impl implementation component does not directly execute subagent processes or mutate workspace files; these are handled by other components.
 
@@ -29,7 +21,7 @@ When coordinating multi-agent execution:
 
 - The realization resets preexisting role workspaces for declared roles upon initiating orchestration.
 
-- The realization resolves subagent batch sizes, conversation token limits, and maximum unproductive turn thresholds from declarative model configurations matching designated model names or identifiers.
+- The realization resolves subagent batch sizes, conversation token limits, and maximum unproductive round thresholds from declarative model configurations matching designated model names or identifiers.
 
 - The realization queries commissioned workspaces and evaluates unblocked dirty role work queues.
 
@@ -39,16 +31,25 @@ When coordinating multi-agent execution:
 
 - The realization dispatches role directives concurrently for roles possessing ready work, tracking active worker handles without static wave partitioning.
 
-- The realization periodically polls active workers through non-blocking checks on the configured harness adapter at a configurable interval (defaulting to 10 seconds), collecting role turn results upon completion.
+- The realization periodically polls active workers through non-blocking checks on the configured harness adapter at a configurable interval (defaulting to 10 seconds), collecting role round results upon completion.
 
-- The realization tracks consecutive unproductive turns where a role yields zero submitted and zero blamed targets, halting orchestration when unproductive turns exceed a threshold configured per model or globally (defaulting to 5).
+- The realization tracks consecutive unproductive rounds where a role yields zero submitted and zero blamed targets and its assigned ready targets remain unresolved in the repository, suppressing unproductive round tracking and scolding reminders when assigned ready targets were resolved or cleaned in the repository during the round, and halting orchestration when consecutive unproductive rounds exceed a threshold configured per model or globally (defaulting to 5).
 
-- The realization emits real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state.
+- When an active worker finishes a round without submitting, blaming, or failing assigned targets and its assigned ready targets remain unresolved in the repository, the realization preserves an unresolved reminder directive and injects it into the task prompt of the subsequent role dispatch directive, reminding the worker that conversational commentary without tools is prohibited and requiring the round to be concluded via check_files and submit, blame, or fail.
 
-- The realization manages the dynamic supervision loop, continuing until all units evaluate clean, a turn reports failure, or maximum wave iterations are reached.
+- The realization emits real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state.
+
+- The realization manages the dynamic supervision loop, continuing until all units evaluate clean, a round reports failure, or maximum wave iterations are reached.
 
 - The realization automatically deletes all provisioned role workspaces in scope upon achieving clean convergence.
 
 - The realization interrupts all active workers and automatically deletes all provisioned role workspaces in scope when orchestration is interrupted by system termination or user cancellation signals.
 
-- The realization normalizes token metrics from turn outcomes and tallies total costs according to model pricing rate cards.
+- The realization normalizes token metrics from round outcomes and tallies total costs according to model pricing rate cards.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-20T23:45:00Z
+CHANGE: Suppress unproductive rounds and scolding reminders when assigned targets are resolved or cleaned in the repository
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

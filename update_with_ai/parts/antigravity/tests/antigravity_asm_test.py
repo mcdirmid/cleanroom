@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-12T21:45:00Z
-# LAST_CHANGED: 2026-10-12T21:45:00Z
-# CHANGE: author antigravity_asm unit tests
-# CODE_HASH: 445566778899
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for antigravity_asm."""
 
 from __future__ import annotations
@@ -48,3 +41,9 @@ class AntigravityAsmTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-12T21:45:00Z
+# LAST_CHANGED: 2026-10-12T21:45:00Z
+# CHANGE: author antigravity_asm unit tests
+# --- END CLEANROOM METADATA ---

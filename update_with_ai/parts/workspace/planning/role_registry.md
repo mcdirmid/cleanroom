@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Delegate role configuration resolution to roles
-CODE_HASH: 3831f687bd74
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # role_registry interface component
 
 ## Intent
@@ -51,3 +43,10 @@ Managing multiple directory-scoped and role-specific workspaces requires consist
   - Deferred: Provided by workspace registry implementation.
 - Discovery and tracking of active role workspaces.
   - Deferred: Provided by workspace registry implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-14T18:45:00Z
+CHANGE: Delegate role configuration resolution to roles
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

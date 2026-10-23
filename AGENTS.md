@@ -34,6 +34,19 @@
 - **Mechanistic Checking is Only 1%**: Passing linters, type checkers, or verifiers with zero errors is merely a baseline mechanical sanity check. It does NOT mean the specification or implementation is correct or meaningful. Stop treating tasks as syntactic constraint-satisfaction games.
 - **Mandatory Deep Semantic Analysis**: Every specification, implementation, contract, and test must be derived by analyzing the actual behavioral semantics and contracts in upstream artifacts rather than shallow mechanistic checks.
 
+## Standard Terminology: Step vs Round (Strict Prohibition on "Turn")
+
+- **STRICT PROHIBITION ON "TURN"**: The term "turn" is ambiguous (historically conflated between a single tool-call step and a full role dispatch wave) and is strictly deprecated and prohibited in documentation, guides, design docs, specifications, prompts, and code. Use **step** or **round** explicitly.
+- **Step**: A single prompt $\leftrightarrow$ tool-call interaction cycle between an agent/model and the runtime/harness (e.g., model prompt $\to$ internal reasoning $\to$ tool call(s) $\to$ tool response).
+- **Round**: A full Cleanroom role dispatch wave or execution pass across assigned targets (from role dispatch into a role workspace until completion, submission, blame, or exhaustion). A round encompasses all model steps executed within that role dispatch pass. Re-entry of a role (e.g. after downstream rejection or loop propagation) initiates a subsequent round.
+
+## Mandatory Tool Execution and Round Conclusion (Prohibition on Conversational Halting)
+
+- **Ground Truth First (Anti-Speculation Rule)**: Always run `bin/check_files <target>` immediately as the first action after `bin/get_work` to obtain deterministic error diagnostics. Never guess, infer, or speculate about defects from reading prose before checking the actual oracle output.
+- **Continuous Tool Execution**: Role workers operate exclusively via tool execution. Producing conversational commentary, explanations, or announcing actions in prose (such as ending a message with a colon or promising a tool call) without invoking tools in the same step is strictly prohibited and causes runtime harnesses to terminate rounds prematurely.
+- **Targeted Reads Over Repeated Dumps**: Never repeatedly read entire files when output is pruned. Use grep to locate symbols, or read narrow line ranges with offset and limit.
+- **Mandatory Round Conclusion**: Every role round must conclude by resolving all assigned ready targets: running `bin/check_files <target>` to verify, followed by `bin/submit <target> "<summary>"`, `bin/blame <culprit_file> "<critique>"`, or `bin/fail`. Leaving assigned targets unresolved without tool execution triggers coordinator reminders and trips the impasse circuit breaker.
+
 ## Guide Editing & Meta-Rules
 
 - **Editing Guides**: ALWAYS read and maintain in context `update_with_ai/guides/meta_guide.md` before creating, updating, or editing any guide.
@@ -63,13 +76,20 @@ Always read and maintain in context the relevant guide from `update_python_with_
 
 If a test doesn't matter, don't run the test! Do not edit pyrightconfig.json to make the test not matter anymore. If you have a type error that you can't fix, don't edit pyrightconfig.json to make the type error go away. Etc...
 
+## Direct Command Execution
+
+- **Immediate Execution of Explicit Shell Commands**: When the user provides an explicit shell command to run (e.g., `uv run ...`, `bin/...`, `pytest ...`), execute `run_command` immediately in the very first step. Do NOT inspect source code, read files, second-guess, or perform pre-flight research before running the command.
+
 ## Git Operations
 
 - **NO Unprompted Commits or Pushes**: NEVER commit or push to git unless explicitly directed to do so by the user.
 
 ## Autonomous Orchestration Antigravity Execution
 
-- **Immediate Coordinator Invocation on orchestrate (Antigravity Only)**: When running under the Google Antigravity agent, if `uv run cleanroom orchestrate ...` (or `uv run cleanroom clean ... --harness antigravity`) is executed (or outputs the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE`), do NOT stop to ask for confirmation and do NOT inspect tool source code. The `cleanroom_coordinator` agent definition is already installed. Immediately invoke:
-  `invoke_subagent(Subagents=[{"TypeName": "cleanroom_coordinator", "Role": "Cleanroom Coordinator", "Prompt": "Clean all dirty nodes in <scope> up to <role> using cleanroom_coordinator"}])`
+- **Immediate Coordinator Invocation on orchestrate & benchmarks (Antigravity Only)**: When running under the Google Antigravity agent, if any command with `--harness=antigravity` (such as `uv run cleanroom orchestrate ...`, `uv run cleanroom clean ...`, `uv run cleanroom benchmark ...`, or `uv run bin/evaluate_model_efficiency.py ...`) is executed (or emits the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE`):
+  1. If `agentapi send-message` reactive wakeup message is received in the chat, use the target scope specified directly in the message.
+  2. If the command runs as a background task and no message arrived, immediately inspect the task log (`.system_generated/tasks/task-X.log`) or `logs/*_runner.log` to extract the scope name (`benchmarks_flight_*` or target scope). Do NOT wait for the background command to finish before launching the coordinator—the command is waiting for the coordinator to converge the DAG.
+  3. Immediately invoke:
+     `invoke_subagent(TypeName="cleanroom_coordinator", Role="Cleanroom Coordinator", Prompt="Clean all dirty nodes in <scope> using cleanroom_coordinator")`
   In other environments (such as DeepSeek Harness / DSH Desktop), run `uv run cleanroom clean <scope> [target_role] --harness dsh` directly via the terminal tool.
   For autonomous in-process loop execution, run `uv run cleanroom clean <target>` (which defaults to `--harness loop`).

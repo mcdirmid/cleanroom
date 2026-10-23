@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:09:20Z
-CHANGE: Author loop-phase guard concrete scenarios
-CODE_HASH: 92dc54ae9d9c
--->
-
 # Concrete scenarios for `loop_guard` (interface)
 
 ## Scenario 1 — New work produces no reminder
@@ -74,3 +67,9 @@ Given: the loop guard's warning threshold is 2 consecutive repetitions and its f
 2. The tool manager returns the `read_file` response for `/ws/alpha_scope_a/widget.md` once more.
    Observed: no warning threshold has been reached, so the guard produces no loop reminder and no
    loop failure.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:09:20Z
+CHANGE: Author loop-phase guard concrete scenarios
+-->

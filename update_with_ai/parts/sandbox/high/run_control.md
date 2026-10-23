@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:30:00Z
-CHANGE: Update run_control interface component
-CODE_HASH: 9a9b755e4181
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # run_control interface component
 
 imports: tool_provider, file_alias, dag_storage, node_config
@@ -26,10 +18,17 @@ An agent session's *run controller* is configured with per-node blame targets an
 
 The run controller installs the submit tool, the fail tool, the check files tool, and the get work tool unconditionally, and installs the advance tool when guide step mode is active. The get work tool installs the blame tool when any active node has configured blame targets.
 
-The run controller exposes the verification checks that validate session criteria, and caches verification evaluation results alongside the edit manager file hashes of target nodes, reusing a cached verification outcome while no workspace file has been updated since that evaluation.
+The run controller exposes the verification checks that validate session criteria, caches verification evaluation results alongside the edit manager file hashes of target nodes, reusing a cached verification outcome while no workspace file has been updated since that evaluation, and exposes whether verification passed, whether target file hashes are unchanged since the last evaluation, and the aggregated diagnostic output from failing verification checks.
 
 The run controller installs an argument-free *check files tool* named `check_files`. Executing the check files tool updates outdated verification results, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks the last tested file hashes, and fails when verification failed.
 
 The run controller installs an *advance tool* when guide step mode is active. Executing the advance tool coordinates step progression through guide delivery upon passing verification.
 
 The run controller installs an argument-free *get work tool* named `get_work` that retrieves active dirty nodes, materializes startup templates, delivers the session task prompt, resolves the primary guide file from provisioned read-only documentation when not explicitly declared on node configuration, and specifies a follow-up execution of the advance tool when guide step mode is active.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:30:00Z
+CHANGE: Update run_control interface component
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:12:02Z
-CHANGE: Author control src_metadata_impl concrete scenarios
-CODE_HASH: e343cc176262
--->
-
 # Concrete scenarios for `src_metadata_impl` (implementation)
 
 Scenarios 1 through 6 restate the caller observations of the interface scenarios and add, beside
@@ -210,7 +203,7 @@ Given: no file exists at `/ws/alpha_scope_a/parts/sprocket/sprocket_spec.md`, an
    Realized by: the component's own code body extraction over a file with no lines outside the
    block.
 
-### Scenario 10 — Placing a new block below directives inside a content string
+### Scenario 10 — Appending a new block at the bottom inside a content string
 
 Given: the caller holds, as a content string, a Python module whose first line is
 `#!/usr/bin/env python3`, whose second line is `# -*- coding: utf-8 -*-`, and whose remaining lines
@@ -219,16 +212,18 @@ specification whose frontmatter delimiter is followed by the body line `widget c
 current UTC timestamp is `2026-01-10T00:00:00Z`.
 
 1. The caller asks for the Python content string rewritten with the file marked clean.
-   Observed: the returned string still begins with `#!/usr/bin/env python3` and
-   `# -*- coding: utf-8 -*-`, then carries a metadata comment block recording last cleaned
-   `2026-01-10T00:00:00Z`, then the unchanged lines `widget = 1` and `gadget = 2`.
-   Realized by: the component's own serialization, which inserts the new block below the shebang
-   and encoding directive as the placement rules of `src_metadata_ext` require.
+   Observed: the returned string begins with `#!/usr/bin/env python3`, `# -*- coding: utf-8 -*-`,
+   `widget = 1`, and `gadget = 2`, followed by a blank line and the metadata comment block
+   recording last cleaned `2026-01-10T00:00:00Z` at the bottom of the content string.
+   Realized by: the component's own serialization, which appends the new block at the bottom of the
+   content as the placement rules of `src_metadata_ext` require.
 
 2. The caller asks for the Markdown content string rewritten with the file marked clean.
-   Observed: the returned string keeps the frontmatter delimiter above a metadata comment block
-   recording last cleaned `2026-01-10T00:00:00Z`, then the unchanged line
-   `widget contract body`.
+   Observed: the returned string keeps the frontmatter delimiter and the line `widget contract body`,
+   followed by a blank line and the metadata comment block recording last cleaned
+   `2026-01-10T00:00:00Z` at the bottom of the content string.
+   Realized by: the component's own serialization, which appends the new HTML metadata block at the
+   bottom of the content as the placement rules of `src_metadata_ext` require.
    Realized by: the component's own serialization, which inserts the new block after the
    frontmatter delimiter as those same placement rules require.
 
@@ -249,3 +244,9 @@ Given: the workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` is dir
    Observed: the file on disk records last cleaned `2026-01-11T00:00:00Z` and no dirty reason.
    Realized by: the component's own in-place header rewrite, advancing the last cleaned timestamp
    to the current UTC timestamp and clearing the dirty reason.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:12:02Z
+CHANGE: Author control src_metadata_impl concrete scenarios
+-->

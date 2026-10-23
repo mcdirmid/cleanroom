@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-17T12:00:00Z
-LAST_CHANGED: 2026-10-17T12:00:00Z
-CHANGE: new external component for application identity and naming
-CODE_HASH: f1a9608e82cd
--->
-
 # app_info_ext external component
 
 ## Purpose
@@ -28,3 +21,11 @@ Grounding gaps covered include:
 - User-level global configuration directory resolution: Resolves the canonical user global configuration directory according to environment overrides, Windows application data paths, and XDG Base Directory conventions on POSIX systems.
 
 - User-level model configuration and credentials paths: Resolves canonical filesystem paths for global model definitions and private user credentials files within the user configuration hierarchy.
+
+- Template model configuration path: Resolves canonical filesystem paths for the default model_configs.toml starter template.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-17T12:00:00Z
+LAST_CHANGED: 2026-10-17T12:00:00Z
+CHANGE: new external component for application identity and naming
+-->

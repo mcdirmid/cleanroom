@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T19:43:57Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: 3a95da22fd0e
-SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
--->
-
 # uv_asm assembly component
 
 assembles: file_paths_impl, manifest_loader_impl, node_config_impl, target_impl
@@ -25,3 +17,10 @@ Building an autonomous multi-agent development environment requires integrating 
 The uv_asm assembly component aggregates the implementations of the agent file alias, agent node config, uv manifest loader, uv target, and file paths interfaces, providing a unified assembly for workspace manifest loading, target resolution, and node configuration.
 
 The uv assembly initializes its constituent implementations recursively, registering every singleton service with the system lifecycle prototype to achieve interface closure across the Cleanroom workspace contracts.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T19:43:57Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
+-->

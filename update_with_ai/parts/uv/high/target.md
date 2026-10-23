@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: d57bf0dea237
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # target interface component
 
 imports: dag_storage, file_paths
@@ -23,3 +15,10 @@ Multi-step workflows require deterministic node addressing and durable state sto
 A *node directory* is a workspace path addressing the workspace package directory of a node.
 
 A system's *uv target* normalizes an arbitrary target identifier string into a canonical node, and extracts the node directory of a node.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

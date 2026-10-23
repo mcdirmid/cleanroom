@@ -272,3 +272,49 @@ To run repository verification checks, static type checks, and pytest suites cle
 ```bash
 bin/test
 ```
+
+---
+
+## 5. Model Configuration Schema (`model_configs.toml`)
+
+Cleanroom resolves model definitions, capability tiers, and financial rate cards from:
+1. Explicit CLI flag: `--model-config <path>` or `CLEANROOM_MODEL_CONFIG_FILE` environment override
+2. Local repository candidate: `./model_configs.toml`
+3. Canonical user configuration: `~/.config/cleanroom/model_configs.toml`
+4. Canonical starter template: [`update_python_with_ai/templates/model_configs.toml`](update_python_with_ai/templates/model_configs.toml)
+
+Run `uv run cleanroom configure` to scaffold `~/.config/cleanroom/model_configs.toml` and credentials templates.
+
+### TOML Schema Reference
+
+```toml
+# Top-Level Harness Defaults
+default = "qwen-moe-q6"                  # Default model profile name
+loop_default = "qwen-moe-q6"             # Default for autonomous loop harness
+antigravity_default = "gemini-4-argon"   # Default for Antigravity harness
+dsh_default = "deepseek-v41-flash"       # Default for DeepSeek Harness (DSH)
+max_unproductive_rounds = 5              # Global circuit-breaker round limit
+
+# Model Profiles: [models.<profile-name>]
+# IMPORTANT: Model keys containing dots must be quoted in TOML, e.g. [models."gemini-3.8-flash"]
+
+[models.deepseek-v41-flash]
+model = "deepseek-flash"                 # Model identifier sent to provider API
+provider = "deepseek"                    # Protocol adapter ("deepseek", "google", "openai", "anthropic", "mlx", "omlx")
+tier = 2                                 # Capability tier (1=Local, 2=Budget, 3=Mid-Tier, 4=Frontier)
+tier_label = "Budget API"                # Descriptive capability label
+rate_uncached_in = 0.15                  # USD per 1,000,000 uncached input tokens
+rate_cached_in = 0.003                   # USD per 1,000,000 cached input tokens (prompt cache hit)
+rate_out = 0.60                          # USD per 1,000,000 output tokens (including reasoning tokens)
+default_harness = "dsh"                  # Recommended runtime harness ("dsh", "antigravity", "loop")
+base_url = "https://api.deepseek.com/v1" # HTTP base endpoint
+api_key_env = "DEEPSEEK_API_KEY"         # Environment variable holding the API key
+max_tokens = 8192                        # Max completion tokens per request
+subagent_batch_size = 10                 # Maximum concurrent role subagent dispatches
+conversation_max_tokens = 256000         # Context window compaction threshold in tokens
+max_feedback_chars = 4000                # Max feedback buffer length preserved across rounds
+max_unproductive_rounds = 5              # Profile-level circuit breaker
+temperature = 0.7                        # Generation temperature
+timeout_seconds = 120.0                  # Request/process timeout in seconds
+```
+

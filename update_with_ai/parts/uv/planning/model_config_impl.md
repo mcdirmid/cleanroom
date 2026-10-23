@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-17T12:00:00Z
-LAST_CHANGED: 2026-10-17T12:00:00Z
-CHANGE: align model_config_impl planning with app_info_ext and credentials fallback
-CODE_HASH: 039afb36fec7
--->
-
 # model_config_impl implementation component
 
 ## Intent
@@ -55,3 +48,9 @@ By reading target configuration from environment variables or command-line argum
   - Grounded: [filesystem_ext: [filesystem_operations]]
 - Inspecting configuration file paths across repository root and user configuration directories.
   - Grounded: [filesystem_ext: [host_path_operations], app_info_ext: [user_configuration_paths]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-17T12:00:00Z
+LAST_CHANGED: 2026-10-17T12:00:00Z
+CHANGE: align model_config_impl planning with app_info_ext and credentials fallback
+-->

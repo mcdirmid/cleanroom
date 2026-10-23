@@ -1,26 +1,15 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:50:00Z
-# CHANGE: Delegate command workflows to commands
-# CODE_HASH: 50e1815c1375
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for cli_tool_impl."""
 
 from typing import Optional, Sequence
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import commands
 import cli_tool
 
 
 @singleton_type("agent_session")
-class WorkspaceToolRunner(
-    cli_tool.WorkspaceToolRunner,
-    InTier[AgentSessionTier],
-):
+class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
     """Realizes command-line subagent tool execution for role workspaces.
 
     GROUNDING:
@@ -179,3 +168,9 @@ def __orphan__() -> None:
     """
     ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T17:50:00Z
+# CHANGE: Delegate command workflows to commands
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

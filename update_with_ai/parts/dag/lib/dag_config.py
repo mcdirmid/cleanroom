@@ -1,11 +1,5 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:59:19Z
-# CHANGE: Remove generated scaffold markers and carry the grounding specification's class and property contracts into the interface
-# CODE_HASH: 33567465df66
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from support.lib.lifecycle import Singleton, SystemTier
 
 from typing import NewType, Protocol
 
@@ -16,7 +10,7 @@ NodeVisitLimit = NewType("NodeVisitLimit", int)
 BatchSize = NewType("BatchSize", int)
 
 
-class DagConfig(Protocol):
+class DagConfig(Singleton[SystemTier], Protocol):
     """System service exposing operational limits governing graph node visit caps and dirty node batch sizes during cleaning passes."""
 
     @property
@@ -30,3 +24,9 @@ class DagConfig(Protocol):
         # Contract: Bound on the number of dirty nodes of the same role address collected into a single cleaning batch.
         """Bound on the number of dirty nodes of the same role address collected into a single cleaning batch."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T04:59:19Z
+# CHANGE: Remove generated scaffold markers and carry the grounding specification's class and property contracts into the interface
+# --- END CLEANROOM METADATA ---

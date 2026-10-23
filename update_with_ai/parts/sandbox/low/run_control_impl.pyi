@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T18:30:00Z
-# CHANGE: Update run_control_impl low-level realization specification
-# CODE_HASH: 18c14d435487
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Sandbox run control implementation low-level specification."""
 
 from typing import Any, Mapping, Optional, Sequence, Set
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import file_alias
 import node_config
@@ -26,9 +18,7 @@ import tool_provider
 
 
 @singleton_type("agent_session")
-class CheckFilesTool(
-    run_control.CheckFilesTool, InTier[AgentSessionTier]
-):
+class CheckFilesTool(run_control.CheckFilesTool):
     """Realizes verification check execution and diagnostic aggregation.
 
     GROUNDING:
@@ -62,8 +52,8 @@ class CheckFilesTool(
             Response containing verification outcomes or failure feedback.
 
         POSTCONDITIONS:
-        - WHEN target file hashes have not changed since previous check, MUST remind agent that verification status is unchanged.
-        - WHEN verification fails, MUST present sanitized diagnostic feedback alongside verification failure instructions.
+        - WHEN target file hashes have not changed since previous check and verification is passing, MUST remind agent that verification status is unchanged.
+        - WHEN verification fails, MUST present sanitized diagnostic feedback alongside verification failure instructions regardless of whether target file hashes changed.
         - WHEN verification passes, MUST produce response presenting passing results.
 
         GROUNDING:
@@ -75,9 +65,7 @@ class CheckFilesTool(
 
 
 @singleton_type("agent_session")
-class AdvanceTool(
-    run_control.AdvanceTool, InTier[AgentSessionTier]
-):
+class AdvanceTool(run_control.AdvanceTool):
     """Realizes guide milestone advancement gated by verification checks.
 
     GROUNDING:
@@ -126,9 +114,7 @@ class AdvanceTool(
 
 
 @singleton_type("agent_session")
-class GetWorkTool(
-    run_control.GetWorkTool, InTier[AgentSessionTier]
-):
+class GetWorkTool(run_control.GetWorkTool):
     """Realizes batch acquisition and session task prompt delivery.
 
     GROUNDING:
@@ -182,9 +168,7 @@ class GetWorkTool(
 
 
 @singleton_type("agent_session")
-class RunController(
-    run_control.RunController, InTier[AgentSessionTier]
-):
+class RunController(run_control.RunController):
     """Realizes tool installation and verification check result caching.
 
     GROUNDING:
@@ -231,6 +215,36 @@ class RunController(
         """
         ...
 
+    @property
+    @override
+    def is_passed(self) -> bool:
+        """Exposes whether the latest verification evaluation passed.
+
+        GROUNDING:
+        - Exposes the cached pass/fail status determined by update_verification.
+        """
+        ...
+
+    @property
+    @override
+    def is_unchanged(self) -> bool:
+        """Exposes whether target file hashes are unchanged since the last evaluation.
+
+        GROUNDING:
+        - Exposes whether the cached file hashes match the current workspace file hashes.
+        """
+        ...
+
+    @property
+    @override
+    def diagnostic_output(self) -> str:
+        """Exposes aggregated diagnostic output from failing verification checks.
+
+        GROUNDING:
+        - Exposes the aggregated diagnostic output text cached during update_verification.
+        """
+        ...
+
     @operation
     @override
     def update_verification(self) -> None:
@@ -246,3 +260,10 @@ class RunController(
           sequentially, caching each outcome alongside the target file hash.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-21T22:00:00Z
+# LAST_CHANGED: 2026-10-21T22:00:00Z
+# CHANGE: Present diagnostic feedback on verification failure regardless of whether target file hashes changed
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

@@ -68,6 +68,17 @@ class AppInfoTest(unittest.TestCase):
                 self.assertEqual(creds.get("openai_api_key"), "sk-test123")
                 self.assertEqual(creds.get("DEEPSEEK_API_KEY"), "sk-deep456")
 
+    def test_get_template_model_config_file(self) -> None:
+        template_path = app_info.get_template_model_config_file()
+        self.assertTrue(os.path.isfile(template_path))
+        self.assertTrue(template_path.endswith("model_configs.toml"))
+
+    def test_default_user_model_configs_toml_loaded_from_template(self) -> None:
+        content = app_info.DEFAULT_USER_MODEL_CONFIGS_TOML
+        self.assertIn("[models.deepseek-flash]", content)
+        self.assertIn("rate_cached_in = 0.003", content)
+        self.assertIn('model = "gemini-3.8-flash"', content)
+
 
 if __name__ == "__main__":
     unittest.main()

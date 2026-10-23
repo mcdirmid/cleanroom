@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:05:56Z
-CHANGE: State the continuation invariant in terms of nodes no other node cleaning can address
-CODE_HASH: 789181d8cbb1
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # node_cleaner interface component
 
 ## Intent
@@ -44,3 +36,10 @@ By isolating role execution and failure reporting into a polymorphic cleaner int
   - Deferred: Managed via agent session lifecycle and loop driver in implementation.
 - Translation of execution outcomes into graph storage mutations.
   - Deferred: Commits clean state, change messages, or blame feedback in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:05:56Z
+CHANGE: State the continuation invariant in terms of nodes no other node cleaning can address
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

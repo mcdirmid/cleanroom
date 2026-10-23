@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-07T00:11:26Z
-CHANGE: new file
-CODE_HASH: 9b444d467c88
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # work_scheduler interface component
 
 ## Intent
@@ -54,3 +46,10 @@ Multi-stage Cleanroom pipelines require progressive execution where upstream art
   - Deferred: Derived from role configuration in implementation.
 - Resolution of prompt templates and formatting of task prompts with feedback history.
   - Deferred: Formatted using role prompt templates in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-07T00:11:26Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

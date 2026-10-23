@@ -1,11 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T19:49:56Z
-# LAST_CHANGED: 2026-10-11T05:03:57Z
-# CHANGE: Track node state with the declared target-state values instead of ad-hoc strings, normalize aliases through the alias manager, disambiguate default targets by workspace path modification time, always register scheduled nodes, and prune uncontracted public members
-# CODE_HASH: 06f481714eab
-# COVERAGE_AUDIT: 2026-10-15T19:49:56Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 import os
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -31,6 +23,63 @@ from . import (
 )
 
 
+def _get_role_definitions() -> Dict[str, Any]:
+    """Retrieves declared role definitions from NodeConfig or WorkspaceRegistry."""
+    try:
+        cfg: Any = get_singleton(node_config.NodeConfig)
+        if cfg is not None and hasattr(cfg, "role_definitions"):
+            r_defs = cfg.role_definitions
+            if isinstance(r_defs, dict) and r_defs:
+                return r_defs
+    except (LifecycleResolutionError, KeyError, AttributeError, RuntimeError):
+        pass
+
+    try:
+        from update_with_ai.parts.workspace.lib import role_registry
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        return {r.role_name: r for r in reg.list_roles()}
+    except Exception:
+        pass
+
+    return {}
+
+
+def _role_src_pattern(role_def: Any) -> str:
+    """Returns the source pattern for a role definition or mapping."""
+    if hasattr(role_def, "src_pattern"):
+        return str(role_def.src_pattern or "")
+    if isinstance(role_def, dict):
+        return str(role_def.get("src_pattern") or "")
+    return ""
+
+
+def _role_name(role_def: Any, default: str = "") -> str:
+    """Returns the role name for a role definition or mapping."""
+    if hasattr(role_def, "role_name"):
+        return str(role_def.role_name or default)
+    if isinstance(role_def, dict):
+        return str(role_def.get("role_name") or default)
+    return default
+
+
+def _role_audit_tag(role_def: Any) -> Optional[str]:
+    """Returns the audit tag for a role definition or mapping."""
+    if hasattr(role_def, "audit_tag"):
+        return role_def.audit_tag
+    if isinstance(role_def, dict):
+        return role_def.get("audit_tag")
+    return None
+
+
+def _role_feedback_deps(role_def: Any) -> Sequence[str]:
+    """Returns the feedback role dependencies for a role definition or mapping."""
+    if hasattr(role_def, "feedback_role_deps"):
+        return role_def.feedback_role_deps or ()
+    if isinstance(role_def, dict):
+        return role_def.get("feedback_role_deps") or ()
+    return ()
+
+
 def _extract_unit_info(node: dag_storage.DagNode) -> Tuple[str, str]:
     """Decomposes a node's unit address into its part directory and unit name."""
     addr = str(node.unit_address).strip()
@@ -44,12 +93,7 @@ def _extract_unit_info(node: dag_storage.DagNode) -> Tuple[str, str]:
         pkg, target_part = "", addr
 
     role = str(node.role_address).split(":")[-1].strip() if node.role_address else ""
-    cfg: Optional[node_config.NodeConfig] = None
-    try:
-        cfg = get_singleton(node_config.NodeConfig)
-    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
-        cfg = None
-    role_defs = getattr(cfg, "role_definitions", {}) if cfg is not None else {}
+    role_defs = _get_role_definitions()
     known_roles = tuple(role_defs.keys())
     if not known_roles and role:
         known_roles = (role,)
@@ -74,7 +118,7 @@ def _normalize_alias(alias: str) -> str:
     except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
         converted = None
     if converted is not None:
-        relative = str(getattr(converted, "relative_path", ""))
+        relative = str(converted.relative_path if hasattr(converted, "relative_path") else "")
         if relative:
             return relative
     return raw.lstrip("/")
@@ -82,28 +126,34 @@ def _normalize_alias(alias: str) -> str:
 
 def _bound_file_path(bound_file: Any) -> str:
     """Resolves the host path text of a declared session bound file."""
-    ws_path = getattr(bound_file, "workspace_path", None)
-    if ws_path is not None:
-        return str(getattr(ws_path, "path", ws_path))
-    return str(getattr(bound_file, "relative_path", bound_file))
+    if hasattr(bound_file, "workspace_path") and bound_file.workspace_path is not None:
+        ws_path = bound_file.workspace_path
+        return str(ws_path.path if hasattr(ws_path, "path") else ws_path)
+    if hasattr(bound_file, "relative_path"):
+        return str(bound_file.relative_path)
+    return str(bound_file)
 
 
 def _node_display_alias(node: dag_storage.DagNode) -> str:
     """Returns a user/agent-facing file alias for a node, avoiding raw Bazel target addresses."""
     try:
         cfg = get_singleton(node_config.NodeConfig)
-        if getattr(cfg, "src_file_alias_by_node", None) and node in cfg.src_file_alias_by_node:
-            return str(cfg.src_file_alias_by_node[node])
-        for bt_set in getattr(cfg, "blame_targets_by_node", {}).values():
-            for bt in bt_set:
-                if getattr(bt, "owning_node", None) == node:
-                    return str(getattr(bt, "relative_path", bt))
-        for ro in getattr(cfg, "read_only_files", ()):
-            if getattr(ro, "owning_node", None) == node:
-                return str(getattr(ro, "relative_path", ro))
-        for rw in getattr(cfg, "read_write_files", ()):
-            if getattr(rw, "owning_node", None) == node:
-                return str(getattr(rw, "relative_path", rw))
+        if cfg is not None:
+            if hasattr(cfg, "src_file_alias_by_node") and cfg.src_file_alias_by_node and node in cfg.src_file_alias_by_node:
+                return str(cfg.src_file_alias_by_node[node])
+            if hasattr(cfg, "blame_targets_by_node") and cfg.blame_targets_by_node:
+                for bt_set in cfg.blame_targets_by_node.values():
+                    for bt in bt_set:
+                        if hasattr(bt, "owning_node") and bt.owning_node == node:
+                            return str(bt.relative_path if hasattr(bt, "relative_path") else bt)
+            if hasattr(cfg, "read_only_files") and cfg.read_only_files:
+                for ro in cfg.read_only_files:
+                    if hasattr(ro, "owning_node") and ro.owning_node == node:
+                        return str(ro.relative_path if hasattr(ro, "relative_path") else ro)
+            if hasattr(cfg, "read_write_files") and cfg.read_write_files:
+                for rw in cfg.read_write_files:
+                    if hasattr(rw, "owning_node") and rw.owning_node == node:
+                        return str(rw.relative_path if hasattr(rw, "relative_path") else rw)
     except Exception:
         pass
 
@@ -118,39 +168,20 @@ def _node_display_alias(node: dag_storage.DagNode) -> str:
         pkg, unit_name = "", addr
 
     role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
-    try:
-        cfg = get_singleton(node_config.NodeConfig)
-        role_defs = getattr(cfg, "role_definitions", {})
-        if role in role_defs:
-            r_def = role_defs[role]
-            src_pat = getattr(r_def, "src_pattern", "") or (
-                r_def.get("src_pattern") if isinstance(r_def, dict) else ""
-            )
-            if src_pat:
-                formatted = src_pat.replace("{unit_dir}", pkg).replace(
-                    "{unit_name}", unit_name
-                ).strip("/")
-                if formatted:
-                    return formatted
-    except Exception:
-        pass
+    role_defs = _get_role_definitions()
+    if role in role_defs:
+        src_pat = _role_src_pattern(role_defs[role])
+        if src_pat:
+            formatted = src_pat.replace("{unit_dir}", pkg).replace(
+                "{unit_name}", unit_name
+            ).strip("/")
+            if formatted:
+                return formatted
 
-    if role == "test":
-        return f"{pkg}/tests/{unit_name}_test.py" if pkg else f"tests/{unit_name}_test.py"
-    if role == "lib":
-        return f"{pkg}/lib/{unit_name}.py" if pkg else f"lib/{unit_name}.py"
-    if role == "low":
-        return f"{pkg}/low/{unit_name}.pyi" if pkg else f"low/{unit_name}.pyi"
-    if role == "high":
-        return f"{pkg}/high/{unit_name}.md" if pkg else f"high/{unit_name}.md"
-    if role == "planning":
-        return f"{pkg}/planning/{unit_name}.md" if pkg else f"planning/{unit_name}.md"
-    if role == "scenario":
-        return f"{pkg}/scenarios/{unit_name}.md" if pkg else f"scenarios/{unit_name}.md"
     return f"{pkg}/{unit_name}" if pkg else unit_name
 
 
-class SessionCoordinator(coordinate.SessionCoordinator, Singleton):
+class SessionCoordinator(coordinate.SessionCoordinator):
     """Central session control coordinator facade."""
 
     tier = agent_session.agent_session
@@ -190,14 +221,15 @@ class SessionCoordinator(coordinate.SessionCoordinator, Singleton):
             src_alias = None
             if (
                 cfg is not None
-                and getattr(cfg, "src_file_alias_by_node", None)
+                and hasattr(cfg, "src_file_alias_by_node")
+                and cfg.src_file_alias_by_node
                 and n in cfg.src_file_alias_by_node
             ):
                 src_alias = cfg.src_file_alias_by_node[n]
-            elif cfg is not None and getattr(cfg, "read_write_files", None):
+            elif cfg is not None and hasattr(cfg, "read_write_files") and cfg.read_write_files:
                 for f in cfg.read_write_files:
-                    if getattr(f, "owning_node", None) == n:
-                        src_alias = getattr(f, "relative_path", "")
+                    if hasattr(f, "owning_node") and f.owning_node == n:
+                        src_alias = str(f.relative_path if hasattr(f, "relative_path") else "")
                         break
 
             display_alias = src_alias or _node_display_alias(n)
@@ -389,25 +421,28 @@ class SessionCoordinator(coordinate.SessionCoordinator, Singleton):
         rw_files: List[Any] = []
         try:
             cfg = get_singleton(node_config.NodeConfig)
-            rw_files = list(getattr(cfg, "read_write_files", None) or [])
+            rw_files = list(cfg.read_write_files if (cfg and hasattr(cfg, "read_write_files")) else [])
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             pass
 
         def _owning_open_node(f: Any) -> Optional[dag_storage.DagNode]:
-            owner = getattr(f, "owning_node", None)
+            owner = f.owning_node if hasattr(f, "owning_node") else None
             if owner is not None:
                 return owner if owner in open_set else None
-            alias_node = self.get_node_for_alias(str(getattr(f, "relative_path", "")))
+            rel = str(f.relative_path if hasattr(f, "relative_path") else "")
+            alias_node = self.get_node_for_alias(rel)
             return alias_node if alias_node in open_set else None
 
         last_f = last_accessed_file
         if last_f is not None:
-            last_path = getattr(
-                last_f, "relative_path", getattr(last_f, "short_name", str(last_f))
-            )
-            cand_node = self.get_node_for_alias(str(last_path)) or getattr(
-                last_f, "owning_node", None
-            )
+            if hasattr(last_f, "relative_path"):
+                last_path = str(last_f.relative_path)
+            elif hasattr(last_f, "short_name"):
+                last_path = str(last_f.short_name)
+            else:
+                last_path = str(last_f)
+            owner = last_f.owning_node if hasattr(last_f, "owning_node") else None
+            cand_node = self.get_node_for_alias(last_path) or owner
             if cand_node is not None and cand_node in open_set:
                 return cand_node
 
@@ -561,7 +596,8 @@ class SessionCoordinator(coordinate.SessionCoordinator, Singleton):
                 )
                 if (
                     matched_bound is not None
-                    and getattr(matched_bound, "owning_node", None) is not None
+                    and hasattr(matched_bound, "owning_node")
+                    and matched_bound.owning_node is not None
                 ):
                     blame_target_node = matched_bound.owning_node
                     self.register_node(
@@ -642,6 +678,12 @@ class SessionCoordinator(coordinate.SessionCoordinator, Singleton):
             message=outcome.message,
             remaining_open_targets=self._open_nodes(),
         )
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T19:49:56Z
+# LAST_CHANGED: 2026-10-11T05:03:57Z
+# CHANGE: Track node state with the declared target-state values instead of ad-hoc strings, normalize aliases through the alias manager, disambiguate default targets by workspace path modification time, always register scheduled nodes, and prune uncontracted public members
+# COVERAGE_AUDIT: 2026-10-15T19:49:56Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

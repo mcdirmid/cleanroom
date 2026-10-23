@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-05T04:26:30Z
-CHANGE: new file
-CODE_HASH: 7cd6cb1bd713
--->
-
 # openai_ext external component
 
 ## Purpose
@@ -28,3 +21,9 @@ Grounding gaps covered include:
 - HTTP error status translation: Translates standard HTTP response status codes into structured domain outcomes, mapping 401 unauthorized errors to authentication failures, 429 rate limit errors to throttling conditions, 5xx server errors to endpoint unavailability, and request timeouts to network deadline outcomes.
 
 - Completion response parsing and token usage accounting: Deserializes endpoint response JSON payloads into model-generated message records, structured assistant tool calls containing function names and argument strings, completion finish reasons, and token consumption metrics covering prompt tokens, cached prompt tokens, completion tokens, and total tokens.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-05T04:26:30Z
+CHANGE: new file
+-->

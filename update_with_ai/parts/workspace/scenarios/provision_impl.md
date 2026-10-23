@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:45:00Z
-CHANGE: align AGENTS.md scenarios with in-workspace file inspection and terminal command restrictions
-CODE_HASH: 48150813effc
--->
-
 # Concrete scenarios for `provision_impl` (implementation)
 
 Scenarios 1 through 7 restate the caller observations of the interface scenarios and add, beside
@@ -79,11 +72,12 @@ Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a` with main r
 1. The provisioner commissions the alpha workspace.
    Observed: the workspace guide states that the agent acts only inside `/ws/alpha_scope_a`, that
    version control operations are forbidden, that `/repo` is read-only and reachable only through
-   the workspace runner tools, that terminal commands are restricted to prescribed `bin/` tools,
-   that reading a file outside the workspace aborts the session at once, that inspecting in-workspace
-   specifications and code using file-reading tools is explicitly permitted, and that passing static
-   checks does not mean feedback is resolved, requiring runtime defects to be addressed before submit
-   and requiring target change headers to be inspected before auditor blame delivery.
+   the workspace runner tools, that in-workspace shell commands and native harness tools are permitted
+   while round resolution mandates prescribed `bin/` tools, that reading a file outside the workspace
+   aborts the session at once, that inspecting in-workspace specifications and code using file-reading
+   tools is explicitly permitted, and that passing static checks does not mean feedback is resolved,
+   requiring runtime defects to be addressed before submit and requiring target change headers to be
+   inspected before auditor blame delivery.
    Realized by: role guide synthesis delegated to `scaffold`, which writes the boundary
    rules, the contamination tripwire, the blame and feedback resolution instructions, and the
    fail-stop reporting protocol into the guide file.
@@ -134,16 +128,19 @@ is empty.
 ### Scenario 8 — Build definitions and package initializers are copied verbatim
 
 Given: role alpha is commissioned for scope_a, its directory scope holds the project
-configuration and the build definition for the part, and the stub role dependency beta supplies
-`beta/lib/beta.py` whose canonical content is `def beta(): return 7`.
+configuration and the build definition for the part, the bound methodology package supplies
+`support/lib/lifecycle.py`, companion guides, and templates, the main repository contains an
+unbound directory, and the stub role dependency beta supplies `beta/lib/beta.py` whose canonical content is `def beta(): return 7`.
 
 1. The provisioner commissions the alpha workspace.
    Observed: the workspace holds the project configuration and the part build definition with the
-   same content as the main repository, and the stub for beta raises `NotImplementedError` instead
-   of carrying `def beta(): return 7`.
+   same content as the main repository, the bound methodology runtime support libraries, companion guides,
+   starter templates, and methodology configurations are projected directly to `./support/lib`, `./guides`,
+   `./templates`, and `./cleanroom_roles.toml` at the workspace root with read-only permissions, the unbound
+   directory is not copied into the workspace, and the stub for beta raises `NotImplementedError` instead of carrying `def beta(): return 7`.
    Realized by: the component's own selective copying, which passes build definitions, project
-   configuration, and package initializers through while routing stub role dependencies to stub
-   synthesis.
+   configuration, and package initializers through, projects bound methodology assets to the workspace root
+   without copying unbound repository root directories, while routing stub role dependencies to stub synthesis.
 
 ### Scenario 9 — Type checking covers the workspace without exclusions
 
@@ -165,3 +162,9 @@ Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a`.
    and the directory scope scope_a, omitting host repository roots to preserve double-blind isolation.
    Realized by: the component's own descriptor writing, and the role definition resolved through
    `role_registry`.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-22T13:50:00Z
+LAST_CHANGED: 2026-10-22T13:50:00Z
+CHANGE: Restrict workspace provisioning exclusively to target scope and bound methodology package assets
+-->

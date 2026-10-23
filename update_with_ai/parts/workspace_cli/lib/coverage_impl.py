@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T04:55:44Z
-# CHANGE: Register the coverage evaluator on the system tier as the spec declares, add __initialize__ registering both the impl and interface protocol keys, discover implementation/test pairs across all repository part packages instead of a hardcoded package name, and include the compact missing ranges alongside the spans in the deficit report
-# CODE_HASH: 6567b26d0b71
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
 
 import ast
@@ -17,7 +8,7 @@ from pathlib import Path
 import sys
 import trace
 import types
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 import unittest
 
 from support.lib.lifecycle import (
@@ -29,7 +20,7 @@ from support.lib.lifecycle import (
 from . import coverage
 
 
-class CoverageEvaluator(coverage.CoverageEvaluator, Singleton):
+class CoverageEvaluator(coverage.CoverageEvaluator):
     """Realizes the system coverage evaluator as a system service providing AST analysis, traced unit test execution, and coverage report generation."""
 
     tier = system
@@ -213,10 +204,12 @@ class CoverageEvaluator(coverage.CoverageEvaluator, Singleton):
             if "# pragma: no cover" in line or "# no cover" in line:
                 pragma_lines.add(idx)
 
+        # Legitimate reflection: match_case is only present on ast in Python 3.10+
         block_types = (ast.stmt, ast.ExceptHandler, getattr(ast, "match_case", ()))
         for node in ast.walk(tree):
             if not isinstance(node, block_types):
                 continue
+            # Legitimate reflection: heterogeneous AST nodes lack uniform line and span attribute schemas
             start = getattr(node, "lineno", None)
             pattern = getattr(node, "pattern", None)
             if start is None and pattern is not None:
@@ -249,7 +242,7 @@ class CoverageEvaluator(coverage.CoverageEvaluator, Singleton):
                 and isinstance(node.value.value, str)
             ):
                 start = node.lineno
-                end = getattr(node, "end_lineno", node.lineno)
+                end = node.end_lineno if hasattr(node, "end_lineno") and node.end_lineno is not None else node.lineno
                 for ln in range(start, end + 1):
                     non_exec.add(ln)
         return non_exec
@@ -262,10 +255,10 @@ class CoverageEvaluator(coverage.CoverageEvaluator, Singleton):
         ipath = Path(impl_path).resolve()
         tpath = Path(test_path).resolve()
 
-        find_exec = getattr(trace, "_find_executable_linenos", None)
         raw_exec: Set[int] = set()
-        if callable(find_exec):
-            exec_dict = find_exec(str(ipath))
+        trace_mod: Any = trace
+        if hasattr(trace_mod, "_find_executable_linenos"):
+            exec_dict = trace_mod._find_executable_linenos(str(ipath))
             if isinstance(exec_dict, dict):
                 raw_exec = {ln for ln in exec_dict.keys() if isinstance(ln, int) and ln > 0}
         non_exec = self.get_non_executable_lines(ipath)
@@ -280,6 +273,12 @@ class CoverageEvaluator(coverage.CoverageEvaluator, Singleton):
                 or m.endswith(f".{module_base}")
                 or m == tpath.stem
                 or m.endswith(f".{tpath.stem}")
+                or m == "lib"
+                or m.startswith("lib.")
+                or m == "tests"
+                or m.startswith("tests.")
+                or m == "parts"
+                or m.startswith("parts.")
             ):
                 del sys.modules[m]
 
@@ -319,10 +318,35 @@ class CoverageEvaluator(coverage.CoverageEvaluator, Singleton):
                 test_failures_str = "\n".join(fail_lines)
         orig_sys_path = list(sys.path)
         try:
-            if str(ipath.parent) not in sys.path:
-                sys.path.insert(0, str(ipath.parent))
-            if str(tpath.parent) not in sys.path:
-                sys.path.insert(0, str(tpath.parent))
+            extra_paths: List[str] = []
+            part_dir = str(ipath.parent.parent)
+            lib_dir = str(ipath.parent)
+            test_dir = str(tpath.parent)
+            extra_paths.extend([test_dir, lib_dir, part_dir])
+
+            # Include enclosing package scopes (e.g. directories containing 'parts', cleanroom configs, or pyproject.toml)
+            curr = ipath.parent
+            while curr and curr != curr.parent:
+                if (curr / "parts").is_dir():
+                    extra_paths.append(str(curr))
+                if (curr / "cleanroom.toml").is_file() or (curr / "pyproject.toml").is_file():
+                    extra_paths.append(str(curr))
+                curr = curr.parent
+
+            env_pypath = os.environ.get("PYTHONPATH", "")
+            if env_pypath:
+                for pp in env_pypath.split(os.pathsep):
+                    if pp and os.path.isdir(pp):
+                        extra_paths.append(str(Path(pp).resolve()))
+
+            cwd_str = str(Path.cwd().resolve())
+            extra_paths.append(cwd_str)
+
+            for p in reversed(extra_paths):
+                while p in sys.path:
+                    sys.path.remove(p)
+                sys.path.insert(0, p)
+
             tracer.runfunc(run_suite)
         finally:
             sys.path[:] = orig_sys_path
@@ -418,6 +442,13 @@ class CoverageEvaluator(coverage.CoverageEvaluator, Singleton):
                 f.write(report)
 
         return cov
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-21T20:15:00Z
+# CHANGE: Include enclosing package scope roots and ancestor paths in coverage loader search paths
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

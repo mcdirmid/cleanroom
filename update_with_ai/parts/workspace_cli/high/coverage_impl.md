@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T04:09:44Z
-CHANGE: Aligned the coverage evaluator with the system-tier grounding: removed the agent_session import and stated the evaluator as a system service rather than a session service.
-CODE_HASH: 0567e59d5bff
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # coverage_impl implementation component
 
 implements: coverage
@@ -26,10 +18,17 @@ The coverage evaluator discovers target mappings by scanning the part directorie
 
 The coverage evaluator extracts candidate non-executable lines by parsing source text into abstract syntax trees, identifying docstring constants, class and function signature continuations, and line indices marked with pragma no cover comments together with their statement bodies.
 
-The coverage evaluator executes a single-target test suite under trace instrumentation, clearing cached target and test modules from memory across package namespaces, injecting local package paths into module search paths, capturing test suite runner failures, and collecting executed line hits on the implementation file.
+The coverage evaluator executes a single-target test suite under trace instrumentation, clearing cached target, test, and library package modules from memory across package namespaces, injecting local part package and constituent directory paths into module search paths to prevent loading cross-workspace shadows, capturing test suite runner failures, and collecting executed line hits on the implementation file.
 
 The coverage evaluator formats uncovered line sequences into compact comma-separated range strings and paired contiguous span tuples, and formats source context snippets for uncovered spans by extracting the corresponding source file lines and clamping output to a maximum span limit when requested.
 
 The coverage evaluator formats comprehensive coverage reports incorporating test outcomes, coverage metrics, uncovered code spans, and grounding attribution instructions.
 
 The coverage evaluator enforces minimum coverage thresholds, returning exit status indications and synchronizing formatted output to the specified coverage log files.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-19T17:15:00Z
+CHANGE: Inject local part package root into module search paths and purge package namespaces to prevent cross-workspace module shadowing
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-04T23:01:55Z
-CHANGE: new file
-CODE_HASH: 4cfa3e8c4898
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # file_reader interface component
 
 ## Intent
@@ -61,3 +53,10 @@ By restricting access to declared read-only and read-write session files and val
   - Deferred: Requires session configuration inspection in implementation.
 - Capability to record file reads in session edit manager.
   - Deferred: Requires session state tracking in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-04T23:01:55Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

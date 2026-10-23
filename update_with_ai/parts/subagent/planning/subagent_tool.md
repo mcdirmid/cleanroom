@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-18T01:30:00Z
-CHANGE: support optional target unit boundary in orchestrate command
-CODE_HASH: 8b8a27d23b01
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # subagent_tool interface component
 
 ## Intent
@@ -21,7 +13,7 @@ Multi-agent coordination requires command-line entrypoints for triggering dynami
 ### Contracts
 
 - The subagent tool runner dispatches CLI arguments for orchestration subcommands and executes the selected action. [dispatch_subagent_subcommand]
-- The subagent tool runner coordinates multi-agent workspace orchestration up to an optional target role boundary and optional target unit boundary through a designated harness adapter with configurable batch sizes, execution timeouts, conversation token limits, and maximum unproductive turn limits until DAG convergence or failure. [execute_orchestrate_command]
+- The subagent tool runner coordinates multi-agent workspace orchestration up to an optional target role boundary and optional target unit boundary through a designated harness adapter with configurable batch sizes, execution timeouts, conversation token limits, and maximum unproductive round limits until DAG convergence or failure. [execute_orchestrate_command]
 
 ### Woven Contracts
 
@@ -37,3 +29,10 @@ Multi-agent coordination requires command-line entrypoints for triggering dynami
 
 - Agent session lifecycle phase and context management.
   - Grounded: [session: [agent_session_tier_provision]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-18T01:30:00Z
+CHANGE: support optional target unit boundary in orchestrate command
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

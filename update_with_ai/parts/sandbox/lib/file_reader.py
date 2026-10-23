@@ -1,11 +1,5 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-09T02:19:24Z
-# CHANGE: Fix sibling and cross-part imports
-# CODE_HASH: 60263e25770a
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from support.lib.lifecycle import Singleton
 from typing import Any, Mapping, Optional, Protocol, Set, Union
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 import update_with_ai.parts.agent.lib.file_alias as file_alias
@@ -13,7 +7,7 @@ from . import tool_provider
 
 # Requirements specified in file_reader.pyi
 
-class ReadManager(Protocol):
+class ReadManager(Singleton[AgentSessionTier], Protocol):
     # Contract: Exposes declared read-only files from session configuration.
     @property
     def read_only_files(self) -> Set[file_alias.ReadOnlyFile]:
@@ -29,7 +23,7 @@ class ReadManager(Protocol):
         ...
 
 
-class ViewFileTool(tool_provider.Tool, Protocol):
+class ViewFileTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
     # Contract: Path parameter identifying file alias to view.
     @property
     def path_parameter(self) -> tool_provider.ToolParameter[file_alias.FileAlias, str]:
@@ -55,7 +49,7 @@ class ViewFileTool(tool_provider.Tool, Protocol):
         ...
 
 
-class SearchTool(tool_provider.Tool, Protocol):
+class SearchTool(tool_provider.Tool, Singleton[AgentSessionTier], Protocol):
     # Contract: Parameter specifying regex pattern to search.
     @property
     def regex_pattern_parameter(self) -> tool_provider.ToolParameter[file_alias.RegexPattern, str]:
@@ -79,3 +73,9 @@ class SearchTool(tool_provider.Tool, Protocol):
     # Contract: Discovers regex pattern matches across read-only and read-write files.
     def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-09T02:19:24Z
+# CHANGE: Fix sibling and cross-part imports
+# --- END CLEANROOM METADATA ---

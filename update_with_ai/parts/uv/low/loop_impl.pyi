@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T03:48:44Z
-# CHANGE: Correct stale mark-dirty collaborator citation to the real graph storage member
-# CODE_HASH: 47ba75fad4a1
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Cleanroom loop implementation low-level specification."""
 
 from typing import Optional
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 import cleanroom_files_ext
 import dag_storage
 import loop
@@ -21,7 +13,7 @@ import manifest_loader
 
 
 @singleton_type("system")
-class Loop(loop.Loop, InTier[SystemTier]):
+class Loop(loop.Loop):
     """Realizes workspace target loading, topological cleaning, and runner telemetry streaming.
 
     GROUNDING:
@@ -136,3 +128,10 @@ class Loop(loop.Loop, InTier[SystemTier]):
         - Records change description on target node in dag_storage, clearing last cleaned timestamp, invalidating downstream dependents, and appending to cleanroom_files_ext.CLEANROOM_LOG_FILE.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T03:48:44Z
+# CHANGE: Correct stale mark-dirty collaborator citation to the real graph storage member
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

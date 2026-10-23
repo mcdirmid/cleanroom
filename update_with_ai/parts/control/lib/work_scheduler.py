@@ -1,11 +1,6 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-06T10:45:00Z
-# CHANGE: new file
-# CODE_HASH: 7bdde095c67d
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from update_with_ai.parts.agent.lib.session import AgentSessionTier
+from support.lib.lifecycle import Singleton
 from dataclasses import dataclass
 from typing import Mapping, Optional, Protocol, Sequence
 from update_with_ai.parts.dag.lib import dag_storage, subgraph
@@ -35,7 +30,7 @@ class WorkSchedule:
     tasks: Sequence[ScheduledTask]
 
 
-class WorkScheduler(Protocol):
+class WorkScheduler(Singleton[AgentSessionTier], Protocol):
     """Schedules ready dirty nodes across subgraph or directory scope."""
 
     # Contract: Discovers ready dirty tasks across subgraph or directory scope, sorts by dynamic role precedence, and limits to max_batch_size.
@@ -55,3 +50,9 @@ class WorkScheduler(Protocol):
     def format_task_prompt(
         self, nodes: Sequence[dag_storage.DagNode]
     ) -> str: ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-06T10:45:00Z
+# CHANGE: new file
+# --- END CLEANROOM METADATA ---

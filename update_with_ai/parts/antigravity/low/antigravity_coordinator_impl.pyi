@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-12T21:45:00Z
-# CHANGE: author antigravity_coordinator_impl implementation low-level specification
-# CODE_HASH: bdb2b37c9fc0
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for antigravity_coordinator_impl."""
 
 from typing import Optional
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 import session as agent_session
 import antigravity_coordinator
 import antigravity_ext
@@ -20,10 +12,7 @@ import role_registry
 
 
 @singleton_type("agent_session")
-class AntigravityWorkspaceConfigurer(
-    antigravity_workspace.AntigravityWorkspaceConfigurer,
-    InTier[agent_session.AgentSessionTier],
-):
+class AntigravityWorkspaceConfigurer(antigravity_workspace.AntigravityWorkspaceConfigurer):
     """Realizes Antigravity-specific isolation rules and workspace confinement.
 
     GROUNDING:
@@ -55,10 +44,7 @@ class AntigravityWorkspaceConfigurer(
 
 
 @singleton_type("agent_session")
-class AntigravityCoordinatorGenerator(
-    antigravity_coordinator.AntigravityCoordinatorGenerator,
-    InTier[agent_session.AgentSessionTier],
-):
+class AntigravityCoordinatorGenerator(antigravity_coordinator.AntigravityCoordinatorGenerator):
     """Realizes skill artifact generation, tool parameter formatting, and wake notification parsing.
 
     GROUNDING:
@@ -78,8 +64,8 @@ class AntigravityCoordinatorGenerator(
 
         GROUNDING:
         - Renders YAML frontmatter and Markdown body conforming to antigravity_ext,
-          instructing the coordinator to evaluate DAG queues via CLI and dispatch roles
-          via invoke_subagent while asserting that Workspace is explicitly set and never inherited.
+          instructing the coordinator to evaluate DAG queues via CLI, dispatch roles
+          via invoke_subagent, and message back workers upon unresolved rounds, while asserting that Workspace is explicitly set and never inherited.
         """
         ...
 
@@ -95,7 +81,7 @@ class AntigravityCoordinatorGenerator(
         GROUNDING:
         - Converts subagent_coordinator.RoleDispatch parameters into an
           antigravity_coordinator.SubagentDispatchSpec instance, binding the target workspace
-          path to dispatch.workspace_dir and constructing the role invocation prompt.
+          path to dispatch.workspace_dir and constructing the role invocation prompt incorporating coordinator reminders when present.
         """
         ...
 
@@ -112,3 +98,10 @@ class AntigravityCoordinatorGenerator(
           to antigravity_ext, populating antigravity_coordinator.WakeNotificationMessage.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-12T21:45:00Z
+# CHANGE: author antigravity_coordinator_impl implementation low-level specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

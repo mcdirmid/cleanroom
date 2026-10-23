@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Split the phase execution paragraph, canonicalize change timestamps, and state the feedback routing invariant
-CODE_HASH: ed55f7543be9
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # node_cleaner_impl implementation component
 
 imports: node_config, node_storage, dag_storage, subgraph, conversation, driver, logger, src_metadata
@@ -48,3 +40,10 @@ Resolving dirty nodes results in:
 When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, marking the nodes clean with a change summary when incoming pending messages indicate changes from upstream dependencies, and marking the nodes clean without a change summary otherwise.
 
 A feedback message is delivered only to the declared feedback dependency node that owns the blamed file, never to an arbitrary dependency, a non-feedback dependency, a guide, or a fixed node specification.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Split the phase execution paragraph, canonicalize change timestamps, and state the feedback routing invariant
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

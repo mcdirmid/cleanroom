@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:55:00Z
-# CHANGE: Define stub_impl realization
-# CODE_HASH: c7533347c172
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for stub_impl."""
 
 from __future__ import annotations
@@ -227,6 +218,7 @@ def _generate_readonly_test_stub(
                         if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
                             try:
                                 mod = importlib.import_module(f"{entry}.support.lib.lib_lint")
+                                # Legitimate reflection: optional plugin hook discovery on dynamically imported module
                                 generate_lib_skeleton = getattr(mod, "generate_lib_skeleton", None)
                                 if generate_lib_skeleton is not None:
                                     break
@@ -368,6 +360,7 @@ def _sync_all_stub_deps(
     main_root: str,
     dir_scope: str,
     part_map: Optional[Dict[str, Tuple[str, str]]] = None,
+    workspace_dir: Optional[str] = None,
 ) -> int:
     """Synchronizes read-only test stubs for all stub_role_deps."""
     if not role_def.stub_role_deps or not os.path.isdir(main_scope_dir):
@@ -455,12 +448,25 @@ def _sync_all_stub_deps(
             os.makedirs(ws_dep_dir, exist_ok=True)
 
             main_dep_dir = os.path.join(part_main, dep_dir)
-            if os.path.isdir(main_dep_dir):
-                for meta_f in ("__init__.py",):
-                    src_meta = os.path.join(main_dep_dir, meta_f)
-                    dst_meta = os.path.join(ws_dep_dir, meta_f)
-                    if os.path.isfile(src_meta) and not os.path.isfile(dst_meta):
-                        copy_file_with_perms(src_meta, dst_meta, readonly=True)
+            dst_meta = os.path.join(ws_dep_dir, "__init__.py")
+            if not os.path.isfile(dst_meta):
+                src_meta = (
+                    os.path.join(main_dep_dir, "__init__.py")
+                    if os.path.isdir(main_dep_dir)
+                    else None
+                )
+                if src_meta and os.path.isfile(src_meta):
+                    copy_file_with_perms(src_meta, dst_meta, readonly=True)
+                else:
+                    write_file_with_perms(dst_meta, "", readonly=True)
+
+            curr_p = os.path.dirname(ws_dep_dir)
+            ws_root_clean = os.path.abspath(workspace_dir or ws_scope_dir)
+            while curr_p and curr_p != ws_root_clean and curr_p.startswith(ws_root_clean):
+                p_init = os.path.join(curr_p, "__init__.py")
+                if not os.path.isfile(p_init):
+                    write_file_with_perms(p_init, "", readonly=True)
+                curr_p = os.path.dirname(curr_p)
 
             for spec_f in os.listdir(low_dir):
                 if not spec_f.endswith(".pyi"):
@@ -489,7 +495,7 @@ def _sync_all_stub_deps(
 
 
 # Contract: Realizes stub.WorkspaceStubSynthesizer singleton.
-class WorkspaceStubSynthesizer(stub.WorkspaceStubSynthesizer, Singleton):
+class WorkspaceStubSynthesizer(stub.WorkspaceStubSynthesizer):
     """Realizes AST-based test stub synthesis and dependency synchronization."""
 
     tier = agent_session.agent_session
@@ -528,6 +534,7 @@ class WorkspaceStubSynthesizer(stub.WorkspaceStubSynthesizer, Singleton):
             role_def,
             main_root,
             dir_scope,
+            workspace_dir=workspace_dir,
         )
 
     # Contract: Checks whether rel_path corresponds to any declared role in stub_role_deps.
@@ -544,6 +551,13 @@ class WorkspaceStubSynthesizer(stub.WorkspaceStubSynthesizer, Singleton):
     def is_valid_test_stub(self, file_path: str) -> bool:
         """Checks whether file_path is already a valid cleanroom test stub."""
         return _is_valid_test_stub(file_path)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T17:55:00Z
+# CHANGE: Define stub_impl realization
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

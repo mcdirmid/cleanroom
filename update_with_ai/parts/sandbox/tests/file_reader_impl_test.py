@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:48:53Z
-# CHANGE: Carry workspace_path as the contracted file_paths.WorkspacePath record, expose a WorkspaceRoot record, and drop the undeclared resolve_path alias attribute
-# CODE_HASH: af3fbc15ccf4
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for file_reader_impl per its grounding specification."""
 
 from __future__ import annotations
@@ -186,22 +177,22 @@ class MockFilePathManager:
     tier = system
 
     def create_host_path(self, path: Any) -> file_paths.HostPath:
-        p = str(path.path) if hasattr(path, "path") else str(path)
+        p = str(path.path) if isinstance(path, file_paths.HostPath) else str(path)
         return file_paths.HostPath(file_paths.PathString(p))
 
     def create_absolute_path(self, path: Any) -> file_paths.AbsolutePath:
-        p = str(path.path) if hasattr(path, "path") else str(path)
+        p = str(path.path) if isinstance(path, file_paths.HostPath) else str(path)
         return file_paths.AbsolutePath(file_paths.PathString(p))
 
     def create_workspace_path(self, path: Any) -> file_paths.WorkspacePath:
-        p = str(path.path) if hasattr(path, "path") else str(path)
+        p = str(path.path) if isinstance(path, file_paths.HostPath) else str(path)
         return file_paths.WorkspacePath(file_paths.PathString(p))
 
     def resolve_path(
         self, root: Any, relative: Any
     ) -> file_paths.AbsolutePath:
-        root_str = str(root.path) if hasattr(root, "path") else str(root)
-        rel_str = str(relative.path) if hasattr(relative, "path") else str(relative)
+        root_str = str(root.path) if isinstance(root, file_paths.HostPath) else str(root)
+        rel_str = str(relative.path) if isinstance(relative, file_paths.HostPath) else str(relative)
         return file_paths.AbsolutePath(file_paths.PathString(os.path.join(root_str, rel_str)))
 
 
@@ -495,3 +486,12 @@ if __name__ == "__main__":
 
 # Untested requirements:
 # None
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:48:53Z
+# CHANGE: Carry workspace_path as the contracted file_paths.WorkspacePath record, expose a WorkspaceRoot record, and drop the undeclared resolve_path alias attribute
+# CODE_HASH: af3fbc15ccf4
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

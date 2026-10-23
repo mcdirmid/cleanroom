@@ -1,22 +1,14 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T17:50:00Z
-# CHANGE: Define commands low-level interface specification
-# CODE_HASH: 1df3b8f9701d
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for commands."""
 
 from typing import Optional, Protocol
-from framework import operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import cleanroom_files_ext
 
 
 @singleton_type
-class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
+class WorkspaceCommandHandler(Singleton[AgentSessionTier], Protocol):
     """Executes substantive domain operations for Cleanroom role workspaces."""
 
     @operation
@@ -62,6 +54,7 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         """Verifies and submits target to canonical main repository.
 
         POSTCONDITIONS:
+        - WHEN target is modified and has not been verified via check_files since modification and no_verify is False, MUST reject submission and return non-zero exit code.
         - WHEN verification checks fail and no_verify is False, MUST reject submission and return non-zero exit code.
         - WHEN submission is accepted, MUST append submission message to cleanroom_files_ext.CLEANROOM_LOG_FILE both in the canonical repository and the local workspace root.
         - WHEN submission is accepted, MUST clear target from pending work.
@@ -78,6 +71,7 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         """Attributes defect critique to culprit target in main repository.
 
         POSTCONDITIONS:
+        - WHEN workspace target files are modified and have not been verified via check_files since modification, MUST reject blame attribution and return non-zero exit code.
         - WHEN critique is accepted, MUST append blame message to cleanroom_files_ext.CLEANROOM_LOG_FILE both in the canonical repository and the local workspace root.
         - WHEN critique is accepted, MUST clear target from pending work.
         """
@@ -90,7 +84,11 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
         reason: Optional[str] = None,
         repo_root: Optional[str] = None,
     ) -> int:
-        """Marks target dirty and records failure feedback diagnostics."""
+        """Marks target dirty and records failure feedback diagnostics.
+
+        POSTCONDITIONS:
+        - WHEN target is modified and has not been verified via check_files since modification, MUST reject failure marking and return non-zero exit code.
+        """
         ...
 
     @operation
@@ -131,3 +129,10 @@ class WorkspaceCommandHandler(InTier[AgentSessionTier], Protocol):
     ) -> int:
         """Refreshes system files, bin tools, configs, and guides across role workspaces."""
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-14T17:50:00Z
+# CHANGE: Define commands low-level interface specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

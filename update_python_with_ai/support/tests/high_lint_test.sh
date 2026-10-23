@@ -152,7 +152,7 @@ Defines types.
 EOF
 cat > "$tmp/c7/low/service.pyi" <<'EOF'
 from typing import Protocol
-from framework import singleton_type
+from support.lib.framework import singleton_type
 
 @singleton_type
 class Service(Protocol):

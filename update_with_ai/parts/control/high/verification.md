@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T04:08:58Z
-CHANGE: Removed the unused node_config import and its delegation clause: verification check definitions are grounded in the low-level specification without an node_config member, so the interface now declares only agent_session and dag_storage.
-CODE_HASH: 9b07771f7e18
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # verification interface component
 
 imports: session, dag_storage
@@ -31,3 +23,10 @@ The verification evaluator evaluates the configured verification checks of a spe
 The verification evaluator filters diagnostic text by stripping build system progress lines, target load banners, and elapsed timing statistics, preserving actionable diagnostic error and warning messages.
 
 The verification evaluator caches verification results alongside target file hashes, reusing a cached result while target file contents are unchanged since the previous evaluation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T04:08:58Z
+CHANGE: Removed the unused node_config import and its delegation clause: verification check definitions are grounded in the low-level specification without an node_config member, so the interface now declares only agent_session and dag_storage.
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

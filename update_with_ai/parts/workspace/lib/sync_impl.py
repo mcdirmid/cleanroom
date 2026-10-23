@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:45:00Z
-# CHANGE: refresh AGENTS.md with in-workspace file inspection and terminal command restrictions
-# CODE_HASH: 447730dd28e8
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for sync_impl."""
 
 from __future__ import annotations
@@ -22,6 +13,102 @@ from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_regi
 from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.metadata.lib import src_metadata
 from . import provision, role_registry, sync
+
+
+def _find_methodology_for_scope(root: str, dir_scope: str) -> Optional[str]:
+    """Finds methodology binding from cleanroom.toml within dir_scope or upward."""
+    if not dir_scope:
+        return None
+    scope_dir = os.path.join(root, dir_scope)
+    root_abs = os.path.abspath(root)
+
+    import tomllib
+    cand = os.path.join(scope_dir, "cleanroom.toml")
+    if os.path.isfile(cand):
+        try:
+            with open(cand, "rb") as f:
+                data = tomllib.load(f)
+            meth = data.get("methodology")
+            if meth and isinstance(meth, str):
+                return meth.strip()
+        except (OSError, tomllib.TOMLDecodeError):
+            pass
+
+    if os.path.isdir(scope_dir):
+        try:
+            for entry in os.listdir(scope_dir):
+                sub = os.path.join(scope_dir, entry)
+                if os.path.isdir(sub) and not entry.startswith((".", "bazel-", "venv")):
+                    sub_cand = os.path.join(sub, "cleanroom.toml")
+                    if os.path.isfile(sub_cand):
+                        try:
+                            with open(sub_cand, "rb") as f:
+                                data = tomllib.load(f)
+                            meth = data.get("methodology")
+                            if meth and isinstance(meth, str):
+                                return meth.strip()
+                        except (OSError, tomllib.TOMLDecodeError):
+                            pass
+        except OSError:
+            pass
+
+    curr = os.path.abspath(scope_dir)
+    while curr and curr.startswith(root_abs) and curr != root_abs:
+        cand = os.path.join(curr, "cleanroom.toml")
+        if os.path.isfile(cand):
+            try:
+                with open(cand, "rb") as f:
+                    data = tomllib.load(f)
+                meth = data.get("methodology")
+                if meth and isinstance(meth, str):
+                    return meth.strip()
+            except (OSError, tomllib.TOMLDecodeError):
+                pass
+        curr_parent = os.path.dirname(curr)
+        if curr == curr_parent:
+            break
+        curr = curr_parent
+
+    return None
+
+
+def _resolve_active_methodology_pkg(
+    resolved_root: str,
+    dir_scope: str,
+    role_def: Optional[Any] = None,
+) -> Optional[str]:
+    """Dynamically resolves the active methodology package directory name without hardcoding."""
+    meth = _find_methodology_for_scope(resolved_root, dir_scope)
+    if meth:
+        clean = meth.lstrip("./").lstrip("/")
+        if os.path.isdir(os.path.join(resolved_root, clean)):
+            return clean
+
+    if role_def and hasattr(role_def, "guide_path") and role_def.guide_path:
+        for seg in role_def.guide_path.replace("\\", "/").split("/"):
+            if seg and seg != "guides" and os.path.isdir(os.path.join(resolved_root, seg)):
+                return seg
+            if seg == "guides":
+                break
+
+    if role_def and hasattr(role_def, "template") and role_def.template:
+        for seg in role_def.template.replace("\\", "/").split("/"):
+            if seg and seg != "templates" and os.path.isdir(os.path.join(resolved_root, seg)):
+                return seg
+            if seg == "templates":
+                break
+
+    if dir_scope:
+        top_scope = dir_scope.strip("/").split("/")[0]
+        cand_pkg = os.path.join(resolved_root, top_scope)
+        if os.path.isdir(cand_pkg) and (
+            os.path.isdir(os.path.join(cand_pkg, "support"))
+            or os.path.isdir(os.path.join(cand_pkg, "guides"))
+            or os.path.isdir(os.path.join(cand_pkg, "templates"))
+        ):
+            return top_scope
+
+    return None
 
 
 # Contract: Blame buffer file matching cleanroom_files_ext.BLAME_BUFFER_FILE.
@@ -58,6 +145,14 @@ def _project_for_role_workspace(content: str, filename: str, is_writable: bool) 
         code_hash=code_hash,
         clear_code_hash=not is_writable,
     )
+
+
+def _is_runtime_support_library(fname: str) -> bool:
+    """Returns True if file is a user-facing runtime API or type stub, excluding internal oracles."""
+    base = fname.lower()
+    if "lint" in base or "tool" in base or "runner" in base or base.startswith("app_info"):
+        return False
+    return fname.endswith((".py", ".pyi", ".bzl", ".toml"))
 
 
 def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
@@ -138,6 +233,8 @@ def _find_matching_files(root_dir: str, patterns: Sequence[str]) -> List[str]:
         for f in files:
             full_path = os.path.join(r, f)
             rel_path = os.path.relpath(full_path, root_dir)
+            if "support" in rel_path.split(os.sep)[:-1]:
+                continue
             if any(
                 fnmatch.fnmatch(rel_path, p)
                 or fnmatch.fnmatch(rel_path, f"*/{p}")
@@ -150,10 +247,7 @@ def _find_matching_files(root_dir: str, patterns: Sequence[str]) -> List[str]:
 
 
 # Contract: Realizes sync.WorkspaceSynchronizer singleton.
-class WorkspaceSynchronizer(
-    sync.WorkspaceSynchronizer,
-    Singleton,
-):
+class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
     """Realizes two-phase harvesting, inbound pulling, and blame flushing."""
 
     tier = agent_session.agent_session
@@ -363,6 +457,7 @@ class WorkspaceSynchronizer(
             "cleanroom_roles.toml",
             "model_configs.toml",
             "uv.lock",
+            ".python-version",
         ):
             cfg_src = os.path.join(main_root, cfg_name)
             if os.path.isfile(cfg_src):
@@ -399,38 +494,106 @@ class WorkspaceSynchronizer(
             except OSError:
                 pass
 
-        if os.path.isdir(main_root):
-            try:
-                for entry in os.listdir(main_root):
-                    pkg_dir = os.path.join(main_root, entry)
-                    if not os.path.isdir(pkg_dir) or entry.startswith((".", "bazel-", "venv")):
+        active_pkg = _resolve_active_methodology_pkg(canonical_root, dir_scope, role_def)
+        target_pkgs = [active_pkg] if active_pkg else []
+
+        for entry in target_pkgs:
+            pkg_dir = os.path.join(main_root, entry)
+            if not os.path.isdir(pkg_dir):
+                continue
+            for rname in os.listdir(pkg_dir):
+                if rname.endswith((".toml", ".json")):
+                    r_src = os.path.join(pkg_dir, rname)
+                    if os.path.isfile(r_src):
+                        r_dst = os.path.join(workspace_dir, rname)
+                        copy_file_with_perms(r_src, r_dst, readonly=True)
+                        refreshed_count += 1
+            guides_dir = os.path.join(pkg_dir, "guides")
+            if os.path.isdir(guides_dir):
+                d_guides = os.path.join(workspace_dir, "guides")
+                os.makedirs(d_guides, exist_ok=True)
+                for gf in os.listdir(guides_dir):
+                    gsf = os.path.join(guides_dir, gf)
+                    gdf = os.path.join(d_guides, gf)
+                    if os.path.isfile(gsf):
+                        copy_file_with_perms(gsf, gdf, readonly=True)
+                        refreshed_count += 1
+            tmpl_dir = os.path.join(pkg_dir, "templates")
+            if os.path.isdir(tmpl_dir):
+                d_tmpl = os.path.join(workspace_dir, "templates")
+                os.makedirs(d_tmpl, exist_ok=True)
+                for tf in os.listdir(tmpl_dir):
+                    tsf = os.path.join(tmpl_dir, tf)
+                    tdf = os.path.join(d_tmpl, tf)
+                    if os.path.isfile(tsf):
+                        copy_file_with_perms(tsf, tdf, readonly=True)
+                refreshed_count += 1
+            s_lib = os.path.join(pkg_dir, "support", "lib")
+            if os.path.isdir(s_lib):
+                d_support = os.path.join(workspace_dir, "support")
+                d_lib = os.path.join(d_support, "lib")
+                os.makedirs(d_lib, exist_ok=True)
+                pkg_support = os.path.join(workspace_dir, entry, "support")
+                pkg_lib = os.path.join(pkg_support, "lib")
+                os.makedirs(pkg_lib, exist_ok=True)
+                s_init = os.path.join(pkg_dir, "support", "__init__.py")
+                if os.path.isfile(s_init):
+                    copy_file_with_perms(s_init, os.path.join(d_support, "__init__.py"), readonly=True)
+                    copy_file_with_perms(s_init, os.path.join(pkg_support, "__init__.py"), readonly=True)
+                lib_init = os.path.join(s_lib, "__init__.py")
+                if os.path.isfile(lib_init):
+                    copy_file_with_perms(lib_init, os.path.join(d_lib, "__init__.py"), readonly=True)
+                    copy_file_with_perms(lib_init, os.path.join(pkg_lib, "__init__.py"), readonly=True)
+                import py_compile
+                for fname in os.listdir(s_lib):
+                    sf = os.path.join(s_lib, fname)
+                    if not os.path.isfile(sf):
                         continue
-                    for rname in os.listdir(pkg_dir):
-                        if rname.endswith((".toml", ".json")):
-                            r_src = os.path.join(pkg_dir, rname)
-                            if os.path.isfile(r_src):
-                                r_dst = os.path.join(workspace_dir, entry, rname)
-                                copy_file_with_perms(r_src, r_dst, readonly=True)
-                                refreshed_count += 1
-                    s_lib = os.path.join(pkg_dir, "support", "lib")
-                    if os.path.isdir(s_lib):
-                        d_lib = os.path.join(workspace_dir, entry, "support", "lib")
-                        os.makedirs(d_lib, exist_ok=True)
-                        for fname in os.listdir(s_lib):
-                            if fname.endswith((".py", ".pyi", ".bzl", ".toml")):
-                                sf = os.path.join(s_lib, fname)
-                                df = os.path.join(d_lib, fname)
-                                if os.path.isfile(sf):
-                                    copy_file_with_perms(sf, df, readonly=True)
-                                    refreshed_count += 1
-            except OSError:
-                pass
+                    if _is_runtime_support_library(fname):
+                        df = os.path.join(d_lib, fname)
+                        pkg_df = os.path.join(pkg_lib, fname)
+                        if os.path.isfile(sf):
+                            copy_file_with_perms(sf, df, readonly=True)
+                            copy_file_with_perms(sf, pkg_df, readonly=True)
+                            refreshed_count += 1
+                    elif fname.endswith(".py"):
+                        stale_py = os.path.join(d_lib, fname)
+                        if os.path.isfile(stale_py):
+                            try:
+                                os.remove(stale_py)
+                            except OSError:
+                                pass
+                        stale_pkg_py = os.path.join(pkg_lib, fname)
+                        if os.path.isfile(stale_pkg_py):
+                            try:
+                                os.remove(stale_pkg_py)
+                            except OSError:
+                                pass
+                        df_pyc = os.path.join(d_lib, fname + "c")
+                        pkg_df_pyc = os.path.join(pkg_lib, fname + "c")
+                        try:
+                            py_compile.compile(sf, df_pyc, optimize=2, doraise=True)
+                            try:
+                                os.chmod(df_pyc, 0o444)
+                            except OSError:
+                                pass
+                            py_compile.compile(sf, pkg_df_pyc, optimize=2, doraise=True)
+                            try:
+                                os.chmod(pkg_df_pyc, 0o444)
+                            except OSError:
+                                pass
+                            refreshed_count += 1
+                        except Exception:
+                            pass
 
         if role_def.guide_path:
             guide_src = os.path.join(main_root, role_def.guide_path)
             if os.path.isfile(guide_src):
                 guide_dst = os.path.join(workspace_dir, role_def.guide_path)
                 copy_file_with_perms(guide_src, guide_dst, readonly=True)
+                root_guide_dst = os.path.join(workspace_dir, "guides", os.path.basename(role_def.guide_path))
+                if not os.path.isfile(root_guide_dst):
+                    copy_file_with_perms(guide_src, root_guide_dst, readonly=True)
                 refreshed_count += 1
 
         bin_dir = os.path.join(workspace_dir, "bin")
@@ -598,6 +761,13 @@ class WorkspaceSynchronizer(
             stamped_audits=stamped_audits,
             flushed_blames=flushed_blames,
         )
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-20T23:45:00Z
+# LAST_CHANGED: 2026-10-20T23:45:00Z
+# CHANGE: Refresh promoted methodology runtime support, guides, templates, and configurations at workspace root
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T01:30:00Z
-CHANGE: eliminate cleanroom_workspaces.json workspace registry file
-CODE_HASH: 0d01979a2989
--->
-
 # Concrete scenarios for `role_registry_impl` (implementation)
 
 Scenarios 1 through 10 restate the caller observations of the interface scenarios and add, beside
@@ -251,3 +244,9 @@ declared read-only file pattern `alpha/contracts/{unit}.md`.
    Realized by: the component's own derivation of read-only file patterns from the role
    dependencies and star role dependencies, merged with the declared read-only file patterns, and
    its derivation of writable file patterns from the source pattern.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-13T01:30:00Z
+CHANGE: eliminate cleanroom_workspaces.json workspace registry file
+-->

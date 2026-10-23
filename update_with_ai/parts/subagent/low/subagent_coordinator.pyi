@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_coordinator interface low-level specification
-# CODE_HASH: 6b25eb8873f8
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for subagent_coordinator."""
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Sequence
-from framework import data_type, operation, poly_type, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, poly_type, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 
 
@@ -59,16 +51,16 @@ class RoleDispatch:
 
 @data_type
 @dataclass(frozen=True)
-class RoleTurnResult:
-    """Outcome of an autonomous subagent execution turn.
+class RoleRoundResult:
+    """Outcome of an autonomous subagent execution round.
 
     Args:
         role: Target role identifier.
-        status: Turn outcome status.
+        status: Round outcome status.
         submitted_targets: Sequence of submitted target paths.
         blamed_targets: Sequence of blamed target paths.
         failure_reason: Optional diagnostic failure message.
-        telemetry: Optional token telemetry recorded during the turn.
+        telemetry: Optional token telemetry recorded during the round.
         wall_clock_seconds: Elapsed duration in seconds.
     """
 
@@ -79,6 +71,9 @@ class RoleTurnResult:
     failure_reason: Optional[str] = None
     telemetry: Optional[TokenUsage] = None
     wall_clock_seconds: float = 0.0
+
+
+RoleTurnResult = RoleRoundResult
 
 
 @data_type
@@ -117,20 +112,20 @@ class HarnessAdapter(Protocol):
         ...
 
     @operation
-    def await_role(self, task_handle: str) -> RoleTurnResult:
-        """Awaits subagent turn completion and returns outcome result.
+    def await_role(self, task_handle: str) -> RoleRoundResult:
+        """Awaits subagent round completion and returns outcome result.
 
         POSTCONDITIONS:
-        - MUST await turn completion and return role turn result with telemetry.
+        - MUST await round completion and return role round result with telemetry.
         """
         ...
 
     @operation
-    def poll_role(self, task_handle: str) -> Optional[RoleTurnResult]:
-        """Polls subagent turn execution without blocking.
+    def poll_role(self, task_handle: str) -> Optional[RoleRoundResult]:
+        """Polls subagent round execution without blocking.
 
         POSTCONDITIONS:
-        - WHEN subagent process has terminated, MUST return role turn result.
+        - WHEN subagent process has terminated, MUST return role round result.
         - WHEN subagent process is still running, MUST return None without blocking or termination.
         """
         ...
@@ -146,7 +141,7 @@ class HarnessAdapter(Protocol):
 
 
 @singleton_type("agent_session")
-class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
+class SubagentCoordinator(Singleton[AgentSessionTier], Protocol):
     """Zero-execution coordinator scheduling subagents across role workspaces."""
 
     @operation
@@ -173,13 +168,13 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         self,
         wave: Sequence[RoleDispatch],
         harness: HarnessAdapter,
-    ) -> Sequence[RoleTurnResult]:
+    ) -> Sequence[RoleRoundResult]:
         """Dispatches all roles in an execution wave through the harness and awaits results.
 
         POSTCONDITIONS:
         - MUST dispatch each role directive through harness.dispatch_role.
         - MUST await completion of each dispatched role through harness.await_role.
-        - MUST return sequence of role turn results.
+        - MUST return sequence of role round results.
         """
         ...
 
@@ -196,6 +191,7 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         poll_interval: Optional[float] = None,
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
+        max_unproductive_rounds: Optional[int] = None,
     ) -> OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure.
 
@@ -203,11 +199,12 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         - MUST reset preexisting role workspaces for declared roles upon initiating orchestration.
         - MUST iterate through execution waves until all units in scope evaluate clean, a role fails, or max_waves is reached.
         - MUST periodically poll active workers through harness.poll_role or harness.await_role at a configurable interval defaulting to 10.0 seconds.
-        - WHEN a role turn reports status failed, MUST stop execution and return non-converged summary with failure details.
-        - WHEN consecutive unproductive turns for a role on unresolved targets exceed the threshold (defaulting to 5), MUST stop execution and return non-converged summary with impasse details.
-        - MUST emit real-time progress notifications detailing role dispatch, turn outcomes, token consumption, and work queue state.
+        - WHEN a role round reports status failed, MUST stop execution and return non-converged summary with failure details.
+        - WHEN consecutive unproductive rounds for a role on unresolved targets exceed the threshold (defaulting to 5), MUST stop execution and return non-converged summary with impasse details.
+        - WHEN a role round concludes without submitting, blaming, or failing assigned targets, MUST inject an actionable reminder into the task prompt of the subsequent role dispatch directive.
+        - MUST emit real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state.
         - WHEN all units evaluate clean across all roles, MUST automatically delete all provisioned role workspaces in scope and return converged summary.
-        - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive turns thresholds from model configurations.
+        - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
         - MUST persist effective batch size bounds into provisioned role workspace configurations.
         - MUST aggregate cumulative token usage and monetary expenditure in orchestration summary.
         - WHEN target_node is specified, MUST restrict work queue discovery and execution to target_node and its transitive dependencies.
@@ -225,13 +222,32 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         """
         ...
 
+    @operation
+    def resolve_model_parameters(
+        self,
+        repo_root: str,
+        model_name: Optional[str] = None,
+    ) -> tuple[Optional[int], Optional[int], Optional[int]]:
+        """Dynamically resolves subagent batch sizes, token limits, and unproductive round thresholds.
+
+        POSTCONDITIONS:
+        - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
+        """
+        ...
+
 
 def __orphan__() -> None:
     """Orphan contracts for subagent log directory and model configuration resolution.
 
     POSTCONDITIONS:
     - MUST resolve the canonical repository logs directory for a role workspace.
-    - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive turns thresholds from model configurations.
+    - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
     """
     ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-12T21:00:00Z
+# CHANGE: author subagent_coordinator interface low-level specification
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

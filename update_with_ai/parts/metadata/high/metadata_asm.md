@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T19:43:57Z
-LAST_CHANGED: 2026-10-14T17:25:00Z
-CHANGE: Define metadata_asm assembly component
-CODE_HASH: fd2a5d4fc250
-SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
--->
-
 # metadata_asm assembly component
 
 assembles: src_metadata_impl, src_storage_impl
@@ -23,3 +15,10 @@ Cleanroom builds and multi-agent coordination loops require durable, in-band per
 ## Types and Behavior
 
 The metadata_asm assembly component aggregates the implementations of the source metadata coordinator, agent storage, and DAG storage interfaces, providing a unified assembly for in-band metadata manipulation and target storage.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T19:43:57Z
+LAST_CHANGED: 2026-10-14T17:25:00Z
+CHANGE: Define metadata_asm assembly component
+SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
+-->

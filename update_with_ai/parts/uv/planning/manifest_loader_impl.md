@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: d5bc2f2feadd
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # manifest_loader_impl implementation component
 
 ## Intent
@@ -57,3 +49,10 @@ By resolving package directories against the workspace root, parsing role config
   - Grounded: [manifest_ext: [role_manifest_parsing]]
 - Registering node definitions and dependency edges in graph storage.
   - Grounded: [node_storage: [agent_storage_service], dag_storage: [dag_storage_service]]
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

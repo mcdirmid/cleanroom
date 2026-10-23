@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T03:37:02Z
-# CHANGE: Align synchronizer typing and test stub integrity; remove unused import
-# CODE_HASH: b8d989bd9284
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level interface specification for sync."""
 
 from dataclasses import dataclass
 from typing import Protocol, Sequence
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
 import cleanroom_files_ext
 
@@ -35,7 +27,7 @@ class SyncResult:
 
 
 @singleton_type("agent_session")
-class WorkspaceSynchronizer(InTier[AgentSessionTier], Protocol):
+class WorkspaceSynchronizer(Singleton[AgentSessionTier], Protocol):
     """Transfers files and in-band metadata between canonical repositories and role workspaces."""
 
     @operation
@@ -118,3 +110,10 @@ class WorkspaceSynchronizer(InTier[AgentSessionTier], Protocol):
         - MUST return the sequence of culprit file paths receiving appended feedback.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T03:37:02Z
+# CHANGE: Align synchronizer typing and test stub integrity; remove unused import
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

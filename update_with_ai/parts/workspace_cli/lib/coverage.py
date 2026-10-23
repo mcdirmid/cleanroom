@@ -1,11 +1,5 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:20:45Z
-# CHANGE: Remove the undeclared module-level delegation API and its cached evaluator global so the interface holds only the declared coverage record and evaluator protocol
-# CODE_HASH: 0bd1d982431a
-# --- END CLEANROOM METADATA ---
-
 from __future__ import annotations
+from support.lib.lifecycle import Singleton, SystemTier
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,7 +43,7 @@ class ModuleCoverage:
 
 
 # Contract: CoverageEvaluator protocol coordinates statement coverage measurement and report generation.
-class CoverageEvaluator(Protocol):
+class CoverageEvaluator(Singleton[SystemTier], Protocol):
     """Protocol for single-target statement test coverage evaluation and report generation."""
 
     # Contract: Formats missing statement line numbers into compact comma-separated range strings.
@@ -95,3 +89,8 @@ class CoverageEvaluator(Protocol):
         max_spans: Optional[int] = None,
     ) -> ModuleCoverage: ...
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:20:45Z
+# CHANGE: Remove the undeclared module-level delegation API and its cached evaluator global so the interface holds only the declared coverage record and evaluator protocol
+# --- END CLEANROOM METADATA ---

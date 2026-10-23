@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:30:00Z
-CHANGE: Define submission_impl realization
-CODE_HASH: 29e567c84d8e
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # submission_impl implementation component
 
 imports: tool_provider, file_alias, node_config, guide_delivery, src_metadata, coordinate, run_control
@@ -72,3 +64,10 @@ The blame tool:
 - Fails when the explanation contains newline characters, providing an error response and reminding the agent that a blame explanation must be a single paragraph without newlines.
 
 - Records defect feedback for the blamed target in graph storage, marks the blame target as attributed, and resolves the active node.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-14T18:30:00Z
+CHANGE: Define submission_impl realization
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

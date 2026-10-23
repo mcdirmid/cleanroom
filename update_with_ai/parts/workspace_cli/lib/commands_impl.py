@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:50:00Z
-# CHANGE: Define commands_impl realization
-# CODE_HASH: 3ad33f76279d
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for commands_impl."""
 
 from __future__ import annotations
@@ -26,7 +17,7 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
-from update_with_ai.parts.agent.lib import session as agent_session
+from update_with_ai.parts.agent.lib import node_config, session as agent_session
 from update_with_ai.parts.control.lib import (
     attribution,
     submit,
@@ -42,6 +33,73 @@ from . import (
     commands,
     pending,
 )
+from update_with_ai.parts.metadata.lib import src_metadata
+
+BLAME_BUFFER_FILE = ".cleanroom_blame_buffer.json"
+
+
+def _record_blame_buffer(
+    ws_root: str,
+    culprit_file: str,
+    critique: str = "",
+    caller: str = "",
+) -> None:
+    """Records blamed target entry into workspace blame buffer."""
+    buf_path = os.path.join(ws_root, BLAME_BUFFER_FILE)
+    entries: List[Dict[str, Any]] = []
+    if os.path.isfile(buf_path):
+        try:
+            with open(buf_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    entries = [e for e in data if isinstance(e, dict)]
+        except (OSError, json.JSONDecodeError):
+            entries = []
+    culprit_rel = culprit_file.lstrip("/")
+    entry = {
+        "target": culprit_rel,
+        "explanation": critique,
+        "blamed_by": caller or "role workspace",
+    }
+    if not any(e.get("target") == culprit_rel for e in entries):
+        entries.append(entry)
+    try:
+        with open(buf_path, "w", encoding="utf-8") as f:
+            json.dump(entries, f, indent=2)
+    except OSError:
+        pass
+
+
+def _is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
+    clean_r = role_name.split(":")[-1].strip().lower()
+    try:
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        r_def = reg.resolve_role_definition(clean_r, repo_root=repo_root)
+        return bool(r_def.audit_tag or not r_def.src_pattern or not r_def.writable_file_patterns)
+    except Exception:
+        return clean_r in ("qa", "coverage", "spec_qa")
+
+def _is_role_writable_file(role_def: Any, file_path: str) -> bool:
+    if not role_def:
+        return True
+    patterns = (role_def.writable_file_patterns if hasattr(role_def, "writable_file_patterns") else None) or ()
+    if not patterns:
+        return False
+    import fnmatch
+    norm_path = file_path.replace("\\", "/")
+    fname = os.path.basename(norm_path)
+    for pat in patterns:
+        pat_norm = pat.replace("\\", "/")
+        if fnmatch.fnmatch(norm_path, f"*{pat_norm}") or fnmatch.fnmatch(fname, pat_norm):
+            return True
+        if pat_norm.endswith("/*") and pat_norm[:-2] in norm_path:
+            return True
+        if "/*." in pat_norm:
+            dir_part = pat_norm.split("/")[0]
+            if f"/{dir_part}/" in norm_path or norm_path.startswith(f"{dir_part}/"):
+                return True
+    return False
+
 
 # Contract: __orphan__ - discovers root of commissioned role workspace or repo root
 def find_workspace_root() -> str:
@@ -138,8 +196,7 @@ def _find_agent_node_config_module() -> Any:
 
 
 def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
-    node_cfg_mod = _find_agent_node_config_module()
-    node_cfg_cls = getattr(node_cfg_mod, "NodeConfig", None) if node_cfg_mod else None
+    node_cfg_cls = node_config.NodeConfig
     cfg = None
     if node_cfg_cls is not None:
         try:
@@ -177,22 +234,21 @@ def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
                 self.per_node_info_by_node = {}
 
         cli_cfg = CliNodeConfig(role_defs)
-        keys: List[Any] = [CliNodeConfig]
-        if node_cfg_cls is not None:
-            keys.append(node_cfg_cls)
+        keys: List[Any] = [CliNodeConfig, node_config.NodeConfig]
         reg.register_instance(
             cli_cfg,
             keys=keys,
             tier=agent_session.agent_session,
         )
     else:
-        if not hasattr(cfg, "role_definitions") or not getattr(cfg, "role_definitions", None):
-            setattr(cfg, "role_definitions", role_defs)
+        cfg_any: Any = cfg
+        if not hasattr(cfg_any, "role_definitions") or not cfg_any.role_definitions:
+            setattr(cfg_any, "role_definitions", role_defs)
 
 
 
 # Contract: Realizes substantive domain operations for Cleanroom role workspaces in agent_session tier.
-class WorkspaceCommandHandler(commands.WorkspaceCommandHandler, Singleton):
+class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
     """Realizes substantive domain operations for Cleanroom role workspaces."""
 
     tier = agent_session.agent_session
@@ -241,8 +297,25 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler, Singleton):
         ws_root = os.path.realpath(find_workspace_root())
         meta = get_current_role_metadata()
         role_name = str(meta.get("role_name") or meta.get("role") or "") if meta else ""
+        clean_role = role_name.split(":")[-1].strip().lower() if role_name else ""
         main_root = _resolve_main_root(ws_root, meta, repo_root)
         _ensure_cli_node_config(main_root)
+
+        is_auditor = _is_auditor_role(clean_role, repo_root=main_root) if clean_role else False
+        if not no_verify and not is_auditor:
+            sub_coord = get_singleton(submit.SubmissionCoordinator)
+            d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+            target_path, _ = sub_coord.resolve_submit_target(
+                target, ws_root, clean_role, d_scope
+            )
+            if target_path and os.path.isfile(target_path) and src_metadata.is_code_modified(target_path):
+                checker = get_singleton(check.WorkspaceChecker)
+                if not checker.is_checked_since_modification(ws_root, target_path):
+                    print(
+                        f"Error: Target '{target}' has been modified, but 'bin/check_files' has not been run since the latest modifications.\n"
+                        f"Run 'bin/check_files {target}' to verify errors before calling submit."
+                    )
+                    return 1
 
         if not no_verify:
             check_exit = self.run_check_files(target=target, repo_root=main_root)
@@ -288,6 +361,31 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler, Singleton):
         main_root = _resolve_main_root(ws_root, meta, repo_root)
         _ensure_cli_node_config(main_root)
         caller = (meta.get("role_name") or meta.get("role", "")) if meta else ""
+        clean_caller = caller.split(":")[-1].strip().lower() if caller else ""
+
+        is_auditor = _is_auditor_role(clean_caller, repo_root=main_root) if clean_caller else False
+        if not is_auditor:
+            reg = get_singleton(role_registry.WorkspaceRegistry)
+            r_def = None
+            try:
+                r_def = reg.resolve_role_definition(clean_caller, repo_root=main_root)
+            except Exception:
+                pass
+            pending_mgr = get_singleton(pending.WorkspacePendingManager)
+            pending_targets = pending_mgr.get_pending_work(ws_root)
+            sub_coord = get_singleton(submit.SubmissionCoordinator)
+            d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+            for pt in pending_targets:
+                pt_path, _ = sub_coord.resolve_submit_target(pt, ws_root, clean_caller, d_scope)
+                if pt_path and os.path.isfile(pt_path) and _is_role_writable_file(r_def, pt_path):
+                    if src_metadata.is_code_modified(pt_path):
+                        checker = get_singleton(check.WorkspaceChecker)
+                        if not checker.is_checked_since_modification(ws_root, pt_path):
+                            print(
+                                f"Error: Workspace target '{pt}' has been modified, but 'bin/check_files' has not been run since the latest modifications.\n"
+                                f"Run 'bin/check_files {pt}' to verify errors before calling blame."
+                            )
+                            return 1
 
         attr_coord = get_singleton(attribution.AttributionCoordinator)
         outcome = attr_coord.blame_culprit_file(
@@ -310,6 +408,7 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler, Singleton):
                     append_cleanroom_log(culprit_file, blame_msg, repo_root=ws_root)
                 except OSError:
                     pass
+            _record_blame_buffer(ws_root, culprit_file, critique=critique, caller=caller)
             if meta:
                 pending_mgr = get_singleton(pending.WorkspacePendingManager)
                 pending_mgr.remove_pending_target(ws_root, culprit_file)
@@ -328,6 +427,24 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler, Singleton):
         meta = get_current_role_metadata()
         main_root = _resolve_main_root(ws_root, meta, repo_root)
         _ensure_cli_node_config(main_root)
+        caller = (meta.get("role_name") or meta.get("role", "")) if meta else ""
+        clean_caller = caller.split(":")[-1].strip().lower() if caller else ""
+
+        is_auditor = _is_auditor_role(clean_caller, repo_root=main_root) if clean_caller else False
+        if not is_auditor:
+            sub_coord = get_singleton(submit.SubmissionCoordinator)
+            d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+            target_path, _ = sub_coord.resolve_submit_target(
+                file_path, ws_root, clean_caller, d_scope
+            )
+            if target_path and os.path.isfile(target_path) and src_metadata.is_code_modified(target_path):
+                checker = get_singleton(check.WorkspaceChecker)
+                if not checker.is_checked_since_modification(ws_root, target_path):
+                    print(
+                        f"Error: Target '{file_path}' has been modified, but 'bin/check_files' has not been run since the latest modifications.\n"
+                        f"Run 'bin/check_files {file_path}' to verify errors before calling fail."
+                    )
+                    return 1
 
         attr_coord = get_singleton(attribution.AttributionCoordinator)
         outcome = attr_coord.fail_target_file(
@@ -500,7 +617,13 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler, Singleton):
                     )
         print(f"Refreshed system files across {count} role workspace(s).")
         return 0
-
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-20T21:10:00Z
+# CHANGE: Record blamed target into workspace blame buffer in run_blame
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

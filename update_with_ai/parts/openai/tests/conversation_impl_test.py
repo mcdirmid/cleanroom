@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:45:09Z
-# CHANGE: Inspect chronological message order through the contracted get_model_request result instead of the undeclared messages attribute
-# CODE_HASH: 113caba3e589
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for conversation_impl aligned with grounding specifications."""
 
 import json
@@ -27,7 +18,7 @@ from update_with_ai.parts.openai.lib.conversation_impl import (
     __initialize__,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
-from update_with_ai.parts.agent.lib.session import session as agent_session
+from update_with_ai.parts.agent.lib.session import agent_session
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     SuppressionKey,
     ToolName,
@@ -433,35 +424,23 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 m for m in history.get_model_request().messages if m.role == "tool"
             ]
 
-            # Verify responses without suppression keys were NOT superseded
+            # Verify responses without suppression keys were NOT deleted
             self.assertFalse(tool_msgs[0].is_stub)
             self.assertEqual(tool_msgs[0].content, "spec v1")
             self.assertFalse(tool_msgs[1].is_stub)
             self.assertEqual(tool_msgs[1].content, "spec v2")
 
-            # Verify distinct suppression key was NOT superseded
+            # Verify distinct suppression key was NOT deleted
             self.assertFalse(tool_msgs[2].is_stub)
             self.assertEqual(tool_msgs[2].content, "other code")
 
-            # Verify widget.py v1 WAS superseded (pushed past buffer limit 3), while widget.py v2, v3, v4 are intact
-            self.assertTrue(tool_msgs[3].is_stub)
-            self.assertEqual(tool_msgs[3].content, "[Superseded]")
-            self.assertFalse(tool_msgs[4].is_stub)
-            self.assertEqual(tool_msgs[4].content, "widget v2")
-            self.assertFalse(tool_msgs[5].is_stub)
-            self.assertEqual(tool_msgs[5].content, "widget v3")
-            self.assertFalse(tool_msgs[6].is_stub)
-            self.assertEqual(tool_msgs[6].content, "widget v4")
-
-            # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message retain their parameter keys, preserving file path parameters, preserving non-string values, and replacing other string values with a stub marker.
-            w1_asst = next(
-                m
-                for m in history.get_model_request().messages
-                if m.tool_call_id == "call_w1" and m.role == "assistant"
+            # Verify widget.py v1 and its tool call WERE deleted (pushed past buffer limit 3), while widget.py v2, v3, v4 are intact
+            self.assertFalse(
+                any(
+                    m.tool_call_id == "call_w1"
+                    for m in history.get_model_request().messages
+                )
             )
-            self.assertTrue(w1_asst.is_stub)
-            self.assertEqual(w1_asst.tool_arguments, "{}")
-
             w2_asst = next(
                 m
                 for m in history.get_model_request().messages
@@ -469,37 +448,31 @@ class OpenAIConversationImplTest(unittest.TestCase):
             )
             self.assertFalse(w2_asst.is_stub)
 
-            # Verify advance v1 WAS superseded into a stub and retained its reminder, while v2, v3, v4 are intact
-            self.assertTrue(tool_msgs[7].is_stub)
-            self.assertEqual(tool_msgs[7].content, "[Superseded]")
-            self.assertEqual(
-                tool_msgs[7].reminder, "Only provide change summary when completing."
+            # Verify advance v1 was deleted while its reminder was inherited by advance v2; v2, v3, v4 are intact
+            self.assertFalse(
+                any(
+                    m.tool_call_id == "call_adv1"
+                    for m in history.get_model_request().messages
+                )
             )
-            self.assertFalse(tool_msgs[8].is_stub)
-            self.assertEqual(tool_msgs[8].content, "advance step 2")
-            self.assertEqual(
-                tool_msgs[8].reminder, "Only provide change summary when completing."
-            )
-            self.assertFalse(tool_msgs[9].is_stub)
-            self.assertEqual(tool_msgs[9].content, "advance step 3")
-            self.assertFalse(tool_msgs[10].is_stub)
-            self.assertEqual(tool_msgs[10].content, "advance step 4")
-
-            # Verify Edit 1 was superseded: response is stubbed AND assistant arguments are stubbed all-or-nothing (preserving path and non-string count, replacing other strings with [STUB])
-            # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message retain their parameter keys, preserving file path parameters, preserving non-string values, and replacing other string values with a stub marker.
-            edit1_asst_after = next(
+            adv2_tool = next(
                 m
                 for m in history.get_model_request().messages
-                if m.tool_call_id == "call_edit1" and m.role == "assistant"
+                if m.tool_call_id == "call_adv2" and m.role == "tool"
             )
-            self.assertTrue(edit1_asst_after.is_stub)
-            parsed_args = json.loads(edit1_asst_after.tool_arguments or "{}")
-            self.assertEqual(parsed_args["path"], "file_a.py")
-            self.assertEqual(parsed_args["count"], 42)
-            self.assertEqual(parsed_args["target_content"], "[STUB]")
-            self.assertEqual(parsed_args["replacement_content"], "[STUB]")
-            self.assertTrue(tool_msgs[11].is_stub)
-            self.assertEqual(tool_msgs[11].content, "[Superseded]")
+            self.assertEqual(adv2_tool.content, "advance step 2")
+            self.assertEqual(
+                adv2_tool.reminder,
+                "Only provide change summary when completing.",
+            )
+
+            # Verify Edit 1 was deleted: response and assistant tool call are deleted
+            self.assertFalse(
+                any(
+                    m.tool_call_id == "call_edit1"
+                    for m in history.get_model_request().messages
+                )
+            )
 
             # Verify Edit 2, 3, 4 are intact in the buffer
             edit2_asst = next(
@@ -509,8 +482,6 @@ class OpenAIConversationImplTest(unittest.TestCase):
             )
             self.assertFalse(edit2_asst.is_stub)
             self.assertIn("file_b.py", edit2_asst.tool_arguments or "")
-            self.assertFalse(tool_msgs[12].is_stub)
-            self.assertEqual(tool_msgs[12].content, "diff b")
 
             edit3_asst = next(
                 m
@@ -519,8 +490,6 @@ class OpenAIConversationImplTest(unittest.TestCase):
             )
             self.assertFalse(edit3_asst.is_stub)
             self.assertIn("file_c.py", edit3_asst.tool_arguments or "")
-            self.assertFalse(tool_msgs[13].is_stub)
-            self.assertEqual(tool_msgs[13].content, "diff c")
 
             edit4_asst = next(
                 m
@@ -529,10 +498,6 @@ class OpenAIConversationImplTest(unittest.TestCase):
             )
             self.assertFalse(edit4_asst.is_stub)
             self.assertIn("file_d.py", edit4_asst.tool_arguments or "")
-            self.assertFalse(tool_msgs[14].is_stub)
-            self.assertEqual(
-                tool_msgs[14].content, "Error: target_content not found in file_d.py."
-            )
 
     def test_get_model_request_formats_roles_and_reminders(self) -> None:
         """CUJ: Formatting messages into ModelRequest formats OpenAI conventions and active reminders."""
@@ -585,8 +550,10 @@ class OpenAIConversationImplTest(unittest.TestCase):
             # Requirement: Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
             self.assertIn("Remember to finish.", req2.messages[-1].content)
 
-    def test_supersede_arg_keep_edge_cases(self) -> None:
-        """CUJ: Exercising all-or-nothing field stubbing, preserving path parameters and non-strings while stubbing other strings."""
+    def test_superseded_tool_calls_and_responses_deleted_beyond_buffer_limit(
+        self,
+    ) -> None:
+        """CUJ: Preceding tool responses and their correlating assistant tool calls beyond the buffer limit are deleted."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             history = scope.get_singleton(Conversation)
             history.append_message(
@@ -602,7 +569,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
                             "active": True,
                             "count": 100,
                             "description": "Short desc",
-                            "replacement_content": "A very long replacement string that previously got sliced to 20 chars",
+                            "replacement_content": "A very long replacement string",
                         }
                     ),
                 )
@@ -619,7 +586,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
                             "active": True,
                             "count": 100,
                             "description": "Short desc",
-                            "replacement_content": "A very long replacement string that previously got sliced to 20 chars",
+                            "replacement_content": "A very long replacement string",
                         }
                     )
                 ),
@@ -638,7 +605,6 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 tool_arguments=SerializedArguments("{}"),
             )
             # Response 4 pushes response 1 out of the 3-response buffer
-            # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message retain their parameter keys, preserving file path parameters, preserving non-string values, and replacing other string values with a stub marker.
             history.append_tool_response(
                 _make_response("result 4", suppression_key="key_stub"),
                 tool_name=ToolName("edit_file"),
@@ -646,21 +612,32 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 tool_arguments=SerializedArguments("{}"),
             )
 
-            asst_stub = next(
-                m
-                for m in history.get_model_request().messages
-                if m.tool_call_id == "call_stub_1" and m.role == "assistant"
+            # Assert call_stub_1 is deleted
+            self.assertFalse(
+                any(
+                    m.tool_call_id == "call_stub_1"
+                    for m in history.get_model_request().messages
+                )
             )
-            parsed = json.loads(asst_stub.tool_arguments or "{}")
-            # Path parameters preserved intact (no truncation or 20-char slice)
-            self.assertEqual(parsed["path"], "parts/sandbox/lib/foo.py")
-            self.assertEqual(parsed["target_file"], "parts/sandbox/lib/bar.py")
-            # Non-strings preserved intact
-            self.assertEqual(parsed["active"], True)
-            self.assertEqual(parsed["count"], 100)
-            # Other strings replaced with [STUB] (all or nothing, no 20-char slice)
-            self.assertEqual(parsed["description"], "[STUB]")
-            self.assertEqual(parsed["replacement_content"], "[STUB]")
+            # Assert responses 2, 3, 4 are preserved
+            self.assertTrue(
+                any(
+                    m.tool_call_id == "call_stub_2"
+                    for m in history.get_model_request().messages
+                )
+            )
+            self.assertTrue(
+                any(
+                    m.tool_call_id == "call_stub_3"
+                    for m in history.get_model_request().messages
+                )
+            )
+            self.assertTrue(
+                any(
+                    m.tool_call_id == "call_stub_4"
+                    for m in history.get_model_request().messages
+                )
+            )
 
     def test_initialize_unprompted_tool_response_inserts_synthetic_assistant_call(
         self,
@@ -704,50 +681,47 @@ class OpenAIConversationImplTest(unittest.TestCase):
             self.assertEqual(msgs[3].role, "tool")
             self.assertEqual(msgs[3].tool_call_id, "paired_call")
 
-    def test_append_tool_response_superseded_invalid_json_fallback(self) -> None:
-        """CUJ: Superseding a tool response when preceding assistant message has non-JSON arguments falls back gracefully."""
+    def test_unprompted_tool_response_invalid_json_arguments_fallback(self) -> None:
+        """CUJ: Handling unprompted tool responses with invalid JSON argument strings falls back to preserving raw arguments."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             history = scope.get_singleton(Conversation)
-            history.append_message(
-                _make_msg(
-                    role="assistant",
-                    content="",
-                    tool_call_id="call_bad_json",
-                    tool_name="some_tool",
-                    tool_arguments="{invalid json: not parsed",
-                )
+            tool_msg = _make_msg(
+                role="tool",
+                content="unprompted output",
+                tool_call_id="call_init_bad",
+                tool_name="some_tool",
+                tool_arguments="{invalid json",
             )
-            history.append_tool_response(
-                _make_response("out 1", suppression_key="bad_json_key"),
-                tool_name=ToolName("some_tool"),
-                tool_call_id=ToolCallId("call_bad_json"),
-                tool_arguments=SerializedArguments("{invalid json: not parsed"),
-            )
-            history.append_tool_response(
-                _make_response("out 2", suppression_key="bad_json_key"),
-                tool_name=ToolName("some_tool"),
-                tool_call_id=ToolCallId("call_bad_json_2"),
-                tool_arguments=SerializedArguments("{}"),
-            )
-            history.append_tool_response(
-                _make_response("out 3", suppression_key="bad_json_key"),
-                tool_name=ToolName("some_tool"),
-                tool_call_id=ToolCallId("call_bad_json_3"),
-                tool_arguments=SerializedArguments("{}"),
-            )
-            history.append_tool_response(
-                _make_response("out 4", suppression_key="bad_json_key"),
-                tool_name=ToolName("some_tool"),
-                tool_call_id=ToolCallId("call_bad_json_4"),
-                tool_arguments=SerializedArguments("{}"),
-            )
-            asst_stub = next(
+            history.initialize([tool_msg])
+            asst = next(
                 m
                 for m in history.get_model_request().messages
-                if m.tool_call_id == "call_bad_json" and m.role == "assistant"
+                if m.role == "assistant"
             )
-            self.assertTrue(asst_stub.is_stub)
+            self.assertEqual(asst.tool_arguments, "{invalid json")
+
+            # Also unprompted via append_tool_response
+            history.append_tool_response(
+                _make_response("append unprompted"),
+                tool_name=ToolName("other_tool"),
+                tool_call_id=ToolCallId("call_append_bad"),
+                tool_arguments=SerializedArguments("{invalid append json"),
+            )
+            asst2 = next(
+                m
+                for m in history.get_model_request().messages
+                if m.tool_call_id == "call_append_bad" and m.role == "assistant"
+            )
+            self.assertEqual(asst2.tool_arguments, "{invalid append json")
 
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-21T12:45:00Z
+# CHANGE: Delete superseded tool calls and responses beyond buffer limit instead of stubbing arguments
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

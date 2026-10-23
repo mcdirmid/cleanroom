@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T19:15:00Z
-CHANGE: support non-blocking turn polling and optional timeout in antigravity harness
-CODE_HASH: ffe0c10a017c
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # antigravity_harness interface component
 
 imports: session, subagent_coordinator, subagent_harness
@@ -41,3 +33,10 @@ When executing a role turn:
 - The antigravity harness adapter inspects role workspace submission outcomes (including completion tags extracted from standard output) and blame buffers to construct a complete role turn result.
 
 - The antigravity harness adapter interrupts active turns when execution deadlines are exceeded.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-13T19:15:00Z
+CHANGE: support non-blocking turn polling and optional timeout in antigravity harness
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

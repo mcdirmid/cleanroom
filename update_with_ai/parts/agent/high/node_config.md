@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T01:39:02Z
-CHANGE: Replace the session config fragment lead-in with a declarative parameter inventory and canonicalize session terminology
-CODE_HASH: 4a49596edaf5
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # node_config interface component
 
 imports: session, file_alias, dag_storage
@@ -35,3 +27,10 @@ An agent session's *session config* provides the resolved configuration paramete
 The session config provides the read-only files restricting bound files to read, the read-write files permitting bound files for read and write, the session guide when step mode is active, the templates mapping read-write files to initial file content, the template parameters binding values for template evaluation, the verification checks evaluated during session verification, and the verification success message communicating feedback when verification passes.
 
 The session config also provides the blame targets mapping each read-write file to the read-only files eligible for blame, and the session messages mapping each read-write file to incoming messages explaining why the file requires cleaning.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T01:39:02Z
+CHANGE: Replace the session config fragment lead-in with a declarative parameter inventory and canonicalize session terminology
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

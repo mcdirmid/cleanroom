@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_coordinator interface library
-# CODE_HASH: a5caeb1c0a45
-# --- END CLEANROOM METADATA ---
-
 """Interface specification for subagent_coordinator."""
 
 from __future__ import annotations
@@ -12,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from typing import Optional, Protocol, Sequence
-from support.lib.lifecycle import InTier
+from support.lib.lifecycle import Singleton
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 
 
@@ -58,18 +51,18 @@ class RoleDispatch:
     task_prompt: str = ""
 
 
-# Contract: outcome of an autonomous subagent execution turn
+# Contract: outcome of an autonomous subagent execution round
 @dataclass(frozen=True)
-class RoleTurnResult:
-    """Outcome of an autonomous subagent execution turn.
+class RoleRoundResult:
+    """Outcome of an autonomous subagent execution round.
 
     Args:
         role: Target role identifier.
-        status: Turn outcome status.
+        status: Round outcome status.
         submitted_targets: Sequence of submitted target paths.
         blamed_targets: Sequence of blamed target paths.
         failure_reason: Optional diagnostic failure message.
-        telemetry: Optional token telemetry recorded during the turn.
+        telemetry: Optional token telemetry recorded during the round.
         wall_clock_seconds: Elapsed duration in seconds.
     """
 
@@ -80,6 +73,10 @@ class RoleTurnResult:
     failure_reason: Optional[str] = None
     telemetry: Optional[TokenUsage] = None
     wall_clock_seconds: float = 0.0
+
+
+# Deprecated backward-compatible alias
+RoleTurnResult = RoleRoundResult
 
 
 # Contract: outcome of iterative workspace orchestration across execution waves
@@ -112,14 +109,14 @@ class HarnessAdapter(Protocol):
         """Dispatches work directive to a subagent bound to the role workspace."""
         ...
 
-    # Contract: await subagent turn completion and return outcome result
-    def await_role(self, task_handle: str) -> RoleTurnResult:
-        """Awaits subagent turn completion and returns outcome result."""
+    # Contract: await subagent round completion and return outcome result
+    def await_role(self, task_handle: str) -> RoleRoundResult:
+        """Awaits subagent round completion and returns outcome result."""
         ...
 
-    # Contract: poll subagent turn execution without blocking
-    def poll_role(self, task_handle: str) -> Optional[RoleTurnResult]:
-        """Polls subagent turn execution without blocking."""
+    # Contract: poll subagent round execution without blocking
+    def poll_role(self, task_handle: str) -> Optional[RoleRoundResult]:
+        """Polls subagent round execution without blocking."""
         ...
 
     # Contract: abort active subagent task execution upon timeout or loop limit
@@ -128,7 +125,7 @@ class HarnessAdapter(Protocol):
         ...
 
 
-class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
+class SubagentCoordinator(Singleton[AgentSessionTier], Protocol):
     """Zero-execution coordinator scheduling subagents across role workspaces."""
 
     # Contract: evaluate DAG queues and group unblocked ready roles into execution waves
@@ -147,7 +144,7 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         self,
         wave: Sequence[RoleDispatch],
         harness: HarnessAdapter,
-    ) -> Sequence[RoleTurnResult]:
+    ) -> Sequence[RoleRoundResult]:
         """Dispatches all roles in an execution wave through the harness and awaits results."""
         ...
 
@@ -164,6 +161,7 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
         poll_interval: Optional[float] = None,
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
+        max_unproductive_rounds: Optional[int] = None,
     ) -> OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure."""
         ...
@@ -173,7 +171,7 @@ class SubagentCoordinator(InTier[AgentSessionTier], Protocol):
 def resolve_cleanroom_log_dir(workspace_dir: str) -> str:
     """Resolves the canonical repository logs directory for a role workspace."""
     try:
-        from support.lib.lifecycle import get_singleton
+        from support.lib.lifecycle import Singleton, get_singleton
         import importlib
         ws_reg_mod = importlib.import_module("role_registry")
         reg = get_singleton(ws_reg_mod.WorkspaceRegistry)  # type: ignore
@@ -199,3 +197,9 @@ def resolve_cleanroom_log_dir(workspace_dir: str) -> str:
             log_dir = os.path.join(workspace_dir, ".cleanroom", "logs")
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-20T10:00:00Z
+# CHANGE: Standardize terminology on role rounds and role round results, deprecating turn terminology
+# --- END CLEANROOM METADATA ---

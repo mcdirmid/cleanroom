@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-18T01:04:33Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: afbbeff3f531
-# COVERAGE_AUDIT: 2026-10-18T01:04:33Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for model_config_impl aligned with grounding specifications."""
 
 import os
@@ -466,3 +457,11 @@ model = "gpt-4o"
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-18T01:04:33Z
+# LAST_CHANGED: 2026-10-07T00:00:00Z
+# CHANGE: new file
+# COVERAGE_AUDIT: 2026-10-18T01:04:33Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

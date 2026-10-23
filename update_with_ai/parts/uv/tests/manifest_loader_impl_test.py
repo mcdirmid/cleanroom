@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T05:58:39Z
-# CHANGE: Assert the synthesized promptless pass-through definition is registered as a non-propagating edge where the dependent producer declares it
-# CODE_HASH: 119f04f0bc33
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for manifest_loader_impl aligned with low-level specifications."""
 
 import os
@@ -439,3 +430,11 @@ active_component_types = ["implementation"]
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-11T05:58:39Z
+# CHANGE: Assert the synthesized promptless pass-through definition is registered as a non-propagating edge where the dependent producer declares it
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

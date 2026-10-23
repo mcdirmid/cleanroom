@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-09T22:20:00Z
-CHANGE: Record change summary during clean status transition without appending dirty change message
-CODE_HASH: 4dd72b475fc6
-SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
--->
-
 # submit interface component
 
 ## Intent
@@ -61,3 +53,10 @@ Allowing untested code to enter the repository creates regressions. The submissi
   - Deferred: Queried from role configuration in implementation.
 - Mutation of target node status to clean and persistence of change summary in graph storage.
   - Deferred: Delegated to DagStorage in implementation.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-09T22:20:00Z
+CHANGE: Record change summary during clean status transition without appending dirty change message
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

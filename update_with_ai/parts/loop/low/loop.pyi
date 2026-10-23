@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:19:49Z
-# CHANGE: Align loop cleaning pass, feedback injection, and change recording contracts
-# CODE_HASH: 28bc762fdc1a
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Loop low-level interface specification."""
 
 from dataclasses import dataclass
 from typing import NewType, Protocol
-from framework import data_type, operation, singleton_type
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
 import dag_storage
 
 BuildSummary = NewType("BuildSummary", str)
@@ -31,7 +23,7 @@ class BuildResult:
 
 
 @singleton_type("system")
-class Loop(InTier[SystemTier], Protocol):
+class Loop(Singleton[SystemTier], Protocol):
     """System service executing topological build and cleaning passes across workspace nodes."""
 
     @operation
@@ -111,3 +103,10 @@ class Loop(InTier[SystemTier], Protocol):
         - MUST dynamically invalidate downstream dependencies of the target node.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:19:49Z
+# CHANGE: Align loop cleaning pass, feedback injection, and change recording contracts
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

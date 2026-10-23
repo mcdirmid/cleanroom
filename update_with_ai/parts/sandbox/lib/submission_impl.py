@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:30:00Z
-# CHANGE: Define submission_impl realization
-# CODE_HASH: 3ded9ebbdb69
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation for submission."""
 
 from __future__ import annotations
@@ -17,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Optional, Sequence, Set, cast
 
 from support.lib.lifecycle import (
-    InTier,
+
     LifecycleRegistry,
     Singleton,
     get_default_registry,
@@ -115,9 +106,7 @@ class _BlameExplanationParamType(
         return submission.BlameExplanation(wire_value)
 
 
-class SubmitTool(
-    submission.SubmitTool, InTier[AgentSessionTier], Singleton
-):
+class SubmitTool(submission.SubmitTool):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -210,8 +199,8 @@ class SubmitTool(
 
         run_ctrl = get_singleton(run_control.RunController)
         run_ctrl.update_verification()
-        if not getattr(run_ctrl, "_passed", True):
-            raw_diag = getattr(run_ctrl, "_diagnostic_output", "")
+        if not run_ctrl.is_passed:
+            raw_diag = run_ctrl.diagnostic_output
             return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
@@ -255,7 +244,7 @@ class SubmitTool(
         # File alias suffix matching and probing has_modifications attribute on SourceMetadataCoordinator.
         if target_to_check:
             matched = False
-            for rw_file in getattr(node_cfg, "read_write_files", []):
+            for rw_file in (node_cfg.read_write_files or ()):
                 rel = str(rw_file.relative_path)
                 ws_path = str(rw_file.workspace_path.path)
                 if (
@@ -264,7 +253,8 @@ class SubmitTool(
                     or target_to_check.endswith("/" + ws_path)
                 ):
                     disk_path = str(Path(ws_root) / ws_path) if ws_root else ws_path
-                    if bool(getattr(meta_mgr, "has_modifications", False)):
+                    meta_mgr_any: Any = meta_mgr
+                    if bool(meta_mgr_any.has_modifications if hasattr(meta_mgr_any, "has_modifications") else False):
                         has_mods = True
                     else:
                         try:
@@ -279,7 +269,8 @@ class SubmitTool(
                     if os.path.isabs(target_to_check)
                     else (str(Path(ws_root) / target_to_check) if ws_root else target_to_check)
                 )
-                if bool(getattr(meta_mgr, "has_modifications", False)):
+                meta_mgr_any = meta_mgr
+                if bool(meta_mgr_any.has_modifications if hasattr(meta_mgr_any, "has_modifications") else False):
                     has_mods = True
                 else:
                     try:
@@ -287,10 +278,11 @@ class SubmitTool(
                     except Exception:
                         has_mods = False
         else:
-            for rw_file in getattr(node_cfg, "read_write_files", []):
+            for rw_file in (node_cfg.read_write_files or ()):
                 ws_path = str(rw_file.workspace_path.path)
                 disk_path = str(Path(ws_root) / ws_path) if ws_root else ws_path
-                if bool(getattr(meta_mgr, "has_modifications", False)):
+                meta_mgr_any = meta_mgr
+                if bool(meta_mgr_any.has_modifications if hasattr(meta_mgr_any, "has_modifications") else False):
                     has_mods = True
                     break
                 try:
@@ -299,7 +291,8 @@ class SubmitTool(
                         break
                 except Exception:
                     pass
-            if not has_mods and bool(getattr(meta_mgr, "has_modifications", False)):
+            meta_mgr_any = meta_mgr
+            if not has_mods and bool(meta_mgr_any.has_modifications if hasattr(meta_mgr_any, "has_modifications") else False):
                 has_mods = True
         raw_summary = actual_parameter_bindings.get(self.change_summary_parameter)
         change_summary_str = (
@@ -353,9 +346,7 @@ class SubmitTool(
         )
 
 
-class FailTool(
-    submission.FailTool, InTier[AgentSessionTier], Singleton
-):
+class FailTool(submission.FailTool):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -470,9 +461,7 @@ def _match_blame_target(
     return None
 
 
-class BlameTool(
-    submission.BlameTool, InTier[AgentSessionTier], Singleton
-):
+class BlameTool(submission.BlameTool):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -580,16 +569,16 @@ class BlameTool(
         coord = get_singleton(coordinate.SessionCoordinator)
         run_ctrl = get_singleton(run_control.RunController)
 
-        raw_target = actual_parameter_bindings.get(self.target_parameter)
+        raw_target_any: Any = actual_parameter_bindings.get(self.target_parameter)
         target_alias = (
-            str(getattr(raw_target, "relative_path", raw_target))
-            if raw_target is not None
+            str(raw_target_any.relative_path if hasattr(raw_target_any, "relative_path") else raw_target_any)
+            if raw_target_any is not None
             else None
         )
-        raw_blame = actual_parameter_bindings.get(self.blame_target_parameter)
+        raw_blame_any: Any = actual_parameter_bindings.get(self.blame_target_parameter)
         blame_alias = (
-            str(getattr(raw_blame, "relative_path", raw_blame))
-            if raw_blame is not None
+            str(raw_blame_any.relative_path if hasattr(raw_blame_any, "relative_path") else raw_blame_any)
+            if raw_blame_any is not None
             else None
         )
 
@@ -711,40 +700,35 @@ class BlameTool(
                 content=tool_provider.ToolResponseContent(outcome.message),
             )
 
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T18:30:00Z
+# CHANGE: Define submission_impl realization
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
+
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Registers constituent singletons into the lifecycle registry."""
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         SubmitTool,
-        keys=[
-            SubmitTool,
-            submission.SubmitTool,
-            run_control.SubmitTool,
-            InTier[AgentSessionTier],
-        ],
+        keys=[SubmitTool, submission.SubmitTool, run_control.SubmitTool],
         tier=agent_session,
     )
     reg.register_singleton(
         FailTool,
-        keys=[
-            FailTool,
-            submission.FailTool,
-            run_control.FailTool,
-            InTier[AgentSessionTier],
-        ],
+        keys=[FailTool, submission.FailTool, run_control.FailTool],
         tier=agent_session,
     )
     reg.register_singleton(
         BlameTool,
-        keys=[
-            BlameTool,
-            submission.BlameTool,
-            run_control.BlameTool,
-            InTier[AgentSessionTier],
-        ],
+        keys=[BlameTool, submission.BlameTool, run_control.BlameTool],
         tier=agent_session,
     )
 
 
 _initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

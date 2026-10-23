@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-07T00:00:00Z
-CHANGE: new file
-CODE_HASH: 8f4587055edf
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # manifest_loader interface component
 
 imports: node_storage, dag_storage, file_alias
@@ -33,3 +25,10 @@ The uv manifest loader resolves manifests into target nodes, node definitions, a
 The uv manifest loader resolves declared silent dependencies as non-propagating dependencies in node storage, and synthesizes definitions for declared dependencies that lack an explicit manifest.
 
 The uv manifest loader synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when the component type of a unit is not active for a role.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-07T00:00:00Z
+CHANGE: new file
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

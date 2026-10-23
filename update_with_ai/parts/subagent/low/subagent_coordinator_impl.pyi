@@ -1,16 +1,8 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_coordinator_impl implementation low-level specification
-# CODE_HASH: a6132ac91315
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Low-level implementation specification for subagent_coordinator_impl."""
 
 from typing import Optional, Sequence
-from framework import operation, override, singleton_type
-from support.lib.lifecycle import InTier
+from support.lib.framework import operation, override, singleton_type
+from support.lib.lifecycle import Singleton
 import session as agent_session
 import subagent_coordinator
 import provision
@@ -19,10 +11,7 @@ import work
 
 
 @singleton_type("agent_session")
-class SubagentCoordinator(
-    subagent_coordinator.SubagentCoordinator,
-    InTier[agent_session.AgentSessionTier],
-):
+class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
     """Realizes zero-execution multi-agent workspace coordination across execution waves.
 
     GROUNDING:
@@ -60,12 +49,12 @@ class SubagentCoordinator(
         self,
         wave: Sequence[subagent_coordinator.RoleDispatch],
         harness: subagent_coordinator.HarnessAdapter,
-    ) -> Sequence[subagent_coordinator.RoleTurnResult]:
+    ) -> Sequence[subagent_coordinator.RoleRoundResult]:
         """Dispatches all roles in an execution wave through the harness and awaits results.
 
         GROUNDING:
         - Dispatches each role directive via harness.dispatch_role, awaits each result via
-          harness.await_role, and collects RoleTurnResult instances.
+          harness.await_role, and collects RoleRoundResult instances.
         """
         ...
 
@@ -83,18 +72,20 @@ class SubagentCoordinator(
         poll_interval: Optional[float] = None,
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
+        max_unproductive_rounds: Optional[int] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure.
 
         GROUNDING:
         - Resets preexisting role workspace directories for declared roles via role_registry
           and filesystem operations.
-        - Resolves subagent batch size, token limits, and maximum unproductive turn thresholds from model configurations and persists
+        - Resolves subagent batch size, token limits, and maximum unproductive round thresholds from model configurations and persists
           effective batch sizes into role workspaces.
         - Restricts work discovery and execution to target_node and its transitive dependencies via
           work.WorkspaceWorkManager.compute_role_work_queue when target_node is specified.
-        - Iterates dynamic process supervision until work queues are clean, a turn fails,
-          consecutive unproductive turns exceed the threshold, or max_waves is exceeded,
+        - Iterates dynamic process supervision until work queues are clean, a round fails,
+          consecutive unproductive rounds on unresolved targets exceed the threshold (suppressing unproductive counts and reminders when assigned ready targets are resolved or cleaned in the repository), or max_waves is exceeded,
+          injecting reminder directives into subsequent role dispatches upon unresolved rounds when assigned targets remain unresolved,
           emitting real-time telemetry and aggregating TokenUsage into OrchestrationSummary.
         - Upon clean convergence, deletes provisioned role workspace directories for declared roles in scope.
         - When cancelled or interrupted by signals, interrupts active workers via harness.interrupt_role and deletes provisioned role workspace directories in scope.
@@ -111,3 +102,35 @@ class SubagentCoordinator(
           back to traversing parent directory structure, and returns logs directory path.
         """
         ...
+
+    @operation
+    def resolve_model_parameters(
+        self,
+        repo_root: str,
+        model_name: Optional[str] = None,
+    ) -> tuple[Optional[int], Optional[int], Optional[int]]:
+        """Dynamically resolves subagent batch sizes, token limits, and unproductive round thresholds.
+
+        GROUNDING:
+        - Resolves parameters from model configurations matching model_name, defaulting when absent.
+
+        POSTCONDITIONS:
+        - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
+        """
+        ...
+
+
+def __orphan__() -> None:
+    """Orphan contracts for model configuration and parameter resolution.
+
+    POSTCONDITIONS:
+    - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
+    """
+    ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-20T23:45:00Z
+# CHANGE: Suppress unproductive rounds and scolding reminders when assigned targets are resolved or cleaned in the repository
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

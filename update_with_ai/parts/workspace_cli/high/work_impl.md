@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-18T01:30:00Z
-CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
-CODE_HASH: 784c08018e50
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
--->
-
 # work_impl implementation component
 
 imports: session, cleanroom_files_ext, work_scheduler, dag_storage, src_metadata, dirtiness, pending, role_registry
@@ -49,7 +41,7 @@ When evaluating work in a role workspace:
 
 - The work manager inspects the build definitions when present, extracting the imported, implemented, and assembled dependencies from the High-Level Specifications of the unit, or derives dependencies from the filesystem component stems when discovering units and dependencies in a part directory.
 
-- The work manager partitions candidate tasks into ready items whose forward dependencies are clean, and blocked items whose prerequisites remain dirty, bounding presented ready items by the requested batch size when positive and tracking the remaining unpresented ready count.
+- The work manager partitions candidate tasks into ready items whose forward dependencies are clean, and blocked items whose prerequisites remain dirty, evaluating role upstream prerequisites across role dependencies, feedback role dependencies, star role dependencies, and silent role dependencies, bounding presented ready items by the requested batch size when positive and tracking the remaining unpresented ready count.
 
 - The work manager materializes starter templates via graph storage for any ready tasks of roles with declared source patterns and upstream dependencies whose target source files do not exist on disk.
 
@@ -62,3 +54,10 @@ When evaluating work in a role workspace:
 - The work manager enforces fail-loud resolution for unknown roles or unmatched paths, raising explicit exceptions without synthetic fallbacks.
 
 - The work manager compiles the results into a work queue summary detailing ready tasks, dirty reasons, dependency paths, companion contract files, blocked causes, and role-specific instructions.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:47Z
+LAST_CHANGED: 2026-10-19T16:30:00Z
+CHANGE: evaluate role upstream prerequisites across silent role dependencies
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+-->

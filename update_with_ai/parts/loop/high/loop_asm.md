@@ -1,11 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T19:43:57Z
-LAST_CHANGED: 2026-10-11T02:20:00Z
-CHANGE: Reduce the assembly narrative to a single structural sentence and remove constituent naming from prose
-CODE_HASH: 95fde45de97d
-SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
--->
-
 # loop_asm assembly component
 
 assembles: guard_impl, node_cleaner_impl
@@ -23,3 +15,10 @@ Autonomous problem solving requires binding message history formatting, oscillat
 ## Types and Behavior
 
 The loop_asm assembly component aggregates the implementations of the loop cleaner, loop guard, and loop node cleaner interfaces, providing a unified assembly for repetition detection, subgraph cleaning iteration, and node clean execution.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T19:43:57Z
+LAST_CHANGED: 2026-10-11T02:20:00Z
+CHANGE: Reduce the assembly narrative to a single structural sentence and remove constituent naming from prose
+SPEC_QA_AUDIT: 2026-10-15T19:43:57Z
+-->

@@ -1,17 +1,9 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-11T03:44:39Z
-# CHANGE: Scope clean-status postcondition to nodes with a source file, resolving the missing-artifact contradiction
-# CODE_HASH: 147dca269d16
-# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
-# --- END CLEANROOM METADATA ---
-
 """Dag storage low-level interface specification."""
 
 from dataclasses import dataclass
 from typing import NewType, Optional, Protocol, Set
-from framework import data_type, operation, singleton_type, variant
-from support.lib.lifecycle import InTier, SystemTier
+from support.lib.framework import data_type, operation, singleton_type, variant
+from support.lib.lifecycle import Singleton, SystemTier
 
 
 UnitAddress = NewType("UnitAddress", str)
@@ -78,7 +70,7 @@ class FeedbackMessage(DagMessage):
 
 
 @singleton_type("system")
-class DagStorage(InTier[SystemTier], Protocol):
+class DagStorage(Singleton[SystemTier], Protocol):
     """Stores node graph structure, node status, and messages for dag nodes.
 
     INVARIANTS:
@@ -227,3 +219,10 @@ class DagStorage(InTier[SystemTier], Protocol):
         - WHEN source artifact already exists on disk, MUST preserve existing content without overwriting.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:46Z
+# LAST_CHANGED: 2026-10-11T03:44:39Z
+# CHANGE: Scope clean-status postcondition to nodes with a source file, resolving the missing-artifact contradiction
+# SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+# --- END CLEANROOM METADATA ---

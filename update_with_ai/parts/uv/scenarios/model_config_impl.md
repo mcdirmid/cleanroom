@@ -1,10 +1,3 @@
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:20:05Z
-CHANGE: Author uv model_config_impl concrete scenarios
-CODE_HASH: 9136dedfb19b
--->
-
 # Concrete scenarios for `uv_model_config_impl` (implementation)
 
 Scenarios 1 through 18 restate the caller observations of the interface scenarios and add, beside
@@ -392,3 +385,9 @@ Given: the repository root holds the file `model_configs.toml` whose text is
    with ambient credentials substituted for the malformed entry.
    Realized by: reading the declarative configuration files through `filesystem_ext`, whose
    structured failure the component's own propagation reports instead of falling back silently.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-10-11T03:20:05Z
+CHANGE: Author uv model_config_impl concrete scenarios
+-->

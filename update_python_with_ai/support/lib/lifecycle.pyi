@@ -1,10 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-07T05:04:27Z
-# LAST_CHANGED: 2026-10-04T02:03:40Z
-# CHANGE: new file
-# CODE_HASH: adc1357923e2
-# --- END CLEANROOM METADATA ---
-
 '''
 # Cleanroom Lifecycle Management Specification & Usage Guide
 
@@ -180,6 +173,7 @@ from typing import (
     Protocol,
     Sequence,
     TypeVar,
+    runtime_checkable,
 )
 
 T = TypeVar("T")
@@ -218,14 +212,19 @@ class SystemTier(RootTier):
     ...
 
 
-class InTier[T: LifecycleTier](Protocol):
-    """Marker protocol indicating membership in a specific lifecycle tier.
+@runtime_checkable
+class Singleton[T: LifecycleTier](Protocol):
+    """Protocol representing a singleton service scoped to a lifecycle tier.
 
-    Active services inheriting InTier[TierType] statically declare that they belong
-    to TierType (e.g. InTier[SystemTier]), allowing static analysis, IDEs, and Groundtalk
-    solvers to reason about singleton visibility and collaborator reachability.
+    Active services inheriting Singleton[TierType] statically declare that they belong
+    to TierType (e.g. Singleton[SystemTier]), allowing static analysis, IDEs, and Cleanroom
+    tools to reason about singleton visibility and collaborator reachability.
     """
     ...
+
+
+InTier = Singleton
+Initializable = Singleton
 
 
 system: SystemTier
@@ -259,13 +258,7 @@ def get_tier[T: LifecycleTier](tier_type: type[T]) -> T:
     ...
 
 
-class Singleton:
-    tier: LifecycleTier
-    def __init__(self, tier: Optional[LifecycleTier | str] = None) -> None: ...
-    def initialize(self) -> None: ...
 
-
-Initializable = Singleton
 
 
 class SingletonDescriptor:
@@ -397,3 +390,10 @@ def singleton(
     phase: LifecycleTier | str = ...,
     registry: Optional[LifecycleRegistry] = None,
 ) -> Callable[[type[T]], type[T]]: ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-07T05:04:27Z
+# LAST_CHANGED: 2026-10-04T02:03:40Z
+# CHANGE: new file
+# CODE_HASH: adc1357923e2
+# --- END CLEANROOM METADATA ---

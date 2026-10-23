@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-18T01:04:33Z
-# LAST_CHANGED: 2026-10-07T00:00:00Z
-# CHANGE: new file
-# CODE_HASH: dc7f16653653
-# COVERAGE_AUDIT: 2026-10-18T01:04:33Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Cleanroom UV model and runtime configuration implementation."""
 
 from __future__ import annotations
@@ -279,7 +270,7 @@ def _get_config_data() -> _ConfigData:
     return _ConfigData()
 
 
-class AgentConfig(agent_config.AgentConfig, Singleton):
+class AgentConfig(agent_config.AgentConfig):
     tier = system
 
     def __init__(self) -> None:
@@ -316,7 +307,7 @@ class AgentConfig(agent_config.AgentConfig, Singleton):
         return agent_config.SupersedeArgKeepLimit(self._cfg.supersede_arg_keep)
 
 
-class DagConfig(dag_config.DagConfig, Singleton):
+class DagConfig(dag_config.DagConfig):
     tier = system
 
     def __init__(self) -> None:
@@ -333,7 +324,7 @@ class DagConfig(dag_config.DagConfig, Singleton):
         return dag_config.BatchSize(self._cfg.batch_size)
 
 
-class OpenAIConfig(openai_config.OpenAIConfig, Singleton):
+class OpenAIConfig(openai_config.OpenAIConfig):
     tier = system
 
     def __init__(self) -> None:
@@ -380,6 +371,13 @@ class OpenAIConfig(openai_config.OpenAIConfig, Singleton):
             if self._cfg.max_tokens is not None
             else None
         )
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-18T01:04:33Z
+# LAST_CHANGED: 2026-10-07T00:00:00Z
+# CHANGE: new file
+# COVERAGE_AUDIT: 2026-10-18T01:04:33Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---

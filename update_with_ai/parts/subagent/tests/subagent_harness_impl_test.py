@@ -1,12 +1,3 @@
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T11:00:00Z
-# CHANGE: turn down support for goose, supporting only antigravity and dsh
-# CODE_HASH: d2816dd91149
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
-# --- END CLEANROOM METADATA ---
-
 """Unit tests for subagent_harness_impl."""
 
 from __future__ import annotations
@@ -217,7 +208,7 @@ class SubagentHarnessImplTest(unittest.TestCase):
             self.assertIn("timed out", str(result.failure_reason))
 
     def test_parsing_token_metrics_from_execution_logs(self) -> None:
-        """Scenario 7: Parses token reporting from turn logs into normalized token telemetry."""
+        """Scenario 7: Parses token reporting from round/step logs into normalized token telemetry."""
         with enter_phase(agent_session.agent_session, registry=self.registry):
             adapter = subagent_harness_impl.CommandHarnessAdapter(simulation_mode=True)
             dispatch = subagent_coordinator.RoleDispatch(
@@ -228,22 +219,23 @@ class SubagentHarnessImplTest(unittest.TestCase):
             )
             handle = adapter.dispatch_role(dispatch)
 
-            # Write fake turn log
-            log_path = adapter._active_tasks[handle].log_file
+            # Write fake step log
+            log_dir = subagent_coordinator.resolve_cleanroom_log_dir(self.test_dir)
+            log_path = os.path.join(log_dir, f".cleanroom_round_{handle}.log")
             with open(log_path, "w", encoding="utf-8") as lf:
                 lf.write(
-                    "[Turn 1] Input tokens: 1000\n"
-                    "[Turn 1] Cached tokens: 500\n"
-                    "[Turn 1] Output tokens: 200\n"
-                    "[Turn 2] Model request: 10K tokens, 50% cached\n"
+                    "[Step 1] Input tokens: 1000\n"
+                    "[Step 1] Cached tokens: 500\n"
+                    "[Step 1] Output tokens: 200\n"
+                    "[Step 2] Model request: 10K tokens, 50% cached\n"
                 )
 
             result = adapter.await_role(handle)
             tel = result.telemetry
             self.assertIsNotNone(tel)
             assert tel is not None
-            # Turn 1: 1000 in, 500 cached, 200 out
-            # Turn 2: 10,000 total (50% cached = 5000 cached, 5000 uncached)
+            # Step 1: 1000 in, 500 cached, 200 out
+            # Step 2: 10,000 total (50% cached = 5000 cached, 5000 uncached)
             # Total in: 1000 + 5000 = 6000
             # Total cached: 500 + 5000 = 5500
             # Total out: 200
@@ -256,3 +248,11 @@ class SubagentHarnessImplTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-14T11:00:00Z
+# CHANGE: turn down support for goose, supporting only antigravity and dsh
+# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
