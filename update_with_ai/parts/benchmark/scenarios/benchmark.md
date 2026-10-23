@@ -53,7 +53,17 @@ Given: a completed flight record and benchmark unit with synthesized library, te
 3. The caller requests artifact archival for a flight record whose verification outcomes indicate failure.
    Observed: returns None and skips writing files to the results directory.
 
-## Scenario 7 — Querying suite catalogs and harvesting telemetry logs
+## Scenario 8 — Baseline flight recording and execution
+
+Given: a benchmark evaluator and a baseline flight request with an autonomous subagent harness.
+
+1. The caller executes a baseline flight.
+   Observed: the caller provides the low-level specification and instructs the agent to consult it, create the two-file library structure in `lib/`, test `_impl.py`, and achieve 100% test coverage with opt-outs, exactly one execution round is tallied under role `baseline`, stages executed reflects baseline, and methodology is `baseline`.
+
+2. The caller attempts baseline execution under the loop harness.
+   Observed: rejects execution or raises an error because the loop harness does not support single-agent baseline evaluation.
+
+## Scenario 9 — Querying suite catalogs and harvesting telemetry logs
 
 Given: the benchmark evaluator service and a suite catalog containing suite `dag_engine`.
 

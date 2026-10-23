@@ -72,7 +72,7 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
             self.assertEqual(role_build.role_name, "build_role")
 
             # 2. TOML takes precedence over BUILD.bazel
-            toml_file = os.path.join(tmp_root, "cleanroom_python_roles.toml")
+            toml_file = os.path.join(tmp_root, "cleanroom_roles.toml")
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
                     '[roles.toml_role]\n'

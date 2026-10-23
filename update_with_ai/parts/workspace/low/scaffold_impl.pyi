@@ -26,7 +26,8 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
 
         GROUNDING:
         - Packages self-contained executable runner zipapp wrappers into bin_dir with 0o755
-          permissions, configuring runner import paths bounded strictly to the active role workspace
+          permissions, embedding the active methodology cleanroom_files_ext.CLEANROOM_ROLES_FILE manifest inside the archive,
+          configuring runner import paths bounded strictly to the active role workspace
           root on sys.path without injecting arbitrary workspace subdirectories onto sys.path,
           isolating runner execution from the canonical repository root in sys.path, packaging blame
           only when role_def declares feedback capability or auditor tags, and omitting blame for

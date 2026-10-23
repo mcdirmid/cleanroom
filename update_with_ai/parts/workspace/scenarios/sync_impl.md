@@ -79,10 +79,10 @@ changed the tool runner, the project configuration, and the guide file
 `guides/alpha_guide.md`.
 
 1. The synchronizer refreshes the non-parts system files for alpha.
-   Observed: the workspace tool runner, project configuration, promoted methodology assets (`./support/lib/`, `./guides/`, `./templates/`, `./cleanroom_roles.toml`, `./pyright_spec.json`), and guide hold the canonical
+   Observed: the workspace tool runner, project configuration, runtime support libraries (`./support/lib/`), and assigned guide hold the canonical
    content, and the locally modified alpha source for widget is untouched.
    Realized by: the component's own system file refresh, which recopies project
-   configurations, promoted methodology assets belonging exclusively to the active methodology binding, and guides while skipping every in-scope source file and without copying unbound repository root directories, and delegation of runner
+   configurations, runtime support libraries belonging exclusively to the active methodology binding, and the assigned guide while skipping every in-scope source file and without copying unbound repository root directories, and delegation of runner
    deployment, role guide regeneration, and test stub synchronization to `provision`.
 
 ### Scenario 6 — Harvesting validated targets and an auditor audit

@@ -27,7 +27,7 @@ When pulling changes from the canonical main repository into a role workspace, t
 
 - Deletes the files within the role workspace scope that no longer exist in the canonical main repository.
 
-When refreshing system files, the workspace synchronizer recopies project configurations, promoted methodology assets (`./support/lib/`, `./guides/`, `./templates/`, `./cleanroom_roles.toml`, `./pyright_spec.json`), and linters belonging exclusively to the active methodology binding from the main repository into the role workspace root without scanning or mirroring unbound repository root directories, delegates runner packaging, role guide regeneration, and test stub synchronization to workspace provisioning without touching an in-scope source file, and validates that every stub role dependency file remains a read-only test stub.
+When refreshing system files, the workspace synchronizer recopies project configurations, runtime support libraries (`./support/lib/`), and the role's assigned companion guide (`./guides/`) belonging exclusively to the active methodology binding from the main repository into the role workspace root without copying templates, unneeded configuration files (`cleanroom_roles.toml`, `pyright_spec.json`), redundant package directories, or unbound repository root directories, delegates runner packaging, role guide regeneration, and test stub synchronization to workspace provisioning without touching an in-scope source file, and validates that every stub role dependency file remains a read-only test stub.
 
 When harvesting changes from a role workspace back to the canonical main repository, the workspace synchronizer performs two-phase synchronization:
 

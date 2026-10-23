@@ -17,7 +17,7 @@ Parsing role configuration declarations from diverse TOML and repository build f
 
 An agent session's *role resolver* realizes role configuration resolution and validation as a session service.
 
-The role resolver parses role declarations from declarative configuration files or build file AST representations, normalizing source path patterns into writable and read-only glob patterns.
+The role resolver parses role declarations from declarative configuration files (`cleanroom_roles.toml`), in-memory cache, bundled runner zipapp archives, or build file AST representations, normalizing source path patterns into writable and read-only glob patterns and decoupling tool execution from workspace root configuration files.
 
 The role resolver validates declaration constraints across role dependencies, failing when feedback or star dependencies are duplicated in role dependencies, when dependencies are declared as both active and silent, or when auditor roles are declared outside silent role dependencies.
 

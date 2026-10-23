@@ -70,15 +70,9 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
             rel_pkg = meth.lstrip("./").lstrip("/")
             toml_path = os.path.join(root, rel_pkg, "cleanroom_roles.toml")
             if not os.path.isfile(toml_path):
-                cand = os.path.join(root, rel_pkg, "cleanroom_python_roles.toml")
-                if os.path.isfile(cand):
-                    toml_path = cand
-            if not os.path.isfile(toml_path):
-                for root_cand in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
-                    c_path = os.path.join(root, root_cand)
-                    if os.path.isfile(c_path):
-                        toml_path = c_path
-                        break
+                c_path = os.path.join(root, "cleanroom_roles.toml")
+                if os.path.isfile(c_path):
+                    toml_path = c_path
             canon_meth = f"//{rel_pkg}"
         else:
             canon_meth = meth

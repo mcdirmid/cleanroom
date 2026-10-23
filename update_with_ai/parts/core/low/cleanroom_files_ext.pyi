@@ -12,7 +12,6 @@ The `cleanroom_files_ext` external component specifies the filesystem schema, st
 
 - `CLEANROOM_ROLES_FILE: str = "cleanroom_roles.toml"`:
   Canonical role definitions file located within methodology packages or at repository root.
-  - Secondary fallback name: `CLEANROOM_PYTHON_ROLES_FILE: str = "cleanroom_python_roles.toml"`.
   - Schema:
     - `[methodology]`: Table with `name: str` and `description: str`.
     - `[roles.<role_name>]`: Table defining role attributes:

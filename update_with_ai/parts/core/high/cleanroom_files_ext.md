@@ -16,7 +16,7 @@ Grounding gaps covered include:
 
 - Cleanroom methodology binding schema: Defines `cleanroom.toml`, containing the scoped `methodology` address attribute that binds a package hierarchy to its methodology specification package. In a Cleanroom project, `cleanroom.toml` should be present in the `parts` directory (not workspace).
 
-- Role definitions schema: Defines `cleanroom_roles.toml` and `cleanroom_python_roles.toml`, containing methodology metadata and the role definition table that specifies persona descriptions, source patterns, prompt templates, verification check templates, guide paths, step mode eligibility, component types, and role dependencies.
+- Role definitions schema: Defines `cleanroom_roles.toml`, containing methodology metadata and the role definition table that specifies persona descriptions, source patterns, prompt templates, verification check templates, guide paths, step mode eligibility, component types, and role dependencies.
 
 - Role workspace descriptor schema: Defines `.cleanroom_role.json`, containing provisioned role workspace attributes including role name, directory scope, and canonical repository root.
 

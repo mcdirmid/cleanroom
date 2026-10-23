@@ -134,12 +134,11 @@ unbound directory, and the stub role dependency beta supplies `beta/lib/beta.py`
 
 1. The provisioner commissions the alpha workspace.
    Observed: the workspace holds the project configuration and the part build definition with the
-   same content as the main repository, the bound methodology runtime support libraries, companion guides,
-   starter templates, and methodology configurations are projected directly to `./support/lib`, `./guides`,
-   `./templates`, and `./cleanroom_roles.toml` at the workspace root with read-only permissions, the unbound
+   same content as the main repository, the bound methodology runtime support libraries are projected
+   directly to `./support/lib` and the assigned companion guide to `./guides` at the workspace root with read-only permissions, unneeded templates and configuration files are omitted, the unbound
    directory is not copied into the workspace, and the stub for beta raises `NotImplementedError` instead of carrying `def beta(): return 7`.
    Realized by: the component's own selective copying, which passes build definitions, project
-   configuration, and package initializers through, projects bound methodology assets to the workspace root
+   configuration, and package initializers through, projects bound runtime support and the assigned guide to the workspace root
    without copying unbound repository root directories, while routing stub role dependencies to stub synthesis.
 
 ### Scenario 9 — Type checking covers the workspace without exclusions

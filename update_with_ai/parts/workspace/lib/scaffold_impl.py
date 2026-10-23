@@ -365,6 +365,87 @@ def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
     return pycs
 
 
+def _find_roles_toml_content(bin_dir: str) -> Optional[bytes]:
+    """Locates and reads canonical cleanroom_roles.toml content for bundling into runner zipapps."""
+    repo_root = os.environ.get("CLEANROOM_MAIN_ROOT")
+    if not repo_root or not os.path.isdir(repo_root):
+        ws_dir = os.path.dirname(bin_dir)
+        parent = os.path.dirname(ws_dir)
+        if os.path.basename(parent) == "role_workspaces":
+            p_root = os.path.dirname(parent)
+            ws_base = os.path.basename(ws_dir)
+            try:
+                for entry in sorted(os.listdir(p_root), key=len, reverse=True):
+                    if entry != "role_workspaces" and ws_base.startswith(f"{entry}_"):
+                        cand = os.path.join(p_root, entry)
+                        if os.path.isdir(cand):
+                            repo_root = cand
+                            break
+            except OSError:
+                pass
+    if not repo_root or not os.path.isdir(repo_root):
+        try:
+            cand = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+            if os.path.isdir(cand) and (
+                os.path.isfile(os.path.join(cand, "cleanroom.toml"))
+                or os.path.isfile(os.path.join(cand, "pyproject.toml"))
+            ):
+                repo_root = cand
+        except Exception:
+            pass
+
+    if repo_root and os.path.isdir(repo_root):
+        cand = os.path.join(repo_root, "cleanroom_roles.toml")
+        if os.path.isfile(cand):
+            try:
+                with open(cand, "rb") as f:
+                    return f.read()
+            except OSError:
+                pass
+        try:
+            for sub in os.listdir(repo_root):
+                cand = os.path.join(repo_root, sub, "cleanroom_roles.toml")
+                if os.path.isfile(cand):
+                    try:
+                        with open(cand, "rb") as f:
+                            return f.read()
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+
+    for p in sys.path:
+        if p and os.path.isdir(p):
+            cand = os.path.join(p, "cleanroom_roles.toml")
+            if os.path.isfile(cand):
+                try:
+                    with open(cand, "rb") as f:
+                        return f.read()
+                except OSError:
+                    pass
+            try:
+                for sub in os.listdir(p):
+                    cand = os.path.join(p, sub, "cleanroom_roles.toml")
+                    if os.path.isfile(cand):
+                        try:
+                            with open(cand, "rb") as f:
+                                return f.read()
+                        except OSError:
+                            pass
+            except OSError:
+                pass
+
+    try:
+        import importlib.resources
+        data = importlib.resources.files("update_python_with_ai").joinpath("cleanroom_roles.toml").read_bytes()
+        if data:
+            return data
+    except Exception:
+        pass
+
+    return None
+
+
 def package_runner_zipapps(bin_dir: str, can_blame: bool = True) -> None:
     """Packages runner zipapps into bin_dir with executable permissions."""
     os.makedirs(bin_dir, exist_ok=True)
@@ -394,6 +475,7 @@ def package_runner_zipapps(bin_dir: str, can_blame: bool = True) -> None:
             pass
 
     pycs = _collect_and_compile_runner_pycs(bin_dir)
+    roles_toml_bytes = _find_roles_toml_content(bin_dir)
 
     for tool_name, cmd in tools.items():
         tool_path = os.path.join(bin_dir, tool_name)
@@ -435,6 +517,10 @@ if __name__ == "__main__":
             f.write(b"#!/usr/bin/env python3\n")
             with zipfile.ZipFile(f, "w", compression=zipfile.ZIP_DEFLATED) as z:
                 z.writestr("__main__.py", runner_code)
+                if roles_toml_bytes is not None:
+                    z.writestr("cleanroom_roles.toml", roles_toml_bytes)
+                    z.writestr("support/cleanroom_roles.toml", roles_toml_bytes)
+                    z.writestr("update_python_with_ai/cleanroom_roles.toml", roles_toml_bytes)
                 for arcname, pyc_bytes in pycs.items():
                     z.writestr(arcname, pyc_bytes)
         try:

@@ -63,6 +63,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         wait_for_convergence: bool = True,
         timeout: Optional[float] = None,
         antigravity_dispatch: str = "message",
+        baseline: bool = False,
     ) -> benchmark.FlightRecord:
         """Executes a benchmark flight for a designated model and unit.
 
@@ -75,6 +76,9 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
 
         POSTCONDITIONS:
         - MUST execute the flight under the requested harness or simulation mode.
+        - WHEN baseline is True and harness is 'loop', MUST raise ValueError rejecting loop harness.
+        - WHEN baseline is True, MUST record exactly one execution round under baseline role.
+        - WHEN baseline is True, MUST provide the low-level specification and instruct the developer agent to consult it, implement the two-file library structure in lib/, test _impl.py, and achieve 100% test coverage with opt-outs.
         - MUST harvest telemetry and evaluate verification gates.
         - MUST return a flight record with complete empirical measurements.
         - MUST skip artifact archival and workspace draining when dry_run is True.
@@ -101,7 +105,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
 
         POSTCONDITIONS:
         - WHEN record.verification_outcomes indicates failure (unit_tests_failed > 0, unit_tests_passed == 0, pyright_errors > 0, or spec_linter_pass is False), MUST skip archival and return None.
-        - WHEN verification gates pass and synthesized source files are present, MUST resolve directory under <results_dir>/<benchmark-id>/<model-name+harness-name>/.
+        - WHEN verification gates pass and synthesized source files are present, MUST resolve directory under <results_dir>/<benchmark-id>/<model-name+harness-name>/ (or appending -baseline for baseline methodology).
         - MUST resolve the next sequential run index N and copy the library file as lib_<N>.py and the test file as test_<N>.py.
         - MUST prepend flight telemetry metrics, role execution rounds, and verification outcomes as comments to lib_<N>.py.
         - MUST preserve multi-file library implementations within lib_<N>.py.

@@ -74,8 +74,8 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         - Resolves the canonical repository root and role context of the synchronized workspace
           through role_registry.WorkspaceRegistry.discover_repository_root and
           role_registry.WorkspaceDescriptor before recopying system files from that root.
-        - Recopies project configurations, promoted methodology assets (./support/lib/, ./guides/, ./templates/, cleanroom_files_ext.CLEANROOM_ROLES_FILE, ./pyright_spec.json) belonging exclusively to the active methodology binding, and linters from main into the workspace root
-          using provision.WorkspaceProvisioner.copy_file_with_permissions without scanning or copying unbound repository root directories and without altering writable targets.
+        - Recopies project configurations, runtime support libraries (./support/lib/), and the assigned companion guide (./guides/) belonging exclusively to the active methodology binding from main into the workspace root
+          using provision.WorkspaceProvisioner.copy_file_with_permissions without copying templates, unneeded configuration files, or unbound repository root directories and without altering writable targets.
         - Delegates runner packaging to provision.WorkspaceProvisioner.deploy_runner_zipapps,
           role guide regeneration to provision.WorkspaceProvisioner.write_role_agents_guide,
           and test stub synchronization to provision.WorkspaceProvisioner.sync_test_stubs.

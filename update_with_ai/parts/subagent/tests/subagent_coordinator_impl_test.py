@@ -773,6 +773,29 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
+    def test_resolve_model_parameters_falls_back_to_candidate_config(self) -> None:
+        """Requirement: MUST resolve model configuration from candidate path when absent in repo root."""
+        tmp_dir = tempfile.mkdtemp()
+        cand_dir = tempfile.mkdtemp()
+        old_env = os.environ.get("CLEANROOM_MODEL_CONFIG_FILE")
+        try:
+            cand_cfg = os.path.join(cand_dir, "model_configs.toml")
+            with open(cand_cfg, "w", encoding="utf-8") as f:
+                f.write('[models.qwen_test]\nsubagent_batch_size = 3\nconversation_max_tokens = 96000\nmax_unproductive_rounds = 3\n')
+            os.environ["CLEANROOM_MODEL_CONFIG_FILE"] = cand_cfg
+
+            batch, tokens, unprod = resolve_model_parameters(tmp_dir, "qwen_test")
+            self.assertEqual(batch, 3)
+            self.assertEqual(tokens, 96000)
+            self.assertEqual(unprod, 3)
+        finally:
+            if old_env is not None:
+                os.environ["CLEANROOM_MODEL_CONFIG_FILE"] = old_env
+            else:
+                os.environ.pop("CLEANROOM_MODEL_CONFIG_FILE", None)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            shutil.rmtree(cand_dir, ignore_errors=True)
+
     def test_stress_multi_wave_deep_diamond_and_star_dependency_hierarchy(self) -> None:
         """Requirement: MUST iterate through multi-wave deep diamond and star dependency hierarchies until convergence."""
         fake_reg = FakeWorkspaceRegistry([

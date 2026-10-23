@@ -41,6 +41,37 @@ def resolve_model_parameters(
         return None, None, None
     cfg_path = os.path.join(repo_root, "model_configs.toml")
     if not os.path.isfile(cfg_path):
+        env_cfg = os.environ.get("CLEANROOM_MODEL_CONFIG_FILE")
+        if env_cfg and os.path.isfile(env_cfg):
+            cfg_path = env_cfg
+        elif model_name:
+            candidates = [
+                os.path.join(os.path.dirname(repo_root), "model_configs.toml"),
+            ]
+            try:
+                from support.lib import app_info
+                candidates.append(app_info.get_user_model_config_file())
+                candidates.append(app_info.get_template_model_config_file())
+            except Exception:
+                try:
+                    from update_with_ai.support.lib import app_info
+                    candidates.append(app_info.get_user_model_config_file())
+                    candidates.append(app_info.get_template_model_config_file())
+                except Exception:
+                    try:
+                        from update_python_with_ai.support.lib import app_info
+                        candidates.append(app_info.get_user_model_config_file())
+                        candidates.append(app_info.get_template_model_config_file())
+                    except Exception:
+                        candidates.append(os.path.expanduser("~/.config/cleanroom/model_configs.toml"))
+            for cand in candidates:
+                if cand and os.path.isfile(cand):
+                    cfg_path = cand
+                    break
+        else:
+            return None, None, None
+
+    if not cfg_path or not os.path.isfile(cfg_path):
         return None, None, None
     try:
         with open(cfg_path, "rb") as f:

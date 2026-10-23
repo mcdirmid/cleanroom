@@ -43,7 +43,7 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
         """Commissions an isolated role workspace with permission boundaries.
 
         POSTCONDITIONS:
-        - MUST create the role workspace working tree by copying workspace roots, project configurations, and build definitions, resolving the target scope's bound methodology package from cleanroom_files_ext.CLEANROOM_CONFIG_FILE, and projecting only active methodology runtime support libraries, companion guides, starter templates, and configurations directly to the workspace root, while strictly ignoring unbound repository root directories.
+        - MUST create the role workspace working tree by copying workspace roots, project configurations, and build definitions, resolving the target scope's bound methodology package from cleanroom_files_ext.CLEANROOM_CONFIG_FILE, and projecting active methodology runtime support libraries directly to ./support/lib and the role's assigned companion guide to ./guides, while strictly avoiding copying templates, unneeded configuration files, or unbound repository root directories.
         - MUST configure type-checking to cover the workspace without directory exclusions.
         - WHEN a declared writable target file does not yet exist on disk, MUST create a missing target skeleton.
         - WHEN reset is true, MUST clear stale pending work buffers in the workspace.
@@ -56,9 +56,9 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
           working tree through role_registry.WorkspaceRegistry.compute_workspace_dir.
         - Creates the role workspace working tree by copying workspace roots, project
           configurations, and build definitions into the computed workspace directory,
-          projecting active methodology runtime support libraries to ./support/lib,
-          companion guides to ./guides, starter templates to ./templates, and
-          configurations (cleanroom_files_ext.CLEANROOM_ROLES_FILE, pyright_spec.json) directly to the workspace root,
+          projecting active methodology runtime support libraries to ./support/lib and
+          the assigned companion guide to ./guides, while omitting templates, unneeded
+          configuration files, and unbound repository root directories,
           and configures type-checking to cover the workspace without directory exclusions.
         - Creates a missing target skeleton for a declared writable target file matching
           role_registry.RoleDefinition.writable_file_patterns when that file does not

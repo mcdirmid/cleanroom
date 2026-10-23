@@ -95,9 +95,19 @@ Given: an active Antigravity environment with `ANTIGRAVITY_CONVERSATION_ID` set.
 1. The benchmark evaluator executes a flight under the `antigravity` harness.
    Observed: persists `.cleanroom/active_flight.json` recording flight metadata, invokes `bin/cleanroom clean` which dispatches coordination via `agentapi`, monitors DAG convergence, cleans up active flight state on completion, and evaluates verification gates.
 
+## Scenario 12 — Traditional single-agent baseline flight execution and loop prohibition
+
+Given: the benchmark evaluator and CLI argument parser.
+
+1. The caller runs `cleanroom benchmark` with `--baseline` and `--harness loop`.
+   Observed: rejects execution with an exit code of 1 and outputs an error indicating the loop harness is not supported for baseline benchmarks.
+
+2. The caller runs a baseline flight in simulation mode or with an autonomous harness.
+   Observed: the agent is provided with and instructed to inspect the low-level specification stubs (`low/*.pyi`), implement the two-file library structure in `lib/`, test `_impl.py`, and achieve 100% test coverage with opt-outs, returns a flight record with methodology `baseline`, stages executed `["baseline"]`, exactly one role round tallied under `baseline`, and archives passing artifacts under a baseline results destination.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-19T18:45:00Z
-LAST_CHANGED: 2026-10-22T23:10:00Z
-CHANGE: Update scenarios 2 and 3 to reference discovered benchmark parts
+LAST_CHANGED: 2026-10-23T11:10:00Z
+CHANGE: Add scenario 12 for baseline flight execution and loop harness prohibition
 SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 -->

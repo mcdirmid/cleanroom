@@ -7,6 +7,7 @@ import sys
 import tempfile
 from typing import Any, Optional, Sequence
 import unittest
+import zipfile
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
 from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.workspace.lib import (
@@ -179,8 +180,9 @@ class FakeWorkspaceScaffolder:
             tools.append("blame")
         for tool in tools:
             p = os.path.join(bin_dir, tool)
-            with open(p, "w", encoding="utf-8") as f:
-                f.write("#!/bin/sh\n")
+            with zipfile.ZipFile(p, "w") as zf:
+                zf.writestr("__main__.py", "#!/usr/bin/env python3\n")
+                zf.writestr("cleanroom_roles.toml", "[roles.qa]\nname = 'qa'\naudit_tag = 'QA_AUDIT'\n")
             os.chmod(p, 0o755)
 
     def write_role_metadata(
@@ -344,14 +346,14 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             parts_d = os.path.join(repo_root, "test_scope", "parts")
             os.makedirs(parts_d, exist_ok=True)
             with open(os.path.join(parts_d, "cleanroom.toml"), "w", encoding="utf-8") as f:
-                f.write('methodology = "cleanroom_python_roles.toml"\n')
+                f.write('methodology = "cleanroom_roles.toml"\n')
 
             # Project configurations and legacy Bazel files in repo root
             with open(os.path.join(repo_root, ".python-version"), "w", encoding="utf-8") as f:
                 f.write("3.12.0\n")
             with open(os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8") as f:
                 f.write("[project]\nname = 'test'\n")
-            with open(os.path.join(repo_root, "cleanroom_python_roles.toml"), "w", encoding="utf-8") as f:
+            with open(os.path.join(repo_root, "cleanroom_roles.toml"), "w", encoding="utf-8") as f:
                 f.write(
                     "[methodology]\nname = 'python'\n\n"
                     "[roles.low]\nname = 'low'\nsrc_pattern = '{unit_dir}/low/{unit_name}.pyi'\n\n"
@@ -370,7 +372,7 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             with open(os.path.join(repo_root, "unbound_consumer", "pyproject.toml"), "w", encoding="utf-8") as f:
                 f.write("[project]\nname = 'unbound'\n")
             with open(os.path.join(unbound_dir, "cleanroom.toml"), "w", encoding="utf-8") as f:
-                f.write('methodology = "cleanroom_python_roles.toml"\n')
+                f.write('methodology = "cleanroom_roles.toml"\n')
 
             desc = self.provisioner.commission(
                 role_name="lib",
@@ -430,15 +432,14 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertIn("# CHANGE:", qa_agents_text)
             self.assertIn("NEVER recycle identical blame critiques", qa_agents_text)
 
-            # Decoupled project configurations copied as read-only
+            # Decoupled project configurations copied as read-only, but role definitions manifest stripped from workspace root
             ws_pyver = os.path.join(ws_dir, ".python-version")
             self.assertTrue(os.path.isfile(ws_pyver))
             ws_pyproj = os.path.join(ws_dir, "pyproject.toml")
             self.assertTrue(os.path.isfile(ws_pyproj))
             self.assertEqual(stat.S_IMODE(os.stat(ws_pyproj).st_mode) & 0o444, 0o444)
-            ws_roles = os.path.join(ws_dir, "cleanroom_python_roles.toml")
-            self.assertTrue(os.path.isfile(ws_roles))
-            self.assertEqual(stat.S_IMODE(os.stat(ws_roles).st_mode) & 0o444, 0o444)
+            ws_roles = os.path.join(ws_dir, "cleanroom_roles.toml")
+            self.assertFalse(os.path.exists(ws_roles))
             ws_parts_cfg = os.path.join(ws_dir, "test_scope", "parts", "cleanroom.toml")
             self.assertTrue(os.path.isfile(ws_parts_cfg))
             self.assertEqual(stat.S_IMODE(os.stat(ws_parts_cfg).st_mode) & 0o444, 0o444)
@@ -449,11 +450,12 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(ws_support, "build_lint_common.py")))
             self.assertFalse(os.path.exists(os.path.join(ws_support, "test_lint.py")))
 
-            # Promoted guides and templates at workspace root
-            self.assertTrue(os.path.isdir(os.path.join(ws_dir, "guides")))
-            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "guides", "qa.md")))
-            self.assertTrue(os.path.isdir(os.path.join(ws_dir, "templates")))
-            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "templates", "tmpl.md")))
+            # Minimal hermetic workspace: templates are NEVER copied to workspace root
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "templates")))
+
+            # Selective single-guide provisioning: qa workspace has qa.md, lib workspace does not
+            self.assertTrue(os.path.isfile(os.path.join(qa_desc.workspace_dir, "guides", "qa.md")))
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "guides", "qa.md")))
 
             # Verify standard python import without PYTHONPATH
             import subprocess
@@ -639,6 +641,80 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertNotIn("LAST_CLEANED:", readonly_content)
             self.assertNotIn("LAST_CHANGED:", readonly_content)
             self.assertNotIn("SPEC_QA_AUDIT:", readonly_content)
+
+    def test_minimal_hermetic_workspace_provisioning_and_clutter_eradication(self) -> None:
+        """Verifies Task 2: minimal hermetic workspace contains strictly required files without clutter."""
+        with tempfile.TemporaryDirectory() as repo_root:
+            parts_d = os.path.join(repo_root, "test_scope", "parts")
+            os.makedirs(parts_d, exist_ok=True)
+            with open(os.path.join(parts_d, "cleanroom.toml"), "w", encoding="utf-8") as f:
+                f.write('methodology = "update_python_with_ai"\n')
+
+            meth_d = os.path.join(repo_root, "update_python_with_ai")
+            os.makedirs(os.path.join(meth_d, "guides"), exist_ok=True)
+            os.makedirs(os.path.join(meth_d, "templates"), exist_ok=True)
+            os.makedirs(os.path.join(meth_d, "support", "lib"), exist_ok=True)
+
+            with open(os.path.join(meth_d, "cleanroom_roles.toml"), "w", encoding="utf-8") as f:
+                f.write(
+                    "[methodology]\nname = 'update_python_with_ai'\n\n"
+                    "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
+                    "guide = 'guides/low_to_lib.md'\n\n"
+                    "[roles.qa]\nname = 'qa'\naudit_tag = 'QA_AUDIT'\nguide = 'guides/qa.md'\n"
+                )
+            with open(os.path.join(meth_d, "pyright_spec.json"), "w", encoding="utf-8") as f:
+                f.write("{}\n")
+            with open(os.path.join(meth_d, "guides", "low_to_lib.md"), "w", encoding="utf-8") as f:
+                f.write("# low to lib guide\n")
+            with open(os.path.join(meth_d, "guides", "qa.md"), "w", encoding="utf-8") as f:
+                f.write("# qa guide\n")
+            with open(os.path.join(meth_d, "templates", "lib.template.py"), "w", encoding="utf-8") as f:
+                f.write("# lib template\n")
+            with open(os.path.join(meth_d, "support", "lib", "lifecycle.py"), "w", encoding="utf-8") as f:
+                f.write("class LifecycleRegistry:\n    pass\n")
+            with open(os.path.join(meth_d, "support", "lib", "build_lint_common.py"), "w", encoding="utf-8") as f:
+                f.write("# internal oracle\n")
+
+            with open(os.path.join(repo_root, ".python-version"), "w", encoding="utf-8") as f:
+                f.write("3.12.0\n")
+            with open(os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8") as f:
+                f.write("[project]\nname = 'test'\n")
+
+            desc = self.provisioner.commission(
+                role_name="qa",
+                dir_scope="test_scope",
+                repo_root=repo_root,
+            )
+            ws_dir = desc.workspace_dir
+
+            # 1. No manifest dumps or pyright_spec.json in workspace root
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "cleanroom_roles.toml")))
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "cleanroom_python_roles.toml")))
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "pyright_spec.json")))
+
+            # 2. No templates/ directory in workspace root
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "templates")))
+
+            # 3. No redundant methodology directory in workspace root
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "update_python_with_ai")))
+
+            # 4. Selective single-guide provisioning: only qa.md, not low_to_lib.md
+            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "guides", "qa.md")))
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "guides", "low_to_lib.md")))
+
+            # 5. Minimal runtime support: lifecycle.py present, internal oracles excluded
+            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "support", "lib", "lifecycle.py")))
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "support", "lib", "build_lint_common.py")))
+
+            # 6. Runner tools in bin/ are valid zipapps with cleanroom_roles.toml bundled
+            import zipfile
+            check_tool = os.path.join(ws_dir, "bin", "check_files")
+            self.assertTrue(os.path.isfile(check_tool))
+            with zipfile.ZipFile(check_tool, "r") as zf:
+                self.assertIn("cleanroom_roles.toml", zf.namelist())
+                roles_content = zf.read("cleanroom_roles.toml").decode("utf-8")
+                self.assertIn("[roles.qa]", roles_content)
+                self.assertIn("audit_tag = 'QA_AUDIT'", roles_content)
 
 
 if __name__ == "__main__":

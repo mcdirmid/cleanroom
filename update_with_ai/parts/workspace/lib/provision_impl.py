@@ -398,20 +398,22 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                 role_def=role_def,
             )
 
+        active_pkg = _resolve_active_methodology_pkg(resolved_root, dir_scope, role_def)
+
         if role_def.guide_path:
-            guide_src = os.path.join(resolved_root, role_def.guide_path)
-            if os.path.isfile(guide_src):
-                guide_dst = os.path.join(workspace_dir, role_def.guide_path)
-                copy_file_with_perms(guide_src, guide_dst, readonly=True)
+            guide_candidates = [
+                os.path.join(resolved_root, role_def.guide_path),
+            ]
+            if active_pkg:
+                guide_candidates.append(os.path.join(resolved_root, active_pkg, role_def.guide_path))
+                guide_candidates.append(os.path.join(resolved_root, active_pkg, "guides", os.path.basename(role_def.guide_path)))
+            guide_src = next((c for c in guide_candidates if os.path.isfile(c)), None)
+            if guide_src:
                 root_guide_dst = os.path.join(workspace_dir, "guides", os.path.basename(role_def.guide_path))
-                if not os.path.isfile(root_guide_dst):
-                    copy_file_with_perms(guide_src, root_guide_dst, readonly=True)
+                copy_file_with_perms(guide_src, root_guide_dst, readonly=True)
 
         for cfg_name in (
             "pyproject.toml",
-            "cleanroom.toml",
-            "cleanroom_roles.toml",
-            "cleanroom_python_roles.toml",
             "model_configs.toml",
             "uv.lock",
             ".python-version",
@@ -462,54 +464,23 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
             except OSError:
                 pass
 
-        active_pkg = _resolve_active_methodology_pkg(resolved_root, dir_scope, role_def)
         target_pkgs = [active_pkg] if active_pkg else []
 
         for entry in target_pkgs:
             pkg_dir = os.path.join(resolved_root, entry)
             if not os.path.isdir(pkg_dir):
                 continue
-            for rname in os.listdir(pkg_dir):
-                if rname.endswith((".toml", ".json")):
-                    r_src = os.path.join(pkg_dir, rname)
-                    if os.path.isfile(r_src):
-                        r_dst = os.path.join(workspace_dir, rname)
-                        copy_file_with_perms(r_src, r_dst, readonly=True)
-            guides_dir = os.path.join(pkg_dir, "guides")
-            if os.path.isdir(guides_dir):
-                d_guides = os.path.join(workspace_dir, "guides")
-                os.makedirs(d_guides, exist_ok=True)
-                for gf in os.listdir(guides_dir):
-                    gsf = os.path.join(guides_dir, gf)
-                    gdf = os.path.join(d_guides, gf)
-                    if os.path.isfile(gsf):
-                        copy_file_with_perms(gsf, gdf, readonly=True)
-            tmpl_dir = os.path.join(pkg_dir, "templates")
-            if os.path.isdir(tmpl_dir):
-                d_tmpl = os.path.join(workspace_dir, "templates")
-                os.makedirs(d_tmpl, exist_ok=True)
-                for tf in os.listdir(tmpl_dir):
-                    tsf = os.path.join(tmpl_dir, tf)
-                    tdf = os.path.join(d_tmpl, tf)
-                    if os.path.isfile(tsf):
-                        copy_file_with_perms(tsf, tdf, readonly=True)
             s_lib = os.path.join(pkg_dir, "support", "lib")
             if os.path.isdir(s_lib):
                 d_support = os.path.join(workspace_dir, "support")
                 d_lib = os.path.join(d_support, "lib")
                 os.makedirs(d_lib, exist_ok=True)
-                pkg_support = os.path.join(workspace_dir, entry, "support")
-                pkg_lib = os.path.join(pkg_support, "lib")
-                os.makedirs(pkg_lib, exist_ok=True)
                 s_init = os.path.join(pkg_dir, "support", "__init__.py")
                 if os.path.isfile(s_init):
                     copy_file_with_perms(s_init, os.path.join(d_support, "__init__.py"), readonly=True)
-                    copy_file_with_perms(s_init, os.path.join(pkg_support, "__init__.py"), readonly=True)
                 lib_init = os.path.join(s_lib, "__init__.py")
                 if os.path.isfile(lib_init):
                     copy_file_with_perms(lib_init, os.path.join(d_lib, "__init__.py"), readonly=True)
-                    copy_file_with_perms(lib_init, os.path.join(pkg_lib, "__init__.py"), readonly=True)
-                import py_compile
                 for fname in os.listdir(s_lib):
                     sf = os.path.join(s_lib, fname)
                     if not os.path.isfile(sf):
@@ -517,36 +488,6 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                     if _is_runtime_support_library(fname):
                         df = os.path.join(d_lib, fname)
                         copy_file_with_perms(sf, df, readonly=True)
-                        pkg_df = os.path.join(pkg_lib, fname)
-                        copy_file_with_perms(sf, pkg_df, readonly=True)
-                    elif fname.endswith(".py"):
-                        stale_py = os.path.join(d_lib, fname)
-                        if os.path.isfile(stale_py):
-                            try:
-                                os.remove(stale_py)
-                            except OSError:
-                                pass
-                        stale_pkg_py = os.path.join(pkg_lib, fname)
-                        if os.path.isfile(stale_pkg_py):
-                            try:
-                                os.remove(stale_pkg_py)
-                            except OSError:
-                                pass
-                        df_pyc = os.path.join(d_lib, fname + "c")
-                        pkg_df_pyc = os.path.join(pkg_lib, fname + "c")
-                        try:
-                            py_compile.compile(sf, df_pyc, optimize=2, doraise=True)
-                            try:
-                                os.chmod(df_pyc, 0o444)
-                            except OSError:
-                                pass
-                            py_compile.compile(sf, pkg_df_pyc, optimize=2, doraise=True)
-                            try:
-                                os.chmod(pkg_df_pyc, 0o444)
-                            except OSError:
-                                pass
-                        except Exception:
-                            pass
 
         scaffolder.deploy_runner_zipapps(bin_dir, role_def=role_def)
 

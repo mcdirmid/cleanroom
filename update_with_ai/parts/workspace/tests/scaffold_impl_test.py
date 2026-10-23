@@ -88,11 +88,12 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
                     main_content = zf.read("__main__.py").decode("utf-8")
                     self.assertIn("sys.path.insert(0, curr)", main_content)
                     self.assertNotIn("sys.path.insert(0, pkg_dir)", main_content)
+                    self.assertIn("cleanroom_roles.toml", namelist)
                     for name in namelist:
                         if name != "__main__.py":
                             self.assertTrue(
-                                name.endswith((".pyc", ".py")),
-                                f"Expected module .pyc or .py in zipapp but found: {name}",
+                                name.endswith((".pyc", ".py", ".toml")),
+                                f"Expected module .pyc, .py, or .toml in zipapp but found: {name}",
                             )
 
             # When deployed for a role without blame capability, blame and feedback are omitted

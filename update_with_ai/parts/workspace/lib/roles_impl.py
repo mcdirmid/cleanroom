@@ -198,6 +198,72 @@ def _load_roles_from_toml_file(
     return _build_role_definitions(raw_roles)
 
 
+def _load_roles_from_toml_bytes(data: bytes) -> Dict[str, roles.RoleDefinition]:
+    """Parses role declarations from raw TOML bytes."""
+    parsed = tomllib.loads(data.decode("utf-8"))
+    raw_roles = parsed.get("roles", {})
+    return _build_role_definitions(raw_roles)
+
+
+def _load_roles_from_zipapp() -> Optional[Dict[str, roles.RoleDefinition]]:
+    """Loads role definitions bundled inside an active runner zipapp or package resource."""
+    cached = _ROLE_CACHE.get("_BUNDLED_ZIPAPP_ROLES")
+    if cached:
+        return cached[1]
+
+    # 1. Try sys.argv[0] if it is a zipapp
+    import sys
+    if sys.argv and sys.argv[0] and os.path.isfile(sys.argv[0]):
+        try:
+            import zipfile
+            if zipfile.is_zipfile(sys.argv[0]):
+                with zipfile.ZipFile(sys.argv[0], "r") as zf:
+                    for cand in (
+                        "cleanroom_roles.toml",
+                        "support/cleanroom_roles.toml",
+                        "update_python_with_ai/cleanroom_roles.toml",
+                    ):
+                        if cand in zf.namelist():
+                            defs = _load_roles_from_toml_bytes(zf.read(cand))
+                            _ROLE_CACHE["_BUNDLED_ZIPAPP_ROLES"] = (0.0, defs)
+                            return defs
+        except Exception:
+            pass
+
+    # 2. Try pkgutil / importlib resources
+    try:
+        import pkgutil
+        data = pkgutil.get_data("support", "cleanroom_roles.toml")
+        if not data:
+            data = pkgutil.get_data("update_python_with_ai", "cleanroom_roles.toml")
+        if data:
+            defs = _load_roles_from_toml_bytes(data)
+            _ROLE_CACHE["_BUNDLED_ZIPAPP_ROLES"] = (0.0, defs)
+            return defs
+    except Exception:
+        pass
+
+    # 3. Try finding any zipapp in nearby bin/ directory
+    try:
+        curr = os.getcwd()
+        for check_dir in (curr, os.path.dirname(curr)):
+            bin_dir = os.path.join(check_dir, "bin")
+            if os.path.isdir(bin_dir):
+                import zipfile
+                for tool_name in ("check_files", "submit", "get_work"):
+                    tool_p = os.path.join(bin_dir, tool_name)
+                    if os.path.isfile(tool_p) and zipfile.is_zipfile(tool_p):
+                        with zipfile.ZipFile(tool_p, "r") as zf:
+                            if "cleanroom_roles.toml" in zf.namelist():
+                                defs = _load_roles_from_toml_bytes(zf.read("cleanroom_roles.toml"))
+                                _ROLE_CACHE["_BUNDLED_ZIPAPP_ROLES"] = (0.0, defs)
+                                return defs
+    except Exception:
+        pass
+
+    return None
+
+
 def _load_roles_from_build_file(
     build_file_path: str,
 ) -> Dict[str, roles.RoleDefinition]:
@@ -331,16 +397,15 @@ def _load_roles_from_methodology(
     if methodology.startswith("//") or methodology.startswith("./"):
         rel_pkg = methodology.lstrip("./").lstrip("/")
         pkg_dir = os.path.join(root, rel_pkg)
-        for cand_name in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
-            cand = os.path.join(pkg_dir, cand_name)
-            if os.path.isfile(cand):
-                mtime = os.path.getmtime(cand)
-                cached = _ROLE_CACHE.get(cand)
-                if cached and cached[0] == mtime:
-                    return cached[1]
-                defs = _load_roles_from_toml_file(cand)
-                _ROLE_CACHE[cand] = (mtime, defs)
-                return defs
+        cand = os.path.join(pkg_dir, "cleanroom_roles.toml")
+        if os.path.isfile(cand):
+            mtime = os.path.getmtime(cand)
+            cached = _ROLE_CACHE.get(cand)
+            if cached and cached[0] == mtime:
+                return cached[1]
+            defs = _load_roles_from_toml_file(cand)
+            _ROLE_CACHE[cand] = (mtime, defs)
+            return defs
         cand_b = os.path.join(pkg_dir, "BUILD.bazel")
         if os.path.isfile(cand_b):
             try:
@@ -354,16 +419,19 @@ def _load_roles_from_methodology(
         try:
             import importlib.resources
             files = importlib.resources.files(pkg_name)
-            for cand_name in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
-                cand = str(files.joinpath(cand_name))
-                if os.path.isfile(cand):
-                    return _load_roles_from_toml_file(cand)
-        except (ImportError, TypeError, OSError):
-            pass
-        for cand_name in ("cleanroom_roles.toml", "cleanroom_python_roles.toml"):
-            cand = os.path.join(root, methodology, cand_name)
+            cand = str(files.joinpath("cleanroom_roles.toml"))
             if os.path.isfile(cand):
                 return _load_roles_from_toml_file(cand)
+        except (ImportError, TypeError, OSError):
+            pass
+        cand = os.path.join(root, methodology, "cleanroom_roles.toml")
+        if os.path.isfile(cand):
+            return _load_roles_from_toml_file(cand)
+
+    # Fallback to bundled zipapp if methodology manifest not found on disk
+    bundled = _load_roles_from_zipapp()
+    if bundled:
+        return bundled
     return None
 
 
@@ -381,38 +449,30 @@ class RoleResolver(roles.RoleResolver):
 
         roots_to_try = [root]
         for r in roots_to_try:
-            for toml_name in (
-                "cleanroom_roles.toml",
-                "cleanroom_python_roles.toml",
-            ):
-                cand = os.path.join(r, toml_name)
-                if os.path.isfile(cand):
-                    mtime = os.path.getmtime(cand)
-                    cached = _ROLE_CACHE.get(cand)
-                    if cached and cached[0] == mtime:
-                        return cached[1]
-                    defs = _load_roles_from_toml_file(cand)
-                    _ROLE_CACHE[cand] = (mtime, defs)
-                    return defs
+            cand = os.path.join(r, "cleanroom_roles.toml")
+            if os.path.isfile(cand):
+                mtime = os.path.getmtime(cand)
+                cached = _ROLE_CACHE.get(cand)
+                if cached and cached[0] == mtime:
+                    return cached[1]
+                defs = _load_roles_from_toml_file(cand)
+                _ROLE_CACHE[cand] = (mtime, defs)
+                return defs
 
             if os.path.isdir(r):
                 try:
                     for entry in os.listdir(r):
                         pkg_dir = os.path.join(r, entry)
                         if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
-                            for toml_name in (
-                                "cleanroom_roles.toml",
-                                "cleanroom_python_roles.toml",
-                            ):
-                                cand = os.path.join(pkg_dir, toml_name)
-                                if os.path.isfile(cand):
-                                    mtime = os.path.getmtime(cand)
-                                    cached = _ROLE_CACHE.get(cand)
-                                    if cached and cached[0] == mtime:
-                                        return cached[1]
-                                    defs = _load_roles_from_toml_file(cand)
-                                    _ROLE_CACHE[cand] = (mtime, defs)
-                                    return defs
+                            cand = os.path.join(pkg_dir, "cleanroom_roles.toml")
+                            if os.path.isfile(cand):
+                                mtime = os.path.getmtime(cand)
+                                cached = _ROLE_CACHE.get(cand)
+                                if cached and cached[0] == mtime:
+                                    return cached[1]
+                                defs = _load_roles_from_toml_file(cand)
+                                _ROLE_CACHE[cand] = (mtime, defs)
+                                return defs
                 except OSError:
                     pass
 
@@ -440,6 +500,11 @@ class RoleResolver(roles.RoleResolver):
                                     pass
                 except OSError:
                     pass
+
+        # Decoupled tool execution: load from zipapp bundle or in-memory cache
+        bundled = _load_roles_from_zipapp()
+        if bundled:
+            return bundled
 
         raise FileNotFoundError(
             f"Cleanroom role definitions file (cleanroom_roles.toml) not found under: '{root}'"

@@ -91,7 +91,6 @@ def _search_ancestor_markers(start_dir: str) -> Optional[str]:
                 for marker in (
                     "cleanroom.toml",
                     "cleanroom_roles.toml",
-                    "cleanroom_python_roles.toml",
                     "pyproject.toml",
                 )
             )

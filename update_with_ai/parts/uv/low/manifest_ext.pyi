@@ -1,9 +1,9 @@
 """
 ## External Mechanics & API Documentation
 
-The `uv_manifest_ext` external component specifies the TOML schema and deserialization mechanics for role definition files (`cleanroom_python_roles.toml`) and Cleanroom package layout conventions. External boundary specifications define no standalone library files; manifest loaders import Python's standard `tomllib` (or `tomli`) module directly or use boundary helpers.
+The `uv_manifest_ext` external component specifies the TOML schema and deserialization mechanics for role definition files (`cleanroom_roles.toml`) and Cleanroom package layout conventions. External boundary specifications define no standalone library files; manifest loaders import Python's standard `tomllib` (or `tomli`) module directly or use boundary helpers.
 
-**Role Definition TOML Schema (`cleanroom_python_roles.toml`)**
+**Role Definition TOML Schema (`cleanroom_roles.toml`)**
 
 Written at project workspace root to configure methodology roles.
 - `[methodology]`: Methodology name and description.

@@ -46,6 +46,13 @@
 6. [Experimental Conditions & Baseline Controls](#6-experimental-conditions--baseline-controls)
    - [Baseline 1: Conventional "Vibe Coding" (Iterative Chat Loop)](#baseline-1-conventional-vibe-coding-iterative-chat-loop)
    - [Baseline 2: Single-Agent Joint Context TDD ($\mathcal{I} > 0$)](#baseline-2-single-agent-joint-context-tdd-mathcali--0)
+     - [Operational Mechanics & The `--baseline` Architecture](#operational-mechanics--the---baseline-architecture)
+     - [Low-Level Specification Grounding & Two-File Structure](#low-level-specification-grounding--two-file-structure)
+     - [Unit Test Targeting, 100% Coverage Gate & Opt-Outs](#unit-test-targeting-100-coverage-gate--opt-outs)
+     - [Harness Constraints & Loop Harness Prohibition](#harness-constraints--loop-harness-prohibition)
+     - [Ephemeral Scope Isolation & Telemetry Invariants](#ephemeral-scope-isolation--telemetry-invariants)
+     - [The Single Source of Truth & Scientific Fairness (Steel-Manning the Baseline)](#the-single-source-of-truth--scientific-fairness-steel-manning-the-baseline)
+     - [The Contamination Trap: Cognitive Bias vs. Structural Independence](#the-contamination-trap-cognitive-bias-vs-structural-independence)
    - [Baseline 3: Cleanroom Single-Model ($\mathcal{I} = 0$, Task Asymmetry)](#baseline-3-cleanroom-single-model-mathcali--0-task-asymmetry)
    - [Baseline 4: Cleanroom Heterogeneous Cross-Tier Ensembles](#baseline-4-cleanroom-heterogeneous-cross-tier-ensembles)
 7. [Unified Metrics, Measurement Instruments & Telemetry](#7-unified-metrics-measurement-instruments--telemetry)
@@ -666,6 +673,104 @@ To evaluate Cleanroom's contributions rigorously against standard industry pract
 2. **Baseline 2: Single-Agent Joint Context TDD ($\mathcal{I} > 0$)**:
    - Reflects modern agentic coding benchmarks (e.g., SWE-bench, Devin-style loops) where a single agent authors both code and tests.
    - Captures the Fatal Contamination Trap: mutual confirmation bias where the test suite certifies the implementation's flawed assumptions.
+
+#### Operational Mechanics & The `--baseline` Architecture
+To establish an empirical baseline representing traditional single-agent software engineering within the benchmark suite, Cleanroom provides native baseline execution via the `--baseline` CLI option (`uv run cleanroom benchmark --baseline` or `uv run bin/evaluate_model_efficiency.py --baseline`). 
+
+Instead of orchestrating a multi-agent bipartite DAG across Cleanroom roles (`high` $\to$ `planning` $\to$ `scenarios` $\to$ `low` $\to$ `spec_qa` $\to$ `lib` $\to$ `test` $\to$ `qa` $\to$ `coverage`), the baseline evaluator dispatches an autonomous developer agent granted **exactly ONE continuous round** to implement the library, author unit tests, and perform iterative self-verification using standard developer tooling.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                   CLEANROOM vs. TRADITIONAL BASELINE EXECUTION TOPOLOGY                │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│   CLEANROOM MULTI-ROLE BIPARTITE ARCHITECTURE (I = 0)                                  │
+│   ┌──────────┐      ┌────────────┐      ┌─────────────┐      ┌───────────────┐         │
+│   │   High   │ ───► │  Planning  │ ───► │  Scenarios  │ ───► │   Low (.pyi)  │         │
+│   └──────────┘      └────────────┘      └─────────────┘      └───────┬───────┘         │
+│                                                                      │                 │
+│                                        ┌─────────────────────────────┴─────────────┐   │
+│                                        ▼                                           ▼   │
+│                         ┌─────────────────────────────┐             ┌────────────────┐ │
+│                         │   Synthesizer (lib/*.py)    │ ◄──Blame──► │ Test (tests/*) │ │
+│                         │   W_lib (isolated sandbox)  │             │ W_test (chmod) │ │
+│                         └─────────────────────────────┘             └────────────────┘ │
+│                                                                                        │
+│   TRADITIONAL BASELINE ARCHITECTURE (I > 0, Single Round)                              │
+│   ┌──────────────────────────┐                                                         │
+│   │ Low-Level Specs (.pyi)   │                                                         │
+│   └─────────────┬────────────┘                                                         │
+│                 │                                                                      │
+│                 ▼                                                                      │
+│   ┌────────────────────────────────────────────────────────────────────────────────┐   │
+│   │ Autonomous Baseline Developer Agent (cleanroom_baseline_worker)                │   │
+│   │ • Inspects low/*.pyi contract stubs                                            │   │
+│   │ • Implements two-file lib: <unit>.py (interfaces) & <unit>_impl.py (concrete)  │   │
+│   │ • Authors unit tests: tests/<unit>_impl_test.py                                │   │
+│   │ • Runs terminal verification: pyright (0 errs) & pytest --cov (100% coverage)  │   │
+│   │ • Uses # pragma: no cover for unreachable fallbacks                            │   │
+│   └────────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Low-Level Specification Grounding & Two-File Structure
+The baseline agent is specifically grounded in the **Low-Level Specification** (`low/*.pyi`), which serves as its authoritative contract for types, interfaces, classes, and method signatures:
+1. **Low-Spec Discovery**: The evaluator dynamically inspects the ephemeral unit workspace and exposes the concrete `.pyi` stubs (e.g., `parts/<unit>/low/<unit>.pyi` and `parts/<unit>/low/<unit>_impl.pyi`).
+2. **Two-File Implementation Protocol**: The agent is explicitly instructed to mirror the dual-specification pattern into `lib/`:
+   - `<unit>.py`: Public interfaces, protocols, dataclasses, enums, and exceptions matching `<unit>.pyi`.
+   - `<unit>_impl.py`: Concrete realization classes implementing those interfaces matching `<unit>_impl.pyi`.
+   - Preserves strict interface fidelity, typing constraints, and method signatures.
+
+#### Unit Test Targeting, 100% Coverage Gate & Opt-Outs
+The agent is instructed to self-verify code and tests prior to completing the round:
+1. **Targeted Test Suite**: Authors unit tests in `tests/<unit>_impl_test.py` targeting `<unit>_impl.py`.
+2. **Deterministic Type Checking**: Runs `pyright <target_dir>` via shell command execution, resolving all type errors to achieve 0 diagnostics.
+3. **100% Statement & Branch Coverage**: Runs `pytest --cov=<target_dir>/lib --cov-report=term-missing <target_dir>/tests` to verify that all written tests pass and that 100% code coverage is achieved across all library files.
+4. **Legitimate Coverage Opt-Outs**: For defensive assertion fallbacks or unreachable platform branches that cannot be exercised under unit test execution, the agent annotates those lines with `# pragma: no cover`.
+
+#### Harness Constraints & Loop Harness Prohibition
+1. **Prohibition of `loop` Harness**: The baseline condition evaluates autonomous agentic development. The deterministic Cleanroom `loop` harness relies on Cleanroom role micro-binaries (`bin/get_work`, `bin/submit`, `bin/check_files`) and does not provision general-purpose developer tool loops. Therefore, `--baseline` strictly rejects `--harness loop` with an immediate failure diagnostic.
+2. **Permitted Harnesses**: Baseline flights require autonomous subagent harnesses equipped with general development tooling:
+   - **Google Antigravity**: Uses the specialized `cleanroom_baseline_worker` subagent equipped with standard tools: `run_command` (terminal commands for `pytest` and `pyright`), `read_file` (`view_file`), `write_file` (`write_to_file`), `edit_file` (`replace_file_content`, `multi_replace_file_content`), and `send_message`.
+   - **DeepSeek Harness (DSH)**: Dispatches via direct JSON-RPC socket session with terminal bash tool and file editing capabilities.
+
+#### Ephemeral Scope Isolation & Telemetry Invariants
+1. **Zero Contamination in `benchmark_N`**: The baseline runs entirely within an ephemeral, indexed flight scope directory (`benchmark_N/parts/<task_id>/`). Canonical `benchmarks/` remains completely pristine and read-only.
+2. **No Role Workspaces Overhead**: Unlike Cleanroom multi-agent flights, no `role_workspaces/<repo>_<role>_benchmark_N` sibling sandboxes are provisioned; the baseline developer works directly inside `benchmark_N/parts/<task_id>/` and the entire scope is wiped cleanly in `finally:`.
+3. **Telemetry Parity**: Identical telemetry metrics are harvested ($T_{\text{in}}^{\text{uncached}}, T_{\text{in}}^{\text{cached}}, T_{\text{out}}$, step latencies, wall-clock time, financial costs). Role rounds are recorded as `role_rounds={"baseline": 1}`.
+4. **Two-Pass Verification & Archival**: Evaluates the identical two-pass verification gate. Passing flights are archived to `<results_dir>/<benchmark-id>/<model+harness>-baseline/` with embedded metrics comments and `# Methodology: baseline`.
+
+#### The Single Source of Truth & Scientific Fairness (Steel-Manning the Baseline)
+In empirical software engineering and AI evaluation, comparative baselines are frequently vulnerable to criticism if they are artificially crippled, denied standard tooling, or provided vague prompts. To guarantee scientific rigor and defensibility, the Cleanroom baseline control is deliberately **steel-manned**:
+
+1. **Identical Single Source of Truth**:
+   The baseline agent is not given an informal or degraded requirements document. It is granted direct access to the **exact same formal Low-Level Specification (`low/*.pyi`)** utilized by Cleanroom workers, containing complete type signatures, class declarations, and formal behavioral contracts with preconditions and postconditions.
+2. **Identical Verification Tools**:
+   The baseline agent possesses full shell execution rights to run the exact same type checker (`pyright`) and test runner (`pytest --cov`) used by Cleanroom's verification gates.
+3. **Full Iterative Autonomy**:
+   The agent is granted an unconstrained, continuous single session to author code, write tests, inspect compiler diagnostics and runtime tracebacks, and iteratively refine its implementation.
+
+Consequently, this comparison is exceptionally fair: if an LLM possessed sufficient internal cognitive discipline to hold the formal specification invariant in memory, verify every line against `low/*.pyi`, and arbitrate test failures exclusively by referencing the specification truth rather than its own code, it could theoretically achieve Cleanroom's verification standards.
+
+#### The Contamination Trap: Cognitive Bias vs. Structural Independence
+Because the single source of truth is held strictly constant across both conditions, the benchmark isolates and tests a single theoretical variable: **statistical independence ($\mathcal{I} = 0$) versus shared context ($\mathcal{I} > 0$)**.
+
+In theory, **even if the baseline agent hallucinates or makes a mistake during initial synthesis, as long as it diligently double-checks its work against the source of truth (`low/*.pyi`), it should be fine.** The specification contains all required ground truths, types, and behavioral contracts.
+
+In practice, however, the baseline consistently fails to achieve Cleanroom's defect suppression due to three cognitive blindspots inherent in single-agent joint context:
+
+1. **Proxy Substitution (Green Tests as False Truth)**:
+   When an agent implements both code and unit tests, it naturally substitutes *test execution* for *specification verification*. Once `pytest` runs green with zero errors, the agent's completion heuristics fire: it concludes its work is certified and complete, bypassing any subsequent double-checking against the original `low/*.pyi` source of truth.
+2. **Latent Misunderstanding Propagation & Proofreading Blindness**:
+   If the model misinterprets a subtle specification invariant during initial library synthesis (e.g., topological sort tie-breaking order, cycle detection edge cases, or exception hierarchies), that flawed mental model is retained in its conversational memory. When the same model reads the specification to "double check," it suffers from proofreading blindness—interpreting the specification text through the biased lens of the code it just wrote. It then writes unit tests that validate its *misunderstanding* rather than the ground-truth specification, resulting in **coincident error** ($P(V \text{ passes } P \mid V_{\text{oracle}} \text{ fails } P) > 0$).
+3. **The "Path of Least Cognitive Resistance"**:
+   When unit tests fail during self-verification in a joint context:
+   - *Disciplined Specification Recalibration*: The developer re-reads `low/*.pyi`, re-anchors to the formal postcondition, and rewrites the implementation.
+   - *Actual LLM Behavior (The Contamination Trap)*: The model takes the path of least cognitive resistance—it modifies the test assertion to conform to whatever output the implementation currently emits, or introduces an ad-hoc conditional. The test suite and implementation enter a state of **tautological mutual confirmation**.
+
+#### Cleanroom's Structural Guarantee
+Cleanroom does not rely on an LLM's self-discipline, memory retention, or proofreading vigilance. By enforcing double-blind physical isolation between the Synthesizer ($W_{\text{lib}}$) and Certifier ($W_{\text{test}}$), the test worker *cannot inspect the implementation code*. It has zero knowledge of what the library author hallucinated or assumed; its tests are derived strictly, independently, and adversarially from the specification contract. Any divergence between the code and specification is flagged unconditionally.
 3. **Baseline 3: Cleanroom Single-Model ($\mathcal{I} = 0$, Task Asymmetry)**:
    - Evaluates Cleanroom's pure architectural mechanism by holding the model constant.
    - Demonstrates that physical isolation and task asymmetry alone suppress coincident errors and enforce the fail-safe invariant.
@@ -720,6 +825,7 @@ Benchmark telemetry focuses strictly on **rounds** and **steps**:
 - **Role Short Name Normalization**: Roles are dynamically identified by their short names (e.g., `lib`, `test`, `qa`, `coverage`, `low`, `spec_qa`) rather than static enumerations.
 - **Harvesting Sources**: Parsed from runner execution logs (`Starting cleaning pass for root ...#<role>`, `.cleanroom_round_task_<role>_<counter>_<ts>.log`, `.cleanroom_round_dsh_<role>_<ts>.log`, `.cleanroom_round_<role>_<ts>.log`, with backward compatibility for `.cleanroom_turn_*`) and task prompt headers (`- Role: <role>`).
 - **Telemetry Metric**: Expressed as `role_rounds: Dict[str, int]` (e.g., `{"lib": 2, "test": 1, "qa": 2, "coverage": 1}`) with total rounds $\sum R_{\text{role}}$, enabling cross-model comparisons of where reasoning effort and token budgets are expended during convergence.
+- **Baseline Role Round Invariant**: For baseline methodology flights (`--baseline`), role rounds are recorded strictly as `role_rounds={"baseline": 1}`, reflecting the single continuous round execution constraint without multi-role sub-workspaces.
 
 ### Systems, Concurrency & Quality Metrics
 
@@ -867,6 +973,22 @@ uv run bin/evaluate_model_efficiency.py \
   --rq=rq6 \
   --concurrency-defects=6 \
   --mutation-testing
+
+# Traditional Single-Agent Baseline Flight (Autonomous Subagent Harness, 1 Round)
+uv run cleanroom benchmark \
+  --baseline \
+  --suite=dag_engine \
+  --models=gemini-3.8-flash \
+  --harness=antigravity \
+  --units=1
+
+# Baseline Execution via DeepSeek Harness (DSH)
+uv run cleanroom benchmark \
+  --baseline \
+  --suite=dag_engine_lite \
+  --models=deepseek-flash \
+  --harness=dsh \
+  --units=1
 ```
 
 ### Pipeline Orchestration & Sandboxed Runner
@@ -899,21 +1021,25 @@ To prevent cross-flight cache contamination, state bleed, or accidental reuse of
 ```
 benchmarks/results/
 └── <benchmark-id>/
-    └── <model-name+harness-name>/
-        ├── lib_1.py       # Run 1 synthesized library implementation (with empirical comment header)
-        ├── test_1.py      # Run 1 synthesized candidate test suite
-        ├── lib_2.py       # Run 2 synthesized library implementation
-        └── test_2.py      # Run 2 synthesized candidate test suite
+    ├── <model-name+harness-name>/             # Cleanroom multi-role runs (Methodology: cleanroom)
+    │   ├── lib_1.py                           # Run 1 synthesized library implementation (with empirical comment header)
+    │   ├── test_1.py                          # Run 1 synthesized candidate test suite
+    │   ├── lib_2.py                           # Run 2 synthesized library implementation
+    │   └── test_2.py                          # Run 2 synthesized candidate test suite
+    └── <model-name+harness-name>-baseline/    # Baseline single-agent runs (Methodology: baseline)
+        ├── lib_1.py                           # Run 1 baseline library implementation (# Methodology: baseline)
+        ├── test_1.py                          # Run 1 baseline unit test suite
+        └── cleanroom_1.log                    # Run 1 event log (when present)
 ```
 
 1. **Pre-Flight Workspace Drain (`drain_unit_workspace`)**:
    - Before executing a benchmark flight, `drain_unit_workspace()` wipes any pre-existing code and tests under `unit_dir/lib` and `unit_dir/tests`, and purges any ephemeral `role_workspaces/` matching the unit.
    - This marks the unit `DIRTY` in the Cleanroom DAG and forces synthesis strictly from typed specifications under `low/*.pyi`.
 2. **Post-Flight Sequential Archival (`archive_flight_artifacts`)**:
-   - Synthesized candidate files are saved to `benchmarks/results/<benchmark-id>/<model-name+harness-name>/`.
+   - Synthesized candidate files are saved to `benchmarks/results/<benchmark-id>/<model-name+harness-name>/` (or appending `-baseline` for baseline methodology flights).
    - The evaluator dynamically resolves the next sequential run index $N \in \{1, 2, \dots\}$.
-   - `test_<N>.py` archives the raw unit test suite synthesized by the test role worker.
-   - `lib_<N>.py` prepends a comprehensive, machine-readable metrics comment block directly above the synthesized library code:
+   - `test_<N>.py` archives the raw unit test suite synthesized by the test role worker (or baseline developer agent).
+   - `lib_<N>.py` prepends a comprehensive, machine-readable metrics comment block directly above the synthesized library code (incorporating `# Methodology: baseline` and single-round `role_rounds: baseline: 1` when evaluated under `--baseline`):
      ```python
      # ==============================================================================
      # Cleanroom Empirical Benchmark Flight Metrics

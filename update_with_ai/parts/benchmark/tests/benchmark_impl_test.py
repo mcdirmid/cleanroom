@@ -1,9 +1,11 @@
 """Unit tests for benchmark_impl aligned with grounding specifications."""
 
+import io
 import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 from unittest.mock import patch
 from pathlib import Path
 
@@ -761,6 +763,181 @@ class BenchmarkImplTest(unittest.TestCase):
                 self.assertIn("--antigravity-dispatch", clean_cmd)
                 self.assertIn("message", clean_cmd)
                 self.assertFalse((repo_root / ".cleanroom" / "active_flight.json").exists())
+
+    def test_baseline_flight_simulation(self) -> None:
+        """CUJ: Executing a simulated baseline flight and validating single-round metadata."""
+        evaluator = BenchmarkEvaluator()
+        catalog = evaluator.get_model_catalog()
+        model = catalog["gemini-3.8-flash"]
+        unit = evaluator.get_suite_catalog()["dag_engine"][0]
+
+        record = evaluator.execute_flight(
+            model=model,
+            unit=unit,
+            rq="rq1",
+            harness="antigravity",
+            simulate=True,
+            baseline=True,
+        )
+
+        self.assertTrue(record.flight_id.endswith("_baseline"))
+        self.assertEqual(record.methodology, "baseline")
+        self.assertEqual(record.stages_executed, ["baseline"])
+        self.assertEqual(record.measurements.role_rounds, {"baseline": 1})
+        self.assertTrue(record.verification_outcomes.spec_linter_pass)
+        self.assertGreater(record.verification_outcomes.unit_tests_passed, 0)
+
+    def test_baseline_rejects_loop_harness(self) -> None:
+        """CUJ: Enforcing rejection of loop harness for baseline benchmark flights."""
+        evaluator = BenchmarkEvaluator()
+        catalog = evaluator.get_model_catalog()
+        model = catalog["gemini-3.8-flash"]
+        unit = evaluator.get_suite_catalog()["dag_engine"][0]
+
+        with self.assertRaises(ValueError) as ctx:
+            evaluator.execute_flight(
+                model=model,
+                unit=unit,
+                rq="rq1",
+                harness="loop",
+                simulate=True,
+                baseline=True,
+            )
+        self.assertIn("loop", str(ctx.exception))
+        self.assertIn("baseline", str(ctx.exception))
+
+    def test_baseline_cli_rejection_of_loop(self) -> None:
+        """CUJ: CLI immediately rejects --baseline with --harness loop or loop default models."""
+        evaluator = BenchmarkEvaluator()
+
+        # 1. Explicit --harness=loop
+        ret = evaluator.run_cli(["--baseline", "--harness=loop", "--dry-run"])
+        self.assertEqual(ret, 1)
+
+        # 2. Model that defaults to loop under --harness=auto
+        ret2 = evaluator.run_cli(["--baseline", "--models=qwen-moe-q6", "--harness=auto", "--dry-run"])
+        self.assertEqual(ret2, 1)
+
+    def test_baseline_cli_successful_simulation(self) -> None:
+        """CUJ: CLI dispatches simulated baseline flight with autonomous harness."""
+        evaluator = BenchmarkEvaluator()
+        ret = evaluator.run_cli([
+            "--baseline",
+            "--suite=dag_engine",
+            "--models=gemini-3.8-flash",
+            "--harness=antigravity",
+            "--simulation",
+            "--units=1",
+        ])
+        self.assertEqual(ret, 0)
+
+    def test_baseline_artifact_archival_directory(self) -> None:
+        """CUJ: Archiving successful baseline flight saves into -baseline folder with metadata header."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            evaluator = BenchmarkEvaluator()
+            evaluator._repo_root = repo_root
+
+            model = evaluator.get_model_catalog()["gemini-3.8-flash"]
+            unit = benchmark.BenchmarkUnit(
+                suite="dag_engine",
+                task_id="dag_engine",
+                unit_dir="parts/dag_engine",
+                target_address="//parts/dag_engine#lib",
+            )
+
+            # Provision source files in temp unit dir
+            unit_full = repo_root / "parts" / "dag_engine"
+            lib_dir = unit_full / "lib"
+            tests_dir = unit_full / "tests"
+            lib_dir.mkdir(parents=True, exist_ok=True)
+            tests_dir.mkdir(parents=True, exist_ok=True)
+            (lib_dir / "dag_engine.py").write_text("class DAG: pass\n", encoding="utf-8")
+            (tests_dir / "dag_engine_test.py").write_text("def test_dag(): pass\n", encoding="utf-8")
+
+            measurements = benchmark.FlightMeasurements(
+                inbound_tokens_uncached=1000,
+                inbound_tokens_cached=2000,
+                outbound_tokens=500,
+                step_latencies_seconds=[1.2],
+                wall_clock_seconds=5.0,
+                role_rounds={"baseline": 1},
+            )
+            measurements.compute_totals(model)
+            outcomes = benchmark.VerificationOutcomes(
+                spec_linter_pass=True,
+                pyright_errors=0,
+                unit_tests_passed=10,
+                unit_tests_failed=0,
+                line_coverage_pct=95.0,
+                branch_coverage_pct=90.0,
+            )
+            record = benchmark.FlightRecord(
+                flight_id="flight_test_baseline_001",
+                timestamp="2026-10-23T11:00:00Z",
+                rq="RQ1",
+                model={"identifier": model.identifier, "tier": model.tier, "default_harness": "antigravity"},
+                benchmark_unit={"task_id": unit.task_id, "suite": unit.suite},
+                methodology="baseline",
+                stages_executed=["baseline"],
+                measurements=measurements,
+                verification_outcomes=outcomes,
+            )
+
+            res = evaluator.archive_flight_artifacts(record, unit)
+            self.assertIsNotNone(res)
+            assert res is not None
+            lib_dest, test_dest = res
+            self.assertIn("gemini-3.8-flash+antigravity-baseline", lib_dest)
+            lib_content = Path(lib_dest).read_text(encoding="utf-8")
+            self.assertIn("Methodology: baseline", lib_content)
+            self.assertIn("Role Execution Rounds:   baseline: 1 (Total: 1)", lib_content)
+
+    @mock.patch("sys.stdout", new_callable=io.StringIO)
+    def test_baseline_flight_prompt_includes_low_spec(self, mock_stdout: io.StringIO) -> None:
+        """CUJ: Baseline flight prompt discovers and instructs model with Low-Level Specification."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            evaluator = BenchmarkEvaluator()
+            evaluator._repo_root = repo_root
+
+            model = evaluator.get_model_catalog()["gemini-3.8-flash"]
+            unit = benchmark.BenchmarkUnit(
+                suite="dag_engine",
+                task_id="dag_engine",
+                unit_dir="parts/dag_engine",
+                target_address="//parts/dag_engine#lib",
+            )
+
+            # Provision source low-level spec in unit dir
+            unit_full = repo_root / "parts" / "dag_engine"
+            low_dir = unit_full / "low"
+            low_dir.mkdir(parents=True, exist_ok=True)
+            (low_dir / "dag_engine.pyi").write_text("class DAG: ...\n", encoding="utf-8")
+
+            with mock.patch("update_with_ai.parts.benchmark.lib.benchmark_impl._VerificationGate.evaluate") as mock_gate, \
+                 mock.patch("update_with_ai.parts.benchmark.lib.benchmark_impl._LogHarvester.harvest_from_antigravity", return_value=(100, 200, 50, [1.0], {"baseline": 1})):
+                mock_gate.return_value = benchmark.VerificationOutcomes(
+                    spec_linter_pass=True, pyright_errors=0, unit_tests_passed=5, unit_tests_failed=0
+                )
+                record = evaluator.execute_flight(
+                    model=model,
+                    unit=unit,
+                    rq="RQ1",
+                    harness="antigravity",
+                    baseline=True,
+                    wait_for_convergence=False,
+                )
+
+            stdout_output = mock_stdout.getvalue()
+            self.assertIn("cleanroom_baseline_worker", stdout_output)
+            self.assertIn("Low-Level Specification", stdout_output)
+            self.assertIn("low/dag_engine.pyi", stdout_output)
+            self.assertIn("100% code coverage", stdout_output)
+            self.assertIn("pragma: no cover", stdout_output)
+            self.assertIn("_impl_test.py", stdout_output)
+            self.assertEqual(record.methodology, "baseline")
+            self.assertEqual(record.stages_executed, ["baseline"])
 
 
 if __name__ == "__main__":

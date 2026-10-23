@@ -120,6 +120,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         wait_for_convergence: bool = True,
         timeout: Optional[float] = None,
         antigravity_dispatch: str = "message",
+        baseline: bool = False,
     ) -> FlightRecord:
         ...
 

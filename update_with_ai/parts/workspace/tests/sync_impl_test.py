@@ -741,7 +741,7 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             )
             self.assertGreater(refreshed, 0)
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, "pyproject.toml")))
-            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "cleanroom_roles.toml")))
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "cleanroom_roles.toml")))
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, "support", "lib", "lifecycle.py")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "notes.txt")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "pyrightconfig.json")))

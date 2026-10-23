@@ -133,7 +133,7 @@ class TestUvManifestLoaderImpl(unittest.TestCase):
             self.storage, keys=[AgentStorage], tier="system"
         )
 
-        # Setup mock cleanroom_python_roles.toml
+        # Setup mock cleanroom_roles.toml
         toml_content = """
 [roles.high]
 src_pattern = "{unit_dir}/high/{unit_name}.md"
@@ -163,7 +163,7 @@ feedback_role_deps = ["planning"]
 silent_role_deps = []
 allows_step_mode = false
 """
-        with open(os.path.join(self.test_dir, "cleanroom_python_roles.toml"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.test_dir, "cleanroom_roles.toml"), "w", encoding="utf-8") as f:
             f.write(toml_content)
         with open(os.path.join(self.test_dir, "cleanroom.toml"), "w", encoding="utf-8") as f:
             f.write('methodology = "//"\n')
@@ -407,7 +407,7 @@ prompt_template = "Test {unit_name}"
 verification_success_message = "{unit_name}_test.py passed static checks in {unit_dir}."
 active_component_types = ["implementation"]
 """
-        with open(os.path.join(self.test_dir, "cleanroom_python_roles.toml"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.test_dir, "cleanroom_roles.toml"), "w", encoding="utf-8") as f:
             f.write(toml_content)
 
         node = _make_dag_node("//pkg/sub:my_unit", "test")

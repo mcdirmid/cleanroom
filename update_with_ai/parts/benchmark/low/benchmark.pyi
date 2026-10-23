@@ -120,11 +120,15 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         wait_for_convergence: bool = True,
         timeout: Optional[float] = None,
         antigravity_dispatch: str = "message",
+        baseline: bool = False,
     ) -> FlightRecord:
         """Executes a benchmark flight for a designated model and unit.
 
         POSTCONDITIONS:
         - MUST execute the flight under the requested harness or simulation mode.
+        - WHEN baseline is True and harness is 'loop', MUST raise ValueError rejecting loop harness.
+        - WHEN baseline is True, MUST provide the low-level specification and instruct the agent to consult it, implement the two-file library structure in lib/, test _impl.py, and achieve 100% test coverage with opt-outs.
+        - WHEN baseline is True, MUST record exactly one execution round under baseline role.
         - MUST harvest telemetry and evaluate verification gates.
         - MUST return a flight record with complete empirical measurements.
         """

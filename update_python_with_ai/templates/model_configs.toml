@@ -24,7 +24,7 @@ dsh_default = "deepseek-flash"
 
 # max_unproductive_rounds: Global circuit breaker limit for consecutive rounds
 # that fail to produce change or progress before aborting.
-max_unproductive_rounds = 5
+max_unproductive_rounds = 3
 
 # ==============================================================================
 # Model Table Schema: [models.<profile-name>]
@@ -82,7 +82,7 @@ batch_size = 1
 subagent_batch_size = 3
 conversation_max_tokens = 96000
 max_feedback_chars = 600
-max_unproductive_rounds = 10
+max_unproductive_rounds = 3
 
 [models.qwen-dense]
 model = "Qwen3.8-27B-MLX-oQ4e-mtp"
@@ -104,7 +104,7 @@ batch_size = 1
 subagent_batch_size = 3
 conversation_max_tokens = 96000
 max_feedback_chars = 600
-max_unproductive_rounds = 10
+max_unproductive_rounds = 3
 
 [models.qwen-flash]
 model = "qwen-flash-next-288-q4"
@@ -126,7 +126,7 @@ batch_size = 1
 subagent_batch_size = 3
 conversation_max_tokens = 96000
 max_feedback_chars = 600
-max_unproductive_rounds = 10
+max_unproductive_rounds = 3
 
 # --- Tier 2: Budget Frontier APIs ---
 
@@ -148,7 +148,7 @@ max_tokens = 8192
 subagent_batch_size = 10
 conversation_max_tokens = 256000
 max_feedback_chars = 4000
-max_unproductive_rounds = 5
+max_unproductive_rounds = 3
 
 [models.gemini-flash]
 model = "gemini-3.8-flash"
@@ -167,7 +167,7 @@ max_tokens = 8192
 subagent_batch_size = 5
 conversation_max_tokens = 256000
 max_feedback_chars = 4000
-max_unproductive_rounds = 5
+max_unproductive_rounds = 3
 
 # --- Tier 3: Mid-Tier Control ---
 
@@ -188,7 +188,7 @@ max_tokens = 8192
 subagent_batch_size = 5
 conversation_max_tokens = 200000
 max_feedback_chars = 4000
-max_unproductive_rounds = 5
+max_unproductive_rounds = 3
 
 [models.o3-mini]
 model = "o3-mini"
@@ -208,7 +208,7 @@ max_tokens = 16384
 subagent_batch_size = 5
 conversation_max_tokens = 200000
 max_feedback_chars = 4000
-max_unproductive_rounds = 5
+max_unproductive_rounds = 3
 
 [models.gpt-4o]
 model = "gpt-4o"
@@ -224,7 +224,7 @@ max_tokens = 4096
 subagent_batch_size = 3
 conversation_max_tokens = 128000
 max_feedback_chars = 2000
-max_unproductive_rounds = 5
+max_unproductive_rounds = 3
 
 # --- Tier 4: Frontier Ceilings ---
 
@@ -245,4 +245,4 @@ max_tokens = 16384
 subagent_batch_size = 5
 conversation_max_tokens = 256000
 max_feedback_chars = 4000
-max_unproductive_rounds = 5
+max_unproductive_rounds = 3

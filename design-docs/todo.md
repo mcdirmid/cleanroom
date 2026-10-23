@@ -545,8 +545,9 @@ The following prioritized roadmap outlines the active forward engineering tasks 
 
 ---
 
-### Task 2: Minimal Hermetic Role Workspace Provisioning & Clutter Eradication
+### [COMPLETED] Task 2: Minimal Hermetic Role Workspace Provisioning & Clutter Eradication
 - **Priority**: High
+- **Status**: Completed (2026-10-22)
 - **Component**: `update_with_ai/parts/workspace/` (`provision_impl.py`, `sync_impl.py`, `scaffold_impl.py`, `roles_impl.py`)
 - **Objective**: Prevent context pollution, token waste, and agent distraction by ensuring provisioned role workspaces contain strictly the files required for the assigned role, eliminating all configuration file dumps, dead legacy manifests, irrelevant guides, and starter templates.
 - **Problem Statement**:
@@ -554,23 +555,23 @@ The following prioritized roadmap outlines the active forward engineering tasks 
   - When role agents (such as `test` or `lib`) inspect their working directory via `ls` or file lookups, they see `cleanroom_roles.toml`, irrelevant guides, and templates. This distracts the model from its assigned task, prompts unnecessary inspection loops, pollutes context windows, and wastes tokens.
   - Additionally, references to the non-existent legacy ghost file `cleanroom_python_roles.toml` persist across fallback search loops in `roles_impl.py`, `provision_impl.py`, `manifest_loader_impl.py`, and `benchmark_impl.py`.
 - **Implementation Steps**:
-  1. [ ] **Purge Ghost File References (`cleanroom_python_roles.toml`)**:
+  1. [x] **Purge Ghost File References (`cleanroom_python_roles.toml`)**:
      - Remove all fallback references to `cleanroom_python_roles.toml` across `roles_impl.py`, `provision_impl.py`, `role_registry_impl.py`, `manifest_loader_impl.py`, `benchmark_impl.py`, and specification stubs.
      - Enforce `cleanroom_roles.toml` as the sole canonical role manifest name.
-  2. [ ] **Bundle Role Configuration Inside Zipapps**:
+  2. [x] **Bundle Role Configuration Inside Zipapps**:
      - Update `scaffold_impl.py` to package `cleanroom_roles.toml` directly into the `bin/*` runner zipapps.
      - Update `roles_impl.py` to load role definitions directly from the zipapp bundle or in-memory cache, decoupling tool execution from workspace root files.
-  3. [ ] **Strip Unneeded Files from Role Workspace Root**:
+  3. [x] **Strip Unneeded Files from Role Workspace Root**:
      - Update `provision_impl.py` and `sync_impl.py` to **never** copy `cleanroom_roles.toml`, `cleanroom_python_roles.toml`, or `pyright_spec.json` into the role workspace root.
      - Never copy `templates/` into the role workspace.
      - Never create a redundant `update_python_with_ai/` directory in the workspace root.
-  4. [ ] **Selective Single-Guide Provisioning**:
+  4. [x] **Selective Single-Guide Provisioning**:
      - Ensure `guides/` in the role workspace contains strictly the single companion guide designated for the assigned role (e.g. `guides/low_to_test.md` for `test`, `guides/low_to_lib.md` for `lib`).
      - Cease copying all other 7 methodology guides into the role workspace.
-  5. [ ] **Preserve Minimal Runtime Support for Code Execution**:
+  5. [x] **Preserve Minimal Runtime Support for Code Execution**:
      - Maintain strictly `support/lib/` containing only the user-facing runtime primitives (`framework.py`, `framework.pyi`, `lifecycle.py`, `lifecycle.pyi`) so that `pyright` and `pytest` cleanly resolve runtime dependencies of code under test without import errors.
      - Maintain minimal project scaffolding: `pyproject.toml`, `uv.lock`, `.python-version`, `.cleanroom_role.json`, `AGENTS.md`, and `bin/` tools.
-  6. [ ] **Cascade Specification Alignment & Verification**:
+  6. [x] **Cascade Specification Alignment & Verification**:
      - Author HLS, Planning, Scenarios, and Low-level specifications under `update_with_ai/parts/workspace/` before code modifications.
      - Verify with `bin/test update_with_ai/parts/workspace` and test on live commissioned workspaces.
 

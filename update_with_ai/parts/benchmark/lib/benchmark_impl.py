@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import importlib
 import json
 import os
 import re
@@ -434,7 +435,13 @@ class _LogHarvester:
             except OSError:
                 continue
 
-            if "cleanroom_coordinator" in header_text or (scope and f"Clean all dirty nodes in {scope}" in header_text):
+            if (
+                "cleanroom_coordinator" in header_text
+                or "cleanroom_baseline_worker" in header_text
+                or "Baseline Developer" in header_text
+                or (scope and f"Clean all dirty nodes in {scope}" in header_text)
+                or (scope and f"scope '{scope}'" in header_text)
+            ):
                 candidate_coords.append((mtime, entry.name))
 
         if not candidate_coords:
@@ -445,6 +452,7 @@ class _LogHarvester:
 
         coord_file = brain_dir / coord_id / ".system_generated" / "logs" / "transcript.jsonl"
         worker_roles: Dict[str, str] = {}
+        is_baseline = False
 
         try:
             with open(coord_file, "r", encoding="utf-8", errors="replace") as f:
@@ -454,6 +462,8 @@ class _LogHarvester:
                     except (json.JSONDecodeError, ValueError):
                         continue
                     content = str(d.get("content", ""))
+                    if "cleanroom_baseline_worker" in content or "Baseline Developer" in content:
+                        is_baseline = True
 
                     for m in re.finditer(
                         r'\{[^{}]*"role":\s*"Cleanroom ([a-zA-Z0-9_]+) Worker"[^{}]*"conversationId":\s*"([0-9a-fA-F\-]{36})"',
@@ -467,6 +477,25 @@ class _LogHarvester:
                             worker_roles[cid] = "unknown"
         except OSError:
             pass
+
+        if is_baseline and not worker_roles:
+            try:
+                with open(coord_file, "r", encoding="utf-8", errors="replace") as f:
+                    for line in f:
+                        try:
+                            d = json.loads(line)
+                        except (json.JSONDecodeError, ValueError):
+                            continue
+                        if d.get("type") == "PLANNER_RESPONSE":
+                            dur = d.get("duration_ms") or d.get("durationMs")
+                            if dur is not None and isinstance(dur, (int, float)):
+                                latencies.append(round(dur / 1000.0, 3))
+                        uncached_in += d.get("input_tokens", 0)
+                        cached_in += d.get("cached_tokens", 0)
+                        out_tokens += d.get("output_tokens", 0)
+            except OSError:
+                pass
+            return uncached_in, cached_in, out_tokens, latencies, {"baseline": 1}
 
         for cid, r_name in list(worker_roles.items()):
             if r_name == "unknown":
@@ -772,7 +801,7 @@ def _provision_flight_scope(
         except OSError:
             pass
 
-    for cfg_name in ("cleanroom.toml", "cleanroom_roles.toml", "cleanroom_python_roles.toml", "pyright_spec.json"):
+    for cfg_name in ("cleanroom.toml", "cleanroom_roles.toml", "pyright_spec.json"):
         cfg_file = original_scope_dir / cfg_name
         if cfg_file.is_file():
             try:
@@ -789,7 +818,7 @@ def _provision_flight_scope(
                 shutil.copyfile(orig_parts_dir / "__init__.py", flight_parts_dir / "__init__.py")
             except OSError:
                 pass
-        for cfg_name in ("cleanroom.toml", "cleanroom_roles.toml", "cleanroom_python_roles.toml"):
+        for cfg_name in ("cleanroom.toml", "cleanroom_roles.toml"):
             cfg_file = orig_parts_dir / cfg_name
             if cfg_file.is_file():
                 try:
@@ -904,6 +933,8 @@ def _archive_flight_artifacts(
     model_id = str(record.model.get("identifier", "unknown")).replace("/", "_")
     resolved_harness = harness or str(record.model.get("default_harness", "loop"))
     folder_name = f"{model_id}+{resolved_harness}"
+    if record.methodology == "baseline":
+        folder_name += "-baseline"
     benchmark_id = unit.task_id
 
     v = record.verification_outcomes
@@ -979,6 +1010,7 @@ def _archive_flight_artifacts(
         f"# Timestamp: {record.timestamp}\n"
         f"# Benchmark Task: {unit.task_id}\n"
         f"# Model: {model_id} (Tier {tier_val})\n"
+        f"# Methodology: {record.methodology}\n"
         f"# Harness: {resolved_harness}\n"
         f"# Run Index: {run_idx}\n"
         "#\n"
@@ -1066,6 +1098,7 @@ def _execute_flight(
     wait_for_convergence: bool = True,
     timeout: Optional[float] = None,
     antigravity_dispatch: str = "message",
+    baseline: bool = False,
 ) -> benchmark.FlightRecord:
     timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
     flight_id = f"flight_{timestamp_str}_{model.identifier.replace('.', '_')}_{unit.task_id}"
@@ -1077,6 +1110,12 @@ def _execute_flight(
 
     resolved_harness = harness if harness != "auto" else model.default_harness
 
+    if baseline and resolved_harness == "loop":
+        raise ValueError(
+            "The 'loop' harness is not supported for baseline benchmarks (--baseline). "
+            "Baseline evaluation requires an autonomous subagent harness ('antigravity' or 'dsh') with general software development tools."
+        )
+
     if dry_run or simulate:
         time.sleep(0.01)
         base_in = (unit.spec_loc * 60) if unit.spec_loc > 0 else 18_000
@@ -1085,7 +1124,10 @@ def _execute_flight(
         measurements.outbound_tokens = (unit.target_lib_loc * 18) if unit.target_lib_loc > 0 else 6_000
         measurements.step_latencies_seconds = [2.4, 3.1, 2.9, 4.2]
         measurements.wall_clock_seconds = round(time.perf_counter() - start_wall, 2)
-        measurements.role_rounds = {"lib": 1, "test": 1, "qa": 1, "coverage": 1}
+        if baseline:
+            measurements.role_rounds = {"baseline": 1}
+        else:
+            measurements.role_rounds = {"lib": 1, "test": 1, "qa": 1, "coverage": 1}
         measurements.compute_totals(model)
 
         tests_passed = max(12, unit.target_lib_loc // 20) if unit.target_lib_loc > 0 else 25
@@ -1098,9 +1140,9 @@ def _execute_flight(
             branch_coverage_pct=92.1,
             mutation_score_pct=88.5 if mutation_testing else 0.0,
         )
-        stages = ["high", "planning", "scenarios", "low", "spec_qa", "lib", "test", "qa", "coverage"]
+        stages = ["baseline"] if baseline else ["high", "planning", "scenarios", "low", "spec_qa", "lib", "test", "qa", "coverage"]
         return benchmark.FlightRecord(
-            flight_id=flight_id,
+            flight_id=f"{flight_id}_baseline" if baseline else flight_id,
             timestamp=iso_timestamp,
             rq=rq.upper(),
             model={
@@ -1119,7 +1161,7 @@ def _execute_flight(
                 "target_lib_loc": unit.target_lib_loc,
                 "unit_dir": unit.unit_dir,
             },
-            methodology="cleanroom",
+            methodology="baseline" if baseline else "cleanroom",
             stages_executed=stages,
             measurements=measurements,
             verification_outcomes=outcomes,
@@ -1131,6 +1173,380 @@ def _execute_flight(
         flight_unit_rel = str(flight_unit_dir.relative_to(repo_root)).replace("\\", "/")
 
         try:
+            if baseline:
+                # Baseline single-agent execution in ephemeral flight scope
+                low_dir = flight_unit_dir / "low"
+                low_files: List[str] = []
+                if low_dir.is_dir():
+                    low_files = [f"{flight_unit_rel}/low/{p.name}" for p in sorted(low_dir.glob("*.pyi"))]
+                low_specs_desc = ", ".join(f"'{lf}'" for lf in low_files) if low_files else f"'{flight_unit_rel}/low/*.pyi'"
+
+                output_text = ""
+                u_in, c_in, out_tok, lats = 0, 0, 0, []
+
+                if resolved_harness == "antigravity":
+                    try:
+                        role_tool = importlib.import_module("update_with_ai.support.lib.cleanroom_role_tool")
+                        if hasattr(role_tool, "ensure_antigravity_plugin_installed"):
+                            role_tool.ensure_antigravity_plugin_installed()
+                    except Exception:
+                        pass
+
+                    active_flight_file = repo_root / ".cleanroom" / "active_flight.json"
+                    try:
+                        active_flight_file.parent.mkdir(parents=True, exist_ok=True)
+                        active_flight_file.write_text(
+                            json.dumps(
+                                {
+                                    "flight_id": f"{flight_id}_baseline",
+                                    "flight_scope": flight_scope,
+                                    "unit": unit.target_address,
+                                    "model": model.identifier,
+                                    "harness": resolved_harness,
+                                    "baseline": True,
+                                    "start_time": start_wall,
+                                },
+                                indent=2,
+                            ),
+                            encoding="utf-8",
+                        )
+                    except OSError:
+                        pass
+
+                    baseline_directive = (
+                        "\n" + "=" * 72 + "\n"
+                        "AUTONOMOUS ANTIGRAVITY BASELINE DIRECTIVE:\n"
+                        "The 'cleanroom_baseline_worker' subagent definition is installed and ready.\n"
+                        "Immediately invoke the baseline developer subagent in this step:\n"
+                        "  invoke_subagent(\n"
+                        '    TypeName="cleanroom_baseline_worker",\n'
+                        '    Role="Baseline Developer",\n'
+                        f'    Prompt="You are an autonomous software developer working in scope \'{flight_scope}\'. '
+                        f"You are provided with the Low-Level Specification in: {low_specs_desc}. "
+                        "Read and inspect the Low-Level Specification carefully. Your task is to:\\n"
+                        f"1. Implement the two-file library structure in '{flight_unit_rel}/lib/' matching the specifications: "
+                        f"interfaces/protocols in '<unit>.py' and concrete classes in '<unit>_impl.py'.\\n"
+                        f"2. Author comprehensive unit tests in '{flight_unit_rel}/tests/<unit>_impl_test.py' targeting '<unit>_impl.py'.\\n"
+                        f"3. Run type checking ('uv run pyright {flight_unit_rel}') and test coverage ('uv run pytest --cov={flight_unit_rel}/lib --cov-report=term-missing {flight_unit_rel}/tests'). "
+                        "Achieve 100% test pass and 100% code coverage, annotating any legitimately unreachable lines with '# pragma: no cover'."
+                        '"\n'
+                        "  )\n"
+                        + "=" * 72 + "\n"
+                    )
+                    sys.stdout.write(baseline_directive)
+                    sys.stdout.flush()
+
+                    if antigravity_dispatch and antigravity_dispatch != "none":
+                        try:
+                            role_tool = importlib.import_module("update_with_ai.support.lib.cleanroom_role_tool")
+                            if hasattr(role_tool, "dispatch_antigravity_coordination"):
+                                role_tool.dispatch_antigravity_coordination(
+                                    target_display=f"{flight_unit_rel} (baseline)",
+                                    mode=antigravity_dispatch,
+                                    model=model.identifier,
+                                    baseline=True,
+                                )
+                        except Exception:
+                            pass
+
+                    if wait_for_convergence:
+                        max_wait = timeout if timeout is not None else 3600.0
+                        poll_interval = 5.0
+                        poll_start = time.time()
+                        sys.stdout.write(
+                            f"\n[Antigravity Harness] Baseline directive emitted. Waiting for single-round completion in scope '{flight_scope}' "
+                            f"(timeout: {int(max_wait)}s)...\n"
+                        )
+                        sys.stdout.flush()
+
+                        converged = False
+                        while time.time() - poll_start < max_wait:
+                            time.sleep(poll_interval)
+                            if _has_materialized_artifacts(flight_unit_dir):
+                                converged = True
+                                break
+
+                        if converged:
+                            sys.stdout.write(f"\n[Antigravity Harness] Scope '{flight_scope}' baseline materialized! Harvesting metrics...\n")
+                            sys.stdout.flush()
+                        else:
+                            sys.stdout.write(
+                                f"\n[Antigravity Harness] Timeout ({int(max_wait)}s) reached or scope '{flight_scope}' baseline not materialized.\n"
+                            )
+                            sys.stdout.flush()
+                elif resolved_harness in ("dsh", "deepseek", "deepseek-harness"):
+                    # Provision symlinks inside flight_scope_dir for baseline developer tools and imports
+                    for sym_name, sym_target in [
+                        ("bin", repo_root / "bin"),
+                        (flight_scope, flight_scope_dir),
+                        ("pyproject.toml", repo_root / "pyproject.toml"),
+                        ("uv.lock", repo_root / "uv.lock"),
+                        (".venv", repo_root / ".venv"),
+                        ("update_python_with_ai", repo_root / "update_python_with_ai"),
+                        ("update_with_ai", repo_root / "update_with_ai"),
+                    ]:
+                        link_path = flight_scope_dir / sym_name
+                        if not link_path.exists() and not link_path.is_symlink() and sym_target.exists():
+                            try:
+                                link_path.symlink_to(sym_target)
+                            except OSError:
+                                pass
+
+                    # Grounding and directives for the baseline developer
+                    agents_md_file = flight_scope_dir / "AGENTS.md"
+                    agents_md_content = (
+                        f"# Baseline Software Developer\n"
+                        f"Scope: {flight_scope}\n"
+                        f"Unit: {flight_unit_rel}\n\n"
+                        "You are an autonomous software developer working directly on code and test implementation.\n"
+                        f"Your task is to implement the library and write comprehensive unit tests conforming to the Low-Level Specification in:\n"
+                        f"{low_specs_desc}\n\n"
+                        "## WORKFLOW & DIRECTIVES:\n"
+                        f"1. Low-Level Specification Grounding:\n"
+                        f"   - Read and inspect the specifications in {low_specs_desc}.\n"
+                        "   - Understand all protocols, dataclasses, class definitions, method signatures, and contract postconditions.\n"
+                        f"2. Library Implementation (Two-File Structure in 'lib/'):\n"
+                        f"   - Implement the two Python files in '{flight_unit_rel}/lib/':\n"
+                        "     - '<unit>.py': Public interfaces, protocols, dataclasses, enums, and exceptions.\n"
+                        "     - '<unit>_impl.py': Concrete realization classes realizing those interfaces.\n"
+                        "   - Maintain strict interface fidelity and type annotations matching the specifications.\n"
+                        f"3. Unit Test Suite (in 'tests/'):\n"
+                        f"   - Author comprehensive unit tests in '{flight_unit_rel}/tests/<unit>_impl_test.py' targeting '<unit>_impl.py'.\n"
+                        f"4. Verification Gate:\n"
+                        f"   - Run type checking: `uv run pyright {flight_unit_rel}` (or `bin/test {flight_unit_rel}`).\n"
+                        f"   - Run test coverage: `uv run pytest --cov={flight_unit_rel}/lib --cov-report=term-missing {flight_unit_rel}/tests`.\n"
+                        "   - Achieve 100% test pass and 100% code coverage. Any legitimately unreachable defensive code or type check branches MUST be annotated with '# pragma: no cover'.\n"
+                        "5. Conclude Work:\n"
+                        "   - When all tests pass and coverage is 100%, conclude your work.\n"
+                    )
+                    try:
+                        agents_md_file.write_text(agents_md_content, encoding="utf-8")
+                    except OSError:
+                        pass
+
+                    # Configure Cordis overlay patch for DSH
+                    cleanroom_dir = flight_scope_dir / ".cleanroom"
+                    cleanroom_dir.mkdir(parents=True, exist_ok=True)
+                    patch_file = cleanroom_dir / "dsh_patch.yml"
+                    try:
+                        dsh_ws_mod = importlib.import_module("update_with_ai.parts.dsh.lib.dsh_workspace_impl")
+                        patch_content = dsh_ws_mod._format_dsh_patch_yml(
+                            model_name=model.identifier, workspace_dir=str(flight_scope_dir)
+                        )
+                        patch_file.write_text(patch_content, encoding="utf-8")
+                    except Exception:
+                        pass
+
+                    # Persist active flight metadata for observability
+                    active_flight_file = repo_root / ".cleanroom" / "active_flight.json"
+                    try:
+                        active_flight_file.parent.mkdir(parents=True, exist_ok=True)
+                        active_flight_file.write_text(
+                            json.dumps(
+                                {
+                                    "flight_id": f"{flight_id}_baseline",
+                                    "flight_scope": flight_scope,
+                                    "unit": unit.target_address,
+                                    "model": model.identifier,
+                                    "harness": resolved_harness,
+                                    "baseline": True,
+                                    "start_time": start_wall,
+                                },
+                                indent=2,
+                            ),
+                            encoding="utf-8",
+                        )
+                    except OSError:
+                        pass
+
+                    prompt_text = (
+                        f"You are an autonomous software developer working in scope '{flight_scope}'.\n"
+                        f"You are provided with the Low-Level Specification in: {low_specs_desc}.\n"
+                        "Read and inspect the Low-Level Specification carefully. Your task is to:\n"
+                        f"1. Implement the two-file library structure in '{flight_unit_rel}/lib/' matching the specifications: "
+                        "interfaces/protocols in '<unit>.py' and concrete classes in '<unit>_impl.py'.\n"
+                        f"2. Author comprehensive unit tests in '{flight_unit_rel}/tests/<unit>_impl_test.py' targeting '<unit>_impl.py'.\n"
+                        f"3. Run type checking ('uv run pyright {flight_unit_rel}') and test coverage ('uv run pytest --cov={flight_unit_rel}/lib --cov-report=term-missing {flight_unit_rel}/tests').\n"
+                        "Achieve 100% test pass and 100% code coverage, annotating any legitimately unreachable lines with '# pragma: no cover'.\n"
+                        "Use standard tools (bash terminal to run pytest/pyright, file editor) and verify that all tests pass before completing."
+                    )
+
+                    dsh_tel_mod = importlib.import_module("update_with_ai.parts.dsh.lib.dsh_telemetry_impl")
+                    parser = dsh_tel_mod.DshTelemetryParser()
+                    server_available = parser.is_desktop_server_available()
+
+                    if server_available:
+                        task_handle = parser.dispatch_round_rpc(
+                            workspace_dir=str(flight_scope_dir),
+                            role_name="baseline",
+                            prompt_text=prompt_text,
+                            model_name=model.identifier,
+                        )
+                        if not task_handle:
+                            raise RuntimeError(
+                                f"Failed to dispatch baseline round RPC to DeepSeek Harness Desktop for scope '{flight_scope}'"
+                            )
+
+                        max_wait = timeout if timeout is not None else 3600.0
+                        poll_interval = 2.0
+                        poll_start = time.time()
+                        sys.stdout.write(
+                            f"\n[DSH Harness] Baseline round dispatched ({task_handle}). Awaiting completion in scope '{flight_scope}' "
+                            f"(timeout: {int(max_wait)}s)...\n"
+                        )
+                        sys.stdout.flush()
+
+                        rpc_status = None
+                        last_tok = 0
+                        has_started = False
+                        while time.time() - poll_start < max_wait:
+                            time.sleep(poll_interval)
+                            rpc_status = parser.poll_round_rpc(task_handle)
+                            if rpc_status.metrics and rpc_status.metrics.total_tokens > last_tok:
+                                last_tok = rpc_status.metrics.total_tokens
+                                has_started = True
+                                sys.stdout.write(
+                                    f"[DSH Harness] In progress: {last_tok:,} tokens (${rpc_status.metrics.cost_usd:.4f})...\n"
+                                )
+                                sys.stdout.flush()
+                            if rpc_status.is_active:
+                                has_started = True
+                            if rpc_status.is_completed:
+                                if has_started or (time.time() - poll_start) >= 5.0:
+                                    break
+
+                        if rpc_status and rpc_status.metrics and rpc_status.metrics.total_tokens > 0:
+                            u_in = rpc_status.metrics.input_tokens
+                            c_in = rpc_status.metrics.cached_tokens
+                            out_tok = rpc_status.metrics.output_tokens
+                            measurements.financial_cost_usd = rpc_status.metrics.cost_usd
+                            sys.stdout.write(
+                                f"\n[DSH Harness] Baseline completed: {rpc_status.metrics.total_tokens:,} tokens (${rpc_status.metrics.cost_usd:.4f})\n"
+                            )
+                            sys.stdout.flush()
+                        else:
+                            sys.stdout.write(f"\n[DSH Harness] Harvesting session storage...\n")
+                            sys.stdout.flush()
+                            metrics = parser.parse_session_storage(
+                                workspace_dir=str(flight_scope_dir), model_name=model.identifier
+                            )
+                            if metrics and metrics.total_tokens > 0:
+                                u_in = metrics.input_tokens
+                                c_in = metrics.cached_tokens
+                                out_tok = metrics.output_tokens
+                                measurements.financial_cost_usd = metrics.cost_usd
+                    else:
+                        dsh_bin = shutil.which("dsh")
+                        if not dsh_bin:
+                            raise RuntimeError(
+                                "DeepSeek Harness Desktop server is unreachable and 'dsh' CLI executable is not on PATH."
+                            )
+                        prompt_file = cleanroom_dir / f"dsh_prompt_{int(time.time()*1000)}.md"
+                        prompt_file.write_text(prompt_text, encoding="utf-8")
+                        log_path = repo_root / "logs" / f"dsh_baseline_{flight_scope}.log"
+                        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+                        sys.stdout.write(f"\n[DSH Harness] Desktop server unavailable; executing via CLI headless runner...\n")
+                        sys.stdout.flush()
+
+                        env = os.environ.copy()
+                        env["DSH_PERMISSION_MODE"] = "danger-full-access"
+                        cmd = f'cat "{prompt_file}" | dsh --patch "{patch_file}" --profile headless --json -'
+                        with open(log_path, "w", encoding="utf-8") as lf:
+                            proc = subprocess.Popen(
+                                cmd, shell=True, cwd=str(flight_scope_dir), stdout=lf, stderr=subprocess.STDOUT, env=env
+                            )
+                            try:
+                                proc.wait(timeout=timeout if timeout is not None else 3600.0)
+                            except subprocess.TimeoutExpired:
+                                proc.kill()
+                                proc.wait()
+
+                        if log_path.is_file():
+                            metrics = parser.parse_stream_text(
+                                log_path.read_text(encoding="utf-8", errors="replace"), model_name=model.identifier
+                            )
+                            if metrics and metrics.total_tokens > 0:
+                                u_in = metrics.input_tokens
+                                c_in = metrics.cached_tokens
+                                out_tok = metrics.output_tokens
+                                measurements.financial_cost_usd = metrics.cost_usd
+
+                elapsed = time.perf_counter() - start_wall
+                measurements.wall_clock_seconds = round(elapsed, 2)
+
+                if resolved_harness == "antigravity":
+                    appdata_dir = os.environ.get("ANTIGRAVITY_APP_DATA_DIR") or os.path.expanduser("~/.gemini/antigravity")
+                    brain_dir = Path(appdata_dir) / "brain"
+                    u_in, c_in, out_tok, lats, _ = _LogHarvester.harvest_from_antigravity(
+                        brain_dir, start_epoch, scope=flight_scope
+                    )
+
+                if not (u_in or c_in or out_tok):
+                    logs_dir = repo_root / "logs"
+                    u_in, c_in, out_tok, lats, _ = _LogHarvester.harvest_from_log_files(logs_dir, start_epoch)
+
+                measurements.inbound_tokens_uncached = u_in
+                measurements.inbound_tokens_cached = c_in
+                measurements.outbound_tokens = out_tok
+                measurements.step_latencies_seconds = lats
+                measurements.role_rounds = {"baseline": 1}
+                if measurements.financial_cost_usd == 0.0 or not measurements.financial_cost_usd:
+                    measurements.compute_totals(model)
+                else:
+                    measurements.total_tokens = u_in + c_in + out_tok
+
+                flight_unit_spec = benchmark.BenchmarkUnit(
+                    suite=unit.suite,
+                    task_id=unit.task_id,
+                    archetype=unit.archetype,
+                    spec_loc=unit.spec_loc,
+                    target_lib_loc=unit.target_lib_loc,
+                    unit_dir=flight_unit_rel,
+                    target_address=f"//{flight_unit_rel}#lib",
+                    description=unit.description,
+                )
+                outcomes = _VerificationGate.evaluate(repo_root, flight_unit_spec, run_mutation=mutation_testing)
+
+                stages = ["baseline"]
+                record = benchmark.FlightRecord(
+                    flight_id=f"{flight_id}_baseline",
+                    timestamp=iso_timestamp,
+                    rq=rq.upper(),
+                    model={
+                        "identifier": model.identifier,
+                        "tier": model.tier,
+                        "provider": model.provider,
+                        "quantization": model.quantization,
+                        "endpoint": model.endpoint,
+                        "default_harness": model.default_harness,
+                    },
+                    benchmark_unit={
+                        "suite": unit.suite,
+                        "task_id": unit.task_id,
+                        "archetype": unit.archetype,
+                        "spec_loc": unit.spec_loc,
+                        "target_lib_loc": unit.target_lib_loc,
+                        "unit_dir": unit.unit_dir,
+                    },
+                    methodology="baseline",
+                    stages_executed=stages,
+                    measurements=measurements,
+                    verification_outcomes=outcomes,
+                )
+
+                if not dry_run:
+                    _archive_flight_artifacts(
+                        repo_root,
+                        record,
+                        unit,
+                        results_dir=results_dir,
+                        harness=resolved_harness,
+                        source_dir=flight_unit_dir,
+                        flight_scope_dir=flight_scope_dir,
+                    )
+
+                return record
             # Resolve config profile key from model catalog to pass to cleanroom clean
             cleanroom_model_arg = next(
                 (k for k, v in _MODEL_CATALOG.items() if v.identifier == model.identifier and "." not in k),
@@ -1401,6 +1817,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         wait_for_convergence: bool = True,
         timeout: Optional[float] = None,
         antigravity_dispatch: str = "message",
+        baseline: bool = False,
     ) -> benchmark.FlightRecord:
         return _execute_flight(
             repo_root=self._repo_root,
@@ -1415,6 +1832,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             wait_for_convergence=wait_for_convergence,
             timeout=timeout,
             antigravity_dispatch=antigravity_dispatch,
+            baseline=baseline,
         )
 
     def harvest_flight(
@@ -1612,6 +2030,11 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             help="Include monolithic non-Cleanroom baseline comparison.",
         )
         parser.add_argument(
+            "--baseline",
+            action="store_true",
+            help="Execute traditional single-agent baseline evaluation (one round to write lib, tests, and verify using standard developer tools).",
+        )
+        parser.add_argument(
             "--results-dir",
             type=str,
             default=None,
@@ -1643,6 +2066,14 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
 
         args = parser.parse_args(argv)
         root = self._repo_root
+
+        if args.baseline and args.harness == "loop":
+            print(
+                "Error: The 'loop' harness is not supported for baseline benchmarks (--baseline).\n"
+                "Baseline evaluation requires an autonomous subagent harness ('antigravity' or 'dsh') with general software development tools.",
+                file=sys.stderr,
+            )
+            return 1
 
         if args.harvest_flight:
             record = self.harvest_flight(
@@ -1713,6 +2144,17 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             print(f"[ERROR] No benchmark units resolved for suite '{args.suite}'.")
             return 1
 
+        if args.baseline:
+            for m in selected_models:
+                eff_h = args.harness if args.harness != "auto" else m.default_harness
+                if eff_h == "loop":
+                    print(
+                        f"Error: Model '{m.identifier}' resolves to the 'loop' harness, which is not supported for baseline benchmarks (--baseline).\n"
+                        "Please specify an autonomous subagent harness using --harness (e.g. --harness antigravity or --harness dsh).",
+                        file=sys.stderr,
+                    )
+                    return 1
+
         records: List[benchmark.FlightRecord] = []
         logs_dir = root / "logs"
 
@@ -1730,6 +2172,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
                     wait_for_convergence=not args.no_wait,
                     timeout=args.timeout,
                     antigravity_dispatch=args.antigravity_dispatch,
+                    baseline=args.baseline,
                 )
                 self.save_flight_json(record, str(logs_dir))
                 records.append(record)
