@@ -29,9 +29,9 @@ class DAG(dag_engine_lite.DAG):
         """Adds a task node to the graph.
 
         GROUNDING:
-        - Constructs immutable dag_engine_lite.NodeDefinition with frozen dependency set.
+        - Constructs immutable dag_engine_lite.NodeDefinition with frozen dependency set without eagerly checking dependency existence.
         - Inserts definition into _nodes, registering empty neighbor sets in _upstream and _downstream if absent.
-        - Adds directed edges from each dependency to node_id.
+        - Adds directed edges from each dependency to node_id, deferring existence validation.
         """
         ...
 
@@ -239,7 +239,7 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
         - Sets _states[node_id] to dag_engine_lite.NodeState.FAILED.
         - Transitions all non-terminal nodes to dag_engine_lite.NodeState.CANCELLED if failure_policy is dag_engine_lite.FailurePolicy.FAIL_FAST.
         - Traverses transitive downstream dependents and marks non-terminal dependents as dag_engine_lite.NodeState.SKIPPED if failure_policy is dag_engine_lite.FailurePolicy.SKIP_DOWNSTREAM.
-        - Retains non-terminal states for unblocked independent nodes if failure_policy is dag_engine_lite.FailurePolicy.CONTINUE_ON_ERROR.
+        - Retains non-terminal states for unblocked independent nodes if failure_policy is dag_engine_lite.FailurePolicy.CONTINUE_ON_ERROR, transitioning blocked dependents of failed nodes to dag_engine_lite.NodeState.SKIPPED.
         """
         ...
 
@@ -251,7 +251,7 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
         GROUNDING:
         - Synchronizes _states with all nodes currently registered in _dag.all_nodes().
         - Checks whether every node in the DAG is present in _states and in a terminal state (SUCCEEDED, FAILED, SKIPPED, CANCELLED).
-        - Returns True if all registered DAG nodes have reached terminal states or if DAG is empty, False otherwise.
+        - Returns True if all registered DAG nodes have reached terminal states or if no ready nodes remain and unexecuted nodes are blocked by failed dependencies, or if DAG is empty; False otherwise.
         """
         ...
 
@@ -273,7 +273,7 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
 
         GROUNDING:
         - Ensures _states contains all nodes from _dag.all_nodes().
-        - Returns a shallow copy of _states mapping.
+        - Returns a shallow copy of _states mapping filtered to only include nodes currently present in _dag.all_nodes().
         """
         ...
 
@@ -313,8 +313,8 @@ class DAGRunner(dag_engine_lite.DAGRunner):
         ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-22T10:20:00Z
-# LAST_CHANGED: 2026-10-22T10:20:00Z
-# CHANGE: Model concrete DAG, WaveScheduler, and DAGRunner as system tier singletons
-# SPEC_QA_AUDIT: 2026-10-22T10:20:00Z
+# LAST_CLEANED: 2026-10-26T20:55:00Z
+# LAST_CHANGED: 2026-10-26T20:55:00Z
+# CHANGE: Specify dynamic scheduler state synchronization on remove_node, ascending alphabetical tie-breaking, and SKIP state for blocked dependents
+# SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 # --- END CLEANROOM METADATA ---

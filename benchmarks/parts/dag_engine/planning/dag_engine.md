@@ -71,8 +71,8 @@ By factoring graph construction, topological sorting, failure propagation polici
   - Deferred: Realized by concrete realization in dag_engine_impl.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T01:28:27Z
+LAST_CLEANED: 2026-10-26T21:35:31Z
 LAST_CHANGED: 2026-10-21T18:13:00Z
 CHANGE: Align planning contracts with operation-driven failure policies and continue on error contract
-SPEC_QA_AUDIT: 2026-10-22T01:28:27Z
+SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
 -->

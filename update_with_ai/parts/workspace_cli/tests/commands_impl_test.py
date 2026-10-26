@@ -168,6 +168,22 @@ class FakePendingManager:
     def remove_pending_target(self, ws_root: str, target: str) -> None:
         if target in self.pending:
             self.pending.remove(target)
+            return
+        def _norm(s: str) -> str:
+            stem = os.path.splitext(os.path.basename(s.replace("\\", "/")))[0]
+            changed = True
+            while changed:
+                changed = False
+                for sfx in ("_pretense", "_test", "_impl"):
+                    if stem.endswith(sfx):
+                        stem = stem[: -len(sfx)]
+                        changed = True
+                        break
+            return stem
+        norm_t = _norm(target)
+        for p in list(self.pending):
+            if _norm(p) == norm_t:
+                self.pending.remove(p)
 
 
 class FakeWorkspaceWorkManager:
@@ -477,6 +493,65 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
         with open(buf_path, "r", encoding="utf-8") as f:
             entries = json.load(f)
         self.assertTrue(any(e.get("target") == culprit.lstrip("/") for e in entries))
+
+    def test_run_blame_clears_pending_library_target_when_pretense_blamed(self) -> None:
+        r_def = role_registry.RoleDefinition(
+            role_name="pretense_qa",
+            guide_path="guides/pretense_qa.md",
+            writable_file_patterns=[],
+            readonly_file_patterns=[],
+            feedback_role_deps=["lib", "pretense"],
+            src_pattern="",
+            audit_tag="PRETEST_QA_AUDIT",
+        )
+        self.fake_reg.roles.append(r_def)
+        with open(
+            os.path.join(self.test_dir, ".cleanroom_role.json"), "w", encoding="utf-8"
+        ) as f:
+            json.dump(
+                {"role_name": "pretense_qa", "dir_scope": "pkg", "parts_dir": "pkg"},
+                f,
+            )
+
+        lib_target = os.path.join(self.test_dir, "lib", "dag_engine_lite_impl.py")
+        culprit = os.path.join(
+            self.test_dir, "pretense", "dag_engine_lite_impl_pretense.py"
+        )
+        os.makedirs(os.path.dirname(lib_target), exist_ok=True)
+        os.makedirs(os.path.dirname(culprit), exist_ok=True)
+        with open(lib_target, "w") as f:
+            f.write("# lib code\n")
+        with open(culprit, "w") as f:
+            f.write("# pretense suite\n")
+
+        # Auditor has lib_target in pending work
+        self.fake_pending.pending = [lib_target]
+
+        ret = self.cmd_handler.run_blame(culprit, "Recursion in pretense aggregate")
+        self.assertEqual(ret, 0)
+        # lib_target must be cleared from pending work
+        self.assertNotIn(lib_target, self.fake_pending.pending)
+        self.assertEqual(self.fake_pending.pending, [])
+
+    def test_run_blame_clears_single_pending_target_on_cross_unit_blame(self) -> None:
+        my_target = os.path.join(self.test_dir, "lib", "my_unit.py")
+        culprit = os.path.join(self.test_dir, "lib", "external_dep.py")
+        os.makedirs(os.path.dirname(my_target), exist_ok=True)
+        os.makedirs(os.path.dirname(culprit), exist_ok=True)
+        with open(my_target, "w") as f:
+            f.write("# unit\n")
+        with open(culprit, "w") as f:
+            f.write("# dep\n")
+
+        # Worker or auditor has single pending target
+        self.fake_pending.pending = [my_target]
+        self.fake_check.record_check_executed(self.test_dir, my_target, passed=False)
+
+        ret = self.cmd_handler.run_blame(culprit, "External dependency defect")
+        self.assertEqual(ret, 0)
+        # my_target must be resolved because exactly one pending target was being worked on
+        self.assertNotIn(my_target, self.fake_pending.pending)
+        self.assertEqual(self.fake_pending.pending, [])
 
     def test_run_blame_gated_when_workspace_modified(self) -> None:
         culprit = os.path.join(self.test_dir, "low", "foo.pyi")

@@ -579,6 +579,8 @@ def write_role_agents_md(
             guide = f"guides/{os.path.basename(role_def.guide_path)}"
         elif os.path.isfile(os.path.join(workspace_dir, role_def.guide_path)):
             guide = role_def.guide_path
+        else:
+            guide = f"guides/{os.path.basename(role_def.guide_path)}"
 
     meta_path = os.path.join(workspace_dir, ".cleanroom_role.json")
     is_constrained = False
@@ -759,7 +761,7 @@ If any cleanroom binary ({fail_stop_tools}) fails due to:
 - **DO NOT** attempt alternate execution paths outside `bin/`.
 - **REPORT IMMEDIATELY**: Output the exact command that failed and its verbatim error/traceback to the user, state what dependency or file appears to be missing, and wait for human instruction.
 
-NOTE: Verification test failures (e.g. `[FAIL] Verification failed` output from tests or linters on code under test) are NORMAL test results to be acted upon via {test_failure_action}, NOT infrastructure crashes. Fail-Stop applies ONLY to internal tool crashes, tracebacks, or missing tooling/dependencies.
+NOTE: Verification test failures (e.g. `[FAIL] Verification failed` or `[FAIL] Verification timed out` output from tests or linters on code under test) are NORMAL test results to be acted upon via {test_failure_action}, NOT infrastructure crashes. Timeouts, process hangs, and termination by SIGTERM during test verification indicate code defects (such as infinite loops, deadlocks, live-locks, or unresolvable dependencies in the code under test), NOT infrastructure failures. When `bin/check_files` times out or receives SIGTERM, do NOT fail-stop; diagnose the hanging method/loop and issue a blame against the culprit file. Fail-Stop applies ONLY to internal tool crashes, tracebacks, or missing tooling/dependencies.
 
 ## Unresolvable Impasse & Failure Protocol
 If you determine that success is not possible (e.g. unreachable code under test, contradictory specification contracts, or dead ends that blame cannot resolve):
@@ -848,9 +850,9 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
     ) -> None:
         write_file_with_perms(dst, content, readonly=readonly, executable=executable)
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-20T23:45:00Z
-# LAST_CHANGED: 2026-10-20T23:45:00Z
-# CHANGE: Resolve companion guides and starter templates from workspace root and main repository
+# LAST_CLEANED: 2026-10-26T12:40:00Z
+# LAST_CHANGED: 2026-10-26T12:40:00Z
+# CHANGE: Clarify in fail-stop protocol that test execution timeouts and SIGTERM are code defects rather than infrastructure failures
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

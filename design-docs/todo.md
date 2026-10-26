@@ -40,6 +40,7 @@
    - [Task 2: Minimal Hermetic Role Workspace Provisioning & Clutter Eradication](#task-2-minimal-hermetic-role-workspace-provisioning--clutter-eradication)
    - [[COMPLETED] Task 3: Refine Broad Exception Linter (`check_exception_eating`) for Task Executors & Boundary Handlers](#completed-task-3-refine-broad-exception-linter-check_exception_eating-for-task-executors--boundary-handlers)
    - [Task 4: Standalone Ephemeral Distribution (`uvx cleanroom`)](#task-4-standalone-ephemeral-distribution-uvx-cleanroom)
+   - [Task 5: Contract Slug Integration in Low-Level Specifications & Test Requirement Traceability](#task-5-contract-slug-integration-in-low-level-specifications--test-requirement-traceability)
 
 ---
 
@@ -505,6 +506,12 @@ In Google Antigravity environments:
   - Headless Tab Dispatch (`new-conversation`): supports `--antigravity-dispatch=new-conversation` (or `--antigravity-mode=new-conversation`) spawning dedicated sidebar coordinator tabs to decouple long-running flight polling from active chat canvases.
   - Resilient Fallback: persists active run metadata to `.cleanroom/active_flight.json` and falls back gracefully to standard synchronous stdout directives if `agentapi` or conversation IDs are absent.
   - Cascaded across full specification pipeline (`update_with_ai/parts/benchmark/` HLS $\to$ Planning $\to$ Scenarios $\to$ Low $\to$ Lib $\to$ Tests) and validated with unit test suite in `cleanroom_role_tool_test.py`.
+- [x] **Phase 8: Pretense Stateful Fuzzing, Baseline Equalizer & Watchdog Hardening**
+  - Implemented the Pretense state-machine and fake synthesis engine (`pretense/`) across Cleanroom roles (`pretense`, `pretense_qa`, `pretense_coverage`) and single-agent baselines (`--baseline --pretense`).
+  - Executed empirical cross-model benchmark campaigns on `dag_engine_lite` comparing Cleanroom against Pretense Baselines across DeepSeek-Flash (DSH), Gemini 3.8 Flash (Antigravity), and Qwen-MoE (Local omlx).
+  - Hardened Pretense runner (`pretense/cli.py`) with per-target watchdog timeout (`--timeout`, `PRETENSE_TIMEOUT=45.0s`), GIL-independent native thread dump (`faulthandler.dump_traceback_later`), and non-zero exit on infinite loop/deadlock hangs.
+  - Resolved `reportOptionalCall` typing defect in `pretense/transition.py` to achieve 0 Pyright errors out-of-the-box.
+  - **Empirical Breakthrough**: Pretense serves as an architectural equalizer, allowing single-agent baselines to achieve 100% test pass rates and 98% coverage at 37%–74% lower token cost and 2x–4x faster wall-clock execution than multi-role Cleanroom pipelines.
 
 ### Current Verification Health
 
@@ -607,6 +614,31 @@ The following prioritized roadmap outlines the active forward engineering tasks 
   1. Audit package data inclusion in `pyproject.toml` to ensure methodology templates and default configs are bundled into wheels.
   2. Test `uvx --from . cleanroom --help` in an isolated directory.
   3. Provide pre-built binary distributions via GitHub Releases.
+
+---
+
+### Task 5: Contract Slug Integration in Low-Level Specifications & Test Requirement Traceability
+- **Priority**: High
+- **Component**: `update_python_with_ai/` (`support/tools/`), `update_with_ai/guides/low_to_test.md`
+- **Design Specification**: [`hypothesis_todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/hypothesis_todo.md) Section 6 & [`cross_model_defect_analysis_and_coincident_blindspots.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cross_model_defect_analysis_and_coincident_blindspots.md)
+- **Objective**: Eliminate errors of omission and test suite blind spots without requiring expensive frontier models by formalizing requirement slugs in Low-Level Specifications (`low/*.pyi`) and asserting that every postcondition clause has matching comment/docstring slug tags in tests (`# [slug:<id>]`) verified via zero-token AST/regex linters, avoiding runtime decorators or metadata overhead.
+- **Problem Statement**:
+  - In `dag_engine_lite`, the Qwen Cleanroom run greenlit three genuine soundness defects (off-by-one retry counter, node re-registration edge retention, and scheduler state removal desynchronization) while achieving 100% test pass rates, 95% statement coverage, and 90% branch coverage.
+  - The defects occurred because the test author never conceived of the edge-case postconditions declared in `low/*.pyi` docstrings.
+  - AST code coverage and mutation testing (`mutmut`) only evaluate existing code and are fundamentally blind to errors of omission.
+- **Implementation Steps**:
+  1. **Low-Level Specification Slug Schema**:
+     - Formalize `[slug:<interface>.<method>.<clause>]` syntax in `low/*.pyi` docstring postconditions (e.g. `[slug:dag.add_node.replace_existing]`).
+     - Align with existing factored contract slugs in `planning/*.md` (`planning_format.md`).
+  2. **Test Comment Tagging Convention**:
+     - Test methods document covered requirements using standard comments or docstring tags (e.g. `# [slug:<slug_id>]` or `"""[slug:<slug_id>]"""`), keeping tests clean and free of runtime decorator dependencies.
+  3. **Deterministic Traceability Linter**:
+     - Implement a zero-token Python linter in `update_python_with_ai/` that parses all `[slug:...]` declarations from `low/*.pyi` and scans `tests/*_test.py` comments/docstrings for matching slug references.
+     - Integrate into `bin/check_files`: fail Pass 1 if any slug declared in `low/*.pyi` lacks a corresponding test comment reference.
+  4. **Guide & Prompt Alignment**:
+     - Update `update_python_with_ai/guides/low_to_test.md` to instruct the Certifier ($W_{\text{test}}$) to systematically enumerate and tag test methods with the exact slug comments matching specification clauses.
+  5. **Corpus Migration**:
+     - Retrofit contract slugs into benchmark suites (`benchmarks/parts/dag_engine_lite/low/`), establishing the baseline for the upcoming `semver_solver` benchmark.
 
 
 

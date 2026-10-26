@@ -64,6 +64,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         timeout: Optional[float] = None,
         antigravity_dispatch: str = "message",
         baseline: bool = False,
+        pretense: bool = False,
     ) -> benchmark.FlightRecord:
         """Executes a benchmark flight for a designated model and unit.
 
@@ -78,7 +79,10 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         - MUST execute the flight under the requested harness or simulation mode.
         - WHEN baseline is True and harness is 'loop', MUST raise ValueError rejecting loop harness.
         - WHEN baseline is True, MUST record exactly one execution round under baseline role.
-        - WHEN baseline is True, MUST provide the low-level specification and instruct the developer agent to consult it, implement the two-file library structure in lib/, test _impl.py, and achieve 100% test coverage with opt-outs, awaiting baseline round completion.
+        - WHEN baseline is True, MUST provision execution watchdog environment variables (PYTHONFAULTHANDLER=1, PRETENSE_TIMEOUT=45.0, CLEANROOM_VERIFY_TIMEOUT=45.0) in .env within the flight scope workspace, provide the low-level specification and instruct the developer agent to consult it, implement the two-file library structure in lib/, test _impl.py (or author pretense suites in pretense/), achieve 100% test coverage with opt-outs, and troubleshoot test timeouts/hangs as infinite loops or deadlocks in code under test rather than modifying tests, awaiting baseline round completion (requiring discovered candidate baseline subagent transcripts to be present and to have completed their final step without tool calls).
+        - WHEN baseline is True and harness is in ('dsh', 'deepseek', 'deepseek-harness'), MUST initialize DSH platform singletons and configure the workspace under the agent session lifecycle tier, ensuring the Cordis overlay patch is generated.
+        - WHEN pretense is True, MUST execute synthesis and verification using Pretense state machines, fakes, and property fuzzing.
+        - WHEN baseline is True and pretense is True, MUST provision pretense/ and guides/pretense.md, scaffold starter pretense suite, instruct the agent to author pretense state machine/fakes/fuzz tests, evaluate verification gates with pretense, and record methodology as pretense_baseline.
         - MUST harvest telemetry and evaluate verification gates.
         - MUST return a flight record with complete empirical measurements.
         - MUST skip artifact archival and workspace draining when dry_run is True.
@@ -227,7 +231,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-10-22T23:10:00Z
-# CHANGE: Ground deriving benchmark suites from benchmark part directories
+# LAST_CHANGED: 2026-10-26T21:55:00Z
+# CHANGE: Specify execution watchdog environment provisioning (.env) and infinite loop troubleshooting guidance in baseline developer prompts
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---

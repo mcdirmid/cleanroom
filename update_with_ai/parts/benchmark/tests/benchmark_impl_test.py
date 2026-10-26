@@ -1,5 +1,6 @@
 """Unit tests for benchmark_impl aligned with grounding specifications."""
 
+import importlib
 import io
 import json
 import os
@@ -10,7 +11,7 @@ from unittest import mock
 from unittest.mock import patch
 from pathlib import Path
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system
 from update_with_ai.parts.benchmark.lib import benchmark
 from update_with_ai.parts.benchmark.lib.benchmark_impl import (
     BenchmarkEvaluator,
@@ -553,6 +554,10 @@ class BenchmarkImplTest(unittest.TestCase):
 
             self.assertEqual(flight_scope, "benchmark_1")
             self.assertTrue(flight_unit_dir.is_dir())
+            self.assertTrue((repo_root / flight_scope / ".env").is_file())
+            env_text = (repo_root / flight_scope / ".env").read_text(encoding="utf-8")
+            self.assertIn("PYTHONFAULTHANDLER=1", env_text)
+            self.assertIn("PRETENSE_TIMEOUT=45.0", env_text)
             self.assertTrue((repo_root / flight_scope / "parts" / "cleanroom.toml").is_file())
             self.assertTrue((flight_unit_dir / "high" / "sample.md").is_file())
             rewritten_md = (flight_unit_dir / "high" / "sample.md").read_text(encoding="utf-8")
@@ -953,6 +958,8 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertIn("100% code coverage", stdout_output)
             self.assertIn("pragma: no cover", stdout_output)
             self.assertIn("_impl_test.py", stdout_output)
+            self.assertIn("Execution & Troubleshooting Rules", stdout_output)
+            self.assertIn("infinite loop or deadlock", stdout_output)
             self.assertEqual(record.methodology, "baseline")
             self.assertEqual(record.stages_executed, ["baseline"])
 
@@ -993,13 +1000,267 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertEqual(rounds, {"baseline": 1})
             self.assertTrue(_LogHarvester._is_antigravity_baseline_complete(brain_dir, 0.0, scope="benchmark_1"))
 
+    def test_antigravity_coordinator_and_workers_harvesting(self) -> None:
+        """CUJ: Harvesting telemetry across coordinator and role worker subagent transcripts."""
+        from update_with_ai.parts.benchmark.lib.benchmark_impl import _LogHarvester
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            brain_dir = Path(tmp_dir) / "brain"
+            coord_id = "00000000-0000-0000-0000-000000000010"
+            worker1_id = "00000000-0000-0000-0000-000000000011"
+            worker2_id = "00000000-0000-0000-0000-000000000012"
+
+            # Coordinator transcript includes invoke_subagent prompt referencing role worker
+            c_log_dir = brain_dir / coord_id / ".system_generated" / "logs"
+            c_log_dir.mkdir(parents=True, exist_ok=True)
+            c_transcript = c_log_dir / "transcript.jsonl"
+            c_lines = [
+                json.dumps({"step_index": 0, "source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": "Clean all dirty nodes in benchmark_1 using cleanroom_coordinator."}),
+                json.dumps({"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 1000, "cache_read_tokens": 2000, "output_tokens": 100}),
+                json.dumps({"step_index": 2, "source": "MODEL", "type": "GENERIC", "content": f'Created the following subagents:\n{{"conversationId": "{worker1_id}"}}\n{{"conversationId": "{worker2_id}"}}'}),
+                json.dumps({"step_index": 3, "source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 500, "cache_read_tokens": 1000, "output_tokens": 50, "tool_calls": [{"name": "invoke_subagent", "args": {"Prompt": "You are an autonomous Cleanroom 'lib' worker for scope 'benchmark_1'."}}]}),
+            ]
+            c_transcript.write_text("\n".join(c_lines) + "\n", encoding="utf-8")
+
+            # Worker 1: lib
+            w1_log_dir = brain_dir / worker1_id / ".system_generated" / "logs"
+            w1_log_dir.mkdir(parents=True, exist_ok=True)
+            w1_transcript = w1_log_dir / "transcript.jsonl"
+            w1_lines = [
+                json.dumps({"step_index": 0, "source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": "You are an autonomous Cleanroom 'lib' worker for scope 'benchmark_1'."}),
+                json.dumps({"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 4000, "cache_read_tokens": 8000, "output_tokens": 300}),
+            ]
+            w1_transcript.write_text("\n".join(w1_lines) + "\n", encoding="utf-8")
+
+            # Worker 2: pretense
+            w2_log_dir = brain_dir / worker2_id / ".system_generated" / "logs"
+            w2_log_dir.mkdir(parents=True, exist_ok=True)
+            w2_transcript = w2_log_dir / "transcript.jsonl"
+            w2_lines = [
+                json.dumps({"step_index": 0, "source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": "You are an autonomous Cleanroom 'pretense' worker for scope 'benchmark_1'."}),
+                json.dumps({"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 3000, "cache_read_tokens": 6000, "output_tokens": 200}),
+            ]
+            w2_transcript.write_text("\n".join(w2_lines) + "\n", encoding="utf-8")
+
+            u_in, c_in, out_tok, lats, rounds = _LogHarvester.harvest_from_antigravity(
+                brain_dir, 0.0, scope="benchmark_1", baseline=False
+            )
+            # Total across coord (1500) + w1 (4000) + w2 (3000) = 8500
+            self.assertEqual(u_in, 8500)
+            # Total cached: coord (3000) + w1 (8000) + w2 (6000) = 17000
+            self.assertEqual(c_in, 17000)
+            # Total output: coord (150) + w1 (300) + w2 (200) = 650
+            self.assertEqual(out_tok, 650)
+            self.assertEqual(rounds, {"lib": 1, "pretense": 1})
+
+    def test_baseline_pretense_simulation(self) -> None:
+        """CUJ: Executing a simulated baseline flight with pretense enabled."""
+        evaluator = BenchmarkEvaluator()
+        catalog = evaluator.get_model_catalog()
+        model = catalog["gemini-3.8-flash"]
+        unit = evaluator.get_suite_catalog()["dag_engine"][0]
+
+        record = evaluator.execute_flight(
+            model=model,
+            unit=unit,
+            rq="rq1",
+            harness="antigravity",
+            simulate=True,
+            baseline=True,
+            pretense=True,
+        )
+
+        self.assertTrue(record.flight_id.endswith("_pretense_baseline"))
+        self.assertEqual(record.methodology, "pretense_baseline")
+        self.assertEqual(record.stages_executed, ["baseline"])
+        self.assertEqual(record.measurements.role_rounds, {"baseline": 1})
+        self.assertTrue(record.verification_outcomes.spec_linter_pass)
+        self.assertGreater(record.verification_outcomes.unit_tests_passed, 0)
+
+    def test_baseline_pretense_artifact_archival_directory(self) -> None:
+        """CUJ: Archiving successful baseline pretense flight saves into -pretense-baseline folder with pretense_<N>.py."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            evaluator = BenchmarkEvaluator()
+            evaluator._repo_root = repo_root
+
+            model = evaluator.get_model_catalog()["gemini-3.8-flash"]
+            unit = benchmark.BenchmarkUnit(
+                suite="dag_engine",
+                task_id="dag_engine",
+                unit_dir="parts/dag_engine",
+                target_address="//parts/dag_engine#lib",
+            )
+
+            unit_full = repo_root / "parts" / "dag_engine"
+            lib_dir = unit_full / "lib"
+            pretense_dir = unit_full / "pretense"
+            lib_dir.mkdir(parents=True, exist_ok=True)
+            pretense_dir.mkdir(parents=True, exist_ok=True)
+            (lib_dir / "dag_engine.py").write_text("class DAG: pass\n", encoding="utf-8")
+            (pretense_dir / "dag_engine_impl_pretense.py").write_text("class TestDAGUnit: pass\n", encoding="utf-8")
+
+            measurements = benchmark.FlightMeasurements(
+                inbound_tokens_uncached=1000,
+                inbound_tokens_cached=2000,
+                outbound_tokens=500,
+                step_latencies_seconds=[1.2],
+                wall_clock_seconds=5.0,
+                role_rounds={"baseline": 1},
+            )
+            measurements.compute_totals(model)
+            outcomes = benchmark.VerificationOutcomes(
+                spec_linter_pass=True,
+                pyright_errors=0,
+                unit_tests_passed=10,
+                unit_tests_failed=0,
+                line_coverage_pct=95.0,
+                branch_coverage_pct=90.0,
+            )
+            record = benchmark.FlightRecord(
+                flight_id="flight_test_pretense_baseline_001",
+                timestamp="2026-10-25T11:00:00Z",
+                rq="RQ1",
+                model={"identifier": model.identifier, "tier": model.tier, "default_harness": "antigravity"},
+                benchmark_unit={"task_id": unit.task_id, "suite": unit.suite},
+                methodology="pretense_baseline",
+                stages_executed=["baseline"],
+                measurements=measurements,
+                verification_outcomes=outcomes,
+            )
+
+            res = evaluator.archive_flight_artifacts(record, unit)
+            self.assertIsNotNone(res)
+            assert res is not None
+            lib_dest, test_dest = res
+            self.assertIn("gemini-3.8-flash+antigravity-pretense-baseline", lib_dest)
+            self.assertTrue(test_dest.endswith("pretense_1.py"))
+            lib_content = Path(lib_dest).read_text(encoding="utf-8")
+            self.assertIn("Methodology: pretense_baseline", lib_content)
+            self.assertIn("Role Execution Rounds:   baseline: 1 (Total: 1)", lib_content)
+
+    @mock.patch("sys.stdout", new_callable=io.StringIO)
+    def test_baseline_pretense_workspace_setup_and_scaffolding(self, mock_stdout: io.StringIO) -> None:
+        """CUJ: Baseline pretense flight provisions pretense symlink, guides, scaffolds pretense file, and instructs model."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            evaluator = BenchmarkEvaluator()
+            evaluator._repo_root = repo_root
+
+            model = evaluator.get_model_catalog()["gemini-3.8-flash"]
+            unit = benchmark.BenchmarkUnit(
+                suite="dag_engine",
+                task_id="dag_engine",
+                unit_dir="parts/dag_engine",
+                target_address="//parts/dag_engine#lib",
+            )
+
+            # Provision source low-level spec in unit dir
+            unit_full = repo_root / "parts" / "dag_engine"
+            low_dir = unit_full / "low"
+            low_dir.mkdir(parents=True, exist_ok=True)
+            (low_dir / "dag_engine.pyi").write_text("class DAG: ...\n", encoding="utf-8")
+
+            # Provision guides in repo_root
+            guides_dir = repo_root / "update_python_with_ai" / "guides"
+            guides_dir.mkdir(parents=True, exist_ok=True)
+            (guides_dir / "pretense.md").write_text("# Pretense Guide\n", encoding="utf-8")
+            (guides_dir / "low_to_lib.md").write_text("# Low to Lib Guide\n", encoding="utf-8")
+
+            # Provision pretense runtime dir in repo_root
+            (repo_root / "pretense").mkdir(parents=True, exist_ok=True)
+
+            with mock.patch("update_with_ai.parts.benchmark.lib.benchmark_impl._VerificationGate.evaluate") as mock_gate, \
+                 mock.patch("update_with_ai.parts.benchmark.lib.benchmark_impl._LogHarvester.harvest_from_antigravity", return_value=(100, 200, 50, [1.0], {"baseline": 1})):
+                mock_gate.return_value = benchmark.VerificationOutcomes(
+                    spec_linter_pass=True, pyright_errors=0, unit_tests_passed=5, unit_tests_failed=0
+                )
+                record = evaluator.execute_flight(
+                    model=model,
+                    unit=unit,
+                    rq="RQ1",
+                    harness="antigravity",
+                    baseline=True,
+                    pretense=True,
+                    wait_for_convergence=False,
+                    antigravity_dispatch="none",
+                )
+
+            stdout_output = mock_stdout.getvalue()
+            self.assertIn("cleanroom_baseline_worker", stdout_output)
+            self.assertIn("Pretense Baseline Developer", stdout_output)
+            self.assertIn("Low-Level Specification", stdout_output)
+            self.assertIn("guides/pretense.md", stdout_output)
+            self.assertIn("uv run pretense", stdout_output)
+            self.assertIn("Execution & Troubleshooting Rules", stdout_output)
+            self.assertIn("infinite loop or deadlock", stdout_output)
+            self.assertEqual(record.methodology, "pretense_baseline")
+            self.assertEqual(record.stages_executed, ["baseline"])
+
+    def test_is_antigravity_baseline_complete_lifecycle(self) -> None:
+        """Verifies _is_antigravity_baseline_complete requires candidate transcripts and conclusion."""
+        from update_with_ai.parts.benchmark.lib.benchmark_impl import _LogHarvester
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            brain = Path(tmp_dir)
+            t_start = 1000.0
+
+            # 1. Empty brain dir -> False (worker hasn't started)
+            self.assertFalse(_LogHarvester._is_antigravity_baseline_complete(brain, t_start, scope="flight_1"))
+
+            # 2. Worker session started, but still running (tool_calls present)
+            worker_dir = brain / "worker_conv_1" / ".system_generated" / "logs"
+            worker_dir.mkdir(parents=True, exist_ok=True)
+            t_file = worker_dir / "transcript.jsonl"
+            t_file.write_text(
+                json.dumps({"type": "USER_INPUT", "content": "You are an autonomous software developer working in scope 'flight_1'"}) + "\n"
+                + json.dumps({"type": "PLANNER_RESPONSE", "tool_calls": [{"name": "run_command"}]}) + "\n",
+                encoding="utf-8",
+            )
+            os.utime(t_file, (1050.0, 1050.0))
+            self.assertFalse(_LogHarvester._is_antigravity_baseline_complete(brain, t_start, scope="flight_1"))
+
+            # 3. Worker session completed (final PLANNER_RESPONSE without tool calls)
+            with open(t_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"type": "PLANNER_RESPONSE", "content": "Work complete"}) + "\n")
+            os.utime(t_file, (1060.0, 1060.0))
+            self.assertTrue(_LogHarvester._is_antigravity_baseline_complete(brain, t_start, scope="flight_1"))
+
+    def test_dsh_baseline_workspace_configuration(self) -> None:
+        """Verifies that DSH baseline workspace configuration creates dsh_patch.yml and AGENTS.md under agent_session."""
+        with tempfile.TemporaryDirectory() as td:
+            flight_scope_dir = Path(td)
+            cleanroom_dir = flight_scope_dir / ".cleanroom"
+            cleanroom_dir.mkdir(parents=True, exist_ok=True)
+            patch_file = cleanroom_dir / "dsh_patch.yml"
+
+            dsh_asm = importlib.import_module("update_with_ai.parts.dsh.lib.dsh_asm")
+            dsh_asm.__initialize__()
+
+            agent_sess_mod = importlib.import_module("update_with_ai.parts.agent.lib.session")
+            dsh_ws_mod = importlib.import_module("update_with_ai.parts.dsh.lib.dsh_workspace")
+            with enter_phase(agent_sess_mod.agent_session) as sess_scope:
+                ws_cfg = sess_scope.get(dsh_ws_mod.DshWorkspaceConfigurer)
+                rep = ws_cfg.configure_role_workspace(
+                    workspace_dir=str(flight_scope_dir),
+                    role_name="baseline",
+                    model_name="deepseek-flash",
+                )
+                self.assertIsNotNone(rep)
+
+            self.assertTrue(patch_file.exists())
+            patch_text = patch_file.read_text(encoding="utf-8")
+            self.assertIn("danger-full-access", patch_text)
+            self.assertIn("deepseek-flash", patch_text)
+
+            agents_file = flight_scope_dir / "AGENTS.md"
+            self.assertTrue(agents_file.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-10-21T14:15:00Z
-# CHANGE: Test ephemeral flight scope provisioning, teardown, and event log archival
+# LAST_CHANGED: 2026-10-26T21:55:00Z
+# CHANGE: Test execution watchdog environment provisioning (.env) and infinite loop troubleshooting guidance in baseline developer prompts
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---

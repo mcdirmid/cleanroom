@@ -99,13 +99,47 @@ class WorkspaceRolesImplTest(unittest.TestCase):
             self.assertIn("Auditor roles can only be silent_role_deps", str(ctx.exception))
 
 
+    def test_list_roles_pipeline_filtering(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            toml_path = os.path.join(tmp_dir, "cleanroom_roles.toml")
+            with open(toml_path, "w", encoding="utf-8") as f:
+                f.write(
+                    '[roles.lib]\nsrc_pattern = "lib/{unit}.py"\n\n'
+                    '[roles.test]\nsrc_pattern = "tests/{unit}_test.py"\npipeline = "standard"\n\n'
+                    '[roles.pretense]\nsrc_pattern = "pretense/{unit}_pretense.py"\npipeline = "pretense"\n'
+                )
+            # Create a dir_scope with cleanroom.toml setting pipeline = "pretense"
+            scope_dir = os.path.join(tmp_dir, "my_scope")
+            os.makedirs(scope_dir)
+            with open(os.path.join(scope_dir, "cleanroom.toml"), "w", encoding="utf-8") as f:
+                f.write('pipeline = "pretense"\n')
+
+            roles = self.resolver.list_roles(repo_root=tmp_dir, dir_scope="my_scope")
+            role_names = [r.role_name for r in roles]
+            self.assertIn("lib", role_names)
+            self.assertIn("pretense", role_names)
+            self.assertNotIn("test", role_names)
+
+            # Create standard scope
+            std_dir = os.path.join(tmp_dir, "std_scope")
+            os.makedirs(std_dir)
+            with open(os.path.join(std_dir, "cleanroom.toml"), "w", encoding="utf-8") as f:
+                f.write('pipeline = "standard"\n')
+
+            std_roles = self.resolver.list_roles(repo_root=tmp_dir, dir_scope="std_scope")
+            std_names = [r.role_name for r in std_roles]
+            self.assertIn("lib", std_names)
+            self.assertIn("test", std_names)
+            self.assertNotIn("pretense", std_names)
+
+
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Unit tests for roles_impl
+# LAST_CHANGED: 2026-10-25T21:55:00Z
+# CHANGE: Add test for pipeline-aware role listing in roles_impl_test
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

@@ -121,6 +121,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         timeout: Optional[float] = None,
         antigravity_dispatch: str = "message",
         baseline: bool = False,
+        pretense: bool = False,
     ) -> FlightRecord:
         ...
 
@@ -154,8 +155,8 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-10-20T22:34:00Z
-# CHANGE: Expose get_suite_catalog and results_dir parameter on BenchmarkEvaluator
+# LAST_CHANGED: 2026-10-25T17:50:00Z
+# CHANGE: Add pretense flag to execute_flight contract
 # --- END CLEANROOM METADATA ---
 
 

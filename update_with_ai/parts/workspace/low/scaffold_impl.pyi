@@ -75,7 +75,7 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
           cleanroom compilation stub isolation rules for roles declaring stub dependencies,
           prohibitions against runner binary inspection and linter hunting,
           model-contingent payload ceiling protection for local or output-constrained models while omitting it for cloud models,
-          fail-stop reporting protocols, and tool execution instructions with 0o644 permissions (workspace_scaffold_mechanics).
+          fail-stop reporting protocols (clarifying test timeouts and SIGTERM as code defects rather than infrastructure failures), and tool execution instructions with 0o644 permissions (workspace_scaffold_mechanics).
         """
         ...
 
@@ -123,8 +123,8 @@ def __orphan__() -> None:
     ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-22T13:50:00Z
-# LAST_CHANGED: 2026-10-22T13:50:00Z
-# CHANGE: Enforce strict workspace root sys.path isolation in runner zipapps
+# LAST_CLEANED: 2026-10-26T12:40:00Z
+# LAST_CHANGED: 2026-10-26T12:40:00Z
+# CHANGE: Clarify in fail-stop protocol that test execution timeouts and SIGTERM are code defects rather than infrastructure failures
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

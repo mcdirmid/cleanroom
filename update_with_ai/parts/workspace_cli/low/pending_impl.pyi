@@ -61,8 +61,8 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
         """Removes a submitted target from local pending work buffer.
 
         GROUNDING:
-        - Filters out target path or stem matching submitted target from
-          cleanroom_files_ext.PENDING_WORK_FILE without wiping non-matching targets.
+        - Filters out target path or stem normalized across pretense, test, and implementation variants
+          matching submitted target from cleanroom_files_ext.PENDING_WORK_FILE without wiping non-matching targets.
         """
         ...
 
@@ -89,7 +89,7 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T17:40:00Z
-# CHANGE: Define pending_impl low-level specification
+# LAST_CHANGED: 2026-10-25T22:36:00Z
+# CHANGE: Document stem normalization across pretense, test, and impl variants for remove_pending_target
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

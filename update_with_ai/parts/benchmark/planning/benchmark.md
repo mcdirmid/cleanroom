@@ -22,7 +22,7 @@ By establishing standard data models for model specifications, benchmark units, 
 - A model specification computes financial cost from non-cached inbound tokens, cached inbound tokens, and outbound tokens according to its rate card. [compute_financial_cost]
 - A system's benchmark evaluator provides model and suite catalogs mapping identifiers to specifications and units. [provide_catalogs]
 - A system's benchmark evaluator provisions an ephemeral flight scope directory preserving the package structure of the benchmark unit's enclosing scope to isolate role workspaces and prevent concurrent flight collisions. [provision_flight_scope]
-- A system's benchmark evaluator executes a benchmark flight for a designated model specification and benchmark unit across Cleanroom or baseline methodologies, providing the low-level specification and instructing the baseline agent to implement the two-file library structure in `lib/`, test `_impl.py`, and achieve 100% test coverage with opt-outs for baseline flights, supporting optional custom results directory destinations. [execute_benchmark_flight]
+- A system's benchmark evaluator executes a benchmark flight for a designated model specification and benchmark unit across Cleanroom, Pretense, baseline, or combined pretense-baseline methodologies, providing the low-level specification and instructing the baseline agent to implement the two-file library structure in `lib/`, test `_impl.py` (or author pretense suites in `pretense/`), and achieve 100% test coverage with opt-outs for baseline flights, provisioning pretense runtime tools and scaffolding when combined, supporting optional custom results directory destinations. [execute_benchmark_flight]
 - A system's benchmark evaluator evaluates verification outcomes through two-pass verification gates. [evaluate_verification_outcomes]
 - A system's benchmark evaluator produces a flight trace recording empirical telemetry and verification outcomes. [produce_flight_trace]
 - A system's benchmark evaluator formats flight traces into a summary report. [format_summary_report]
@@ -47,7 +47,7 @@ By establishing standard data models for model specifications, benchmark units, 
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-19T18:45:00Z
-LAST_CHANGED: 2026-10-22T23:10:00Z
-CHANGE: Update benchmark unit typing to make descriptive metadata optional
+LAST_CHANGED: 2026-10-25T22:45:00Z
+CHANGE: Specify Pretense with baseline benchmark evaluation execution
 SPEC_QA_AUDIT: 2026-10-19T18:45:00Z
 -->

@@ -820,14 +820,14 @@ def main() -> int:
         mod_content = read_text(args.module_path)
         if spec_file and is_uninitialized_module(mod_content):
             sys.stderr.write(
-                f"{args.module_path} is uninitialized (missing implementation classes and functions). Consult your Companion Guide (update_python_with_ai/guides/low_to_lib.md) for required structure.\n"
+                f"{args.module_path} is uninitialized (missing implementation classes and functions). Consult your Companion Guide (guides/low_to_lib.md) for required structure.\n"
             )
             return 1
     elif os.path.isfile(args.module_path):
         mod_content = read_text(args.module_path)
         if spec_file and is_uninitialized_module(mod_content):
             sys.stderr.write(
-                f"{args.module_path} is uninitialized (missing implementation classes and functions). Consult your Companion Guide (update_python_with_ai/guides/low_to_lib.md) for required structure.\n"
+                f"{args.module_path} is uninitialized (missing implementation classes and functions). Consult your Companion Guide (guides/low_to_lib.md) for required structure.\n"
             )
             return 1
 

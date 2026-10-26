@@ -195,6 +195,8 @@ def _compute_role_work_queue(
         stem = os.path.splitext(os.path.basename(it.target_file))[0]
         if stem.endswith("_test"):
             stem = stem[:-5]
+        elif stem.endswith("_pretense"):
+            stem = stem[:-9]
         dirtiness_reasons = (
             it.dirtiness_reasons
             if hasattr(it, "dirtiness_reasons")
@@ -340,6 +342,18 @@ def _resolve_effective_max_failures(
     return 5 if is_local else 100
 
 
+def _resolve_workspace_guide_path(ws_root: str, guide_path: Optional[str]) -> Optional[str]:
+    """Resolves a role definition guide path to its workspace-relative path ('guides/<basename>')."""
+    if not guide_path:
+        return None
+    ws_guide = f"guides/{os.path.basename(guide_path)}"
+    if os.path.isfile(os.path.join(ws_root, ws_guide)):
+        return ws_guide
+    if os.path.isfile(os.path.join(ws_root, guide_path)):
+        return guide_path
+    return ws_guide
+
+
 # Contract: Realizes work discovery and file verification for role workspaces in agent_session tier.
 class WorkspaceChecker(check.WorkspaceChecker):
     """Executes work discovery and file verification for role workspaces."""
@@ -405,7 +419,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
             try:
                 r_def = reg.resolve_role_definition(role_name, repo_root=main_root)
                 if r_def and r_def.guide_path:
-                    role_guide_path = r_def.guide_path
+                    role_guide_path = _resolve_workspace_guide_path(ws_root, r_def.guide_path)
             except Exception:
                 pass
 
@@ -527,7 +541,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
                     try:
                         ir_def = reg.resolve_role_definition(item["role"], repo_root=main_root)
                         if ir_def and ir_def.guide_path:
-                            item_guide = ir_def.guide_path
+                            item_guide = _resolve_workspace_guide_path(ws_root, ir_def.guide_path)
                     except Exception:
                         pass
                 if item_guide:
@@ -773,11 +787,18 @@ class WorkspaceChecker(check.WorkspaceChecker):
                         else:
                             print(f"[OK] Verification passed for {active_unit}")
                 except subprocess.TimeoutExpired as exc:
-                    out_text = (exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or ""))
-                    err_text = (exc.stderr.decode() if isinstance(exc.stderr, bytes) else (exc.stderr or ""))
-                    print(
-                        f"[FAIL] Verification timed out after {cmd_timeout:.1f}s for {active_unit}:\n{out_text}\n{err_text}".strip()
-                    )
+                    out_text = (exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or ""))
+                    err_text = (exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or ""))
+                    diagnostic_parts = [
+                        f"[FAIL] Verification timed out after {cmd_timeout:.1f}s for {active_unit} (possible infinite loop or deadlock detected in code under test).",
+                        "NOTE: This execution timeout is a verification failure in the library or test code, NOT an infrastructure error.",
+                        "Action: Diagnose the hanging method or infinite loop and issue a blame against the culprit file.",
+                    ]
+                    if out_text.strip():
+                        diagnostic_parts.append(f"STDOUT:\n{out_text.strip()}")
+                    if err_text.strip():
+                        diagnostic_parts.append(f"STDERR:\n{err_text.strip()}")
+                    print("\n".join(diagnostic_parts))
                     unit_failed = True
 
             if unit_failed:
@@ -814,9 +835,9 @@ class WorkspaceChecker(check.WorkspaceChecker):
     ) -> None:
         record_check_executed(ws_root, target_path, passed)
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-10-20T21:10:00Z
-# CHANGE: Direct immediate round conclusion in actionable next step when only blocked targets remain
+# LAST_CLEANED: 2026-10-26T12:40:00Z
+# LAST_CHANGED: 2026-10-26T12:40:00Z
+# CHANGE: Clarify in check_files that verification timeouts indicate code defects rather than infrastructure failures
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

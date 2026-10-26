@@ -97,7 +97,7 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
           attribution.AttributionCoordinator, appends blame message to
           cleanroom_files_ext.CLEANROOM_LOG_FILE in the directory containing parts,
           records the blamed target in cleanroom_files_ext.BLAME_BUFFER_FILE in the workspace root,
-          and clears target from pending work via pending.WorkspacePendingManager.
+          and clears target or single pending workspace target from pending work via pending.WorkspacePendingManager.
         """
         ...
 
@@ -114,7 +114,7 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
         GROUNDING:
         - Enforces that modified target files have been checked via check_files since modification,
           delegates failure marking and diagnostics recording to
-          attribution.AttributionCoordinator, and clears target from pending work
+          attribution.AttributionCoordinator, and clears target or single pending workspace target from pending work
           via pending.WorkspacePendingManager.
         """
         ...
@@ -191,7 +191,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-20T21:10:00Z
-# CHANGE: Record blamed target into workspace blame buffer in run_blame
+# LAST_CHANGED: 2026-10-25T22:36:00Z
+# CHANGE: Clear matching target or single pending target upon accepted blame and fail
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

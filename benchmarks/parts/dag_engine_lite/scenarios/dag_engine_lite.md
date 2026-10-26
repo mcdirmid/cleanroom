@@ -61,9 +61,25 @@ Given: A DAG runner managing a graph with independent root node `worker_1` and d
 1. Execute the DAG runner run operation with failure policy continue on error.
 Observed: The returned DAG run report records total node count 2, succeeded node identifiers `worker_1` and `worker_2`, and 0 failed node identifiers.
 
+## Scenario 8 — Deferred dependency registration on add_node
+
+Given: A newly initialized directed acyclic graph containing zero nodes.
+
+1. Add node `consumer` depending on `provider` before `provider` is registered in the graph.
+Observed: Node `consumer` is successfully registered without raising an error.
+
+2. Validate graph invariants before adding `provider`.
+Observed: Invariant validation raises node not found error identifying missing node `provider`.
+
+3. Add node `provider` with zero dependencies.
+Observed: Node `provider` is registered in the graph.
+
+4. Validate graph invariants.
+Observed: Validation completes successfully with zero errors.
+
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T10:20:00Z
-LAST_CHANGED: 2026-10-22T10:20:00Z
-CHANGE: Specify failure policy on mark_failed and run steps
-SPEC_QA_AUDIT: 2026-10-22T10:20:00Z
+LAST_CLEANED: 2026-10-26T20:55:00Z
+LAST_CHANGED: 2026-10-26T20:55:00Z
+CHANGE: Add scenario for deferred dependency validation on add_node
+SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 -->

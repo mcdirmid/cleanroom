@@ -411,7 +411,10 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
             _record_blame_buffer(ws_root, culprit_file, critique=critique, caller=caller)
             if meta:
                 pending_mgr = get_singleton(pending.WorkspacePendingManager)
+                pending_targets = list(pending_mgr.get_pending_work(ws_root))
                 pending_mgr.remove_pending_target(ws_root, culprit_file)
+                if len(pending_targets) == 1 and list(pending_mgr.get_pending_work(ws_root)) == pending_targets:
+                    pending_mgr.remove_pending_target(ws_root, pending_targets[0])
             return 0
         return 1
 
@@ -459,7 +462,10 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
         if outcome.accepted:
             if meta:
                 pending_mgr = get_singleton(pending.WorkspacePendingManager)
+                pending_targets = list(pending_mgr.get_pending_work(ws_root))
                 pending_mgr.remove_pending_target(ws_root, file_path)
+                if len(pending_targets) == 1 and list(pending_mgr.get_pending_work(ws_root)) == pending_targets:
+                    pending_mgr.remove_pending_target(ws_root, pending_targets[0])
             return 0
         return 1
 
@@ -619,8 +625,8 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
         return 0
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-20T21:10:00Z
-# CHANGE: Record blamed target into workspace blame buffer in run_blame
+# LAST_CHANGED: 2026-10-25T22:36:00Z
+# CHANGE: Clear matching target or single pending target upon accepted blame and fail
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

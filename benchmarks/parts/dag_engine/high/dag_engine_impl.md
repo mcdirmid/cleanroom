@@ -37,8 +37,8 @@ A *concrete DAG runner* realizes the DAG runner protocol by executing graph wave
 Execution advances by iteratively dispatching ready waves to worker threads, running task actions with retry backoff, propagating failure policies when marking node failures in the scheduler, and compiling terminal node outcomes into a consolidated DAG run report. Loop iterations sequentially evaluate cancellation events and timeout limits as independent loop guards before dispatching ready waves to worker threads.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T01:28:31Z
+LAST_CLEANED: 2026-10-26T21:35:31Z
 LAST_CHANGED: 2026-10-22T10:20:00Z
 CHANGE: Realize concrete DAG, WaveScheduler, and DAGRunner as system singleton services with operation-driven failure propagation
-SPEC_QA_AUDIT: 2026-10-22T01:28:31Z
+SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
 -->

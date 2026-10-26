@@ -518,8 +518,8 @@ class DAGRunner(Singleton[SystemTier], Protocol):
         ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-22T01:28:27Z
+# LAST_CLEANED: 2026-10-26T21:35:31Z
 # LAST_CHANGED: 2026-10-22T10:20:00Z
 # CHANGE: Model DAG, WaveScheduler, and DAGRunner as system tier singletons
-# SPEC_QA_AUDIT: 2026-10-22T01:28:27Z
+# SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
 # --- END CLEANROOM METADATA ---

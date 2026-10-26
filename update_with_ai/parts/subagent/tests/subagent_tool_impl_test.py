@@ -197,14 +197,26 @@ class SubagentToolImplTest(unittest.TestCase):
                 "//staging/parts/sandbox:file_reader_impl#qa",
             )
 
+    def test_execute_command_orchestrate_with_pretense(self) -> None:
+        """Scenario 6: Verifies execute_command parses --pretense argument without error."""
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(subagent_tool.SubagentToolRunner)
+            status = runner.execute_command([
+                "orchestrate",
+                "staging",
+                "--pretense",
+                "--simulation",
+            ])
+            self.assertEqual(status, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_tool_impl unit tests
+# LAST_CHANGED: 2026-10-25T21:50:00Z
+# CHANGE: test subagent_tool_impl with --pretense flag
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

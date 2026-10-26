@@ -73,8 +73,22 @@ Given: the benchmark evaluator service and a suite catalog containing suite `dag
 2. The caller executes log harvesting on a completed Cleanroom role log.
    Observed: returns inbound token counts, outbound token counts, step latencies, and role execution rounds parsed from execution log events.
 
+## Scenario 10 — Pretense benchmark flight recording and execution
+
+Given: a benchmark evaluator and a flight request with the pretense flag enabled.
+
+1. The caller executes a benchmark flight with pretense enabled.
+   Observed: the flight executes synthesis and testing using Pretense state machines, fakes, and property fuzzing across pretense roles or baseline prompts, verification gates evaluate Pretense test execution and statement coverage, methodology is `pretense`, and stages executed reflect pretense pipeline roles.
+
+## Scenario 11 — Pretense baseline benchmark flight execution
+
+Given: a benchmark evaluator and a flight request with both `--baseline` and `--pretense` enabled.
+
+1. The caller executes a baseline pretense flight.
+   Observed: the evaluator provisions the pretense package and companion guide into the baseline workspace root, pre-scaffolds the starter pretense suite, instructs the baseline agent to implement `lib/` and author state machine models, transitions, fake synthesis, unit tests, and property fuzz tests in `pretense/` verifying with `uv run pretense`, exactly one execution round is tallied under role `baseline`, stages executed reflects baseline, methodology is `pretense_baseline`, and passing artifacts are archived under `-pretense-baseline`.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-19T18:45:00Z
-LAST_CHANGED: 2026-10-22T23:10:00Z
-CHANGE: Update scenario 2 and 7 to reference discovered benchmark parts and optional metadata
+LAST_CHANGED: 2026-10-25T22:45:00Z
+CHANGE: Add scenario for Pretense baseline benchmark flight execution
 -->

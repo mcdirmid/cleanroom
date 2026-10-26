@@ -20,12 +20,12 @@ By encapsulating adjacency index management, employing Kahn's algorithm for dete
 - A concrete directed acyclic graph maintains an adjacency index partitioning upstream prerequisite neighbor sets and downstream dependent neighbor sets. [maintain_adjacency_maps]
 - A concrete directed acyclic graph updates upstream and downstream neighbor sets during node registration and edge addition. [update_neighbor_sets_on_registration]
 - A concrete directed acyclic graph tests node presence directly against the node registry. [test_node_registry_membership]
-- A concrete directed acyclic graph removes node registry entries and clears incident connections across both adjacency sets upon node removal. [purge_incident_connections_on_removal]
-- A concrete directed acyclic graph rejects unregistered dependencies with node not found error upon lookup or edge insertion. [enforce_node_presence]
+- A concrete directed acyclic graph removes node registry entries, clears incident connections across both adjacency sets upon node removal, and purges removed nodes from wave scheduler tracking. [purge_incident_connections_on_removal]
+- A concrete directed acyclic graph rejects unregistered dependencies with node not found error upon lookup or edge insertion, deferring missing dependency validation on node addition. [enforce_node_presence]
 - A concrete directed acyclic graph detects cycles by executing depth-first traversal with active path recursion tracking. [detect_graph_cycles]
 - When depth-first traversal discovers a back-edge, the concrete directed acyclic graph raises cycle error. [raise_cycle_error_on_back_edge]
 - A concrete directed acyclic graph computes topological sort using Kahn's algorithm with in-degree counts maintained from the adjacency index. [execute_deterministic_topological_sort]
-- A concrete directed acyclic graph processes unblocked nodes in descending priority then ascending node identifier order during topological sorting. [order_unblocked_nodes_by_priority]
+- A concrete directed acyclic graph processes unblocked nodes in descending priority then lexicographically ascending node identifier order during topological sorting. [order_unblocked_nodes_by_priority]
 - A concrete directed acyclic graph computes critical path bounds by applying dynamic programming over topological completion times. [compute_critical_path_dp]
 - A concrete directed acyclic graph backtracks from the maximal completion leaf to resolve the critical path. [backtrack_from_maximal_completion_leaf]
 - A concrete wave scheduler populates initial states by assigning ready status to root nodes with empty upstream sets and pending status to remaining nodes. [initialize_scheduler_states]
@@ -34,8 +34,8 @@ By encapsulating adjacency index management, employing Kahn's algorithm for dete
 - A concrete wave scheduler promotes pending dependents to ready when all upstream prerequisites transition to succeeded. [promote_unblocked_dependents]
 - A concrete wave scheduler applies fail fast by cancelling all remaining pending nodes upon a node failure. [apply_fail_fast_cancellation]
 - A concrete wave scheduler applies skip downstream by marking all transitive dependents skipped upon a node failure. [apply_skip_downstream_marking]
-- A concrete wave scheduler applies continue on error by leaving unblocked independent nodes eligible for execution upon a node failure. [apply_continue_on_error_eligibility]
-- A concrete wave scheduler confirms that every node in the graph is recorded in the state index and has reached a terminal state, returning true if all nodes are terminal or if the graph has no nodes, and false if any node remains non-terminal. [verify_scheduler_completion]
+- A concrete wave scheduler applies continue on error by leaving unblocked independent nodes eligible for execution while transitioning blocked dependents that cannot execute due to upstream failure to skipped. [apply_continue_on_error_eligibility]
+- A concrete wave scheduler confirms that every registered node in the graph is recorded in the state index and has reached a terminal state (or that no ready nodes remain and unexecuted nodes are blocked by upstream failures), returning true if all nodes are terminal or if the graph has no nodes, and false if any node remains non-terminal and eligible. [verify_scheduler_completion]
 - A concrete DAG runner validates graph invariants before commencing wave execution. [pre_validate_graph_before_run]
 - A concrete DAG runner polls the wave scheduler and dispatches ready waves sequentially until execution completes. [dispatch_sequential_waves]
 - A concrete DAG runner executes node actions with retry attempts, compiling succeeded node results or failed node execution errors. [execute_node_action_with_retries]
@@ -64,8 +64,8 @@ By encapsulating adjacency index management, employing Kahn's algorithm for dete
   - Grounded: [dag_engine_lite: [dag_engine_lite_core_service]]
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T10:20:00Z
-LAST_CHANGED: 2026-10-22T10:20:00Z
-CHANGE: Restore system lifecycle tier and specify operation-driven failure propagation contracts
-SPEC_QA_AUDIT: 2026-10-22T10:20:00Z
+LAST_CLEANED: 2026-10-26T20:55:00Z
+LAST_CHANGED: 2026-10-26T20:55:00Z
+CHANGE: Specify dynamic scheduler state synchronization on remove_node, ascending alphabetical tie-breaking, and SKIP state for blocked dependents
+SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 -->

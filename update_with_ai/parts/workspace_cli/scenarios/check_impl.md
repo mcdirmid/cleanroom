@@ -40,10 +40,17 @@ Given: an active role workspace with a model configuration declaring max_failure
 Given: an active role workspace with a verification command that hangs or exceeds the execution timeout.
 
 1. The caller runs `run_check_files`.
-   Observed: bounds command execution with an execution timeout, terminates the hanging sub-process, reports verification failure due to timeout expiration, and returns a non-zero exit status without blocking indefinitely.
+   Observed: bounds command execution with an execution timeout, terminates the hanging sub-process, reports verification failure due to timeout expiration with explicit diagnostic messaging that the timeout indicates a code defect (such as an infinite loop or deadlock) rather than an infrastructure failure, and returns a non-zero exit status without blocking indefinitely.
+
+## Scenario 7 — Workspace-relative companion guide path resolution in get_work
+
+Given: an active role workspace with an assigned role declaring a repository-relative guide path (`update_python_with_ai/guides/pretense.md`) and a copied guide in the role workspace (`guides/pretense.md`).
+
+1. The caller runs `run_get_work`.
+   Observed: formats the actionable next steps displaying the workspace-relative companion guide path (`guides/pretense.md`) rather than the uncopied repository-relative path.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-21T21:50:00Z
-LAST_CHANGED: 2026-10-21T21:50:00Z
-CHANGE: Enforce execution timeout on check_files verification commands
+LAST_CHANGED: 2026-10-25T22:12:00Z
+CHANGE: Add scenario for workspace-relative companion guide path resolution
 -->

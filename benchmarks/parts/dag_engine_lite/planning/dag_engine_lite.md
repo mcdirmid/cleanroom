@@ -25,10 +25,10 @@ By factoring graph construction, topological sorting, failure propagation polici
 
 ### Contracts
 
-- A directed acyclic graph adds a task node with a callable action, dependency identifiers, a scheduling priority, and a retry count. [add_node_to_graph]
+- A directed acyclic graph adds a task node with a callable action, dependency identifiers, a scheduling priority, and a retry count, deferring missing dependency validation to graph validation. [add_node_to_graph]
 - A directed acyclic graph adds a directed dependency edge from an upstream prerequisite to a downstream dependent. [add_edge_between_nodes]
 - When an edge addition or a node removal references a node absent from the graph, the graph raises node not found error. [raise_node_not_found_on_missing_reference]
-- A directed acyclic graph removes a node together with its incident edges. [remove_node_from_graph]
+- A directed acyclic graph removes a node together with its incident edges, purging removed nodes from wave scheduler tracking. [remove_node_from_graph]
 - A directed acyclic graph tests whether a node identifier is present. [test_node_presence]
 - A directed acyclic graph retrieves the immutable definition of a registered node. [retrieve_node_definition]
 - A directed acyclic graph retrieves the direct upstream dependencies of a node. [retrieve_upstream_dependencies]
@@ -38,7 +38,7 @@ By factoring graph construction, topological sorting, failure propagation polici
 - When a referenced dependency identifier corresponds to no registered node, invariant validation raises node not found error. [raise_node_not_found_on_dangling_dependency]
 - When invariant validation detects a directed cycle, the graph raises cycle error carrying the cycle sequence. [raise_cycle_error_on_directed_cycle]
 - A directed acyclic graph computes a topological sort ordering prerequisites before dependents. [compute_topological_sort]
-- A directed acyclic graph breaks topological ties between ready nodes by descending scheduling priority then ascending node identifier. [break_topological_ties_deterministically]
+- A directed acyclic graph breaks topological ties between ready nodes by descending scheduling priority then lexicographically ascending node identifier. [break_topological_ties_deterministically]
 - When a cycle prevents topological ordering, the graph raises cycle error carrying the cycle sequence. [raise_cycle_error_on_topological_sort]
 - A directed acyclic graph identifies root nodes having zero dependencies. [find_graph_roots]
 - A directed acyclic graph identifies leaf nodes having zero dependents. [find_graph_leaves]
@@ -53,9 +53,9 @@ By factoring graph construction, topological sorting, failure propagation polici
 - A wave scheduler transitions a node to failed state and applies an assigned failure policy defaulting to fail fast. [mark_node_failed]
 - When the failure policy is fail fast, marking a node failed transitions all remaining pending nodes to cancelled. [apply_fail_fast_policy]
 - When the failure policy is skip downstream, marking a node failed transitions all transitive dependents to skipped. [apply_skip_downstream_policy]
-- When the failure policy is continue on error, marking a node failed leaves unblocked independent nodes eligible for execution. [apply_continue_on_error_policy]
-- A wave scheduler reports whether all registered graph nodes have reached terminal states, returning true when every node is terminal or the graph is empty. [check_execution_finished]
-- A wave scheduler retrieves node states individually and across all nodes. [retrieve_node_states]
+- When the failure policy is continue on error, marking a node failed leaves unblocked independent nodes eligible for execution while transitioning blocked dependents that cannot execute due to upstream failure to skipped. [apply_continue_on_error_policy]
+- A wave scheduler reports whether execution is finished, returning true when every registered node is in a terminal state (or when no ready nodes remain and unexecuted nodes are blocked by upstream failures) or the graph is empty. [check_execution_finished]
+- A wave scheduler retrieves node states individually and across all nodes, reflecting only currently registered nodes. [retrieve_node_states]
 - A DAG runner runs a graph to completion by dispatching ready waves sequentially under an assigned failure policy defaulting to fail fast. [run_graph_execution]
 - A DAG runner validates graph invariants prior to commencing wave execution. [validate_invariants_before_execution]
 - A DAG runner executes a node action and retries it up to the configured retry count upon action failure. [execute_node_action_with_retries]
@@ -79,8 +79,8 @@ By factoring graph construction, topological sorting, failure propagation polici
   - Deferred: Realized by concrete realization in dag_engine_lite_impl.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T10:20:00Z
-LAST_CHANGED: 2026-10-22T10:20:00Z
-CHANGE: Specify operation-driven failure policy on mark_failed and run
-SPEC_QA_AUDIT: 2026-10-22T10:20:00Z
+LAST_CLEANED: 2026-10-26T20:55:00Z
+LAST_CHANGED: 2026-10-26T20:55:00Z
+CHANGE: Specify deferred missing dependency validation, ascending alphabetical tie-breaking, and SKIP state for blocked dependents
+SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 -->

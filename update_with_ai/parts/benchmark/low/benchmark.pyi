@@ -121,14 +121,17 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         timeout: Optional[float] = None,
         antigravity_dispatch: str = "message",
         baseline: bool = False,
+        pretense: bool = False,
     ) -> FlightRecord:
         """Executes a benchmark flight for a designated model and unit.
 
         POSTCONDITIONS:
         - MUST execute the flight under the requested harness or simulation mode.
         - WHEN baseline is True and harness is 'loop', MUST raise ValueError rejecting loop harness.
-        - WHEN baseline is True, MUST provide the low-level specification and instruct the agent to consult it, implement the two-file library structure in lib/, test _impl.py, and achieve 100% test coverage with opt-outs.
+        - WHEN baseline is True, MUST provide the low-level specification and instruct the agent to consult it, implement the two-file library structure in lib/, test _impl.py (or author pretense suites in pretense/), and achieve 100% test coverage with opt-outs.
         - WHEN baseline is True, MUST record exactly one execution round under baseline role.
+        - WHEN pretense is True, MUST execute synthesis and verification using Pretense state machines, fakes, and property fuzzing.
+        - WHEN baseline is True and pretense is True, MUST provision pretense/ and guides/pretense.md, scaffold starter pretense suite, instruct the agent to author pretense state machine/fakes/fuzz tests, evaluate verification gates with pretense, and record methodology as pretense_baseline.
         - MUST harvest telemetry and evaluate verification gates.
         - MUST return a flight record with complete empirical measurements.
         """
@@ -214,7 +217,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-10-22T23:10:00Z
-# CHANGE: Make BenchmarkUnit descriptive metadata fields optional with defaults
+# LAST_CHANGED: 2026-10-25T22:45:00Z
+# CHANGE: Specify Pretense baseline execution postconditions
 # SPEC_QA_AUDIT: 2026-10-19T18:45:00Z
 # --- END CLEANROOM METADATA ---

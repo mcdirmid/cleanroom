@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tuple
 
 try:
     import dotenv
@@ -110,6 +110,8 @@ def resolve_scope_nodes(
     root_dir: str,
     loader: Any,
     up_to_role: Optional[str] = None,
+    exclude_roles: Optional[Sequence[str]] = None,
+    pipeline: Optional[str] = None,
 ) -> Optional[List[DagNode]]:
     """Resolves a filesystem path or scope string to an ordered list of DagNodes.
 
@@ -221,10 +223,13 @@ def resolve_scope_nodes(
 
     depths = _compute_role_depths(roles_dict)
     ordered_roles = sorted(roles_dict.keys(), key=lambda r: (depths.get(r, 0), r))
-    if role_filter:
-        roles_to_scan = [role_filter]
-    elif up_to_role:
-        target_clean = up_to_role.strip().lower()
+
+    effective_up_to = up_to_role
+    if not effective_up_to and explicit_role:
+        effective_up_to = explicit_role
+
+    if effective_up_to:
+        target_clean = effective_up_to.strip().lower()
         matching_idx = None
         for idx, r in enumerate(ordered_roles):
             if r.lower() == target_clean or r.split(":")[-1].strip().lower() == target_clean:
@@ -234,8 +239,24 @@ def resolve_scope_nodes(
             roles_to_scan = ordered_roles[: matching_idx + 1]
         else:
             roles_to_scan = ordered_roles
+    elif role_filter:
+        roles_to_scan = [role_filter]
     else:
         roles_to_scan = ordered_roles
+
+    if pipeline:
+        pipe_clean = pipeline.strip().lower()
+        roles_to_scan = [
+            r for r in roles_to_scan
+            if roles_dict.get(r, {}).get("pipeline") in (None, "", pipe_clean)
+        ]
+
+    if exclude_roles:
+        exclude_set = {r.strip().lower() for r in exclude_roles}
+        roles_to_scan = [
+            r for r in roles_to_scan
+            if r.strip().lower() not in exclude_set and r.split(":")[-1].strip().lower() not in exclude_set
+        ]
 
     nodes: List[DagNode] = []
 
@@ -291,6 +312,8 @@ def run_cleanroom_target(
     workspace_dir: Optional[str] = None,
     up_to_role: Optional[str] = None,
     config: Optional[str] = None,
+    exclude_roles: Optional[Sequence[str]] = None,
+    pipeline: Optional[str] = None,
 ) -> int:
     resolved_model = model or config
     if not resolved_model or resolved_model == "default":
@@ -339,7 +362,9 @@ def run_cleanroom_target(
     storage = get_singleton(dag_storage.DagStorage)
     runner = get_singleton(loop.Loop)
 
-    scope_nodes = resolve_scope_nodes(target_str, repo_root, loader, up_to_role=up_to_role)
+    scope_nodes = resolve_scope_nodes(
+        target_str, repo_root, loader, up_to_role=up_to_role, exclude_roles=exclude_roles, pipeline=pipeline
+    )
 
     if scope_nodes is not None:
         if action == "mark-clean":

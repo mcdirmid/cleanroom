@@ -63,6 +63,41 @@ class WorkspacePendingImplTest(unittest.TestCase):
         res = self.pending_mgr.get_pending_work(ws_dir)
         self.assertEqual(list(res), ["staging/parts/agent/lib/bar.py"])
 
+    def test_remove_pending_target_normalizes_pretense_and_impl(self) -> None:
+        ws_dir = os.path.join(self.test_dir, "ws_norm_pretense")
+        os.makedirs(ws_dir, exist_ok=True)
+        targets = [
+            "parts/dag_engine_lite/lib/dag_engine_lite_impl.py",
+            "parts/other/lib/other_impl.py",
+        ]
+        self.pending_mgr.set_pending_work(ws_dir, targets)
+
+        # Removing pretense variant removes dag_engine_lite_impl.py via stem normalization
+        self.pending_mgr.remove_pending_target(
+            ws_dir, "parts/dag_engine_lite/pretense/dag_engine_lite_impl_pretense.py"
+        )
+        res = self.pending_mgr.get_pending_work(ws_dir)
+        self.assertEqual(list(res), ["parts/other/lib/other_impl.py"])
+
+        # Removing test variant removes other_impl.py via stem normalization
+        self.pending_mgr.remove_pending_target(
+            ws_dir, "parts/other/tests/other_impl_test.py"
+        )
+        self.assertEqual(list(self.pending_mgr.get_pending_work(ws_dir)), [])
+
+    def test_remove_pending_target_strictly_preserves_unrelated(self) -> None:
+        ws_dir = os.path.join(self.test_dir, "ws_unrelated")
+        os.makedirs(ws_dir, exist_ok=True)
+        self.pending_mgr.set_pending_work(
+            ws_dir, ["parts/dag_engine_lite/lib/dag_engine_lite_impl.py"]
+        )
+        # Attempting to remove unrelated target does not remove the pending target
+        self.pending_mgr.remove_pending_target(ws_dir, "parts/other/lib/other_file.py")
+        self.assertEqual(
+            list(self.pending_mgr.get_pending_work(ws_dir)),
+            ["parts/dag_engine_lite/lib/dag_engine_lite_impl.py"],
+        )
+
     def test_clear_pending_work(self) -> None:
         ws_dir = os.path.join(self.test_dir, "ws_clear")
         os.makedirs(ws_dir, exist_ok=True)

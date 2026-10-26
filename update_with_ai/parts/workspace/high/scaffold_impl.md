@@ -29,7 +29,7 @@ The workspace scaffolder:
 
 - Writes execution guidance into the guide that permits shell commands and native harness tools within the workspace directory, while mandating that Cleanroom target verification and round resolution proceed through prescribed `bin/` executables (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/fail`, and `bin/blame` only for roles declaring feedback capability), strictly enforcing continuous tool execution without conversational idling or dangling colons in model steps, ground-truth-first verification via `bin/check_files` before inspecting prose, targeted reads over full file dumps, prohibiting searching for internal linters or inspecting, decompiling, or reverse-engineering `bin/` executables, establishing a round conclusion protocol mandating that once all ready targets have been resolved or when get_work reports only blocked targets or zero ready targets, the worker must conclude the round immediately without further tool execution or conversational idling, and incorporating model-contingent payload ceiling protection directives instructing staged incremental writing when configured for local or output-constrained models while omitting them for cloud models.
 
-- Writes a fail-stop and reporting protocol into the guide that prohibits self-healing on an infrastructure traceback, error, or missing dependency, while distinguishing ordinary verification test failures and establishing an unresolvable impasse protocol where failures are recorded via `bin/fail` and escalated to the coordinator.
+- Writes a fail-stop and reporting protocol into the guide that prohibits self-healing on an infrastructure traceback, error, or missing dependency, while distinguishing ordinary verification test failures (and explicitly clarifying that execution timeouts, process hangs, and termination by SIGTERM during test verification are code defects such as infinite loops, deadlocks, or live-locks rather than infrastructure failures) and establishing an unresolvable impasse protocol where failures are recorded via `bin/fail` and escalated to the coordinator.
 
 - Writes instructions for acting on blame and feedback into the guide, warning authoring agents that static checks do not execute tests or verify runtime logic, clarifying that passing `bin/check_files` does not mean feedback is resolved, directing authors to resolve runtime defects in their assigned target files against contracts and tests before submitting, incorporating cleanroom compilation stub rules for roles declaring stub dependencies explaining that stub dependencies are read-only compilation stubs that must not be edited or asserted to raise stub errors, and mandating that auditor agents inspect target `# CHANGE:` commit headers before delivering blame to tailor feedback to what remains unaddressed without recycling identical critiques.
 
@@ -38,8 +38,8 @@ The workspace scaffolder:
 - Writes text files with explicit permissions (read-only, writable, or executable).
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T13:50:00Z
-LAST_CHANGED: 2026-10-22T13:50:00Z
-CHANGE: Enforce strict workspace root sys.path isolation in runner zipapps
+LAST_CLEANED: 2026-10-26T12:40:00Z
+LAST_CHANGED: 2026-10-26T12:40:00Z
+CHANGE: Clarify in fail-stop protocol that test execution timeouts and SIGTERM are code defects rather than infrastructure failures
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

@@ -453,14 +453,14 @@ def main() -> int:
         mod_content = read_text(args.module_path)
         if pyi_path and is_uninitialized_test_module(mod_content):
             sys.stderr.write(
-                f"{args.module_path} is uninitialized (missing unittest.TestCase class and test methods). Consult your Companion Guide (update_python_with_ai/guides/low_to_test.md) for required structure.\n"
+                f"{args.module_path} is uninitialized (missing unittest.TestCase class and test methods). Consult your Companion Guide (guides/low_to_test.md) for required structure.\n"
             )
             return 1
     elif os.path.isfile(args.module_path):
         mod_content = read_text(args.module_path)
         if pyi_path and is_uninitialized_test_module(mod_content):
             sys.stderr.write(
-                f"{args.module_path} is uninitialized (missing unittest.TestCase class and test methods). Consult your Companion Guide (update_python_with_ai/guides/low_to_test.md) for required structure.\n"
+                f"{args.module_path} is uninitialized (missing unittest.TestCase class and test methods). Consult your Companion Guide (guides/low_to_test.md) for required structure.\n"
             )
             return 1
 

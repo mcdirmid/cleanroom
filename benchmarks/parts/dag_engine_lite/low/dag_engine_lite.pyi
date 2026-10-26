@@ -168,6 +168,7 @@ class DAG(Singleton[SystemTier], Protocol):
         POSTCONDITIONS:
         - MUST register the node definition into the graph.
         - WHEN dependencies are provided, MUST add directed dependency edges from each dependency to node_id.
+        - MUST defer missing dependency existence checks to validate() and topological_sort() without eagerly raising NodeNotFoundError.
         """
         ...
 
@@ -201,6 +202,7 @@ class DAG(Singleton[SystemTier], Protocol):
         POSTCONDITIONS:
         - MUST remove the node and its incident edges.
         - WHEN node_id is absent, MUST raise NodeNotFoundError.
+        - MUST purge the node identifier from wave scheduler state tracking.
         """
         ...
 
@@ -312,7 +314,7 @@ class DAG(Singleton[SystemTier], Protocol):
 
         POSTCONDITIONS:
         - MUST return a valid topological ordering where every prerequisite precedes its dependents.
-        - MUST break ties between concurrent ready nodes using priority descending and name ascending.
+        - MUST break ties between concurrent ready nodes using priority descending and lexicographical node_id ascending.
         - WHEN a cycle exists, MUST raise CycleError.
         """
         ...
@@ -415,7 +417,7 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
         - MUST update the node state to FAILED.
         - WHEN failure_policy is SKIP_DOWNSTREAM, MUST transition all transitive dependents to SKIPPED.
         - WHEN failure_policy is FAIL_FAST, MUST transition all remaining PENDING nodes to CANCELLED.
-        - WHEN failure_policy is CONTINUE_ON_ERROR, MUST leave unblocked independent nodes eligible for execution.
+        - WHEN failure_policy is CONTINUE_ON_ERROR, MUST leave unblocked independent nodes eligible for execution and transition blocked dependents of failed nodes to SKIPPED.
         """
         ...
 
@@ -428,7 +430,8 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
 
         POSTCONDITIONS:
         - WHEN all nodes in the DAG have reached terminal states (SUCCEEDED, FAILED, SKIPPED, CANCELLED), MUST return True.
-        - WHEN any node in the DAG is not in a terminal state, MUST return False.
+        - WHEN no ready nodes remain and unexecuted nodes are blocked by failed dependencies, MUST return True.
+        - WHEN any node in the DAG remains non-terminal and eligible to execute, MUST return False.
         - WHEN the DAG contains no nodes, MUST return True.
         """
         ...
@@ -450,7 +453,7 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
         """Returns the execution state of every node in the graph.
 
         Returns:
-            Mapping of node identifier to current NodeState.
+            Mapping of node identifier to current NodeState, reflecting only currently registered nodes.
         """
         ...
 
@@ -472,7 +475,12 @@ class DAGRunner(Singleton[SystemTier], Protocol):
         Returns:
             Consolidated DAGRunReport recording all node outcomes and metrics.
 
+        Raises:
+            NodeNotFoundError: When graph validation detects referenced dependencies not present in the graph.
+            CycleError: When graph validation detects directed cycles in the graph.
+
         POSTCONDITIONS:
+        - MUST validate graph invariants before commencing wave execution.
         - MUST execute ready waves sequentially.
         - MUST execute retries up to the configured retry count for failed node actions.
         - MUST apply the specified failure_policy to the scheduler upon node failure.
@@ -481,8 +489,8 @@ class DAGRunner(Singleton[SystemTier], Protocol):
         ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-22T10:20:00Z
-# LAST_CHANGED: 2026-10-22T10:20:00Z
-# CHANGE: Model DAG, WaveScheduler, and DAGRunner as system tier singletons
-# SPEC_QA_AUDIT: 2026-10-22T10:20:00Z
+# LAST_CLEANED: 2026-10-26T20:55:00Z
+# LAST_CHANGED: 2026-10-26T20:55:00Z
+# CHANGE: Specify deferred missing dependency validation, ascending alphabetical tie-breaking, and SKIP state for blocked dependents
+# SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 # --- END CLEANROOM METADATA ---

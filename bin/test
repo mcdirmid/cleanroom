@@ -46,7 +46,15 @@ IFS=: read -ra PYPATHS <<< "$DISCOVERED_PATHS"
 
 if [ -n "$TARGET" ] && [ -d "$REPO_ROOT/$TARGET" ]; then
     PYPATHS+=("$REPO_ROOT/$TARGET")
-    for sub in "$REPO_ROOT/$TARGET"/lib "$REPO_ROOT/$TARGET"/low "$REPO_ROOT/$TARGET"/tests; do
+    TARGET_PARENT="$(dirname "$REPO_ROOT/$TARGET")"
+    if [ -d "$TARGET_PARENT" ]; then
+        PYPATHS+=("$TARGET_PARENT")
+        TARGET_GRANDPARENT="$(dirname "$TARGET_PARENT")"
+        if [ -d "$TARGET_GRANDPARENT" ]; then
+            PYPATHS+=("$TARGET_GRANDPARENT")
+        fi
+    fi
+    for sub in "$REPO_ROOT/$TARGET"/lib "$REPO_ROOT/$TARGET"/low "$REPO_ROOT/$TARGET"/tests "$REPO_ROOT/$TARGET"/pretense; do
         if [ -d "$sub" ]; then
             PYPATHS+=("$sub")
         fi
@@ -146,19 +154,52 @@ if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
             uv run pyright --project update_python_with_ai/pyright_spec.json "$TARGET"
             exit 0
             ;;
-        *)
+        *_pretense.py)
             echo "=== Type Checking: $TARGET ==="
             uv run pyright "$TARGET"
             echo ""
+            echo "=== Pretense Tests: $TARGET ==="
+            exec uv run pretense "$TARGET"
+            ;;
+        *)
+            echo "=== Type Checking: $TARGET ==="
+            CHECK_TARGETS=()
+            if [ -d "$TARGET" ]; then
+                for sub in lib tests pretense; do
+                    if [ -d "$TARGET/$sub" ]; then
+                        CHECK_TARGETS+=("$TARGET/$sub")
+                    fi
+                done
+            fi
+            if [ "${#CHECK_TARGETS[@]}" -gt 0 ]; then
+                uv run pyright "${CHECK_TARGETS[@]}"
+            else
+                uv run pyright "$TARGET"
+            fi
+            echo ""
             echo "=== Tests: $TARGET ==="
             shift || true
-            exec uv run pytest -q --tb=short "$TARGET" "$@"
+            PYTEST_EXIT=0
+            if [ -d "$TARGET/tests" ] || find "$TARGET" -name "*_test.py" -print -quit 2>/dev/null | grep -q .; then
+                uv run pytest -q --tb=short "$TARGET" "$@" || PYTEST_EXIT=$?
+                if [ "$PYTEST_EXIT" -ne 0 ] && [ "$PYTEST_EXIT" -ne 5 ]; then
+                    exit "$PYTEST_EXIT"
+                fi
+            fi
+            if [ -d "$TARGET/pretense" ] || find "$TARGET" -name "*_pretense.py" -print -quit 2>/dev/null | grep -q .; then
+                echo ""
+                echo "=== Pretense Tests: $TARGET ==="
+                uv run pretense "$TARGET"
+            fi
             ;;
     esac
 else
     echo "=== Type Checking (pyright) ==="
-    uv run pyright
+    uv run pyright update_with_ai update_python_with_ai pretense
     echo ""
     echo "=== Tests (pytest) ==="
-    exec uv run pytest -q --tb=short "$@"
+    uv run pytest -q --tb=short "$@"
+    echo ""
+    echo "=== Pretense Tests ==="
+    uv run pretense update_with_ai/parts/
 fi

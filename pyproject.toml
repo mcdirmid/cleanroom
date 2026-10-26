@@ -29,9 +29,10 @@ cleanroom_loop = "update_with_ai.support.lib.cleanroom_uv_runner:main"
 clean = "update_with_ai.support.lib.cleanroom_role_tool:main_clean"
 orchestrate = "update_with_ai.support.lib.cleanroom_role_tool:main_orchestrate"
 benchmark = "update_with_ai.support.lib.cleanroom_role_tool:main_benchmark"
+pretense = "pretense.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["update_with_ai", "update_python_with_ai", "benchmarks"]
+packages = ["update_with_ai", "update_python_with_ai", "benchmarks", "pretense"]
 
 [tool.pytest.ini_options]
 testpaths = [
@@ -54,7 +55,7 @@ pythonpath = [
     "benchmarks",
 ]
 python_files = ["*_test.py", "test_*.py"]
-timeout = 60
+timeout = 45
 timeout_method = "signal"
 addopts = []
 

@@ -45,6 +45,7 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
         max_unproductive_rounds: Optional[int] = None,
+        pretense: bool = False,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence.
 
@@ -66,7 +67,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_tool_impl implementation low-level specification
+# LAST_CHANGED: 2026-10-25T21:50:00Z
+# CHANGE: add pretense parameter to run_orchestrate
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

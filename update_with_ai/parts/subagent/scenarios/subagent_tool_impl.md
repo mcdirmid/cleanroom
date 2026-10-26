@@ -28,12 +28,13 @@ Given: scope_a has unblocked roles across multiple development stages.
 
 Given: scope_a has unblocked roles and ready work targets.
 
-1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, `--max-context-tokens 100000`, and `--max-unproductive-rounds 8`.
-   Observed: the coordinator and harness adapter receive the configured batch size, timeout, context compaction, and unproductive round limits.
-   Realized by: the component's CLI options parsing `--batch-size`, `--timeout`, `--max-context-tokens`, and `--max-unproductive-rounds` (or `--max-unproductive-turns`) and propagating them to harness resolution and coordinator options.
+1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, `--max-context-tokens 100000`, `--max-unproductive-rounds 8`, and `--pretense`.
+   Observed: the coordinator and harness adapter receive the configured batch size, timeout, context compaction, and unproductive round limits, and pretense testing pipeline flags are accepted.
+   Realized by: the component's CLI options parsing `--batch-size`, `--timeout`, `--max-context-tokens`, `--max-unproductive-rounds` (or `--max-unproductive-turns`), and `--pretense` and propagating them to harness resolution and coordinator options.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T12:00:00Z
-CHANGE: update subagent tool impl scenarios for dynamic supervision and options
+LAST_CHANGED: 2026-10-25T21:50:00Z
+CHANGE: update subagent tool impl scenarios for pretense option
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

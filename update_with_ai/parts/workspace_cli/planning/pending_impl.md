@@ -10,7 +10,7 @@ Operating command-line subagents in isolated workspaces requires durable file-ba
 
 - The workspace pending manager reads target file paths from the pending work buffer file and returns an empty sequence when missing. [read_pending_buffer_file]
 - The workspace pending manager writes designated target paths into the pending work buffer file as JSON. [write_assigned_pending_targets]
-- The workspace pending manager filters out a submitted or blamed target path matching pending target paths or unit stems strictly without clearing unmatched targets. [filter_out_resolved_pending_target]
+- The workspace pending manager filters out a submitted or blamed target path matching pending target paths or unit stems normalized across pretense, test, and implementation suffixes strictly without clearing unmatched targets. [filter_out_resolved_pending_target]
 - The workspace pending manager deletes the pending work buffer file from disk when pending targets are cleared. [delete_pending_work_buffer]
 - The workspace pending manager checks local and main repository metadata to test if a pending target is dirty, evaluating canonical lifecycle timestamps from the main repository when available, evaluating star role dependency modification timestamps, and verifying implicit feedback dependencies. [test_pending_target_dirty_state]
 - The workspace pending manager materializes starter templates via graph storage for missing targets of roles with declared source patterns and upstream dependencies. [materialize_pending_starter_template]
@@ -48,7 +48,7 @@ Operating command-line subagents in isolated workspaces requires durable file-ba
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:40:00Z
-CHANGE: Define pending_impl planning specification
+LAST_CHANGED: 2026-10-25T22:36:00Z
+CHANGE: Normalize unit stems across pretense, test, and impl suffixes when filtering resolved pending targets
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

@@ -74,11 +74,31 @@ Given: A DAG runner managing a graph with independent root node `worker_1` and d
 Observed: The returned DAG run report records total node count 2, succeeded node identifiers `worker_1` and `worker_2`, and 0 failed node identifiers.
 Realized by: Fetching ready waves from the wave scheduler, executing node actions sequentially, marking node states with the supplied failure policy, and compiling individual node results into a DAG run report.
 
+### Scenario 8 — Deferred dependency registration on add_node
+
+Given: A newly initialized directed acyclic graph containing zero nodes.
+
+1. Add node `consumer` depending on `provider` before `provider` is registered in the graph.
+Observed: Node `consumer` is successfully registered without raising an error.
+Realized by: Storing the dependency set in the node definition and recording the edge in the upstream map without checking provider existence in the node registry.
+
+2. Validate graph invariants before adding `provider`.
+Observed: Invariant validation raises node not found error identifying missing node `provider`.
+Realized by: Checking all upstream edge targets against registered node identifiers and detecting missing `provider`.
+
+3. Add node `provider` with zero dependencies.
+Observed: Node `provider` is registered in the graph.
+Realized by: Inserting `provider` into the internal node registry and initializing empty adjacency sets.
+
+4. Validate graph invariants.
+Observed: Validation completes successfully with zero errors.
+Realized by: Verifying that all referenced dependencies exist and depth-first traversal confirms no cycles.
+
 ## Implementation-only
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T10:20:00Z
-LAST_CHANGED: 2026-10-22T10:20:00Z
-CHANGE: Mirror operation-driven failure policy scenarios with matching realization clauses
-SPEC_QA_AUDIT: 2026-10-22T10:20:00Z
+LAST_CLEANED: 2026-10-26T20:55:00Z
+LAST_CHANGED: 2026-10-26T20:55:00Z
+CHANGE: Mirror deferred dependency validation scenario with matching realization clauses
+SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 -->

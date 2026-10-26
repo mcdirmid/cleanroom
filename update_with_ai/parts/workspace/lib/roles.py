@@ -62,6 +62,7 @@ class RoleDefinition:
     task_prompt: Optional[str] = None
     template: str = ""
     template_command: str = ""
+    pipeline: Optional[str] = None
 
 
 # Contract: RoleResolver protocol loads role configurations and validates declaration rules.
@@ -89,6 +90,6 @@ class RoleResolver(Singleton[AgentSessionTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Define roles interface component
+# LAST_CHANGED: 2026-10-25T21:55:00Z
+# CHANGE: Add pipeline field to RoleDefinition
 # --- END CLEANROOM METADATA ---

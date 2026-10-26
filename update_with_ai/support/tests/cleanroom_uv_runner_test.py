@@ -52,8 +52,8 @@ class CleanroomUvRunnerTest(unittest.TestCase):
         self.assertGreater(len(nodes), 100)
         # Verify first tier is high
         self.assertEqual(nodes[0].role_address, "high")
-        # Verify last tier is coverage
-        self.assertEqual(nodes[-1].role_address, "coverage")
+        # Verify last tier is an audit role (coverage or pretense_coverage)
+        self.assertIn(nodes[-1].role_address, ("coverage", "pretense_coverage"))
 
     def test_resolve_scope_part(self) -> None:
         nodes = cleanroom_uv_runner.resolve_scope_nodes(
@@ -61,7 +61,7 @@ class CleanroomUvRunnerTest(unittest.TestCase):
         )
         self.assertIsNotNone(nodes)
         assert nodes is not None
-        self.assertEqual(len(nodes), 109)
+        self.assertEqual(len(nodes), 130)
         roles = {n.role_address for n in nodes}
         self.assertIn("scenario", roles)
         for n in nodes:

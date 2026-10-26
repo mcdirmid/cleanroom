@@ -61,6 +61,7 @@ class RoleDefinition:
     task_prompt: Optional[str] = None
     template: str = ""
     template_command: str = ""
+    pipeline: Optional[str] = None
 
 
 @singleton_type("agent_session")
@@ -99,18 +100,18 @@ class RoleResolver(Singleton[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - MUST parse role definition declarations from repository role configuration files or build files.
-        - WHEN dir_scope is specified, MUST resolve role definitions from the methodology configuration bound to that directory scope or its package hierarchy.
+        - WHEN dir_scope is specified, MUST resolve role definitions from the methodology configuration bound to that directory scope or its package hierarchy and filter resolved roles according to the scope's active pipeline.
         - WHEN feedback role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
         - WHEN star role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
         - WHEN a dependency is declared as both a role dependency and a silent role dependency, MUST raise ValueError.
         - WHEN an auditor role is declared as a role dependency, a star role dependency, or a feedback role dependency, MUST raise ValueError.
-        - MUST return a role definition for every declared role.
+        - MUST return a role definition for every declared role matching the active pipeline.
         """
         ...
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Define roles low-level specification
+# LAST_CHANGED: 2026-10-25T21:55:00Z
+# CHANGE: Add pipeline field and pipeline filtering to roles low-level specification
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

@@ -44,6 +44,7 @@ class RoleResolver(roles.RoleResolver):
 
         GROUNDING:
         - Evaluates all declared role definitions from repository TOML files or build file AST structures,
+          discovering package methodology configurations and filtering listed roles according to the scope's active pipeline,
           validating constraints and returning resolved definitions.
         """
         ...
@@ -63,7 +64,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Define roles_impl low-level specification
+# LAST_CHANGED: 2026-10-25T21:55:00Z
+# CHANGE: Specify pipeline filtering in roles_impl low-level specification
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

@@ -44,6 +44,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
         - Evaluates dirty work using work.WorkspaceWorkManager.compute_role_work_queue,
           formats ready and blocked items with actionable next steps directing immediate
           round conclusion when zero ready targets remain and blocked targets are pending,
+          resolving workspace-relative companion guide paths,
           and records pending targets using pending.WorkspacePendingManager.set_pending_work.
         """
         ...
@@ -61,7 +62,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
         - Resolves target via submit.SubmissionCoordinator.resolve_submit_target,
           extracts max_failures from active model configuration (defaulting to 5 for local engines and 100 for non-local models) and propagates failure limits to test execution runners,
           assembles verification environment bounded strictly to the active role workspace and its constituent package directories, isolating verification from the canonical repository root in PYTHONPATH and sys.path,
-          enforces an execution timeout on verification commands to prevent blocked sub-processes from stalling the workspace developer loop,
+          enforces an execution timeout on verification commands to prevent blocked sub-processes from stalling the workspace developer loop and reports verification failure with code-defect diagnostic messaging when execution expires,
           executes verification checks from role_registry.RoleDefinition, and
           records verification execution records and target file hashes in the workspace.
         """
@@ -89,8 +90,8 @@ class WorkspaceChecker(check.WorkspaceChecker):
         ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-21T21:50:00Z
-# LAST_CHANGED: 2026-10-21T21:50:00Z
-# CHANGE: Enforce execution timeout on check_files verification commands
+# LAST_CLEANED: 2026-10-26T12:40:00Z
+# LAST_CHANGED: 2026-10-26T12:40:00Z
+# CHANGE: Clarify in check_files that verification timeouts indicate code defects rather than infrastructure failures
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

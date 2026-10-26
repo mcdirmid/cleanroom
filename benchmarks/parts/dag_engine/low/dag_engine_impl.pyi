@@ -325,8 +325,9 @@ class DAGRunner(dag_engine.DAGRunner):
         ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-22T01:28:31Z
+# LAST_CLEANED: 2026-10-26T21:35:31Z
 # LAST_CHANGED: 2026-10-22T10:20:00Z
 # CHANGE: Model concrete DAG, WaveScheduler, and DAGRunner as system tier singletons
-# SPEC_QA_AUDIT: 2026-10-22T01:28:31Z
+# CODE_HASH: 24331ee38a0f
+# SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
 # --- END CLEANROOM METADATA ---

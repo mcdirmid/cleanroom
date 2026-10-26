@@ -28,23 +28,23 @@ A *DAG run report* summarizes an entire graph execution run, carrying a *total n
 
 A *directed acyclic graph* maintains task nodes and directed dependency edges between prerequisites and dependents. Graph modification operations provide:
 
-- Adding nodes with callable actions, dependency identifiers, scheduling priorities, and retry counts.
+- Adding nodes with callable actions, dependency identifiers, scheduling priorities, and retry counts, deferring missing dependency validation to graph validation and topological sort rather than eagerly failing upon node registration.
 
 - Adding edges from upstream prerequisites to downstream dependents, raising node not found error when either node is missing.
 
-- Removing nodes and incident edges, raising node not found error when the node is missing.
+- Removing nodes and incident edges, raising node not found error when the node is missing, purging removed nodes from wave scheduler state tracking.
 
 Graph inspection supports testing node presence, retrieving node definitions, retrieving dependencies, retrieving dependents, and listing all nodes. Graph invariant validation verifies that all referenced dependencies exist and raises cycle error upon detecting directed cycles.
 
 Graph ordering and structural analysis provide:
 
-- Computing a topological sort where prerequisites precede dependents, deterministically breaking ties between ready nodes by descending scheduling priority then ascending node identifier, raising cycle error if cycles exist.
+- Computing a topological sort where prerequisites precede dependents, deterministically breaking ties between ready nodes by descending scheduling priority then lexicographically ascending node identifier, raising cycle error if cycles exist.
 
 - Finding root nodes with zero dependencies and finding leaf nodes with zero dependents.
 
 - Computing critical paths, resolving the longest weighted path through the graph and its cumulative duration weight using optional duration weights defaulting to one.
 
-A *wave scheduler* partitions and coordinates graph nodes into executable sequential waves. The scheduler dynamically tracks execution states for all registered nodes in the graph, resolving a *next wave* of ready nodes whose upstream dependencies have succeeded, ordered by descending scheduling priority then ascending node identifier, returning an empty sequence when no nodes are ready.
+A *wave scheduler* partitions and coordinates graph nodes into executable sequential waves. The scheduler dynamically tracks execution states for all registered nodes in the graph, reflecting only nodes currently registered in the graph and resolving a *next wave* of ready nodes whose upstream dependencies have succeeded, ordered by descending scheduling priority then ascending node identifier, returning an empty sequence when no nodes are ready.
 
 The scheduler supports marking nodes running, marking nodes succeeded and promoting unblocked dependents to ready, and marking nodes failed under an assigned failure policy defaulting to fail fast. When marking a node failed, failure policy propagation enforces:
 
@@ -52,15 +52,15 @@ The scheduler supports marking nodes running, marking nodes succeeded and promot
 
 - Transitioning all transitive dependents to skipped under the skip downstream policy.
 
-- Leaving unblocked independent nodes eligible for execution under the continue on error policy.
+- Leaving unblocked independent nodes eligible for execution under the continue on error policy, while transitioning blocked dependents that cannot execute due to upstream failure to skipped.
 
-The scheduler tests whether execution is finished when all registered nodes in the graph have reached terminal states (succeeded, failed, cancelled, or skipped), or when the graph contains no nodes, and supports retrieving node states individually and across all nodes.
+The scheduler tests whether execution is finished when all registered nodes in the graph have reached terminal states (succeeded, failed, cancelled, or skipped), or when no unblocked nodes remain and any remaining nodes cannot execute due to prerequisite failures, or when the graph contains no nodes, and supports retrieving node states individually and across all nodes.
 
 A *DAG runner* coordinates sequential graph execution under failure policies. The runner supports running graphs to completion under an assigned failure policy defaulting to fail fast, validating graph invariants prior to execution, dispatching ready waves sequentially, executing configured retries upon action failures, and compiling execution results into a DAG run report.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T10:20:00Z
-LAST_CHANGED: 2026-10-22T10:20:00Z
-CHANGE: Specify operation-driven failure policy on mark_failed and run
-SPEC_QA_AUDIT: 2026-10-22T10:20:00Z
+LAST_CLEANED: 2026-10-26T20:55:00Z
+LAST_CHANGED: 2026-10-26T20:55:00Z
+CHANGE: Clarify deferred dependency validation on add_node, scheduler purge on remove_node, tie-breaking lexicographical ordering, and terminal state transitions under continue on error
+SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 -->

@@ -18,27 +18,27 @@ A *concrete directed acyclic graph* realizes the directed acyclic graph protocol
 
 - Downstream dependent neighbor sets updated during node registration and edge addition.
 
-Node presence checks and removal operations update the node registry and clear incident connections across both adjacency sets. Invariant validation detects cycles by executing depth-first traversal with active path recursion tracking, failing with cycle error upon discovering a back-edge.
+Node presence checks and removal operations update the node registry, clear incident connections across both adjacency sets, and purge removed node records from active wave scheduler tracking. Invariant validation detects cycles by executing depth-first traversal with active path recursion tracking, failing with cycle error upon discovering a back-edge.
 
-Topological sorting evaluates graph structure using Kahn's algorithm, maintaining in-degree counts from the adjacency index and processing unblocked nodes in priority order. Critical path analysis resolves longest dependency bounds by applying dynamic programming over topological completion times, backtracking from the maximal completion leaf.
+Topological sorting evaluates graph structure using Kahn's algorithm, maintaining in-degree counts from the adjacency index and processing unblocked nodes in priority order, resolving ties between equal-priority nodes by lexicographically ascending node identifier. Critical path analysis resolves longest dependency bounds by applying dynamic programming over topological completion times, backtracking from the maximal completion leaf.
 
-A *concrete wave scheduler* realizes the wave scheduler protocol by tracking execution states across an internal *state index*. The scheduler synchronizes state tracking dynamically with all registered nodes in the graph. State transitions evaluate:
+A *concrete wave scheduler* realizes the wave scheduler protocol by tracking execution states across an internal *state index*. The scheduler synchronizes state tracking dynamically with all registered nodes in the graph, purging states for nodes removed from the graph. State transitions evaluate:
 
 - Initial state population assigning ready status to root nodes with empty upstream sets and pending status to remaining nodes.
 
 - Unblocked dependent promotion advancing downstream nodes to ready when all upstream dependencies succeed.
 
-- Downstream promotion and failure policy propagation updating the state index in response to terminal node outcomes using the supplied failure policy.
+- Downstream promotion and failure policy propagation updating the state index in response to terminal node outcomes using the supplied failure policy, transitioning unreachable dependents of failed nodes to skipped under continue on error.
 
-- Completion verification confirming that every node in the graph is recorded in the state index and has reached a terminal state, returning true if all nodes are terminal or if the graph has no nodes, and false if any node remains non-terminal.
+- Completion verification confirming that every registered node in the graph is recorded in the state index and has reached a terminal state (or that no executable nodes remain and any uncompleted nodes cannot run due to failed dependencies), returning true if all nodes are terminal or if the graph has no nodes, and false if any node remains non-terminal and eligible.
 
 A *concrete DAG runner* realizes the DAG runner protocol by executing graph waves sequentially to completion. The runner enforces pre-execution invariant validation against the graph before commencing wave execution.
 
-Execution advances by iteratively polling the wave scheduler, running unblocked node actions with retry attempts, propagating failure policies when marking node failures in the scheduler, and compiling terminal node outcomes into a consolidated DAG run report.
+Execution advances by iteratively polling the wave scheduler, running unblocked node actions with retry attempts, propagating failure policies when marking node failures in the scheduler, and compiling terminal node outcomes into a consolidated DAG run report with succeeded, failed, skipped, and cancelled node sequences.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T10:20:00Z
-LAST_CHANGED: 2026-10-22T10:20:00Z
-CHANGE: Realize concrete DAG, WaveScheduler, and DAGRunner as system singleton services with operation-driven failure propagation
-SPEC_QA_AUDIT: 2026-10-22T10:20:00Z
+LAST_CLEANED: 2026-10-26T20:55:00Z
+LAST_CHANGED: 2026-10-26T20:55:00Z
+CHANGE: Specify scheduler state purge on node removal, tie-breaking lexicographical ordering, and terminal state transitions under continue on error
+SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 -->

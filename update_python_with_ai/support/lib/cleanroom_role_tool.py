@@ -926,6 +926,51 @@ def install_workspace(repo_root: str | None = None) -> int:
     return 0
 
 
+def resolve_scope_pipeline(
+    scope: str,
+    repo_root: str | None = None,
+    explicit_pretense: bool = False,
+    target_role: str | None = None,
+) -> str | None:
+    if explicit_pretense:
+        return "pretense"
+    if target_role and "pretense" in target_role.lower():
+        return "pretense"
+
+    root = repo_root or find_workspace_root()
+
+    # 1. Check active flight metadata
+    flight_file = os.path.join(root, ".cleanroom", "active_flight.json")
+    if os.path.isfile(flight_file):
+        try:
+            with open(flight_file, "r", encoding="utf-8") as f:
+                fdata = json.load(f)
+            if fdata.get("flight_scope") == scope:
+                if fdata.get("pretense") or "pretense" in str(fdata.get("flight_id", "")):
+                    return "pretense"
+        except Exception:
+            pass
+
+    # 2. Check cleanroom.toml in scope or parts
+    import tomllib
+    scope_clean = scope.lstrip("/").rstrip("/")
+    curr = os.path.join(root, scope_clean)
+    for sub in ("parts", ""):
+        cand_dir = os.path.join(curr, sub) if sub else curr
+        cand = os.path.join(cand_dir, "cleanroom.toml")
+        if os.path.isfile(cand):
+            try:
+                with open(cand, "rb") as f:
+                    data = tomllib.load(f)
+                pipe = data.get("pipeline")
+                if pipe and isinstance(pipe, str):
+                    return pipe.strip().lower()
+            except Exception:
+                pass
+
+    return "standard" if not target_role else None
+
+
 def run_work_queue(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="cleanroom work-queue",
@@ -961,6 +1006,11 @@ def run_work_queue(argv: list[str]) -> int:
         help="Output queue state as structured JSON.",
     )
     parser.add_argument(
+        "--pretense",
+        action="store_true",
+        help="Inspect work queue for Pretense pipeline.",
+    )
+    parser.add_argument(
         "--repo-root",
         dest="repo_root",
         default=None,
@@ -976,6 +1026,12 @@ def run_work_queue(argv: list[str]) -> int:
     target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
 
     root = parsed.repo_root or find_workspace_root()
+    active_pipeline = resolve_scope_pipeline(
+        scope=scope,
+        repo_root=root,
+        explicit_pretense=parsed.pretense,
+        target_role=target_role or None,
+    )
     from support.lib.lifecycle import enter_phase, get_singleton
     from update_with_ai.parts.agent.lib import session as agent_session
     from update_with_ai.parts.workspace.lib import role_registry, provision
@@ -990,6 +1046,19 @@ def run_work_queue(argv: list[str]) -> int:
         if not declared_roles:
             print(f"Error: No declared roles found for directory scope '{scope}'.", file=sys.stderr)
             return 1
+
+        if active_pipeline and cleanroom_uv_runner is not None:
+            try:
+                scope_prefix = f"{scope}/parts" if scope else "parts"
+                loader = cleanroom_uv_runner.get_singleton(cleanroom_uv_runner.manifest_loader.UvManifestLoader)
+                _, roles_dict = loader._get_methodology_roles(root, scope_prefix)  # type: ignore[reportAttributeAccessIssue]
+                if roles_dict:
+                    declared_roles = [
+                        r for r in declared_roles
+                        if roles_dict.get(r.role_name, {}).get("pipeline") in (None, "", active_pipeline)
+                    ]
+            except Exception:
+                pass
 
         if target_role:
             matching_idx = None
@@ -1108,6 +1177,8 @@ def run_loop_target(
     repo_root: str | None = None,
     workspace_dir: str | None = None,
     config: str | None = None,
+    exclude_roles: Sequence[str] | None = None,
+    pipeline: str | None = None,
 ) -> int:
     assert cleanroom_uv_runner is not None, "cleanroom_uv_runner module not found"
     ws = workspace_dir or repo_root
@@ -1118,6 +1189,8 @@ def run_loop_target(
         message=message,
         workspace_dir=ws,
         up_to_role=up_to_role,
+        exclude_roles=exclude_roles,
+        pipeline=pipeline,
     )
 
 
@@ -1138,6 +1211,24 @@ def run_mark_clean_cli(argv: list[str]) -> int:
         default=None,
         help="Custom workspace directory (default: current working directory).",
     )
+    parser.add_argument(
+        "--up-to-role",
+        "--up-to",
+        default=None,
+        help="Only mark roles up to the specified role clean.",
+    )
+    parser.add_argument(
+        "--exclude-roles",
+        nargs="+",
+        default=None,
+        help="Roles to exclude from marking clean.",
+    )
+    parser.add_argument(
+        "--pretense",
+        action="store_true",
+        default=False,
+        help="Use pretense pipeline.",
+    )
     parsed = parser.parse_args(argv)
     target = parsed.target or _get_dir_scope()
     if not target:
@@ -1148,6 +1239,9 @@ def run_mark_clean_cli(argv: list[str]) -> int:
         target_str=target,
         action="mark-clean",
         workspace_dir=parsed.workspace_dir,
+        up_to_role=parsed.up_to_role,
+        exclude_roles=parsed.exclude_roles,
+        pipeline="pretense" if parsed.pretense else None,
     )
 
 
@@ -1465,6 +1559,11 @@ def run_orchestrate(
         help="Force headless execution even on antigravity harness.",
     )
     parser.add_argument(
+        "--pretense",
+        action="store_true",
+        help="Use Pretense testing pipeline (pretense, pretense_qa, pretense_coverage) instead of standard test/qa/coverage.",
+    )
+    parser.add_argument(
         "--antigravity-dispatch",
         choices=["message", "new-conversation", "none"],
         default="message",
@@ -1485,6 +1584,13 @@ def run_orchestrate(
     scope, parsed_role, is_unit = parse_cleanroom_target(target_input)
     target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
 
+    active_pipeline = resolve_scope_pipeline(
+        scope=scope,
+        repo_root=parsed.repo_root,
+        explicit_pretense=parsed.pretense,
+        target_role=target_role or None,
+    )
+
     active_harness = "loop" if parsed.loop else (parsed.harness or default_harness).strip().lower()
 
     if active_harness == "loop":
@@ -1504,6 +1610,7 @@ def run_orchestrate(
             action=parsed.action,
             message=msg,
             repo_root=parsed.repo_root,
+            pipeline=active_pipeline,
         )
 
     # Headless / CI Mode (or dsh / simulation harnesses)
@@ -1530,6 +1637,8 @@ def run_orchestrate(
                 forward_args.extend(["--max-context-tokens", str(parsed.max_context_tokens)])
             if parsed.repo_root:
                 forward_args.extend(["--repo-root", parsed.repo_root])
+            if parsed.pretense:
+                forward_args.append("--pretense")
             if parsed.simulation:
                 forward_args.append("--simulation")
             return subagent_tool_mod.main(forward_args)
@@ -1555,6 +1664,19 @@ def run_orchestrate(
         if not declared_roles:
             print(f"Error: No declared roles found for directory scope '{scope}'.", file=sys.stderr)
             return 1
+
+        if active_pipeline and cleanroom_uv_runner is not None:
+            try:
+                scope_prefix = f"{scope}/parts" if scope else "parts"
+                loader = cleanroom_uv_runner.get_singleton(cleanroom_uv_runner.manifest_loader.UvManifestLoader)
+                _, roles_dict = loader._get_methodology_roles(root, scope_prefix)  # type: ignore[reportAttributeAccessIssue]
+                if roles_dict:
+                    declared_roles = [
+                        r for r in declared_roles
+                        if roles_dict.get(r.role_name, {}).get("pipeline") in (None, "", active_pipeline)
+                    ]
+            except Exception:
+                pass
 
         if target_role:
             matching_idx = None
@@ -1892,12 +2014,15 @@ def run_commission_cli(argv: list[str]) -> int:
             if harness in ("dsh", "deepseek", "deepseek-harness"):
                 try:
                     from update_with_ai.parts.dsh.lib import dsh_workspace
-                    ws_cfg = get_singleton(dsh_workspace.DshWorkspaceConfigurer)
-                    ws_cfg.configure_role_workspace(
-                        workspace_dir=desc.workspace_dir,
-                        role_name=r,
-                        model_name=bound_model,
-                    )
+                    from update_with_ai.parts.agent.lib import session as agent_session
+                    from support.lib.lifecycle import enter_phase
+                    with enter_phase(agent_session.agent_session):
+                        ws_cfg = get_singleton(dsh_workspace.DshWorkspaceConfigurer)
+                        ws_cfg.configure_role_workspace(
+                            workspace_dir=desc.workspace_dir,
+                            role_name=r,
+                            model_name=bound_model,
+                        )
                 except Exception:
                     pass
 

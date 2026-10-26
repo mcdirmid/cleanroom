@@ -43,8 +43,11 @@ Given: a culprit upstream target and a multi-line critique containing newline ch
 3. The handler executes `run_blame` or `run_fail` while workspace target files are modified without having run `run_check_files` since modification.
    Observed: execution is refused, reporting that `check_files` must be run on the modified files, and exit code is 1.
 
+4. An auditor workspace with pending target `parts/dag_engine_lite/lib/dag_engine_lite_impl.py` executes `run_blame` against `parts/dag_engine_lite/pretense/dag_engine_lite_impl_pretense.py` with a valid critique.
+   Observed: blame is accepted, pending work is cleared of the audited target, and exit code is 0.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-20T21:07:00Z
-LAST_CHANGED: 2026-10-20T21:07:00Z
-CHANGE: Record blamed culprit into blame buffer during run_blame scenario
+LAST_CHANGED: 2026-10-25T22:36:00Z
+CHANGE: Add scenario for clearing pending target when auditor blames pretense culprit
 -->

@@ -21,13 +21,13 @@ The role resolver parses role declarations from declarative configuration files 
 
 The role resolver validates declaration constraints across role dependencies, failing when feedback or star dependencies are duplicated in role dependencies, when dependencies are declared as both active and silent, or when auditor roles are declared outside silent role dependencies.
 
-The role resolver discovers methodology configurations across directory scopes by inspecting package configuration files and parent package hierarchies, caching parsed role definitions against configuration file modification timestamps.
+The role resolver discovers methodology and pipeline configurations across directory scopes by inspecting package configuration files and parent package hierarchies, caching parsed role definitions against configuration file modification timestamps, and filtering listed roles according to the scope's active pipeline (e.g. pretense vs standard).
 
 The role resolver resolves role definitions for unqualified role names and qualified role addresses, qualifying role definitions with their requested role addresses upon resolution.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Define roles_impl implementation component
+LAST_CHANGED: 2026-10-25T21:50:00Z
+CHANGE: Specify pipeline-aware role listing and filtering in role resolver
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

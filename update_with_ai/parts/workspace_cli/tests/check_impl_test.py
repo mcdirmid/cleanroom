@@ -460,14 +460,41 @@ class WorkspaceCheckImplTest(unittest.TestCase):
             records = json.load(f)
         self.assertFalse(records[os.path.realpath(target_file)]["passed"])
 
+    def test_run_get_work_resolves_workspace_relative_guide_path(self) -> None:
+        self.fake_reg.roles = [
+            role_registry.RoleDefinition(
+                role_name="lib",
+                guide_path="update_python_with_ai/guides/lib.md",
+                writable_file_patterns=["lib/*.py"],
+                readonly_file_patterns=["low/*.pyi"],
+                feedback_role_deps=[],
+            )
+        ]
+        self.fake_work.ready_items = [
+            {
+                "role": "lib",
+                "target_file": "pkg/parts/foo/lib/foo.py",
+                "contract_files": [],
+                "reasons": ["spec changed"],
+            }
+        ]
+        import io
+        from unittest.mock import patch
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            ret = self.checker.run_get_work(dir_scope="pkg")
+            out = mock_out.getvalue()
+        self.assertIn("Companion Guide to Follow:", out)
+        self.assertIn("guides/lib.md", out)
+        self.assertNotIn("update_python_with_ai/guides/lib.md", out)
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-10-14T18:25:00Z
-# CHANGE: Unit tests for check_impl
+# LAST_CHANGED: 2026-10-25T22:12:00Z
+# CHANGE: Add test for workspace-relative companion guide path resolution
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

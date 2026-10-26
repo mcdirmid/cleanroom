@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import tomllib
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -176,6 +177,7 @@ def _build_role_definitions(
             task_prompt=rkwargs.get("prompt_template") or None,
             template=rkwargs.get("template") or "",
             template_command=rkwargs.get("template_command") or "",
+            pipeline=str(rkwargs["pipeline"]).strip().lower() if rkwargs.get("pipeline") else None,
         )
 
     return role_defs
@@ -334,11 +336,25 @@ def _normalize_role_identifier(role_name_or_address: str) -> str:
     return cleaned.strip("/").lower()
 
 
+def _normalize_dir_scope(root: str, dir_scope: str) -> Tuple[str, str]:
+    """Returns (scope_dir_abs, scope_dir_rel)."""
+    if os.path.isabs(dir_scope):
+        scope_dir = os.path.abspath(dir_scope)
+        try:
+            scope_rel = os.path.relpath(scope_dir, root)
+        except ValueError:
+            scope_rel = os.path.basename(scope_dir)
+    else:
+        scope_rel = dir_scope.strip("/\\")
+        scope_dir = os.path.abspath(os.path.join(root, scope_rel))
+    return scope_dir, scope_rel
+
+
 def _find_methodology_for_scope(root: str, dir_scope: str) -> Optional[str]:
     """Finds methodology binding from cleanroom.toml within dir_scope or upward."""
     if not dir_scope:
         return None
-    scope_dir = os.path.join(root, dir_scope)
+    scope_dir, _ = _normalize_dir_scope(root, dir_scope)
     root_abs = os.path.abspath(root)
 
     cand = os.path.join(scope_dir, "cleanroom.toml")
@@ -380,6 +396,78 @@ def _find_methodology_for_scope(root: str, dir_scope: str) -> Optional[str]:
                 meth = data.get("methodology")
                 if meth and isinstance(meth, str):
                     return meth.strip()
+            except (OSError, tomllib.TOMLDecodeError):
+                pass
+        curr_parent = os.path.dirname(curr)
+        if curr == curr_parent:
+            break
+        curr = curr_parent
+
+    return None
+
+
+def _find_pipeline_for_scope(root: str, dir_scope: str) -> Optional[str]:
+    """Finds pipeline binding from active flight metadata or cleanroom.toml within dir_scope or upward."""
+    if not dir_scope:
+        return None
+
+    scope_dir, scope_rel = _normalize_dir_scope(root, dir_scope)
+    root_abs = os.path.abspath(root)
+
+    # Check active flight metadata if present
+    flight_file = os.path.join(root, ".cleanroom", "active_flight.json")
+    if os.path.isfile(flight_file):
+        try:
+            with open(flight_file, "r", encoding="utf-8") as f:
+                fdata = json.load(f)
+            flight_scope = str(fdata.get("flight_scope", "")).strip("/\\")
+            if flight_scope and (flight_scope == scope_rel or flight_scope == os.path.basename(scope_dir)):
+                if fdata.get("pretense") or "pretense" in str(fdata.get("flight_id", "")):
+                    return "pretense"
+                if fdata.get("pipeline"):
+                    return str(fdata.get("pipeline")).strip().lower()
+        except Exception:
+            pass
+
+    cand = os.path.join(scope_dir, "cleanroom.toml")
+    if os.path.isfile(cand):
+        try:
+            with open(cand, "rb") as f:
+                data = tomllib.load(f)
+            pipe = data.get("pipeline")
+            if pipe and isinstance(pipe, str):
+                return pipe.strip().lower()
+        except (OSError, tomllib.TOMLDecodeError):
+            pass
+
+    if os.path.isdir(scope_dir):
+        try:
+            for entry in os.listdir(scope_dir):
+                sub = os.path.join(scope_dir, entry)
+                if os.path.isdir(sub) and not entry.startswith((".", "bazel-", "venv")):
+                    sub_cand = os.path.join(sub, "cleanroom.toml")
+                    if os.path.isfile(sub_cand):
+                        try:
+                            with open(sub_cand, "rb") as f:
+                                data = tomllib.load(f)
+                            pipe = data.get("pipeline")
+                            if pipe and isinstance(pipe, str):
+                                return pipe.strip().lower()
+                        except (OSError, tomllib.TOMLDecodeError):
+                            pass
+        except OSError:
+            pass
+
+    curr = os.path.abspath(scope_dir)
+    while curr and curr.startswith(root_abs) and curr != root_abs:
+        cand = os.path.join(curr, "cleanroom.toml")
+        if os.path.isfile(cand):
+            try:
+                with open(cand, "rb") as f:
+                    data = tomllib.load(f)
+                pipe = data.get("pipeline")
+                if pipe and isinstance(pipe, str):
+                    return pipe.strip().lower()
             except (OSError, tomllib.TOMLDecodeError):
                 pass
         curr_parent = os.path.dirname(curr)
@@ -538,6 +626,7 @@ class RoleResolver(roles.RoleResolver):
             task_prompt=base.task_prompt,
             template=base.template,
             template_command=base.template_command,
+            pipeline=base.pipeline,
         )
 
     # Contract: Resolves role configuration matching declared roles or addressed packages.
@@ -593,18 +682,38 @@ class RoleResolver(roles.RoleResolver):
     ) -> Sequence[roles.RoleDefinition]:
         """Loads and resolves all role definitions declared in the repository."""
         root = _discover_root(repo_root)
+        resolved_roles: Sequence[roles.RoleDefinition]
         if dir_scope:
             meth = _find_methodology_for_scope(root, dir_scope)
             if meth:
                 scope_roles = _load_roles_from_methodology(root, meth)
                 if scope_roles:
-                    return list(scope_roles.values())
+                    resolved_roles = list(scope_roles.values())
+                else:
+                    all_roles = self._get_roles(repo_root)
+                    resolved_roles = list(all_roles.values())
+            else:
+                all_roles = self._get_roles(repo_root)
+                resolved_roles = list(all_roles.values())
+
+            active_pipeline = _find_pipeline_for_scope(root, dir_scope)
+            if active_pipeline:
+                return [
+                    r for r in resolved_roles
+                    if r.pipeline is None or r.pipeline == "" or r.pipeline == active_pipeline
+                ]
+            else:
+                return [
+                    r for r in resolved_roles
+                    if r.pipeline is None or r.pipeline == "" or r.pipeline == "standard"
+                ]
+
         all_roles = self._get_roles(repo_root)
         return list(all_roles.values())
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:45:00Z
-# CHANGE: Implement roles_impl
+# LAST_CHANGED: 2026-10-25T21:55:00Z
+# CHANGE: Implement pipeline-aware role listing and filtering in roles_impl
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

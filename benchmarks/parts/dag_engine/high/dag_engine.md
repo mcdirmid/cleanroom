@@ -65,8 +65,8 @@ A *DAG runner* coordinates graph execution under concurrency limits, failure pol
 Execution bounded by an overall timeout limit raises DAG timeout error when elapsed duration exceeds the timeout. The runner supports cancelling active execution, transitioning non-terminal nodes to cancelled and raising DAG cancelled error.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T01:28:27Z
+LAST_CLEANED: 2026-10-26T21:35:31Z
 LAST_CHANGED: 2026-10-21T18:13:00Z
 CHANGE: Specify operation-driven failure policy on mark_failed and run, and concurrency limit on run
-SPEC_QA_AUDIT: 2026-10-22T01:28:27Z
+SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
 -->

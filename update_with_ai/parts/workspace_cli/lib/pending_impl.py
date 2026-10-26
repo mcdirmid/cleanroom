@@ -101,6 +101,20 @@ def materialize_starter_template(
     return False
 
 
+def _normalize_unit_stem(name: str) -> str:
+    norm = name.strip().lstrip("/").replace("\\", "/")
+    stem = os.path.splitext(os.path.basename(norm))[0]
+    changed = True
+    while changed:
+        changed = False
+        for suffix in ("_pretense", "_test", "_impl"):
+            if stem.endswith(suffix):
+                stem = stem[: -len(suffix)]
+                changed = True
+                break
+    return stem
+
+
 # Contract: Realizes pending buffer tracking, target removal, and dirty checks in agent_session tier.
 class WorkspacePendingManager(pending.WorkspacePendingManager):
     """Realizes pending buffer tracking, target removal, and dirty checks."""
@@ -172,20 +186,16 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
         if not targets:
             return
         norm_sub = submitted_target.strip().lstrip("/")
-        sub_stem = os.path.splitext(os.path.basename(norm_sub))[0]
-        if sub_stem.endswith("_test"):
-            sub_stem = sub_stem[:-5]
+        sub_stem = _normalize_unit_stem(norm_sub)
         remaining = []
         for t in targets:
             norm_t = t.strip().lstrip("/")
-            t_stem = os.path.splitext(os.path.basename(norm_t))[0]
-            if t_stem.endswith("_test"):
-                t_stem = t_stem[:-5]
+            t_stem = _normalize_unit_stem(norm_t)
             if (
                 norm_t == norm_sub
                 or norm_t.endswith(f"/{norm_sub}")
                 or norm_sub.endswith(f"/{norm_t}")
-                or t_stem == sub_stem
+                or (sub_stem and t_stem and t_stem == sub_stem)
             ):
                 continue
             remaining.append(t)
@@ -270,8 +280,8 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:40:00Z
-# CHANGE: Implement pending_impl
+# LAST_CHANGED: 2026-10-25T22:36:00Z
+# CHANGE: Normalize unit stems across pretense, test, and impl variants in remove_pending_target
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

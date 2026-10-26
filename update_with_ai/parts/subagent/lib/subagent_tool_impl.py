@@ -121,6 +121,11 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
             action="store_true",
             help="Run in simulation mode without external subprocesses.",
         )
+        orch_parser.add_argument(
+            "--pretense",
+            action="store_true",
+            help="Use Pretense testing pipeline.",
+        )
 
         args_list = list(argv)
         if not args_list or args_list[0] != "orchestrate":
@@ -144,6 +149,7 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
                 repo_root=parsed.repo_root,
                 max_unproductive_rounds=parsed.max_unproductive_rounds,
                 target_node=parsed.target_node,
+                pretense=parsed.pretense,
             )
 
         parser.print_help()
@@ -164,6 +170,7 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
         max_unproductive_rounds: Optional[int] = None,
+        pretense: bool = False,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence."""
         effective_unproductive = (
@@ -225,8 +232,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return runner.execute_command(raw_args)
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T11:00:00Z
-# CHANGE: turn down support for goose, supporting only antigravity and dsh
+# LAST_CHANGED: 2026-10-25T21:50:00Z
+# CHANGE: Support pretense pipeline option in orchestrate CLI arguments
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

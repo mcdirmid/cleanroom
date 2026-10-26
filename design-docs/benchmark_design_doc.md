@@ -536,6 +536,8 @@ To rigorously stress-test Cleanroom's Bipartite Boundary Principle ($\langle [s^
   - `beta.2` vs `beta.11`: Naive string sorting places `beta.11` before `beta.2`. Comparing `alpha < beta` achieves 100% branch coverage on the comparison function, but fails on numeric sub-segments.
   - Caret zero rules: `^1.2.3` permits `<2.0.0`, but `^0.2.3` permits only `<0.3.0` and `^0.0.3` permits only `<0.0.4`. A single `if major > 0: ... else: ...` gets 100% branch coverage with two simple tests, but completely misses the `0.0.x` edge case.
   - A linear dependency solver passes all CUJ tests with 100% line coverage, yet fails or loops indefinitely on diamond cycles and conflict backtracks.
+- **Crucible for Edge-Case & Invariant Verification**:
+  `semver_solver` serves as the primary benchmark suite for evaluating advanced edge-case verification techniques. While `dag_engine_lite` exposed fundamental state synchronization omissions, `semver_solver` provides an exceptionally dense mathematical and combinatorial problem space to evaluate the comparative efficacy of **Targeted Mutation Testing**, **Contract Slug Traceability (`[slug:...]`)**, and **Hypothesis Stateful Property Testing** in eliminating subtle edge-case omissions without relying on expensive frontier models.
 
 #### Option B: RFC 6902 JSON Patch & RFC 7396 Merge Patch Engine (~580–780 LOC)
 - **Specification Authority**: IETF RFC 6902 (JSON Patch), RFC 6901 (JSON Pointer), RFC 7396 (JSON Merge Patch).
@@ -673,6 +675,12 @@ To evaluate Cleanroom's contributions rigorously against standard industry pract
 2. **Baseline 2: Single-Agent Joint Context TDD ($\mathcal{I} > 0$)**:
    - Reflects modern agentic coding benchmarks (e.g., SWE-bench, Devin-style loops) where a single agent authors both code and tests.
    - Captures the Fatal Contamination Trap: mutual confirmation bias where the test suite certifies the implementation's flawed assumptions.
+3. **Baseline 3: Cleanroom Single-Model ($\mathcal{I} = 0$, Task Asymmetry)**:
+   - Evaluates Cleanroom's pure architectural mechanism by holding the model constant.
+   - Demonstrates that physical isolation and task asymmetry alone suppress coincident errors and enforce the fail-safe invariant.
+4. **Baseline 4: Cleanroom Heterogeneous Cross-Tier Ensembles**:
+   - Evaluates real-world production deployment: pairing cost-effective models (Tier 1 Local or Tier 2 Budget Cloud) with Tier 3/4 Arbiters.
+   - Quantifies the optimal frontier-to-worker economic trade-off.
 
 #### Operational Mechanics & The `--baseline` Architecture
 To establish an empirical baseline representing traditional single-agent software engineering within the benchmark suite, Cleanroom provides native baseline execution via the `--baseline` CLI option (`uv run cleanroom benchmark --baseline` or `uv run bin/evaluate_model_efficiency.py --baseline`). 
@@ -771,12 +779,98 @@ In practice, however, the baseline consistently fails to achieve Cleanroom's def
 
 #### Cleanroom's Structural Guarantee
 Cleanroom does not rely on an LLM's self-discipline, memory retention, or proofreading vigilance. By enforcing double-blind physical isolation between the Synthesizer ($W_{\text{lib}}$) and Certifier ($W_{\text{test}}$), the test worker *cannot inspect the implementation code*. It has zero knowledge of what the library author hallucinated or assumed; its tests are derived strictly, independently, and adversarially from the specification contract. Any divergence between the code and specification is flagged unconditionally.
-3. **Baseline 3: Cleanroom Single-Model ($\mathcal{I} = 0$, Task Asymmetry)**:
-   - Evaluates Cleanroom's pure architectural mechanism by holding the model constant.
-   - Demonstrates that physical isolation and task asymmetry alone suppress coincident errors and enforce the fail-safe invariant.
-4. **Baseline 4: Cleanroom Heterogeneous Cross-Tier Ensembles**:
-   - Evaluates real-world production deployment: pairing cost-effective models (Tier 1 Local or Tier 2 Budget Cloud) with Tier 3/4 Arbiters.
-   - Quantifies the optimal frontier-to-worker economic trade-off.
+
+### 6.2 Differential Cross-Testing Protocol & Runner Tooling (`bin/run_cross_tests.py`)
+
+When evaluating AI-generated code against AI-generated tests, 100% test pass rates on an agent's self-authored test suite ($V_{\text{self}} \to P_{\text{self}}$) provide zero assurance of actual contract correctness due to the Contamination Trap (coincident errors and shared blind spots). To mathematically and empirically prove the value of statistical independence, the benchmark architecture incorporates a **Differential Cross-Testing Protocol** automated via the standalone tool `bin/run_cross_tests.py`:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        DIFFERENTIAL CROSS-TESTING ARCHITECTURE                         │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│     Cleanroom Environment (I = 0)                   Baseline Environment (I > 0)       │
+│   ┌───────────────────────────────┐               ┌───────────────────────────────┐    │
+│   │ P_clean (Cleanroom Library)   │               │ P_base (Baseline Library)     │    │
+│   │ V_clean (Independent Tests)   │               │ V_base (Self-Authored Tests)  │    │
+│   └──────────────┬────────────────┘               └──────────────┬────────────────┘    │
+│                  │                                               │                     │
+│                  ├───────────────────────┐   ┌───────────────────┤                     │
+│                  │                       │   │                   │                     │
+│                  ▼                       ▼   ▼                   ▼                     │
+│           [ V_clean -> P_clean ]    [ V_clean -> P_base ]  [ V_base -> P_base ]        │
+│           (Self-Consistency: 100%)  (Forward Cross-Check)  (Self-Consistency: 100%)    │
+│                                              │                                         │
+│                                              ▼                                         │
+│                                     [ V_base -> P_clean ]                              │
+│                                     (Reverse Cross-Check)                              │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 1. Execution Protocol & Architecture
+The differential cross-test runner (`bin/run_cross_tests.py`) executes an exhaustive pairwise evaluation matrix across all archived Cleanroom and Baseline runs:
+
+1. **Artifact Extraction & Multi-File Unbundling**:
+   Extracts bundled library files (`lib_1.py`) and test suites (`test_1.py`) using `# === File: <name> ===` demarcations into ephemeral sandboxes (`/tmp/cross_eval_matrix/<test>_on_<lib>/`).
+2. **Namespace & Flight Scope Normalization**:
+   Different benchmark flights run in indexed ephemeral scopes (`benchmark_1`, `benchmark_2`, `benchmark_3`). The runner establishes directory symlinks across flight scopes, ensuring tests importing from any historical flight scope resolve transparently against the target library.
+3. **Module Identity Harmonization & Conftest Injection**:
+   In Python, importing a module via a qualified package path (`benchmark_1.parts.<unit>.lib.<unit>`) versus an unqualified name (`<unit>`) creates distinct module instances in `sys.modules`, which breaks enum identity checks (`Enum.A != Enum.A`). The runner automatically injects a localized `conftest.py` into the target test directory to alias `sys.modules` mappings to identical module objects.
+4. **Lifecycle Container Bridge**:
+   For baseline libraries that omitted Cleanroom's auto-generated lifecycle registration function, the runner safely injects `__initialize__(registry=None)` to bind `@singleton_type` implementations to the dependency injection registry.
+5. **Phase 1: Self-Consistency Gate ($V_{\text{self}} \to P_{\text{self}}$)**:
+   Verifies that each flight passes its own test suite 100%. Any failure here invalidates the flight.
+6. **Phase 2: Pairwise Cross-Evaluation ($V_{\text{test}} \to P_{\text{target}}$)**:
+   Executes independent Cleanroom tests against Baseline libraries (Forward Cross-Check) and Baseline tests against Cleanroom libraries (Reverse Cross-Check).
+
+#### 2. CLI Tooling Usage (`bin/run_cross_tests.py`)
+```bash
+# Run full differential cross-test matrix for dag_engine_lite
+./bin/run_cross_tests.py --suite dag_engine_lite
+
+# Target a specific library implementation against all test suites
+./bin/run_cross_tests.py --suite dag_engine_lite --target-model Qwen3.6-35B-A3B-oQ6-mtp+dsh
+
+# Evaluate against custom results directory or evaluation sandbox
+./bin/run_cross_tests.py --results-dir benchmarks/results --eval-base /tmp/cross_eval
+```
+
+#### 3. Empirical Divergence Taxonomy
+Every cross-check divergence is categorized into one of three empirical failure modes:
+
+1. **Defect Detection (Soundness Gap)**:
+   - *Condition*: $V_{\text{clean}}$ fails on $P_{\text{base}}$ (or foreign $V$ fails on $P_{\text{clean}}$), while $V_{\text{self}}$ passes on $P_{\text{self}}$.
+   - *Interpretation*: A genuine implementation defect violating a formal contract in `low/*.pyi`. The self-authored test suite suffered from coincident cognitive blind spots and failed to test the condition.
+   - *Examples Observed*:
+     - *Off-by-one retry counter*: Incrementing `retries_attempted` only upon failed retries rather than successful recoveries.
+     - *Node re-registration edge retention*: Failing to clear stale dependency edges when a node is re-added with new dependencies.
+     - *Scheduler state removal synchronization*: Leaving removed nodes in `WaveScheduler._states`.
+2. **Over-Specification & White-Box Leakage (Coupling Gap)**:
+   - *Condition*: $V_{\text{base}}$ fails on $P_{\text{clean}}$, while $V_{\text{clean}}$ passes on $P_{\text{clean}}$.
+   - *Interpretation*: The baseline developer authored tests tightly coupled to private internal mechanisms or uncontracted convenience APIs not specified in `low/*.pyi`.
+   - *Examples Observed*:
+     - *Constructor parameter injection*: Baseline tests calling `WaveScheduler(dag=self.dag)` when the specification contracted lifecycle resolution via `get_singleton(dag_engine_lite.DAG)` with a parameterless constructor.
+     - *In-place dataclass mutation*: Baseline tests attempting to mutate frozen dataclass fields.
+     - *Cycle tuple closing format*: Asserting cycle paths contain duplicate closed endpoints (`("a", "b", "a")`) rather than standard path tuples.
+3. **Packaging & Interface Ambiguities**:
+   - *Condition*: Failures caused by packaging or environment conventions rather than semantic logic.
+   - *Interpretation*: Module identity splits in `sys.modules` across flat vs. qualified package roots, or discrepancies in framework bootstrapping hooks. Handled systematically via sandboxed test harness normalization.
+
+For a comprehensive deep dive into the empirical case study where foreign models exposed soundness gaps in Qwen3.6-35B-A3B-oQ6-mtp's Cleanroom library, see [Cross-Model Differential Defect Analysis: Coincident Cognitive Blind Spots & Edge-Case Coverage](cross_model_defect_analysis_and_coincident_blindspots.md).
+
+#### 4. The Edge-Case Frontier: Commission vs. Omission & Roadmap to `semver_solver`
+
+Empirical findings from the `dag_engine_lite` cross-testing matrix established a foundational theoretical distinction:
+- **Errors of Commission (Faulty AST Logic)**: Inverted operators, wrong variable bindings, or flawed arithmetic. Mutation testing (`mutmut`) excels at measuring test suite sensitivity to these defects and preventing "rubber-stamp" assertions.
+- **Errors of Omission (Missing Code / Unhandled State Transitions)**: Omitted cleanup loops, missing dynamic synchronization, or ignored recovery branches. Mutation testing is blind to errors of omission because there is no AST syntax to mutate.
+
+To solve the edge-case challenge systematically without relying on expensive frontier models, Cleanroom combines:
+1. **Contract Slug Traceability (`[slug:...]`)**: Forces 100% test coverage over every granular postcondition clause in `low/*.pyi`.
+2. **Stateful Property-Based Testing (`hypothesis.stateful.RuleBasedStateMachine`)**: Generates bounded random walks over API state machines to discover unhandled state interleavings (see [`hypothesis_todo.md`](hypothesis_todo.md)).
+3. **Targeted Boundary Mutants**: Replaces slow, brute-force `mutmut` runs with fast first-order operator and return-value mutations to verify assertion rigor.
+
+The edge-case challenge will be comprehensively revisited and evaluated on the upcoming **`semver_solver`** benchmark suite. SemVer range intersection, prerelease precedence ordering (§11), and PubGrub backtracking dependency resolution present an exceptionally rich combinatorial state space where errors of omission and boundary subtleties are prevalent.
 
 ---
 
@@ -1223,6 +1317,45 @@ To permanently eradicate these failure modes across all model tiers, Cleanroom w
 5. **Coverage Arbiter Assumption Pragma Attribution**:
    - Updated [`update_python_with_ai/guides/coverage.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/guides/coverage.md) to prohibit demanding white-box tests that manipulate private state to reach defensive branches.
    - Unreachable defensive branches must be attributed to `lib` for annotation with `# pragma: no cover (assumption: <reason>)` or dead code elimination, preventing coverage deadlocks.
+
+---
+
+### 9.2 Pretense Benchmark Suite on `dag_engine_lite`: Baseline vs. Cleanroom Efficiency Analysis
+
+To evaluate the impact of Pretense (Hypothesis state-machine verification, bidirectional fake synthesis, and property fuzzing) on both the **Cleanroom Double-Blind Pipeline** and the **Autonomous Single-Agent Baseline**, comprehensive benchmark flights were executed across three model architectures on the `dag_engine_lite` benchmark unit.
+
+#### Empirical Results Matrix (`dag_engine_lite` with Pretense)
+
+| Configuration | Model & Harness | Unit / Fuzz Tests | Pyright Errors (Lib) | Wall Clock (s) | Financial Cost ($USD) | Total Tokens | Net Rounds |
+| :--- | :--- | :---: | :---: | ---: | ---: | ---: | :---: |
+| **Cleanroom (Gross)** | **DeepSeek-Flash** (DSH) | **49P / 0F** | **0 errors** | 1180.9s | $0.2438 | 13,511,994 | 16 |
+| **Cleanroom (Net Code/Test)** | **DeepSeek-Flash** (DSH) | **49P / 0F** | **0 errors** | 1180.9s | **$0.1779** | 11,088,411 | 8 |
+| **Pretense Baseline** | **DeepSeek-Flash** (DSH) | **33P / 0F** | **0 errors** | 492.3s | **$0.1332** | 6,932,259 | 1 |
+| **Cleanroom (Gross)** | **Gemini-3.8-Flash** (Antigravity) | **60P / 0F** | **0 errors** | 1135.0s | $0.8764 | 22,987,541 | 21 |
+| **Cleanroom (Net Code/Test)** | **Gemini-3.8-Flash** (Antigravity) | **60P / 0F** | **0 errors** | 1135.0s | **$0.7487** | 20,750,091 | 16 |
+| **Pretense Baseline** | **Gemini-3.8-Flash** (Antigravity) | **57P / 0F** | **0 errors** | 266.4s | **$0.1972** | 5,747,750 | 1 |
+| **Cleanroom (Gross)** | **Qwen-MoE** (DSH / Local) | **98P / 0F** | **0 errors** | 2223.8s | $0.0000 | 12,852,569 | 14 |
+| **Pretense Baseline** | **Qwen-MoE** (DSH / Local) | **92P / 0F** | **0 errors** | 1151.5s | **$0.0000** | 6,719,320 | 1 |
+
+*(Notes: Gross Cleanroom includes specification authoring/alignment rounds [`high`, `planning`, `scenarios`, `low`, `spec_qa`]. Net Cleanroom isolates pure implementation and testing rounds [`lib`, `pretense`, `pretense_qa`, `pretense_coverage`].)*
+
+#### Key Empirical Finding: Pretense as a Baseline Equalizer
+
+A decisive empirical discovery emerges from this comparison:
+
+1. **Pretense Enables the Baseline to Compete Directly with Cleanroom**:
+   In conventional benchmarks (without Pretense), single-agent baselines often succumb to the *Contamination Trap*—writing shallow, tautological tests that pass trivial cases while missing subtle state-machine regressions, cycle conditions, or edge interleavings.
+   With Pretense, the model is provided with a formal state transition protocol (`Transition`, `@proto.transition`, `FakeAdapter`). This acts as an **executable behavioral oracle**, compelling the single-agent baseline to author comprehensive stateful verification suites (33 to 92 passing tests, 98%–100% statement coverage, and 0 Pyright errors).
+
+2. **Substantially Lower Cost & Wall-Clock Latency**:
+   Because the Pretense Baseline operates in a single, un-fragmented developer round without the coordination overhead of multi-role dispatch waves:
+   - **DeepSeek-Flash**: Pretense Baseline cost **$0.1332** vs. Net Cleanroom **$0.1779** (25% cheaper than Net, 45% cheaper than Gross) and completed in **492.3s** vs. 1180.9s (2.4x faster).
+   - **Gemini-3.8-Flash**: Pretense Baseline cost **$0.1972** vs. Net Cleanroom **$0.7487** (**3.8x cheaper** than Net, 4.4x cheaper than Gross) and completed in **266.4s** vs. 1135.0s (**4.2x faster**).
+   - **Qwen-MoE (Local)**: Pretense Baseline consumed **6.72M tokens** vs. Cleanroom **12.85M tokens** (**48% reduction** in token expenditure) and finished in **1151.5s** vs. 2223.8s (**1.9x faster**).
+
+3. **Architectural Trade-Off Analysis**:
+   - **Where Baseline + Pretense Dominates**: For isolated, single-unit modules with clean interfaces, Pretense gives the baseline model the structural discipline of property-based testing without paying the multi-agent coordination tax. It achieves near-parity quality at a dramatically lower price point.
+   - **Where Cleanroom Double-Blind Pipeline Remains Essential**: In complex multi-component systems, ungrounded specifications, or cross-module boundary interactions, single-agent baselines can still suffer from coincident blind spots (e.g. omitting an invariant from both implementation and test). Cleanroom's independent roles (`spec_qa`, `pretense_qa`, `pretense_coverage`) provide external arbitration and blaming that prevent mutual confirmation bias from escaping into production.
 
 ---
 

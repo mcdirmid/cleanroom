@@ -47,6 +47,7 @@ Implementation modules (`lib/<name>_impl.py` or concrete service modules) transl
 - [ ] Implementation classes fulfill all inherited supertype contracts and postconditions transitively across the inheritance hierarchy, even when low-level specification stubs omit redundant docstring copy-down
 - [ ] Top-level unbound postconditions declared under `__orphan__()` in `low/<name>.pyi` are realized by the appropriate module service logic
 - [ ] Iterative sweeps and comprehensions process collections, dictionaries, and sequences according to contract requirements
+- [ ] When specifications mandate deterministic ordering or tie-breaking (such as topological sorting or priority queueing where items have identical rank), implementation code uses explicit stable keys (such as ascending alphabetical or lexicographical order) matching low specifications
 - [ ] Happy-path outputs construct and return concrete response records or values matching declared return types in `low/<name>.pyi`
 - [ ] Return values, dataclass parameters, and collaborator method arguments typed as domain NewTypes are explicitly wrapped (e.g. `MyNewType(val)`) rather than passed as bare primitives (`str`, `int`, `float`)
 - [ ] Wire-format type aliases using Python 3.12 syntax (`type WireType = ...`) declared in `low/<name>.pyi` are preserved and re-exported
@@ -59,6 +60,7 @@ Implementation modules (`lib/<name>_impl.py` or concrete service modules) transl
 - [ ] Missing message diagnostic functions are called where contracts specify missing note postconditions in implementation modules
 - [ ] Wire conversions are wrapped in `try/except ParameterConversionError` blocks where contracts specify parameter conversion postconditions in implementation modules
 - [ ] Diagnostic failure responses are formatted using the exact error templates specified in `low/<name>.pyi` postconditions in implementation modules
+- [ ] Custom exception classes realized with `@dataclass` or frozen dataclass semantics implement `def __str__(self) -> str: return self.message` (or call `Exception.__init__(self, message)`) so that `str(exc)` returns the intended human-readable message in test assertions
 - [ ] When contracts specify domain error exceptions (e.g. classes extending `ValueError` or `RuntimeError`), operations raise them with exact quoted messages, and coordinating services catch them to format responses
 - [ ] Catching broad exceptions (such as `except Exception:`) without re-raising is prohibited; task runners, executors, and retry handlers that contractually reify caught exceptions into result records or error attributes (e.g. `_result.error = exc`, `NodeResult(error=exc)`) capture the exception instance, or mark boundary handlers with `# cleanroom: allow-broad-exception`
 - [ ] Collaborator response failures are checked and propagated where contracts specify failure propagation postconditions in implementation modules
@@ -71,7 +73,7 @@ Implementation modules (`lib/<name>_impl.py` or concrete service modules) transl
 - [ ] Dependencies required across singleton operations are resolved on demand via `get_singleton(...)` or passed as contracted method arguments; inventing uncontracted configuration methods to inject dependencies is prohibited
 - [ ] Unreachable defensive branches or assertions protecting internal implementation assumptions are annotated with `# pragma: no cover (assumption: <reason>)`
 - [ ] In interface modules, service protocols remain purely abstract without instance attributes, backing storage, or mutators
-- [ ] Mutator operations in implementation singletons update internal state collections while enforcing contracted type-level invariants (`INVARIANTS:`)
+- [ ] Mutator operations in implementation singletons update internal state collections while enforcing contracted type-level invariants (`INVARIANTS:`), and dynamically synchronize dependent internal tracking state (such as dynamic scheduling queues or lifecycle state mappings) upon structural mutations (such as removals) so that state queries remain synchronized
 - [ ] Getter properties in implementation singletons expose defensive copies or read-only views (`dict(self._tools)`) of internal state
 - [ ] Services in implementation modules resolve peer or ancestor singletons via `get_singleton(...)` on demand rather than caching stale instances in global variables
 - [ ] In implementation modules, `__initialize__` is maintained under the auto-generated block delimiter (`# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---`) and left untouched; interface modules omit `__initialize__`

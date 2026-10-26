@@ -20,4 +20,6 @@ __pycache__/
 /logs/
 *.cleanroom.log*
 /benchmark_*
+scratch/
+.coverage*
 

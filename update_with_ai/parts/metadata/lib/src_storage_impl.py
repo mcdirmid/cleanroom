@@ -524,7 +524,12 @@ class AgentStorage(node_storage.AgentStorage):
         if role_def and role_def.template_command:
             unit_str = str(node.unit_address).strip()
             unit_stem = os.path.splitext(os.path.basename(unit_str))[0]
-            unit_name = unit_stem[:-5] if unit_stem.endswith("_test") else unit_stem
+            clean_stem = unit_stem
+            for sfx in ("_test", "_pretense"):
+                if clean_stem.endswith(sfx):
+                    clean_stem = clean_stem[:-len(sfx)]
+                    break
+            unit_name = clean_stem
             unit_dir = ""
             if ":" in unit_str:
                 unit_dir = unit_str.split(":", 1)[0].lstrip("/")

@@ -59,8 +59,8 @@ By encapsulating adjacency index management under re-entrant locks, employing Ka
   - Grounded: [dag_engine: [dag_engine_core_service]]
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T01:28:31Z
+LAST_CLEANED: 2026-10-26T21:35:31Z
 LAST_CHANGED: 2026-10-22T10:20:00Z
 CHANGE: Restore system lifecycle tier and specify operation-driven failure propagation contracts
-SPEC_QA_AUDIT: 2026-10-22T01:28:31Z
+SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
 -->

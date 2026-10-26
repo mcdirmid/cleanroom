@@ -25,9 +25,9 @@ The realization:
 
 - Evaluates role verification checks on the target file during submit execution, enforcing that modified targets have been verified via check_files since their latest modifications unless bypassed, rejecting submission when verification fails unless bypassed, delegates file validation and metadata stamping to the submission coordinator, reflects stamped files into the role workspace, appends submission records to the cleanroom log, and clears the target from pending work on success.
 
-- Verifies single-paragraph critique constraints during blame and feedback execution, enforcing that modified workspace targets have been verified via check_files since their latest modifications, delegates attribution to the attribution coordinator, records blamed culprit targets into the workspace blame buffer, appends blame records to the cleanroom log, and clears the target from pending work on success.
+- Verifies single-paragraph critique constraints during blame and feedback execution, enforcing that modified workspace targets have been verified via check_files since their latest modifications, delegates attribution to the attribution coordinator, records blamed culprit targets into the workspace blame buffer, appends blame records to the cleanroom log, and clears the matching target or single pending workspace target from pending work on success.
 
-- Enforces that modified target files have been verified via check_files since their latest modifications, delegates failure tagging and diagnostic recording to the attribution coordinator during fail execution, clearing the target from pending work on success.
+- Enforces that modified target files have been verified via check_files since their latest modifications, delegates failure tagging and diagnostic recording to the attribution coordinator during fail execution, clearing the matching target or single pending workspace target from pending work on success.
 
 - Delegates statement coverage evaluation to the coverage evaluator during coverage execution, using local workspace files when present, and formats diagnostic span reports.
 
@@ -35,7 +35,7 @@ The realization:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-20T21:07:00Z
-LAST_CHANGED: 2026-10-20T21:07:00Z
-CHANGE: Record blamed culprit targets into workspace blame buffer during blame execution
+LAST_CHANGED: 2026-10-25T22:36:00Z
+CHANGE: Clear matching or single pending target upon accepted blame and fail execution
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->
