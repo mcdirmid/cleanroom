@@ -62,6 +62,8 @@ class RoleDefinition:
     template: str = ""
     template_command: str = ""
     pipeline: Optional[str] = None
+    fused_roles: Sequence[str] = ()
+    common_spec_roles: Sequence[str] = ()
 
 
 @singleton_type("agent_session")
@@ -110,8 +112,8 @@ class RoleResolver(Singleton[AgentSessionTier], Protocol):
         ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-25T21:55:00Z
-# CHANGE: Add pipeline field and pipeline filtering to roles low-level specification
+# LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-10-29T00:40:00Z
+# CHANGE: Add common_spec_roles attribute to RoleDefinition in roles specification
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

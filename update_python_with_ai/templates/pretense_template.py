@@ -6,8 +6,8 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, EnsuresCheck, RequiresCheck, StateMachine, TransitionContext, transition
 from pretense.compiler import compile_hypothesis_test_case
-from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Raised, Value
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system
 
@@ -21,41 +21,41 @@ class TargetState:
     initialized: bool = True
 
 
-proto = StateMachineProto[TargetState]()
+class TargetStateMachine(StateMachine[TargetState]):
+    """Unified Pretense State Machine for Target."""
 
-# Example Transition Pattern:
-# @proto.transition(TargetClass.method_name)
-# def method_name(): pass
-#
-# @method_name.arguments
-# def _(
-#     state: TargetState,
-#     this: Any,
-#     arg1: Any | NotBoundType = NotBound,
-# ) -> Optional[Tuple[Any, ...]]:
-#     # Draw valid arguments via strategies or fallback defaults
-#     return ((arg1 if not isinstance(arg1, NotBoundType) else "sample_arg"),)
-#
-# @method_name.returns
-# def _(
-#     state: TargetState,
-#     this: Any,
-#     arg1: Any,
-#     outcome: object = NotBound,
-# ) -> Optional[Outcome[Any]]:
-#     if outcome is NotBound:
-#         return Value(None)
-#     return outcome if isinstance(outcome, Outcome) else Value(outcome)
-#
-# @method_name.provide
-# def _(
-#     state: TargetState,
-#     this: Any,
-#     arg1: Any,
-#     result: Any,
-# ) -> None:
-#     # Apply state mutations reflecting postconditions
-#     pass
+    def __init__(
+        self,
+        state: Optional[TargetState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or TargetState(), singletons=singletons)
+
+    # Example Transition Pattern (Declarative Domains):
+    # @transition(TargetClass.method_name)
+    # def method_name(self, ctx: TransitionContext[TargetClass, [str, int], str]) -> None:
+    #     ctx.requires(lambda check: check(self.state.initialized, "Must be initialized"))
+    #     ctx.arguments(
+    #         name=Domain.set(["sample_1", "sample_2"]),      # or Domain.regex(r"^[a-z]+$"), Domain.text()
+    #         count=Domain.range(1, 100),                     # analytical validation + generative sampling
+    #     )
+    #     ctx.returns(lambda name, count: f"result_{name}_{count}")
+    #     ctx.ensures(lambda res, target, check, name, count: (
+    #         check.equal(res, f"result_{name}_{count}", "Return value mismatch"),
+    #     ))
+    #     ctx.update(lambda res, name, count: None)
+    #
+    # Relational Arguments Example (Dependent Closures & Perturbations):
+    # @transition(TargetClass.compare)
+    # def compare(self, ctx: TransitionContext[TargetClass, [int, int], bool]) -> None:
+    #     ctx.arguments(
+    #         v1=Domain.range(0, 100),
+    #         v2=lambda v1: Domain.range(v1 + 1, 200),        # dependent closure: v2 > v1
+    #     )
+    #     ctx.returns(lambda v1, v2: True)
+
+
+proto = TargetStateMachine()
 
 
 # ==============================================================================
@@ -63,14 +63,15 @@ proto = StateMachineProto[TargetState]()
 # ==============================================================================
 
 # Single service fake factory:
-# def make_target_fake(state: TargetState) -> TargetClass:
+# def make_target_fake(state: Optional[TargetState] = None) -> TargetClass:
 #     """Synthesizes fake instance for TargetClass."""
-#     return proto.make_state_machine(state).as_fake(TargetClass)
+#     sm = TargetStateMachine(state or TargetState())
+#     return sm.as_fake(TargetClass)
 
 # Multi-service fakes factory (when target has multiple singletons sharing state):
-# def make_target_fakes(state: TargetState) -> Tuple[ServiceA, ServiceB]:
+# def make_target_fakes(state: Optional[TargetState] = None) -> Tuple[ServiceA, ServiceB]:
 #     """Synthesizes fake instances for component services sharing model state."""
-#     sm = proto.make_state_machine(state)
+#     sm = TargetStateMachine(state or TargetState())
 #     return (sm.as_fake(ServiceA), sm.as_fake(ServiceB))
 
 
@@ -106,15 +107,20 @@ class TestTargetImplReal(unittest.TestCase):
         self.phase_scope.__enter__()
         # For single service:
         # self.real = get_singleton(TargetClass)
+        # self.sm = TargetStateMachine(singletons={TargetClass: self.real})
         # For multi-service:
         # self.service_a = get_singleton(ServiceA)
         # self.service_b = get_singleton(ServiceB)
+        # self.sm = TargetStateMachine(singletons={ServiceA: self.service_a, ServiceB: self.service_b})
 
     def tearDown(self) -> None:
         self.phase_scope.__exit__(None, None, None)
 
     def test_real_conformance(self) -> None:
-        # Exercise all operational methods and branches to achieve 100% statement coverage under --no-fuzz --cov
+        # Drive operational scenarios via self.sm.dispatch_transition("<transition_name>", *args)
+        # to achieve 100% statement coverage under --no-fuzz --cov.
+        # Operational postconditions and invariants are verified automatically by transition ctx.ensures(...) handlers;
+        # fixed scenario tests should contain no redundant manual assertions (self.assertEqual, self.assertTrue).
         pass
 
 

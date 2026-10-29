@@ -8,6 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
@@ -36,221 +37,95 @@ class AgentStorageState:
     task_prompts: PretenseDict[DagNode, TaskPrompt] = field(default_factory=PretenseDict)
 
 
-proto = StateMachineProto[AgentStorageState]()
+class AgentStorageStateMachine(StateMachine[AgentStorageState]):
+    """Pretense StateMachine for AgentStorage."""
+
+    def __init__(self, state: Optional[AgentStorageState] = None):
+        super().__init__(state=state or AgentStorageState())
+
+    # ==============================================================================
+    # 1. Seeding Transitions
+    # ==============================================================================
+
+    @transition.seeding()
+    def seed_node(
+        self,
+        ctx: TransitionContext[None, [DagNode, bool], None],
+    ) -> None:
+        ctx.arguments(
+                    node=Domain(strategy=lambda: DagNode(UnitAddress('target'), RoleAddress('lib'))),
+                    is_dirty=Domain(strategy=lambda: False),
+                )
+        def _consequent(res: None, node: DagNode = DagNode(UnitAddress("target"), RoleAddress("lib")), is_dirty: bool = False) -> None:
+            self.state.nodes.add(node)
+            if is_dirty:
+                self.state.dirty_nodes.add(node)
+            else:
+                self.state.dirty_nodes.discard(node)
+        ctx.update(_consequent)
+
+    @transition.seeding()
+    def seed_node_definition(
+        self,
+        ctx: TransitionContext[None, [DagNode, str], None],
+    ) -> None:
+        ctx.arguments(
+                    node=Domain(strategy=lambda: DagNode(UnitAddress('target'), RoleAddress('lib'))),
+                    task_prompt=Domain(strategy=lambda: 'Clean the target node'),
+                )
+        def _consequent(res: None, node: DagNode = DagNode(UnitAddress("target"), RoleAddress("lib")), task_prompt: str = "Clean the target node") -> None:
+            self.state.nodes.add(node)
+            prompt = TaskPrompt(str(task_prompt))
+            self.state.task_prompts[node] = prompt
+            self.state.node_definitions[node] = NodeDefinition(task_prompt=prompt)
+        ctx.update(_consequent)
+
+    # ==============================================================================
+    # 2. AgentStorage Transitions
+    # ==============================================================================
+
+    @transition(AgentStorage.get_dependencies)
+    def get_dependencies(
+        self,
+        ctx: TransitionContext[AgentStorage, [DagNode], Sequence[DagDependency]],
+    ) -> None:
+        ctx.arguments(node=Domain(strategy=lambda: next(iter(self.state.nodes))))
+        ctx.returns(lambda node: tuple(self.state.dependencies.get(node, set())))
+
+    @transition(AgentStorage.get_messages)
+    def get_messages(
+        self,
+        ctx: TransitionContext[AgentStorage, [DagNode], Sequence[DagMessage]],
+    ) -> None:
+        ctx.arguments(node=Domain(strategy=lambda: next(iter(self.state.nodes))))
+        ctx.returns(lambda node: tuple(self.state.messages.get(node, set())))
+
+    @transition(AgentStorage.is_dirty)
+    def is_dirty(
+        self,
+        ctx: TransitionContext[AgentStorage, [DagNode], bool],
+    ) -> None:
+        ctx.arguments(node=Domain(strategy=lambda: next(iter(self.state.nodes))))
+        ctx.returns(lambda node: node in self.state.dirty_nodes)
+
+    @transition(AgentStorage.get_node_definition)
+    def get_node_definition(
+        self,
+        ctx: TransitionContext[AgentStorage, [DagNode], NodeDefinition],
+    ) -> None:
+        ctx.arguments(node=Domain(strategy=lambda: next(iter(self.state.node_definitions.keys()))))
+        ctx.returns(lambda node: self.state.node_definitions.get(node, NodeDefinition(task_prompt=TaskPrompt("default prompt"))))
+
+    @transition(AgentStorage.get_task_prompt)
+    def get_task_prompt(
+        self,
+        ctx: TransitionContext[AgentStorage, [DagNode], TaskPrompt],
+    ) -> None:
+        ctx.arguments(node=Domain(strategy=lambda: next(iter(self.state.task_prompts.keys()))))
+        ctx.returns(lambda node: self.state.task_prompts.get(node, TaskPrompt("default prompt")))
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_node(): pass
-
-@seed_node.arguments
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-    is_dirty: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode, bool]]:
-    n = DagNode(UnitAddress("target"), RoleAddress("lib")) if isinstance(node, NotBoundType) else node
-    dirty = False if isinstance(is_dirty, NotBoundType) else bool(is_dirty)
-    return (n, dirty)
-
-@seed_node.provide
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode,
-    is_dirty: bool,
-    result: None = None,
-) -> None:
-    state.nodes.add(node)
-    if is_dirty:
-        state.dirty_nodes.add(node)
-    else:
-        state.dirty_nodes.discard(node)
-
-
-@proto.seeding()
-def seed_node_definition(): pass
-
-@seed_node_definition.arguments
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-    task_prompt: str | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode, TaskPrompt]]:
-    n = DagNode(UnitAddress("target"), RoleAddress("lib")) if isinstance(node, NotBoundType) else node
-    prompt = TaskPrompt("Clean the target node" if isinstance(task_prompt, NotBoundType) else str(task_prompt))
-    return (n, prompt)
-
-@seed_node_definition.provide
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode,
-    task_prompt: TaskPrompt,
-    result: None = None,
-) -> None:
-    state.nodes.add(node)
-    state.task_prompts[node] = task_prompt
-    state.node_definitions[node] = NodeDefinition(task_prompt=task_prompt)
-
-
-# ==============================================================================
-# 2. AgentStorage Transitions
-# ==============================================================================
-
-@proto.transition(AgentStorage.get_dependencies)
-def get_dependencies(): pass
-
-@get_dependencies.arguments
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode]]:
-    if isinstance(node, NotBoundType):
-        if not state.nodes:
-            return None
-        return (next(iter(state.nodes)),)
-    return (node,)
-
-@get_dependencies.returns
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Sequence[DagDependency]]]:
-    expected = tuple(state.dependencies.get(node, set()))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(AgentStorage.get_messages)
-def get_messages(): pass
-
-@get_messages.arguments
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode]]:
-    if isinstance(node, NotBoundType):
-        if not state.nodes:
-            return None
-        return (next(iter(state.nodes)),)
-    return (node,)
-
-@get_messages.returns
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Sequence[DagMessage]]]:
-    expected = tuple(state.messages.get(node, set()))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(AgentStorage.is_dirty)
-def is_dirty(): pass
-
-@is_dirty.arguments
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode]]:
-    if isinstance(node, NotBoundType):
-        if not state.nodes:
-            return None
-        return (next(iter(state.nodes)),)
-    return (node,)
-
-@is_dirty.returns
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode,
-    outcome: object = NotBound,
-) -> Optional[Outcome[bool]]:
-    expected = node in state.dirty_nodes
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(AgentStorage.get_node_definition)
-def get_node_definition(): pass
-
-@get_node_definition.arguments
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode]]:
-    if isinstance(node, NotBoundType):
-        if not state.node_definitions:
-            return None
-        return (next(iter(state.node_definitions.keys())),)
-    return (node,)
-
-@get_node_definition.returns
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode,
-    outcome: object = NotBound,
-) -> Optional[Outcome[NodeDefinition]]:
-    expected = state.node_definitions.get(node, NodeDefinition(task_prompt=TaskPrompt("default prompt")))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(AgentStorage.get_task_prompt)
-def get_task_prompt(): pass
-
-@get_task_prompt.arguments
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode]]:
-    if isinstance(node, NotBoundType):
-        if not state.task_prompts:
-            return None
-        return (next(iter(state.task_prompts.keys())),)
-    return (node,)
-
-@get_task_prompt.returns
-def _(
-    state: AgentStorageState,
-    this: Any,
-    node: DagNode,
-    outcome: object = NotBound,
-) -> Optional[Outcome[TaskPrompt]]:
-    expected = state.task_prompts.get(node, TaskPrompt("default prompt"))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = AgentStorageStateMachine()
 
 
 # ==============================================================================
@@ -259,8 +134,7 @@ def _(
 
 def make_agent_storage_fake(state: Optional[AgentStorageState] = None) -> AgentStorage:
     """Instantiate a synthesized AgentStorage fake with Pretense."""
-    st = state or AgentStorageState()
-    sm = proto.make_state_machine(st)
+    sm = AgentStorageStateMachine(state)
     return sm.as_fake(AgentStorage)
 
 
@@ -273,7 +147,7 @@ class TestAgentStorageUnit(unittest.TestCase):
 
     def setUp(self) -> None:
         self.state = AgentStorageState()
-        self.sm = proto.make_state_machine(self.state)
+        self.sm = AgentStorageStateMachine(self.state)
         self.node = DagNode(UnitAddress("target"), RoleAddress("lib"))
         self.sm.seed_node(self.node, is_dirty=True)
         self.sm.seed_node_definition(self.node, task_prompt="Implement feature X")
@@ -306,7 +180,7 @@ class TestAgentStorageFuzz(unittest.TestCase):
     )
     def test_storage_invariants_under_fuzz(self, prompts: list[str], dirty_flags: list[bool]) -> None:
         state = AgentStorageState()
-        sm = proto.make_state_machine(state)
+        sm = AgentStorageStateMachine(state)
 
         for i, (prompt, dirty) in enumerate(zip(prompts, dirty_flags)):
             node = DagNode(UnitAddress(f"unit_{i}"), RoleAddress("lib"))

@@ -385,7 +385,7 @@ def _eval_unit_dirty_internal(
                 continue
             dir_prefix = _parse_pattern_info(fb_pat)[0]
             if dir_prefix and not os.path.isdir(os.path.join(main_root, part_dir, dir_prefix)):
-                if fb_role not in ("lib", "test") and clean_role not in ("qa", "coverage"):
+                if not fb_pat.endswith(".py"):
                     continue
             audited_targets_count += 1
             fb_rel = fb_pat.format(unit_dir=part_dir, unit_name=unit_name)

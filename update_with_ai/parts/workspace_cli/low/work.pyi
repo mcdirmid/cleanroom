@@ -125,6 +125,7 @@ class WorkspaceWorkManager(Singleton[AgentSessionTier], Protocol):
         - WHEN target_unit is specified, MUST restrict discovered dirty items to the target unit and its transitive dependencies.
         - WHEN any star role dependency is modified, MUST mark target dirty.
         - MUST check intra-unit upstream roles, auditor feedback deps, and inter-unit module deps.
+        - WHEN role declares fused_roles, MUST relax upstream dependencies internal to the fused role cluster, evaluating units as ready when their prerequisites outside the fused role cluster are clean.
         - MUST return tuple of (ready_items, blocked_items) sorted topologically.
         """
         ...
@@ -194,8 +195,8 @@ def __orphan__() -> None:
     ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-18T01:30:00Z
-# CHANGE: support bounding work queue discovery to target units and clarify producer dependency evaluation
+# LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-10-26T20:38:00Z
+# CHANGE: Add intra-fuse dependency relaxation postcondition to compute_role_work_queue
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

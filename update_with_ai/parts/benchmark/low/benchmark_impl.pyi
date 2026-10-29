@@ -79,10 +79,9 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         - MUST execute the flight under the requested harness or simulation mode.
         - WHEN baseline is True and harness is 'loop', MUST raise ValueError rejecting loop harness.
         - WHEN baseline is True, MUST record exactly one execution round under baseline role.
-        - WHEN baseline is True, MUST provision execution watchdog environment variables (PYTHONFAULTHANDLER=1, PRETENSE_TIMEOUT=45.0, CLEANROOM_VERIFY_TIMEOUT=45.0) in .env within the flight scope workspace, provide the low-level specification and instruct the developer agent to consult it, implement the two-file library structure in lib/, test _impl.py (or author pretense suites in pretense/), achieve 100% test coverage with opt-outs, and troubleshoot test timeouts/hangs as infinite loops or deadlocks in code under test rather than modifying tests, awaiting baseline round completion (requiring discovered candidate baseline subagent transcripts to be present and to have completed their final step without tool calls).
-        - WHEN baseline is True and harness is in ('dsh', 'deepseek', 'deepseek-harness'), MUST initialize DSH platform singletons and configure the workspace under the agent session lifecycle tier, ensuring the Cordis overlay patch is generated.
+        - WHEN baseline is True, MUST route execution through the unified Cleanroom clean orchestrator targeting the fused role (pretense_baseline or baseline) and record methodology accordingly.
         - WHEN pretense is True, MUST execute synthesis and verification using Pretense state machines, fakes, and property fuzzing.
-        - WHEN baseline is True and pretense is True, MUST provision pretense/ and guides/pretense.md, scaffold starter pretense suite, instruct the agent to author pretense state machine/fakes/fuzz tests, evaluate verification gates with pretense, and record methodology as pretense_baseline.
+        - WHEN baseline is True and pretense is True, MUST evaluate verification gates with pretense and record methodology as pretense_baseline.
         - MUST harvest telemetry and evaluate verification gates.
         - MUST return a flight record with complete empirical measurements.
         - MUST skip artifact archival and workspace draining when dry_run is True.
@@ -130,7 +129,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         - MUST remove all files and directories under unit.unit_dir/lib and unit.unit_dir/tests.
         - MUST mark specifications clean up to specification QA within the flight scope to isolate code and test generation.
         - MUST purge ephemeral role workspaces associated with the unit.
-        - MUST remove ephemeral flight scopes when present.
+        - MUST remove ephemeral flight scopes when present for successful flights, preserving them as <flight_scope>.failed along with associated role workspaces under <flight_scope>.failed/role_workspaces when flights fail verification.
         """
         ...
 
@@ -147,7 +146,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
           analysis, writing to output_path when provided.
 
         POSTCONDITIONS:
-        - MUST format a markdown summary table containing model tiers, token metrics, costs, and test results.
+        - MUST format a markdown summary table containing model tiers, token metrics, costs, test results, and status indicators marking PASS or FAILED.
         - WHEN an output path is provided, MUST write the markdown report to disk.
         """
         ...
@@ -224,14 +223,14 @@ def __orphan__() -> None:
     - MUST provision a concise sequential ephemeral flight scope directory (e.g. benchmark_1), rewrite copied benchmark imports, disallow bare parts imports, mark specifications clean up to specification QA, and copy scope methodology configuration.
     - WHEN an evaluated flight scope index does not exist in the repository root, MUST purge any orphaned role workspaces matching that index to permit sequential reuse.
     - MUST clean up orphaned flight scope directories and associated role workspaces from prior flights.
-    - MUST tear down the ephemeral flight scope directory and associated provisioned role workspaces upon flight completion.
+    - MUST tear down the ephemeral flight scope directory and associated provisioned role workspaces upon flight completion, deleting them for successful flights and preserving the flight scope directory as <flight_scope>.failed along with associated role workspaces under <flight_scope>.failed/role_workspaces on failure.
     - MUST execute the benchmark evaluator command-line runner within the system lifecycle tier.
     """
     ...
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-10-26T21:55:00Z
-# CHANGE: Specify execution watchdog environment provisioning (.env) and infinite loop troubleshooting guidance in baseline developer prompts
+# LAST_CHANGED: 2026-10-27T22:45:00Z
+# CHANGE: Specify robust failed flight directory preservation with role workspaces, prominent failure reporting, and non-zero exit code on verification failure
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---

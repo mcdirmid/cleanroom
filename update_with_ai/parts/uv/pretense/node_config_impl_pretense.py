@@ -10,6 +10,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.agent.lib.node_config import NodeConfig, NodeGuide
@@ -23,79 +24,50 @@ class NodeConfigState:
     is_step: bool = False
 
 
-proto = StateMachineProto[NodeConfigState]()
+class NodeConfigStateMachine(StateMachine[NodeConfigState]):
+    """Pretense StateMachine for NodeConfig."""
+
+    def __init__(self, state: Optional[NodeConfigState] = None):
+        super().__init__(state=state or NodeConfigState())
+
+    # ==============================================================================
+    # 1. Seeding Transitions
+    # ==============================================================================
+
+    @transition.seeding()
+    def seed_node_config_data(
+        self,
+        ctx: TransitionContext[None, [bool, bool], None],
+    ) -> None:
+        ctx.arguments(
+                    allows_step=Domain(strategy=lambda: True),
+                    is_step=Domain(strategy=lambda: False),
+                )
+        def _consequent(res: None, allows_step: bool = True, is_step: bool = False) -> None:
+            self.state.allows_step = allows_step
+            self.state.is_step = is_step
+        ctx.update(_consequent)
+
+    # ==============================================================================
+    # 2. NodeConfig Transitions
+    # ==============================================================================
+
+    @transition(getattr(NodeConfig, "allows_step_mode"))
+    def allows_step_mode(
+        self,
+        ctx: TransitionContext[NodeConfig, [], bool],
+    ) -> None:
+        ctx.returns(lambda: self.state.allows_step)
+
+    @transition(getattr(NodeConfig, "is_step_mode"))
+    def is_step_mode(
+        self,
+        ctx: TransitionContext[NodeConfig, [], bool],
+    ) -> None:
+        ctx.returns(lambda: self.state.is_step)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_node_config_data(): pass
-
-@seed_node_config_data.arguments
-def _(
-    state: NodeConfigState,
-    this: Any,
-    allows_step: bool | NotBoundType = NotBound,
-    is_step: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[bool, bool]]:
-    a = True if isinstance(allows_step, NotBoundType) else bool(allows_step)
-    s = False if isinstance(is_step, NotBoundType) else bool(is_step)
-    return (a, s)
-
-@seed_node_config_data.provide
-def _(
-    state: NodeConfigState,
-    this: Any,
-    allows_step: bool,
-    is_step: bool,
-    result: None = None,
-) -> None:
-    state.allows_step = allows_step
-    state.is_step = is_step
-
-
-# ==============================================================================
-# 2. NodeConfig Transitions
-# ==============================================================================
-
-@proto.transition(getattr(NodeConfig, "allows_step_mode"))
-def allows_step_mode(): pass
-
-@allows_step_mode.arguments
-def _(
-    state: NodeConfigState,
-    this: Any,
-) -> Optional[Tuple[()]]:
-    return ()
-
-@allows_step_mode.returns
-def _(
-    state: NodeConfigState,
-    this: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[bool]]:
-    return Value(state.allows_step)
-
-
-@proto.transition(getattr(NodeConfig, "is_step_mode"))
-def is_step_mode(): pass
-
-@is_step_mode.arguments
-def _(
-    state: NodeConfigState,
-    this: Any,
-) -> Optional[Tuple[()]]:
-    return ()
-
-@is_step_mode.returns
-def _(
-    state: NodeConfigState,
-    this: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[bool]]:
-    return Value(state.is_step)
+proto = NodeConfigStateMachine()
 
 
 # ==============================================================================
@@ -104,8 +76,7 @@ def _(
 
 def make_node_config_fake(state: Optional[NodeConfigState] = None) -> NodeConfig:
     """Instantiate a synthesized NodeConfig fake."""
-    st = state or NodeConfigState()
-    sm = proto.make_state_machine(st)
+    sm = NodeConfigStateMachine(state)
     return sm.as_fake(NodeConfig)
 
 
@@ -118,7 +89,7 @@ class TestNodeConfigUnit(unittest.TestCase):
 
     def setUp(self) -> None:
         self.state = NodeConfigState(allows_step=True, is_step=False)
-        self.sm = proto.make_state_machine(self.state)
+        self.sm = NodeConfigStateMachine(self.state)
         self.fake: NodeConfig = self.sm.as_fake(NodeConfig)
 
     def test_allows_step_mode_and_is_step_mode(self) -> None:
@@ -190,7 +161,7 @@ class TestNodeConfigFuzz(unittest.TestCase):
     )
     def test_node_config_invariants(self, allows_step: bool, is_step: bool) -> None:
         state = NodeConfigState(allows_step=allows_step, is_step=is_step)
-        sm = proto.make_state_machine(state)
+        sm = NodeConfigStateMachine(state)
         fake = sm.as_fake(NodeConfig)
 
         self.assertEqual(fake.allows_step_mode, allows_step)

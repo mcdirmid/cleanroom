@@ -23,6 +23,7 @@ class WorkspaceChecker(Singleton[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - WHEN batch_size is provided or resolved from configuration, MUST bound presented ready tasks to at most batch_size without extraneous remaining or blocked queue details.
         - WHEN unacted feedback reasons exceed max_feedback_chars resolved from configuration, MUST throttle presented feedback reasons to at most max_feedback_chars.
+        - WHEN zero ready targets remain, MUST format a prominent round conclusion directive instructing the worker that all work assigned to their role is resolved and directing immediate round conclusion without further tool calls.
         - MUST evaluate dirty work in local workspace and print ready tasks.
         """
         ...
@@ -65,7 +66,7 @@ class WorkspaceChecker(Singleton[AgentSessionTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T18:25:00Z
-# CHANGE: Define check low-level interface specification
+# LAST_CHANGED: 2026-10-28T20:15:00Z
+# CHANGE: Add round conclusion directive postcondition when 0 ready targets remain
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

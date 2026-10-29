@@ -52,6 +52,7 @@ def _parse_pat_to_glob(pat: str) -> Tuple[str, str, str]:
 
 def _build_role_definitions(
     raw_roles: Dict[str, Dict[str, Any]],
+    raw_fused: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, roles.RoleDefinition]:
     """Builds role definition records from raw role declaration attributes."""
     # Contract: __orphan__ - MUST return validated role definitions parsed from raw role attribute dictionaries.
@@ -63,7 +64,12 @@ def _build_role_definitions(
     }
 
     role_defs: Dict[str, roles.RoleDefinition] = {}
+    fused_candidates: Dict[str, Dict[str, Any]] = dict(raw_fused or {})
+
     for rname, rkwargs in raw_roles.items():
+        if rkwargs.get("fused_roles"):
+            fused_candidates[rname] = rkwargs
+            continue
         raw_role_deps = rkwargs.get("role_deps") or []
         raw_star_deps = rkwargs.get("star_role_deps") or []
         raw_fb_deps = rkwargs.get("feedback_role_deps") or []
@@ -178,6 +184,79 @@ def _build_role_definitions(
             template=rkwargs.get("template") or "",
             template_command=rkwargs.get("template_command") or "",
             pipeline=str(rkwargs["pipeline"]).strip().lower() if rkwargs.get("pipeline") else None,
+            fused_roles=(),
+            common_spec_roles=rkwargs.get("common_spec_roles") or (),
+        )
+
+    # Process fused role definitions
+    for fname, fkwargs in fused_candidates.items():
+        constituents = fkwargs.get("roles") or fkwargs.get("fused_roles") or []
+        constituents_clean = tuple(c.split(":")[-1].strip().lower() for c in constituents)
+        writable_set: List[str] = []
+        readonly_set: List[str] = ["guides/*.md"]
+        tools_set: List[str] = []
+        inherited_pipeline = str(fkwargs["pipeline"]).strip().lower() if fkwargs.get("pipeline") else None
+
+        for c in constituents_clean:
+            c_def = role_defs.get(c)
+            if c_def:
+                for wp in c_def.writable_file_patterns:
+                    if wp not in writable_set:
+                        writable_set.append(wp)
+                for rp in c_def.readonly_file_patterns:
+                    if rp not in readonly_set:
+                        readonly_set.append(rp)
+                for t in c_def.tools:
+                    if t not in tools_set:
+                        tools_set.append(t)
+                if not inherited_pipeline and c_def.pipeline:
+                    inherited_pipeline = c_def.pipeline
+
+        # Remove writable patterns from readonly set
+        readonly_filtered = [p for p in readonly_set if p not in writable_set]
+
+        guide_label = str(fkwargs.get("guide") or "")
+        if guide_label.startswith("//"):
+            guide_clean = guide_label.lstrip("/")
+            if ":" in guide_clean:
+                pkg, tgt = guide_clean.split(":", 1)
+                fused_guide = f"{pkg}/{tgt}.md"
+            else:
+                fused_guide = f"{guide_clean}.md"
+        elif guide_label.endswith(".md"):
+            fused_guide = guide_label
+        elif guide_label:
+            fused_guide = f"{guide_label.lstrip(':')}.md"
+        else:
+            first_c = constituents_clean[0] if constituents_clean else ""
+            fused_guide = role_defs[first_c].guide_path if first_c in role_defs else ""
+
+        role_defs[fname] = roles.RoleDefinition(
+            role_name=fname,
+            guide_path=fused_guide,
+            writable_file_patterns=writable_set,
+            readonly_file_patterns=readonly_filtered,
+            feedback_role_deps=(),
+            src_pattern="",
+            role_deps=(),
+            star_role_deps=(),
+            silent_role_deps=(),
+            stub_role_deps=(),
+            silent_cross_role_deps=(),
+            active_component_types=(),
+            verify_template="",
+            verification_success_message="",
+            persona=fkwargs.get("persona") or f"{fname.capitalize()} Engineer",
+            workspace_files=fkwargs.get("workspace_files") or [],
+            tools=tools_set,
+            derive_build_template="",
+            audit_tag=None,
+            task_prompt=fkwargs.get("prompt_template") or None,
+            template="",
+            template_command="",
+            pipeline=inherited_pipeline,
+            fused_roles=constituents_clean,
+            common_spec_roles=(),
         )
 
     return role_defs
@@ -197,14 +276,16 @@ def _load_roles_from_toml_file(
     with open(toml_path, "rb") as f:
         data = tomllib.load(f)
     raw_roles = data.get("roles", {})
-    return _build_role_definitions(raw_roles)
+    raw_fused = data.get("fused_roles", {})
+    return _build_role_definitions(raw_roles, raw_fused=raw_fused)
 
 
 def _load_roles_from_toml_bytes(data: bytes) -> Dict[str, roles.RoleDefinition]:
     """Parses role declarations from raw TOML bytes."""
     parsed = tomllib.loads(data.decode("utf-8"))
     raw_roles = parsed.get("roles", {})
-    return _build_role_definitions(raw_roles)
+    raw_fused = parsed.get("fused_roles", {})
+    return _build_role_definitions(raw_roles, raw_fused=raw_fused)
 
 
 def _load_roles_from_zipapp() -> Optional[Dict[str, roles.RoleDefinition]]:
@@ -627,6 +708,8 @@ class RoleResolver(roles.RoleResolver):
             template=base.template,
             template_command=base.template_command,
             pipeline=base.pipeline,
+            fused_roles=base.fused_roles,
+            common_spec_roles=base.common_spec_roles,
         )
 
     # Contract: Resolves role configuration matching declared roles or addressed packages.
@@ -700,20 +783,20 @@ class RoleResolver(roles.RoleResolver):
             if active_pipeline:
                 return [
                     r for r in resolved_roles
-                    if r.pipeline is None or r.pipeline == "" or r.pipeline == active_pipeline
+                    if not r.fused_roles and (r.pipeline is None or r.pipeline == "" or r.pipeline == active_pipeline)
                 ]
             else:
                 return [
                     r for r in resolved_roles
-                    if r.pipeline is None or r.pipeline == "" or r.pipeline == "standard"
+                    if not r.fused_roles and (r.pipeline is None or r.pipeline == "" or r.pipeline == "standard")
                 ]
 
         all_roles = self._get_roles(repo_root)
-        return list(all_roles.values())
+        return [r for r in all_roles.values() if not r.fused_roles]
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-25T21:55:00Z
-# CHANGE: Implement pipeline-aware role listing and filtering in roles_impl
+# LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-10-26T20:38:00Z
+# CHANGE: Support fused role parsing and pattern unioning in roles_impl
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

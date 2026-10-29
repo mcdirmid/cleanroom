@@ -162,6 +162,8 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
             self.assertIn("Ground Truth First", content)
             self.assertIn("Targeted Reads Over Full Dumps", content)
             self.assertIn("Round Conclusion Protocol", content)
+            self.assertIn("When you have no outstanding work to do and `bin/get_work` does not give you more work to do", content)
+            self.assertIn("Conclude with Text Only", content)
             self.assertNotIn("Incremental Authoring", content)
 
     def test_write_role_agents_guide_with_stubs(self) -> None:
@@ -245,6 +247,27 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
                 content = f.read()
             self.assertIn("guides/lib.md", content)
             self.assertNotIn("pkg/guides/lib.md", content)
+
+    def test_write_role_agents_guide_fused_role(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            role_def = roles.RoleDefinition(
+                role_name="baseline",
+                guide_path="guides/baseline.md",
+                writable_file_patterns=["lib/*.py", "tests/*_test.py"],
+                readonly_file_patterns=["low/*.pyi"],
+                feedback_role_deps=[],
+                fused_roles=["lib", "test", "qa", "coverage"],
+            )
+            self.scaffolder.write_role_agents_guide(tmp_dir, role_def, "parts/sample")
+            agents_md = os.path.join(tmp_dir, "AGENTS.md")
+            self.assertTrue(os.path.isfile(agents_md))
+            with open(agents_md, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("bin/verify_lib", content)
+            self.assertIn("bin/verify_test", content)
+            self.assertIn("bin/verify_coverage", content)
+            self.assertIn("Prune Uncontracted Defensive Code", content)
+            self.assertIn("prune and delete the unreachable defensive code", content)
 
     def test_create_missing_target_skeletons_from_template(self) -> None:
         with tempfile.TemporaryDirectory() as repo_root:

@@ -27,6 +27,9 @@ from build_lint_common import (
     build_module_resolution_map,
     compute_allowed_spec_deps,
     compute_test_derived_info,
+    check_no_private_imports,
+    check_no_sys_modules_tampering,
+    check_tautological_assertions,
     check_syntax,
     check_test_dry_run,
     check_test_getattr,
@@ -697,6 +700,9 @@ def main() -> int:
         all_errors = (
             check_test_imports(args.lib_pkg, args.module_path)
             + check_test_impl_imports(args.lib_pkg, args.module_path)
+            + check_no_private_imports(args.module_path)
+            + check_tautological_assertions(args.module_path)
+            + check_no_sys_modules_tampering(args.module_path)
             + check_test_mocks(args.module_path)
             + check_test_structure(args.module_path)
             + check_test_getattr(args.module_path)

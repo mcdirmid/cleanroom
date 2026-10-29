@@ -4,7 +4,7 @@ from __future__ import annotations
 from update_with_ai.parts.agent.lib.session import AgentSessionTier
 from support.lib.lifecycle import Singleton
 
-from typing import List, Optional, Protocol
+from typing import List, Optional, Protocol, Sequence
 from . import roles
 
 
@@ -30,6 +30,8 @@ class WorkspaceScaffolder(Singleton[AgentSessionTier], Protocol):
         model: Optional[str] = None,
         batch_size: Optional[int] = None,
         max_feedback_chars: Optional[int] = None,
+        fused_roles: Optional[Sequence[str]] = None,
+        common_spec_roles: Optional[Sequence[str]] = None,
     ) -> None: ...
 
     # Contract: Synthesizes role-tailored AGENTS.md instructions in the workspace root with 0o644 permissions.
@@ -59,7 +61,7 @@ class WorkspaceScaffolder(Singleton[AgentSessionTier], Protocol):
     ) -> None: ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:50:00Z
-# CHANGE: Define scaffold interface
+# LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-10-29T00:40:00Z
+# CHANGE: Support recording common_spec_roles in write_role_metadata
 # --- END CLEANROOM METADATA ---

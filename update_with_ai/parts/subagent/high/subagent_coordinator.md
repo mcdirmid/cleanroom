@@ -40,9 +40,9 @@ When coordinating multi-agent execution:
 
 - The subagent coordinator ensures absent role workspaces are commissioned via workspace provisioning on demand before dispatching directives, persisting effective batch size bounds into workspace configurations.
 
-- The subagent coordinator dispatches role directives to unblocked ready roles concurrently, tracking active worker handles without static wave partitioning.
+- The subagent coordinator dispatches role directives to unblocked ready roles concurrently, tracking active worker handles without static wave partitioning, evaluating unblocked work queues across inactive roles on each polling interval to dispatch newly ready roles without awaiting completion of active workers.
 
-- The subagent coordinator periodically polls active workers through the harness adapter at a configurable polling interval (defaulting to 10 seconds), reaping completed rounds and propagating blame defects into the build graph.
+- The subagent coordinator periodically polls active workers through the harness adapter at a configurable polling interval (defaulting to 10 seconds), reaping completed rounds, interrupting idling workers holding zero pending work items across consecutive polling intervals, and propagating blame defects into the build graph.
 
 - The subagent coordinator tracks consecutive unproductive rounds yielding zero submitted and zero blamed targets, halting orchestration when unproductive rounds on unresolved targets exceed a threshold configured per model or globally (defaulting to 5).
 
@@ -62,7 +62,7 @@ When coordinating multi-agent execution:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-20T10:00:00Z
-CHANGE: Standardize terminology on role rounds and role round results, deprecating turn terminology
+LAST_CHANGED: 2026-10-28T20:20:00Z
+CHANGE: Asynchronous unblocked role dispatch and idle worker reaping
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

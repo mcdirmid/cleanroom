@@ -14,9 +14,8 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.metadata.lib import src_metadata, src_metadata_impl
 from update_with_ai.parts.metadata.lib.src_metadata import FileMetadata, SourceMetadataCoordinator
 
@@ -33,653 +32,411 @@ class SourceMetadataState:
     clock: str = "2026-10-24T12:00:00Z"
 
 
-proto = StateMachineProto[SourceMetadataState]()
+class SourceMetadataStateMachine(StateMachine[SourceMetadataState]):
+    """Unified Pretense State Machine for SourceMetadataCoordinator."""
 
+    def __init__(
+        self,
+        state: Optional[SourceMetadataState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or SourceMetadataState(), singletons=singletons)
 
-# ==============================================================================
-# 2. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_metadata(): pass
-
-@seed_metadata.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-    metadata: Optional[FileMetadata] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, FileMetadata]]:
-    p = "demo.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    if isinstance(metadata, NotBoundType) or metadata is None:
-        meta = FileMetadata(
-            last_cleaned=state.clock,
-            last_changed=state.clock,
-            change_summary="seed",
-            feedback=[],
-            audits={},
-            dirty=None,
-            code_hash="seedhash1234",
-        )
-    else:
-        meta = metadata
-    return (p, meta)
-
-@seed_metadata.provide
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    metadata: FileMetadata,
-    result: None = None,
-) -> None:
-    state.files[file_path] = metadata
-
-
-@proto.seeding()
-def seed_code_hash(): pass
-
-@seed_code_hash.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-    code_hash: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str]]:
-    p = "demo.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    h = "hash12345678" if isinstance(code_hash, NotBoundType) else str(code_hash)
-    return (p, h)
-
-@seed_code_hash.provide
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    code_hash: str,
-    result: None = None,
-) -> None:
-    state.code_hashes[file_path] = code_hash
-
-
-@proto.seeding()
-def seed_clock(): pass
-
-@seed_clock.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    timestamp: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    t = "2026-10-24T12:00:00Z" if isinstance(timestamp, NotBoundType) else str(timestamp)
-    return (t,)
-
-@seed_clock.provide
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    timestamp: str,
-    result: None = None,
-) -> None:
-    state.clock = timestamp
-
-
-# ==============================================================================
-# 3. SourceMetadataCoordinator Interface Queries
-# ==============================================================================
-
-@proto.transition(SourceMetadataCoordinator.extract_metadata)
-def extract_metadata(): pass
-
-@extract_metadata.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    if isinstance(file_path, NotBoundType):
-        if not state.files:
-            return ("demo.py",)
-        return (next(iter(state.files.keys())),)
-    return (str(file_path),)
-
-@extract_metadata.returns
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Optional[FileMetadata]]]:
-    expected = state.files.get(file_path)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SourceMetadataCoordinator.extract_metadata_from_text)
-def extract_metadata_from_text(): pass
-
-@extract_metadata_from_text.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    content: str | NotBoundType = NotBound,
-    filename_or_ext: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str]]:
-    if isinstance(content, NotBoundType) or isinstance(filename_or_ext, NotBoundType):
-        return ("", "test.py")
-    return (content, filename_or_ext)
-
-@extract_metadata_from_text.returns
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    content: str,
-    filename_or_ext: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Optional[FileMetadata]]]:
-    is_html = src_metadata._is_html_comment_format(filename_or_ext)
-    lines = content.splitlines()
-    bounds = src_metadata._extract_block_boundaries(lines, is_html)
-    expected = None if bounds is None else src_metadata.parse_metadata_content(lines[bounds[0] : bounds[1] + 1])
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SourceMetadataCoordinator.extract_code_body)
-def extract_code_body(): pass
-
-@extract_code_body.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    content: str | NotBoundType = NotBound,
-    filename_or_ext: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str]]:
-    if isinstance(content, NotBoundType) or isinstance(filename_or_ext, NotBoundType):
-        return ("", "test.py")
-    return (content, filename_or_ext)
-
-@extract_code_body.returns
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    content: str,
-    filename_or_ext: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[str]]:
-    is_html = src_metadata._is_html_comment_format(filename_or_ext)
-    lines = content.splitlines()
-    bounds = src_metadata._extract_block_boundaries(lines, is_html)
-    if bounds is None:
-        expected = "\n".join(lines).strip()
-    else:
-        expected = "\n".join(lines[: bounds[0]] + lines[bounds[1] + 1 :]).strip()
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SourceMetadataCoordinator.compute_code_hash)
-def compute_code_hash(): pass
-
-@compute_code_hash.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    content: str | NotBoundType = NotBound,
-    filename_or_ext: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str]]:
-    if isinstance(content, NotBoundType) or isinstance(filename_or_ext, NotBoundType):
-        return ("", "test.py")
-    return (content, filename_or_ext)
-
-@compute_code_hash.returns
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    content: str,
-    filename_or_ext: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[str]]:
-    is_html = src_metadata._is_html_comment_format(filename_or_ext)
-    lines = content.splitlines()
-    bounds = src_metadata._extract_block_boundaries(lines, is_html)
-    body = "\n".join(lines if bounds is None else lines[: bounds[0]] + lines[bounds[1] + 1 :]).strip()
-    expected = hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SourceMetadataCoordinator.compute_file_code_hash)
-def compute_file_code_hash(): pass
-
-@compute_file_code_hash.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    if isinstance(file_path, NotBoundType):
-        if not state.files:
-            return ("demo.py",)
-        return (next(iter(state.files.keys())),)
-    return (str(file_path),)
-
-@compute_file_code_hash.returns
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Optional[str]]]:
-    if file_path in state.code_hashes:
-        expected = state.code_hashes[file_path]
-    elif file_path in state.files:
-        expected = state.files[file_path].code_hash or "fakehash1234"
-    else:
-        expected = None
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SourceMetadataCoordinator.is_code_modified)
-def is_code_modified(): pass
-
-@is_code_modified.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    if isinstance(file_path, NotBoundType):
-        if not state.files:
-            return ("demo.py",)
-        return (next(iter(state.files.keys())),)
-    return (str(file_path),)
-
-@is_code_modified.returns
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[bool]]:
-    meta = state.files.get(file_path)
-    if meta is None or not meta.code_hash:
-        expected = True
-    else:
-        curr_hash = state.code_hashes.get(file_path, meta.code_hash)
-        expected = curr_hash != meta.code_hash
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SourceMetadataCoordinator.is_metadata_altered)
-def is_metadata_altered(): pass
-
-@is_metadata_altered.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    original_content: str | NotBoundType = NotBound,
-    new_content: str | NotBoundType = NotBound,
-    filename_or_ext: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str]]:
-    if (
-        isinstance(original_content, NotBoundType)
-        or isinstance(new_content, NotBoundType)
-        or isinstance(filename_or_ext, NotBoundType)
-    ):
-        return ("", "", "test.py")
-    return (original_content, new_content, filename_or_ext)
-
-@is_metadata_altered.returns
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    original_content: str,
-    new_content: str,
-    filename_or_ext: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[bool]]:
-    is_html = src_metadata._is_html_comment_format(filename_or_ext)
-    orig_lines = original_content.splitlines()
-    orig_bounds = src_metadata._extract_block_boundaries(orig_lines, is_html)
-    new_lines = new_content.splitlines()
-    new_bounds = src_metadata._extract_block_boundaries(new_lines, is_html)
-
-    if orig_bounds is not None:
-        if new_bounds is None:
-            expected = True
-        else:
-            orig_meta = orig_lines[orig_bounds[0] : orig_bounds[1] + 1]
-            new_meta = new_lines[new_bounds[0] : new_bounds[1] + 1]
-            expected = orig_meta != new_meta
-    else:
-        if new_bounds is not None:
-            expected = True
-        else:
-            expected = any(
-                line.strip() in ("# --- CLEANROOM METADATA ---", "# --- END CLEANROOM METADATA ---")
-                or (line.strip().startswith("<!--") and "CLEANROOM METADATA" in line.strip())
-                for line in new_lines
+    @transition.seeding(name="seed_metadata")
+    def seed_metadata(
+        self,
+        ctx: TransitionContext[Any, [Path | str, Optional[FileMetadata]], None],
+    ) -> None:
+        ctx.arguments(
+                    file_path=Domain(strategy=lambda: 'demo.py'),
+                    metadata=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda file_path="demo.py", metadata=None: None)
+        def provide(res: None, file_path: Path | str = "demo.py", metadata: Optional[FileMetadata] = None) -> None:
+            p = str(file_path)
+            meta = metadata or FileMetadata(
+                last_cleaned=self.state.clock,
+                last_changed=self.state.clock,
+                change_summary="seed",
+                feedback=[],
+                audits={},
+                dirty=None,
+                code_hash="seedhash1234",
             )
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+            self.state.files[p] = meta
+        ctx.update(provide)
+
+    @transition.seeding(name="seed_code_hash")
+    def seed_code_hash(
+        self,
+        ctx: TransitionContext[Any, [Path | str, str], None],
+    ) -> None:
+        ctx.arguments(
+                    file_path=Domain(strategy=lambda: 'demo.py'),
+                    code_hash=Domain(strategy=lambda: 'hash12345678'),
+                )
+        ctx.returns(lambda file_path="demo.py", code_hash="hash12345678": None)
+        ctx.update(lambda res, file_path="demo.py", code_hash="hash12345678": (
+            self.state.code_hashes.__setitem__(str(file_path), str(code_hash))
+        ))
+
+    @transition.seeding(name="seed_clock")
+    def seed_clock(
+        self,
+        ctx: TransitionContext[Any, [str], None],
+    ) -> None:
+        ctx.arguments(timestamp=Domain(strategy=lambda: '2026-10-24T12:00:00Z'))
+        ctx.returns(lambda timestamp="2026-10-24T12:00:00Z": None)
+        ctx.update(lambda res, timestamp="2026-10-24T12:00:00Z": setattr(self.state, "clock", str(timestamp)))
+
+    @transition(SourceMetadataCoordinator.extract_metadata)
+    def extract_metadata(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [Path | str], Optional[FileMetadata]],
+    ) -> None:
+        ctx.arguments(file_path=Domain(strategy=lambda: ('demo.py',) if not self.state.files else (next(iter(self.state.files.keys())),)))
+        ctx.returns(lambda file_path="demo.py": self.state.files.get(str(file_path)))
+        ctx.update(lambda res, file_path="demo.py": None)
+
+    @transition(SourceMetadataCoordinator.extract_metadata_from_text)
+    def extract_metadata_from_text(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [str, str], Optional[FileMetadata]],
+    ) -> None:
+        ctx.arguments(
+                    content=Domain(strategy=lambda: ''),
+                    filename_or_ext=Domain(strategy=lambda: 'test.py'),
+                )
+        def returns(content: str = "", filename_or_ext: str = "test.py") -> Optional[FileMetadata]:
+            is_html = src_metadata._is_html_comment_format(filename_or_ext)
+            lines = content.splitlines()
+            bounds = src_metadata._extract_block_boundaries(lines, is_html)
+            return None if bounds is None else src_metadata.parse_metadata_content(lines[bounds[0] : bounds[1] + 1])
+        ctx.returns(returns)
+        ctx.update(lambda res, content="", filename_or_ext="test.py": None)
+
+    @transition(SourceMetadataCoordinator.extract_code_body)
+    def extract_code_body(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [str, str], str],
+    ) -> None:
+        ctx.arguments(
+                    content=Domain(strategy=lambda: ''),
+                    filename_or_ext=Domain(strategy=lambda: 'test.py'),
+                )
+        def returns(content: str = "", filename_or_ext: str = "test.py") -> str:
+            is_html = src_metadata._is_html_comment_format(filename_or_ext)
+            lines = content.splitlines()
+            bounds = src_metadata._extract_block_boundaries(lines, is_html)
+            if bounds is None:
+                return "\n".join(lines).strip()
+            return "\n".join(lines[: bounds[0]] + lines[bounds[1] + 1 :]).strip()
+        ctx.returns(returns)
+        ctx.update(lambda res, content="", filename_or_ext="test.py": None)
+
+    @transition(SourceMetadataCoordinator.compute_code_hash)
+    def compute_code_hash(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [str, str], str],
+    ) -> None:
+        ctx.arguments(
+                    content=Domain(strategy=lambda: ''),
+                    filename_or_ext=Domain(strategy=lambda: 'test.py'),
+                )
+        def returns(content: str = "", filename_or_ext: str = "test.py") -> str:
+            is_html = src_metadata._is_html_comment_format(filename_or_ext)
+            lines = content.splitlines()
+            bounds = src_metadata._extract_block_boundaries(lines, is_html)
+            body = "\n".join(lines if bounds is None else lines[: bounds[0]] + lines[bounds[1] + 1 :]).strip()
+            return hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
+        ctx.returns(returns)
+        ctx.update(lambda res, content="", filename_or_ext="test.py": None)
+
+    @transition(SourceMetadataCoordinator.compute_file_code_hash)
+    def compute_file_code_hash(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [Path | str], Optional[str]],
+    ) -> None:
+        ctx.arguments(file_path=Domain(strategy=lambda: ('demo.py',) if not self.state.files else (next(iter(self.state.files.keys())),)))
+        def returns(file_path: Path | str = "demo.py") -> Optional[str]:
+            p = str(file_path)
+            if p in self.state.code_hashes:
+                return self.state.code_hashes[p]
+            elif p in self.state.files:
+                return self.state.files[p].code_hash or "fakehash1234"
+            return None
+        ctx.returns(returns)
+        ctx.update(lambda res, file_path="demo.py": None)
+
+    @transition(SourceMetadataCoordinator.is_code_modified)
+    def is_code_modified(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [Path | str], bool],
+    ) -> None:
+        ctx.arguments(file_path=Domain(strategy=lambda: ('demo.py',) if not self.state.files else (next(iter(self.state.files.keys())),)))
+        def returns(file_path: Path | str = "demo.py") -> bool:
+            p = str(file_path)
+            meta = self.state.files.get(p)
+            if meta is None or not meta.code_hash:
+                return True
+            curr_hash = self.state.code_hashes.get(p, meta.code_hash)
+            return curr_hash != meta.code_hash
+        ctx.returns(returns)
+        ctx.update(lambda res, file_path="demo.py": None)
+
+    @transition(SourceMetadataCoordinator.is_metadata_altered)
+    def is_metadata_altered(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [str, str, str], bool],
+    ) -> None:
+        ctx.arguments(
+                    original_content=Domain(strategy=lambda: ''),
+                    new_content=Domain(strategy=lambda: ''),
+                    filename_or_ext=Domain(strategy=lambda: 'test.py'),
+                )
+        def returns(original_content: str = "", new_content: str = "", filename_or_ext: str = "test.py") -> bool:
+            is_html = src_metadata._is_html_comment_format(filename_or_ext)
+            orig_lines = original_content.splitlines()
+            orig_bounds = src_metadata._extract_block_boundaries(orig_lines, is_html)
+            new_lines = new_content.splitlines()
+            new_bounds = src_metadata._extract_block_boundaries(new_lines, is_html)
+
+            if orig_bounds is not None:
+                if new_bounds is None:
+                    return True
+                orig_meta = orig_lines[orig_bounds[0] : orig_bounds[1] + 1]
+                new_meta = new_lines[new_bounds[0] : new_bounds[1] + 1]
+                return orig_meta != new_meta
+            else:
+                if new_bounds is not None:
+                    return True
+                return any(
+                    line.strip() in ("# --- CLEANROOM METADATA ---", "# --- END CLEANROOM METADATA ---")
+                    or (line.strip().startswith("<!--") and "CLEANROOM METADATA" in line.strip())
+                    for line in new_lines
+                )
+        ctx.returns(returns)
+        ctx.update(lambda res, original_content="", new_content="", filename_or_ext="test.py": None)
+
+    @transition(SourceMetadataCoordinator.mark_dirty)
+    def mark_dirty(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [Path | str, str], None],
+    ) -> None:
+        ctx.arguments(
+                    file_path=Domain(strategy=lambda: 'demo.py'),
+                    reason=Domain(strategy=lambda: 'manual dirty'),
+                )
+        ctx.returns(lambda file_path="demo.py", reason="manual dirty": None)
+        def provide(res: None, file_path: Path | str = "demo.py", reason: str = "manual dirty") -> None:
+            p = str(file_path)
+            curr = self.state.files.get(p)
+            if curr is None:
+                self.state.files[p] = FileMetadata(
+                    last_cleaned=self.state.clock,
+                    last_changed=None,
+                    change_summary="",
+                    feedback=[],
+                    audits={},
+                    dirty=reason,
+                    code_hash=None,
+                )
+            else:
+                self.state.files[p] = FileMetadata(
+                    last_cleaned=self.state.clock,
+                    last_changed=curr.last_changed,
+                    change_summary=curr.change_summary,
+                    feedback=list(curr.feedback),
+                    audits=dict(curr.audits),
+                    dirty=reason,
+                    code_hash=curr.code_hash,
+                )
+        ctx.update(provide)
+
+    @transition(SourceMetadataCoordinator.mark_clean)
+    def mark_clean(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [Path | str, str], None],
+    ) -> None:
+        ctx.arguments(
+                    file_path=Domain(strategy=lambda: 'demo.py'),
+                    default_change=Domain(strategy=lambda: 'new file'),
+                )
+        ctx.returns(lambda file_path="demo.py", default_change="new file": None)
+        def provide(res: None, file_path: Path | str = "demo.py", default_change: str = "new file") -> None:
+            p = str(file_path)
+            curr = self.state.files.get(p)
+            hash_val = self.state.code_hashes.get(p, curr.code_hash if curr else "clean1234567")
+            if curr is None:
+                self.state.files[p] = FileMetadata(
+                    last_cleaned=self.state.clock,
+                    last_changed=self.state.clock,
+                    change_summary=default_change,
+                    feedback=[],
+                    audits={},
+                    dirty=None,
+                    code_hash=hash_val,
+                )
+            else:
+                self.state.files[p] = FileMetadata(
+                    last_cleaned=self.state.clock,
+                    last_changed=curr.last_changed or self.state.clock,
+                    change_summary=curr.change_summary or default_change,
+                    feedback=[],
+                    audits=dict(curr.audits),
+                    dirty=None,
+                    code_hash=hash_val,
+                )
+        ctx.update(provide)
+
+    @transition(SourceMetadataCoordinator.record_change)
+    def record_change(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [Path | str, str, Optional[str]], None],
+    ) -> None:
+        ctx.arguments(
+                    file_path=Domain(strategy=lambda: 'demo.py'),
+                    change_description=Domain(strategy=lambda: 'update'),
+                    code_hash=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda file_path="demo.py", change_description="update", code_hash=None: None)
+        def provide(res: None, file_path: Path | str = "demo.py", change_description: str = "update", code_hash: Optional[str] = None) -> None:
+            p = str(file_path)
+            h = code_hash or self.state.code_hashes.get(p, "changehash12")
+            self.state.files[p] = FileMetadata(
+                last_cleaned=self.state.clock,
+                last_changed=self.state.clock,
+                change_summary=change_description,
+                feedback=[],
+                audits={},
+                dirty=None,
+                code_hash=h,
+            )
+        ctx.update(provide)
+
+    @transition(SourceMetadataCoordinator.append_feedback)
+    def append_feedback(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [Path | str, str, str], None],
+    ) -> None:
+        ctx.arguments(
+                    file_path=Domain(strategy=lambda: 'demo.py'),
+                    explanation=Domain(strategy=lambda: 'feedback item'),
+                    sender=Domain(strategy=lambda: 'user'),
+                )
+        ctx.returns(lambda file_path="demo.py", explanation="feedback item", sender="user": None)
+        def provide(res: None, file_path: Path | str = "demo.py", explanation: str = "feedback item", sender: str = "user") -> None:
+            p = str(file_path)
+            curr = self.state.files.get(p)
+            fb_item = f"[{self.state.clock} from {sender}]: {explanation}"
+            if curr is None:
+                self.state.files[p] = FileMetadata(
+                    last_cleaned=self.state.clock,
+                    last_changed=None,
+                    change_summary="",
+                    feedback=[fb_item],
+                    audits={},
+                    dirty=None,
+                    code_hash=None,
+                )
+            else:
+                new_fb = list(curr.feedback)
+                new_fb.append(fb_item)
+                self.state.files[p] = FileMetadata(
+                    last_cleaned=self.state.clock,
+                    last_changed=curr.last_changed,
+                    change_summary=curr.change_summary,
+                    feedback=new_fb,
+                    audits=dict(curr.audits),
+                    dirty=curr.dirty,
+                    code_hash=curr.code_hash,
+                )
+        ctx.update(provide)
+
+    @transition(SourceMetadataCoordinator.stamp_audit)
+    def stamp_audit(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [Path | str, str], None],
+    ) -> None:
+        ctx.arguments(
+                    file_path=Domain(strategy=lambda: 'demo.py'),
+                    role_name=Domain(strategy=lambda: 'qa'),
+                )
+        ctx.returns(lambda file_path="demo.py", role_name="qa": None)
+        def provide(res: None, file_path: Path | str = "demo.py", role_name: str = "qa") -> None:
+            p = str(file_path)
+            tag = src_metadata.get_audit_tag(role_name)
+            curr = self.state.files.get(p)
+            if curr is None:
+                self.state.files[p] = FileMetadata(
+                    last_cleaned=self.state.clock,
+                    last_changed=None,
+                    change_summary="",
+                    feedback=[],
+                    audits={tag: self.state.clock},
+                    dirty=None,
+                    code_hash=None,
+                )
+            else:
+                new_audits = dict(curr.audits)
+                new_audits[tag] = self.state.clock
+                self.state.files[p] = FileMetadata(
+                    last_cleaned=self.state.clock,
+                    last_changed=curr.last_changed,
+                    change_summary=curr.change_summary,
+                    feedback=list(curr.feedback),
+                    audits=new_audits,
+                    dirty=curr.dirty,
+                    code_hash=curr.code_hash,
+                )
+        ctx.update(provide)
+
+    @transition(SourceMetadataCoordinator.clear_audits)
+    def clear_audits(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [Path | str], None],
+    ) -> None:
+        ctx.arguments(file_path=Domain(strategy=lambda: 'demo.py'))
+        ctx.returns(lambda file_path="demo.py": None)
+        def provide(res: None, file_path: Path | str = "demo.py") -> None:
+            p = str(file_path)
+            curr = self.state.files.get(p)
+            if curr is not None:
+                self.state.files[p] = FileMetadata(
+                    last_cleaned=self.state.clock,
+                    last_changed=curr.last_changed,
+                    change_summary=curr.change_summary,
+                    feedback=list(curr.feedback),
+                    audits={},
+                    dirty=curr.dirty,
+                    code_hash=curr.code_hash,
+                )
+        ctx.update(provide)
+
+    @transition(SourceMetadataCoordinator.delete_last_cleaned)
+    def delete_last_cleaned(
+        self,
+        ctx: TransitionContext[SourceMetadataCoordinator, [Path | str], None],
+    ) -> None:
+        ctx.arguments(file_path=Domain(strategy=lambda: 'demo.py'))
+        ctx.returns(lambda file_path="demo.py": None)
+        def provide(res: None, file_path: Path | str = "demo.py") -> None:
+            p = str(file_path)
+            curr = self.state.files.get(p)
+            if curr is not None:
+                self.state.files[p] = FileMetadata(
+                    last_cleaned=None,
+                    last_changed=curr.last_changed,
+                    change_summary=curr.change_summary,
+                    feedback=list(curr.feedback),
+                    audits=dict(curr.audits),
+                    dirty=curr.dirty,
+                    code_hash=curr.code_hash,
+                )
+        ctx.update(provide)
 
 
-# ==============================================================================
-# 4. SourceMetadataCoordinator Interface Mutations
-# ==============================================================================
-
-@proto.transition(SourceMetadataCoordinator.mark_dirty)
-def mark_dirty(): pass
-
-@mark_dirty.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-    reason: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str]]:
-    p = "demo.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    r = "manual dirty" if isinstance(reason, NotBoundType) else str(reason)
-    return (p, r)
-
-@mark_dirty.provide
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    reason: str,
-    result: None = None,
-) -> None:
-    curr = state.files.get(file_path)
-    if curr is None:
-        state.files[file_path] = FileMetadata(
-            last_cleaned=state.clock,
-            last_changed=None,
-            change_summary="",
-            feedback=[],
-            audits={},
-            dirty=reason,
-            code_hash=None,
-        )
-    else:
-        state.files[file_path] = FileMetadata(
-            last_cleaned=state.clock,
-            last_changed=curr.last_changed,
-            change_summary=curr.change_summary,
-            feedback=list(curr.feedback),
-            audits=dict(curr.audits),
-            dirty=reason,
-            code_hash=curr.code_hash,
-        )
-
-
-@proto.transition(SourceMetadataCoordinator.mark_clean)
-def mark_clean(): pass
-
-@mark_clean.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-    default_change: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str]]:
-    p = "demo.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    c = "new file" if isinstance(default_change, NotBoundType) else str(default_change)
-    return (p, c)
-
-@mark_clean.provide
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    default_change: str,
-    result: None = None,
-) -> None:
-    curr = state.files.get(file_path)
-    hash_val = state.code_hashes.get(file_path, curr.code_hash if curr else "clean1234567")
-    if curr is None:
-        state.files[file_path] = FileMetadata(
-            last_cleaned=state.clock,
-            last_changed=state.clock,
-            change_summary=default_change,
-            feedback=[],
-            audits={},
-            dirty=None,
-            code_hash=hash_val,
-        )
-    else:
-        state.files[file_path] = FileMetadata(
-            last_cleaned=state.clock,
-            last_changed=curr.last_changed or state.clock,
-            change_summary=curr.change_summary or default_change,
-            feedback=[],
-            audits=dict(curr.audits),
-            dirty=None,
-            code_hash=hash_val,
-        )
-
-
-@proto.transition(SourceMetadataCoordinator.record_change)
-def record_change(): pass
-
-@record_change.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-    change_description: str | NotBoundType = NotBound,
-    code_hash: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, Optional[str]]]:
-    p = "demo.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    c = "update" if isinstance(change_description, NotBoundType) else str(change_description)
-    h = None if isinstance(code_hash, NotBoundType) else code_hash
-    return (p, c, h)
-
-@record_change.provide
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    change_description: str,
-    code_hash: Optional[str],
-    result: None = None,
-) -> None:
-    h = code_hash or state.code_hashes.get(file_path, "changehash12")
-    state.files[file_path] = FileMetadata(
-        last_cleaned=state.clock,
-        last_changed=state.clock,
-        change_summary=change_description,
-        feedback=[],
-        audits={},
-        dirty=None,
-        code_hash=h,
-    )
-
-
-@proto.transition(SourceMetadataCoordinator.append_feedback)
-def append_feedback(): pass
-
-@append_feedback.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-    explanation: str | NotBoundType = NotBound,
-    sender: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str]]:
-    p = "demo.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    e = "feedback item" if isinstance(explanation, NotBoundType) else str(explanation)
-    s = "user" if isinstance(sender, NotBoundType) else str(sender)
-    return (p, e, s)
-
-@append_feedback.provide
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    explanation: str,
-    sender: str,
-    result: None = None,
-) -> None:
-    curr = state.files.get(file_path)
-    fb_item = f"[{state.clock} from {sender}]: {explanation}"
-    if curr is None:
-        state.files[file_path] = FileMetadata(
-            last_cleaned=state.clock,
-            last_changed=None,
-            change_summary="",
-            feedback=[fb_item],
-            audits={},
-            dirty=None,
-            code_hash=None,
-        )
-    else:
-        new_fb = list(curr.feedback)
-        new_fb.append(fb_item)
-        state.files[file_path] = FileMetadata(
-            last_cleaned=state.clock,
-            last_changed=curr.last_changed,
-            change_summary=curr.change_summary,
-            feedback=new_fb,
-            audits=dict(curr.audits),
-            dirty=curr.dirty,
-            code_hash=curr.code_hash,
-        )
-
-
-@proto.transition(SourceMetadataCoordinator.stamp_audit)
-def stamp_audit(): pass
-
-@stamp_audit.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-    role_name: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str]]:
-    p = "demo.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    r = "qa" if isinstance(role_name, NotBoundType) else str(role_name)
-    return (p, r)
-
-@stamp_audit.provide
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    role_name: str,
-    result: None = None,
-) -> None:
-    tag = src_metadata.get_audit_tag(role_name)
-    curr = state.files.get(file_path)
-    if curr is None:
-        state.files[file_path] = FileMetadata(
-            last_cleaned=state.clock,
-            last_changed=None,
-            change_summary="",
-            feedback=[],
-            audits={tag: state.clock},
-            dirty=None,
-            code_hash=None,
-        )
-    else:
-        new_audits = dict(curr.audits)
-        new_audits[tag] = state.clock
-        state.files[file_path] = FileMetadata(
-            last_cleaned=state.clock,
-            last_changed=curr.last_changed,
-            change_summary=curr.change_summary,
-            feedback=list(curr.feedback),
-            audits=new_audits,
-            dirty=curr.dirty,
-            code_hash=curr.code_hash,
-        )
-
-
-@proto.transition(SourceMetadataCoordinator.clear_audits)
-def clear_audits(): pass
-
-@clear_audits.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    p = "demo.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    return (p,)
-
-@clear_audits.provide
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    result: None = None,
-) -> None:
-    curr = state.files.get(file_path)
-    if curr is not None:
-        state.files[file_path] = FileMetadata(
-            last_cleaned=state.clock,
-            last_changed=curr.last_changed,
-            change_summary=curr.change_summary,
-            feedback=list(curr.feedback),
-            audits={},
-            dirty=curr.dirty,
-            code_hash=curr.code_hash,
-        )
-
-
-@proto.transition(SourceMetadataCoordinator.delete_last_cleaned)
-def delete_last_cleaned(): pass
-
-@delete_last_cleaned.arguments
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: Path | str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    p = "demo.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    return (p,)
-
-@delete_last_cleaned.provide
-def _(
-    state: SourceMetadataState,
-    this: Any,
-    file_path: str,
-    result: None = None,
-) -> None:
-    curr = state.files.get(file_path)
-    if curr is not None:
-        state.files[file_path] = FileMetadata(
-            last_cleaned=None,
-            last_changed=curr.last_changed,
-            change_summary=curr.change_summary,
-            feedback=list(curr.feedback),
-            audits=dict(curr.audits),
-            dirty=curr.dirty,
-            code_hash=curr.code_hash,
-        )
+proto = SourceMetadataStateMachine()
 
 
 # ==============================================================================

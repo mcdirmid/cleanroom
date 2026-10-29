@@ -47,7 +47,7 @@ class FakeCoordinator:
         dir_scope: str,
         harness: subagent_coordinator.HarnessAdapter,
         target_role: Optional[str] = None,
-        max_waves: int = 50,
+        max_waves: int = 100,
         batch_size: Optional[int] = None,
         repo_root: Optional[str] = None,
         model_name: Optional[str] = None,

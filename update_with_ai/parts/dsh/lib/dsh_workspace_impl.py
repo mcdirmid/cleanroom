@@ -74,10 +74,10 @@ def _format_agents_md(
         f"{workflow_binaries}"
         "MANDATORY EXECUTION RULES:\n"
         "1. GROUND TRUTH FIRST: Always run `bin/check_files <target>` immediately as your first action after `bin/get_work`. Never guess, diagnose, or speculate about errors from reading prose before you observe the check output.\n"
-        "2. CONTINUOUS TOOL EXECUTION: Never announce actions in prose or end a message with a colon without calling the tool in the same step. Every step MUST execute a tool call.\n"
+        "2. CONTINUOUS TOOL EXECUTION WHILE WORK REMAINS: While ready targets remain unresolved, you operate exclusively via tool execution. Never announce actions in prose or end a message with a colon without calling the tool in the same step. Every in-progress step MUST execute a tool call.\n"
         "3. TARGETED READS OVER REPEATED FILE DUMPS: Never repeatedly read an entire file if output is pruned. Use grep to find symbols, or read narrow line ranges with offset and limit.\n"
         f"4. MANDATORY ROUND RESOLUTION: Every assigned ready target MUST be resolved using {res_tools} before concluding the round. Halting with conversational commentary while ready targets remain unresolved is strictly prohibited.\n"
-        "5. ROUND CONCLUSION PROTOCOL: When all ready targets are resolved, or when `bin/get_work` indicates that only blocked targets remain (or no ready targets exist), STOP IMMEDIATELY. Conclude your round without executing additional tools or repeating `bin/get_work` in a loop.\n"
+        f"5. ROUND CONCLUSION PROTOCOL: When you have no outstanding work to do and `bin/get_work` does not give you more work to do (all ready targets have been resolved using {res_tools}, or only blocked targets remain), YOU CAN AND MUST CONCLUDE IMMEDIATELY. Output your concise final summary text WITHOUT calling any further tools (`ls`, `bin/get_work`, dummy commands). Delivering text with zero tool calls is the expected and required signal that completes your round in DeepSeek Harness.\n"
         f"{constrained_directive}"
     )
     return confinement_header
@@ -376,8 +376,8 @@ class DshWorkspaceConfigurer(dsh_workspace.DshWorkspaceConfigurer):
         )
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-20T22:12:00Z
-# CHANGE: Document and configure model-contingent payload ceiling protection in AGENTS.md
+# LAST_CHANGED: 2026-10-27T20:50:00Z
+# CHANGE: Instruct workers to conclude immediately with text and no tool calls when work is resolved and get_work gives no more work
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

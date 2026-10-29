@@ -65,7 +65,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         dir_scope: str,
         harness: subagent_coordinator.HarnessAdapter,
         target_role: Optional[str] = None,
-        max_waves: int = 50,
+        max_waves: int = 100,
         batch_size: Optional[int] = None,
         repo_root: Optional[str] = None,
         model_name: Optional[str] = None,
@@ -78,14 +78,17 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
 
         GROUNDING:
         - Resets preexisting role workspace directories for declared roles via role_registry
-          and filesystem operations.
+          and filesystem operations, restricting workspace provisioning and execution exclusively to a designated fused role when target_role resolves to a fused role definition.
         - Resolves subagent batch size, token limits, and maximum unproductive round thresholds from model configurations and persists
           effective batch sizes into role workspaces.
         - Restricts work discovery and execution to target_node and its transitive dependencies via
           work.WorkspaceWorkManager.compute_role_work_queue when target_node is specified.
         - Iterates dynamic process supervision until work queues are clean, a round fails,
-          consecutive unproductive rounds on unresolved targets exceed the threshold (suppressing unproductive counts and reminders when assigned ready targets are resolved or cleaned in the repository), or max_waves is exceeded,
+          consecutive unproductive rounds on unresolved targets exceed the threshold (suppressing unproductive counts and reminders when assigned ready targets are resolved or cleaned in the repository), or max_waves is exceeded (draining in-flight active workers to completion or cleanly interrupting active workers upon loop termination),
+          evaluating work queues on each polling interval to dispatch newly unblocked roles without awaiting completion of active workers,
+          interrupting idling workers that have resolved assigned targets and hold zero pending items across consecutive intervals,
           injecting reminder directives into subsequent role dispatches upon unresolved rounds when assigned targets remain unresolved,
+          supervising fused role workers with coordinator verification, delivering diagnostics up to 3 retries on failure, and atomically harvesting targets on success,
           emitting real-time telemetry and aggregating TokenUsage into OrchestrationSummary.
         - Upon clean convergence, deletes provisioned role workspace directories for declared roles in scope.
         - When cancelled or interrupted by signals, interrupts active workers via harness.interrupt_role and deletes provisioned role workspace directories in scope.
@@ -129,8 +132,8 @@ def __orphan__() -> None:
     ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-20T23:45:00Z
-# CHANGE: Suppress unproductive rounds and scolding reminders when assigned targets are resolved or cleaned in the repository
+# LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-10-28T20:20:00Z
+# CHANGE: Asynchronous unblocked role dispatch and idle worker reaping
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

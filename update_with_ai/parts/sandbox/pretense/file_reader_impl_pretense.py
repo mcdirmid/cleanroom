@@ -9,6 +9,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseSet
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
@@ -33,112 +34,76 @@ class ReadManagerState:
     read_write_files: PretenseSet[file_alias.ReadWriteFile] = field(default_factory=PretenseSet)
 
 
-proto = StateMachineProto[ReadManagerState]()
+class ReadManagerStateMachine(StateMachine[ReadManagerState]):
+    """Pretense StateMachine for ReadManager."""
+
+    def __init__(self, state: Optional[ReadManagerState] = None):
+        super().__init__(state=state or ReadManagerState())
+
+    # ==============================================================================
+    # 1. Seeding Transitions
+    # ==============================================================================
+
+    @transition.seeding()
+    def seed_readable_file(
+        self,
+        ctx: TransitionContext[None, [str, bool], None],
+    ) -> None:
+        ctx.arguments(
+                    relative_path=Domain(strategy=lambda: 'lib/module.py'),
+                    is_readonly=Domain(strategy=lambda: True),
+                )
+        def _consequent(
+            res: None,
+            relative_path: str = "lib/module.py",
+            is_readonly: bool = True,
+        ) -> None:
+            node = DagNode(UnitAddress("target"), RoleAddress("lib"))
+            rel = file_alias.RelativePath(relative_path)
+            ws = file_paths.WorkspacePath(file_paths.PathString(f"ws/{relative_path}"))
+            if is_readonly:
+                self.state.read_only_files.add(file_alias.ReadOnlyFile(rel, ws, node))
+            else:
+                self.state.read_write_files.add(file_alias.ReadWriteFile(rel, ws, node))
+        ctx.update(_consequent)
+
+    # ==============================================================================
+    # 2. ReadManager Transitions
+    # ==============================================================================
+
+    @transition(name="read_only_files")
+    def read_only_files(
+        self,
+        ctx: TransitionContext[ReadManager, [], Set[file_alias.ReadOnlyFile]],
+    ) -> None:
+        ctx.returns(lambda: set(self.state.read_only_files))
+
+    @transition(name="read_write_files")
+    def read_write_files(
+        self,
+        ctx: TransitionContext[ReadManager, [], Set[file_alias.ReadWriteFile]],
+    ) -> None:
+        ctx.returns(lambda: set(self.state.read_write_files))
+
+    @transition(ReadManager.can_read)
+    def can_read(
+        self,
+        ctx: TransitionContext[ReadManager, [Union[file_alias.RelativePath, file_alias.FileAlias]], ToolResponse],
+    ) -> None:
+        ctx.arguments(path=Domain(strategy=lambda: file_alias.RelativePath('lib/module.py')))
+        def _returns(path: Optional[Union[file_alias.RelativePath, file_alias.FileAlias]] = None) -> ToolResponse:
+            p = path or file_alias.RelativePath("lib/module.py")
+            rel = str(p.relative_path if isinstance(p, file_alias.FileAlias) else p)
+            ro_rels = {str(f.relative_path) for f in self.state.read_only_files}
+            rw_rels = {str(f.relative_path) for f in self.state.read_write_files}
+
+            if rel in ro_rels or rel in rw_rels:
+                return ToolResponse(is_failed=False, is_terminated=False, content=ToolResponseContent(f"Access granted for {rel}"))
+            return ToolResponse(is_failed=True, is_terminated=False, content=ToolResponseContent(f"Permission denied: {rel} is not a declared readable file."))
+        ctx.returns(_returns)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_readable_file(): pass
-
-@seed_readable_file.arguments
-def _(
-    state: ReadManagerState,
-    this: Any,
-    relative_path: str | NotBoundType = NotBound,
-    is_readonly: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[str, bool]]:
-    p = "lib/module.py" if isinstance(relative_path, NotBoundType) else str(relative_path)
-    ro = True if isinstance(is_readonly, NotBoundType) else bool(is_readonly)
-    return (p, ro)
-
-@seed_readable_file.provide
-def _(
-    state: ReadManagerState,
-    this: Any,
-    relative_path: str,
-    is_readonly: bool,
-    result: None = None,
-) -> None:
-    node = DagNode(UnitAddress("target"), RoleAddress("lib"))
-    rel = file_alias.RelativePath(relative_path)
-    ws = file_paths.WorkspacePath(file_paths.PathString(f"ws/{relative_path}"))
-    if is_readonly:
-        state.read_only_files.add(file_alias.ReadOnlyFile(rel, ws, node))
-    else:
-        state.read_write_files.add(file_alias.ReadWriteFile(rel, ws, node))
-
-
-# ==============================================================================
-# 2. ReadManager Transitions
-# ==============================================================================
-
-@proto.transition(name="read_only_files")
-def read_only_files(): pass
-
-@read_only_files.returns
-def _(state: ReadManagerState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Set[file_alias.ReadOnlyFile]]]:
-    expected = set(state.read_only_files)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(name="read_write_files")
-def read_write_files(): pass
-
-@read_write_files.returns
-def _(state: ReadManagerState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Set[file_alias.ReadWriteFile]]]:
-    expected = set(state.read_write_files)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(ReadManager.can_read)
-def can_read(): pass
-
-@can_read.arguments
-def _(
-    state: ReadManagerState,
-    this: Any,
-    path: Union[file_alias.RelativePath, file_alias.FileAlias] | str | NotBoundType = NotBound,
-) -> Optional[Tuple[Union[file_alias.RelativePath, file_alias.FileAlias]]]:
-    if isinstance(path, NotBoundType):
-        p = file_alias.RelativePath("lib/module.py")
-    elif isinstance(path, str):
-        p = file_alias.RelativePath(path)
-    else:
-        p = path
-    return (p,)
-
-@can_read.returns
-def _(
-    state: ReadManagerState,
-    this: Any,
-    path: Union[file_alias.RelativePath, file_alias.FileAlias],
-    outcome: object = NotBound,
-) -> Optional[Outcome[ToolResponse]]:
-    rel = str(path.relative_path if isinstance(path, file_alias.FileAlias) else path)
-    ro_rels = {str(f.relative_path) for f in state.read_only_files}
-    rw_rels = {str(f.relative_path) for f in state.read_write_files}
-
-    if rel in ro_rels or rel in rw_rels:
-        expected = ToolResponse(is_failed=False, is_terminated=False, content=ToolResponseContent(f"Access granted for {rel}"))
-    else:
-        expected = ToolResponse(is_failed=True, is_terminated=False, content=ToolResponseContent(f"Permission denied: {rel} is not a declared readable file."))
-
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = ReadManagerStateMachine()
 
 
 # ==============================================================================
@@ -147,8 +112,7 @@ def _(
 
 def make_read_manager_fake(state: Optional[ReadManagerState] = None) -> ReadManager:
     """Instantiate a synthesized ReadManager fake."""
-    st = state or ReadManagerState()
-    sm = proto.make_state_machine(st)
+    sm = ReadManagerStateMachine(state)
     return sm.as_fake(ReadManager)
 
 
@@ -161,7 +125,7 @@ class TestReadManagerUnit(unittest.TestCase):
 
     def setUp(self) -> None:
         self.state = ReadManagerState()
-        self.sm = proto.make_state_machine(self.state)
+        self.sm = ReadManagerStateMachine(self.state)
         self.sm.seed_readable_file("lib/demo.py", is_readonly=True)
         self.sm.seed_readable_file("tests/demo_test.py", is_readonly=False)
         self.fake: ReadManager = self.sm.as_fake(ReadManager)
@@ -613,7 +577,7 @@ class TestReadManagerFuzz(unittest.TestCase):
     )
     def test_can_read_invariants(self, declared: list[str]) -> None:
         state = ReadManagerState()
-        sm = proto.make_state_machine(state)
+        sm = ReadManagerStateMachine(state)
         for d in declared:
             sm.seed_readable_file(f"lib/{d}.py", is_readonly=True)
 

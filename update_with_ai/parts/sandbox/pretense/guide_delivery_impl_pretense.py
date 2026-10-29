@@ -8,6 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import StateMachine, TransitionContext, transition
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
@@ -72,33 +73,28 @@ class GuideDeliveryState:
     has_steps_remaining: bool = False
 
 
-proto = StateMachineProto[GuideDeliveryState]()
+class GuideDeliveryStateMachine(StateMachine[GuideDeliveryState]):
+    """Pretense StateMachine for GuideDelivery."""
+
+    def __init__(self, state: Optional[GuideDeliveryState] = None):
+        super().__init__(state=state or GuideDeliveryState())
+
+    @transition(name="guide")
+    def guide(
+        self,
+        ctx: TransitionContext[guide_delivery.GuideDelivery, [], Optional[node_config.NodeGuide]],
+    ) -> None:
+        ctx.returns(lambda: self.state.guide)
+
+    @transition(name="has_steps_remaining")
+    def has_steps_remaining(
+        self,
+        ctx: TransitionContext[guide_delivery.GuideDelivery, [], bool],
+    ) -> None:
+        ctx.returns(lambda: self.state.has_steps_remaining)
 
 
-@proto.transition(name="guide")
-def guide(): pass
-
-@guide.returns
-def _(state: GuideDeliveryState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Optional[node_config.NodeGuide]]]:
-    expected = state.guide
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(name="has_steps_remaining")
-def has_steps_remaining(): pass
-
-@has_steps_remaining.returns
-def _(state: GuideDeliveryState, this: Any, outcome: object = NotBound) -> Optional[Outcome[bool]]:
-    expected = state.has_steps_remaining
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = GuideDeliveryStateMachine()
 
 
 # ==============================================================================

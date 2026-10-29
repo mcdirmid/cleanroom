@@ -10,7 +10,7 @@ This document describes the complete toolchain architecture implemented in Clean
 1. **The Modular Coverage Evaluation Engine (`update_with_ai/parts/tools/`)**: Modular single-target test tracing, AST statement normalization, and contiguous span deficit reporting ([`tool_coverage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage.py), [`tool_coverage_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage_impl.py)), executed natively via `bin/check_files` under the `coverage` role.
 2. **The Modular Workspace & Tools Engine (`update_with_ai/parts/workspace/` & `update_with_ai/parts/tools/`)**: Pure Python workspace lifecycle management (`workspace_roles`, `workspace_scaffold`, `workspace_stub`, `workspace_provision`, `workspace_registry`, `workspace_sync`), convention-based role provisioning, and in-band work queue evaluation (`workspace_tool.py`, `workspace_work.py`, `workspace_check.py`, `workspace_dirtiness.py`).
 3. **The Specification Linters (`update_python_with_ai/support/lib/`)**: AST-based prose validation (`high_lint.py`), planning canvas structure validation (`spec_lint.py`), and pure interface stub verification (`low_lint.py`).
-4. **The Code & Test Linters (`update_python_with_ai/support/lib/`)**: Concrete implementation compliance (`lib_lint.py`) and requirement comment citation validation (`test_lint.py`).
+4. **The Code & Test Linters (`update_python_with_ai/support/lib/`)**: Concrete implementation compliance (`lib_lint.py`), requirement comment citation validation (`test_lint.py`), and exception suppression vs. reification analysis (`build_lint_common.py: check_exception_eating`).
 5. **Native Type Verification (`uv run pyright`)**: Hermetic, sub-second static type analysis driven by dynamic `PYTHONPATH` construction and package-level `pyproject.toml` configurations.
 
 ```
@@ -191,6 +191,23 @@ Cleanroom provides specialized deterministic AST linters in `update_python_with_
 - Enforces the requirements of `update_python_with_ai/guides/low_to_test.md`.
 - Verifies that test assertions carry `# Requirement: <exact text>` comments matching canonical contract statements.
 - Verifies that every test file concludes with `# Untested requirements: None` or an explicit bulleted list of untestable requirements.
+
+### 4.6 `build_lint_common.py: check_exception_eating`: Exception Suppression vs. Reification Linter
+Cleanroom strictly prohibits silent exception eating (`except Exception: pass` or returning default values without error recording) to prevent latent bugs from hiding in production code. However, in execution engines, DAG runners, scheduler loops, and retry handlers (e.g., `dag_engine_impl.py`), components are contractually required to invoke arbitrary user-supplied callbacks (`action()`), catch arbitrary `Exception` failures, record them into structured outcome records (such as `NodeResult(state=NodeState.FAILED, error=exc)`), and continue running independent nodes according to failure policies (such as `CONTINUE_ON_ERROR`).
+
+To prevent agent flailing and false-positive rejections in executor/runner components while continuing to prohibit silent bug suppression, `check_exception_eating` implements intelligent semantic AST analysis:
+
+1. **Structured Exception Reification**:
+   - The AST analyzer inspects the handler block: if the caught exception instance (`except Exception as exc:`) is assigned into a result data structure, passed as an argument to a failure handler, or stored into an error attribute (e.g., `error=exc`, `_result.error = exc`), the linter classifies it as legitimate exception reification rather than unhandled suppression.
+
+2. **Explicit Pragma Escape Hatches**:
+   - For foreign boundary execution layers and external callback runners where broad exception capture is required by architectural design, inline comment escape hatches (`# cleanroom: allow-broad-exception` or `# intentional-catch`) are supported to explicitly bypass the check with clear human intent.
+
+3. **Strict Rejection of Silent Suppression**:
+   - The linter maintains strict zero-tolerance for genuine silent suppression (e.g., `except Exception: pass`, empty exception handlers, or handlers that return arbitrary uncontracted fallbacks without recording or propagating the error).
+
+4. **Hermetic Test Coverage**:
+   - Verified via unit test suites in `build_lint_common_test.py` and `lib_lint_test.sh`, ensuring valid execution engine patterns and pragma comments pass cleanly while empty exception suppression consistently fails.
 
 ---
 

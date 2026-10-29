@@ -12,8 +12,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib import node_storage
 from update_with_ai.parts.agent.lib.node_storage import (
@@ -293,43 +292,36 @@ class StorageState:
     dirty_nodes: Set[DagNode] = field(default_factory=set)
 
 
-proto = StateMachineProto[StorageState]()
+class SrcStorageStateMachine(StateMachine[StorageState]):
+    """Unified Pretense State Machine for AgentStorage."""
+
+    def __init__(
+        self,
+        state: Optional[StorageState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or StorageState(), singletons=singletons)
+
+    @transition(AgentStorage.get_node_definition)
+    def get_node_definition(
+        self,
+        ctx: TransitionContext[AgentStorage, [DagNode], NodeDefinition],
+    ) -> None:
+        ctx.arguments(node=Domain(strategy=lambda: _make_dag_node('//pkg:default')))
+        ctx.returns(lambda node=None: self.state.nodes.get(node or _make_dag_node("//pkg:default"), NodeDefinition(task_prompt=TaskPrompt("default"))))
+        ctx.update(lambda res, node=None: None)
+
+    @transition(AgentStorage.is_dirty)
+    def is_dirty(
+        self,
+        ctx: TransitionContext[AgentStorage, [DagNode], bool],
+    ) -> None:
+        ctx.arguments(node=Domain(strategy=lambda: _make_dag_node('//pkg:default')))
+        ctx.returns(lambda node=None: (node or _make_dag_node("//pkg:default")) in self.state.dirty_nodes)
+        ctx.update(lambda res, node=None: None)
 
 
-@proto.transition(AgentStorage.get_node_definition)
-def get_node_definition(): pass
-
-@get_node_definition.arguments
-def _(state: StorageState, this: Any, node: DagNode | NotBoundType = NotBound) -> Optional[Tuple[DagNode]]:
-    n = _make_dag_node("//pkg:default") if isinstance(node, NotBoundType) else node
-    return (n,)
-
-@get_node_definition.returns
-def _(state: StorageState, this: Any, node: DagNode, outcome: object = NotBound) -> Optional[Outcome[NodeDefinition]]:
-    expected = state.nodes.get(node, NodeDefinition(task_prompt=TaskPrompt("default")))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(AgentStorage.is_dirty)
-def is_dirty(): pass
-
-@is_dirty.arguments
-def _(state: StorageState, this: Any, node: DagNode | NotBoundType = NotBound) -> Optional[Tuple[DagNode]]:
-    n = _make_dag_node("//pkg:default") if isinstance(node, NotBoundType) else node
-    return (n,)
-
-@is_dirty.returns
-def _(state: StorageState, this: Any, node: DagNode, outcome: object = NotBound) -> Optional[Outcome[bool]]:
-    res = node in state.dirty_nodes
-    if isinstance(outcome, Value) and outcome.val == res:
-        return outcome
-    if outcome is NotBound:
-        return Value(res)
-    return None
+proto = SrcStorageStateMachine()
 
 
 def make_storage_fake(state: Optional[StorageState] = None) -> AgentStorage:

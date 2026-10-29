@@ -11,9 +11,8 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.workspace_cli.lib.pending import WorkspacePendingManager
 
 
@@ -24,195 +23,99 @@ class PendingState:
     dirty_targets: PretenseSet[str] = field(default_factory=PretenseSet)
 
 
-proto = StateMachineProto[PendingState]()
+class WorkspacePendingStateMachine(StateMachine[PendingState]):
+    """Unified Pretense State Machine for WorkspacePendingManager."""
+
+    def __init__(
+        self,
+        state: Optional[PendingState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or PendingState(), singletons=singletons)
+
+    @transition.seeding(name="seed_pending_data")
+    def seed_pending_data(
+        self,
+        ctx: TransitionContext[Any, [Optional[Sequence[str]], Optional[Sequence[str]]], None],
+    ) -> None:
+        ctx.arguments(
+                    targets=Domain(strategy=lambda: ('part/sample.py',)),
+                    dirty_targets=Domain(strategy=lambda: ('part/sample.py',)),
+                )
+        ctx.returns(lambda targets=None, dirty_targets=None: None)
+        ctx.update(lambda res, targets=None, dirty_targets=None: (
+            self.state.pending_targets.update(targets or ()),
+            self.state.dirty_targets.update(dirty_targets or ()),
+        ))
+
+    @transition(WorkspacePendingManager.get_pending_work)
+    def get_pending_work(self, ctx: TransitionContext[WorkspacePendingManager, [str], Sequence[str]]) -> None:
+        ctx.arguments(workspace_dir=Domain(strategy=lambda: '/tmp/ws'))
+        ctx.returns(lambda workspace_dir="/tmp/ws": tuple(sorted(self.state.pending_targets)))
+        ctx.update(lambda res, workspace_dir="/tmp/ws": None)
+
+    @transition(WorkspacePendingManager.set_pending_work)
+    def set_pending_work(self, ctx: TransitionContext[WorkspacePendingManager, [str, Sequence[str]], None]) -> None:
+        ctx.arguments(
+                    workspace_dir=Domain(strategy=lambda: '/tmp/ws'),
+                    targets=Domain(strategy=lambda: ('part/foo.py',)),
+                )
+        ctx.returns(lambda workspace_dir="/tmp/ws", targets=(): None)
+        ctx.update(lambda res, workspace_dir="/tmp/ws", targets=(): (
+            self.state.pending_targets.clear(),
+            self.state.pending_targets.update(targets),
+        ))
+
+    @transition(WorkspacePendingManager.remove_pending_target)
+    def remove_pending_target(self, ctx: TransitionContext[WorkspacePendingManager, [str, str], None]) -> None:
+        ctx.arguments(
+                    workspace_dir=Domain(strategy=lambda: '/tmp/ws'),
+                    submitted_target=Domain(strategy=lambda: 'part/foo.py'),
+                )
+        def _remove(submitted_target: str) -> None:
+            self.state.pending_targets.discard(submitted_target)
+            def _norm(s: str) -> str:
+                stem = os.path.splitext(os.path.basename(s.replace("\\", "/")))[0]
+                changed = True
+                while changed:
+                    changed = False
+                    for sfx in ("_pretense", "_test", "_impl"):
+                        if stem.endswith(sfx):
+                            stem = stem[: -len(sfx)]
+                            changed = True
+                            break
+                return stem
+            sub_stem = _norm(submitted_target)
+            for t in list(self.state.pending_targets):
+                if _norm(t) == sub_stem:
+                    self.state.pending_targets.discard(t)
+        ctx.returns(lambda workspace_dir="/tmp/ws", submitted_target="part/foo.py": None)
+        ctx.update(lambda res, workspace_dir="/tmp/ws", submitted_target="part/foo.py": _remove(submitted_target))
+
+    @transition(WorkspacePendingManager.clear_pending_work)
+    def clear_pending_work(self, ctx: TransitionContext[WorkspacePendingManager, [str], None]) -> None:
+        ctx.arguments(workspace_dir=Domain(strategy=lambda: '/tmp/ws'))
+        ctx.returns(lambda workspace_dir="/tmp/ws": None)
+        ctx.update(lambda res, workspace_dir="/tmp/ws": self.state.pending_targets.clear())
+
+    @transition(WorkspacePendingManager.is_pending_target_dirty)
+    def is_pending_target_dirty(
+        self,
+        ctx: TransitionContext[WorkspacePendingManager, [str, str, Optional[str], Optional[str]], bool],
+    ) -> None:
+        ctx.arguments(
+                    target_path=Domain(strategy=lambda: 'part/foo.py'),
+                    workspace_dir=Domain(strategy=lambda: '/tmp/ws'),
+                    main_root=Domain(strategy=lambda: None),
+                    role_name=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda target_path="part/foo.py", workspace_dir="/tmp/ws", main_root=None, role_name=None: (
+            target_path in self.state.dirty_targets
+        ))
+        ctx.update(lambda res, target_path="part/foo.py", workspace_dir="/tmp/ws", main_root=None, role_name=None: None)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_pending_data(): pass
-
-@seed_pending_data.arguments
-def _(
-    state: PendingState,
-    this: Any,
-    targets: Optional[Sequence[str]] | NotBoundType = NotBound,
-    dirty_targets: Optional[Sequence[str]] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[str], Sequence[str]]]:
-    t = ("part/sample.py",) if isinstance(targets, NotBoundType) or targets is None else tuple(targets)
-    d = ("part/sample.py",) if isinstance(dirty_targets, NotBoundType) or dirty_targets is None else tuple(dirty_targets)
-    return (t, d)
-
-@seed_pending_data.provide
-def _(
-    state: PendingState,
-    this: Any,
-    targets: Sequence[str],
-    dirty_targets: Sequence[str],
-    result: None = None,
-) -> None:
-    state.pending_targets.update(targets)
-    state.dirty_targets.update(dirty_targets)
-
-
-# ==============================================================================
-# 2. Pending Transitions
-# ==============================================================================
-
-@proto.transition(WorkspacePendingManager.get_pending_work)
-def get_pending_work(): pass
-
-@get_pending_work.arguments
-def _(
-    state: PendingState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    ws = "/tmp/ws" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    return (ws,)
-
-@get_pending_work.returns
-def _(
-    state: PendingState,
-    this: Any,
-    workspace_dir: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Sequence[str]]]:
-    expected = tuple(sorted(state.pending_targets))
-    if isinstance(outcome, Value) and tuple(outcome.val) == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspacePendingManager.set_pending_work)
-def set_pending_work(): pass
-
-@set_pending_work.arguments
-def _(
-    state: PendingState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-    targets: Sequence[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Sequence[str]]]:
-    ws = "/tmp/ws" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    t = ("part/foo.py",) if isinstance(targets, NotBoundType) else tuple(targets)
-    return (ws, t)
-
-@set_pending_work.returns
-def _(
-    state: PendingState,
-    this: Any,
-    workspace_dir: str,
-    targets: Sequence[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    state.pending_targets.clear()
-    state.pending_targets.update(targets)
-    return Value(None)
-
-
-@proto.transition(WorkspacePendingManager.remove_pending_target)
-def remove_pending_target(): pass
-
-@remove_pending_target.arguments
-def _(
-    state: PendingState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-    submitted_target: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str]]:
-    ws = "/tmp/ws" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    t = "part/foo.py" if isinstance(submitted_target, NotBoundType) else str(submitted_target)
-    return (ws, t)
-
-@remove_pending_target.returns
-def _(
-    state: PendingState,
-    this: Any,
-    workspace_dir: str,
-    submitted_target: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    state.pending_targets.discard(submitted_target)
-    def _norm(s: str) -> str:
-        stem = os.path.splitext(os.path.basename(s.replace("\\", "/")))[0]
-        changed = True
-        while changed:
-            changed = False
-            for sfx in ("_pretense", "_test", "_impl"):
-                if stem.endswith(sfx):
-                    stem = stem[: -len(sfx)]
-                    changed = True
-                    break
-        return stem
-    sub_stem = _norm(submitted_target)
-    for t in list(state.pending_targets):
-        if _norm(t) == sub_stem:
-            state.pending_targets.discard(t)
-    return Value(None)
-
-
-@proto.transition(WorkspacePendingManager.clear_pending_work)
-def clear_pending_work(): pass
-
-@clear_pending_work.arguments
-def _(
-    state: PendingState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    ws = "/tmp/ws" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    return (ws,)
-
-@clear_pending_work.returns
-def _(
-    state: PendingState,
-    this: Any,
-    workspace_dir: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    state.pending_targets.clear()
-    return Value(None)
-
-
-@proto.transition(WorkspacePendingManager.is_pending_target_dirty)
-def is_pending_target_dirty(): pass
-
-@is_pending_target_dirty.arguments
-def _(
-    state: PendingState,
-    this: Any,
-    target_path: str | NotBoundType = NotBound,
-    workspace_dir: str | NotBoundType = NotBound,
-    main_root: Optional[str] | NotBoundType = NotBound,
-    role_name: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, Optional[str], Optional[str]]]:
-    t = "part/foo.py" if isinstance(target_path, NotBoundType) else str(target_path)
-    ws = "/tmp/ws" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    mr = None if isinstance(main_root, NotBoundType) else main_root
-    rn = None if isinstance(role_name, NotBoundType) else role_name
-    return (t, ws, mr, rn)
-
-@is_pending_target_dirty.returns
-def _(
-    state: PendingState,
-    this: Any,
-    target_path: str,
-    workspace_dir: str,
-    main_root: Optional[str],
-    role_name: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[bool]]:
-    expected = target_path in state.dirty_targets
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = WorkspacePendingStateMachine()
 
 
 # ==============================================================================
@@ -221,8 +124,7 @@ def _(
 
 def make_pending_fake(state: Optional[PendingState] = None) -> WorkspacePendingManager:
     """Instantiate a synthesized WorkspacePendingManager fake."""
-    st = state or PendingState()
-    sm = proto.make_state_machine(st)
+    sm = WorkspacePendingStateMachine(state=state)
     return sm.as_fake(WorkspacePendingManager)
 
 

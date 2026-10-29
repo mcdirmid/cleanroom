@@ -20,17 +20,17 @@ The workspace scaffolder:
 
 - Deploys executable runner tools into the `bin/` directory of the workspace, packaging work, check files, submit, and fail runners as standalone zipapp executables with execution permissions, packaging blame only when the role declares feedback capability or auditor tags, and omitting blame for author roles without feedback capability.
 
-- Writes workspace role configuration into a hidden role descriptor file recording role identity, directory scope, and optional model profile settings without exposing host repository paths.
+- Writes workspace role configuration into a hidden role descriptor file recording role identity, directory scope, common specification roles, and optional model profile settings without exposing host repository paths.
 
-- Synthesizes role-tailored `AGENTS.md` guide instructions in the workspace root, establishing agent constraints, workspace boundary rules, permitted in-workspace shell and harness tool execution, fail-stop protocols, cleanroom compilation stub isolation rules for roles declaring stub dependencies, omission of blame directives for roles without feedback capability, and model-contingent payload ceiling protection for local or output-constrained models while omitting it for cloud models.
+- Synthesizes role-tailored `AGENTS.md` guide instructions in the workspace root, establishing agent constraints, workspace boundary rules, permitted in-workspace shell and harness tool execution, fail-stop protocols, cleanroom compilation stub isolation rules for roles declaring stub dependencies, omission of blame directives for roles without feedback capability, model-contingent payload ceiling protection for local or output-constrained models while omitting it for cloud models, and multi-phase instructions for fused roles dynamically derived from constituent role metadata, incorporating use-based micro-binary verification, arbiter self-audits, and defensive code pruning directives requiring pruning uncontracted dead defensive code upon coverage failures.
 
 - Generates starter skeleton files for declared writable target files that are absent from disk, inspecting companion specifications or role templates.
 
 - Writes text files with explicit permissions (read-only, writable, or executable).
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-20T22:50:00Z
-LAST_CHANGED: 2026-10-20T22:50:00Z
-CHANGE: Tailor runner tools and AGENTS.md to role blame capability and stub dependency isolation
+LAST_CLEANED: 2026-10-27T11:35:00Z
+LAST_CHANGED: 2026-10-29T15:30:00Z
+CHANGE: Derive fused role micro-binaries strictly and dynamically from constituent role names with zero hardcoded role names
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

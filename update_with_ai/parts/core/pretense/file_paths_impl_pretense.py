@@ -12,10 +12,16 @@ from typing import Any, List, Optional, Tuple
 import unittest
 
 import hypothesis.strategies as st
+from pretense import (
+    Domain,
+    Raised,
+    StateMachine,
+    TransitionContext,
+    get_current_draw,
+    transition,
+)
 from pretense.compiler import compile_hypothesis_test_case
-from pretense.context import get_current_draw
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Raised, Value
+from pretense.sentinels import NotBound, NotBoundType
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system
 from update_with_ai.parts.core.lib import file_paths
 from update_with_ai.parts.core.lib.file_paths import (
@@ -48,242 +54,113 @@ class FilePathManagerState:
     )
 
 
-proto = StateMachineProto[FilePathManagerState]()
+class FilePathManagerStateMachine(StateMachine[FilePathManagerState]):
+    """Unified Pretense State Machine for FilePathManager."""
 
+    def __init__(
+        self,
+        state: Optional[FilePathManagerState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or FilePathManagerState(), singletons=singletons)
 
-# ------------------------------------------------------------------------------
-# 1.1 create_host_path
-# ------------------------------------------------------------------------------
+    @transition(FilePathManager.create_host_path)
+    def create_host_path(
+        self,
+        ctx: TransitionContext[FilePathManager, [PathString | str], HostPath],
+    ) -> None:
+        ctx.arguments(
+            path=Domain(
+                strategy=st.text(min_size=1, max_size=30).filter(lambda s: "\x00" not in s),
+                validator=lambda p: isinstance(p, str),
+            )
+        )
+        ctx.returns(lambda path: HostPath(path=PathString(str(path))))
+        ctx.update(lambda res, path: self.state.created_host_paths.append(res))
 
-@proto.transition(FilePathManager.create_host_path)
-def create_host_path(): pass
-
-@create_host_path.arguments
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    path: PathString | str | NotBoundType = NotBound,
-) -> Optional[Tuple[PathString]]:
-    if isinstance(path, NotBoundType):
-        draw = get_current_draw()
-        if draw is not None:
-            raw = draw(st.text(min_size=1, max_size=30).filter(lambda s: "\x00" not in s))
-        else:
-            raw = f"host_path_{len(state.created_host_paths)}"
-        resolved_path = PathString(raw)
-    else:
-        resolved_path = PathString(str(path))
-    return (resolved_path,)
-
-@create_host_path.returns
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    path: PathString,
-    outcome: object = NotBound,
-) -> Optional[Outcome[HostPath]]:
-    expected = HostPath(path=path)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@create_host_path.provide
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    path: PathString,
-    result: HostPath,
-) -> None:
-    state.created_host_paths.append(result)
-
-
-# ------------------------------------------------------------------------------
-# 1.2 create_absolute_path
-# ------------------------------------------------------------------------------
-
-@proto.transition(FilePathManager.create_absolute_path)
-def create_absolute_path(): pass
-
-@create_absolute_path.arguments
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    path: PathString | str | NotBoundType = NotBound,
-) -> Optional[Tuple[PathString]]:
-    if isinstance(path, NotBoundType):
-        draw = get_current_draw()
-        if draw is not None:
-            # 80% valid absolute, 20% invalid relative
-            is_valid = draw(st.booleans()) and draw(st.booleans())
-            if is_valid:
-                seg = draw(st.text(min_size=1, max_size=15, alphabet="abcdefghijklmnopqrstuvwxyz0123456789_-"))
-                raw = f"/{seg}"
-            else:
-                raw = draw(st.text(min_size=1, max_size=15, alphabet="abcdefghijklmnopqrstuvwxyz0123456789_-"))
-        else:
-            raw = f"/abs_path_{len(state.created_absolute_paths)}"
-        resolved_path = PathString(raw)
-    else:
-        resolved_path = PathString(str(path))
-    return (resolved_path,)
-
-@create_absolute_path.returns
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    path: PathString,
-    outcome: object = NotBound,
-) -> Optional[Outcome[AbsolutePath]]:
-    raw = str(path)
-    is_valid = raw.startswith("/") and "\x00" not in raw
-    if is_valid:
-        expected = AbsolutePath(path=path)
-        if isinstance(outcome, Value) and outcome.val == expected:
-            return outcome
-        if outcome is NotBound:
-            return Value(expected)
-        return None
-    else:
-        # Invalid absolute path must raise PathValidationError
-        if isinstance(outcome, Raised) and isinstance(outcome.exc, PathValidationError):
-            return outcome
-        if outcome is NotBound:
+    @transition(FilePathManager.create_absolute_path)
+    def create_absolute_path(
+        self,
+        ctx: TransitionContext[FilePathManager, [PathString | str], AbsolutePath],
+    ) -> None:
+        ctx.arguments(
+            path=Domain(
+                strategy=st.one_of(
+                    st.from_regex(r"^/[a-z0-9_-]{1,15}$", fullmatch=True),
+                    st.from_regex(r"^[a-z0-9_-]{1,15}$", fullmatch=True),
+                ),
+                validator=lambda p: isinstance(p, str),
+            )
+        )
+        def returns(path: PathString | str) -> Any:
+            raw = str(path)
+            if raw.startswith("/") and "\x00" not in raw:
+                return AbsolutePath(path=PathString(raw))
             return Raised(PathValidationError(ValidationMessage(f"Path must be absolute: {raw}")))
-        return None
+        ctx.returns(returns)
+        def provide(res: Any, path: PathString | str) -> None:
+            if isinstance(res, AbsolutePath):
+                self.state.created_absolute_paths.append(res)
+        ctx.update(provide)
 
-@create_absolute_path.provide
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    path: PathString,
-    result: AbsolutePath,
-) -> None:
-    state.created_absolute_paths.append(result)
-
-
-# ------------------------------------------------------------------------------
-# 1.3 create_workspace_path
-# ------------------------------------------------------------------------------
-
-@proto.transition(FilePathManager.create_workspace_path)
-def create_workspace_path(): pass
-
-@create_workspace_path.arguments
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    path: PathString | str | NotBoundType = NotBound,
-) -> Optional[Tuple[PathString]]:
-    if isinstance(path, NotBoundType):
-        draw = get_current_draw()
-        if draw is not None:
-            # 80% valid relative workspace path, 20% invalid (absolute or with ..)
-            is_valid = draw(st.booleans()) and draw(st.booleans())
+    @transition(FilePathManager.create_workspace_path)
+    def create_workspace_path(
+        self,
+        ctx: TransitionContext[FilePathManager, [PathString | str], WorkspacePath],
+    ) -> None:
+        ctx.arguments(
+            path=Domain(
+                strategy=st.one_of(
+                    st.from_regex(r"^src/[a-z0-9_-]{1,15}\.py$", fullmatch=True),
+                    st.from_regex(r"^/invalid/[a-c]{1,10}$", fullmatch=True),
+                ),
+                validator=lambda p: isinstance(p, str),
+            )
+        )
+        def returns(path: PathString | str) -> Any:
+            raw = str(path)
+            is_valid = not raw.startswith("/") and not raw.startswith("\\") and ".." not in raw.split("/") and "\x00" not in raw
             if is_valid:
-                seg = draw(st.text(min_size=1, max_size=15, alphabet="abcdefghijklmnopqrstuvwxyz0123456789_-"))
-                raw = f"src/{seg}.py"
-            else:
-                raw = f"/invalid/{draw(st.text(min_size=1, max_size=10, alphabet='abc'))}"
-        else:
-            raw = f"ws_path_{len(state.created_workspace_paths)}"
-        resolved_path = PathString(raw)
-    else:
-        resolved_path = PathString(str(path))
-    return (resolved_path,)
-
-@create_workspace_path.returns
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    path: PathString,
-    outcome: object = NotBound,
-) -> Optional[Outcome[WorkspacePath]]:
-    raw = str(path)
-    is_valid = not raw.startswith("/") and not raw.startswith("\\") and ".." not in raw.split("/") and "\x00" not in raw
-    if is_valid:
-        expected = WorkspacePath(path=path)
-        if isinstance(outcome, Value) and outcome.val == expected:
-            return outcome
-        if outcome is NotBound:
-            return Value(expected)
-        return None
-    else:
-        if isinstance(outcome, Raised) and isinstance(outcome.exc, PathValidationError):
-            return outcome
-        if outcome is NotBound:
+                return WorkspacePath(path=PathString(raw))
             return Raised(PathValidationError(ValidationMessage(f"Path must be relative workspace path: {raw}")))
-        return None
+        ctx.returns(returns)
+        def provide(res: Any, path: PathString | str) -> None:
+            if isinstance(res, WorkspacePath):
+                self.state.created_workspace_paths.append(res)
+        ctx.update(provide)
 
-@create_workspace_path.provide
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    path: PathString,
-    result: WorkspacePath,
-) -> None:
-    state.created_workspace_paths.append(result)
+    @transition(FilePathManager.resolve_path)
+    def resolve_path(
+        self,
+        ctx: TransitionContext[FilePathManager, [AbsolutePath, WorkspacePath], AbsolutePath],
+    ) -> None:
+        ctx.arguments(
+            root=Domain(
+                strategy=lambda draw: (
+                    draw(st.sampled_from(self.state.created_absolute_paths))
+                    if self.state.created_absolute_paths
+                    else AbsolutePath(PathString("/workspace"))
+                ),
+                validator=lambda r: isinstance(r, AbsolutePath),
+            ),
+            relative=Domain(
+                strategy=lambda draw: (
+                    draw(st.sampled_from(self.state.created_workspace_paths))
+                    if self.state.created_workspace_paths
+                    else WorkspacePath(PathString("file.txt"))
+                ),
+                validator=lambda rel: isinstance(rel, WorkspacePath),
+            ),
+        )
+        def returns(root: AbsolutePath, relative: WorkspacePath) -> AbsolutePath:
+            norm_root = str(root.path).rstrip("/")
+            joined = f"{norm_root}/{str(relative.path)}"
+            return AbsolutePath(PathString(joined))
+        ctx.returns(returns)
+        ctx.update(lambda res, root, relative: self.state.resolved_paths.append((root, relative, res)))
 
 
-# ------------------------------------------------------------------------------
-# 1.4 resolve_path
-# ------------------------------------------------------------------------------
-
-@proto.transition(FilePathManager.resolve_path)
-def resolve_path(): pass
-
-@resolve_path.arguments
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    root: AbsolutePath | NotBoundType = NotBound,
-    relative: WorkspacePath | NotBoundType = NotBound,
-) -> Optional[Tuple[AbsolutePath, WorkspacePath]]:
-    if isinstance(root, NotBoundType):
-        if state.created_absolute_paths:
-            r = state.created_absolute_paths[0]
-        else:
-            r = AbsolutePath(PathString("/workspace"))
-    else:
-        r = root
-
-    if isinstance(relative, NotBoundType):
-        if state.created_workspace_paths:
-            rel = state.created_workspace_paths[0]
-        else:
-            rel = WorkspacePath(PathString("file.txt"))
-    else:
-        rel = relative
-
-    return (r, rel)
-
-@resolve_path.returns
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    root: AbsolutePath,
-    relative: WorkspacePath,
-    outcome: object = NotBound,
-) -> Optional[Outcome[AbsolutePath]]:
-    norm_root = str(root.path).rstrip("/")
-    joined = f"{norm_root}/{str(relative.path)}"
-    expected = AbsolutePath(PathString(joined))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@resolve_path.provide
-def _(
-    state: FilePathManagerState,
-    this: Any,
-    root: AbsolutePath,
-    relative: WorkspacePath,
-    result: AbsolutePath,
-) -> None:
-    state.resolved_paths.append((root, relative, result))
+proto = FilePathManagerStateMachine()
 
 
 # ==============================================================================

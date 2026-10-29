@@ -35,8 +35,16 @@ Given: role `alpha` declares source pattern `parts/alpha/lib/{unit_name}.py` and
 1. The scaffolder creates missing target skeletons for the workspace.
    Observed: `parts/alpha/lib/widget.py` is generated in `/ws/alpha_scope_a` with starter skeleton content derived from `widget.pyi`, and has permissions 0o644.
 
+## Scenario 6 — Synthesizing role AGENTS.md guide instructions for fused role
+
+Given: role `baseline` is a fused role combining `lib`, `test`, `qa`, and `coverage` with companion guides in `guides/` and scope `parts/alpha`.
+
+1. The scaffolder writes the role agents guide into `/ws/baseline_scope_a`.
+   Observed: `AGENTS.md` exists with multi-phase workflow instructions incorporating use-based micro-binary verification (`bin/verify_lib`, `bin/verify_test`, `bin/verify_coverage`), QA arbiter contract fidelity self-audit directives, coverage arbiter semantic closure directives requiring pruning uncontracted dead defensive code upon coverage failure, and an atomic completion protocol omitting per-target submission.
+
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T18:50:00Z
-CHANGE: Align scaffold scenarios with permitted shell and harness tool execution
+LAST_CLEANED: 2026-10-27T11:35:00Z
+LAST_CHANGED: 2026-10-29T15:30:00Z
+CHANGE: Derive fused role micro-binaries strictly and dynamically from constituent role names with zero hardcoded role names
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

@@ -16,6 +16,7 @@ prompt_template = "Files are aligned according to the guide."
 allows_step_mode = true
 role_deps = []
 star_role_deps = ["high"]
+common_spec_roles = []
 tools = [
     "update_python_with_ai.support.lib.high_lint",
     "update_python_with_ai.support.lib.build_lint_common",
@@ -33,6 +34,7 @@ prompt_template = "Files are aligned according to the guide."
 allows_step_mode = true
 role_deps = []
 star_role_deps = ["scenario"]
+common_spec_roles = ["high"]
 tools = [
     "update_with_ai.support.lib.build_lint_common",
 ]
@@ -50,6 +52,7 @@ allows_step_mode = true
 role_deps = []
 star_role_deps = ["planning"]
 feedback_role_deps = ["high"]
+common_spec_roles = ["high"]
 tools = [
     "update_with_ai.support.lib.build_lint_common",
 ]
@@ -67,6 +70,7 @@ allows_step_mode = true
 role_deps = []
 star_role_deps = ["low"]
 feedback_role_deps = ["planning"]
+common_spec_roles = ["planning"]
 tools = [
     "update_with_ai.support.lib.build_lint_common",
 ]
@@ -83,6 +87,7 @@ allows_step_mode = false
 role_deps = ["scenario"]
 star_role_deps = ["high", "planning", "low"]
 feedback_role_deps = ["high", "planning", "low"]
+common_spec_roles = ["high", "planning", "scenario"]
 tools = [
     "update_python_with_ai.support.lib.high_lint",
     "update_python_with_ai.support.lib.spec_lint",
@@ -106,6 +111,7 @@ role_deps = []
 star_role_deps = ["low"]
 silent_role_deps = ["spec_qa"]
 silent_cross_role_deps = ["lib"]
+common_spec_roles = ["low"]
 tools = [
     "update_python_with_ai.support.lib.lib_lint",
     "update_python_with_ai.support.lib.build_lint_common",
@@ -129,6 +135,7 @@ star_role_deps = ["low"]
 silent_role_deps = ["spec_qa"]
 stub_role_deps = ["lib"]
 silent_cross_role_deps = ["lib"]
+common_spec_roles = ["low"]
 tools = [
     "update_python_with_ai.support.lib.test_lint",
     "update_python_with_ai.support.lib.build_lint_common",
@@ -149,6 +156,7 @@ allows_step_mode = false
 role_deps = []
 star_role_deps = ["low"]
 feedback_role_deps = ["lib", "test"]
+common_spec_roles = ["low"]
 tools = []
 active_component_types = ["implementation"]
 verify_template = "uv run pytest {unit_dir}/tests/{unit_name}_test.py --timeout=10 --timeout-method=thread"
@@ -160,12 +168,13 @@ persona = "Coverage Arbiter"
 pipeline = "standard"
 src_pattern = ""
 guide = "update_python_with_ai/guides/coverage.md"
-prompt_template = "Files are aligned according to the guide."
+prompt_template = "Files are aligned according to the guide. Coverage audits must be formulated strictly against public specification contracts. Never demand testing private helpers or internal methods; uncovered defensive branches belong to the library to prune as dead code or mark as unreachable according to the methodology."
 allows_step_mode = false
 role_deps = []
 silent_role_deps = ["qa"]
 star_role_deps = ["low"]
 feedback_role_deps = ["lib", "test"]
+common_spec_roles = ["low"]
 tools = [
     "update_with_ai.support.lib.cleanroom_role_tool",
 ]
@@ -181,13 +190,14 @@ src_pattern = "{unit_dir}/pretense/{unit_name}_pretense.py"
 guide = "update_python_with_ai/guides/pretense.md"
 template = "update_python_with_ai/templates/pretense_template.py"
 template_command = "uv run python -m update_python_with_ai.support.lib.pretense_lint --scaffold {target_file} --pyi {unit_dir}/low/{unit_name}.pyi --impl {unit_dir}/lib/{unit_name}.py"
-prompt_template = "Files are aligned according to the guide."
+prompt_template = "Files are aligned according to the guide. In Pretense test suites, define transition postconditions in ctx.ensures(...). In Test<Target>ImplReal, bind real instances into self.sm = TargetStateMachine(singletons={...}) and drive scenarios via self.sm.dispatch_transition(...) without redundant manual assertions, relying on ctx.ensures(...) to verify contracts automatically."
 allows_step_mode = true
 role_deps = []
 star_role_deps = ["low"]
 silent_role_deps = ["spec_qa"]
 stub_role_deps = ["lib"]
 silent_cross_role_deps = ["lib"]
+common_spec_roles = ["low"]
 tools = [
     "update_python_with_ai.support.lib.pretense_lint",
     "update_python_with_ai.support.lib.build_lint_common",
@@ -207,6 +217,7 @@ allows_step_mode = false
 role_deps = []
 star_role_deps = ["low"]
 feedback_role_deps = ["lib", "pretense"]
+common_spec_roles = ["low"]
 tools = []
 active_component_types = ["implementation"]
 verify_template = "uv run pretense {unit_dir}/pretense/{unit_name}_pretense.py"
@@ -218,13 +229,29 @@ persona = "Pretense Coverage Arbiter"
 pipeline = "pretense"
 src_pattern = ""
 guide = "update_python_with_ai/guides/pretense_coverage.md"
-prompt_template = "Files are aligned according to the guide."
+prompt_template = "Files are aligned according to the guide. Coverage audits must be formulated strictly against public specification contracts. Never demand testing private helpers or internal methods; uncovered defensive branches belong to the library to prune as dead code or mark as unreachable according to the methodology."
 allows_step_mode = false
 role_deps = []
 silent_role_deps = ["pretense_qa"]
 star_role_deps = ["low"]
 feedback_role_deps = ["lib", "pretense"]
+common_spec_roles = ["low"]
 tools = []
 active_component_types = ["implementation"]
 verify_template = "uv run pretense {unit_dir}/pretense/{unit_name}_pretense.py --no-fuzz --cov --threshold 100.0"
 verification_success_message = "All lines of {unit_name}.py are covered by {unit_name}_pretense.py."
+
+[fused_roles.baseline]
+name = "baseline"
+persona = "Baseline Software Developer"
+pipeline = "standard"
+roles = ["lib", "test", "qa", "coverage"]
+guide = "update_python_with_ai/guides/low_to_lib.md"
+
+[fused_roles.pretense_baseline]
+name = "pretense_baseline"
+persona = "Pretense Baseline Software Developer"
+pipeline = "pretense"
+roles = ["lib", "pretense", "pretense_qa", "pretense_coverage"]
+guide = "update_python_with_ai/guides/low_to_lib.md"
+

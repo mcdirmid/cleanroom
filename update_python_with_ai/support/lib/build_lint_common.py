@@ -576,20 +576,76 @@ def ensure_target(
     return text[:start] + block + text[end:]
 
 
+def format_syntax_error(
+    file_path: str,
+    e: SyntaxError,
+    content: Optional[str] = None,
+) -> str:
+    """Format a SyntaxError with line number, column offset, surrounding context, and a caret pointer."""
+    line = e.lineno if e.lineno is not None else 1
+    col = e.offset if e.offset is not None else 1
+    header = f"{file_path}:{line}:{col}: error: syntax error: {e.msg}"
+
+    lines: list[str] = []
+    if content is not None:
+        lines = content.splitlines()
+    elif os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            pass
+
+    if not lines or line < 1 or line > len(lines):
+        if e.text:
+            return f"{header}\n  >>> {e.text.rstrip()}"
+        return header
+
+    start = max(1, line - 3)
+    end = min(len(lines), line + 3)
+    gutter_width = max(len(str(end)), 4)
+
+    diagnostic_lines = [header]
+    for cur in range(start, end + 1):
+        raw_line = lines[cur - 1]
+        expanded_line = raw_line.expandtabs(4)
+        if cur == line:
+            prefix = f"> {cur:{gutter_width}d} | "
+            diagnostic_lines.append(f"{prefix}{expanded_line}")
+            if e.offset is not None and e.offset >= 1:
+                prefix_col_width = len(prefix)
+                col_offset = len(raw_line[: e.offset - 1].expandtabs(4))
+                indent = prefix_col_width + col_offset
+                diagnostic_lines.append(f"{' ' * indent}^")
+        else:
+            prefix = f"  {cur:{gutter_width}d} | "
+            diagnostic_lines.append(f"{prefix}{expanded_line}")
+
+    return "\n".join(diagnostic_lines)
+
+
 def check_syntax(file_path: str) -> list[str]:
     """Check that a file contains valid Python syntax.
-    Returns error messages for any SyntaxError encountered."""
+    Returns formatted error messages with line context and carets for any SyntaxError encountered."""
     errors: list[str] = []
-    if not os.path.exists(file_path):
+    content: Optional[str] = None
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                content = f.read()
+        except OSError:
+            return errors
+    elif "\n" in file_path or file_path.strip().startswith(("import ", "from ", "def ", "class ", "#")):
+        content = file_path
+        file_path = "<string>"
+    else:
         return errors
+
     try:
-        with open(file_path, encoding="utf-8") as f:
-            content = f.read()
-            compile(content, file_path, "exec")
-            ast.parse(content, filename=file_path)
+        compile(content, file_path, "exec")
+        ast.parse(content, filename=file_path)
     except SyntaxError as e:
-        line = e.lineno if e.lineno is not None else 1
-        errors.append(f"{file_path}:{line}: error: syntax error: {e.msg}")
+        errors.append(format_syntax_error(file_path, e, content))
     except OSError:
         return errors
     return errors
@@ -1032,6 +1088,56 @@ def check_dataclass_stubs(file_path: str) -> list[str]:
     return errors
 
 
+def check_no_frozen_exceptions(file_path: str) -> list[str]:
+    """Check that exception classes are not decorated with @dataclass(frozen=True)."""
+    errors: list[str] = []
+    if not os.path.exists(file_path):
+        return errors
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=file_path)
+    except (OSError, SyntaxError):
+        return errors
+
+    def _inherits_exception(class_def: ast.ClassDef) -> bool:
+        for base in class_def.bases:
+            if isinstance(base, ast.Name) and (
+                base.id.endswith("Error")
+                or base.id.endswith("Exception")
+                or base.id in ("Exception", "BaseException")
+            ):
+                return True
+            if isinstance(base, ast.Attribute) and (
+                base.attr.endswith("Error")
+                or base.attr.endswith("Exception")
+                or base.attr in ("Exception", "BaseException")
+            ):
+                return True
+        return False
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and _inherits_exception(node):
+            for dec in node.decorator_list:
+                if isinstance(dec, ast.Call):
+                    func = dec.func
+                    is_dc = (
+                        (isinstance(func, ast.Name) and func.id == "dataclass")
+                        or (isinstance(func, ast.Attribute) and func.attr == "dataclass")
+                    )
+                    if is_dc:
+                        for kw in dec.keywords:
+                            if (
+                                kw.arg == "frozen"
+                                and isinstance(kw.value, ast.Constant)
+                                and kw.value.value is True
+                            ):
+                                errors.append(
+                                    f"{file_path}:{node.lineno}: error: Exception class '{node.name}' cannot be a frozen dataclass (@dataclass(frozen=True)) "
+                                    f"because Python assigns __traceback__ on exception instances during execution."
+                                )
+    return errors
+
+
 def check_no_stubs(file_path: str) -> list[str]:
     """Check that library modules do not contain unfinished implementation stubs.
 
@@ -1449,6 +1555,254 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
                     f"{file_path}: error: test module must import target class ({expected_str}) from target implementation module '{target_stem}'"
                 )
 
+    return errors
+
+
+ALLOW_PRIVATE_IMPORT_RE = re.compile(
+    r"#\s*(?:cleanroom:\s*allow-private-import|allow-private-import)\b"
+)
+
+
+def check_no_private_imports(
+    file_path: str, tree: Optional[ast.AST] = None
+) -> list[str]:
+    """Check that a test or pretense module does not import private symbols (_*) from library modules."""
+    errors: list[str] = []
+    if not os.path.exists(file_path) and tree is None:
+        return errors
+
+    lines: list[str] = []
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            pass
+
+    if tree is None:
+        try:
+            content = "\n".join(lines)
+            tree = ast.parse(content, filename=file_path)
+        except (SyntaxError, OSError):
+            return errors
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            lineno = getattr(node, "lineno", 1)
+            line_has_pragma = False
+            for check_idx in (lineno - 1, lineno - 2):
+                if 0 <= check_idx < len(lines):
+                    if ALLOW_PRIVATE_IMPORT_RE.search(lines[check_idx]):
+                        line_has_pragma = True
+                        break
+            if line_has_pragma:
+                continue
+
+            if isinstance(node, ast.ImportFrom):
+                mod = node.module or ""
+                if mod.startswith(
+                    ("typing", "dataclasses", "unittest", "hypothesis", "__future__")
+                ):
+                    continue
+                for alias in node.names:
+                    name = alias.name
+                    if name.startswith("_") and name not in (
+                        "__initialize__",
+                        "_initialize_",
+                        "__future__",
+                    ):
+                        errors.append(
+                            f"{file_path}:{lineno}: error: prohibited private import '{name}' from '{mod}'. "
+                            f"Tests must only import public specification symbols and lifecycle hooks."
+                        )
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    name = alias.name.split(".")[-1]
+                    if name.startswith("_") and name not in (
+                        "__initialize__",
+                        "_initialize_",
+                    ):
+                        errors.append(
+                            f"{file_path}:{lineno}: error: prohibited private module/symbol import '{alias.name}'. "
+                            f"Tests must only import public specification symbols."
+                        )
+    return errors
+
+
+ALLOW_TAUTOLOGY_RE = re.compile(
+    r"#\s*(?:cleanroom:\s*allow-tautology|allow-tautology)\b"
+)
+ALLOW_SYS_MODULES_RE = re.compile(
+    r"#\s*(?:cleanroom:\s*allow-sys-modules|allow-sys-modules)\b"
+)
+
+
+def check_tautological_assertions(
+    file_path: str, tree: Optional[ast.AST] = None, check_empty: bool = False
+) -> list[str]:
+    """Check that test methods do not contain tautological assertions or (optionally) empty bodies."""
+    errors: list[str] = []
+    if not os.path.exists(file_path) and tree is None:
+        return errors
+
+    lines: list[str] = []
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            pass
+
+    if tree is None:
+        try:
+            content = "\n".join(lines)
+            tree = ast.parse(content, filename=file_path)
+        except (SyntaxError, OSError):
+            return errors
+
+    for node in ast.walk(tree):
+        if check_empty and isinstance(node, ast.ClassDef):
+            is_test_class = node.name.startswith("Test") or any(
+                (isinstance(b, ast.Name) and "TestCase" in b.id)
+                or (isinstance(b, ast.Attribute) and b.attr == "TestCase")
+                for b in node.bases
+            )
+            if not is_test_class:
+                continue
+            for item in node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name.startswith("test_"):
+                    is_skipped = any("skip" in ast.unparse(d).lower() for d in item.decorator_list)
+                    if not is_skipped:
+                        real_stmts = [
+                            s
+                            for s in item.body
+                            if not (
+                                isinstance(s, ast.Expr)
+                                and isinstance(s.value, ast.Constant)
+                                and isinstance(s.value.value, str)
+                            )
+                        ]
+                        if not real_stmts or all(
+                            (isinstance(s, ast.Pass))
+                            or (
+                                isinstance(s, ast.Expr)
+                                and getattr(s, "value", None)
+                                and isinstance(getattr(s, "value"), ast.Constant)
+                                and getattr(s, "value").value is ...
+                            )
+                            for s in real_stmts
+                        ):
+                            errors.append(
+                                f"{file_path}:{item.lineno}: error: empty test method '{item.name}'; tests must perform assertions."
+                            )
+
+        elif isinstance(node, ast.Call):
+            lineno = getattr(node, "lineno", 1)
+            line_has_pragma = any(
+                0 <= check_idx < len(lines) and ALLOW_TAUTOLOGY_RE.search(lines[check_idx])
+                for check_idx in (lineno - 1, lineno - 2)
+            )
+            if line_has_pragma:
+                continue
+            fn_name = ""
+            if isinstance(node.func, ast.Attribute):
+                fn_name = node.func.attr
+            elif isinstance(node.func, ast.Name):
+                fn_name = node.func.id
+
+            if fn_name in ("assertTrue", "assert_true") and node.args:
+                arg = node.args[0]
+                if isinstance(arg, ast.Constant) and bool(arg.value) is True:
+                    errors.append(
+                        f"{file_path}:{lineno}: error: tautological assertion '{fn_name}({arg.value!r})'; tests must assert on actual behavior."
+                    )
+            elif fn_name in ("assertFalse", "assert_false") and node.args:
+                arg = node.args[0]
+                if isinstance(arg, ast.Constant) and bool(arg.value) is False:
+                    errors.append(
+                        f"{file_path}:{lineno}: error: tautological assertion '{fn_name}({arg.value!r})'; tests must assert on actual behavior."
+                    )
+            elif fn_name in ("assertEqual", "assert_equal", "assertIs", "assert_is") and len(node.args) >= 2:
+                arg1, arg2 = node.args[0], node.args[1]
+                if isinstance(arg1, ast.Constant) and isinstance(arg2, ast.Constant) and arg1.value == arg2.value:
+                    errors.append(
+                        f"{file_path}:{lineno}: error: tautological assertion '{fn_name}({arg1.value!r}, {arg2.value!r})'; tests must assert on actual behavior."
+                    )
+
+        elif isinstance(node, ast.Assert):
+            lineno = getattr(node, "lineno", 1)
+            line_has_pragma = any(
+                0 <= check_idx < len(lines) and ALLOW_TAUTOLOGY_RE.search(lines[check_idx])
+                for check_idx in (lineno - 1, lineno - 2)
+            )
+            if line_has_pragma:
+                continue
+            if isinstance(node.test, ast.Constant) and bool(node.test.value) is True:
+                errors.append(
+                    f"{file_path}:{lineno}: error: tautological assertion 'assert {node.test.value!r}'; tests must assert on actual behavior."
+                )
+
+    return errors
+
+
+def check_no_sys_modules_tampering(
+    file_path: str, tree: Optional[ast.AST] = None
+) -> list[str]:
+    """Check that test modules do not mutate or delete from sys.modules."""
+    errors: list[str] = []
+    if not os.path.exists(file_path) and tree is None:
+        return errors
+
+    lines: list[str] = []
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            pass
+
+    if tree is None:
+        try:
+            content = "\n".join(lines)
+            tree = ast.parse(content, filename=file_path)
+        except (SyntaxError, OSError):
+            return errors
+
+    def is_sys_modules(node: ast.AST) -> bool:
+        if isinstance(node, ast.Attribute) and node.attr == "modules":
+            if isinstance(node.value, ast.Name) and node.value.id == "sys":
+                return True
+        return False
+
+    for node in ast.walk(tree):
+        lineno = getattr(node, "lineno", 1)
+        line_has_pragma = any(
+            0 <= check_idx < len(lines) and ALLOW_SYS_MODULES_RE.search(lines[check_idx])
+            for check_idx in (lineno - 1, lineno - 2)
+        )
+        if line_has_pragma:
+            continue
+
+        if isinstance(node, ast.Delete):
+            for target in node.targets:
+                if isinstance(target, ast.Subscript) and is_sys_modules(target.value):
+                    errors.append(
+                        f"{file_path}:{lineno}: error: prohibited sys.modules mutation in test module. "
+                        f"Module unloading/deletion corrupts Python runtime and dataclass caches."
+                    )
+        elif isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute) and node.func.attr in ("pop", "clear"):
+                if is_sys_modules(node.func.value):
+                    errors.append(
+                        f"{file_path}:{lineno}: error: prohibited sys.modules.{node.func.attr}() call in test module. "
+                        f"Module unloading/deletion corrupts Python runtime and dataclass caches."
+                    )
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Subscript) and is_sys_modules(target.value):
+                    errors.append(
+                        f"{file_path}:{lineno}: error: prohibited direct assignment to sys.modules[...] in test module."
+                    )
     return errors
 
 

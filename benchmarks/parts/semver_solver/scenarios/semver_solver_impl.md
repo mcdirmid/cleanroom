@@ -47,7 +47,7 @@ Observed: Package `pkg_a` is present in the repository.
 Realized by: Inserting release objects into the internal package registry map keyed by package name.
 
 2. Retrieve package releases for `pkg_a`.
-Observed: The returned release sequence has version `1.2.0` followed by version `1.0.0`.
+Observed: The produced release sequence has version `1.2.0` followed by version `1.0.0`.
 Realized by: Sorting candidate releases using the version engine precedence comparison in descending order.
 
 ### Scenario 5 — Backtracking resolution of diamond dependencies
@@ -55,7 +55,7 @@ Realized by: Sorting candidate releases using the version engine precedence comp
 Given: A dependency solver and package repository where `app` depends on `lib_b` and `lib_c`, `lib_b` at `1.0.0` depends on `lib_d` with constraint `^1.0.0`, `lib_c` at `1.0.0` depends on `lib_d` with constraint `>=1.1.0 <2.0.0`, and `lib_d` has releases `1.0.0`, `1.1.0`, and `1.2.0`.
 
 1. Resolve dependencies for root requirement `app` with constraint `^1.0.0`.
-Observed: The returned resolution outcome selects version `1.2.0` for package `lib_d`.
+Observed: The produced resolution outcome selects version `1.2.0` for package `lib_d`.
 Realized by: Intersecting accumulated constraints for `lib_d` into `>=1.1.0 <2.0.0` and selecting the highest satisfying release `1.2.0`.
 
 ### Scenario 6 — Unsatisfiable dependency conflict raises resolution conflict error
@@ -66,6 +66,10 @@ Given: A dependency solver and package repository where `pkg_x` at `1.0.0` requi
 Observed: A resolution conflict error is raised identifying conflicting package `pkg_z`.
 Realized by: Detecting empty constraint intersection between `>=2.0.0` and `<2.0.0` during backtracking search, formatting the conflict derivation trail, and raising resolution conflict error.
 
+2. Resolve dependencies for root requirement on unregistered package `pkg_missing` at `^1.0.0`.
+Observed: A resolution conflict error is raised identifying conflicting package `pkg_missing` without raising package not found error.
+Realized by: Identifying that unregistered package `pkg_missing` has zero viable candidate releases, adding it to the conflict trail, and raising resolution conflict error upon search exhaustion.
+
 ### Scenario 7 — Rejecting invalid version string with leading zeroes
 
 Given: A newly initialized version engine.
@@ -74,10 +78,38 @@ Given: A newly initialized version engine.
 Observed: An invalid version error is raised carrying raw version text `1.02.3`.
 Realized by: Detecting leading zero on numeric minor segment `02` during regular expression parsing and raising invalid version error.
 
+### Scenario 8 — Range parsing whitespace trimming, bare partial rejection, and empty clause rejection
+
+Given: A newly initialized version engine.
+
+1. Parse range expressions with surrounding and clause whitespace `  ^1.0.0  `, `  ~1.0.0  `, and intra-operator whitespace `  >= 1.0.0 < 2.0.0  `.
+Observed: All range expressions parse successfully into valid version ranges.
+Realized by: Trimming leading and trailing whitespace on range input and individual comparator clauses, and accepting optional whitespace between operators and version targets.
+
+2. Parse empty range ``, whitespace-only range `   `, consecutive union delimiters `1.0.0 || || 2.0.0`, comma-delimited comparators `1.0.0, 2.0.0`, and bare partial numbers `1`, `1.2`, and `1.2 - 2.3` lacking wildcards.
+Observed: An invalid range error is raised in each case.
+Realized by: Validating that the trimmed expression and each split union clause are non-empty, rejecting comma delimiters within clauses, and detecting that partial tokens without wildcard characters violate range grammar.
+
+### Scenario 9 — Value object canonical string representation and prerelease boundary evaluation
+
+Given: A newly initialized version engine.
+
+1. Parse version text `1.2.3-beta.1+build.42` into a semantic version and convert it to a string.
+Observed: The string representation matches canonical version string `1.2.3-beta.1+build.42`.
+Realized by: Joining components with dot delimiters, prefixing prerelease with hyphen, and prefixing build metadata with plus.
+
+2. Parse range expression `  >=1.0.0 <2.0.0  ` into a version range, inspect its raw text, and convert it to a string.
+Observed: The range's raw text property contains trimmed string `>=1.0.0 <2.0.0` and its string representation matches `>=1.0.0 <2.0.0`.
+Realized by: Storing trimmed expression text in the immutable version range record.
+
+3. Evaluate satisfaction of version `1.0.0-alpha` against range `>=1.0.0 <2.0.0` with explicit pre-release inclusion requested.
+Observed: Version `1.0.0-alpha` does not satisfy the range because precedence ordering ranks `1.0.0-alpha` strictly lower than boundary `1.0.0`.
+Realized by: Evaluating candidate version directly against lower bound `>=1.0.0` via precedence comparison without shifting numerical boundaries.
+
 ## Implementation-only
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-21T20:57:17Z
-LAST_CHANGED: 2026-10-21T20:57:17Z
-CHANGE: Mirror the corrected caret scenario title and complete the precedence comparison realization
+LAST_CHANGED: 2026-10-27T22:30:00Z
+CHANGE: Re-align scenarios with HLS updates for basic comparators and clean value object strings
 -->

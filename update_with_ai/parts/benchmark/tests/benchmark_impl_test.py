@@ -4,16 +4,17 @@ import importlib
 import io
 import json
 import os
+import shutil
 import tempfile
 import time
 import unittest
 from unittest import mock
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from pathlib import Path
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system
 from update_with_ai.parts.benchmark.lib import benchmark
-from update_with_ai.parts.benchmark.lib.benchmark_impl import (
+from update_with_ai.parts.benchmark.lib.benchmark_impl import (  # cleanroom: allow-private-import
     BenchmarkEvaluator,
     main,
     _provision_flight_scope,
@@ -589,6 +590,47 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertFalse((repo_root / scope2).is_dir())
             self.assertFalse(role_ws.is_dir())
 
+    def test_flight_scope_teardown_on_failure(self) -> None:
+        """CUJ: Preserving failed flight scope as .failed with associated role workspaces on flight failure."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            flight_scope = "benchmark_1"
+            flight_scope_dir = repo_root / flight_scope
+            flight_scope_dir.mkdir(parents=True, exist_ok=True)
+            (flight_scope_dir / "dirty_code.py").write_text("print('failed')", encoding="utf-8")
+
+            # Mock role workspace in repo_root / role_workspaces
+            role_ws = repo_root / "role_workspaces" / f"cleanroom_lib_{flight_scope}"
+            role_ws.mkdir(parents=True, exist_ok=True)
+            (role_ws / "worker.log").write_text("traceback...", encoding="utf-8")
+
+            # Mock role workspace in repo_root.parent / role_workspaces
+            parent_role_ws = repo_root.parent / "role_workspaces" / f"cleanroom_pretense_{flight_scope}"
+            parent_role_ws.mkdir(parents=True, exist_ok=True)
+            (parent_role_ws / "pretense_worker.log").write_text("pretense error...", encoding="utf-8")
+
+            try:
+                # Teardown with failure
+                _teardown_flight_scope(repo_root, flight_scope, success=False)
+
+                # Original flight scope directory must be relocated, not deleted
+                self.assertFalse(flight_scope_dir.is_dir())
+                failed_dir = repo_root / f"{flight_scope}.failed"
+                self.assertTrue(failed_dir.is_dir())
+                self.assertTrue((failed_dir / "dirty_code.py").is_file())
+
+                # Role workspaces must be relocated under failed_dir / role_workspaces, NOT deleted
+                failed_ws = failed_dir / "role_workspaces" / f"cleanroom_lib_{flight_scope}"
+                self.assertTrue(failed_ws.is_dir())
+                self.assertTrue((failed_ws / "worker.log").is_file())
+
+                parent_failed_ws = failed_dir / "role_workspaces" / f"cleanroom_pretense_{flight_scope}"
+                self.assertTrue(parent_failed_ws.is_dir())
+                self.assertTrue((parent_failed_ws / "pretense_worker.log").is_file())
+            finally:
+                if parent_role_ws.is_dir():
+                    shutil.rmtree(parent_role_ws, ignore_errors=True)
+
     def test_flight_scope_marks_clean_up_to_spec_qa(self) -> None:
         """CUJ: Provisioning an ephemeral flight scope marks specifications clean up to spec_qa."""
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -619,7 +661,9 @@ class BenchmarkImplTest(unittest.TestCase):
                 args, kwargs = mock_run.call_args
                 cmd = args[0]
                 self.assertEqual(cmd[:4], ["uv", "run", "cleanroom", "mark-clean"])
-                self.assertTrue(cmd[4].endswith("#spec_qa"))
+                self.assertEqual(cmd[4], flight_scope)
+                self.assertIn("--up-to-role", cmd)
+                self.assertIn("spec_qa", cmd)
 
     def test_archive_cleanroom_event_log(self) -> None:
         """CUJ: Archiving Cleanroom event log (.cleanroom.log) alongside synthesized flight artifacts."""
@@ -778,7 +822,7 @@ class BenchmarkImplTest(unittest.TestCase):
                     antigravity_dispatch="message",
                 )
                 self.assertIsNotNone(record)
-                clean_cmd = next((c for c in dispatched_cmds if len(c) > 1 and c[1] == "clean"), None)
+                clean_cmd = next((c for c in dispatched_cmds if len(c) > 1 and "clean" in c), None)
                 self.assertIsNotNone(clean_cmd)
                 assert clean_cmd is not None
                 self.assertIn("--antigravity-dispatch", clean_cmd)
@@ -914,9 +958,8 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertIn("Methodology: baseline", lib_content)
             self.assertIn("Role Execution Rounds:   baseline: 1 (Total: 1)", lib_content)
 
-    @mock.patch("sys.stdout", new_callable=io.StringIO)
-    def test_baseline_flight_prompt_includes_low_spec(self, mock_stdout: io.StringIO) -> None:
-        """CUJ: Baseline flight prompt discovers and instructs model with Low-Level Specification."""
+    def test_baseline_flight_prompt_includes_low_spec(self) -> None:
+        """CUJ: Baseline flight dispatches unified clean command targeting the baseline fused role."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
             evaluator = BenchmarkEvaluator()
@@ -936,7 +979,13 @@ class BenchmarkImplTest(unittest.TestCase):
             low_dir.mkdir(parents=True, exist_ok=True)
             (low_dir / "dag_engine.pyi").write_text("class DAG: ...\n", encoding="utf-8")
 
-            with mock.patch("update_with_ai.parts.benchmark.lib.benchmark_impl._VerificationGate.evaluate") as mock_gate, \
+            dispatched_cmds = []
+            def fake_subprocess_run(cmd, *args, **kwargs):
+                dispatched_cmds.append(cmd)
+                return MagicMock(returncode=0, stdout="AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE\n", stderr="")
+
+            with mock.patch("subprocess.run", side_effect=fake_subprocess_run), \
+                 mock.patch("update_with_ai.parts.benchmark.lib.benchmark_impl._VerificationGate.evaluate") as mock_gate, \
                  mock.patch("update_with_ai.parts.benchmark.lib.benchmark_impl._LogHarvester.harvest_from_antigravity", return_value=(100, 200, 50, [1.0], {"baseline": 1})):
                 mock_gate.return_value = benchmark.VerificationOutcomes(
                     spec_linter_pass=True, pyright_errors=0, unit_tests_passed=5, unit_tests_failed=0
@@ -951,21 +1000,20 @@ class BenchmarkImplTest(unittest.TestCase):
                     antigravity_dispatch="none",
                 )
 
-            stdout_output = mock_stdout.getvalue()
-            self.assertIn("cleanroom_baseline_worker", stdout_output)
-            self.assertIn("Low-Level Specification", stdout_output)
-            self.assertIn("low/dag_engine.pyi", stdout_output)
-            self.assertIn("100% code coverage", stdout_output)
-            self.assertIn("pragma: no cover", stdout_output)
-            self.assertIn("_impl_test.py", stdout_output)
-            self.assertIn("Execution & Troubleshooting Rules", stdout_output)
-            self.assertIn("infinite loop or deadlock", stdout_output)
+            clean_cmd = next((c for c in dispatched_cmds if len(c) > 1 and "clean" in c), None)
+            self.assertIsNotNone(clean_cmd)
+            assert clean_cmd is not None
+            self.assertIn("--role", clean_cmd)
+            self.assertIn("baseline", clean_cmd)
+            self.assertIn("--baseline", clean_cmd)
             self.assertEqual(record.methodology, "baseline")
             self.assertEqual(record.stages_executed, ["baseline"])
 
     def test_antigravity_baseline_transcript_harvesting(self) -> None:
         """CUJ: Harvesting baseline worker subagent transcript with cache_read_tokens and ignoring parent caller transcript."""
-        from update_with_ai.parts.benchmark.lib.benchmark_impl import _LogHarvester
+        from update_with_ai.parts.benchmark.lib.benchmark_impl import (  # cleanroom: allow-private-import
+            _LogHarvester,
+        )
         with tempfile.TemporaryDirectory() as tmp_dir:
             brain_dir = Path(tmp_dir) / "brain"
             parent_id = "00000000-0000-0000-0000-000000000001"
@@ -1002,7 +1050,9 @@ class BenchmarkImplTest(unittest.TestCase):
 
     def test_antigravity_coordinator_and_workers_harvesting(self) -> None:
         """CUJ: Harvesting telemetry across coordinator and role worker subagent transcripts."""
-        from update_with_ai.parts.benchmark.lib.benchmark_impl import _LogHarvester
+        from update_with_ai.parts.benchmark.lib.benchmark_impl import (  # cleanroom: allow-private-import
+            _LogHarvester,
+        )
         with tempfile.TemporaryDirectory() as tmp_dir:
             brain_dir = Path(tmp_dir) / "brain"
             coord_id = "00000000-0000-0000-0000-000000000010"
@@ -1138,9 +1188,8 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertIn("Methodology: pretense_baseline", lib_content)
             self.assertIn("Role Execution Rounds:   baseline: 1 (Total: 1)", lib_content)
 
-    @mock.patch("sys.stdout", new_callable=io.StringIO)
-    def test_baseline_pretense_workspace_setup_and_scaffolding(self, mock_stdout: io.StringIO) -> None:
-        """CUJ: Baseline pretense flight provisions pretense symlink, guides, scaffolds pretense file, and instructs model."""
+    def test_baseline_pretense_workspace_setup_and_scaffolding(self) -> None:
+        """CUJ: Baseline pretense flight dispatches unified clean command targeting pretense_baseline fused role."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
             evaluator = BenchmarkEvaluator()
@@ -1169,7 +1218,13 @@ class BenchmarkImplTest(unittest.TestCase):
             # Provision pretense runtime dir in repo_root
             (repo_root / "pretense").mkdir(parents=True, exist_ok=True)
 
-            with mock.patch("update_with_ai.parts.benchmark.lib.benchmark_impl._VerificationGate.evaluate") as mock_gate, \
+            dispatched_cmds = []
+            def fake_subprocess_run(cmd, *args, **kwargs):
+                dispatched_cmds.append(cmd)
+                return MagicMock(returncode=0, stdout="AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE\n", stderr="")
+
+            with mock.patch("subprocess.run", side_effect=fake_subprocess_run), \
+                 mock.patch("update_with_ai.parts.benchmark.lib.benchmark_impl._VerificationGate.evaluate") as mock_gate, \
                  mock.patch("update_with_ai.parts.benchmark.lib.benchmark_impl._LogHarvester.harvest_from_antigravity", return_value=(100, 200, 50, [1.0], {"baseline": 1})):
                 mock_gate.return_value = benchmark.VerificationOutcomes(
                     spec_linter_pass=True, pyright_errors=0, unit_tests_passed=5, unit_tests_failed=0
@@ -1185,20 +1240,21 @@ class BenchmarkImplTest(unittest.TestCase):
                     antigravity_dispatch="none",
                 )
 
-            stdout_output = mock_stdout.getvalue()
-            self.assertIn("cleanroom_baseline_worker", stdout_output)
-            self.assertIn("Pretense Baseline Developer", stdout_output)
-            self.assertIn("Low-Level Specification", stdout_output)
-            self.assertIn("guides/pretense.md", stdout_output)
-            self.assertIn("uv run pretense", stdout_output)
-            self.assertIn("Execution & Troubleshooting Rules", stdout_output)
-            self.assertIn("infinite loop or deadlock", stdout_output)
+            clean_cmd = next((c for c in dispatched_cmds if len(c) > 1 and "clean" in c), None)
+            self.assertIsNotNone(clean_cmd)
+            assert clean_cmd is not None
+            self.assertIn("--role", clean_cmd)
+            self.assertIn("pretense_baseline", clean_cmd)
+            self.assertIn("--baseline", clean_cmd)
+            self.assertIn("--pretense", clean_cmd)
             self.assertEqual(record.methodology, "pretense_baseline")
             self.assertEqual(record.stages_executed, ["baseline"])
 
     def test_is_antigravity_baseline_complete_lifecycle(self) -> None:
         """Verifies _is_antigravity_baseline_complete requires candidate transcripts and conclusion."""
-        from update_with_ai.parts.benchmark.lib.benchmark_impl import _LogHarvester
+        from update_with_ai.parts.benchmark.lib.benchmark_impl import (  # cleanroom: allow-private-import
+            _LogHarvester,
+        )
         with tempfile.TemporaryDirectory() as tmp_dir:
             brain = Path(tmp_dir)
             t_start = 1000.0
@@ -1254,13 +1310,90 @@ class BenchmarkImplTest(unittest.TestCase):
             agents_file = flight_scope_dir / "AGENTS.md"
             self.assertTrue(agents_file.exists())
 
+    def test_generate_report_status_and_failures(self) -> None:
+        """CUJ: Formatting summary report with PASS and [FAILED] status indicators and failure diagnostics."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            evaluator = BenchmarkEvaluator()
+            evaluator._repo_root = repo_root
+
+            passing_record = benchmark.FlightRecord(
+                flight_id="flight_pass",
+                timestamp="2026-10-27T00:00:00Z",
+                rq="RQ1",
+                model={"identifier": "test-model", "tier": 1},
+                benchmark_unit={"task_id": "task_pass"},
+                methodology="cleanroom",
+                stages_executed=["lib", "test"],
+                measurements=benchmark.FlightMeasurements(),
+                verification_outcomes=benchmark.VerificationOutcomes(
+                    spec_linter_pass=True,
+                    pyright_errors=0,
+                    unit_tests_passed=10,
+                    unit_tests_failed=0,
+                ),
+            )
+            failing_record = benchmark.FlightRecord(
+                flight_id="flight_fail",
+                timestamp="2026-10-27T00:00:00Z",
+                rq="RQ1",
+                model={"identifier": "test-model", "tier": 1},
+                benchmark_unit={"task_id": "task_fail"},
+                methodology="pretense",
+                stages_executed=["lib", "pretense"],
+                measurements=benchmark.FlightMeasurements(),
+                verification_outcomes=benchmark.VerificationOutcomes(
+                    spec_linter_pass=True,
+                    pyright_errors=2,
+                    unit_tests_passed=0,
+                    unit_tests_failed=0,
+                ),
+            )
+
+            report = evaluator.generate_report([passing_record, failing_record])
+            self.assertIn("| Status |", report)
+            self.assertIn("**PASS**", report)
+            self.assertIn("**[FAILED]**", report)
+            self.assertIn("Flight Failures & Diagnostics", report)
+            self.assertIn("flight_fail", report)
+            self.assertIn("0 unit tests passed", report)
+            self.assertIn("2 pyright type error(s)", report)
+
+    def test_run_cli_returns_one_on_flight_verification_failure(self) -> None:
+        """CUJ: run_cli returns exit code 1 when an executed flight fails verification gates."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            evaluator = BenchmarkEvaluator()
+            evaluator._repo_root = repo_root
+
+            failing_flight = benchmark.FlightRecord(
+                flight_id="flight_failed_eval",
+                timestamp="2026-10-27T00:00:00Z",
+                rq="RQ1",
+                model={"identifier": "qwen-moe", "tier": 1},
+                benchmark_unit={"task_id": "dag_engine"},
+                methodology="pretense",
+                stages_executed=["lib", "pretense"],
+                measurements=benchmark.FlightMeasurements(),
+                verification_outcomes=benchmark.VerificationOutcomes(
+                    spec_linter_pass=True,
+                    pyright_errors=0,
+                    unit_tests_passed=0,
+                    unit_tests_failed=0,
+                ),
+            )
+
+            with patch.object(evaluator, "execute_flight", return_value=failing_flight):
+                ret = evaluator.run_cli(["--suite=dag_engine", "--models=qwen-moe-q6", "--units=1"])
+                self.assertEqual(ret, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-10-26T21:55:00Z
-# CHANGE: Test execution watchdog environment provisioning (.env) and infinite loop troubleshooting guidance in baseline developer prompts
+# LAST_CHANGED: 2026-10-27T22:45:00Z
+# CHANGE: Test failed flight scope preservation with role workspaces, failure status reporting, and non-zero exit code on verification failure
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---

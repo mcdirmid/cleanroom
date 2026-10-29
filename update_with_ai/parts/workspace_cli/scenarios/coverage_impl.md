@@ -95,8 +95,10 @@ spans `(1, 200)` and `(300, 500)`, and the caller requests a report clamped to 1
 
 1. The caller asks for the coverage report clamped to 10 context lines.
    Observed: the report carries the two uncovered spans, at most 10 source code context lines
-   around them, and the same actionable guidance for defect attribution that an unclamped report
-   carries.
+   around them, and actionable guidance directing the agent to formulate blame feedback strictly
+   in terms of how the blamed file is not compliant with the common source of truth specification,
+   permitting line numbers only within the blamed file while strictly forbidding exposing details of
+   other files.
    Realized by: the component's own context snippet extraction, which reads the corresponding
    source lines and clamps the output to the requested span limit, and its own report formatting.
 
@@ -156,6 +158,6 @@ statement.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T04:11:44Z
-CHANGE: Drop the removed agent_session realization from the coverage record scenario
+LAST_CHANGED: 2026-10-29T00:30:00Z
+CHANGE: Format grounding attribution instructions permitting line numbers in blamed file while forbidding exposing details of other files
 -->

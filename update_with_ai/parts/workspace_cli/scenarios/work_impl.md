@@ -205,8 +205,16 @@ prerequisite sprocket is dirty.
    `work_scheduler` with the directory scope, dependency and contract lookups through
    `role_registry`, and dirtiness reasons from `src_metadata`.
 
+### Scenario 12 — Evaluating work queue for a fused role cluster
+
+Given: the agent is working in a fused role workspace combining lib, test, qa, and coverage for scope_a, where low-level specs are clean.
+
+1. The agent asks for work.
+   Observed: ready items across all constituent roles (lib, test, qa, coverage) are presented together in the work queue, with intra-fuse dependencies relaxed.
+   Realized by: the component's own work queue computation unblocking intra-fuse dependencies while enforcing external prerequisites.
+
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-19T16:30:00Z
-CHANGE: evaluate role upstream prerequisites across silent role dependencies
+LAST_CLEANED: 2026-10-26T20:38:00Z
+LAST_CHANGED: 2026-10-26T20:38:00Z
+CHANGE: Add scenario for fused role work queue discovery with intra-fuse relaxation
 -->

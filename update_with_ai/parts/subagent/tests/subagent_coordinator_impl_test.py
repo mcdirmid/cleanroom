@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -69,7 +70,7 @@ class FakeWorkspaceRegistry:
         self.base_dir = base_dir
 
     def discover_repository_root(self, start_dir: Optional[str] = None) -> str:
-        return "/repo/cleanroom"
+        return self.base_dir or "/repo/cleanroom"
 
     def resolve_role_definition(
         self,
@@ -1101,14 +1102,114 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
+    def test_orchestrate_fused_role_supervision(self) -> None:
+        """Scenario 13: Supervising fused role worker with verification, retries, and atomic harvest."""
+        with tempfile.TemporaryDirectory() as repo_root:
+            fused_role = role_registry.RoleDefinition(
+                role_name="baseline",
+                guide_path="guides/baseline.md",
+                writable_file_patterns=["lib/*.py", "tests/*.py"],
+                readonly_file_patterns=["low/*.pyi"],
+                feedback_role_deps=[],
+                role_deps=[],
+                star_role_deps=[],
+                stub_role_deps=[],
+                fused_roles=["lib", "test", "qa", "coverage"],
+            )
+            fake_reg = FakeWorkspaceRegistry([fused_role], base_dir=repo_root)
+            fake_work = FakeWorkspaceWorkManager({
+                "baseline": (([_make_item("staging/parts/alpha/lib/alpha.py", "lib")], ())),
+            })
+            self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+            self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+            class FusedHarness(FakeHarnessAdapter):
+                def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                    fake_work.queue_data["baseline"] = ((), ())
+                    return subagent_coordinator.RoleRoundResult(
+                        role="baseline",
+                        status="clean",
+                        submitted_targets=(),
+                    )
+
+            harness = FusedHarness()
+
+            ws_dir = fake_reg.compute_workspace_dir("baseline", dir_scope="staging", repo_root=repo_root)
+            os.makedirs(ws_dir, exist_ok=True)
+            with open(os.path.join(ws_dir, ".cleanroom_role.json"), "w", encoding="utf-8") as f:
+                json.dump({"role": "baseline", "dir_scope": "staging", "fused_roles": ["lib", "test", "qa", "coverage"]}, f)
+
+            with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+                coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+                summary = coord.orchestrate("staging", harness, poll_interval=0.001, repo_root=repo_root)
+                self.assertTrue(summary.is_converged)
+
+    def test_asynchronous_unblocked_dispatch_and_idle_worker_reaping(self) -> None:
+        """Scenario 16: Coordinator dispatches unblocked roles asynchronously and reaps idle workers."""
+        fake_reg = FakeWorkspaceRegistry([self.impl_role_lib, self.impl_role_test])
+        fake_work = FakeWorkspaceWorkManager({
+            "lib": (([_make_item("lib/core.py", "lib")], ())),
+            "test": (((), ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        dispatched_roles: List[str] = []
+        interrupted_handles: List[str] = []
+        poll_count = 0
+
+        class AsyncReapingHarness(FakeHarnessAdapter):
+            def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
+                dispatched_roles.append(dispatch.role_name)
+                return super().dispatch_role(dispatch)
+
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                nonlocal poll_count
+                role = task_handle.replace("handle_", "")
+                if role == "lib":
+                    poll_count += 1
+                    # lib finishes work and unblocks test
+                    fake_work.queue_data["lib"] = ((), ())
+                    fake_work.queue_data["test"] = (([_make_item("tests/core_test.py", "test")], ()))
+                    if poll_count < 3:
+                        # lib remains running/idling in harness past task completion
+                        return None
+                    return subagent_coordinator.RoleRoundResult(
+                        role="lib",
+                        status="clean",
+                        submitted_targets=("lib/core.py",),
+                    )
+                elif role == "test":
+                    fake_work.queue_data["test"] = ((), ())
+                    return subagent_coordinator.RoleRoundResult(
+                        role="test",
+                        status="clean",
+                        submitted_targets=("tests/core_test.py",),
+                    )
+                return None
+
+            def interrupt_role(self, task_handle: str) -> None:
+                interrupted_handles.append(task_handle)
+
+        harness = AsyncReapingHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001)
+            self.assertTrue(summary.is_converged)
+            # test was dispatched while lib was still active in harness
+            self.assertIn("lib", dispatched_roles)
+            self.assertIn("test", dispatched_roles)
+            self.assertIn("handle_lib", interrupted_handles)
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-10-20T23:50:00Z
-# CHANGE: Test suppression of unproductive rounds and scolding reminders when assigned targets are resolved
+# LAST_CHANGED: 2026-10-28T20:20:00Z
+# CHANGE: Test asynchronous unblocked role dispatch and idle worker reaping
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

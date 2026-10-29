@@ -22,13 +22,13 @@ The coverage evaluator executes a single-target test suite under trace instrumen
 
 The coverage evaluator formats uncovered line sequences into compact comma-separated range strings and paired contiguous span tuples, and formats source context snippets for uncovered spans by extracting the corresponding source file lines and clamping output to a maximum span limit when requested.
 
-The coverage evaluator formats comprehensive coverage reports incorporating test outcomes, coverage metrics, uncovered code spans, and grounding attribution instructions.
+The coverage evaluator formats comprehensive coverage reports incorporating test outcomes, coverage metrics, uncovered code spans, and grounding attribution instructions directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files.
 
 The coverage evaluator enforces minimum coverage thresholds, returning exit status indications and synchronizing formatted output to the specified coverage log files.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-19T17:15:00Z
-CHANGE: Inject local part package root into module search paths and purge package namespaces to prevent cross-workspace module shadowing
+LAST_CHANGED: 2026-10-29T00:30:00Z
+CHANGE: Format grounding attribution instructions permitting line numbers in blamed file while forbidding exposing details of other files
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

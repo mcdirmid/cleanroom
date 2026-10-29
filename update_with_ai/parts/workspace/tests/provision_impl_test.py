@@ -194,6 +194,8 @@ class FakeWorkspaceScaffolder:
         model: Optional[str] = None,
         batch_size: Optional[int] = None,
         max_feedback_chars: Optional[int] = None,
+        fused_roles: Optional[Sequence[str]] = None,
+        common_spec_roles: Optional[Sequence[str]] = None,
     ) -> None:
         role_cfg = os.path.join(workspace_dir, ".cleanroom_role.json")
         data: dict[str, Any] = {
@@ -208,6 +210,10 @@ class FakeWorkspaceScaffolder:
             data["batch_size"] = batch_size
         if max_feedback_chars is not None:
             data["max_feedback_chars"] = max_feedback_chars
+        if fused_roles:
+            data["fused_roles"] = list(fused_roles)
+        if common_spec_roles:
+            data["common_spec_roles"] = list(common_spec_roles)
         with open(role_cfg, "w", encoding="utf-8") as f:
             f.write(json.dumps(data, indent=2))
 
@@ -722,8 +728,8 @@ if __name__ == "__main__":
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-20T23:45:00Z
-# LAST_CHANGED: 2026-10-20T23:45:00Z
-# CHANGE: Assert active methodology assets promoted to role workspace root
+# LAST_CHANGED: 2026-10-29T00:48:00Z
+# CHANGE: Propagate common_spec_roles in FakeWorkspaceScaffolder.write_role_metadata
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

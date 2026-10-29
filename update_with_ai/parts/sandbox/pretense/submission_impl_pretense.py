@@ -26,7 +26,7 @@ from update_with_ai.parts.sandbox.lib import (
     submission_impl,
     tool_provider,
 )
-from update_with_ai.parts.sandbox.lib.submission_impl import (
+from update_with_ai.parts.sandbox.lib.submission_impl import (  # cleanroom: allow-private-import
     BlameTool,
     FailTool,
     SubmitTool,

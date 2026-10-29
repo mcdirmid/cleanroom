@@ -22,9 +22,9 @@ A *SemVer error* serves as the base error for semantic version operations, carry
 
 A *comparator operator* represents a relational comparison between versions, taking the form of *equal*, *not equal*, *less than*, *less than or equal*, *greater than*, or *greater than or equal*.
 
-A *semantic version* represents an immutable semantic version identifier conforming to SemVer 2.0.0, carrying an integer *major version*, an integer *minor version*, an integer *patch version*, an ordered tuple of *pre-release identifiers*, and an ordered tuple of *build metadata identifiers*. The version reports whether it is a *pre-release version* when its pre-release identifiers are non-empty, and provides its canonical *version string*.
+A *semantic version* represents an immutable semantic version identifier conforming to SemVer 2.0.0, carrying an integer *major version*, an integer *minor version*, an integer *patch version*, an ordered tuple of *pre-release identifiers*, and an ordered tuple of *build metadata identifiers*. The version reports whether it is a *pre-release version* when its pre-release identifiers are non-empty, and provides its canonical *version string*. Coercing a semantic version to a string delegates directly to formatting its canonical version string.
 
-A *version range* represents an immutable version constraint expression, carrying its *range expression text*. The range tests whether a semantic version *matches* its constraints, admitting pre-release versions only upon an explicit *pre-release inclusion* request.
+A *version range* represents an immutable version constraint expression, carrying its canonical *range expression text*. The range tests whether a semantic version *matches* its constraints, admitting pre-release versions only upon an explicit *pre-release inclusion* request. Coercing a version range to a string delegates to returning its range expression text.
 
 A *package dependency* represents a prerequisite requirement on a package, carrying a package name and a *range constraint*. A *package release* represents an immutable publication of a package, carrying a package name, a semantic version, and an ordered sequence of *declared dependencies*.
 
@@ -44,22 +44,23 @@ The engine supports *comparing version precedence*, determining ordering precede
 
 - Complete exclusion of build metadata from precedence comparison, such that versions differing solely by build metadata share equal precedence.
 
-The engine supports *parsing version ranges*, converting range expression text into a version range supporting basic comparators, caret ranges, tilde ranges, wildcards, hyphen ranges, and union alternatives, raising invalid range error on syntax errors. The engine supports *evaluating version satisfaction*, testing whether a semantic version satisfies a version range while excluding pre-release versions unless explicitly requested or explicitly specified in the range.
+The engine supports *parsing version ranges*, converting range expression text into a version range supporting basic comparators (`==`, `=`, `!=`, `<`, `<=`, `>`, `>=`), caret ranges (`^`), tilde ranges (`~`), wildcards (`*`, `x`, `X`, `M.x`, `M.*`, `M.m.x`, `M.m.*`), hyphen ranges (`M1.m1.p1 - M2.m2.p2`), and union alternatives (`||`), trimming surrounding whitespace around range expressions and individual clauses while tolerating optional whitespace between relational or prefix operators and version targets, delimiting comparators within clauses strictly by whitespace, raising invalid range error when the expression is empty, consists solely of whitespace, contains empty clauses between union alternatives, uses comma delimiters between comparators, supplies bare partial versions lacking wildcard tokens across any comparator or hyphen expression, or violates range syntax. The engine supports *evaluating version satisfaction*, testing whether a semantic version satisfies a version range while excluding pre-release versions unless explicitly requested or explicitly specified in the range. When pre-release inclusion is requested, pre-release versions evaluate directly against comparator bounds using precedence comparison without shifting numerical boundaries.
 
 A *package repository* stores and indexes package publications. Repository operations provide:
 
 - Registering package releases, associating a package release with its declared dependencies.
 
-- Retrieving package releases, returning all registered releases for a package name ordered by version precedence descending, raising package not found error if the package is missing.
+- Retrieving package releases, yielding all registered releases for a package name ordered by version precedence descending, raising package not found error if the package is missing.
 
 - Testing package presence and listing all registered package names.
 
 A *dependency solver* resolves mutually compatible package versions satisfying root requirements. The solver supports *resolving dependencies*, accepting an initial collection of package dependencies, exploring available package releases from the package repository, and backtracking through alternative candidate assignments upon encountering diamond or transitive version conflicts.
 
-Resolution concludes by selecting the highest precedence compatible release for each required package and returning a resolution outcome. When no combination of package releases can satisfy all transitive dependencies, the solver raises resolution conflict error identifying the conflicting packages and derivation explanation.
+Resolution concludes by selecting the highest precedence compatible release for each required package and producing a resolution outcome. When no combination of package releases can satisfy all transitive dependencies, or when a dependency references a package not present in the package repository, the solver raises resolution conflict error identifying the conflicting packages and derivation explanation without allowing package not found error to escape.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-21T20:56:59Z
-LAST_CHANGED: 2026-10-21T20:56:59Z
-CHANGE: Author semver_solver interface component high-level specification defining SemVer 2.0.0 precedence, range matching, package repository, and backtracking dependency resolution contracts
+LAST_CLEANED: 2026-10-27T02:19:04Z
+LAST_CHANGED: 2026-10-27T22:30:00Z
+CHANGE: Remove overconstrained exact range text normalization, clarify basic equality operators and prerelease boundary satisfaction
+SPEC_QA_AUDIT: 2026-10-27T02:19:04Z
 -->

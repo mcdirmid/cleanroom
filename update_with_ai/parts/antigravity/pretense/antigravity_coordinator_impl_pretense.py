@@ -10,8 +10,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from update_with_ai.parts.antigravity.lib import (
     antigravity_coordinator,
     antigravity_coordinator_impl,
@@ -31,156 +30,109 @@ class AntigravityCoordinatorState:
     last_dispatch: Optional[SubagentDispatchSpec] = None
 
 
-proto = StateMachineProto[AntigravityCoordinatorState]()
+class AntigravityCoordinatorStateMachine(StateMachine[AntigravityCoordinatorState]):
+    """Unified Pretense State Machine for AntigravityCoordinatorGenerator."""
 
+    def __init__(
+        self,
+        state: Optional[AntigravityCoordinatorState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or AntigravityCoordinatorState(), singletons=singletons)
 
-# ==============================================================================
-# 1. AntigravityCoordinatorGenerator Transitions
-# ==============================================================================
+    @transition(AntigravityCoordinatorGenerator.generate_coordinator_skill)
+    def generate_coordinator_skill(
+        self,
+        ctx: TransitionContext[AntigravityCoordinatorGenerator, [str], CoordinatorSkillDocument],
+    ) -> None:
+        ctx.arguments(dir_scope=Domain(strategy=lambda: 'staging'))
+        ctx.returns(lambda dir_scope="staging": CoordinatorSkillDocument(
+            name="cleanroom_coordinator",
+            description="Autonomous Cleanroom DAG convergence coordinator.",
+            frontmatter="---\nname: cleanroom_coordinator\ndescription: Autonomous Cleanroom DAG convergence coordinator.\n---",
+            content=f"# Cleanroom Coordinator Skill for {dir_scope}\n",
+        ))
+        ctx.update(lambda res, dir_scope="staging": None)
 
-@proto.transition(AntigravityCoordinatorGenerator.generate_coordinator_skill)
-def generate_coordinator_skill(): pass
-
-@generate_coordinator_skill.arguments
-def _(
-    state: AntigravityCoordinatorState,
-    this: Any,
-    dir_scope: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    ds = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    return (ds,)
-
-@generate_coordinator_skill.returns
-def _(
-    state: AntigravityCoordinatorState,
-    this: Any,
-    dir_scope: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[CoordinatorSkillDocument]]:
-    expected = CoordinatorSkillDocument(
-        name="cleanroom_coordinator",
-        description="Autonomous Cleanroom DAG convergence coordinator.",
-        frontmatter="---\nname: cleanroom_coordinator\ndescription: Autonomous Cleanroom DAG convergence coordinator.\n---",
-        content=f"# Cleanroom Coordinator Skill for {dir_scope}\n",
-    )
-    if isinstance(outcome, Value) and outcome.val.name == expected.name:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(AntigravityCoordinatorGenerator.format_dispatch_directive)
-def format_dispatch_directive(): pass
-
-@format_dispatch_directive.arguments
-def _(
-    state: AntigravityCoordinatorState,
-    this: Any,
-    dispatch: RoleDispatch | NotBoundType = NotBound,
-    model: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[RoleDispatch, Optional[str]]]:
-    if isinstance(dispatch, NotBoundType):
-        disp = RoleDispatch(
-            role_name="lib",
-            workspace_dir="/ws/lib",
-            ready_targets=["//parts/core:core#lib"],
-            dir_scope="staging",
-            batch_size=5,
-        )
-    else:
-        disp = dispatch
-    m = None if isinstance(model, NotBoundType) else model
-    return (disp, m)
-
-@format_dispatch_directive.returns
-def _(
-    state: AntigravityCoordinatorState,
-    this: Any,
-    dispatch: RoleDispatch,
-    model: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[SubagentDispatchSpec]]:
-    targets_str = ", ".join(dispatch.ready_targets) if dispatch.ready_targets else "all ready nodes"
-    prompt = f"Execute autonomous Cleanroom round for role '{dispatch.role_name}' in scope '{dispatch.dir_scope}'. Nodes ready: {targets_str}."
-    expected = SubagentDispatchSpec(
-        type_name="cleanroom_worker",
-        role=dispatch.role_name,
-        prompt=prompt,
-        workspace=dispatch.workspace_dir,
-        model=model,
-    )
-    if isinstance(outcome, Value) and outcome.val.role == expected.role and outcome.val.workspace == expected.workspace:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(AntigravityCoordinatorGenerator.parse_wake_notification)
-def parse_wake_notification(): pass
-
-@parse_wake_notification.arguments
-def _(
-    state: AntigravityCoordinatorState,
-    this: Any,
-    message_text: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    msg = '{"action": "submit", "role": "lib", "submitted_targets": ["lib/core.py"]}' if isinstance(message_text, NotBoundType) else str(message_text)
-    return (msg,)
-
-@parse_wake_notification.returns
-def _(
-    state: AntigravityCoordinatorState,
-    this: Any,
-    message_text: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[WakeNotificationMessage]]:
-    txt = message_text.strip()
-    if not txt:
-        expected = WakeNotificationMessage(action="idle", role="")
-    else:
-        # Search for JSON block
-        json_matches = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", txt, re.DOTALL)
-        cand = json_matches[0] if json_matches else None
-        if not cand:
-            m = re.search(r"(\{.*\})", txt, re.DOTALL)
-            if m:
-                cand = m.group(1)
-
-        if cand:
-            try:
-                d = json.loads(cand)
-                action = str(d.get("action") or d.get("status") or "complete")
-                role = str(d.get("role") or "")
-                subs = d.get("submitted_targets") or d.get("submitted") or []
-                blms = d.get("blamed_targets") or d.get("blamed") or []
-                reason = d.get("failure_reason") or d.get("reason")
-                expected = WakeNotificationMessage(
-                    action=action,
-                    role=role,
-                    submitted_targets=tuple(str(x) for x in subs),
-                    blamed_targets=tuple(str(x) for x in blms),
-                    failure_reason=str(reason) if reason else None,
+    @transition(AntigravityCoordinatorGenerator.format_dispatch_directive)
+    def format_dispatch_directive(
+        self,
+        ctx: TransitionContext[AntigravityCoordinatorGenerator, [RoleDispatch, Optional[str]], SubagentDispatchSpec],
+    ) -> None:
+        ctx.arguments(
+                    dispatch=Domain(strategy=lambda: RoleDispatch(role_name='lib', workspace_dir='/ws/lib', ready_targets=['//parts/core:core#lib'], dir_scope='staging', batch_size=5)),
+                    model=Domain(strategy=lambda: None),
                 )
-            except Exception:
-                expected = WakeNotificationMessage(action="complete", role="", failure_reason=None)
-        else:
-            action = "idle"
-            role = ""
-            if "submitted" in txt.lower():
-                action = "submit"
-            elif "blamed" in txt.lower():
-                action = "blame"
-            elif "failed" in txt.lower():
-                action = "fail"
-            expected = WakeNotificationMessage(action=action, role=role)
+        def returns(dispatch: Optional[RoleDispatch] = None, model: Optional[str] = None) -> SubagentDispatchSpec:
+            d = dispatch or RoleDispatch(
+                role_name="lib",
+                workspace_dir="/ws/lib",
+                ready_targets=["//parts/core:core#lib"],
+                dir_scope="staging",
+                batch_size=5,
+            )
+            targets_str = ", ".join(d.ready_targets) if d.ready_targets else "all ready nodes"
+            prompt = f"Execute autonomous Cleanroom round for role '{d.role_name}' in scope '{d.dir_scope}'. Nodes ready: {targets_str}."
+            return SubagentDispatchSpec(
+                type_name="cleanroom_worker",
+                role=d.role_name,
+                prompt=prompt,
+                workspace=d.workspace_dir,
+                model=model,
+            )
+        ctx.returns(returns)
+        ctx.update(lambda res, dispatch=None, model=None: None)
 
-    if isinstance(outcome, Value) and outcome.val.action == expected.action and outcome.val.role == expected.role:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+    @transition(AntigravityCoordinatorGenerator.parse_wake_notification)
+    def parse_wake_notification(
+        self,
+        ctx: TransitionContext[AntigravityCoordinatorGenerator, [str], WakeNotificationMessage],
+    ) -> None:
+        ctx.arguments(message_text=Domain(strategy=lambda: '{"action": "submit", "role": "lib", "submitted_targets": ["lib/core.py"]}'))
+        def returns(message_text: str = '{"action": "submit", "role": "lib", "submitted_targets": ["lib/core.py"]}') -> WakeNotificationMessage:
+            txt = message_text.strip()
+            if not txt:
+                return WakeNotificationMessage(action="idle", role="")
+            json_matches = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", txt, re.DOTALL)
+            cand = json_matches[0] if json_matches else None
+            if not cand:
+                m = re.search(r"(\{.*\})", txt, re.DOTALL)
+                if m:
+                    cand = m.group(1)
+
+            if cand:
+                try:
+                    d = json.loads(cand)
+                    action = str(d.get("action") or d.get("status") or "complete")
+                    role = str(d.get("role") or "")
+                    subs = d.get("submitted_targets") or d.get("submitted") or []
+                    blms = d.get("blamed_targets") or d.get("blamed") or []
+                    reason = d.get("failure_reason") or d.get("reason")
+                    return WakeNotificationMessage(
+                        action=action,
+                        role=role,
+                        submitted_targets=tuple(str(x) for x in subs),
+                        blamed_targets=tuple(str(x) for x in blms),
+                        failure_reason=str(reason) if reason else None,
+                    )
+                except Exception:
+                    return WakeNotificationMessage(action="complete", role="", failure_reason=None)
+            else:
+                action = "idle"
+                role = ""
+                if "submitted" in txt.lower():
+                    action = "submit"
+                elif "blamed" in txt.lower():
+                    action = "blame"
+                elif "failed" in txt.lower():
+                    action = "fail"
+                return WakeNotificationMessage(action=action, role=role)
+
+        ctx.returns(returns)
+        ctx.update(lambda res, message_text='{"action": "submit", "role": "lib", "submitted_targets": ["lib/core.py"]}': None)
+
+
+proto = AntigravityCoordinatorStateMachine()
 
 
 # ==============================================================================

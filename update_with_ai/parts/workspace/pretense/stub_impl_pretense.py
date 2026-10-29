@@ -11,9 +11,8 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.workspace.lib import role_registry
 from update_with_ai.parts.workspace.lib.stub import WorkspaceStubSynthesizer
 
@@ -26,195 +25,87 @@ class StubSynthesizerState:
     generated_count: int = 0
 
 
-proto = StateMachineProto[StubSynthesizerState]()
+class WorkspaceStubStateMachine(StateMachine[StubSynthesizerState]):
+    """Unified Pretense State Machine for WorkspaceStubSynthesizer."""
+
+    def __init__(
+        self,
+        state: Optional[StubSynthesizerState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or StubSynthesizerState(), singletons=singletons)
+
+    @transition.seeding(name="seed_stub_data")
+    def seed_stub_data(
+        self,
+        ctx: TransitionContext[Any, [Optional[Sequence[str]], Optional[Sequence[str]]], None],
+    ) -> None:
+        ctx.arguments(
+                    valid_stubs=Domain(strategy=lambda: ('lib/sample.py',)),
+                    stub_dep_files=Domain(strategy=lambda: ('lib/sample.py',)),
+                )
+        ctx.returns(lambda valid_stubs=None, stub_dep_files=None: None)
+        ctx.update(lambda res, valid_stubs=None, stub_dep_files=None: (
+            self.state.valid_stubs.update(valid_stubs or ()),
+            self.state.stub_dep_files.update(stub_dep_files or ()),
+        ))
+
+    @transition(WorkspaceStubSynthesizer.is_valid_test_stub)
+    def is_valid_test_stub(
+        self,
+        ctx: TransitionContext[WorkspaceStubSynthesizer, [str], bool],
+    ) -> None:
+        ctx.arguments(file_path=Domain(strategy=lambda: 'lib/sample.py'))
+        ctx.returns(lambda file_path="lib/sample.py": file_path in self.state.valid_stubs)
+        ctx.update(lambda res, file_path="lib/sample.py": None)
+
+    @transition(WorkspaceStubSynthesizer.is_stub_dep_file)
+    def is_stub_dep_file(
+        self,
+        ctx: TransitionContext[WorkspaceStubSynthesizer, [str, role_registry.RoleDefinition, Optional[str]], bool],
+    ) -> None:
+        ctx.arguments(
+                    rel_path=Domain(strategy=lambda: 'lib/sample.py'),
+                    role_def=Domain(strategy=lambda: role_registry.RoleDefinition(role_name='test', guide_path='guides/test.md', writable_file_patterns=('tests/*.py',), readonly_file_patterns=(), feedback_role_deps=(), stub_role_deps=('lib',))),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda rel_path="lib/sample.py", role_def=None, repo_root=None: rel_path in self.state.stub_dep_files)
+        ctx.update(lambda res, rel_path="lib/sample.py", role_def=None, repo_root=None: None)
+
+    @transition(WorkspaceStubSynthesizer.generate_readonly_test_stub)
+    def generate_readonly_test_stub(
+        self,
+        ctx: TransitionContext[WorkspaceStubSynthesizer, [Optional[str], str, str, str, Optional[Dict[str, Tuple[str, str]]]], None],
+    ) -> None:
+        ctx.arguments(
+                    pyi_path=Domain(strategy=lambda: None),
+                    stem=Domain(strategy=lambda: 'sample'),
+                    out_path=Domain(strategy=lambda: '/tmp/sample.py'),
+                    dep_dir=Domain(strategy=lambda: ''),
+                    part_map=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda pyi_path=None, stem="sample", out_path="/tmp/sample.py", dep_dir="", part_map=None: None)
+        ctx.update(lambda res, pyi_path=None, stem="sample", out_path="/tmp/sample.py", dep_dir="", part_map=None: (
+            setattr(self.state, "generated_count", self.state.generated_count + 1),
+            self.state.valid_stubs.add(out_path),
+        ))
+
+    @transition(WorkspaceStubSynthesizer.sync_all_stub_deps)
+    def sync_all_stub_deps(
+        self,
+        ctx: TransitionContext[WorkspaceStubSynthesizer, [str, str, role_registry.RoleDefinition, str], int],
+    ) -> None:
+        ctx.arguments(
+                    workspace_dir=Domain(strategy=lambda: '/tmp/ws'),
+                    main_root=Domain(strategy=lambda: '/tmp/repo'),
+                    role_def=Domain(strategy=lambda: role_registry.RoleDefinition(role_name='test', guide_path='guides/test.md', writable_file_patterns=('tests/*.py',), readonly_file_patterns=(), feedback_role_deps=(), stub_role_deps=('lib',))),
+                    dir_scope=Domain(strategy=lambda: 'staging'),
+                )
+        ctx.returns(lambda workspace_dir="/tmp/ws", main_root="/tmp/repo", role_def=None, dir_scope="staging": len(self.state.stub_dep_files))
+        ctx.update(lambda res, workspace_dir="/tmp/ws", main_root="/tmp/repo", role_def=None, dir_scope="staging": None)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_stub_data(): pass
-
-@seed_stub_data.arguments
-def _(
-    state: StubSynthesizerState,
-    this: Any,
-    valid_stubs: Optional[Sequence[str]] | NotBoundType = NotBound,
-    stub_dep_files: Optional[Sequence[str]] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[str], Sequence[str]]]:
-    vs = ("lib/sample.py",) if isinstance(valid_stubs, NotBoundType) or valid_stubs is None else tuple(valid_stubs)
-    sf = ("lib/sample.py",) if isinstance(stub_dep_files, NotBoundType) or stub_dep_files is None else tuple(stub_dep_files)
-    return (vs, sf)
-
-@seed_stub_data.provide
-def _(
-    state: StubSynthesizerState,
-    this: Any,
-    valid_stubs: Sequence[str],
-    stub_dep_files: Sequence[str],
-    result: None = None,
-) -> None:
-    state.valid_stubs.update(valid_stubs)
-    state.stub_dep_files.update(stub_dep_files)
-
-
-# ==============================================================================
-# 2. Stub Transitions
-# ==============================================================================
-
-@proto.transition(WorkspaceStubSynthesizer.is_valid_test_stub)
-def is_valid_test_stub(): pass
-
-@is_valid_test_stub.arguments
-def _(
-    state: StubSynthesizerState,
-    this: Any,
-    file_path: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    f = "lib/sample.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    return (f,)
-
-@is_valid_test_stub.returns
-def _(
-    state: StubSynthesizerState,
-    this: Any,
-    file_path: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[bool]]:
-    expected = file_path in state.valid_stubs
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceStubSynthesizer.is_stub_dep_file)
-def is_stub_dep_file(): pass
-
-@is_stub_dep_file.arguments
-def _(
-    state: StubSynthesizerState,
-    this: Any,
-    rel_path: str | NotBoundType = NotBound,
-    role_def: role_registry.RoleDefinition | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, role_registry.RoleDefinition, Optional[str]]]:
-    rp = "lib/sample.py" if isinstance(rel_path, NotBoundType) else str(rel_path)
-    rd = (
-        role_registry.RoleDefinition(
-            role_name="test",
-            guide_path="guides/test.md",
-            writable_file_patterns=("tests/*.py",),
-            readonly_file_patterns=(),
-            feedback_role_deps=(),
-            stub_role_deps=("lib",),
-        )
-        if isinstance(role_def, NotBoundType)
-        else role_def
-    )
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (rp, rd, rr)
-
-@is_stub_dep_file.returns
-def _(
-    state: StubSynthesizerState,
-    this: Any,
-    rel_path: str,
-    role_def: role_registry.RoleDefinition,
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[bool]]:
-    expected = rel_path in state.stub_dep_files
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceStubSynthesizer.generate_readonly_test_stub)
-def generate_readonly_test_stub(): pass
-
-@generate_readonly_test_stub.arguments
-def _(
-    state: StubSynthesizerState,
-    this: Any,
-    pyi_path: Optional[str] | NotBoundType = NotBound,
-    stem: str | NotBoundType = NotBound,
-    out_path: str | NotBoundType = NotBound,
-    dep_dir: str | NotBoundType = NotBound,
-    part_map: Optional[Dict[str, Tuple[str, str]]] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], str, str, str, Optional[Dict[str, Tuple[str, str]]]]]:
-    pyi = None if isinstance(pyi_path, NotBoundType) else pyi_path
-    st = "sample" if isinstance(stem, NotBoundType) else str(stem)
-    out = "/tmp/sample.py" if isinstance(out_path, NotBoundType) else str(out_path)
-    dep = "" if isinstance(dep_dir, NotBoundType) else str(dep_dir)
-    pm = None if isinstance(part_map, NotBoundType) else part_map
-    return (pyi, st, out, dep, pm)
-
-@generate_readonly_test_stub.returns
-def _(
-    state: StubSynthesizerState,
-    this: Any,
-    pyi_path: Optional[str],
-    stem: str,
-    out_path: str,
-    dep_dir: str,
-    part_map: Optional[Dict[str, Tuple[str, str]]],
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    state.generated_count += 1
-    state.valid_stubs.add(out_path)
-    return Value(None)
-
-
-@proto.transition(WorkspaceStubSynthesizer.sync_all_stub_deps)
-def sync_all_stub_deps(): pass
-
-@sync_all_stub_deps.arguments
-def _(
-    state: StubSynthesizerState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-    main_root: str | NotBoundType = NotBound,
-    role_def: role_registry.RoleDefinition | NotBoundType = NotBound,
-    dir_scope: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, role_registry.RoleDefinition, str]]:
-    ws = "/tmp/ws" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    mr = "/tmp/repo" if isinstance(main_root, NotBoundType) else str(main_root)
-    rd = (
-        role_registry.RoleDefinition(
-            role_name="test",
-            guide_path="guides/test.md",
-            writable_file_patterns=("tests/*.py",),
-            readonly_file_patterns=(),
-            feedback_role_deps=(),
-            stub_role_deps=("lib",),
-        )
-        if isinstance(role_def, NotBoundType)
-        else role_def
-    )
-    ds = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    return (ws, mr, rd, ds)
-
-@sync_all_stub_deps.returns
-def _(
-    state: StubSynthesizerState,
-    this: Any,
-    workspace_dir: str,
-    main_root: str,
-    role_def: role_registry.RoleDefinition,
-    dir_scope: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    expected = len(state.stub_dep_files)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = WorkspaceStubStateMachine()
 
 
 # ==============================================================================

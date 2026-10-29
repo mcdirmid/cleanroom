@@ -149,14 +149,12 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             f"--------------------------------------------------------------------------------\n"
             f"{spans_detail}\n"
             f"--------------------------------------------------------------------------------\n"
-            f"AGENT GUIDANCE:\n"
-            f"1. Read the library implementation file with line numbers enabled to analyze uncovered cases.\n"
-            f"2. Translate each uncovered statement into missing requirements with respect to the grounding specification.\n"
-            f"3. Deliver blame feedback to the test agent exclusively using the language of the grounding specification.\n"
-            f"   DO NOT cite library file names, file paths, or line numbers in the feedback.\n"
-            f"4. If an uncovered line represents an impossible case or caller assumption guaranteed by the grounding contract,\n"
-            f"   the ONLY permitted blame feedback to the library implementation is to mark the line with:\n"
-            f"   # pragma: no cover (assumption: <reason>)\n"
+            f"AGENT GUIDANCE / COVERAGE ARBITER REMINDER [EXPLAIN FEEDBACK IN TERMS OF SPECIFICATION]:\n"
+            f"• Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification.\n"
+            f"• Line numbers MAY be mentioned ONLY IF they reference the file being blamed.\n"
+            f"• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
+            f"• Translate uncovered statements and branches into missing specification requirements or scenario cases.\n"
+            f"• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable according to the methodology.\n"
             f"================================================================================\n"
         )
 
@@ -444,8 +442,8 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
         return cov
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-21T20:15:00Z
-# CHANGE: Include enclosing package scope roots and ancestor paths in coverage loader search paths
+# LAST_CHANGED: 2026-10-29T00:30:00Z
+# CHANGE: Appends agent guidance directing blame feedback in terms of common specification compliance, permitting line numbers only in blamed file while forbidding exposing details of other files
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

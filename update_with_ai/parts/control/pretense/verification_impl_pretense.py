@@ -9,6 +9,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
@@ -29,9 +30,6 @@ class VerificationState:
     )
 
 
-proto = StateMachineProto[VerificationState]()
-
-
 # Noise patterns matching verification_impl._NOISE_PATTERNS
 _NOISE_PATTERNS = (
     re.compile(r"^INFO: Analyzed target"),
@@ -50,107 +48,72 @@ _NOISE_PATTERNS = (
 )
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
+class VerificationStateMachine(StateMachine[VerificationState]):
+    """Pretense StateMachine for VerificationEvaluator."""
 
-@proto.seeding()
-def seed_verification_result(): pass
+    def __init__(self, state: Optional[VerificationState] = None):
+        super().__init__(state=state or VerificationState())
 
-@seed_verification_result.arguments
-def _(
-    state: VerificationState,
-    this: Any,
-    node: Optional[DagNode] | NotBoundType = NotBound,
-    passed: bool | NotBoundType = NotBound,
-    diagnostic: str | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[DagNode], bool, str]]:
-    n = None if isinstance(node, NotBoundType) else node
-    p = True if isinstance(passed, NotBoundType) else bool(passed)
-    d = "Passed" if isinstance(diagnostic, NotBoundType) else str(diagnostic)
-    return (n, p, d)
+    # ==============================================================================
+    # 1. Seeding Transitions
+    # ==============================================================================
 
-@seed_verification_result.provide
-def _(
-    state: VerificationState,
-    this: Any,
-    node: Optional[DagNode],
-    passed: bool,
-    diagnostic: str,
-    result: None = None,
-) -> None:
-    res = VerificationResult(passed=passed, diagnostic_output=diagnostic, is_cached=False)
-    if node is None:
-        state.default_result = res
-    else:
-        state.results_by_node[node] = res
+    @transition.seeding()
+    def seed_verification_result(
+        self,
+        ctx: TransitionContext[None, [Optional[DagNode], bool, str], None],
+    ) -> None:
+        ctx.arguments(
+                    node=Domain(strategy=lambda: None),
+                    passed=Domain(strategy=lambda: True),
+                    diagnostic=Domain(strategy=lambda: 'Passed'),
+                )
+        def _consequent(
+            res: None,
+            node: Optional[DagNode] = None,
+            passed: bool = True,
+            diagnostic: str = "Passed",
+        ) -> None:
+            r = VerificationResult(passed=passed, diagnostic_output=diagnostic, is_cached=False)
+            if node is None:
+                self.state.default_result = r
+            else:
+                self.state.results_by_node[node] = r
+        ctx.update(_consequent)
 
+    # ==============================================================================
+    # 2. VerificationEvaluator Transitions
+    # ==============================================================================
 
-# ==============================================================================
-# 2. VerificationEvaluator Transitions
-# ==============================================================================
+    @transition(VerificationEvaluator.clean_diagnostic_noise)
+    def clean_diagnostic_noise(
+        self,
+        ctx: TransitionContext[VerificationEvaluator, [str], str],
+    ) -> None:
+        ctx.arguments(text=Domain(strategy=lambda: 'INFO: Elapsed time 0.1s\nError on line 12'))
+        def _returns(text: str = "") -> str:
+            lines = text.splitlines()
+            filtered = [
+                line for line in lines
+                if not any(pattern.search(line.strip()) for pattern in _NOISE_PATTERNS)
+            ]
+            return "\n".join(filtered).strip()
+        ctx.returns(_returns)
 
-@proto.transition(VerificationEvaluator.clean_diagnostic_noise)
-def clean_diagnostic_noise(): pass
-
-@clean_diagnostic_noise.arguments
-def _(
-    state: VerificationState,
-    this: Any,
-    text: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    t = "INFO: Elapsed time 0.1s\nError on line 12" if isinstance(text, NotBoundType) else str(text)
-    return (t,)
-
-@clean_diagnostic_noise.returns
-def _(
-    state: VerificationState,
-    this: Any,
-    text: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[str]]:
-    lines = text.splitlines()
-    filtered = [
-        line for line in lines
-        if not any(pattern.search(line.strip()) for pattern in _NOISE_PATTERNS)
-    ]
-    expected = "\n".join(filtered).strip()
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+    @transition(VerificationEvaluator.evaluate_verification)
+    def evaluate_verification(
+        self,
+        ctx: TransitionContext[VerificationEvaluator, [Optional[DagNode]], VerificationResult],
+    ) -> None:
+        ctx.arguments(target=Domain(strategy=lambda: None))
+        def _returns(target: Optional[DagNode] = None) -> VerificationResult:
+            if target is not None and target in self.state.results_by_node:
+                return self.state.results_by_node[target]
+            return self.state.default_result
+        ctx.returns(_returns)
 
 
-@proto.transition(VerificationEvaluator.evaluate_verification)
-def evaluate_verification(): pass
-
-@evaluate_verification.arguments
-def _(
-    state: VerificationState,
-    this: Any,
-    target: Optional[DagNode] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[DagNode]]]:
-    t = None if isinstance(target, NotBoundType) else target
-    return (t,)
-
-@evaluate_verification.returns
-def _(
-    state: VerificationState,
-    this: Any,
-    target: Optional[DagNode],
-    outcome: object = NotBound,
-) -> Optional[Outcome[VerificationResult]]:
-    if target is not None and target in state.results_by_node:
-        expected = state.results_by_node[target]
-    else:
-        expected = state.default_result
-
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = VerificationStateMachine()
 
 
 # ==============================================================================
@@ -159,8 +122,7 @@ def _(
 
 def make_verification_fake(state: Optional[VerificationState] = None) -> VerificationEvaluator:
     """Instantiate a synthesized VerificationEvaluator fake."""
-    st = state or VerificationState()
-    sm = proto.make_state_machine(st)
+    sm = VerificationStateMachine(state)
     return sm.as_fake(VerificationEvaluator)
 
 
@@ -173,7 +135,7 @@ class TestVerificationEvaluatorUnit(unittest.TestCase):
 
     def setUp(self) -> None:
         self.state = VerificationState()
-        self.sm = proto.make_state_machine(self.state)
+        self.sm = VerificationStateMachine(self.state)
         self.node = DagNode(UnitAddress("part_a"), RoleAddress("lib"))
         self.sm.seed_verification_result(self.node, passed=False, diagnostic="Compilation error in part_a")
         self.fake: VerificationEvaluator = self.sm.as_fake(VerificationEvaluator)

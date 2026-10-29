@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 import unittest
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
 from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.control.lib import work_scheduler
@@ -182,6 +182,7 @@ def _role(
     stub_role_deps: Optional[List[str]] = None,
     audit_tag: Optional[str] = None,
     silent_role_deps: Optional[List[str]] = None,
+    fused_roles: Optional[Sequence[str]] = None,
 ) -> role_registry.RoleDefinition:
     return role_registry.RoleDefinition(
         role_name=name,
@@ -195,6 +196,7 @@ def _role(
         stub_role_deps=stub_role_deps or [],
         silent_role_deps=silent_role_deps or [],
         audit_tag=audit_tag,
+        fused_roles=tuple(fused_roles) if fused_roles else (),
     )
 
 
@@ -249,6 +251,13 @@ def _make_roles():
             star_role_deps=["low"],
             silent_role_deps=["qa"],
             audit_tag="COVERAGE_AUDIT",
+        ),
+        _role(
+            "baseline",
+            "",
+            ["lib/*.py", "tests/*.py"],
+            readonly=["low/*.pyi"],
+            fused_roles=["lib", "test", "qa", "coverage"],
         ),
         _role(
             "scenario",
@@ -891,6 +900,54 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             self.assertEqual(len(ready_cov), 1)
             self.assertEqual(len(blocked_cov), 0)
             self.assertEqual(ready_cov[0].target_file, "staging/parts/alpha/lib/alpha.py")
+
+    def test_compute_role_work_queue_fused_roles(self) -> None:
+        with tempfile.TemporaryDirectory() as repo_root:
+            cleanroom_toml = (
+                "[methodology]\nname = 'python'\n\n"
+                "[roles.low]\nname = 'low'\nsrc_pattern = '{unit_dir}/low/{unit_name}.pyi'\n\n"
+                "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\nrole_deps = ['low']\n\n"
+                "[roles.test]\nname = 'test'\nsrc_pattern = '{unit_dir}/tests/{unit_name}_test.py'\nrole_deps = ['low']\n\n"
+                "[roles.qa]\nname = 'qa'\naudit_tag = 'QA_AUDIT'\nrole_deps = ['lib', 'test']\nfeedback_role_deps = ['lib', 'test']\n\n"
+                "[roles.coverage]\nname = 'coverage'\naudit_tag = 'COVERAGE_AUDIT'\nrole_deps = ['lib', 'test', 'qa']\nfeedback_role_deps = ['lib', 'test']\n\n"
+                "[fused_roles.baseline]\nroles = ['lib', 'test', 'qa', 'coverage']\n"
+            )
+            with open(os.path.join(repo_root, "cleanroom_roles.toml"), "w", encoding="utf-8") as f:
+                f.write(cleanroom_toml)
+
+            part_a = os.path.join(repo_root, "staging/parts/alpha")
+            os.makedirs(os.path.join(part_a, "low"), exist_ok=True)
+            os.makedirs(os.path.join(part_a, "lib"), exist_ok=True)
+            os.makedirs(os.path.join(part_a, "tests"), exist_ok=True)
+
+            with open(os.path.join(part_a, "cleanroom.toml"), "w", encoding="utf-8") as f:
+                f.write("[part]\nunits = ['alpha']\n")
+
+            clean_spec = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-18T19:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-18T19:00:00Z\n"
+                "# CHANGE: Spec\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+            with open(os.path.join(part_a, "low/alpha.pyi"), "w", encoding="utf-8") as f:
+                f.write(clean_spec)
+
+            # lib and test are missing (dirty), so qa and coverage would normally be blocked
+            ready_fused, blocked_fused = self.work_mgr.compute_role_work_queue(
+                role_name="baseline",
+                dir_scope="staging",
+                repo_root=repo_root,
+            )
+            # Under fused baseline, intra-fuse dependencies are relaxed, so targets across fused roles are returned
+            fused_roles_in_ready = {item.role_name for item in ready_fused}
+            self.assertIn("lib", fused_roles_in_ready)
+            self.assertIn("test", fused_roles_in_ready)
+            self.assertIn("qa", fused_roles_in_ready)
+            self.assertIn("coverage", fused_roles_in_ready)
+            self.assertEqual(len(blocked_fused), 0)
+            self.assertIn("test", fused_roles_in_ready)
+            self.assertEqual(len(blocked_fused), 0)
 
 
 if __name__ == "__main__":

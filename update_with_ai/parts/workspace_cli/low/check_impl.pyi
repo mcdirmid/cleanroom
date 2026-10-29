@@ -42,8 +42,9 @@ class WorkspaceChecker(check.WorkspaceChecker):
 
         GROUNDING:
         - Evaluates dirty work using work.WorkspaceWorkManager.compute_role_work_queue,
-          formats ready and blocked items with actionable next steps directing immediate
-          round conclusion when zero ready targets remain and blocked targets are pending,
+          verifies when gemini-argon is configured on the antigravity harness that the active subagent conversation is executing on gemini-argon,
+          formats ready and blocked items with a prominent round conclusion directive directing immediate
+          round conclusion without further tool calls when zero ready targets remain,
           resolving workspace-relative companion guide paths,
           and records pending targets using pending.WorkspacePendingManager.set_pending_work.
         """
@@ -63,7 +64,8 @@ class WorkspaceChecker(check.WorkspaceChecker):
           extracts max_failures from active model configuration (defaulting to 5 for local engines and 100 for non-local models) and propagates failure limits to test execution runners,
           assembles verification environment bounded strictly to the active role workspace and its constituent package directories, isolating verification from the canonical repository root in PYTHONPATH and sys.path,
           enforces an execution timeout on verification commands to prevent blocked sub-processes from stalling the workspace developer loop and reports verification failure with code-defect diagnostic messaging when execution expires,
-          executes verification checks from role_registry.RoleDefinition, and
+          executes verification checks from role_registry.RoleDefinition,
+          formats prominent specification grounding reminders upon verification failure when executing in auditor roles directing blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files, and
           records verification execution records and target file hashes in the workspace.
         """
         ...
@@ -91,7 +93,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T12:40:00Z
-# LAST_CHANGED: 2026-10-26T12:40:00Z
-# CHANGE: Clarify in check_files that verification timeouts indicate code defects rather than infrastructure failures
+# LAST_CHANGED: 2026-10-29T00:30:00Z
+# CHANGE: Format auditor specification grounding reminders permitting line numbers in blamed file while forbidding exposing details of other files
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

@@ -8,9 +8,8 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.workspace.lib.sync import (
     SyncResult,
     WorkspaceSynchronizer,
@@ -27,190 +26,101 @@ class SyncState:
     flushed_blames: PretenseSet[str] = field(default_factory=PretenseSet)
 
 
-proto = StateMachineProto[SyncState]()
+class WorkspaceSyncStateMachine(StateMachine[SyncState]):
+    """Unified Pretense State Machine for WorkspaceSynchronizer."""
+
+    def __init__(
+        self,
+        state: Optional[SyncState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or SyncState(), singletons=singletons)
+
+    @transition.seeding(name="seed_sync_counts")
+    def seed_sync_counts(
+        self,
+        ctx: TransitionContext[Any, [int, int], None],
+    ) -> None:
+        ctx.arguments(
+                    pulled_count=Domain(strategy=lambda: 5),
+                    refreshed_count=Domain(strategy=lambda: 3),
+                )
+        ctx.returns(lambda pulled_count=5, refreshed_count=3: None)
+        ctx.update(lambda res, pulled_count=5, refreshed_count=3: (
+            setattr(self.state, "pulled_count", int(pulled_count)),
+            setattr(self.state, "refreshed_count", int(refreshed_count)),
+        ))
+
+    @transition.seeding(name="seed_harvest_artifacts")
+    def seed_harvest_artifacts(
+        self,
+        ctx: TransitionContext[Any, [Optional[Sequence[str]], Optional[Sequence[str]], Optional[Sequence[str]]], None],
+    ) -> None:
+        ctx.arguments(
+                    harvested_files=Domain(strategy=lambda: ()),
+                    stamped_audits=Domain(strategy=lambda: ()),
+                    flushed_blames=Domain(strategy=lambda: ()),
+                )
+        ctx.returns(lambda harvested_files=None, stamped_audits=None, flushed_blames=None: None)
+        ctx.update(lambda res, harvested_files=None, stamped_audits=None, flushed_blames=None: (
+            setattr(self.state, "harvested_files", PretenseSet(harvested_files or ())),
+            setattr(self.state, "stamped_audits", PretenseSet(stamped_audits or ())),
+            setattr(self.state, "flushed_blames", PretenseSet(flushed_blames or ())),
+        ))
+
+    @transition(WorkspaceSynchronizer.pull)
+    def pull(
+        self,
+        ctx: TransitionContext[WorkspaceSynchronizer, [str, str, str, str, bool], int],
+    ) -> None:
+        ctx.arguments(
+                    workspace_dir=Domain(strategy=lambda: '/repo/staging/role_workspaces/lib'),
+                    main_root=Domain(strategy=lambda: '/repo'),
+                    role_name=Domain(strategy=lambda: 'lib'),
+                    dir_scope=Domain(strategy=lambda: 'staging'),
+                    silent=Domain(strategy=lambda: False),
+                )
+        ctx.returns(lambda workspace_dir="/repo/staging/role_workspaces/lib", main_root="/repo", role_name="lib", dir_scope="staging", silent=False: self.state.pulled_count)
+        ctx.update(lambda res, workspace_dir="/repo/staging/role_workspaces/lib", main_root="/repo", role_name="lib", dir_scope="staging", silent=False: None)
+
+    @transition(WorkspaceSynchronizer.refresh_system_files)
+    def refresh_system_files(
+        self,
+        ctx: TransitionContext[WorkspaceSynchronizer, [str, str, str, str, bool], int],
+    ) -> None:
+        ctx.arguments(
+                    workspace_dir=Domain(strategy=lambda: '/repo/staging/role_workspaces/lib'),
+                    main_root=Domain(strategy=lambda: '/repo'),
+                    role_name=Domain(strategy=lambda: 'lib'),
+                    dir_scope=Domain(strategy=lambda: 'staging'),
+                    silent=Domain(strategy=lambda: False),
+                )
+        ctx.returns(lambda workspace_dir="/repo/staging/role_workspaces/lib", main_root="/repo", role_name="lib", dir_scope="staging", silent=False: self.state.refreshed_count)
+        ctx.update(lambda res, workspace_dir="/repo/staging/role_workspaces/lib", main_root="/repo", role_name="lib", dir_scope="staging", silent=False: None)
+
+    @transition(WorkspaceSynchronizer.harvest)
+    def harvest(
+        self,
+        ctx: TransitionContext[WorkspaceSynchronizer, [str, str, str, str], SyncResult],
+    ) -> None:
+        ctx.arguments(
+                    workspace_dir=Domain(strategy=lambda: '/repo/staging/role_workspaces/lib'),
+                    main_root=Domain(strategy=lambda: '/repo'),
+                    role_name=Domain(strategy=lambda: 'lib'),
+                    dir_scope=Domain(strategy=lambda: 'staging'),
+                )
+        ctx.returns(lambda workspace_dir="/repo/staging/role_workspaces/lib", main_root="/repo", role_name="lib", dir_scope="staging": (
+            SyncResult(
+                pulled_files=self.state.pulled_count,
+                harvested_files=len(self.state.harvested_files),
+                stamped_audits=tuple(sorted(self.state.stamped_audits)),
+                flushed_blames=tuple(sorted(self.state.flushed_blames)),
+            )
+        ))
+        ctx.update(lambda res, workspace_dir="/repo/staging/role_workspaces/lib", main_root="/repo", role_name="lib", dir_scope="staging": None)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_sync_counts(): pass
-
-@seed_sync_counts.arguments
-def _(
-    state: SyncState,
-    this: Any,
-    pulled_count: int | NotBoundType = NotBound,
-    refreshed_count: int | NotBoundType = NotBound,
-) -> Optional[Tuple[int, int]]:
-    p = 5 if isinstance(pulled_count, NotBoundType) else int(pulled_count)
-    r = 3 if isinstance(refreshed_count, NotBoundType) else int(refreshed_count)
-    return (p, r)
-
-@seed_sync_counts.provide
-def _(
-    state: SyncState,
-    this: Any,
-    pulled_count: int,
-    refreshed_count: int,
-    result: None = None,
-) -> None:
-    state.pulled_count = pulled_count
-    state.refreshed_count = refreshed_count
-
-
-@proto.seeding()
-def seed_harvest_artifacts(): pass
-
-@seed_harvest_artifacts.arguments
-def _(
-    state: SyncState,
-    this: Any,
-    harvested_files: Optional[Sequence[str]] | NotBoundType = NotBound,
-    stamped_audits: Optional[Sequence[str]] | NotBoundType = NotBound,
-    flushed_blames: Optional[Sequence[str]] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[str], Sequence[str], Sequence[str]]]:
-    h = () if isinstance(harvested_files, NotBoundType) or harvested_files is None else tuple(harvested_files)
-    a = () if isinstance(stamped_audits, NotBoundType) or stamped_audits is None else tuple(stamped_audits)
-    b = () if isinstance(flushed_blames, NotBoundType) or flushed_blames is None else tuple(flushed_blames)
-    return (h, a, b)
-
-@seed_harvest_artifacts.provide
-def _(
-    state: SyncState,
-    this: Any,
-    harvested_files: Sequence[str],
-    stamped_audits: Sequence[str],
-    flushed_blames: Sequence[str],
-    result: None = None,
-) -> None:
-    state.harvested_files = PretenseSet(harvested_files)
-    state.stamped_audits = PretenseSet(stamped_audits)
-    state.flushed_blames = PretenseSet(flushed_blames)
-
-
-# ==============================================================================
-# 2. WorkspaceSynchronizer Transitions
-# ==============================================================================
-
-@proto.transition(WorkspaceSynchronizer.pull)
-def pull(): pass
-
-@pull.arguments
-def _(
-    state: SyncState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-    main_root: str | NotBoundType = NotBound,
-    role_name: str | NotBoundType = NotBound,
-    dir_scope: str | NotBoundType = NotBound,
-    silent: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str, str, bool]]:
-    w = "/repo/staging/role_workspaces/lib" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    m = "/repo" if isinstance(main_root, NotBoundType) else str(main_root)
-    r = "lib" if isinstance(role_name, NotBoundType) else str(role_name)
-    d = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    s = False if isinstance(silent, NotBoundType) else bool(silent)
-    return (w, m, r, d, s)
-
-@pull.returns
-def _(
-    state: SyncState,
-    this: Any,
-    workspace_dir: str,
-    main_root: str,
-    role_name: str,
-    dir_scope: str,
-    silent: bool,
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    expected = state.pulled_count
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceSynchronizer.refresh_system_files)
-def refresh_system_files(): pass
-
-@refresh_system_files.arguments
-def _(
-    state: SyncState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-    main_root: str | NotBoundType = NotBound,
-    role_name: str | NotBoundType = NotBound,
-    dir_scope: str | NotBoundType = NotBound,
-    silent: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str, str, bool]]:
-    w = "/repo/staging/role_workspaces/lib" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    m = "/repo" if isinstance(main_root, NotBoundType) else str(main_root)
-    r = "lib" if isinstance(role_name, NotBoundType) else str(role_name)
-    d = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    s = False if isinstance(silent, NotBoundType) else bool(silent)
-    return (w, m, r, d, s)
-
-@refresh_system_files.returns
-def _(
-    state: SyncState,
-    this: Any,
-    workspace_dir: str,
-    main_root: str,
-    role_name: str,
-    dir_scope: str,
-    silent: bool,
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    expected = state.refreshed_count
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceSynchronizer.harvest)
-def harvest(): pass
-
-@harvest.arguments
-def _(
-    state: SyncState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-    main_root: str | NotBoundType = NotBound,
-    role_name: str | NotBoundType = NotBound,
-    dir_scope: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str, str]]:
-    w = "/repo/staging/role_workspaces/lib" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    m = "/repo" if isinstance(main_root, NotBoundType) else str(main_root)
-    r = "lib" if isinstance(role_name, NotBoundType) else str(role_name)
-    d = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    return (w, m, r, d)
-
-@harvest.returns
-def _(
-    state: SyncState,
-    this: Any,
-    workspace_dir: str,
-    main_root: str,
-    role_name: str,
-    dir_scope: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[SyncResult]]:
-    expected = SyncResult(
-        pulled_files=state.pulled_count,
-        harvested_files=len(state.harvested_files),
-        stamped_audits=tuple(sorted(state.stamped_audits)),
-        flushed_blames=tuple(sorted(state.flushed_blames)),
-    )
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = WorkspaceSyncStateMachine()
 
 
 # ==============================================================================

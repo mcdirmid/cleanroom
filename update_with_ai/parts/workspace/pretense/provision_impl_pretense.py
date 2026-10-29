@@ -12,9 +12,8 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.workspace.lib import role_registry
 from update_with_ai.parts.workspace.lib.provision import WorkspaceProvisioner
 
@@ -26,234 +25,124 @@ class ProvisionerState:
     stubs_count: int = 0
 
 
-proto = StateMachineProto[ProvisionerState]()
+class WorkspaceProvisionStateMachine(StateMachine[ProvisionerState]):
+    """Unified Pretense State Machine for WorkspaceProvisioner."""
+
+    def __init__(
+        self,
+        state: Optional[ProvisionerState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or ProvisionerState(), singletons=singletons)
+
+    @transition.seeding(name="seed_provisioner_data")
+    def seed_provisioner_data(
+        self,
+        ctx: TransitionContext[Any, [int], None],
+    ) -> None:
+        ctx.arguments(stubs_count=Domain(strategy=lambda: 2))
+        ctx.returns(lambda stubs_count=2: None)
+        ctx.update(lambda res, stubs_count=2: setattr(self.state, "stubs_count", int(stubs_count)))
+
+    @transition(WorkspaceProvisioner.commission)
+    def commission(
+        self,
+        ctx: TransitionContext[WorkspaceProvisioner, [str, str, Optional[str], Optional[str], bool, Optional[str]], role_registry.WorkspaceDescriptor],
+    ) -> None:
+        ctx.arguments(
+                    role_name=Domain(strategy=lambda: 'lib'),
+                    dir_scope=Domain(strategy=lambda: 'staging'),
+                    repo_root=Domain(strategy=lambda: None),
+                    custom_dest=Domain(strategy=lambda: None),
+                    reset=Domain(strategy=lambda: False),
+                    model=Domain(strategy=lambda: None),
+                )
+        def returns(role_name: str = "lib", dir_scope: str = "staging", repo_root: Optional[str] = None, custom_dest: Optional[str] = None, reset: bool = False, model: Optional[str] = None) -> role_registry.WorkspaceDescriptor:
+            ws_dir = custom_dest or f"/tmp/workspaces/{role_name}_{dir_scope.replace('/', '_')}"
+            desc = role_registry.WorkspaceDescriptor(
+                workspace_dir=ws_dir,
+                main_repository_root=repo_root or "/repo",
+                directory_scope=dir_scope,
+                role_definition=role_registry.RoleDefinition(
+                    role_name=role_name,
+                    guide_path=f"guides/{role_name}.md",
+                    writable_file_patterns=(f"{role_name}/*.py",),
+                    readonly_file_patterns=(),
+                    feedback_role_deps=(),
+                ),
+            )
+            self.state.commissioned_workspaces[ws_dir] = desc
+            return desc
+        ctx.returns(returns)
+        ctx.update(lambda res, role_name="lib", dir_scope="staging", repo_root=None, custom_dest=None, reset=False, model=None: None)
+
+    @transition(WorkspaceProvisioner.copy_file_with_permissions)
+    def copy_file_with_permissions(
+        self,
+        ctx: TransitionContext[WorkspaceProvisioner, [str, str, bool, bool], None],
+    ) -> None:
+        ctx.arguments(
+                    src=Domain(strategy=lambda: '/tmp/src'),
+                    dst=Domain(strategy=lambda: '/tmp/dst'),
+                    readonly=Domain(strategy=lambda: False),
+                    executable=Domain(strategy=lambda: False),
+                )
+        ctx.returns(lambda src="/tmp/src", dst="/tmp/dst", readonly=False, executable=False: None)
+        ctx.update(lambda res, src="/tmp/src", dst="/tmp/dst", readonly=False, executable=False: None)
+
+    @transition(WorkspaceProvisioner.write_file_with_permissions)
+    def write_file_with_permissions(
+        self,
+        ctx: TransitionContext[WorkspaceProvisioner, [str, str, bool, bool], None],
+    ) -> None:
+        ctx.arguments(
+                    dst=Domain(strategy=lambda: '/tmp/dst'),
+                    content=Domain(strategy=lambda: 'data'),
+                    readonly=Domain(strategy=lambda: False),
+                    executable=Domain(strategy=lambda: False),
+                )
+        ctx.returns(lambda dst="/tmp/dst", content="data", readonly=False, executable=False: None)
+        ctx.update(lambda res, dst="/tmp/dst", content="data", readonly=False, executable=False: None)
+
+    @transition(WorkspaceProvisioner.deploy_runner_zipapps)
+    def deploy_runner_zipapps(
+        self,
+        ctx: TransitionContext[WorkspaceProvisioner, [str], None],
+    ) -> None:
+        ctx.arguments(bin_dir=Domain(strategy=lambda: '/tmp/bin'))
+        ctx.returns(lambda bin_dir="/tmp/bin": None)
+        ctx.update(lambda res, bin_dir="/tmp/bin": None)
+
+    @transition(WorkspaceProvisioner.write_role_agents_guide)
+    def write_role_agents_guide(
+        self,
+        ctx: TransitionContext[WorkspaceProvisioner, [str, str, str, Optional[str]], None],
+    ) -> None:
+        ctx.arguments(
+                    workspace_dir=Domain(strategy=lambda: '/tmp/ws'),
+                    role_name=Domain(strategy=lambda: 'lib'),
+                    dir_scope=Domain(strategy=lambda: 'staging'),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda workspace_dir="/tmp/ws", role_name="lib", dir_scope="staging", repo_root=None: None)
+        ctx.update(lambda res, workspace_dir="/tmp/ws", role_name="lib", dir_scope="staging", repo_root=None: None)
+
+    @transition(WorkspaceProvisioner.sync_test_stubs)
+    def sync_test_stubs(
+        self,
+        ctx: TransitionContext[WorkspaceProvisioner, [str, str, str, Optional[str]], int],
+    ) -> None:
+        ctx.arguments(
+                    workspace_dir=Domain(strategy=lambda: '/tmp/ws'),
+                    role_name=Domain(strategy=lambda: 'test'),
+                    dir_scope=Domain(strategy=lambda: 'staging'),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda workspace_dir="/tmp/ws", role_name="test", dir_scope="staging", repo_root=None: self.state.stubs_count)
+        ctx.update(lambda res, workspace_dir="/tmp/ws", role_name="test", dir_scope="staging", repo_root=None: None)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_provisioner_data(): pass
-
-@seed_provisioner_data.arguments
-def _(
-    state: ProvisionerState,
-    this: Any,
-    stubs_count: int | NotBoundType = NotBound,
-) -> Optional[Tuple[int]]:
-    s = 2 if isinstance(stubs_count, NotBoundType) else int(stubs_count)
-    return (s,)
-
-@seed_provisioner_data.provide
-def _(
-    state: ProvisionerState,
-    this: Any,
-    stubs_count: int,
-    result: None = None,
-) -> None:
-    state.stubs_count = stubs_count
-
-
-# ==============================================================================
-# 2. Provisioner Transitions
-# ==============================================================================
-
-@proto.transition(WorkspaceProvisioner.commission)
-def commission(): pass
-
-@commission.arguments
-def _(
-    state: ProvisionerState,
-    this: Any,
-    role_name: str | NotBoundType = NotBound,
-    dir_scope: str | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    custom_dest: Optional[str] | NotBoundType = NotBound,
-    reset: bool | NotBoundType = NotBound,
-    model: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, Optional[str], Optional[str], bool, Optional[str]]]:
-    rn = "lib" if isinstance(role_name, NotBoundType) else str(role_name)
-    ds = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    cd = None if isinstance(custom_dest, NotBoundType) else custom_dest
-    rs = False if isinstance(reset, NotBoundType) else bool(reset)
-    m = None if isinstance(model, NotBoundType) else model
-    return (rn, ds, rr, cd, rs, m)
-
-@commission.returns
-def _(
-    state: ProvisionerState,
-    this: Any,
-    role_name: str,
-    dir_scope: str,
-    repo_root: Optional[str],
-    custom_dest: Optional[str],
-    reset: bool,
-    model: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[role_registry.WorkspaceDescriptor]]:
-    ws_dir = custom_dest or f"/tmp/workspaces/{role_name}_{dir_scope.replace('/', '_')}"
-    desc = role_registry.WorkspaceDescriptor(
-        workspace_dir=ws_dir,
-        main_repository_root=repo_root or "/repo",
-        directory_scope=dir_scope,
-        role_definition=role_registry.RoleDefinition(
-            role_name=role_name,
-            guide_path=f"guides/{role_name}.md",
-            writable_file_patterns=(f"{role_name}/*.py",),
-            readonly_file_patterns=(),
-            feedback_role_deps=(),
-        ),
-    )
-    state.commissioned_workspaces[ws_dir] = desc
-    return Value(desc)
-
-
-@proto.transition(WorkspaceProvisioner.copy_file_with_permissions)
-def copy_file_with_permissions(): pass
-
-@copy_file_with_permissions.arguments
-def _(
-    state: ProvisionerState,
-    this: Any,
-    src: str | NotBoundType = NotBound,
-    dst: str | NotBoundType = NotBound,
-    readonly: bool | NotBoundType = NotBound,
-    executable: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, bool, bool]]:
-    s = "/tmp/src" if isinstance(src, NotBoundType) else str(src)
-    d = "/tmp/dst" if isinstance(dst, NotBoundType) else str(dst)
-    r = False if isinstance(readonly, NotBoundType) else bool(readonly)
-    e = False if isinstance(executable, NotBoundType) else bool(executable)
-    return (s, d, r, e)
-
-@copy_file_with_permissions.returns
-def _(
-    state: ProvisionerState,
-    this: Any,
-    src: str,
-    dst: str,
-    readonly: bool,
-    executable: bool,
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    return Value(None)
-
-
-@proto.transition(WorkspaceProvisioner.write_file_with_permissions)
-def write_file_with_permissions(): pass
-
-@write_file_with_permissions.arguments
-def _(
-    state: ProvisionerState,
-    this: Any,
-    dst: str | NotBoundType = NotBound,
-    content: str | NotBoundType = NotBound,
-    readonly: bool | NotBoundType = NotBound,
-    executable: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, bool, bool]]:
-    d = "/tmp/dst" if isinstance(dst, NotBoundType) else str(dst)
-    c = "data" if isinstance(content, NotBoundType) else str(content)
-    r = False if isinstance(readonly, NotBoundType) else bool(readonly)
-    e = False if isinstance(executable, NotBoundType) else bool(executable)
-    return (d, c, r, e)
-
-@write_file_with_permissions.returns
-def _(
-    state: ProvisionerState,
-    this: Any,
-    dst: str,
-    content: str,
-    readonly: bool,
-    executable: bool,
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    return Value(None)
-
-
-@proto.transition(WorkspaceProvisioner.deploy_runner_zipapps)
-def deploy_runner_zipapps(): pass
-
-@deploy_runner_zipapps.arguments
-def _(
-    state: ProvisionerState,
-    this: Any,
-    bin_dir: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    b = "/tmp/bin" if isinstance(bin_dir, NotBoundType) else str(bin_dir)
-    return (b,)
-
-@deploy_runner_zipapps.returns
-def _(
-    state: ProvisionerState,
-    this: Any,
-    bin_dir: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    return Value(None)
-
-
-@proto.transition(WorkspaceProvisioner.write_role_agents_guide)
-def write_role_agents_guide(): pass
-
-@write_role_agents_guide.arguments
-def _(
-    state: ProvisionerState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-    role_name: str | NotBoundType = NotBound,
-    dir_scope: str | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str, Optional[str]]]:
-    ws = "/tmp/ws" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    rn = "lib" if isinstance(role_name, NotBoundType) else str(role_name)
-    ds = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (ws, rn, ds, rr)
-
-@write_role_agents_guide.returns
-def _(
-    state: ProvisionerState,
-    this: Any,
-    workspace_dir: str,
-    role_name: str,
-    dir_scope: str,
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    return Value(None)
-
-
-@proto.transition(WorkspaceProvisioner.sync_test_stubs)
-def sync_test_stubs(): pass
-
-@sync_test_stubs.arguments
-def _(
-    state: ProvisionerState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-    role_name: str | NotBoundType = NotBound,
-    dir_scope: str | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str, Optional[str]]]:
-    ws = "/tmp/ws" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    rn = "test" if isinstance(role_name, NotBoundType) else str(role_name)
-    ds = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (ws, rn, ds, rr)
-
-@sync_test_stubs.returns
-def _(
-    state: ProvisionerState,
-    this: Any,
-    workspace_dir: str,
-    role_name: str,
-    dir_scope: str,
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    return Value(state.stubs_count)
+proto = WorkspaceProvisionStateMachine()
 
 
 # ==============================================================================

@@ -8,6 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
@@ -28,303 +29,240 @@ class AttributionState:
     failed_nodes: PretenseSet[DagNode] = field(default_factory=PretenseSet)
 
 
-proto = StateMachineProto[AttributionState]()
+class AttributionStateMachine(StateMachine[AttributionState]):
+    """Pretense StateMachine for AttributionCoordinator."""
+
+    def __init__(self, state: Optional[AttributionState] = None):
+        super().__init__(state=state or AttributionState())
+
+    # ==============================================================================
+    # 1. Seeding Transitions
+    # ==============================================================================
+
+    @transition.seeding()
+    def seed_attribution_node(
+        self,
+        ctx: TransitionContext[None, [DagNode, bool, bool], None],
+    ) -> None:
+        ctx.arguments(
+                    node=Domain(strategy=lambda: DagNode(UnitAddress('target'), RoleAddress('lib'))),
+                    is_dirty=Domain(strategy=lambda: False),
+                    is_failed=Domain(strategy=lambda: False),
+                )
+        def _consequent(
+            res: None,
+            node: DagNode = DagNode(UnitAddress("target"), RoleAddress("lib")),
+            is_dirty: bool = False,
+            is_failed: bool = False,
+        ) -> None:
+            if is_dirty:
+                self.state.dirty_nodes.add(node)
+            else:
+                self.state.dirty_nodes.discard(node)
+            if is_failed:
+                self.state.failed_nodes.add(node)
+            else:
+                self.state.failed_nodes.discard(node)
+        ctx.update(_consequent)
+
+    # ==============================================================================
+    # 2. AttributionCoordinator Transitions
+    # ==============================================================================
+
+    @transition(AttributionCoordinator.blame_target)
+    def blame_target(
+        self,
+        ctx: TransitionContext[
+            AttributionCoordinator,
+            [DagNode, DagNode, str, Optional[Sequence[DagNode]], Optional[Sequence[DagNode]]],
+            AttributionOutcome,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    source_node=Domain(strategy=lambda: DagNode(UnitAddress('src'), RoleAddress('test'))),
+                    blame_target_node=Domain(strategy=lambda: DagNode(UnitAddress('tgt'), RoleAddress('lib'))),
+                    explanation=Domain(strategy=lambda: 'Defect detected in contract'),
+                    in_batch_dependencies=Domain(strategy=lambda: None),
+                    in_batch_dependents=Domain(strategy=lambda: None),
+                )
+        def _returns(
+            source_node: DagNode = DagNode(UnitAddress("src"), RoleAddress("test")),
+            blame_target_node: DagNode = DagNode(UnitAddress("tgt"), RoleAddress("lib")),
+            explanation: str = "Defect detected in contract",
+            in_batch_dependencies: Optional[Sequence[DagNode]] = None,
+            in_batch_dependents: Optional[Sequence[DagNode]] = None,
+        ) -> AttributionOutcome:
+            if "\n" in explanation:
+                return AttributionOutcome(
+                    accepted=False,
+                    message="Critique must be a single paragraph without newline characters",
+                    affected_nodes=(),
+                )
+            elif source_node == blame_target_node:
+                return AttributionOutcome(
+                    accepted=False,
+                    message=f"Cannot blame target {blame_target_node}: self-blame is disallowed",
+                    affected_nodes=(),
+                )
+            else:
+                affected = [blame_target_node]
+                if in_batch_dependents:
+                    affected.extend(in_batch_dependents)
+                return AttributionOutcome(
+                    accepted=True,
+                    message=f"Blame successfully attributed to {blame_target_node}",
+                    affected_nodes=tuple(affected),
+                )
+        ctx.returns(_returns)
+
+        def _consequent(
+            res: AttributionOutcome,
+            source_node: DagNode = DagNode(UnitAddress("src"), RoleAddress("test")),
+            blame_target_node: DagNode = DagNode(UnitAddress("tgt"), RoleAddress("lib")),
+            explanation: str = "Defect detected in contract",
+            in_batch_dependencies: Optional[Sequence[DagNode]] = None,
+            in_batch_dependents: Optional[Sequence[DagNode]] = None,
+        ) -> None:
+            if res.accepted:
+                self.state.feedbacks.setdefault(blame_target_node, []).append(explanation)
+                self.state.dirty_nodes.add(blame_target_node)
+                self.state.failed_nodes.add(source_node)
+                if in_batch_dependents:
+                    for dep in in_batch_dependents:
+                        self.state.failed_nodes.add(dep)
+        ctx.update(_consequent)
+
+    @transition(AttributionCoordinator.fail_target)
+    def fail_target(
+        self,
+        ctx: TransitionContext[
+            AttributionCoordinator,
+            [DagNode, str, Optional[Sequence[DagNode]]],
+            AttributionOutcome,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    target_node=Domain(strategy=lambda: DagNode(UnitAddress('node'), RoleAddress('lib'))),
+                    explanation=Domain(strategy=lambda: 'Task failed to converge'),
+                    in_batch_dependents=Domain(strategy=lambda: None),
+                )
+        def _returns(
+            target_node: DagNode = DagNode(UnitAddress("node"), RoleAddress("lib")),
+            explanation: str = "Task failed to converge",
+            in_batch_dependents: Optional[Sequence[DagNode]] = None,
+        ) -> AttributionOutcome:
+            affected = [target_node]
+            if in_batch_dependents:
+                affected.extend(in_batch_dependents)
+            return AttributionOutcome(
+                accepted=True,
+                message=f"Failure recorded for node {target_node}",
+                affected_nodes=tuple(affected),
+            )
+        ctx.returns(_returns)
+
+        def _consequent(
+            res: AttributionOutcome,
+            target_node: DagNode = DagNode(UnitAddress("node"), RoleAddress("lib")),
+            explanation: str = "Task failed to converge",
+            in_batch_dependents: Optional[Sequence[DagNode]] = None,
+        ) -> None:
+            self.state.failed_nodes.add(target_node)
+            self.state.feedbacks.setdefault(target_node, []).append(explanation)
+            if in_batch_dependents:
+                for dep in in_batch_dependents:
+                    self.state.failed_nodes.add(dep)
+        ctx.update(_consequent)
+
+    @transition(AttributionCoordinator.blame_culprit_file)
+    def blame_culprit_file(
+        self,
+        ctx: TransitionContext[
+            AttributionCoordinator,
+            [str, str, Optional[str], Optional[str], Optional[str]],
+            AttributionOutcome,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    culprit_file=Domain(strategy=lambda: 'lib/module.py'),
+                    critique=Domain(strategy=lambda: 'Missing edge case handling'),
+                    repo_root=Domain(strategy=lambda: None),
+                    workspace_root=Domain(strategy=lambda: None),
+                    caller_role=Domain(strategy=lambda: None),
+                )
+        def _returns(
+            culprit_file: str = "lib/module.py",
+            critique: str = "Missing edge case handling",
+            repo_root: Optional[str] = None,
+            workspace_root: Optional[str] = None,
+            caller_role: Optional[str] = None,
+        ) -> AttributionOutcome:
+            if "\n" in critique.strip():
+                return AttributionOutcome(
+                    accepted=False,
+                    message="Critique must be a single paragraph without newline characters",
+                    affected_nodes=(),
+                )
+            return AttributionOutcome(
+                accepted=True,
+                message=f"Blame attributed to file {culprit_file}",
+                affected_nodes=(),
+            )
+        ctx.returns(_returns)
+
+        def _consequent(
+            res: AttributionOutcome,
+            culprit_file: str = "lib/module.py",
+            critique: str = "Missing edge case handling",
+            repo_root: Optional[str] = None,
+            workspace_root: Optional[str] = None,
+            caller_role: Optional[str] = None,
+        ) -> None:
+            if res.accepted:
+                self.state.file_feedbacks.setdefault(culprit_file, []).append(critique)
+        ctx.update(_consequent)
+
+    @transition(AttributionCoordinator.fail_target_file)
+    def fail_target_file(
+        self,
+        ctx: TransitionContext[
+            AttributionCoordinator,
+            [str, Optional[str], Optional[str], Optional[str]],
+            AttributionOutcome,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    target_file=Domain(strategy=lambda: 'lib/module.py'),
+                    reason=Domain(strategy=lambda: 'Verification failed'),
+                    repo_root=Domain(strategy=lambda: None),
+                    workspace_root=Domain(strategy=lambda: None),
+                )
+        def _returns(
+            target_file: str = "lib/module.py",
+            reason: Optional[str] = None,
+            repo_root: Optional[str] = None,
+            workspace_root: Optional[str] = None,
+        ) -> AttributionOutcome:
+            return AttributionOutcome(
+                accepted=True,
+                message=f"Failure recorded for file {target_file}",
+                affected_nodes=(),
+            )
+        ctx.returns(_returns)
+
+        def _consequent(
+            res: AttributionOutcome,
+            target_file: str = "lib/module.py",
+            reason: Optional[str] = None,
+            repo_root: Optional[str] = None,
+            workspace_root: Optional[str] = None,
+        ) -> None:
+            if reason:
+                self.state.file_feedbacks.setdefault(target_file, []).append(reason)
+        ctx.update(_consequent)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_attribution_node(): pass
-
-@seed_attribution_node.arguments
-def _(
-    state: AttributionState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-    is_dirty: bool | NotBoundType = NotBound,
-    is_failed: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode, bool, bool]]:
-    n = DagNode(UnitAddress("target"), RoleAddress("lib")) if isinstance(node, NotBoundType) else node
-    d = False if isinstance(is_dirty, NotBoundType) else bool(is_dirty)
-    f = False if isinstance(is_failed, NotBoundType) else bool(is_failed)
-    return (n, d, f)
-
-@seed_attribution_node.provide
-def _(
-    state: AttributionState,
-    this: Any,
-    node: DagNode,
-    is_dirty: bool,
-    is_failed: bool,
-    result: None = None,
-) -> None:
-    if is_dirty:
-        state.dirty_nodes.add(node)
-    else:
-        state.dirty_nodes.discard(node)
-    if is_failed:
-        state.failed_nodes.add(node)
-    else:
-        state.failed_nodes.discard(node)
-
-
-# ==============================================================================
-# 2. AttributionCoordinator Transitions
-# ==============================================================================
-
-@proto.transition(AttributionCoordinator.blame_target)
-def blame_target(): pass
-
-@blame_target.arguments
-def _(
-    state: AttributionState,
-    this: Any,
-    source_node: DagNode | NotBoundType = NotBound,
-    blame_target_node: DagNode | NotBoundType = NotBound,
-    explanation: str | NotBoundType = NotBound,
-    in_batch_dependencies: Optional[Sequence[DagNode]] | NotBoundType = NotBound,
-    in_batch_dependents: Optional[Sequence[DagNode]] | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode, DagNode, str, Optional[Sequence[DagNode]], Optional[Sequence[DagNode]]]]:
-    src = DagNode(UnitAddress("src"), RoleAddress("test")) if isinstance(source_node, NotBoundType) else source_node
-    tgt = DagNode(UnitAddress("tgt"), RoleAddress("lib")) if isinstance(blame_target_node, NotBoundType) else blame_target_node
-    exp = "Defect detected in contract" if isinstance(explanation, NotBoundType) else str(explanation)
-    in_deps = None if isinstance(in_batch_dependencies, NotBoundType) else in_batch_dependencies
-    in_downs = None if isinstance(in_batch_dependents, NotBoundType) else in_batch_dependents
-    return (src, tgt, exp, in_deps, in_downs)
-
-@blame_target.returns
-def _(
-    state: AttributionState,
-    this: Any,
-    source_node: DagNode,
-    blame_target_node: DagNode,
-    explanation: str,
-    in_batch_dependencies: Optional[Sequence[DagNode]],
-    in_batch_dependents: Optional[Sequence[DagNode]],
-    outcome: object = NotBound,
-) -> Optional[Outcome[AttributionOutcome]]:
-    # Invariant: critique must be single paragraph
-    if "\n" in explanation.strip():
-        expected = AttributionOutcome(
-            accepted=False,
-            message="Critique must be a single paragraph without newline characters",
-            affected_nodes=(),
-        )
-    # Invariant: self-blame is disallowed
-    elif source_node == blame_target_node:
-        expected = AttributionOutcome(
-            accepted=False,
-            message=f"Cannot blame target {blame_target_node}: self-blame is disallowed",
-            affected_nodes=(),
-        )
-    else:
-        affected = [blame_target_node]
-        if in_batch_dependents:
-            affected.extend(in_batch_dependents)
-        expected = AttributionOutcome(
-            accepted=True,
-            message=f"Blame successfully attributed to {blame_target_node}",
-            affected_nodes=tuple(affected),
-        )
-
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@blame_target.provide
-def _(
-    state: AttributionState,
-    this: Any,
-    source_node: DagNode,
-    blame_target_node: DagNode,
-    explanation: str,
-    in_batch_dependencies: Optional[Sequence[DagNode]],
-    in_batch_dependents: Optional[Sequence[DagNode]],
-    result: AttributionOutcome,
-) -> None:
-    if result.accepted:
-        state.feedbacks.setdefault(blame_target_node, []).append(explanation)
-        state.dirty_nodes.add(blame_target_node)
-        state.failed_nodes.add(source_node)
-        if in_batch_dependents:
-            for dep in in_batch_dependents:
-                state.failed_nodes.add(dep)
-
-
-@proto.transition(AttributionCoordinator.fail_target)
-def fail_target(): pass
-
-@fail_target.arguments
-def _(
-    state: AttributionState,
-    this: Any,
-    target_node: DagNode | NotBoundType = NotBound,
-    explanation: str | NotBoundType = NotBound,
-    in_batch_dependents: Optional[Sequence[DagNode]] | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode, str, Optional[Sequence[DagNode]]]]:
-    tgt = DagNode(UnitAddress("node"), RoleAddress("lib")) if isinstance(target_node, NotBoundType) else target_node
-    exp = "Task failed to converge" if isinstance(explanation, NotBoundType) else str(explanation)
-    in_downs = None if isinstance(in_batch_dependents, NotBoundType) else in_batch_dependents
-    return (tgt, exp, in_downs)
-
-@fail_target.returns
-def _(
-    state: AttributionState,
-    this: Any,
-    target_node: DagNode,
-    explanation: str,
-    in_batch_dependents: Optional[Sequence[DagNode]],
-    outcome: object = NotBound,
-) -> Optional[Outcome[AttributionOutcome]]:
-    affected = [target_node]
-    if in_batch_dependents:
-        affected.extend(in_batch_dependents)
-    expected = AttributionOutcome(
-        accepted=True,
-        message=f"Failure recorded for node {target_node}",
-        affected_nodes=tuple(affected),
-    )
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@fail_target.provide
-def _(
-    state: AttributionState,
-    this: Any,
-    target_node: DagNode,
-    explanation: str,
-    in_batch_dependents: Optional[Sequence[DagNode]],
-    result: AttributionOutcome,
-) -> None:
-    state.failed_nodes.add(target_node)
-    state.feedbacks.setdefault(target_node, []).append(explanation)
-    if in_batch_dependents:
-        for dep in in_batch_dependents:
-            state.failed_nodes.add(dep)
-
-
-@proto.transition(AttributionCoordinator.blame_culprit_file)
-def blame_culprit_file(): pass
-
-@blame_culprit_file.arguments
-def _(
-    state: AttributionState,
-    this: Any,
-    culprit_file: str | NotBoundType = NotBound,
-    critique: str | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    workspace_root: Optional[str] | NotBoundType = NotBound,
-    caller_role: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, Optional[str], Optional[str], Optional[str]]]:
-    c = "lib/module.py" if isinstance(culprit_file, NotBoundType) else str(culprit_file)
-    q = "Missing edge case handling" if isinstance(critique, NotBoundType) else str(critique)
-    r = None if isinstance(repo_root, NotBoundType) else repo_root
-    w = None if isinstance(workspace_root, NotBoundType) else workspace_root
-    role = None if isinstance(caller_role, NotBoundType) else caller_role
-    return (c, q, r, w, role)
-
-@blame_culprit_file.returns
-def _(
-    state: AttributionState,
-    this: Any,
-    culprit_file: str,
-    critique: str,
-    repo_root: Optional[str],
-    workspace_root: Optional[str],
-    caller_role: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[AttributionOutcome]]:
-    if "\n" in critique.strip():
-        expected = AttributionOutcome(
-            accepted=False,
-            message="Critique must be a single paragraph without newline characters",
-            affected_nodes=(),
-        )
-    else:
-        expected = AttributionOutcome(
-            accepted=True,
-            message=f"Blame attributed to file {culprit_file}",
-            affected_nodes=(),
-        )
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@blame_culprit_file.provide
-def _(
-    state: AttributionState,
-    this: Any,
-    culprit_file: str,
-    critique: str,
-    repo_root: Optional[str],
-    workspace_root: Optional[str],
-    caller_role: Optional[str],
-    result: AttributionOutcome,
-) -> None:
-    if result.accepted:
-        state.file_feedbacks.setdefault(culprit_file, []).append(critique)
-
-
-@proto.transition(AttributionCoordinator.fail_target_file)
-def fail_target_file(): pass
-
-@fail_target_file.arguments
-def _(
-    state: AttributionState,
-    this: Any,
-    target_file: str | NotBoundType = NotBound,
-    reason: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    workspace_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str], Optional[str], Optional[str]]]:
-    t = "lib/module.py" if isinstance(target_file, NotBoundType) else str(target_file)
-    r = "Verification failed" if isinstance(reason, NotBoundType) or reason is None else str(reason)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    w = None if isinstance(workspace_root, NotBoundType) else workspace_root
-    return (t, r, rr, w)
-
-@fail_target_file.returns
-def _(
-    state: AttributionState,
-    this: Any,
-    target_file: str,
-    reason: Optional[str],
-    repo_root: Optional[str],
-    workspace_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[AttributionOutcome]]:
-    expected = AttributionOutcome(
-        accepted=True,
-        message=f"Failure recorded for file {target_file}",
-        affected_nodes=(),
-    )
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@fail_target_file.provide
-def _(
-    state: AttributionState,
-    this: Any,
-    target_file: str,
-    reason: Optional[str],
-    repo_root: Optional[str],
-    workspace_root: Optional[str],
-    result: AttributionOutcome,
-) -> None:
-    if reason:
-        state.file_feedbacks.setdefault(target_file, []).append(reason)
+proto = AttributionStateMachine()
 
 
 # ==============================================================================
@@ -333,8 +271,7 @@ def _(
 
 def make_attribution_fake(state: Optional[AttributionState] = None) -> AttributionCoordinator:
     """Instantiate a synthesized AttributionCoordinator fake."""
-    st = state or AttributionState()
-    sm = proto.make_state_machine(st)
+    sm = AttributionStateMachine(state)
     return sm.as_fake(AttributionCoordinator)
 
 
@@ -648,7 +585,7 @@ class TestAttributionCoordinatorUnit(unittest.TestCase):
 
     def setUp(self) -> None:
         self.state = AttributionState()
-        self.sm = proto.make_state_machine(self.state)
+        self.sm = AttributionStateMachine(self.state)
         self.src = DagNode(UnitAddress("part_test"), RoleAddress("test"))
         self.tgt = DagNode(UnitAddress("part_lib"), RoleAddress("lib"))
         self.fake: AttributionCoordinator = self.sm.as_fake(AttributionCoordinator)

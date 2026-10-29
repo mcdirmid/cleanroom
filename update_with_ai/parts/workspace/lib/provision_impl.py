@@ -362,6 +362,11 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                     else os.path.join(workspace_dir, dir_scope)
                 )
                 os.makedirs(ws_d, exist_ok=True)
+                if "__init__.py" in filenames:
+                    src_init = os.path.join(dirpath, "__init__.py")
+                    dst_init = os.path.join(ws_d, "__init__.py")
+                    if not os.path.isfile(dst_init):
+                        _copy_projected_file(src_init, dst_init, is_writable=False)
             stub_synth = get_singleton(stub.WorkspaceStubSynthesizer)
             writable_rel = _find_matching_files(
                 scope_dir, role_def.writable_file_patterns
@@ -391,25 +396,48 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                     dir_scope=dir_scope,
                 )
 
-            scaffolder.create_missing_target_skeletons(
-                workspace_dir=workspace_dir,
-                repo_root=resolved_root,
-                dir_scope=dir_scope,
-                role_def=role_def,
-            )
+            if role_def.fused_roles:
+                for c_role in role_def.fused_roles:
+                    try:
+                        c_def = registry.resolve_role_definition(c_role, resolved_root, dir_scope=dir_scope)
+                        scaffolder.create_missing_target_skeletons(
+                            workspace_dir=workspace_dir,
+                            repo_root=resolved_root,
+                            dir_scope=dir_scope,
+                            role_def=c_def,
+                        )
+                    except Exception:
+                        pass
+            else:
+                scaffolder.create_missing_target_skeletons(
+                    workspace_dir=workspace_dir,
+                    repo_root=resolved_root,
+                    dir_scope=dir_scope,
+                    role_def=role_def,
+                )
 
         active_pkg = _resolve_active_methodology_pkg(resolved_root, dir_scope, role_def)
 
-        if role_def.guide_path:
+        guides_to_copy = [role_def.guide_path] if role_def.guide_path else []
+        if role_def.fused_roles:
+            for c_role in role_def.fused_roles:
+                try:
+                    c_def = registry.resolve_role_definition(c_role, resolved_root, dir_scope=dir_scope)
+                    if c_def.guide_path and c_def.guide_path not in guides_to_copy:
+                        guides_to_copy.append(c_def.guide_path)
+                except Exception:
+                    pass
+
+        for g_path in guides_to_copy:
             guide_candidates = [
-                os.path.join(resolved_root, role_def.guide_path),
+                os.path.join(resolved_root, g_path),
             ]
             if active_pkg:
-                guide_candidates.append(os.path.join(resolved_root, active_pkg, role_def.guide_path))
-                guide_candidates.append(os.path.join(resolved_root, active_pkg, "guides", os.path.basename(role_def.guide_path)))
+                guide_candidates.append(os.path.join(resolved_root, active_pkg, g_path))
+                guide_candidates.append(os.path.join(resolved_root, active_pkg, "guides", os.path.basename(g_path)))
             guide_src = next((c for c in guide_candidates if os.path.isfile(c)), None)
             if guide_src:
-                root_guide_dst = os.path.join(workspace_dir, "guides", os.path.basename(role_def.guide_path))
+                root_guide_dst = os.path.join(workspace_dir, "guides", os.path.basename(g_path))
                 copy_file_with_perms(guide_src, root_guide_dst, readonly=True)
 
         for cfg_name in (
@@ -529,6 +557,8 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
             model=resolved_model_name,
             batch_size=resolved_batch_size,
             max_feedback_chars=resolved_max_feedback_chars,
+            fused_roles=role_def.fused_roles or None,
+            common_spec_roles=role_def.common_spec_roles or None,
         )
         scaffolder.write_role_agents_guide(workspace_dir, role_def, dir_scope)
 
@@ -541,9 +571,9 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
         registry.record_workspace(descriptor, resolved_root)
         return descriptor
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-20T23:45:00Z
-# LAST_CHANGED: 2026-10-20T23:45:00Z
-# CHANGE: Promote active methodology runtime support, guides, templates, and configurations to role workspace root
+# LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-10-26T20:38:00Z
+# CHANGE: Pass fused_roles and copy constituent companion guides in provision_impl
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

@@ -30,7 +30,7 @@ class DshWorkspaceConfigurer(dsh_workspace.DshWorkspaceConfigurer):
 
         GROUNDING:
         - Incorporates explicit isolation boundaries, permitted in-workspace shell commands and
-          native harness tools, auditor rules (mandating in-workspace code and change header inspection while prohibiting code edits), check_files ground truth mandates, continuous tool execution rules, round conclusion protocols directing workers to stop immediately without tool calls when all ready targets are resolved or only blocked targets remain, and model-contingent payload ceiling protection directives (mandating staged incremental writing for local or output-constrained models while omitting it for cloud models) into AGENTS.md,
+          native harness tools, auditor rules (mandating in-workspace code and change header inspection while prohibiting code edits), check_files ground truth mandates, continuous tool execution rules while work remains, round conclusion protocols instructing workers that when they have no outstanding work to do and get_work gives no more work to do (all ready targets are resolved or only blocked targets remain), they can and must conclude immediately by delivering their text summary without further tool calls, and model-contingent payload ceiling protection directives (mandating staged incremental writing for local or output-constrained models while omitting it for cloud models) into AGENTS.md,
           writes Cordis patch into .cleanroom/dsh_patch.yml conforming to dsh_ext (resolving declared model profile names stripping model namespace prefixes against model configuration definitions discovered in workspace ancestors, user configuration, or repository root, mapping local MLX providers to oMLX endpoints, setting high reasoning effort for DeepSeek providers, and disabling unneeded tool plugins including workflow, subagent, office skills, web, user question, jobs, and goal tools), verifies configured
           files exist, and returns a populated dsh_workspace.DshWorkspaceConfinementReport.
         """
@@ -38,7 +38,7 @@ class DshWorkspaceConfigurer(dsh_workspace.DshWorkspaceConfigurer):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-20T22:12:00Z
-# CHANGE: Document model-contingent payload ceiling protection in customized AGENTS.md instructions
+# LAST_CHANGED: 2026-10-27T20:50:00Z
+# CHANGE: Instruct workers to conclude immediately with text and no tool calls when work is resolved and get_work gives no more work
 # SPEC_QA_AUDIT: 2026-10-19T22:33:00Z
 # --- END CLEANROOM METADATA ---

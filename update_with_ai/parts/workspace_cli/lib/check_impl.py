@@ -34,7 +34,74 @@ def is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     clean_r = role_name.split(":")[-1].strip().lower()
     reg = get_singleton(role_registry.WorkspaceRegistry)
     r_def = reg.resolve_role_definition(clean_r, repo_root=repo_root)
+    if r_def.fused_roles:
+        return False
     return bool(r_def.audit_tag or not r_def.src_pattern)
+
+
+def resolve_common_spec_files(
+    role_name: str,
+    part_dir: str,
+    unit_name: Optional[str],
+    ws_root: str,
+    repo_root: Optional[str] = None,
+) -> List[str]:
+    """Resolves existing specification files for a unit from the active role's common_spec_roles."""
+    if not unit_name:
+        return []
+    clean_r = role_name.split(":")[-1].strip().lower()
+    reg = get_singleton(role_registry.WorkspaceRegistry)
+    try:
+        r_def = reg.resolve_role_definition(clean_r, repo_root=repo_root)
+    except Exception:
+        return []
+
+    meta = get_current_role_metadata()
+    spec_roles = list(
+        getattr(r_def, "common_spec_roles", None)
+        or (meta.get("common_spec_roles") if meta else None)
+        or r_def.star_role_deps
+        or []
+    )
+    if not spec_roles:
+        return []
+
+    resolved: List[str] = []
+    base_unit = unit_name[:-5] if unit_name.endswith("_impl") else unit_name
+
+    for s_role in spec_roles:
+        try:
+            s_def = reg.resolve_role_definition(s_role, repo_root=repo_root)
+        except Exception:
+            continue
+        if not s_def.src_pattern:
+            continue
+
+        cands = [s_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)]
+        if base_unit != unit_name:
+            cands.append(s_def.src_pattern.format(unit_dir=part_dir, unit_name=base_unit))
+
+        found_any = False
+        for c in cands:
+            full_ws = os.path.join(ws_root, c) if not os.path.isabs(c) else c
+            full_repo = os.path.join(repo_root, c) if (repo_root and not os.path.isabs(c)) else None
+
+            if os.path.isfile(full_ws):
+                rel = os.path.relpath(full_ws, ws_root)
+                if rel not in resolved:
+                    resolved.append(rel)
+                found_any = True
+            elif full_repo and os.path.isfile(full_repo):
+                rel = os.path.relpath(full_repo, repo_root) if repo_root else c
+                if rel not in resolved:
+                    resolved.append(rel)
+                found_any = True
+
+        if not found_any and cands:
+            if cands[0] not in resolved:
+                resolved.append(cands[0])
+
+    return resolved
 
 
 def record_check_executed(ws_root: str, target_path: str, passed: bool) -> None:
@@ -354,6 +421,80 @@ def _resolve_workspace_guide_path(ws_root: str, guide_path: Optional[str]) -> Op
     return ws_guide
 
 
+def _verify_antigravity_argon_model(ws_root: str, meta: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Verifies when gemini-argon is configured on antigravity that the active subagent is actually using gemini-argon."""
+    if not meta:
+        return None
+    cfg_model = str(meta.get("model") or "").strip().lower()
+    if "argon" not in cfg_model:
+        return None
+    harness = str(meta.get("harness") or "antigravity").strip().lower()
+    if harness not in ("antigravity", ""):
+        return None
+
+    ag_dir = os.environ.get("ANTIGRAVITY_BRAIN_DIR") or os.path.expanduser("~/.gemini/antigravity")
+    brain_dir = os.path.join(ag_dir, "brain")
+    conv_dir = os.path.join(ag_dir, "conversations")
+    if not os.path.isdir(brain_dir) or not os.path.isdir(conv_dir):
+        return None
+
+    ws_name = os.path.basename(ws_root)
+    candidate_cids: List[Tuple[float, str]] = []
+    try:
+        for entry in os.listdir(brain_dir):
+            if entry.startswith("."):
+                continue
+            t_file = os.path.join(brain_dir, entry, ".system_generated", "logs", "transcript.jsonl")
+            if not os.path.isfile(t_file):
+                continue
+            try:
+                mtime = os.path.getmtime(t_file)
+                with open(t_file, "r", encoding="utf-8", errors="replace") as f:
+                    head = "".join(f.readline() for _ in range(4))
+                if ws_root in head or ws_name in head:
+                    candidate_cids.append((mtime, entry))
+            except OSError:
+                continue
+    except OSError:
+        return None
+
+    if not candidate_cids:
+        return None
+
+    candidate_cids.sort(key=lambda x: x[0], reverse=True)
+    cid = candidate_cids[0][1]
+    db_path = os.path.join(conv_dir, f"{cid}.db")
+    if not os.path.isfile(db_path):
+        return None
+
+    try:
+        import sqlite3
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT data FROM gen_metadata ORDER BY idx DESC LIMIT 3")
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+        for (blob,) in rows:
+            if not isinstance(blob, (bytes, bytearray)):
+                continue
+            text = blob.decode("utf-8", errors="ignore").lower()
+            if "argon" in text:
+                return None
+            m = re.search(r"(gemini-[a-z0-9\.\-]+|claude-[a-z0-9\.\-]+)", text)
+            if m:
+                actual_model = m.group(1)
+                return (
+                    f"Error: Model '{meta.get('model')}' was specified (which requires 'inherit' in Antigravity), "
+                    f"but the active conversation is executing on '{actual_model}' instead of Gemini Argon.\n"
+                    f"Please manually switch your model in Antigravity to 'Gemini Argon' before requesting the run again."
+                )
+    except Exception:
+        return None
+    return None
+
+
 # Contract: Realizes work discovery and file verification for role workspaces in agent_session tier.
 class WorkspaceChecker(check.WorkspaceChecker):
     """Executes work discovery and file verification for role workspaces."""
@@ -371,6 +512,11 @@ class WorkspaceChecker(check.WorkspaceChecker):
     ) -> int:
         ws_root = os.path.realpath(find_workspace_root())
         meta = get_current_role_metadata()
+        argon_err = _verify_antigravity_argon_model(ws_root, meta)
+        if argon_err:
+            print(f"\n[CRITICAL MODEL MISMATCH] {argon_err}", file=sys.stderr)
+            print(f"\n[CRITICAL MODEL MISMATCH] {argon_err}")
+            return 1
         role_name = (
             str((meta.get("role_name") or meta.get("role") or "") if meta else "")
             .split(":")[-1]
@@ -395,10 +541,24 @@ class WorkspaceChecker(check.WorkspaceChecker):
         work_mgr = get_singleton(work.WorkspaceWorkManager)
         pending_mgr = get_singleton(pending.WorkspacePendingManager)
 
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        role_guide_path: Optional[str] = None
+        is_fused = bool(meta and meta.get("fused_roles"))
+        if role_name:
+            try:
+                r_def = reg.resolve_role_definition(role_name, repo_root=main_root)
+                if r_def and r_def.guide_path:
+                    role_guide_path = _resolve_workspace_guide_path(ws_root, r_def.guide_path)
+                if r_def and r_def.fused_roles:
+                    is_fused = True
+            except Exception:
+                pass
+
         if main_root and os.path.isdir(main_root) and main_root != ws_root:
             try:
                 sync_svc = get_singleton(sync.WorkspaceSynchronizer)
-                sync_svc.pull(ws_root, main_root, role_name, dir_scope=d_scope, silent=True)
+                if not is_fused:
+                    sync_svc.pull(ws_root, main_root, role_name, dir_scope=d_scope, silent=True)
                 sync_svc.refresh_system_files(
                     ws_root, main_root, role_name, dir_scope=d_scope, silent=True
                 )
@@ -413,17 +573,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 f"Warning: Canonical main workspace '{main_root}' is not an accessible directory. Inbound sync skipped.\n"
             )
 
-        reg = get_singleton(role_registry.WorkspaceRegistry)
-        role_guide_path: Optional[str] = None
-        if role_name:
-            try:
-                r_def = reg.resolve_role_definition(role_name, repo_root=main_root)
-                if r_def and r_def.guide_path:
-                    role_guide_path = _resolve_workspace_guide_path(ws_root, r_def.guide_path)
-            except Exception:
-                pass
-
-        if meta and not force:
+        if meta and not force and not is_fused:
             pending_targets = pending_mgr.get_pending_work(ws_root)
             if pending_targets:
                 still_dirty = [
@@ -493,6 +643,13 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 pending_mgr.clear_pending_work(ws_root)
             print(
                 f"✔ CLEAN: All units in scope '{d_scope}' are clean for role '{role_name}'.\n"
+            )
+            print(
+                "[ROUND CONCLUSION DIRECTIVE]\n"
+                "You have 0 ready targets. All work assigned to your role in this round is resolved.\n"
+                "CRITICAL ACTION: You MUST conclude your round immediately.\n"
+                "DO NOT invoke any further tool calls (no bin/get_work, no ls, no dummy commands).\n"
+                "Delivering text with zero tool calls is the required signal that completes your round.\n"
             )
             return 0
 
@@ -594,13 +751,28 @@ class WorkspaceChecker(check.WorkspaceChecker):
             except Exception:
                 has_feedback = is_auditor_role(role_name)
 
-        if not presented_items and blocked_items:
+        if not presented_items:
+            if blocked_items:
+                print(
+                    "\n[ROUND CONCLUSION DIRECTIVE]\n"
+                    "All targets are blocked waiting on upstream prerequisites and you have 0 ready targets.\n"
+                    "CRITICAL ACTION: You MUST conclude your round immediately.\n"
+                    "DO NOT invoke any further tool calls (no bin/get_work, no ls, no dummy commands).\n"
+                    "Delivering text with zero tool calls is the required signal that completes your round.\n"
+                )
+            else:
+                print(
+                    "\n[ROUND CONCLUSION DIRECTIVE]\n"
+                    "You have 0 ready targets. All work assigned to your role in this round is resolved.\n"
+                    "CRITICAL ACTION: You MUST conclude your round immediately.\n"
+                    "DO NOT invoke any further tool calls (no bin/get_work, no ls, no dummy commands).\n"
+                    "Delivering text with zero tool calls is the required signal that completes your round.\n"
+                )
+        elif is_fused:
             print(
-                "\nACTIONABLE NEXT STEP: All ready targets for this role round are resolved or waiting on upstream prerequisites. Conclude your round immediately without executing additional tools.\n"
-            )
-        elif not presented_items and not ready_items:
-            print(
-                "\nACTIONABLE NEXT STEP: No targets are currently pending or ready for this role. Conclude your round immediately without executing additional tools.\n"
+                "\nACTIONABLE NEXT STEP: Read contracts and companion guides, implement library and test files, "
+                "verify with 'bin/verify_lib', 'bin/verify_pretense' (or 'bin/verify_test'), and 'bin/verify_coverage', "
+                "complete QA and Coverage arbiter self-audits, and conclude your round when all checks pass (do NOT run bin/submit).\n"
             )
         elif is_auditor_role(role_name):
             blame_clause = "; if defects exist, run 'bin/blame <culprit_file> \"<critique>\"'" if has_feedback else ""
@@ -775,6 +947,31 @@ class WorkspaceChecker(check.WorkspaceChecker):
                             f"[FAIL] Verification failed for {active_unit}:\n{res.stdout}\n{res.stderr}".strip()
                         )
                         unit_failed = True
+                        if is_auditor_role(role_name, repo_root=main_root) or "coverage" in role_name or "qa" in role_name:
+                            spec_files = resolve_common_spec_files(role_name, part_dir, active_unit, ws_root, repo_root=main_root)
+                            spec_desc = ", ".join(spec_files) if spec_files else "the common specification"
+                            if "coverage" in role_name:
+                                print(
+                                    "\n" + "=" * 80 + "\n"
+                                    "[COVERAGE ARBITER REMINDER - EXPLAIN FEEDBACK IN TERMS OF SPECIFICATION]\n"
+                                    f"• Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification ({spec_desc}).\n"
+                                    "• Line numbers MAY be mentioned ONLY IF they reference the file being blamed.\n"
+                                    "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
+                                    "• Translate uncovered statements and branches into missing specification requirements or scenario cases.\n"
+                                    "• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable according to the methodology.\n"
+                                    + "=" * 80
+                                )
+                            else:
+                                print(
+                                    "\n" + "=" * 80 + "\n"
+                                    "[QA ARBITER REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]\n"
+                                    f"• Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification ({spec_desc}).\n"
+                                    "• Line numbers MAY be mentioned ONLY IF they reference the file being blamed.\n"
+                                    "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
+                                    "• Frame test failures strictly as contract discrepancies against the specification.\n"
+                                    "• Explain the expected postcondition outcome versus the observed behavior.\n"
+                                    + "=" * 80
+                                )
                     else:
                         if r_def.verification_success_message:
                             try:
@@ -800,6 +997,18 @@ class WorkspaceChecker(check.WorkspaceChecker):
                         diagnostic_parts.append(f"STDERR:\n{err_text.strip()}")
                     print("\n".join(diagnostic_parts))
                     unit_failed = True
+                    if is_auditor_role(role_name, repo_root=main_root) or "coverage" in role_name or "qa" in role_name:
+                        spec_files = resolve_common_spec_files(role_name, part_dir, active_unit, ws_root, repo_root=main_root)
+                        spec_desc = ", ".join(spec_files) if spec_files else "the common specification"
+                        print(
+                            "\n" + "=" * 80 + "\n"
+                            "[AUDITOR REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]\n"
+                            f"• Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification ({spec_desc}).\n"
+                            "• Line numbers MAY be mentioned ONLY IF they reference the file being blamed.\n"
+                            "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
+                            "• Attribute execution timeouts or hangs to algorithmic termination or postcondition contracts.\n"
+                            + "=" * 80
+                        )
 
             if unit_failed:
                 failed_count += 1
@@ -836,8 +1045,8 @@ class WorkspaceChecker(check.WorkspaceChecker):
         record_check_executed(ws_root, target_path, passed)
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T12:40:00Z
-# LAST_CHANGED: 2026-10-26T12:40:00Z
-# CHANGE: Clarify in check_files that verification timeouts indicate code defects rather than infrastructure failures
+# LAST_CHANGED: 2026-10-29T00:30:00Z
+# CHANGE: Format auditor specification grounding reminders permitting line numbers in blamed file while forbidding exposing details of other files
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

@@ -225,6 +225,9 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
         except (LifecycleResolutionError, LookupError):
             pass
         role_def = reg.resolve_role_definition(eval_role, repo_root=m_root) if reg and eval_role else None
+        if role_def and role_def.fused_roles and r_name:
+            eval_role = r_name
+            role_def = reg.resolve_role_definition(eval_role, repo_root=m_root) if reg else None
 
         is_auditor = bool(role_def and (role_def.audit_tag or not role_def.src_pattern)) if role_def else False
         if not is_auditor:

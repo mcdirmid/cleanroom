@@ -36,6 +36,7 @@
 6. [Specification Grounding & Physical Workspace Assembly](#6-specification-grounding--physical-workspace-assembly)
    - [The Formal Grounding Invariant](#the-formal-grounding-invariant)
    - [Physical Workspace Provisioning & Permission Masking](#physical-workspace-provisioning--permission-masking)
+   - [Minimal Hermetic Role Workspace Provisioning & Clutter Eradication](#minimal-hermetic-role-workspace-provisioning--clutter-eradication)
    - [Retirement of Legacy Build Artifacts](#retirement-of-legacy-build-artifacts)
 7. [Packaging, Distribution & CLI Execution Architecture](#7-packaging-distribution--cli-execution-architecture)
    - [Native Python Packaging (`pyproject.toml` + `uv`)](#native-python-packaging-pyprojecttoml--uv)
@@ -459,6 +460,43 @@ The `parts/workspace` module provisions isolated sibling sandboxes:
 2. **Upstream Specifications**: Mounted as read-only copies or symlinks with `chmod 444`. Any attempt by the worker to edit an upstream file results in an OS permission denied error.
 3. **Hidden Roles**: Sibling and downstream roles are omitted entirely. A `lib/` worker cannot see `tests/`; a `tests/` worker cannot see `lib/`.
 4. **Package Projections**: Top-level packages are symlinked so native imports (`import update_with_ai...`) work seamlessly without PYTHONPATH hacks.
+
+---
+
+### Minimal Hermetic Role Workspace Provisioning & Clutter Eradication
+
+To prevent context pollution, token waste, and agent distraction during autonomous multi-agent execution, Cleanroom enforces strict hermetic minimalism when provisioning role workspaces (`parts/workspace/` via `provision_impl.py`, `sync_impl.py`, `scaffold_impl.py`, and `roles_impl.py`).
+
+#### 1. Problem: Monolithic Workspace Clutter
+In earlier designs, workspace provisioners naively copied entire methodology directories (`update_python_with_ai/`) into the sibling sandbox:
+- Dumping full configuration manifests (`cleanroom_roles.toml`, `pyright_spec.json`) into the sandbox root.
+- Dumping all 8 methodology guides into `guides/` and all starter templates into `templates/`.
+- Creating redundant methodology subdirectories in the workspace root.
+- Searching for non-existent legacy ghost files (such as `cleanroom_python_roles.toml`).
+
+When LLM agents inspected their directory via tools (`ls`, file readers), these irrelevant files distracted the model, induced repetitive inspection loops, bloated input contexts, and consumed tokens unnecessarily.
+
+#### 2. Architecture: Zero-Clutter Hermetic Sandboxing
+Cleanroom eliminates workspace clutter through five architectural controls:
+
+1. **Purging Ghost Manifest References**:
+   - `cleanroom_roles.toml` is the sole canonical manifest. All fallback loops to `cleanroom_python_roles.toml` were completely purged across `roles_impl.py`, `provision_impl.py`, `role_registry_impl.py`, `manifest_loader_impl.py`, and `benchmark_impl.py`.
+
+2. **Zipapp Bundling of Role Configurations**:
+   - `scaffold_impl.py` packages `cleanroom_roles.toml` directly inside the standalone runner zipapps (`bin/*`).
+   - `roles_impl.py` dynamically loads role definitions directly from the internal zipapp bundle or in-memory caches, removing any requirement for role manifests to exist in the workspace filesystem.
+
+3. **Workspace Root Stripping**:
+   - `provision_impl.py` and `sync_impl.py` strictly prohibit copying `cleanroom_roles.toml`, `pyright_spec.json`, or starter templates into the workspace root.
+   - Redundant methodology directories (`update_python_with_ai/`) are never created in the sandbox root.
+
+4. **Selective Single-Guide Provisioning**:
+   - The provisioned `guides/` directory contains **strictly the single companion guide designated for the assigned role** (e.g., `guides/low_to_test.md` for `test`, `guides/low_to_lib.md` for `lib`, `guides/spec_qa.md` for `spec_qa`).
+   - Irrelevant companion guides are excluded, guaranteeing that worker subagents read only the contract instructions pertinent to their active role.
+
+5. **Minimal Runtime Support for Hermetic Execution**:
+   - The workspace maintains strictly `support/lib/` containing only the user-facing runtime primitives (`framework.py`, `framework.pyi`, `lifecycle.py`, `lifecycle.pyi`) so that `pyright` and `pytest` cleanly resolve runtime dependencies of code under test without import errors.
+   - Minimal project scaffolding is preserved: `pyproject.toml`, `uv.lock`, `.python-version`, `.cleanroom_role.json`, `AGENTS.md`, and `bin/` tools.
 
 ---
 

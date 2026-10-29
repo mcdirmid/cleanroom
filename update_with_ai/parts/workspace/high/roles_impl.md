@@ -17,7 +17,7 @@ Parsing role configuration declarations from diverse TOML and repository build f
 
 An agent session's *role resolver* realizes role configuration resolution and validation as a session service.
 
-The role resolver parses role declarations from declarative configuration files (`cleanroom_roles.toml`), in-memory cache, bundled runner zipapp archives, or build file AST representations, normalizing source path patterns into writable and read-only glob patterns and decoupling tool execution from workspace root configuration files.
+The role resolver parses role declarations from declarative configuration files (`cleanroom_roles.toml`), in-memory cache, bundled runner zipapp archives, or build file AST representations, normalizing source path patterns into writable and read-only glob patterns, extracting declared common specification roles, and decoupling tool execution from workspace root configuration files. It parses fused role declarations combining multiple constituent roles, deriving unioned writable file patterns, unioned readonly file patterns, and unioned tools from the constituent roles while preserving constituent role identifiers.
 
 The role resolver validates declaration constraints across role dependencies, failing when feedback or star dependencies are duplicated in role dependencies, when dependencies are declared as both active and silent, or when auditor roles are declared outside silent role dependencies.
 
@@ -26,8 +26,8 @@ The role resolver discovers methodology and pipeline configurations across direc
 The role resolver resolves role definitions for unqualified role names and qualified role addresses, qualifying role definitions with their requested role addresses upon resolution.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-25T21:50:00Z
-CHANGE: Specify pipeline-aware role listing and filtering in role resolver
+LAST_CLEANED: 2026-10-26T20:38:00Z
+LAST_CHANGED: 2026-10-29T00:40:00Z
+CHANGE: Parse and extract common specification roles in role resolver
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

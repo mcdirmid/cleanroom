@@ -857,7 +857,7 @@ Every cross-check divergence is categorized into one of three empirical failure 
    - *Condition*: Failures caused by packaging or environment conventions rather than semantic logic.
    - *Interpretation*: Module identity splits in `sys.modules` across flat vs. qualified package roots, or discrepancies in framework bootstrapping hooks. Handled systematically via sandboxed test harness normalization.
 
-For a comprehensive deep dive into the empirical case study where foreign models exposed soundness gaps in Qwen3.6-35B-A3B-oQ6-mtp's Cleanroom library, see [Cross-Model Differential Defect Analysis: Coincident Cognitive Blind Spots & Edge-Case Coverage](cross_model_defect_analysis_and_coincident_blindspots.md).
+For a comprehensive deep dive into the empirical case study where foreign models exposed soundness gaps in Qwen3.6-35B-A3B-oQ6-mtp's Cleanroom library, see [Pretense Section 2: Empirical Genesis — Cross-Model Differential Defect Analysis & Coincident Cognitive Blind Spots](pretense.md#2-empirical-genesis-cross-model-differential-defect-analysis--coincident-cognitive-blind-spots).
 
 #### 4. The Edge-Case Frontier: Commission vs. Omission & Roadmap to `semver_solver`
 

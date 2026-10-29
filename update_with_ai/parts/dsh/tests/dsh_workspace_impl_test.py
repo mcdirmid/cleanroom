@@ -93,6 +93,7 @@ class DshWorkspaceImplTest(unittest.TestCase):
             self.assertIn("bin/blame", agents_content)
             self.assertIn("bin/fail", agents_content)
             self.assertIn("ROUND CONCLUSION PROTOCOL", agents_content)
+            self.assertIn("When you have no outstanding work to do and `bin/get_work` does not give you more work to do", agents_content)
             self.assertNotIn("INCREMENTAL AUTHORING", agents_content)
 
             # Validate patch content

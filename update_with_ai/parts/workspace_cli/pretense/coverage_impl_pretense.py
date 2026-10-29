@@ -11,8 +11,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from update_with_ai.parts.workspace_cli.lib.coverage import CoverageEvaluator, ModuleCoverage
 
 
@@ -22,176 +21,106 @@ class CoverageState:
     default_report: str = "coverage report"
 
 
-proto = StateMachineProto[CoverageState]()
+class CoverageStateMachine(StateMachine[CoverageState]):
+    """Unified Pretense State Machine for CoverageEvaluator."""
 
+    def __init__(
+        self,
+        state: Optional[CoverageState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or CoverageState(), singletons=singletons)
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
+    @transition.seeding(name="seed_coverage_data")
+    def seed_coverage_data(
+        self,
+        ctx: TransitionContext[Any, [str], None],
+    ) -> None:
+        ctx.arguments(default_report=Domain(strategy=lambda: 'report'))
+        ctx.returns(lambda default_report="report": None)
+        ctx.update(lambda res, default_report="report": setattr(self.state, "default_report", str(default_report)))
 
-@proto.seeding()
-def seed_coverage_data(): pass
-
-@seed_coverage_data.arguments
-def _(
-    state: CoverageState,
-    this: Any,
-    default_report: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    r = "report" if isinstance(default_report, NotBoundType) else str(default_report)
-    return (r,)
-
-@seed_coverage_data.provide
-def _(
-    state: CoverageState,
-    this: Any,
-    default_report: str,
-    result: None = None,
-) -> None:
-    state.default_report = default_report
-
-
-# ==============================================================================
-# 2. Coverage Transitions
-# ==============================================================================
-
-@proto.transition(CoverageEvaluator.format_ranges)
-def format_ranges(): pass
-
-@format_ranges.arguments
-def _(
-    state: CoverageState,
-    this: Any,
-    lines: Sequence[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[int]]]:
-    l = () if isinstance(lines, NotBoundType) else tuple(lines)
-    return (l,)
-
-@format_ranges.returns
-def _(
-    state: CoverageState,
-    this: Any,
-    lines: Sequence[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[str]]:
-    if not lines:
-        return Value("")
-    sorted_lines = sorted(lines)
-    spans: List[Tuple[int, int]] = []
-    start = sorted_lines[0]
-    end = start
-    for line in sorted_lines[1:]:
-        if line == end + 1:
-            end = line
-        else:
+    @transition(CoverageEvaluator.format_ranges)
+    def format_ranges(
+        self,
+        ctx: TransitionContext[CoverageEvaluator, [Sequence[int]], str],
+    ) -> None:
+        ctx.arguments(lines=Domain(strategy=lambda: ()))
+        def returns(lines: Sequence[int] = ()) -> str:
+            if not lines:
+                return ""
+            sorted_lines = sorted(lines)
+            spans: List[Tuple[int, int]] = []
+            start = sorted_lines[0]
+            end = start
+            for line in sorted_lines[1:]:
+                if line == end + 1:
+                    end = line
+                else:
+                    spans.append((start, end))
+                    start = line
+                    end = line
             spans.append((start, end))
-            start = line
-            end = line
-    spans.append((start, end))
-    formatted = ", ".join(f"{s}-{e}" if s != e else str(s) for s, e in spans)
-    return Value(formatted)
+            return ", ".join(f"{s}-{e}" if s != e else str(s) for s, e in spans)
 
+        ctx.returns(returns)
+        ctx.update(lambda res, lines=(): None)
 
-@proto.transition(CoverageEvaluator.group_into_spans)
-def group_into_spans(): pass
-
-@group_into_spans.arguments
-def _(
-    state: CoverageState,
-    this: Any,
-    lines: Sequence[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[int]]]:
-    l = () if isinstance(lines, NotBoundType) else tuple(lines)
-    return (l,)
-
-@group_into_spans.returns
-def _(
-    state: CoverageState,
-    this: Any,
-    lines: Sequence[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[List[Tuple[int, int]]]]:
-    if not lines:
-        return Value([])
-    sorted_lines = sorted(lines)
-    spans: List[Tuple[int, int]] = []
-    start = sorted_lines[0]
-    end = start
-    for line in sorted_lines[1:]:
-        if line == end + 1:
-            end = line
-        else:
+    @transition(CoverageEvaluator.group_into_spans)
+    def group_into_spans(
+        self,
+        ctx: TransitionContext[CoverageEvaluator, [Sequence[int]], List[Tuple[int, int]]],
+    ) -> None:
+        ctx.arguments(lines=Domain(strategy=lambda: ()))
+        def returns(lines: Sequence[int] = ()) -> List[Tuple[int, int]]:
+            if not lines:
+                return []
+            sorted_lines = sorted(lines)
+            spans: List[Tuple[int, int]] = []
+            start = sorted_lines[0]
+            end = start
+            for line in sorted_lines[1:]:
+                if line == end + 1:
+                    end = line
+                else:
+                    spans.append((start, end))
+                    start = line
+                    end = line
             spans.append((start, end))
-            start = line
-            end = line
-    spans.append((start, end))
-    return Value(spans)
+            return spans
+
+        ctx.returns(returns)
+        ctx.update(lambda res, lines=(): None)
+
+    @transition(CoverageEvaluator.normalize_target_query)
+    def normalize_target_query(
+        self,
+        ctx: TransitionContext[CoverageEvaluator, [str], str],
+    ) -> None:
+        ctx.arguments(raw_query=Domain(strategy=lambda: 'sample_test'))
+        def returns(raw_query: str = "sample_test") -> str:
+            cleaned = raw_query.split(":")[-1].split("/")[-1]
+            if cleaned.endswith(".py"):
+                cleaned = cleaned[:-3]
+            return cleaned
+
+        ctx.returns(returns)
+        ctx.update(lambda res, raw_query="sample_test": None)
+
+    @transition(CoverageEvaluator.format_spans_report)
+    def format_spans_report(
+        self,
+        ctx: TransitionContext[CoverageEvaluator, [ModuleCoverage, Optional[int]], str],
+    ) -> None:
+        ctx.arguments(
+                    cov=Domain(strategy=lambda: ModuleCoverage(module_name='demo', test_name='demo_test', file_path='demo.py', test_path='demo_test.py', total_executable=10, covered=8, missed=2, coverage_pct=80.0, missing_lines=[9, 10], missing_ranges='9-10', missing_spans=[(9, 10)])),
+                    max_spans=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda cov, max_spans=None: f"Report for {cov.module_name}: {cov.missing_ranges}")
+        ctx.update(lambda res, cov, max_spans=None: None)
 
 
-@proto.transition(CoverageEvaluator.normalize_target_query)
-def normalize_target_query(): pass
-
-@normalize_target_query.arguments
-def _(
-    state: CoverageState,
-    this: Any,
-    raw_query: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    q = "sample_test" if isinstance(raw_query, NotBoundType) else str(raw_query)
-    return (q,)
-
-@normalize_target_query.returns
-def _(
-    state: CoverageState,
-    this: Any,
-    raw_query: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[str]]:
-    cleaned = raw_query.split(":")[-1].split("/")[-1]
-    if cleaned.endswith(".py"):
-        cleaned = cleaned[:-3]
-    return Value(cleaned)
-
-
-@proto.transition(CoverageEvaluator.format_spans_report)
-def format_spans_report(): pass
-
-@format_spans_report.arguments
-def _(
-    state: CoverageState,
-    this: Any,
-    cov: ModuleCoverage | NotBoundType = NotBound,
-    max_spans: Optional[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[ModuleCoverage, Optional[int]]]:
-    mc = (
-        ModuleCoverage(
-            module_name="demo",
-            test_name="demo_test",
-            file_path="demo.py",
-            test_path="demo_test.py",
-            total_executable=10,
-            covered=8,
-            missed=2,
-            coverage_pct=80.0,
-            missing_lines=[9, 10],
-            missing_ranges="9-10",
-            missing_spans=[(9, 10)],
-        )
-        if isinstance(cov, NotBoundType)
-        else cov
-    )
-    ms = None if isinstance(max_spans, NotBoundType) else max_spans
-    return (mc, ms)
-
-@format_spans_report.returns
-def _(
-    state: CoverageState,
-    this: Any,
-    cov: ModuleCoverage,
-    max_spans: Optional[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[str]]:
-    return Value(f"Report for {cov.module_name}: {cov.missing_ranges}")
+proto = CoverageStateMachine()
 
 
 # ==============================================================================

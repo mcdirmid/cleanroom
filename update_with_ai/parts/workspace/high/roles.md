@@ -14,7 +14,7 @@ Managing autonomous development roles requires consistent mapping between role c
 
 ## Types and Behavior
 
-A *role definition* record encapsulates configuration for an autonomous development role: a *role name*, a *role address* when explicitly targeted, a *guide path*, a starter *template* path when defined, a *template command* when dynamic scaffolding applies, a *source pattern*, *writable file patterns*, *read-only file patterns*, *role dependencies*, *star role dependencies*, *silent role dependencies*, *stub role dependencies*, *silent cross-role dependencies*, *feedback role dependencies*, *active component types*, a *verification template*, a *verification success message*, a *persona*, *workspace files*, *tools*, an *audit tag* when the role performs auditing, and a *task prompt* when custom instructions apply.
+A *role definition* record encapsulates configuration for an autonomous development role: a *role name*, a *role address* when explicitly targeted, a *guide path*, a starter *template* path when defined, a *template command* when dynamic scaffolding applies, a *source pattern*, *writable file patterns*, *read-only file patterns*, *role dependencies*, *star role dependencies*, *silent role dependencies*, *stub role dependencies*, *silent cross-role dependencies*, *feedback role dependencies*, *common specification roles*, *active component types*, a *verification template*, a *verification success message*, a *persona*, *workspace files*, *tools*, an *audit tag* when the role performs auditing, and a *task prompt* when custom instructions apply.
 
 An agent session's *role resolver* resolves role specifications and validates role configurations.
 
@@ -24,7 +24,7 @@ The role resolver resolves a role definition and lists every declared role defin
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T18:45:00Z
-CHANGE: Define roles interface component
+LAST_CHANGED: 2026-10-29T00:40:00Z
+CHANGE: Add common specification roles to role definition record
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

@@ -18,8 +18,8 @@ By enforcing grammar validation, compiling ranges into normalized comparator set
 
 - A concrete version engine extracts named component groups from version text using regular expression patterns. [tokenize_version_string]
 - A concrete version engine rejects numeric tokens containing leading zeroes. [reject_leading_zero_tokens]
-- A concrete version engine compiles range expressions into disjunctive normal form clauses containing sets of relational comparator bounds. [compile_range_comparator_sets]
-- A concrete version engine expands caret, tilde, and hyphen range tokens into explicit upper and lower boundary pairs. [expand_range_boundary_pairs]
+- A concrete version engine compiles range expressions into disjunctive normal form clauses containing sets of relational comparator bounds, trimming surrounding whitespace around expressions and clauses while permitting optional whitespace between comparator operators and target version tokens, delimiting comparators within clauses strictly by whitespace, and raising invalid range error on empty or whitespace-only inputs, empty union clauses, comma-separated comparators, and bare partial versions lacking wildcard characters across all comparator and hyphen expressions. [compile_range_comparator_sets]
+- A concrete version engine expands caret, tilde, wildcard, and hyphen range tokens into explicit upper and lower boundary pairs. [expand_range_boundary_pairs]
 - A concrete version engine compares precedence through short-circuiting evaluation across numeric tuples and pre-release segment iterators. [evaluate_rfc_precedence_ordering]
 - A concrete version engine ignores build metadata during precedence comparison. [ignore_build_metadata_in_precedence]
 - A concrete version engine evaluates candidate versions against compiled comparator clauses. [evaluate_range_disjunction]
@@ -28,6 +28,7 @@ By enforcing grammar validation, compiling ranges into normalized comparator set
 - A concrete package repository performs key-based package lookup and membership testing directly against the package registry map. [lookup_package_releases]
 - A concrete dependency solver tracks a partial solution assignment and an active decision stack. [initialize_solver_search]
 - A concrete dependency solver selects unassigned packages possessing the fewest viable candidate releases. [select_most_constrained_package]
+- A concrete dependency solver treats unregistered packages referenced by dependencies as having zero viable candidate releases without raising package not found error. [handle_unregistered_package_dependencies]
 - A concrete dependency solver explores candidates in descending precedence order. [explore_candidate_releases]
 - A concrete dependency solver records failing constraint intersections into a conflict trail. [record_conflict_trail_entries]
 - A concrete dependency solver reverts assignments from the decision stack to explore alternative release branches. [revert_assignments_from_decision_stack]
@@ -38,7 +39,7 @@ By enforcing grammar validation, compiling ranges into normalized comparator set
 ### Woven Contracts
 
 - Tokenization, RFC precedence, range compilation, repository sorting, and backtracking search coordinate to resolve dependency graphs safely and deterministically. [tokenize_version_string, compile_range_comparator_sets, expand_range_boundary_pairs, evaluate_rfc_precedence_ordering, evaluate_range_disjunction, store_releases_in_registry_map, sort_releases_by_precedence, lookup_package_releases, initialize_solver_search, explore_candidate_releases, revert_assignments_from_decision_stack, compile_resolution_outcome]
-- Most-constrained package selection, conflict trail recording, and decision stack reversion compose so that exhaustive search converts accumulated failures into ordered derivation steps. [select_most_constrained_package, record_conflict_trail_entries, revert_assignments_from_decision_stack, compile_conflict_derivation_steps, raise_resolution_conflict_on_search_exhaustion]
+- Most-constrained package selection, conflict trail recording, and decision stack reversion compose so that exhaustive search converts accumulated failures into ordered derivation steps. [select_most_constrained_package, handle_unregistered_package_dependencies, record_conflict_trail_entries, revert_assignments_from_decision_stack, compile_conflict_derivation_steps, raise_resolution_conflict_on_search_exhaustion]
 
 ## Grounding
 
@@ -57,7 +58,8 @@ By enforcing grammar validation, compiling ranges into normalized comparator set
   - Grounded: [semver_solver: [semver_solver_core_service]]
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-21T20:59:18Z
-LAST_CHANGED: 2026-10-21T20:59:18Z
-CHANGE: Ground concrete SemVer implementation contracts: split conflict recording from decision-stack reversion and conflict compilation from error raising; preserve build-metadata exclusion and most-constrained selection.
+LAST_CLEANED: 2026-10-27T03:48:22Z
+LAST_CHANGED: 2026-10-27T22:30:00Z
+CHANGE: Remove exact equality formatting, self-contain all backtracking search contracts
+SPEC_QA_AUDIT: 2026-10-27T03:48:22Z
 -->

@@ -11,8 +11,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from update_with_ai.parts.workspace_cli.lib.cli_tool import WorkspaceToolRunner
 
 
@@ -22,202 +21,102 @@ class ToolRunnerState:
     exit_code: int = 0
 
 
-proto = StateMachineProto[ToolRunnerState]()
+class WorkspaceToolRunnerStateMachine(StateMachine[ToolRunnerState]):
+    """Unified Pretense State Machine for WorkspaceToolRunner."""
+
+    def __init__(
+        self,
+        state: Optional[ToolRunnerState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or ToolRunnerState(), singletons=singletons)
+
+    @transition.seeding(name="seed_tool_runner_data")
+    def seed_tool_runner_data(
+        self,
+        ctx: TransitionContext[Any, [int], None],
+    ) -> None:
+        ctx.arguments(exit_code=Domain(strategy=lambda: 0))
+        ctx.returns(lambda exit_code=0: None)
+        ctx.update(lambda res, exit_code=0: setattr(self.state, "exit_code", int(exit_code)))
+
+    @transition(WorkspaceToolRunner.execute_command)
+    def execute_command(
+        self,
+        ctx: TransitionContext[WorkspaceToolRunner, [Sequence[str]], int],
+    ) -> None:
+        ctx.arguments(argv=Domain(strategy=lambda: ('get_work',)))
+        ctx.returns(lambda argv=("get_work",): self.state.exit_code)
+        ctx.update(lambda res, argv=("get_work",): None)
+
+    @transition(WorkspaceToolRunner.run_get_work)
+    def run_get_work(
+        self,
+        ctx: TransitionContext[WorkspaceToolRunner, [Optional[str], Optional[str], bool, Optional[int]], int],
+    ) -> None:
+        ctx.arguments(
+                    dir_scope=Domain(strategy=lambda: None),
+                    repo_root=Domain(strategy=lambda: None),
+                    force=Domain(strategy=lambda: False),
+                    batch_size=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda dir_scope=None, repo_root=None, force=False, batch_size=None: self.state.exit_code)
+        ctx.update(lambda res, dir_scope=None, repo_root=None, force=False, batch_size=None: None)
+
+    @transition(WorkspaceToolRunner.run_check_files)
+    def run_check_files(
+        self,
+        ctx: TransitionContext[WorkspaceToolRunner, [Optional[str], Optional[str]], int],
+    ) -> None:
+        ctx.arguments(
+                    target=Domain(strategy=lambda: None),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda target=None, repo_root=None: self.state.exit_code)
+        ctx.update(lambda res, target=None, repo_root=None: None)
+
+    @transition(WorkspaceToolRunner.run_submit)
+    def run_submit(
+        self,
+        ctx: TransitionContext[WorkspaceToolRunner, [str, Optional[str], Optional[str], bool], int],
+    ) -> None:
+        ctx.arguments(
+                    target=Domain(strategy=lambda: 'lib/foo.py'),
+                    summary=Domain(strategy=lambda: None),
+                    repo_root=Domain(strategy=lambda: None),
+                    no_verify=Domain(strategy=lambda: False),
+                )
+        ctx.returns(lambda target="lib/foo.py", summary=None, repo_root=None, no_verify=False: self.state.exit_code)
+        ctx.update(lambda res, target="lib/foo.py", summary=None, repo_root=None, no_verify=False: None)
+
+    @transition(WorkspaceToolRunner.run_blame)
+    def run_blame(
+        self,
+        ctx: TransitionContext[WorkspaceToolRunner, [str, str, Optional[str]], int],
+    ) -> None:
+        ctx.arguments(
+                    culprit_file=Domain(strategy=lambda: 'low/foo.pyi'),
+                    critique=Domain(strategy=lambda: 'critique'),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda culprit_file="low/foo.pyi", critique="critique", repo_root=None: self.state.exit_code)
+        ctx.update(lambda res, culprit_file="low/foo.pyi", critique="critique", repo_root=None: None)
+
+    @transition(WorkspaceToolRunner.run_fail)
+    def run_fail(
+        self,
+        ctx: TransitionContext[WorkspaceToolRunner, [str, Optional[str], Optional[str]], int],
+    ) -> None:
+        ctx.arguments(
+                    file_path=Domain(strategy=lambda: 'lib/foo.py'),
+                    reason=Domain(strategy=lambda: None),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda file_path="lib/foo.py", reason=None, repo_root=None: self.state.exit_code)
+        ctx.update(lambda res, file_path="lib/foo.py", reason=None, repo_root=None: None)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_tool_runner_data(): pass
-
-@seed_tool_runner_data.arguments
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    exit_code: int | NotBoundType = NotBound,
-) -> Optional[Tuple[int]]:
-    e = 0 if isinstance(exit_code, NotBoundType) else int(exit_code)
-    return (e,)
-
-@seed_tool_runner_data.provide
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    exit_code: int,
-    result: None = None,
-) -> None:
-    state.exit_code = exit_code
-
-
-# ==============================================================================
-# 2. Tool Runner Transitions
-# ==============================================================================
-
-@proto.transition(WorkspaceToolRunner.execute_command)
-def execute_command(): pass
-
-@execute_command.arguments
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    argv: Sequence[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[str]]]:
-    a = ("get_work",) if isinstance(argv, NotBoundType) else tuple(argv)
-    return (a,)
-
-@execute_command.returns
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    argv: Sequence[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    return Value(state.exit_code)
-
-
-@proto.transition(WorkspaceToolRunner.run_get_work)
-def run_get_work(): pass
-
-@run_get_work.arguments
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    dir_scope: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    force: bool | NotBoundType = NotBound,
-    batch_size: Optional[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], Optional[str], bool, Optional[int]]]:
-    ds = None if isinstance(dir_scope, NotBoundType) else dir_scope
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    f = False if isinstance(force, NotBoundType) else bool(force)
-    bs = None if isinstance(batch_size, NotBoundType) else batch_size
-    return (ds, rr, f, bs)
-
-@run_get_work.returns
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    dir_scope: Optional[str],
-    repo_root: Optional[str],
-    force: bool,
-    batch_size: Optional[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    return Value(state.exit_code)
-
-
-@proto.transition(WorkspaceToolRunner.run_check_files)
-def run_check_files(): pass
-
-@run_check_files.arguments
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    target: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], Optional[str]]]:
-    t = None if isinstance(target, NotBoundType) else target
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (t, rr)
-
-@run_check_files.returns
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    target: Optional[str],
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    return Value(state.exit_code)
-
-
-@proto.transition(WorkspaceToolRunner.run_submit)
-def run_submit(): pass
-
-@run_submit.arguments
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    target: str | NotBoundType = NotBound,
-    summary: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    no_verify: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str], Optional[str], bool]]:
-    t = "lib/foo.py" if isinstance(target, NotBoundType) else str(target)
-    s = None if isinstance(summary, NotBoundType) else summary
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    nv = False if isinstance(no_verify, NotBoundType) else bool(no_verify)
-    return (t, s, rr, nv)
-
-@run_submit.returns
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    target: str,
-    summary: Optional[str],
-    repo_root: Optional[str],
-    no_verify: bool,
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    return Value(state.exit_code)
-
-
-@proto.transition(WorkspaceToolRunner.run_blame)
-def run_blame(): pass
-
-@run_blame.arguments
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    culprit_file: str | NotBoundType = NotBound,
-    critique: str | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, Optional[str]]]:
-    cf = "low/foo.pyi" if isinstance(culprit_file, NotBoundType) else str(culprit_file)
-    c = "critique" if isinstance(critique, NotBoundType) else str(critique)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (cf, c, rr)
-
-@run_blame.returns
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    culprit_file: str,
-    critique: str,
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    return Value(state.exit_code)
-
-
-@proto.transition(WorkspaceToolRunner.run_fail)
-def run_fail(): pass
-
-@run_fail.arguments
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    file_path: str | NotBoundType = NotBound,
-    reason: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str], Optional[str]]]:
-    fp = "lib/foo.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    r = None if isinstance(reason, NotBoundType) else reason
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (fp, r, rr)
-
-@run_fail.returns
-def _(
-    state: ToolRunnerState,
-    this: Any,
-    file_path: str,
-    reason: Optional[str],
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    return Value(state.exit_code)
+proto = WorkspaceToolRunnerStateMachine()
 
 
 # ==============================================================================

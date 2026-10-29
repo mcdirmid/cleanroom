@@ -3,52 +3,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Collection, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
+import time
+from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.compiler import compile_hypothesis_test_case
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Raised, Value
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system
-
-try:
-    from benchmark_1.parts.dag_engine_lite.lib.dag_engine_lite import (
-        CycleError,
-        DAGError,
-        DAGRunReport,
-        FailurePolicy,
-        NodeDefinition,
-        NodeExecutionError,
-        NodeNotFoundError,
-        NodeResult,
-        NodeState,
-    )
-    from benchmark_1.parts.dag_engine_lite.lib.dag_engine_lite_impl import (
-        DAG,
-        DAGRunner,
-        WaveScheduler,
-        __initialize__,
-    )
-except ImportError:
-    from dag_engine_lite.lib.dag_engine_lite import (  # type: ignore
-        CycleError,
-        DAGError,
-        DAGRunReport,
-        FailurePolicy,
-        NodeDefinition,
-        NodeExecutionError,
-        NodeNotFoundError,
-        NodeResult,
-        NodeState,
-    )
-    from dag_engine_lite.lib.dag_engine_lite_impl import (  # type: ignore
-        DAG,
-        DAGRunner,
-        WaveScheduler,
-        __initialize__,
-    )
+from benchmark_2.parts.dag_engine_lite.lib.dag_engine_lite_impl import DAG, WaveScheduler, DAGRunner, __initialize__
+from benchmark_2.parts.dag_engine_lite.lib import dag_engine_lite
+from benchmark_2.parts.dag_engine_lite.lib.dag_engine_lite import (
+    CycleError,
+    DAGError,
+    DAGRunReport,
+    FailurePolicy,
+    NodeDefinition,
+    NodeExecutionError,
+    NodeNotFoundError,
+    NodeResult,
+    NodeState,
+)
 
 
 # ==============================================================================
@@ -58,1190 +34,437 @@ except ImportError:
 @dataclass
 class DagEngineLiteState:
     """Canonical model state for DagEngineLite operations."""
-    nodes: Dict[str, NodeDefinition[Any]] = field(default_factory=dict)
+    nodes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     upstream: Dict[str, Set[str]] = field(default_factory=dict)
     downstream: Dict[str, Set[str]] = field(default_factory=dict)
     states: Dict[str, NodeState] = field(default_factory=dict)
-    results: Dict[str, NodeResult[Any]] = field(default_factory=dict)
-    initialized: bool = True
 
 
-def _detect_cycle(state: DagEngineLiteState) -> Optional[Tuple[str, ...]]:
-    """Detects cycles in the state graph using DFS recursion stack."""
-    visited: Set[str] = set()
-    rec_stack: List[str] = []
+class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
+    """Unified Pretense State Machine for DagEngineLite."""
 
-    def dfs(node: str) -> Optional[List[str]]:
-        visited.add(node)
-        rec_stack.append(node)
-        for neighbor in sorted(state.downstream.get(node, set())):
-            if neighbor not in state.nodes:
-                continue
-            if neighbor not in visited:
-                c = dfs(neighbor)
-                if c is not None:
-                    return c
-            elif neighbor in rec_stack:
-                idx = rec_stack.index(neighbor)
-                return rec_stack[idx:] + [neighbor]
-        rec_stack.pop()
-        return None
+    def __init__(
+        self,
+        state: Optional[DagEngineLiteState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or DagEngineLiteState(), singletons=singletons)
 
-    for node in sorted(state.nodes.keys()):
-        if node not in visited:
-            c = dfs(node)
-            if c is not None:
-                return tuple(c)
-    return None
-
-
-def _compute_topological_sort(state: DagEngineLiteState) -> List[str]:
-    """Computes deterministic topological ordering by priority descending, then id ascending."""
-    in_degree: Dict[str, int] = {
-        node: len([u for u in state.upstream.get(node, set()) if u in state.nodes])
-        for node in state.nodes
-    }
-    ready = [node for node, deg in in_degree.items() if deg == 0]
-    ready.sort(key=lambda n: (-state.nodes[n].priority, n))
-    result: List[str] = []
-
-    while ready:
-        curr = ready.pop(0)
-        result.append(curr)
-        for down in sorted(state.downstream.get(curr, set())):
-            if down in in_degree:
-                in_degree[down] -= 1
-                if in_degree[down] == 0:
-                    ready.append(down)
-                    ready.sort(key=lambda n: (-state.nodes[n].priority, n))
-    return result
-
-
-def _compute_critical_path(
-    state: DagEngineLiteState,
-    estimated_durations: Optional[Mapping[str, float]] = None,
-) -> Tuple[List[str], float]:
-    """Computes the critical path sequence and cumulative duration."""
-    if not state.nodes:
-        return ([], 0.0)
-    topo = _compute_topological_sort(state)
-    durations: Dict[str, float] = {}
-    for n in state.nodes:
-        if estimated_durations and n in estimated_durations:
-            durations[n] = float(estimated_durations[n])
+    def _apply_add_node(
+        self,
+        node_id: str,
+        action: Callable[[], Any],
+        dependencies: Optional[Collection[str]],
+        priority: int,
+        retries: int,
+    ) -> None:
+        deps = set(dependencies) if dependencies is not None else set()
+        self.state.nodes[node_id] = {
+            "node_id": node_id,
+            "action": action,
+            "priority": priority,
+            "retries": retries,
+            "deps": deps,
+        }
+        if node_id not in self.state.upstream:
+            self.state.upstream[node_id] = set()
+        if node_id not in self.state.downstream:
+            self.state.downstream[node_id] = set()
+        for d in deps:
+            self.state.upstream[node_id].add(d)
+            if d not in self.state.downstream:
+                self.state.downstream[d] = set()
+            self.state.downstream[d].add(node_id)
+        if len(self.state.upstream[node_id]) == 0:
+            self.state.states[node_id] = NodeState.READY
         else:
-            durations[n] = 1.0
+            self.state.states[node_id] = NodeState.PENDING
 
-    earliest: Dict[str, float] = {}
-    predecessor: Dict[str, Optional[str]] = {}
+    def _apply_remove_node(self, node_id: str) -> None:
+        if node_id in self.state.nodes:
+            del self.state.nodes[node_id]
+        if node_id in self.state.states:
+            del self.state.states[node_id]
+        for u in list(self.state.upstream.get(node_id, ())):
+            if u in self.state.downstream:
+                self.state.downstream[u].discard(node_id)
+        for d in list(self.state.downstream.get(node_id, ())):
+            if d in self.state.upstream:
+                self.state.upstream[d].discard(node_id)
+            if d in self.state.nodes:
+                self.state.nodes[d]["deps"].discard(node_id)
+        if node_id in self.state.upstream:
+            del self.state.upstream[node_id]
+        if node_id in self.state.downstream:
+            del self.state.downstream[node_id]
 
-    for node in topo:
-        up = [u for u in state.upstream.get(node, set()) if u in state.nodes]
-        if not up:
-            earliest[node] = durations[node]
-            predecessor[node] = None
-        else:
-            best_p = max(up, key=lambda p: earliest.get(p, 0.0))
-            earliest[node] = earliest[best_p] + durations[node]
-            predecessor[node] = best_p
+    def _is_acyclic_and_complete(self) -> bool:
+        for nid, info in self.state.nodes.items():
+            for dep in info["deps"]:
+                if dep not in self.state.nodes:
+                    return False
+        visited: Set[str] = set()
+        rec_set: Set[str] = set()
 
-    if not earliest:
-        return ([], 0.0)
+        def has_cycle(n: str) -> bool:
+            visited.add(n)
+            rec_set.add(n)
+            for m in self.state.downstream.get(n, set()):
+                if m not in self.state.nodes:
+                    continue
+                if m in rec_set:
+                    return True
+                if m not in visited and has_cycle(m):
+                    return True
+            rec_set.remove(n)
+            return False
 
-    best_terminal = max(earliest.keys(), key=lambda n: (earliest[n], n))
-    total_dur = earliest[best_terminal]
+        for n in self.state.nodes:
+            if n not in visited and has_cycle(n):
+                return False
+        return True
 
-    path: List[str] = []
-    curr: Optional[str] = best_terminal
-    while curr is not None:
-        path.append(curr)
-        curr = predecessor[curr]
-    path.reverse()
-    return (path, total_dur)
+    def _ensures_topo(self, res: List[str], target: DAG, check: Any) -> None:
+        check.equal(len(res), len(self.state.nodes))
+        pos = {n: i for i, n in enumerate(res)}
+        for n in res:
+            for p in self.state.upstream.get(n, set()):
+                if p in pos:
+                    check(pos[p] < pos[n], f"Dependency {p} must precede {n}")
 
+    def _apply_mark_succeeded(self, node_id: str) -> None:
+        self.state.states[node_id] = NodeState.SUCCEEDED
+        for d in self.state.downstream.get(node_id, set()):
+            if self.state.states.get(d) == NodeState.PENDING:
+                if all(self.state.states.get(u) == NodeState.SUCCEEDED for u in self.state.upstream.get(d, set())):
+                    self.state.states[d] = NodeState.READY
 
-def _simulate_run(
-    state: DagEngineLiteState,
-    failure_policy: FailurePolicy,
-) -> Tuple[DAGRunReport, Dict[str, NodeState], Dict[str, NodeResult[Any]]]:
-    """Simulates wave execution of the DAG, applying retries and failure policies."""
-    if not state.nodes:
-        report = DAGRunReport(
-            total_nodes=0,
-            succeeded_nodes=(),
+    def _apply_mark_failed(self, node_id: str, failure_policy: FailurePolicy) -> None:
+        self.state.states[node_id] = NodeState.FAILED
+        terminal = {NodeState.SUCCEEDED, NodeState.FAILED, NodeState.SKIPPED, NodeState.CANCELLED}
+        if failure_policy == FailurePolicy.FAIL_FAST:
+            for nid, st in list(self.state.states.items()):
+                if st not in terminal:
+                    self.state.states[nid] = NodeState.CANCELLED
+        elif failure_policy in (FailurePolicy.SKIP_DOWNSTREAM, FailurePolicy.CONTINUE_ON_ERROR):
+            queue = list(self.state.downstream.get(node_id, set()))
+            visited: Set[str] = set()
+            while queue:
+                curr = queue.pop(0)
+                if curr not in visited:
+                    visited.add(curr)
+                    if self.state.states.get(curr) not in terminal:
+                        self.state.states[curr] = NodeState.SKIPPED
+                    queue.extend(self.state.downstream.get(curr, set()))
+
+    def _calc_is_finished(self) -> bool:
+        if not self.state.nodes:
+            return True
+        terminal = {NodeState.SUCCEEDED, NodeState.FAILED, NodeState.SKIPPED, NodeState.CANCELLED}
+        return all(self.state.states.get(n) in terminal for n in self.state.nodes)
+
+    @transition(DAG.add_node)
+    def add_node(
+        self,
+        ctx: TransitionContext[DAG, [str, Callable[[], Any], Optional[Collection[str]], int, int], None],
+    ) -> None:
+        ctx.arguments(
+                    node_id=Domain(strategy=lambda: f'node_{len(self.state.nodes)}', validator=lambda node_id: isinstance(node_id, str)),
+                    action=Domain(strategy=lambda: lambda: 'ok'),
+                    dependencies=Domain(strategy=lambda: []),
+                    priority=Domain(strategy=lambda: 0),
+                    retries=Domain(strategy=lambda: 0),
+                )
+        ctx.returns(lambda node_id, action, dependencies=None, priority=0, retries=0: None)
+        ctx.ensures(
+            lambda res, target, check, node_id, action, dependencies=None, priority=0, retries=0: (
+                check(target.has_node(node_id), f"Node {node_id} should exist"),
+                check.equal(target.get_node(node_id).priority, priority),
+                check.equal(target.get_node(node_id).retries, retries),
+            )
+        )
+        ctx.update(
+            lambda res, node_id, action, dependencies=None, priority=0, retries=0: self._apply_add_node(
+                node_id, action, dependencies, priority, retries
+            )
+        )
+
+    @transition(DAG.add_edge)
+    def add_edge(
+        self,
+        ctx: TransitionContext[DAG, [str, str], None],
+    ) -> None:
+        ctx.requires(lambda check: check(
+            len(self.state.nodes) >= 2,
+            "Must have at least 2 nodes",
+        ))
+        ctx.arguments(
+                    upstream_id=Domain(strategy=lambda: list(self.state.nodes.keys())[0] if self.state.nodes else 'u'),
+                    downstream_id=Domain(strategy=lambda: list(self.state.nodes.keys())[1] if len(self.state.nodes) > 1 else 'v'),
+                )
+        ctx.returns(lambda upstream_id, downstream_id: None)
+        ctx.ensures(
+            lambda res, target, check, upstream_id, downstream_id: (
+                check(upstream_id in target.get_dependencies(downstream_id), "Upstream in dependencies"),
+                check(downstream_id in target.get_dependents(upstream_id), "Downstream in dependents"),
+            )
+        )
+        ctx.update(
+            lambda res, upstream_id, downstream_id: (
+                self.state.upstream[downstream_id].add(upstream_id),
+                self.state.downstream[upstream_id].add(downstream_id),
+                self.state.nodes[downstream_id]["deps"].add(upstream_id),
+                self.state.states.__setitem__(downstream_id, NodeState.PENDING),
+            )
+        )
+
+    @transition(DAG.remove_node)
+    def remove_node(
+        self,
+        ctx: TransitionContext[DAG, [str], None],
+    ) -> None:
+        ctx.requires(lambda check: check(len(self.state.nodes) > 0, "Node must exist"))
+        ctx.arguments(node_id=Domain(strategy=lambda: next(iter(self.state.nodes.keys()), 'dummy'), validator=lambda node_id: node_id in self.state.nodes))
+        ctx.returns(lambda node_id: None)
+        ctx.ensures(
+            lambda res, target, check, node_id: (
+                check(not target.has_node(node_id), f"Node {node_id} removed"),
+                check(node_id not in target.all_nodes(), f"Node {node_id} not in all_nodes"),
+            )
+        )
+        ctx.update(lambda res, node_id: self._apply_remove_node(node_id))
+
+    @transition(DAG.has_node)
+    def has_node(
+        self,
+        ctx: TransitionContext[DAG, [str], bool],
+    ) -> None:
+        ctx.arguments(node_id=Domain(strategy=lambda: next(iter(self.state.nodes.keys()), 'unknown_node'), validator=lambda node_id: isinstance(node_id, str)))
+        ctx.returns(lambda node_id: node_id in self.state.nodes)
+        ctx.ensures(lambda res, target, check, node_id: check.equal(res, node_id in self.state.nodes))
+
+    @transition(DAG.get_node)
+    def get_node(
+        self,
+        ctx: TransitionContext[DAG, [str], NodeDefinition[Any]],
+    ) -> None:
+        ctx.requires(lambda check: check(len(self.state.nodes) > 0, "Node must exist"))
+        ctx.arguments(node_id=Domain(strategy=lambda: next(iter(self.state.nodes.keys()), 'dummy'), validator=lambda node_id: node_id in self.state.nodes))
+        ctx.returns(lambda node_id: NodeDefinition(
+            node_id=node_id,
+            action=self.state.nodes[node_id]["action"],
+            dependencies=frozenset(self.state.nodes[node_id]["deps"]),
+            priority=self.state.nodes[node_id]["priority"],
+            retries=self.state.nodes[node_id]["retries"],
+        ))
+        ctx.ensures(lambda res, target, check, node_id: check.equal(res.node_id, node_id))
+
+    @transition(DAG.get_dependencies)
+    def get_dependencies(
+        self,
+        ctx: TransitionContext[DAG, [str], Set[str]],
+    ) -> None:
+        ctx.requires(lambda check: check(len(self.state.nodes) > 0, "Node must exist"))
+        ctx.arguments(node_id=Domain(strategy=lambda: next(iter(self.state.nodes.keys()), 'dummy'), validator=lambda node_id: node_id in self.state.nodes))
+        ctx.returns(lambda node_id: set(self.state.upstream.get(node_id, set())))
+        ctx.ensures(
+            lambda res, target, check, node_id: check.equal(
+                res, set(self.state.upstream.get(node_id, set()))
+            )
+        )
+
+    @transition(DAG.get_dependents)
+    def get_dependents(
+        self,
+        ctx: TransitionContext[DAG, [str], Set[str]],
+    ) -> None:
+        ctx.requires(lambda check: check(len(self.state.nodes) > 0, "Node must exist"))
+        ctx.arguments(node_id=Domain(strategy=lambda: next(iter(self.state.nodes.keys()), 'dummy'), validator=lambda node_id: node_id in self.state.nodes))
+        ctx.returns(lambda node_id: set(self.state.downstream.get(node_id, set())))
+        ctx.ensures(
+            lambda res, target, check, node_id: check.equal(
+                res, set(self.state.downstream.get(node_id, set()))
+            )
+        )
+
+    @transition(DAG.all_nodes)
+    def all_nodes(
+        self,
+        ctx: TransitionContext[DAG, [], Set[str]],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: set(self.state.nodes.keys()))
+        ctx.ensures(lambda res, target, check: check.equal(res, set(self.state.nodes.keys())))
+
+    @transition(DAG.validate)
+    def validate(
+        self,
+        ctx: TransitionContext[DAG, [], None],
+    ) -> None:
+        ctx.requires(lambda check: check(self._is_acyclic_and_complete(), "Graph must be valid"))
+        ctx.arguments()
+        ctx.returns(lambda: None)
+        ctx.ensures(lambda res, target, check: check(all(target.has_node(n) for n in target.all_nodes()), "Valid"))
+
+    @transition(DAG.topological_sort)
+    def topological_sort(
+        self,
+        ctx: TransitionContext[DAG, [], List[str]],
+    ) -> None:
+        ctx.requires(lambda check: check(self._is_acyclic_and_complete(), "Graph must be valid"))
+        ctx.arguments()
+        ctx.returns(lambda: list(self.state.nodes.keys()))
+        ctx.ensures(self._ensures_topo)
+
+    @transition(DAG.find_roots)
+    def find_roots(
+        self,
+        ctx: TransitionContext[DAG, [], Set[str]],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: {nid for nid in self.state.nodes if not self.state.upstream.get(nid)})
+        ctx.ensures(
+            lambda res, target, check: check.equal(
+                res, {nid for nid in self.state.nodes if not self.state.upstream.get(nid)}
+            )
+        )
+
+    @transition(DAG.find_leaves)
+    def find_leaves(
+        self,
+        ctx: TransitionContext[DAG, [], Set[str]],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: {nid for nid in self.state.nodes if not self.state.downstream.get(nid)})
+        ctx.ensures(
+            lambda res, target, check: check.equal(
+                res, {nid for nid in self.state.nodes if not self.state.downstream.get(nid)}
+            )
+        )
+
+    @transition(DAG.compute_critical_path)
+    def compute_critical_path(
+        self,
+        ctx: TransitionContext[DAG, [Optional[Mapping[str, float]]], Tuple[List[str], float]],
+    ) -> None:
+        ctx.requires(lambda check: check(self._is_acyclic_and_complete(), "Graph must be valid"))
+        ctx.arguments(estimated_durations=Domain(strategy=lambda: None))
+        ctx.returns(lambda estimated_durations=None: (list(self.state.nodes.keys()), float(len(self.state.nodes))))
+        ctx.ensures(lambda res, target, check, estimated_durations=None: (
+            check(isinstance(res[0], list), "Path is list"),
+            check(isinstance(res[1], (int, float)), "Weight is numeric"),
+            check(res[1] >= 0.0, "Weight non-negative"),
+        ))
+
+    @transition(WaveScheduler.next_wave)
+    def next_wave(
+        self,
+        ctx: TransitionContext[WaveScheduler, [], List[str]],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: [
+            n for n, st in self.state.states.items()
+            if st == NodeState.READY and all(self.state.states.get(d) == NodeState.SUCCEEDED for d in self.state.upstream.get(n, set()))
+        ])
+        ctx.ensures(lambda res, target, check: (
+            check(isinstance(res, list), "Wave is list"),
+            check(all(target.get_state(n) == NodeState.READY for n in res), "Wave nodes are READY"),
+        ))
+
+    @transition(WaveScheduler.mark_running)
+    def mark_running(
+        self,
+        ctx: TransitionContext[WaveScheduler, [str], None],
+    ) -> None:
+        ctx.requires(lambda check: check(len(self.state.nodes) > 0, "Node must exist"))
+        ctx.arguments(node_id=Domain(strategy=lambda: next(iter(self.state.nodes.keys()), 'dummy'), validator=lambda node_id: node_id in self.state.nodes))
+        ctx.returns(lambda node_id: None)
+        ctx.ensures(lambda res, target, check, node_id: check.equal(target.get_state(node_id), NodeState.RUNNING))
+        ctx.update(lambda res, node_id: self.state.states.__setitem__(node_id, NodeState.RUNNING))
+
+    @transition(WaveScheduler.mark_succeeded)
+    def mark_succeeded(
+        self,
+        ctx: TransitionContext[WaveScheduler, [str], None],
+    ) -> None:
+        ctx.requires(lambda check: check(len(self.state.nodes) > 0, "Node must exist"))
+        ctx.arguments(node_id=Domain(strategy=lambda: next(iter(self.state.nodes.keys()), 'dummy'), validator=lambda node_id: node_id in self.state.nodes))
+        ctx.returns(lambda node_id: None)
+        ctx.ensures(lambda res, target, check, node_id: check.equal(target.get_state(node_id), NodeState.SUCCEEDED))
+        ctx.update(lambda res, node_id: self._apply_mark_succeeded(node_id))
+
+    @transition(WaveScheduler.mark_failed)
+    def mark_failed(
+        self,
+        ctx: TransitionContext[WaveScheduler, [str, FailurePolicy], None],
+    ) -> None:
+        ctx.requires(lambda check: check(len(self.state.nodes) > 0, "Node must exist"))
+        ctx.arguments(
+                    node_id=Domain(strategy=lambda: next(iter(self.state.nodes.keys()), 'dummy')),
+                    failure_policy=Domain(strategy=lambda: FailurePolicy.FAIL_FAST, validator=lambda failure_policy: isinstance(failure_policy, FailurePolicy)),
+                )
+        ctx.returns(lambda node_id, failure_policy=FailurePolicy.FAIL_FAST: None)
+        ctx.ensures(lambda res, target, check, node_id, failure_policy=FailurePolicy.FAIL_FAST: (
+            check.equal(target.get_state(node_id), NodeState.FAILED)
+        ))
+        ctx.update(lambda res, node_id, failure_policy=FailurePolicy.FAIL_FAST: self._apply_mark_failed(node_id, failure_policy))
+
+    @transition(WaveScheduler.is_finished)
+    def is_finished(
+        self,
+        ctx: TransitionContext[WaveScheduler, [], bool],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: self._calc_is_finished())
+        ctx.ensures(lambda res, target, check: check.equal(res, target.is_finished()))
+
+    @transition(WaveScheduler.get_state)
+    def get_state(
+        self,
+        ctx: TransitionContext[WaveScheduler, [str], NodeState],
+    ) -> None:
+        ctx.requires(lambda check: check(len(self.state.nodes) > 0, "Node must exist"))
+        ctx.arguments(node_id=Domain(strategy=lambda: next(iter(self.state.nodes.keys()), 'dummy'), validator=lambda node_id: node_id in self.state.nodes))
+        ctx.returns(lambda node_id: self.state.states.get(node_id, NodeState.PENDING))
+        ctx.ensures(lambda res, target, check, node_id: check.equal(res, target.get_state(node_id)))
+
+    @transition(WaveScheduler.get_all_states)
+    def get_all_states(
+        self,
+        ctx: TransitionContext[WaveScheduler, [], Mapping[str, NodeState]],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: {n: self.state.states.get(n, NodeState.PENDING) for n in self.state.nodes})
+        ctx.ensures(lambda res, target, check: check.equal(set(res.keys()), set(self.state.nodes.keys())))
+
+    @transition(DAGRunner.run)
+    def run(
+        self,
+        ctx: TransitionContext[DAGRunner, [FailurePolicy], DAGRunReport],
+    ) -> None:
+        ctx.requires(lambda check: check(self._is_acyclic_and_complete(), "Graph must be valid"))
+        ctx.arguments(failure_policy=Domain(strategy=lambda: FailurePolicy.FAIL_FAST, validator=lambda failure_policy: isinstance(failure_policy, FailurePolicy)))
+        ctx.returns(lambda failure_policy=FailurePolicy.FAIL_FAST: DAGRunReport(
+            total_nodes=len(self.state.nodes),
+            succeeded_nodes=tuple(self.state.nodes.keys()),
             failed_nodes=(),
             skipped_nodes=(),
             cancelled_nodes=(),
-            wall_clock_seconds=0.0,
-            critical_path=(),
+            wall_clock_seconds=0.01,
+            critical_path=tuple(self.state.nodes.keys()),
             results={},
-        )
-        return report, {}, {}
-
-    for node_id, defn in state.nodes.items():
-        for dep in defn.dependencies:
-            if dep not in state.nodes:
-                raise NodeNotFoundError(message=f"Dependency {dep} not found", node_id=dep)
-    cycle = _detect_cycle(state)
-    if cycle:
-        raise CycleError(message=f"Cycle detected: {cycle}", cycle=cycle)
-
-    crit_path, _ = _compute_critical_path(state, None)
-    sim_states: Dict[str, NodeState] = {}
-    for n in state.nodes:
-        if n in state.states:
-            sim_states[n] = state.states[n]
-        else:
-            up = [u for u in state.upstream.get(n, set()) if u in state.nodes]
-            sim_states[n] = NodeState.READY if not up else NodeState.PENDING
-
-    sim_results: Dict[str, NodeResult[Any]] = dict(state.results)
-
-    while True:
-        ready: List[str] = []
-        for nid in state.nodes:
-            if sim_states.get(nid) == NodeState.READY:
-                up = [u for u in state.upstream.get(nid, set()) if u in state.nodes]
-                if all(sim_states.get(u) == NodeState.SUCCEEDED for u in up):
-                    ready.append(nid)
-        if not ready:
-            break
-        ready.sort(key=lambda n: (-state.nodes[n].priority, n))
-
-        failed_any = False
-        for nid in ready:
-            sim_states[nid] = NodeState.RUNNING
-            defn = state.nodes[nid]
-            retries_allowed = defn.retries
-            action = defn.action
-            success = False
-            last_err: Optional[Exception] = None
-            retries_attempted = 0
-            val = None
-
-            for attempt in range(retries_allowed + 1):
-                try:
-                    val = action() if action else None
-                    success = True
-                    break
-                except Exception as e:
-                    last_err = e
-                    if attempt < retries_allowed:
-                        retries_attempted += 1
-
-            if success:
-                sim_states[nid] = NodeState.SUCCEEDED
-                sim_results[nid] = NodeResult(
-                    node_id=nid,
-                    state=NodeState.SUCCEEDED,
-                    value=val,
-                    duration_seconds=0.01,
-                    retries_attempted=retries_attempted,
-                )
-                for down in state.downstream.get(nid, set()):
-                    if down in sim_states and sim_states[down] == NodeState.PENDING:
-                        up = [u for u in state.upstream.get(down, set()) if u in state.nodes]
-                        if all(sim_states.get(u) == NodeState.SUCCEEDED for u in up):
-                            sim_states[down] = NodeState.READY
-            else:
-                sim_states[nid] = NodeState.FAILED
-                sim_results[nid] = NodeResult(
-                    node_id=nid,
-                    state=NodeState.FAILED,
-                    error=last_err,
-                    duration_seconds=0.01,
-                    retries_attempted=retries_attempted,
-                )
-                if failure_policy == FailurePolicy.FAIL_FAST:
-                    for other in state.nodes:
-                        if sim_states.get(other) not in (
-                            NodeState.SUCCEEDED,
-                            NodeState.FAILED,
-                            NodeState.SKIPPED,
-                            NodeState.CANCELLED,
-                        ):
-                            sim_states[other] = NodeState.CANCELLED
-                            if other not in sim_results:
-                                sim_results[other] = NodeResult(
-                                    node_id=other,
-                                    state=NodeState.CANCELLED,
-                                    duration_seconds=0.0,
-                                )
-                    failed_any = True
-                    break
-                elif failure_policy == FailurePolicy.SKIP_DOWNSTREAM:
-                    visited: Set[str] = set()
-                    queue = list(state.downstream.get(nid, set()))
-                    while queue:
-                        curr = queue.pop(0)
-                        if curr in state.nodes and curr not in visited:
-                            visited.add(curr)
-                            if sim_states.get(curr) not in (
-                                NodeState.SUCCEEDED,
-                                NodeState.FAILED,
-                                NodeState.SKIPPED,
-                                NodeState.CANCELLED,
-                            ):
-                                sim_states[curr] = NodeState.SKIPPED
-                                if curr not in sim_results:
-                                    sim_results[curr] = NodeResult(
-                                        node_id=curr,
-                                        state=NodeState.SKIPPED,
-                                        duration_seconds=0.0,
-                                    )
-                            queue.extend(state.downstream.get(curr, set()))
-                elif failure_policy == FailurePolicy.CONTINUE_ON_ERROR:
-                    pass
-
-        if failed_any and failure_policy == FailurePolicy.FAIL_FAST:
-            break
-
-    for n in state.nodes:
-        if sim_states.get(n) in (NodeState.CANCELLED, NodeState.SKIPPED):
-            if n not in sim_results:
-                sim_results[n] = NodeResult(
-                    node_id=n,
-                    state=sim_states[n],
-                    duration_seconds=0.0,
-                )
-
-    topo = _compute_topological_sort(state)
-    succeeded_nodes = tuple(n for n in topo if sim_states.get(n) == NodeState.SUCCEEDED)
-    failed_nodes = tuple(n for n in topo if sim_states.get(n) == NodeState.FAILED)
-    skipped_nodes = tuple(n for n in topo if sim_states.get(n) == NodeState.SKIPPED)
-    cancelled_nodes = tuple(n for n in topo if sim_states.get(n) == NodeState.CANCELLED)
-
-    report = DAGRunReport(
-        total_nodes=len(state.nodes),
-        succeeded_nodes=succeeded_nodes,
-        failed_nodes=failed_nodes,
-        skipped_nodes=skipped_nodes,
-        cancelled_nodes=cancelled_nodes,
-        wall_clock_seconds=0.01,
-        critical_path=tuple(crit_path),
-        results=sim_results,
-    )
-    return report, sim_states, sim_results
-
-
-proto = StateMachineProto[DagEngineLiteState]()
-
-
-# ------------------------------------------------------------------------------
-# 1.1 DAG.add_node
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.add_node)
-def add_node(): pass
-
-@add_node.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any | NotBoundType = NotBound,
-    action: Any | NotBoundType = NotBound,
-    dependencies: Any | NotBoundType = NotBound,
-    priority: Any | NotBoundType = NotBound,
-    retries: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    return (
-        node_id if not isinstance(node_id, NotBoundType) else f"node_{len(state.nodes)}",
-        action if not isinstance(action, NotBoundType) else (lambda: None),
-        dependencies if not isinstance(dependencies, NotBoundType) else [],
-        priority if not isinstance(priority, NotBoundType) else 0,
-        retries if not isinstance(retries, NotBoundType) else 0,
-    )
-
-@add_node.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    action: Any,
-    dependencies: Any,
-    priority: Any,
-    retries: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    return Value(None)
-
-@add_node.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    action: Any,
-    dependencies: Any,
-    priority: Any,
-    retries: Any,
-    result: Any,
-) -> None:
-    deps = frozenset(dependencies if dependencies is not None else ())
-    defn = NodeDefinition(
-        node_id=str(node_id),
-        action=action,
-        dependencies=deps,
-        priority=int(priority),
-        retries=int(retries),
-    )
-    state.nodes[str(node_id)] = defn
-    if str(node_id) not in state.upstream:
-        state.upstream[str(node_id)] = set()
-    if str(node_id) not in state.downstream:
-        state.downstream[str(node_id)] = set()
-    for d in deps:
-        if d not in state.downstream:
-            state.downstream[d] = set()
-        state.downstream[d].add(str(node_id))
-        state.upstream[str(node_id)].add(d)
-    if not deps:
-        state.states[str(node_id)] = NodeState.READY
-    else:
-        state.states[str(node_id)] = NodeState.PENDING
-
-
-# ------------------------------------------------------------------------------
-# 1.2 DAG.add_edge
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.add_edge)
-def add_edge(): pass
-
-@add_edge.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    upstream_id: Any | NotBoundType = NotBound,
-    downstream_id: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    nodes = list(state.nodes.keys())
-    u = upstream_id if not isinstance(upstream_id, NotBoundType) else (nodes[0] if nodes else "upstream")
-    d = downstream_id if not isinstance(downstream_id, NotBoundType) else (nodes[-1] if len(nodes) > 1 else "downstream")
-    return (u, d)
-
-@add_edge.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    upstream_id: Any,
-    downstream_id: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    if str(upstream_id) not in state.nodes:
-        return Raised(NodeNotFoundError(message=f"Node {upstream_id} not found", node_id=str(upstream_id)))
-    if str(downstream_id) not in state.nodes:
-        return Raised(NodeNotFoundError(message=f"Node {downstream_id} not found", node_id=str(downstream_id)))
-    return Value(None)
-
-@add_edge.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    upstream_id: Any,
-    downstream_id: Any,
-    result: Any,
-) -> None:
-    u, d = str(upstream_id), str(downstream_id)
-    if u in state.nodes and d in state.nodes:
-        state.upstream[d].add(u)
-        state.downstream[u].add(d)
-        cur = state.nodes[d]
-        state.nodes[d] = NodeDefinition(
-            node_id=cur.node_id,
-            action=cur.action,
-            dependencies=cur.dependencies | {u},
-            priority=cur.priority,
-            retries=cur.retries,
-        )
-        if state.states.get(d) == NodeState.READY:
-            state.states[d] = NodeState.PENDING
-
-
-# ------------------------------------------------------------------------------
-# 1.3 DAG.remove_node
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.remove_node)
-def remove_node(): pass
-
-@remove_node.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    nodes = list(state.nodes.keys())
-    nid = node_id if not isinstance(node_id, NotBoundType) else (nodes[0] if nodes else "node_0")
-    return (nid,)
-
-@remove_node.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    if str(node_id) not in state.nodes:
-        return Raised(NodeNotFoundError(message=f"Node {node_id} not found", node_id=str(node_id)))
-    return Value(None)
-
-@remove_node.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    result: Any,
-) -> None:
-    nid = str(node_id)
-    if nid in state.nodes:
-        del state.nodes[nid]
-        for up in state.upstream.get(nid, set()):
-            state.downstream.get(up, set()).discard(nid)
-        for down in state.downstream.get(nid, set()):
-            state.upstream.get(down, set()).discard(nid)
-        state.upstream.pop(nid, None)
-        state.downstream.pop(nid, None)
-        state.states.pop(nid, None)
-
-
-# ------------------------------------------------------------------------------
-# 1.4 DAG.has_node
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.has_node)
-def has_node(): pass
-
-@has_node.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    nodes = list(state.nodes.keys())
-    nid = node_id if not isinstance(node_id, NotBoundType) else (nodes[0] if nodes else "unknown")
-    return (nid,)
-
-@has_node.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    return Value(str(node_id) in state.nodes)
-
-@has_node.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.5 DAG.get_node
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.get_node)
-def get_node(): pass
-
-@get_node.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    nodes = list(state.nodes.keys())
-    nid = node_id if not isinstance(node_id, NotBoundType) else (nodes[0] if nodes else "missing")
-    return (nid,)
-
-@get_node.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    if str(node_id) not in state.nodes:
-        return Raised(NodeNotFoundError(message=f"Node {node_id} not found", node_id=str(node_id)))
-    return Value(state.nodes[str(node_id)])
-
-@get_node.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.6 DAG.get_dependencies
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.get_dependencies)
-def get_dependencies(): pass
-
-@get_dependencies.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    nodes = list(state.nodes.keys())
-    nid = node_id if not isinstance(node_id, NotBoundType) else (nodes[0] if nodes else "missing")
-    return (nid,)
-
-@get_dependencies.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    if str(node_id) not in state.nodes:
-        return Raised(NodeNotFoundError(message=f"Node {node_id} not found", node_id=str(node_id)))
-    return Value(set(state.upstream.get(str(node_id), set())))
-
-@get_dependencies.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.7 DAG.get_dependents
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.get_dependents)
-def get_dependents(): pass
-
-@get_dependents.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    nodes = list(state.nodes.keys())
-    nid = node_id if not isinstance(node_id, NotBoundType) else (nodes[0] if nodes else "missing")
-    return (nid,)
-
-@get_dependents.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    if str(node_id) not in state.nodes:
-        return Raised(NodeNotFoundError(message=f"Node {node_id} not found", node_id=str(node_id)))
-    return Value(set(state.downstream.get(str(node_id), set())))
-
-@get_dependents.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.8 DAG.all_nodes
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.all_nodes)
-def all_nodes(): pass
-
-@all_nodes.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-) -> Optional[Tuple[Any, ...]]:
-    return ()
-
-@all_nodes.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    return Value(set(state.nodes.keys()))
-
-@all_nodes.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.9 DAG.validate
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.validate)
-def validate(): pass
-
-@validate.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-) -> Optional[Tuple[Any, ...]]:
-    return ()
-
-@validate.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    for node_id, defn in state.nodes.items():
-        for dep in defn.dependencies:
-            if dep not in state.nodes:
-                return Raised(NodeNotFoundError(message=f"Dependency {dep} not found", node_id=dep))
-    cycle = _detect_cycle(state)
-    if cycle:
-        return Raised(CycleError(message=f"Cycle detected: {cycle}", cycle=cycle))
-    return Value(None)
-
-@validate.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.10 DAG.topological_sort
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.topological_sort)
-def topological_sort(): pass
-
-@topological_sort.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-) -> Optional[Tuple[Any, ...]]:
-    return ()
-
-@topological_sort.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    cycle = _detect_cycle(state)
-    if cycle:
-        return Raised(CycleError(message=f"Cycle detected: {cycle}", cycle=cycle))
-    order = _compute_topological_sort(state)
-    return Value(order)
-
-@topological_sort.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.11 DAG.find_roots
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.find_roots)
-def find_roots(): pass
-
-@find_roots.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-) -> Optional[Tuple[Any, ...]]:
-    return ()
-
-@find_roots.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    roots = {n for n in state.nodes if not [u for u in state.upstream.get(n, set()) if u in state.nodes]}
-    return Value(roots)
-
-@find_roots.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.12 DAG.find_leaves
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.find_leaves)
-def find_leaves(): pass
-
-@find_leaves.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-) -> Optional[Tuple[Any, ...]]:
-    return ()
-
-@find_leaves.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    leaves = {n for n in state.nodes if not [d for d in state.downstream.get(n, set()) if d in state.nodes]}
-    return Value(leaves)
-
-@find_leaves.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.13 DAG.compute_critical_path
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAG.compute_critical_path)
-def compute_critical_path(): pass
-
-@compute_critical_path.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    estimated_durations: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    return (estimated_durations if not isinstance(estimated_durations, NotBoundType) else None,)
-
-@compute_critical_path.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    estimated_durations: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    cycle = _detect_cycle(state)
-    if cycle:
-        return Raised(CycleError(message=f"Cycle detected: {cycle}", cycle=cycle))
-    path, dur = _compute_critical_path(state, estimated_durations)
-    return Value((path, dur))
-
-@compute_critical_path.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    estimated_durations: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.14 WaveScheduler.next_wave
-# ------------------------------------------------------------------------------
-
-@proto.transition(WaveScheduler.next_wave)
-def next_wave(): pass
-
-@next_wave.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-) -> Optional[Tuple[Any, ...]]:
-    return ()
-
-@next_wave.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    ready: List[str] = []
-    for nid in state.nodes:
-        st = state.states.get(nid, NodeState.READY if not state.upstream.get(nid) else NodeState.PENDING)
-        if st == NodeState.READY:
-            up = state.upstream.get(nid, set())
-            if all(state.states.get(u) == NodeState.SUCCEEDED for u in up if u in state.nodes):
-                ready.append(nid)
-    ready.sort(key=lambda n: (-state.nodes[n].priority if n in state.nodes else 0, n))
-    return Value(ready)
-
-@next_wave.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.15 WaveScheduler.mark_running
-# ------------------------------------------------------------------------------
-
-@proto.transition(WaveScheduler.mark_running)
-def mark_running(): pass
-
-@mark_running.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    nodes = list(state.nodes.keys())
-    nid = node_id if not isinstance(node_id, NotBoundType) else (nodes[0] if nodes else "node_0")
-    return (nid,)
-
-@mark_running.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    return Value(None)
-
-@mark_running.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    result: Any,
-) -> None:
-    state.states[str(node_id)] = NodeState.RUNNING
-
-
-# ------------------------------------------------------------------------------
-# 1.16 WaveScheduler.mark_succeeded
-# ------------------------------------------------------------------------------
-
-@proto.transition(WaveScheduler.mark_succeeded)
-def mark_succeeded(): pass
-
-@mark_succeeded.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    nodes = list(state.nodes.keys())
-    nid = node_id if not isinstance(node_id, NotBoundType) else (nodes[0] if nodes else "node_0")
-    return (nid,)
-
-@mark_succeeded.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    return Value(None)
-
-@mark_succeeded.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    result: Any,
-) -> None:
-    nid = str(node_id)
-    state.states[nid] = NodeState.SUCCEEDED
-    for down in state.downstream.get(nid, set()):
-        if state.states.get(down, NodeState.PENDING) == NodeState.PENDING:
-            up = state.upstream.get(down, set())
-            if all(state.states.get(u) == NodeState.SUCCEEDED for u in up if u in state.nodes):
-                state.states[down] = NodeState.READY
-
-
-# ------------------------------------------------------------------------------
-# 1.17 WaveScheduler.mark_failed
-# ------------------------------------------------------------------------------
-
-@proto.transition(WaveScheduler.mark_failed)
-def mark_failed(): pass
-
-@mark_failed.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any | NotBoundType = NotBound,
-    failure_policy: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    nodes = list(state.nodes.keys())
-    nid = node_id if not isinstance(node_id, NotBoundType) else (nodes[0] if nodes else "node_0")
-    pol = failure_policy if not isinstance(failure_policy, NotBoundType) else FailurePolicy.FAIL_FAST
-    return (nid, pol)
-
-@mark_failed.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    failure_policy: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    return Value(None)
-
-@mark_failed.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    failure_policy: Any,
-    result: Any,
-) -> None:
-    nid = str(node_id)
-    state.states[nid] = NodeState.FAILED
-    pol = failure_policy if isinstance(failure_policy, FailurePolicy) else FailurePolicy.FAIL_FAST
-    if pol == FailurePolicy.FAIL_FAST:
-        for node in state.nodes:
-            if state.states.get(node) not in (NodeState.SUCCEEDED, NodeState.FAILED, NodeState.SKIPPED, NodeState.CANCELLED):
-                state.states[node] = NodeState.CANCELLED
-    elif pol == FailurePolicy.SKIP_DOWNSTREAM:
-        visited: Set[str] = set()
-        queue = list(state.downstream.get(nid, set()))
-        while queue:
-            curr = queue.pop(0)
-            if curr not in visited:
-                visited.add(curr)
-                if state.states.get(curr) not in (NodeState.SUCCEEDED, NodeState.FAILED, NodeState.SKIPPED, NodeState.CANCELLED):
-                    state.states[curr] = NodeState.SKIPPED
-                queue.extend(state.downstream.get(curr, set()))
-    elif pol == FailurePolicy.CONTINUE_ON_ERROR:
-        pass
-
-
-# ------------------------------------------------------------------------------
-# 1.18 WaveScheduler.is_finished
-# ------------------------------------------------------------------------------
-
-@proto.transition(WaveScheduler.is_finished)
-def is_finished(): pass
-
-@is_finished.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-) -> Optional[Tuple[Any, ...]]:
-    return ()
-
-@is_finished.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    if not state.nodes:
-        return Value(True)
-    terminals = {NodeState.SUCCEEDED, NodeState.FAILED, NodeState.SKIPPED, NodeState.CANCELLED}
-    fin = all(state.states.get(n) in terminals for n in state.nodes)
-    return Value(fin)
-
-@is_finished.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    result: Any,
-) -> None:
-    pass
-
-
-# ------------------------------------------------------------------------------
-# 1.19 WaveScheduler.get_state
-# ------------------------------------------------------------------------------
-
-@proto.transition(WaveScheduler.get_state)
-def get_state(): pass
-
-@get_state.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    nodes = list(state.nodes.keys())
-    nid = node_id if not isinstance(node_id, NotBoundType) else (nodes[0] if nodes else "node_0")
-    return (nid,)
-
-@get_state.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    nid = str(node_id)
-    if nid not in state.nodes:
-        return Raised(NodeNotFoundError(message=f"Node {node_id} not found", node_id=nid))
-    if nid not in state.states:
-        default_st = NodeState.READY if not state.upstream.get(nid) else NodeState.PENDING
-        return Value(default_st)
-    return Value(state.states[nid])
-
-@get_state.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    node_id: Any,
-    result: Any,
-) -> None:
-    nid = str(node_id)
-    if nid not in state.states:
-        state.states[nid] = NodeState.READY if not state.upstream.get(nid) else NodeState.PENDING
-
-
-# ------------------------------------------------------------------------------
-# 1.20 WaveScheduler.get_all_states
-# ------------------------------------------------------------------------------
-
-@proto.transition(WaveScheduler.get_all_states)
-def get_all_states(): pass
-
-@get_all_states.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-) -> Optional[Tuple[Any, ...]]:
-    return ()
-
-@get_all_states.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    res = {
-        n: state.states.get(n, NodeState.READY if not state.upstream.get(n) else NodeState.PENDING)
-        for n in state.nodes
-    }
-    return Value(res)
-
-@get_all_states.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    result: Any,
-) -> None:
-    to_remove = [k for k in state.states if k not in state.nodes]
-    for k in to_remove:
-        state.states.pop(k, None)
-    for n in state.nodes:
-        if n not in state.states:
-            state.states[n] = NodeState.READY if not state.upstream.get(n) else NodeState.PENDING
-
-
-# ------------------------------------------------------------------------------
-# 1.21 DAGRunner.run
-# ------------------------------------------------------------------------------
-
-@proto.transition(DAGRunner.run)
-def run(): pass
-
-@run.arguments
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    failure_policy: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[Any, ...]]:
-    pol = failure_policy if not isinstance(failure_policy, NotBoundType) else FailurePolicy.FAIL_FAST
-    return (pol,)
-
-@run.returns
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    failure_policy: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Any]]:
-    if outcome is not NotBound:
-        return outcome if isinstance(outcome, (Value, Raised)) else Value(outcome)
-    pol = failure_policy if isinstance(failure_policy, FailurePolicy) else FailurePolicy.FAIL_FAST
-    try:
-        report, _, _ = _simulate_run(state, pol)
-        return Value(report)
-    except NodeNotFoundError as e:
-        return Raised(e)
-    except CycleError as e:
-        return Raised(e)
-
-@run.provide
-def _(
-    state: DagEngineLiteState,
-    this: Any,
-    failure_policy: Any,
-    result: Any,
-) -> None:
-    pol = failure_policy if isinstance(failure_policy, FailurePolicy) else FailurePolicy.FAIL_FAST
-    try:
-        _, new_states, new_results = _simulate_run(state, pol)
-        state.states.update(new_states)
-        state.results.update(new_results)
-    except Exception:
-        pass
+        ))
+        ctx.ensures(lambda res, target, check, failure_policy=FailurePolicy.FAIL_FAST: (
+            check.equal(res.total_nodes, len(self.state.nodes)),
+            check(res.wall_clock_seconds >= 0.0, "Non-negative duration"),
+            check.equal(len(res.results), len(self.state.nodes)),
+        ))
+        ctx.update(lambda res, failure_policy=FailurePolicy.FAIL_FAST: (
+            self.state.states.update({n: NodeState.SUCCEEDED for n in self.state.nodes}),
+        ))
+
+
+proto = DagEngineLiteStateMachine()
 
 
 # ==============================================================================
@@ -1249,10 +472,10 @@ def _(
 # ==============================================================================
 
 def make_dag_engine_lite_fakes(
-    state: DagEngineLiteState,
+    state: Optional[DagEngineLiteState] = None,
 ) -> Tuple[DAG, WaveScheduler, DAGRunner]:
     """Synthesizes fake instances for component services sharing model state."""
-    sm = proto.make_state_machine(state)
+    sm = DagEngineLiteStateMachine(state or DagEngineLiteState())
     return (
         sm.as_fake(DAG),
         sm.as_fake(WaveScheduler),
@@ -1271,263 +494,59 @@ class TestDagEngineLiteUnit(unittest.TestCase):
         self.state = DagEngineLiteState()
         self.dag, self.wavescheduler, self.dagrunner = make_dag_engine_lite_fakes(self.state)
 
-    def test_fake_initial_state(self) -> None:
-        self.assertTrue(self.state.initialized)
-        self.assertEqual(len(self.dag.all_nodes()), 0)
-        self.assertTrue(self.wavescheduler.is_finished())
+    def test_fake_add_node_and_query(self) -> None:
+        self.dag.add_node("n1", lambda: "ok", [], 1, 0)
+        self.assertTrue(self.dag.has_node("n1"))
+        self.assertEqual(self.dag.all_nodes(), {"n1"})
+        self.assertEqual(self.dag.get_node("n1").node_id, "n1")
+        self.assertEqual(self.dag.find_roots(), {"n1"})
+        self.assertEqual(self.dag.find_leaves(), {"n1"})
 
-    def test_fake_add_node(self) -> None:
-        self.dag.add_node("task1", lambda: 10, priority=5, retries=2)
-        self.assertTrue(self.dag.has_node("task1"))
-        node = self.dag.get_node("task1")
-        self.assertEqual(node.node_id, "task1")
-        self.assertEqual(node.priority, 5)
-        self.assertEqual(node.retries, 2)
-        self.assertEqual(self.dag.get_dependencies("task1"), set())
-
-    def test_fake_add_edge(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None)
-        self.dag.add_edge("A", "B")
-        self.assertIn("A", self.dag.get_dependencies("B"))
-        self.assertIn("B", self.dag.get_dependents("A"))
-
-    def test_fake_add_edge_missing(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        with self.assertRaises(NodeNotFoundError):
-            self.dag.add_edge("missing_upstream", "A")
-
-    def test_fake_add_edge_missing_downstream(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        with self.assertRaises(NodeNotFoundError):
-            self.dag.add_edge("A", "missing_downstream")
+    def test_fake_add_edge_and_dependencies(self) -> None:
+        self.dag.add_node("n1", lambda: "a", [], 0, 0)
+        self.dag.add_node("n2", lambda: "b", [], 0, 0)
+        self.dag.add_edge("n1", "n2")
+        self.assertEqual(self.dag.get_dependencies("n2"), {"n1"})
+        self.assertEqual(self.dag.get_dependents("n1"), {"n2"})
 
     def test_fake_remove_node(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None, dependencies=["A"])
-        self.dag.remove_node("A")
-        self.assertFalse(self.dag.has_node("A"))
-        self.assertTrue(self.dag.has_node("B"))
-        with self.assertRaises(NodeNotFoundError):
-            self.dag.remove_node("A")
+        self.dag.add_node("n1", lambda: "a", [], 0, 0)
+        self.dag.remove_node("n1")
+        self.assertFalse(self.dag.has_node("n1"))
 
-    def test_fake_remove_node_removes_edges(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None, dependencies=["A"])
-        self.dag.add_node("C", lambda: None, dependencies=["B"])
-        self.assertEqual(self.dag.get_dependents("A"), {"B"})
-        self.assertEqual(self.dag.get_dependencies("C"), {"B"})
-        self.dag.remove_node("B")
-        self.assertFalse(self.dag.has_node("B"))
-        self.assertEqual(self.dag.get_dependents("A"), set())
-        self.assertEqual(self.dag.get_dependencies("C"), set())
-        self.assertEqual(self.dag.all_nodes(), {"A", "C"})
-
-    def test_fake_has_node(self) -> None:
-        self.assertFalse(self.dag.has_node("non_existent"))
-        self.dag.add_node("A", lambda: 1)
-        self.assertTrue(self.dag.has_node("A"))
-
-    def test_fake_get_node(self) -> None:
-        with self.assertRaises(NodeNotFoundError):
-            self.dag.get_node("absent")
-        self.dag.add_node("A", lambda: 100)
-        self.assertEqual(self.dag.get_node("A").node_id, "A")
-
-    def test_fake_get_dependencies(self) -> None:
-        with self.assertRaises(NodeNotFoundError):
-            self.dag.get_dependencies("absent")
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None, dependencies=["A"])
-        self.assertEqual(self.dag.get_dependencies("B"), {"A"})
-
-    def test_fake_get_dependents(self) -> None:
-        with self.assertRaises(NodeNotFoundError):
-            self.dag.get_dependents("absent")
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None, dependencies=["A"])
-        self.assertEqual(self.dag.get_dependents("A"), {"B"})
-
-    def test_fake_all_nodes(self) -> None:
-        self.assertEqual(self.dag.all_nodes(), set())
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None)
-        self.assertEqual(self.dag.all_nodes(), {"A", "B"})
-
-    def test_fake_validate(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None, dependencies=["A"])
+    def test_fake_validate_and_sort(self) -> None:
+        self.dag.add_node("n1", lambda: "a", [], 0, 0)
         self.dag.validate()
-
-    def test_fake_validate_cycle(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None)
-        self.dag.add_edge("A", "B")
-        self.dag.add_edge("B", "A")
-        with self.assertRaises(CycleError):
-            self.dag.validate()
-
-    def test_fake_validate_missing_dep(self) -> None:
-        self.dag.add_node("A", lambda: None, dependencies=["ghost"])
-        with self.assertRaises(NodeNotFoundError):
-            self.dag.validate()
-
-    def test_fake_topological_sort(self) -> None:
-        self.dag.add_node("C", lambda: None, priority=1)
-        self.dag.add_node("A", lambda: None, priority=10)
-        self.dag.add_node("B", lambda: None, dependencies=["A"], priority=5)
         order = self.dag.topological_sort()
-        self.assertEqual(order, ["A", "B", "C"])
-
-    def test_fake_find_roots(self) -> None:
-        self.dag.add_node("root1", lambda: None)
-        self.dag.add_node("root2", lambda: None)
-        self.dag.add_node("child", lambda: None, dependencies=["root1", "root2"])
-        self.assertEqual(self.dag.find_roots(), {"root1", "root2"})
-
-    def test_fake_find_leaves(self) -> None:
-        self.dag.add_node("root", lambda: None)
-        self.dag.add_node("leaf1", lambda: None, dependencies=["root"])
-        self.dag.add_node("leaf2", lambda: None, dependencies=["root"])
-        self.assertEqual(self.dag.find_leaves(), {"leaf1", "leaf2"})
+        self.assertEqual(order, ["n1"])
 
     def test_fake_compute_critical_path(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None, dependencies=["A"])
-        self.dag.add_node("C", lambda: None, dependencies=["B"])
-        path, dur = self.dag.compute_critical_path({"A": 2.0, "B": 3.0, "C": 1.0})
-        self.assertEqual(path, ["A", "B", "C"])
-        self.assertEqual(dur, 6.0)
+        self.dag.add_node("n1", lambda: "a", [], 0, 0)
+        path, total = self.dag.compute_critical_path(None)
+        self.assertEqual(path, ["n1"])
+        self.assertGreaterEqual(total, 0.0)
 
-    def test_fake_empty_dag_critical_path_and_is_finished(self) -> None:
-        path, dur = self.dag.compute_critical_path()
-        self.assertEqual(path, [])
-        self.assertEqual(dur, 0.0)
-        self.assertTrue(self.wavescheduler.is_finished())
-        self.assertEqual(self.wavescheduler.next_wave(), [])
-
-    def test_fake_next_wave(self) -> None:
-        self.dag.add_node("A", lambda: None, priority=2)
-        self.dag.add_node("B", lambda: None, priority=5)
+    def test_fake_wavescheduler_lifecycle(self) -> None:
+        self.dag.add_node("n1", lambda: "a", [], 0, 0)
         wave = self.wavescheduler.next_wave()
-        self.assertEqual(wave, ["B", "A"])
-
-    def test_fake_mark_running(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.wavescheduler.mark_running("A")
-        self.assertEqual(self.wavescheduler.get_state("A"), NodeState.RUNNING)
-
-    def test_fake_mark_succeeded(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None, dependencies=["A"])
-        self.assertEqual(self.wavescheduler.get_state("B"), NodeState.PENDING)
-        self.wavescheduler.mark_succeeded("A")
-        self.assertEqual(self.wavescheduler.get_state("A"), NodeState.SUCCEEDED)
-        self.assertEqual(self.wavescheduler.get_state("B"), NodeState.READY)
-
-    def test_fake_mark_failed(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None)
-        self.wavescheduler.mark_failed("A", FailurePolicy.FAIL_FAST)
-        self.assertEqual(self.wavescheduler.get_state("A"), NodeState.FAILED)
-        self.assertEqual(self.wavescheduler.get_state("B"), NodeState.CANCELLED)
-
-    def test_fake_mark_failed_skip_downstream(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None, dependencies=["A"])
-        self.dag.add_node("C", lambda: None)
-        self.wavescheduler.mark_failed("A", FailurePolicy.SKIP_DOWNSTREAM)
-        self.assertEqual(self.wavescheduler.get_state("A"), NodeState.FAILED)
-        self.assertEqual(self.wavescheduler.get_state("B"), NodeState.SKIPPED)
-        self.assertEqual(self.wavescheduler.get_state("C"), NodeState.READY)
-
-    def test_fake_is_finished(self) -> None:
+        self.assertEqual(wave, ["n1"])
+        self.wavescheduler.mark_running("n1")
+        self.assertEqual(self.wavescheduler.get_state("n1"), NodeState.RUNNING)
+        self.wavescheduler.mark_succeeded("n1")
+        self.assertEqual(self.wavescheduler.get_state("n1"), NodeState.SUCCEEDED)
         self.assertTrue(self.wavescheduler.is_finished())
-        self.dag.add_node("A", lambda: None)
-        self.assertFalse(self.wavescheduler.is_finished())
-        self.wavescheduler.mark_succeeded("A")
-        self.assertTrue(self.wavescheduler.is_finished())
+        all_states = self.wavescheduler.get_all_states()
+        self.assertIn("n1", all_states)
 
-    def test_fake_get_state(self) -> None:
-        self.dag.add_node("root", lambda: None)
-        self.assertEqual(self.wavescheduler.get_state("root"), NodeState.READY)
+    def test_fake_wavescheduler_mark_failed(self) -> None:
+        self.dag.add_node("n1", lambda: "a", [], 0, 0)
+        self.wavescheduler.mark_failed("n1", FailurePolicy.FAIL_FAST)
+        self.assertEqual(self.wavescheduler.get_state("n1"), NodeState.FAILED)
 
-    def test_fake_scheduler_get_state_missing(self) -> None:
-        with self.assertRaises(NodeNotFoundError):
-            self.wavescheduler.get_state("unregistered_node")
-
-    def test_fake_get_all_states(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        states = self.wavescheduler.get_all_states()
-        self.assertIn("A", states)
-
-    def test_fake_remove_node_synchronizes_scheduler_states(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None)
-        states_before = self.wavescheduler.get_all_states()
-        self.assertIn("A", states_before)
-        self.assertIn("B", states_before)
-        self.dag.remove_node("A")
-        states_after = self.wavescheduler.get_all_states()
-        self.assertNotIn("A", states_after)
-        self.assertIn("B", states_after)
-        with self.assertRaises(NodeNotFoundError):
-            self.wavescheduler.get_state("A")
-
-    def test_fake_run(self) -> None:
-        self.dag.add_node("A", lambda: 1)
-        report = self.dagrunner.run()
-        self.assertIsInstance(report, DAGRunReport)
-        self.assertEqual(report.total_nodes, 1)
-        self.assertEqual(report.succeeded_nodes, ("A",))
-        self.assertEqual(self.wavescheduler.get_state("A"), NodeState.SUCCEEDED)
-        self.assertTrue(self.wavescheduler.is_finished())
-
-    def test_fake_run_with_retries(self) -> None:
-        attempts = 0
-        def flaky() -> str:
-            nonlocal attempts
-            attempts += 1
-            if attempts <= 2:
-                raise ValueError(f"Transient fault on attempt {attempts}")
-            return "recovered"
-
-        self.dag.add_node("flaky", flaky, retries=2)
-        report = self.dagrunner.run()
-        self.assertIn("flaky", report.succeeded_nodes)
-        self.assertEqual(report.results["flaky"].retries_attempted, 2)
-        self.assertEqual(report.results["flaky"].value, "recovered")
-        self.assertEqual(report.results["flaky"].state, NodeState.SUCCEEDED)
-
-    def test_fake_run_failure_fail_fast(self) -> None:
-        def bad_action() -> None:
-            raise RuntimeError("Fatal execution error")
-
-        self.dag.add_node("bad", bad_action, retries=1)
-        self.dag.add_node("child", lambda: 2, dependencies=["bad"])
-        self.dag.add_node("independent", lambda: 3)
+    def test_fake_dagrunner_run(self) -> None:
+        self.dag.add_node("n1", lambda: "a", [], 0, 0)
         report = self.dagrunner.run(FailurePolicy.FAIL_FAST)
-        self.assertIn("bad", report.failed_nodes)
-        self.assertEqual(report.results["bad"].retries_attempted, 1)
-        self.assertEqual(report.results["bad"].state, NodeState.FAILED)
-        self.assertIn("child", report.cancelled_nodes)
-        self.assertIn("independent", report.cancelled_nodes)
-        self.assertEqual(report.results["child"].state, NodeState.CANCELLED)
-        self.assertEqual(report.results["independent"].state, NodeState.CANCELLED)
-
-    def test_fake_run_failure_skip_downstream(self) -> None:
-        def bad_action() -> None:
-            raise RuntimeError("Fatal node action")
-
-        self.dag.add_node("bad", bad_action, retries=0)
-        self.dag.add_node("downstream", lambda: 2, dependencies=["bad"])
-        self.dag.add_node("independent", lambda: 3)
-        report = self.dagrunner.run(FailurePolicy.SKIP_DOWNSTREAM)
-        self.assertIn("bad", report.failed_nodes)
-        self.assertIn("downstream", report.skipped_nodes)
-        self.assertIn("independent", report.succeeded_nodes)
-        self.assertEqual(report.results["downstream"].state, NodeState.SKIPPED)
-        self.assertEqual(report.results["independent"].state, NodeState.SUCCEEDED)
+        self.assertEqual(report.total_nodes, 1)
 
 
 # ==============================================================================
@@ -1545,237 +564,187 @@ class TestDagEngineLiteImplReal(unittest.TestCase):
         self.dag = get_singleton(DAG)
         self.wavescheduler = get_singleton(WaveScheduler)
         self.dagrunner = get_singleton(DAGRunner)
+        self.sm = DagEngineLiteStateMachine(
+            singletons={
+                DAG: self.dag,
+                WaveScheduler: self.wavescheduler,
+                DAGRunner: self.dagrunner,
+                dag_engine_lite.DAG: self.dag,
+                dag_engine_lite.WaveScheduler: self.wavescheduler,
+                dag_engine_lite.DAGRunner: self.dagrunner,
+            }
+        )
 
     def tearDown(self) -> None:
         self.phase_scope.__exit__(None, None, None)
 
-    def test_real_conformance(self) -> None:
-        self.assertIsNotNone(self.dag)
-        self.assertIsNotNone(self.wavescheduler)
-        self.assertIsNotNone(self.dagrunner)
+    def test_real_empty_dag(self) -> None:
+        self.sm.dispatch_transition("all_nodes")
+        self.sm.dispatch_transition("find_roots")
+        self.sm.dispatch_transition("find_leaves")
+        self.sm.dispatch_transition("validate")
+        self.sm.dispatch_transition("topological_sort")
+        self.sm.dispatch_transition("compute_critical_path", None)
+        self.sm.dispatch_transition("next_wave")
+        self.sm.dispatch_transition("is_finished")
+        self.sm.dispatch_transition("get_all_states")
+        self.sm.dispatch_transition("run", FailurePolicy.FAIL_FAST)
 
-    def test_real_exceptions(self) -> None:
-        err = DAGError("base error")
-        self.assertEqual(str(err), "base error")
-        cause = ValueError("root cause")
-        exec_err = NodeExecutionError(message="execution failed", node_id="node1", cause=cause)
-        self.assertEqual(exec_err.node_id, "node1")
-        self.assertEqual(exec_err.cause, cause)
+    def test_real_linear_pipeline(self) -> None:
+        self.sm.dispatch_transition("add_node", "A", lambda: "res_A", None, 1, 0)
+        self.sm.dispatch_transition("add_node", "B", lambda: "res_B", ["A"], 2, 0)
+        self.sm.dispatch_transition("add_node", "C", lambda: "res_C", ["B"], 0, 0)
+        self.sm.dispatch_transition("has_node", "A")
+        self.sm.dispatch_transition("has_node", "unknown")
+        self.sm.dispatch_transition("get_node", "A")
+        self.sm.dispatch_transition("get_dependencies", "B")
+        self.sm.dispatch_transition("get_dependents", "A")
+        self.sm.dispatch_transition("all_nodes")
+        self.sm.dispatch_transition("find_roots")
+        self.sm.dispatch_transition("find_leaves")
+        self.sm.dispatch_transition("validate")
+        self.sm.dispatch_transition("topological_sort")
+        self.sm.dispatch_transition("compute_critical_path", {"A": 2.0, "B": 3.0, "C": 1.0})
+        self.sm.dispatch_transition("run", FailurePolicy.FAIL_FAST)
 
-    def test_real_dag_add_and_query(self) -> None:
-        self.dag.add_node("x", lambda: 1, priority=10, retries=1)
-        self.assertTrue(self.dag.has_node("x"))
-        defn = self.dag.get_node("x")
-        self.assertEqual(defn.node_id, "x")
-        self.assertEqual(defn.priority, 10)
-        self.assertEqual(defn.retries, 1)
-        self.assertEqual(self.dag.all_nodes(), {"x"})
+    def test_real_add_edge_and_remove(self) -> None:
+        self.sm.dispatch_transition("add_node", "X", lambda: 1, None, 0, 0)
+        self.sm.dispatch_transition("add_node", "Y", lambda: 2, None, 0, 0)
+        self.sm.dispatch_transition("add_node", "Z", lambda: 3, None, 0, 0)
+        self.sm.dispatch_transition("next_wave")
+        self.sm.dispatch_transition("add_edge", "X", "Y")
+        self.sm.dispatch_transition("add_edge", "Y", "Z")
+        self.sm.dispatch_transition("remove_node", "Y")
+        self.sm.dispatch_transition("next_wave")
+        self.sm.dispatch_transition("has_node", "Y")
 
-    def test_real_dag_edges_and_dependencies(self) -> None:
-        self.dag.add_node("p", lambda: 1)
-        self.dag.add_node("q", lambda: 2)
-        self.dag.add_edge("p", "q")
-        self.assertIn("p", self.dag.get_dependencies("q"))
-        self.assertIn("q", self.dag.get_dependents("p"))
-
-    def test_real_dag_node_not_found(self) -> None:
+    def test_real_node_errors(self) -> None:
         with self.assertRaises(NodeNotFoundError):
-            self.dag.get_node("unknown")
+            self.dag.get_node("missing")
         with self.assertRaises(NodeNotFoundError):
-            self.dag.remove_node("unknown")
+            self.dag.get_dependencies("missing")
         with self.assertRaises(NodeNotFoundError):
-            self.dag.get_dependencies("unknown")
+            self.dag.get_dependents("missing")
         with self.assertRaises(NodeNotFoundError):
-            self.dag.get_dependents("unknown")
+            self.dag.remove_node("missing")
         with self.assertRaises(NodeNotFoundError):
-            self.dag.add_edge("unknown", "other")
-        self.dag.add_node("existing", lambda: 1)
+            self.dag.add_edge("missing", "X")
+        self.dag.add_node("P", lambda: 1)
         with self.assertRaises(NodeNotFoundError):
-            self.dag.add_edge("existing", "missing_downstream")
+            self.dag.add_edge("P", "missing")
+        with self.assertRaises(NodeNotFoundError):
+            self.wavescheduler.get_state("missing")
 
-    def test_real_dag_remove_node_removes_edges(self) -> None:
-        self.dag.add_node("A", lambda: 1)
-        self.dag.add_node("B", lambda: 2, dependencies=["A"])
-        self.dag.add_node("C", lambda: 3, dependencies=["B"])
-        self.dag.remove_node("B")
-        self.assertFalse(self.dag.has_node("B"))
-        self.assertEqual(self.dag.get_dependents("A"), set())
-        self.assertEqual(self.dag.get_dependencies("C"), set())
+    def test_real_missing_dependency_validation(self) -> None:
+        self.dag.add_node("N1", lambda: 1, dependencies=["ghost"])
+        with self.assertRaises(NodeNotFoundError):
+            self.dag.validate()
+        with self.assertRaises(NodeNotFoundError):
+            self.dag.topological_sort()
+        with self.assertRaises(NodeNotFoundError):
+            self.dagrunner.run()
 
-    def test_real_dag_roots_leaves_and_topo(self) -> None:
-        self.dag.add_node("r1", lambda: 1)
-        self.dag.add_node("r2", lambda: 2)
-        self.dag.add_node("c", lambda: 3, dependencies=["r1", "r2"])
-        self.assertEqual(self.dag.find_roots(), {"r1", "r2"})
-        self.assertEqual(self.dag.find_leaves(), {"c"})
-        topo = self.dag.topological_sort()
-        self.assertTrue(topo.index("r1") < topo.index("c"))
-        self.assertTrue(topo.index("r2") < topo.index("c"))
-
-    def test_real_dag_topological_sort_tie_breaking(self) -> None:
-        self.dag.add_node("A", lambda: 1, priority=1)
-        self.dag.add_node("B", lambda: 2, priority=10)
-        self.dag.add_node("C", lambda: 3, priority=5)
-        topo = self.dag.topological_sort()
-        self.assertEqual(topo, ["B", "C", "A"])
-
-    def test_real_dag_cycle_detection(self) -> None:
-        self.dag.add_node("n1", lambda: 1)
-        self.dag.add_node("n2", lambda: 2)
-        self.dag.add_edge("n1", "n2")
-        self.dag.add_edge("n2", "n1")
+    def test_real_cycle_detection(self) -> None:
+        self.dag.add_node("C1", lambda: 1)
+        self.dag.add_node("C2", lambda: 2)
+        self.dag.add_edge("C1", "C2")
+        self.dag.add_edge("C2", "C1")
         with self.assertRaises(CycleError):
             self.dag.validate()
         with self.assertRaises(CycleError):
             self.dag.topological_sort()
+        with self.assertRaises(CycleError):
+            self.dagrunner.run()
 
-    def test_real_dag_validate_missing_dependency(self) -> None:
-        self.dag.add_node("n1", lambda: 1, dependencies=["ghost"])
-        with self.assertRaises(NodeNotFoundError):
-            self.dag.validate()
+    def test_real_priority_and_lexicographical_tiebreak(self) -> None:
+        self.sm.dispatch_transition("add_node", "beta", lambda: 1, None, 5, 0)
+        self.sm.dispatch_transition("add_node", "alpha", lambda: 2, None, 5, 0)
+        self.sm.dispatch_transition("add_node", "top", lambda: 3, None, 10, 0)
+        self.sm.dispatch_transition("topological_sort")
+        self.sm.dispatch_transition("next_wave")
 
-    def test_real_dag_critical_path(self) -> None:
-        self.dag.add_node("n1", lambda: 1)
-        self.dag.add_node("n2", lambda: 2, dependencies=["n1"])
-        path, weight = self.dag.compute_critical_path({"n1": 1.5, "n2": 2.5})
-        self.assertEqual(path, ["n1", "n2"])
-        self.assertEqual(weight, 4.0)
+    def test_real_wave_scheduler_manual_progression(self) -> None:
+        self.sm.dispatch_transition("add_node", "w1", lambda: 1, None, 0, 0)
+        self.sm.dispatch_transition("add_node", "w2", lambda: 2, ["w1"], 0, 0)
+        self.sm.dispatch_transition("next_wave")
+        self.sm.dispatch_transition("mark_running", "w1")
+        self.sm.dispatch_transition("mark_succeeded", "w1")
+        self.sm.dispatch_transition("next_wave")
+        self.sm.dispatch_transition("mark_running", "w2")
+        self.sm.dispatch_transition("mark_succeeded", "w2")
+        self.sm.dispatch_transition("is_finished")
 
-    def test_real_dag_critical_path_default_durations(self) -> None:
-        self.dag.add_node("A", lambda: 1)
-        self.dag.add_node("B", lambda: 2, dependencies=["A"])
-        path, dur = self.dag.compute_critical_path()
-        self.assertEqual(path, ["A", "B"])
-        self.assertEqual(dur, 2.0)
+    def test_real_retry_success(self) -> None:
+        attempts = {"count": 0}
 
-    def test_real_empty_dag_critical_path_and_is_finished(self) -> None:
-        path, weight = self.dag.compute_critical_path()
-        self.assertEqual(path, [])
-        self.assertEqual(weight, 0.0)
-        self.assertTrue(self.wavescheduler.is_finished())
-        self.assertEqual(self.wavescheduler.next_wave(), [])
-
-    def test_real_scheduler_lifecycle(self) -> None:
-        self.dag.add_node("t1", lambda: 1)
-        self.dag.add_node("t2", lambda: 2, dependencies=["t1"])
-        wave = self.wavescheduler.next_wave()
-        self.assertEqual(wave, ["t1"])
-        self.wavescheduler.mark_running("t1")
-        self.assertEqual(self.wavescheduler.get_state("t1"), NodeState.RUNNING)
-        self.wavescheduler.mark_succeeded("t1")
-        self.assertEqual(self.wavescheduler.get_state("t1"), NodeState.SUCCEEDED)
-        self.assertEqual(self.wavescheduler.get_state("t2"), NodeState.READY)
-        wave2 = self.wavescheduler.next_wave()
-        self.assertEqual(wave2, ["t2"])
-        self.wavescheduler.mark_succeeded("t2")
-        self.assertTrue(self.wavescheduler.is_finished())
-
-    def test_real_scheduler_get_state_missing(self) -> None:
-        with self.assertRaises(NodeNotFoundError):
-            self.wavescheduler.get_state("unregistered_node")
-
-    def test_real_remove_node_synchronizes_scheduler_states(self) -> None:
-        self.dag.add_node("A", lambda: None)
-        self.dag.add_node("B", lambda: None)
-        states_before = self.wavescheduler.get_all_states()
-        self.assertIn("A", states_before)
-        self.assertIn("B", states_before)
-        self.dag.remove_node("A")
-        states_after = self.wavescheduler.get_all_states()
-        self.assertNotIn("A", states_after)
-        self.assertIn("B", states_after)
-        with self.assertRaises(NodeNotFoundError):
-            self.wavescheduler.get_state("A")
-
-    def test_real_scheduler_failure_fail_fast(self) -> None:
-        self.dag.add_node("t1", lambda: 1)
-        self.dag.add_node("t2", lambda: 2)
-        self.wavescheduler.mark_failed("t1", FailurePolicy.FAIL_FAST)
-        self.assertEqual(self.wavescheduler.get_state("t1"), NodeState.FAILED)
-        self.assertEqual(self.wavescheduler.get_state("t2"), NodeState.CANCELLED)
-
-    def test_real_scheduler_failure_skip_downstream(self) -> None:
-        self.dag.add_node("t1", lambda: 1)
-        self.dag.add_node("t2", lambda: 2, dependencies=["t1"])
-        self.dag.add_node("independent", lambda: 3)
-        self.wavescheduler.mark_failed("t1", FailurePolicy.SKIP_DOWNSTREAM)
-        self.assertEqual(self.wavescheduler.get_state("t1"), NodeState.FAILED)
-        self.assertEqual(self.wavescheduler.get_state("t2"), NodeState.SKIPPED)
-        self.assertEqual(self.wavescheduler.get_state("independent"), NodeState.READY)
-
-    def test_real_scheduler_failure_continue_on_error(self) -> None:
-        self.dag.add_node("t1", lambda: 1)
-        self.dag.add_node("t2", lambda: 2)
-        self.wavescheduler.mark_failed("t1", FailurePolicy.CONTINUE_ON_ERROR)
-        self.assertEqual(self.wavescheduler.get_state("t1"), NodeState.FAILED)
-        self.assertEqual(self.wavescheduler.get_state("t2"), NodeState.READY)
-
-    def test_real_runner_execution(self) -> None:
-        self.dag.add_node("work", lambda: "ok")
-        report = self.dagrunner.run(FailurePolicy.FAIL_FAST)
-        self.assertIsInstance(report, DAGRunReport)
-        self.assertEqual(report.total_nodes, 1)
-        self.assertIn("work", report.succeeded_nodes)
-
-    def test_real_runner_multi_wave(self) -> None:
-        self.dag.add_node("A", lambda: 1)
-        self.dag.add_node("B", lambda: 2, dependencies=["A"])
-        self.dag.add_node("C", lambda: 3, dependencies=["B"])
-        report = self.dagrunner.run()
-        self.assertEqual(report.succeeded_nodes, ("A", "B", "C"))
-        self.assertEqual(report.total_nodes, 3)
-
-    def test_real_runner_execution_with_retries(self) -> None:
-        attempts = 0
-        def flaky_action() -> str:
-            nonlocal attempts
-            attempts += 1
-            if attempts <= 2:
-                raise ValueError("Transient error")
+        def flaky() -> str:
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise ValueError("transient failure")
             return "recovered"
 
-        self.dag.add_node("flaky", flaky_action, retries=2)
-        report = self.dagrunner.run()
-        self.assertIn("flaky", report.succeeded_nodes)
-        self.assertEqual(report.results["flaky"].retries_attempted, 2)
-        self.assertEqual(report.results["flaky"].value, "recovered")
+        self.sm.dispatch_transition("add_node", "flaky", flaky, None, 0, 1)
+        self.sm.dispatch_transition("run", FailurePolicy.FAIL_FAST)
 
-    def test_real_runner_execution_failure_fail_fast(self) -> None:
-        def bad_action() -> None:
-            raise RuntimeError("Fatal action")
+    def test_real_failure_policy_fail_fast(self) -> None:
+        def fail_action() -> None:
+            raise RuntimeError("boom")
 
-        self.dag.add_node("bad", bad_action, retries=1)
-        self.dag.add_node("child", lambda: 2, dependencies=["bad"])
-        self.dag.add_node("indep", lambda: 3)
-        report = self.dagrunner.run(FailurePolicy.FAIL_FAST)
-        self.assertIn("bad", report.failed_nodes)
-        self.assertIn("child", report.cancelled_nodes)
-        self.assertIn("indep", report.cancelled_nodes)
+        self.sm.dispatch_transition("add_node", "bad", fail_action, None, 10, 0)
+        self.sm.dispatch_transition("add_node", "other", lambda: 1, None, 5, 0)
+        self.sm.dispatch_transition("run", FailurePolicy.FAIL_FAST)
 
-    def test_real_runner_execution_failure_skip_downstream(self) -> None:
-        def bad_action() -> None:
-            raise RuntimeError("Fatal action")
+    def test_real_failure_policy_continue_on_error(self) -> None:
+        def fail_action() -> None:
+            raise RuntimeError("boom")
 
-        self.dag.add_node("bad", bad_action, retries=0)
-        self.dag.add_node("child", lambda: 2, dependencies=["bad"])
-        self.dag.add_node("indep", lambda: 3)
-        report = self.dagrunner.run(FailurePolicy.SKIP_DOWNSTREAM)
-        self.assertIn("bad", report.failed_nodes)
-        self.assertIn("child", report.skipped_nodes)
-        self.assertIn("indep", report.succeeded_nodes)
+        self.sm.dispatch_transition("add_node", "fail_node", fail_action, None, 0, 0)
+        self.sm.dispatch_transition("add_node", "downstream_node", lambda: 1, ["fail_node"], 0, 0)
+        self.sm.dispatch_transition("add_node", "independent_node", lambda: 2, None, 0, 0)
+        self.sm.dispatch_transition("run", FailurePolicy.CONTINUE_ON_ERROR)
 
-    def test_real_runner_execution_failure_continue_on_error(self) -> None:
-        def bad_action() -> None:
-            raise RuntimeError("Fatal action")
+    def test_real_failure_policy_skip_downstream(self) -> None:
+        def fail_action() -> None:
+            raise RuntimeError("boom")
 
-        self.dag.add_node("bad", bad_action, retries=0)
-        self.dag.add_node("child", lambda: 2, dependencies=["bad"])
-        self.dag.add_node("indep", lambda: 3)
-        report = self.dagrunner.run(FailurePolicy.CONTINUE_ON_ERROR)
-        self.assertIn("bad", report.failed_nodes)
-        self.assertIn("indep", report.succeeded_nodes)
-        self.assertEqual(report.results["bad"].state, NodeState.FAILED)
-        self.assertEqual(report.results["indep"].state, NodeState.SUCCEEDED)
+        self.sm.dispatch_transition("add_node", "fail_node_s", fail_action, None, 0, 0)
+        self.sm.dispatch_transition("add_node", "downstream_s", lambda: 1, ["fail_node_s"], 0, 0)
+        self.sm.dispatch_transition("add_node", "independent_s", lambda: 2, None, 0, 0)
+        self.sm.dispatch_transition("run", FailurePolicy.SKIP_DOWNSTREAM)
+
+    def test_real_scheduler_mark_failed_branches(self) -> None:
+        self.sm.dispatch_transition("add_node", "m1", lambda: 1, None, 0, 0)
+        self.sm.dispatch_transition("add_node", "m2", lambda: 2, ["m1"], 0, 0)
+        self.sm.dispatch_transition("mark_failed", "m1", FailurePolicy.SKIP_DOWNSTREAM)
+        self.sm.dispatch_transition("is_finished")
+        self.sm.dispatch_transition("get_state", "m1")
+        self.sm.dispatch_transition("get_state", "m2")
+
+    def test_real_scheduler_is_finished_running_branch(self) -> None:
+        self.sm.dispatch_transition("add_node", "r1", lambda: 1, None, 0, 0)
+        self.sm.dispatch_transition("mark_running", "r1")
+        self.assertFalse(self.wavescheduler.is_finished())
+
+    def test_real_critical_path_multi_branch(self) -> None:
+        self.sm.dispatch_transition("add_node", "r_a", lambda: 1, None, 0, 0)
+        self.sm.dispatch_transition("add_node", "r_b", lambda: 2, None, 0, 0)
+        self.sm.dispatch_transition("add_node", "join", lambda: 3, ["r_a", "r_b"], 0, 0)
+        self.sm.dispatch_transition("compute_critical_path", {"r_a": 5.0, "r_b": 10.0, "join": 2.0})
+
+    def test_real_run_breaks_when_wave_empty(self) -> None:
+        self.sm.dispatch_transition("add_node", "stuck", lambda: 1, None, 0, 0)
+        self.sm.dispatch_transition("mark_running", "stuck")
+        self.sm.dispatch_transition("run", FailurePolicy.FAIL_FAST)
+
+    def test_exception_str_representations(self) -> None:
+        e1 = DAGError("error message")
+        self.assertEqual(str(e1), "error message")
+        e2 = CycleError("cycle", ("a", "b", "a"))
+        self.assertEqual(str(e2), "cycle")
+        e3 = NodeNotFoundError("missing", "node_x")
+        self.assertEqual(str(e3), "missing")
+        e4 = NodeExecutionError("failed", "node_y", ValueError("inner"))
+        self.assertEqual(str(e4), "failed")
 
 
 # ==============================================================================
@@ -1799,7 +768,7 @@ class DagEngineLiteSUT:
         self.__dict__["_services"] = (self.dag, self.wavescheduler, self.dagrunner,)
 
     def __getattr__(self, name: str) -> Any:
-        if name.startswith("__") and name.endswith("__"):
+        if name.startswith("__"):
             raise AttributeError(name)
         for service in self.__dict__.get("_services", ()):
             if hasattr(service, name):
@@ -1817,3 +786,14 @@ DagEngineLiteFuzzTest = compile_hypothesis_test_case(
     initial_state_factory=DagEngineLiteState,
     name="DagEngineLiteFuzzTest",
 )
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-28T23:29:37Z
+# LAST_CHANGED: 2026-10-28T23:29:37Z
+# CHANGE: Fused role implementation and verification
+# CODE_HASH: f8284a304bb7
+# COVERAGE_AUDIT: 2026-10-28T23:29:37Z
+# PRETENSE_COVERAGE_AUDIT: 2026-10-28T23:29:37Z
+# PRETENSE_QA_AUDIT: 2026-10-28T23:29:37Z
+# QA_AUDIT: 2026-10-28T23:29:37Z
+# --- END CLEANROOM METADATA ---

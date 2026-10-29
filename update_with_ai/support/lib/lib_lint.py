@@ -35,6 +35,7 @@ from build_lint_common import (
     compute_lib_derived_info,
     check_asm_structure,
     check_dataclass_stubs,
+    check_no_frozen_exceptions,
     check_no_stubs,
     check_dead_code,
     check_exception_eating,
@@ -877,6 +878,7 @@ def main() -> int:
         exception_errors = check_exception_eating(args.module_path)
         framework_errors = check_framework_imports(args.module_path)
         dataclass_errors = check_dataclass_stubs(args.module_path)
+        frozen_exception_errors = check_no_frozen_exceptions(args.module_path)
         stub_errors = check_no_stubs(args.module_path)
         type_ignore_errors = check_type_ignore(args.module_path)
         type_errors = check_public_types(
@@ -913,6 +915,7 @@ def main() -> int:
             + exception_errors
             + framework_errors
             + dataclass_errors
+            + frozen_exception_errors
             + stub_errors
             + type_ignore_errors
             + type_errors
@@ -1184,6 +1187,7 @@ def main() -> int:
     exception_errors = check_exception_eating(args.module_path)
     framework_errors = check_framework_imports(args.module_path)
     dataclass_errors = check_dataclass_stubs(args.module_path)
+    frozen_exception_errors = check_no_frozen_exceptions(args.module_path)
     stub_errors = check_no_stubs(args.module_path)
     type_ignore_errors = check_type_ignore(args.module_path)
     type_errors = check_public_types(
@@ -1219,6 +1223,7 @@ def main() -> int:
         + exception_errors
         + framework_errors
         + dataclass_errors
+        + frozen_exception_errors
         + stub_errors
         + type_ignore_errors
         + type_errors

@@ -10,9 +10,7 @@ import unittest
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
-
+from pretense import Domain, StateMachine, TransitionContext, transition
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.subagent.lib import (
@@ -32,47 +30,32 @@ class HarnessRegistryState:
     installed: Dict[str, Any] = field(default_factory=dict)
 
 
-proto = StateMachineProto[HarnessRegistryState]()
+class SubagentHarnessStateMachine(StateMachine[HarnessRegistryState]):
+    """Unified Pretense State Machine for HarnessRegistry."""
+
+    def __init__(
+        self,
+        state: Optional[HarnessRegistryState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or HarnessRegistryState(), singletons=singletons)
+
+    @transition(subagent_harness.HarnessRegistry.install_harness)
+    def install_harness(
+        self,
+        ctx: TransitionContext[subagent_harness.HarnessRegistry, [str, Any], None],
+    ) -> None:
+        ctx.arguments(
+                    platform_name=Domain(strategy=lambda: 'test_platform'),
+                    adapter_factory=Domain(strategy=lambda: lambda **kwargs: None),
+                )
+        ctx.returns(lambda platform_name="test_platform", adapter_factory=None: None)
+        ctx.update(lambda res, platform_name="test_platform", adapter_factory=None: (
+            self.state.installed.__setitem__(platform_name, adapter_factory)
+        ))
 
 
-# ==============================================================================
-# 2. HarnessRegistry Transitions
-# ==============================================================================
-
-@proto.transition(subagent_harness.HarnessRegistry.install_harness)
-def install_harness(): pass
-
-@install_harness.arguments
-def _(
-    state: HarnessRegistryState,
-    this: Any,
-    platform_name: str | NotBoundType = NotBound,
-    adapter_factory: Any | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Any]]:
-    p = "test_platform" if isinstance(platform_name, NotBoundType) else platform_name
-    f = (lambda **kwargs: None) if isinstance(adapter_factory, NotBoundType) else adapter_factory
-    return (p, f)
-
-@install_harness.returns
-def _(
-    state: HarnessRegistryState,
-    this: Any,
-    platform_name: str | NotBoundType = NotBound,
-    adapter_factory: Any | NotBoundType = NotBound,
-    outcome: object = None,
-) -> Optional[Outcome[None]]:
-    return Value(None)
-
-@install_harness.provide
-def _(
-    state: HarnessRegistryState,
-    this: Any,
-    platform_name: str | NotBoundType = NotBound,
-    adapter_factory: Any | NotBoundType = NotBound,
-    result: None = None,
-) -> None:
-    if not isinstance(platform_name, NotBoundType):
-        state.installed[platform_name] = adapter_factory
+proto = SubagentHarnessStateMachine()
 
 
 # ==============================================================================

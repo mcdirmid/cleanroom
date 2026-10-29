@@ -9,9 +9,8 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.workspace.lib.roles import (
     RoleDefinition,
     RoleResolver,
@@ -24,140 +23,92 @@ class RoleResolverState:
     roles: PretenseDict[str, RoleDefinition] = field(default_factory=PretenseDict)
 
 
-proto = StateMachineProto[RoleResolverState]()
+class RoleResolverStateMachine(StateMachine[RoleResolverState]):
+    """Unified Pretense State Machine for RoleResolver."""
+
+    def __init__(
+        self,
+        state: Optional[RoleResolverState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or RoleResolverState(), singletons=singletons)
+
+    @transition.seeding(name="seed_role")
+    def seed_role(
+        self,
+        ctx: TransitionContext[Any, [str, str, Optional[Sequence[str]], Optional[Sequence[str]], Optional[Sequence[str]], str, Optional[Sequence[str]]], None],
+    ) -> None:
+        ctx.arguments(
+                    role_name=Domain(strategy=lambda: 'lib'),
+                    guide_path=Domain(strategy=lambda: 'guides/lib.md'),
+                    writable_file_patterns=Domain(strategy=lambda: ('lib/*.py',)),
+                    readonly_file_patterns=Domain(strategy=lambda: ('low/*.pyi',)),
+                    feedback_role_deps=Domain(strategy=lambda: ('spec_qa',)),
+                    src_pattern=Domain(strategy=lambda: 'lib/{unit_name}.py'),
+                    role_deps=Domain(strategy=lambda: ('low',)),
+                )
+        ctx.returns(lambda role_name="lib", guide_path="guides/lib.md", writable_file_patterns=None, readonly_file_patterns=None, feedback_role_deps=None, src_pattern="lib/{unit_name}.py", role_deps=None: None)
+        def provide(
+            res: None,
+            role_name: str = "lib",
+            guide_path: str = "guides/lib.md",
+            writable_file_patterns: Optional[Sequence[str]] = None,
+            readonly_file_patterns: Optional[Sequence[str]] = None,
+            feedback_role_deps: Optional[Sequence[str]] = None,
+            src_pattern: str = "lib/{unit_name}.py",
+            role_deps: Optional[Sequence[str]] = None,
+        ) -> None:
+            defn = RoleDefinition(
+                role_name=role_name,
+                guide_path=guide_path,
+                writable_file_patterns=tuple(writable_file_patterns or (f"{role_name}/*.py",)),
+                readonly_file_patterns=tuple(readonly_file_patterns or ("low/*.pyi",)),
+                feedback_role_deps=tuple(feedback_role_deps or ("spec_qa",)),
+                src_pattern=src_pattern,
+                role_deps=tuple(role_deps or ("low",)),
+            )
+            self.state.roles[role_name] = defn
+        ctx.update(provide)
+
+    @transition(RoleResolver.resolve_role_definition)
+    def resolve_role_definition(
+        self,
+        ctx: TransitionContext[RoleResolver, [str, Optional[str], Optional[str]], RoleDefinition],
+    ) -> None:
+        ctx.arguments(
+                    role_name_or_address=Domain(strategy=lambda: 'lib'),
+                    repo_root=Domain(strategy=lambda: None),
+                    dir_scope=Domain(strategy=lambda: None),
+                )
+        def returns(role_name_or_address: str = "lib", repo_root: Optional[str] = None, dir_scope: Optional[str] = None) -> RoleDefinition:
+            clean_name = role_name_or_address.split(":")[-1].split("#")[-1].strip().lower()
+            if clean_name in self.state.roles:
+                return self.state.roles[clean_name]
+            return RoleDefinition(
+                role_name=clean_name,
+                guide_path=f"guides/{clean_name}.md",
+                writable_file_patterns=(f"{clean_name}/*",),
+                readonly_file_patterns=(),
+                feedback_role_deps=(),
+                src_pattern=f"{clean_name}/{{unit_name}}.py",
+            )
+        ctx.returns(returns)
+        ctx.update(lambda res, role_name_or_address="lib", repo_root=None, dir_scope=None: None)
+
+    @transition(RoleResolver.list_roles)
+    def list_roles(
+        self,
+        ctx: TransitionContext[RoleResolver, [Optional[str], Optional[str]], Sequence[RoleDefinition]],
+    ) -> None:
+        ctx.arguments(
+                    repo_root=Domain(strategy=lambda: None),
+                    dir_scope=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda repo_root=None, dir_scope=None: tuple(self.state.roles.values()))
+        ctx.update(lambda res, repo_root=None, dir_scope=None: None)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_role(): pass
-
-@seed_role.arguments
-def _(
-    state: RoleResolverState,
-    this: Any,
-    role_name: str | NotBoundType = NotBound,
-    guide_path: str | NotBoundType = NotBound,
-    writable_file_patterns: Optional[Sequence[str]] | NotBoundType = NotBound,
-    readonly_file_patterns: Optional[Sequence[str]] | NotBoundType = NotBound,
-    feedback_role_deps: Optional[Sequence[str]] | NotBoundType = NotBound,
-    src_pattern: str | NotBoundType = NotBound,
-    role_deps: Optional[Sequence[str]] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, Sequence[str], Sequence[str], Sequence[str], str, Sequence[str]]]:
-    rn = "lib" if isinstance(role_name, NotBoundType) else str(role_name)
-    gp = f"guides/{rn}.md" if isinstance(guide_path, NotBoundType) else str(guide_path)
-    wp = (f"{rn}/*.py",) if isinstance(writable_file_patterns, NotBoundType) or writable_file_patterns is None else tuple(writable_file_patterns)
-    rp = ("low/*.pyi",) if isinstance(readonly_file_patterns, NotBoundType) or readonly_file_patterns is None else tuple(readonly_file_patterns)
-    fb = ("spec_qa",) if isinstance(feedback_role_deps, NotBoundType) or feedback_role_deps is None else tuple(feedback_role_deps)
-    sp = f"{rn}/{{unit_name}}.py" if isinstance(src_pattern, NotBoundType) else str(src_pattern)
-    rd = ("low",) if isinstance(role_deps, NotBoundType) or role_deps is None else tuple(role_deps)
-    return (rn, gp, wp, rp, fb, sp, rd)
-
-@seed_role.provide
-def _(
-    state: RoleResolverState,
-    this: Any,
-    role_name: str,
-    guide_path: str,
-    writable_file_patterns: Sequence[str],
-    readonly_file_patterns: Sequence[str],
-    feedback_role_deps: Sequence[str],
-    src_pattern: str,
-    role_deps: Sequence[str],
-    result: None = None,
-) -> None:
-    defn = RoleDefinition(
-        role_name=role_name,
-        guide_path=guide_path,
-        writable_file_patterns=writable_file_patterns,
-        readonly_file_patterns=readonly_file_patterns,
-        feedback_role_deps=feedback_role_deps,
-        src_pattern=src_pattern,
-        role_deps=role_deps,
-    )
-    state.roles[role_name] = defn
-
-
-# ==============================================================================
-# 2. RoleResolver Transitions
-# ==============================================================================
-
-@proto.transition(RoleResolver.resolve_role_definition)
-def resolve_role_definition(): pass
-
-@resolve_role_definition.arguments
-def _(
-    state: RoleResolverState,
-    this: Any,
-    role_name_or_address: str | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    dir_scope: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str], Optional[str]]]:
-    r = "lib" if isinstance(role_name_or_address, NotBoundType) else str(role_name_or_address)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    ds = None if isinstance(dir_scope, NotBoundType) else dir_scope
-    return (r, rr, ds)
-
-@resolve_role_definition.returns
-def _(
-    state: RoleResolverState,
-    this: Any,
-    role_name_or_address: str,
-    repo_root: Optional[str],
-    dir_scope: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[RoleDefinition]]:
-    clean_name = role_name_or_address.split(":")[-1].split("#")[-1].strip().lower()
-    if clean_name in state.roles:
-        expected = state.roles[clean_name]
-    else:
-        # Default fallback role definition
-        expected = RoleDefinition(
-            role_name=clean_name,
-            guide_path=f"guides/{clean_name}.md",
-            writable_file_patterns=(f"{clean_name}/*",),
-            readonly_file_patterns=(),
-            feedback_role_deps=(),
-            src_pattern=f"{clean_name}/{{unit_name}}.py",
-        )
-
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(RoleResolver.list_roles)
-def list_roles(): pass
-
-@list_roles.arguments
-def _(
-    state: RoleResolverState,
-    this: Any,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    dir_scope: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], Optional[str]]]:
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    ds = None if isinstance(dir_scope, NotBoundType) else dir_scope
-    return (rr, ds)
-
-@list_roles.returns
-def _(
-    state: RoleResolverState,
-    this: Any,
-    repo_root: Optional[str],
-    dir_scope: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[Sequence[RoleDefinition]]]:
-    expected = tuple(state.roles.values())
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = RoleResolverStateMachine()
 
 
 # ==============================================================================

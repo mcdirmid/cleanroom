@@ -8,6 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
@@ -46,121 +47,70 @@ class RoleConfigState:
     version: int = 1
 
 
-role_proto = StateMachineProto[RoleConfigState]()
+class RoleConfigStateMachine(StateMachine[RoleConfigState]):
+    """Pretense StateMachine for RoleConfig."""
+
+    def __init__(self, state: Optional[RoleConfigState] = None):
+        super().__init__(state=state or RoleConfigState())
+
+    @transition.seeding()
+    def seed_role_config(
+        self,
+        ctx: TransitionContext[None, [str, Optional[Sequence[DagNode]], int], None],
+    ) -> None:
+        ctx.arguments(
+                    role=Domain(strategy=lambda: 'lib'),
+                    nodes=Domain(strategy=lambda: ()),
+                    version=Domain(strategy=lambda: 1),
+                )
+        def _consequent(res: None, role: str = "lib", nodes: Optional[Sequence[DagNode]] = None, version: int = 1) -> None:
+            self.state.role = role
+            self.state.nodes = list(nodes or ())
+            self.state.version = version
+        ctx.update(_consequent)
+
+    @transition(name="role")
+    def role(
+        self,
+        ctx: TransitionContext[RoleConfig, [], RoleName],
+    ) -> None:
+        ctx.returns(lambda: RoleName(self.state.role))
+
+    @transition(name="nodes")
+    def nodes(
+        self,
+        ctx: TransitionContext[RoleConfig, [], Sequence[DagNode]],
+    ) -> None:
+        ctx.returns(lambda: tuple(self.state.nodes))
+
+    @transition(name="version")
+    def version(
+        self,
+        ctx: TransitionContext[RoleConfig, [], ExecutionVersion],
+    ) -> None:
+        ctx.returns(lambda: ExecutionVersion(self.state.version))
+
+    @transition(RoleConfig.set_role)
+    def set_role(
+        self,
+        ctx: TransitionContext[RoleConfig, [RoleName | str], None],
+    ) -> None:
+        ctx.arguments(role=Domain(strategy=lambda: RoleName('test')))
+        ctx.update(lambda res, role=RoleName("test"): setattr(self.state, "role", str(role)))
+
+    @transition(RoleConfig.set_nodes)
+    def set_nodes(
+        self,
+        ctx: TransitionContext[RoleConfig, [Sequence[DagNode]], None],
+    ) -> None:
+        ctx.arguments(nodes=Domain(strategy=lambda: ()))
+        def _consequent(res: None, nodes: Sequence[DagNode] = ()) -> None:
+            self.state.nodes = list(nodes)
+            self.state.version += 1
+        ctx.update(_consequent)
 
 
-@role_proto.seeding()
-def seed_role_config(): pass
-
-@seed_role_config.arguments
-def _(
-    state: RoleConfigState,
-    this: Any,
-    role: str | NotBoundType = NotBound,
-    nodes: Optional[Sequence[DagNode]] | NotBoundType = NotBound,
-    version: int | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Sequence[DagNode], int]]:
-    r = "lib" if isinstance(role, NotBoundType) else str(role)
-    ns = () if isinstance(nodes, NotBoundType) or nodes is None else tuple(nodes)
-    v = 1 if isinstance(version, NotBoundType) else int(version)
-    return (r, ns, v)
-
-@seed_role_config.provide
-def _(
-    state: RoleConfigState,
-    this: Any,
-    role: str,
-    nodes: Sequence[DagNode],
-    version: int,
-    result: None = None,
-) -> None:
-    state.role = role
-    state.nodes = list(nodes)
-    state.version = version
-
-
-@role_proto.transition(name="role")
-def role(): pass
-
-@role.returns
-def _(state: RoleConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[RoleName]]:
-    expected = RoleName(state.role)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@role_proto.transition(name="nodes")
-def nodes(): pass
-
-@nodes.returns
-def _(state: RoleConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Sequence[DagNode]]]:
-    expected = tuple(state.nodes)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@role_proto.transition(name="version")
-def version(): pass
-
-@version.returns
-def _(state: RoleConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[ExecutionVersion]]:
-    expected = ExecutionVersion(state.version)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@role_proto.transition(RoleConfig.set_role)
-def set_role(): pass
-
-@set_role.arguments
-def _(
-    state: RoleConfigState,
-    this: Any,
-    role: RoleName | str | NotBoundType = NotBound,
-) -> Optional[Tuple[RoleName]]:
-    r = RoleName("test") if isinstance(role, NotBoundType) else RoleName(str(role))
-    return (r,)
-
-@set_role.provide
-def _(
-    state: RoleConfigState,
-    this: Any,
-    role: RoleName,
-    result: None = None,
-) -> None:
-    state.role = str(role)
-
-
-@role_proto.transition(RoleConfig.set_nodes)
-def set_nodes(): pass
-
-@set_nodes.arguments
-def _(
-    state: RoleConfigState,
-    this: Any,
-    nodes: Sequence[DagNode] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[DagNode]]]:
-    ns = () if isinstance(nodes, NotBoundType) else tuple(nodes)
-    return (ns,)
-
-@set_nodes.provide
-def _(
-    state: RoleConfigState,
-    this: Any,
-    nodes: Sequence[DagNode],
-    result: None = None,
-) -> None:
-    state.nodes = list(nodes)
-    state.version += 1
+role_proto = RoleConfigStateMachine()
 
 
 # ==============================================================================
@@ -187,250 +137,119 @@ class NodeConfigState:
     per_node_info_by_node: PretenseDict[DagNode, PerNodeInfo] = field(default_factory=PretenseDict)
 
 
-node_proto = StateMachineProto[NodeConfigState]()
+class NodeConfigStateMachine(StateMachine[NodeConfigState]):
+    """Pretense StateMachine for NodeConfig."""
+
+    def __init__(self, state: Optional[NodeConfigState] = None):
+        super().__init__(state=state or NodeConfigState())
+
+    @transition.seeding()
+    def seed_node_config(
+        self,
+        ctx: TransitionContext[
+            None,
+            [
+                Optional[Set[file_alias.ReadOnlyFile]],
+                Optional[Set[file_alias.ReadWriteFile]],
+                bool,
+                bool,
+                Optional[file_alias.UnboundFile],
+                Optional[str],
+                Optional[Sequence[str]],
+            ],
+            None,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    read_only_files=Domain(strategy=lambda: set()),
+                    read_write_files=Domain(strategy=lambda: set()),
+                    allows_step_mode=Domain(strategy=lambda: False),
+                    is_step_mode=Domain(strategy=lambda: False),
+                    guide_file=Domain(strategy=lambda: None),
+                    verification_success_message=Domain(strategy=lambda: None),
+                    feedback=Domain(strategy=lambda: ()),
+                )
+        def _consequent(
+            res: None,
+            read_only_files: Optional[Set[file_alias.ReadOnlyFile]] = None,
+            read_write_files: Optional[Set[file_alias.ReadWriteFile]] = None,
+            allows_step_mode: bool = False,
+            is_step_mode: bool = False,
+            guide_file: Optional[file_alias.UnboundFile] = None,
+            verification_success_message: Optional[str] = None,
+            feedback: Optional[Sequence[str]] = None,
+        ) -> None:
+            self.state.read_only_files = PretenseSet(read_only_files or ())
+            self.state.read_write_files = PretenseSet(read_write_files or ())
+            self.state.allows_step_mode = bool(allows_step_mode)
+            self.state.is_step_mode = bool(is_step_mode)
+            self.state.guide_file = guide_file
+            self.state.verification_success_message = VerificationSuccessMessage(str(verification_success_message)) if verification_success_message else None
+            self.state.feedback = [NodeFeedback(f) for f in (feedback or ())]
+        ctx.update(_consequent)
+
+    @transition(name="read_only_files")
+    def read_only_files(self, ctx: TransitionContext[NodeConfig, [], Set[file_alias.ReadOnlyFile]]) -> None:
+        ctx.returns(lambda: set(self.state.read_only_files))
+
+    @transition(name="read_write_files")
+    def read_write_files(self, ctx: TransitionContext[NodeConfig, [], Set[file_alias.ReadWriteFile]]) -> None:
+        ctx.returns(lambda: set(self.state.read_write_files))
+
+    @transition(name="allows_step_mode")
+    def allows_step_mode(self, ctx: TransitionContext[NodeConfig, [], bool]) -> None:
+        ctx.returns(lambda: self.state.allows_step_mode)
+
+    @transition(name="is_step_mode")
+    def is_step_mode(self, ctx: TransitionContext[NodeConfig, [], bool]) -> None:
+        ctx.returns(lambda: self.state.is_step_mode)
+
+    @transition(name="guide_file")
+    def guide_file(self, ctx: TransitionContext[NodeConfig, [], Optional[file_alias.UnboundFile]]) -> None:
+        ctx.returns(lambda: self.state.guide_file)
+
+    @transition(name="templates")
+    def templates(self, ctx: TransitionContext[NodeConfig, [], Mapping[file_alias.BoundFile, file_alias.FileContent]]) -> None:
+        ctx.returns(lambda: dict(self.state.templates))
+
+    @transition(name="template_parameters")
+    def template_parameters(self, ctx: TransitionContext[NodeConfig, [], Mapping[TemplateParamKey, Any]]) -> None:
+        ctx.returns(lambda: dict(self.state.template_parameters))
+
+    @transition(name="guide")
+    def guide(self, ctx: TransitionContext[NodeConfig, [], Optional[NodeGuide]]) -> None:
+        ctx.returns(lambda: self.state.guide)
+
+    @transition(name="blame_targets_by_node")
+    def blame_targets_by_node(self, ctx: TransitionContext[NodeConfig, [], Mapping[DagNode, Set[file_alias.BoundFile]]]) -> None:
+        ctx.returns(lambda: {k: set(v) for k, v in self.state.blame_targets_by_node.items()})
+
+    @transition(name="verification_checks")
+    def verification_checks(self, ctx: TransitionContext[NodeConfig, [], Sequence[VerificationCheck]]) -> None:
+        ctx.returns(lambda: tuple(self.state.verification_checks))
+
+    @transition(name="verification_checks_by_node")
+    def verification_checks_by_node(self, ctx: TransitionContext[NodeConfig, [], Mapping[DagNode, Sequence[VerificationCheck]]]) -> None:
+        ctx.returns(lambda: {k: tuple(v) for k, v in self.state.verification_checks_by_node.items()})
+
+    @transition(name="src_file_alias_by_node")
+    def src_file_alias_by_node(self, ctx: TransitionContext[NodeConfig, [], Mapping[DagNode, file_alias.RelativePath]]) -> None:
+        ctx.returns(lambda: dict(self.state.src_file_alias_by_node))
+
+    @transition(name="verification_success_message")
+    def verification_success_message(self, ctx: TransitionContext[NodeConfig, [], Optional[VerificationSuccessMessage]]) -> None:
+        ctx.returns(lambda: self.state.verification_success_message)
+
+    @transition(name="feedback")
+    def feedback(self, ctx: TransitionContext[NodeConfig, [], Sequence[NodeFeedback]]) -> None:
+        ctx.returns(lambda: tuple(self.state.feedback))
+
+    @transition(name="per_node_info_by_node")
+    def per_node_info_by_node(self, ctx: TransitionContext[NodeConfig, [], Mapping[DagNode, PerNodeInfo]]) -> None:
+        ctx.returns(lambda: dict(self.state.per_node_info_by_node))
 
 
-# Seeding transition for NodeConfig
-@node_proto.seeding()
-def seed_node_config(): pass
-
-@seed_node_config.arguments
-def _(
-    state: NodeConfigState,
-    this: Any,
-    read_only_files: Optional[Set[file_alias.ReadOnlyFile]] | NotBoundType = NotBound,
-    read_write_files: Optional[Set[file_alias.ReadWriteFile]] | NotBoundType = NotBound,
-    allows_step_mode: bool | NotBoundType = NotBound,
-    is_step_mode: bool | NotBoundType = NotBound,
-    guide_file: Optional[file_alias.UnboundFile] | NotBoundType = NotBound,
-    verification_success_message: Optional[str] | NotBoundType = NotBound,
-    feedback: Optional[Sequence[str]] | NotBoundType = NotBound,
-) -> Optional[Tuple[Set[file_alias.ReadOnlyFile], Set[file_alias.ReadWriteFile], bool, bool, Optional[file_alias.UnboundFile], Optional[VerificationSuccessMessage], Sequence[NodeFeedback]]]:
-    ro = set() if isinstance(read_only_files, NotBoundType) or read_only_files is None else set(read_only_files)
-    rw = set() if isinstance(read_write_files, NotBoundType) or read_write_files is None else set(read_write_files)
-    allows = False if isinstance(allows_step_mode, NotBoundType) else bool(allows_step_mode)
-    step = False if isinstance(is_step_mode, NotBoundType) else bool(is_step_mode)
-    gf = None if isinstance(guide_file, NotBoundType) else guide_file
-    vsm = None if isinstance(verification_success_message, NotBoundType) or verification_success_message is None else VerificationSuccessMessage(str(verification_success_message))
-    fb = () if isinstance(feedback, NotBoundType) or feedback is None else tuple(NodeFeedback(f) for f in feedback)
-    return (ro, rw, allows, step, gf, vsm, fb)
-
-@seed_node_config.provide
-def _(
-    state: NodeConfigState,
-    this: Any,
-    read_only_files: Set[file_alias.ReadOnlyFile],
-    read_write_files: Set[file_alias.ReadWriteFile],
-    allows_step_mode: bool,
-    is_step_mode: bool,
-    guide_file: Optional[file_alias.UnboundFile],
-    verification_success_message: Optional[VerificationSuccessMessage],
-    feedback: Sequence[NodeFeedback],
-    result: None = None,
-) -> None:
-    state.read_only_files = PretenseSet(read_only_files)
-    state.read_write_files = PretenseSet(read_write_files)
-    state.allows_step_mode = allows_step_mode
-    state.is_step_mode = is_step_mode
-    state.guide_file = guide_file
-    state.verification_success_message = verification_success_message
-    state.feedback = list(feedback)
-
-
-# NodeConfig property transitions
-@node_proto.transition(name="read_only_files")
-def read_only_files(): pass
-
-@read_only_files.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Set[file_alias.ReadOnlyFile]]]:
-    expected = set(state.read_only_files)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="read_write_files")
-def read_write_files(): pass
-
-@read_write_files.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Set[file_alias.ReadWriteFile]]]:
-    expected = set(state.read_write_files)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="allows_step_mode")
-def allows_step_mode(): pass
-
-@allows_step_mode.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[bool]]:
-    expected = state.allows_step_mode
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="is_step_mode")
-def is_step_mode(): pass
-
-@is_step_mode.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[bool]]:
-    expected = state.is_step_mode
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="guide_file")
-def guide_file(): pass
-
-@guide_file.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Optional[file_alias.UnboundFile]]]:
-    expected = state.guide_file
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="templates")
-def templates(): pass
-
-@templates.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Mapping[file_alias.BoundFile, file_alias.FileContent]]]:
-    expected = dict(state.templates)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="template_parameters")
-def template_parameters(): pass
-
-@template_parameters.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Mapping[TemplateParamKey, Any]]]:
-    expected = dict(state.template_parameters)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="guide")
-def guide(): pass
-
-@guide.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Optional[NodeGuide]]]:
-    expected = state.guide
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="blame_targets_by_node")
-def blame_targets_by_node(): pass
-
-@blame_targets_by_node.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Mapping[DagNode, Set[file_alias.BoundFile]]]]:
-    expected = {k: set(v) for k, v in state.blame_targets_by_node.items()}
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="verification_checks")
-def verification_checks(): pass
-
-@verification_checks.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Sequence[VerificationCheck]]]:
-    expected = tuple(state.verification_checks)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="verification_checks_by_node")
-def verification_checks_by_node(): pass
-
-@verification_checks_by_node.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Mapping[DagNode, Sequence[VerificationCheck]]]]:
-    expected = {k: tuple(v) for k, v in state.verification_checks_by_node.items()}
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="src_file_alias_by_node")
-def src_file_alias_by_node(): pass
-
-@src_file_alias_by_node.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Mapping[DagNode, file_alias.RelativePath]]]:
-    expected = dict(state.src_file_alias_by_node)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="verification_success_message")
-def verification_success_message(): pass
-
-@verification_success_message.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Optional[VerificationSuccessMessage]]]:
-    expected = state.verification_success_message
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="feedback")
-def feedback(): pass
-
-@feedback.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Sequence[NodeFeedback]]]:
-    expected = tuple(state.feedback)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@node_proto.transition(name="per_node_info_by_node")
-def per_node_info_by_node(): pass
-
-@per_node_info_by_node.returns
-def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Mapping[DagNode, PerNodeInfo]]]:
-    expected = dict(state.per_node_info_by_node)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+node_proto = NodeConfigStateMachine()
 
 
 # ==============================================================================
@@ -439,15 +258,13 @@ def _(state: NodeConfigState, this: Any, outcome: object = NotBound) -> Optional
 
 def make_role_config_fake(state: Optional[RoleConfigState] = None) -> RoleConfig:
     """Instantiate a synthesized RoleConfig fake."""
-    st = state or RoleConfigState()
-    sm = role_proto.make_state_machine(st)
+    sm = RoleConfigStateMachine(state)
     return sm.as_fake(RoleConfig)
 
 
 def make_node_config_fake(state: Optional[NodeConfigState] = None) -> NodeConfig:
     """Instantiate a synthesized NodeConfig fake."""
-    st = state or NodeConfigState()
-    sm = node_proto.make_state_machine(st)
+    sm = NodeConfigStateMachine(state)
     return sm.as_fake(NodeConfig)
 
 
@@ -491,7 +308,7 @@ class TestNodeConfigUnit(unittest.TestCase):
 
     def test_seeded_node_config(self) -> None:
         state = NodeConfigState()
-        sm = node_proto.make_state_machine(state)
+        sm = NodeConfigStateMachine(state)
         node = DagNode(UnitAddress("mod"), RoleAddress("lib"))
         rw_file = file_alias.ReadWriteFile(
             relative_path=file_alias.RelativePath("mod.py"),

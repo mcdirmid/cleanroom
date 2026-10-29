@@ -63,6 +63,8 @@ class RoleDefinition:
     template: str = ""
     template_command: str = ""
     pipeline: Optional[str] = None
+    fused_roles: Sequence[str] = ()
+    common_spec_roles: Sequence[str] = ()
 
 
 # Contract: RoleResolver protocol loads role configurations and validates declaration rules.
@@ -89,7 +91,7 @@ class RoleResolver(Singleton[AgentSessionTier], Protocol):
         ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-25T21:55:00Z
-# CHANGE: Add pipeline field to RoleDefinition
+# LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-10-29T00:40:00Z
+# CHANGE: Add common_spec_roles field to RoleDefinition
 # --- END CLEANROOM METADATA ---

@@ -37,10 +37,10 @@
 8. [Current Implementation Progress & Verification Health](#8-current-implementation-progress--verification-health)
 9. [Master Actionable Roadmap & Next TODOs](#9-master-actionable-roadmap--next-todos)
    - [Task 1: Cross-Model Empirical Benchmarking Suite](#task-1-cross-model-empirical-benchmarking-suite)
-   - [Task 2: Minimal Hermetic Role Workspace Provisioning & Clutter Eradication](#task-2-minimal-hermetic-role-workspace-provisioning--clutter-eradication)
-   - [[COMPLETED] Task 3: Refine Broad Exception Linter (`check_exception_eating`) for Task Executors & Boundary Handlers](#completed-task-3-refine-broad-exception-linter-check_exception_eating-for-task-executors--boundary-handlers)
-   - [Task 4: Standalone Ephemeral Distribution (`uvx cleanroom`)](#task-4-standalone-ephemeral-distribution-uvx-cleanroom)
-   - [Task 5: Contract Slug Integration in Low-Level Specifications & Test Requirement Traceability](#task-5-contract-slug-integration-in-low-level-specifications--test-requirement-traceability)
+   - [Task 2: Standalone Ephemeral Distribution (`uvx cleanroom`)](#task-2-standalone-ephemeral-distribution-uvx-cleanroom)
+   - [Task 3: Contract Slug Integration in Low-Level Specifications & Test Requirement Traceability](#task-3-contract-slug-integration-in-low-level-specifications--test-requirement-traceability)
+   - [Task 4: Feedback Embargo Checker Sub-Agent & Anti-Pruning Verification Gate](#task-4-feedback-embargo-checker-sub-agent--anti-pruning-verification-gate)
+   - [Task 5: 100% Statement & Branch Coverage Enforcement in Property Fuzzing](#task-5-100-statement--branch-coverage-enforcement-in-property-fuzzing)
 
 ---
 
@@ -512,12 +512,23 @@ In Google Antigravity environments:
   - Hardened Pretense runner (`pretense/cli.py`) with per-target watchdog timeout (`--timeout`, `PRETENSE_TIMEOUT=45.0s`), GIL-independent native thread dump (`faulthandler.dump_traceback_later`), and non-zero exit on infinite loop/deadlock hangs.
   - Resolved `reportOptionalCall` typing defect in `pretense/transition.py` to achieve 0 Pyright errors out-of-the-box.
   - **Empirical Breakthrough**: Pretense serves as an architectural equalizer, allowing single-agent baselines to achieve 100% test pass rates and 98% coverage at 37%–74% lower token cost and 2x–4x faster wall-clock execution than multi-role Cleanroom pipelines.
+- [x] **Phase 9: Minimal Hermetic Role Workspace Provisioning & Clutter Eradication** (Homed in [`design.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/design.md#L443))
+  - Bundled `cleanroom_roles.toml` inside zipapps, eliminated workspace root clutter, purged ghost manifest references, and implemented selective single-guide provisioning.
+- [x] **Phase 10: Broad Exception Linter & Semantic Reification** (Homed in [`toolchain_and_verification.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md#L164))
+  - Implemented semantic AST exception reification analysis in `check_exception_eating` with explicit pragma directives (`# cleanroom: allow-broad-exception`) for task execution engines.
+- [x] **Phase 11: Class-Based Pretense State Machine Redesign & Repository-Wide Migration** (Homed in [`pretense.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/pretense.md#L2042))
+  - Redesigned Pretense state machines from verbose 4-function `StateMachineProto` definitions into an ergonomic class-based DSL (`class TargetStateMachine(StateMachine[StateT]): ...`) with single decorated methods (`@transition(Target.method)` or `@transition.seeding()`).
+  - Implemented generic `TransitionContext[Target, P, R]` with `ctx.antecedent()`, `ctx.arguments(generate=..., recognize=...)`, `ctx.returns(...)`, `ctx.consequent(...)`, and `ctx.raises(...)`, keeping the reference model pure by decoupling concrete target instances from transition lambdas.
+  - Supported dual-role execution: underneath target singleton dispatch via `singletons={Target: instance}` during test runs, and dynamic in-memory fake synthesis via `sm.as_fake(Target)`.
+  - Migrated 100% of all Pretense test suites repo-wide: 54 canonical suites across `update_with_ai/parts/` and `update_python_with_ai/parts/`, and 18 historical benchmark suites in `benchmarks/results/` (`dag_engine_lite` and `semver_solver`).
+  - Updated Pretense scaffolding tooling and templates (`update_python_with_ai/templates/pretense_template.py`, `update_python_with_ai/support/lib/pretense_lint.py`, verified with `update_python_with_ai/support/tests/pretense_lint_test.py`).
 
 ### Current Verification Health
 
 Cleanroom maintains 100% test pass rates across all validation suites:
-- **`bin/test` & Unit Suites**: **703 passed tests (617 in `update_with_ai`, 15 in `parts/benchmark`, 71 in `support/tests`), 9 subtests passed**
-- **Pyright Type Checking**: **0 errors, 0 warnings, 0 informations**
+- **`bin/test` & Unit Suites**: **778 passed unit tests, 9 subtests passed**
+- **Pretense State Machine Suites**: **148 passed test suites (100% passing)**
+- **Pyright Type Checking**: **0 errors, 0 warnings, 0 informations repo-wide**
 - **Specification Linter**: **129 High-Level, 103 Planning, 129 Low-Level specifications validated**
 
 ---
@@ -552,61 +563,7 @@ The following prioritized roadmap outlines the active forward engineering tasks 
 
 ---
 
-### [COMPLETED] Task 2: Minimal Hermetic Role Workspace Provisioning & Clutter Eradication
-- **Priority**: High
-- **Status**: Completed (2026-10-22)
-- **Component**: `update_with_ai/parts/workspace/` (`provision_impl.py`, `sync_impl.py`, `scaffold_impl.py`, `roles_impl.py`)
-- **Objective**: Prevent context pollution, token waste, and agent distraction by ensuring provisioned role workspaces contain strictly the files required for the assigned role, eliminating all configuration file dumps, dead legacy manifests, irrelevant guides, and starter templates.
-- **Problem Statement**:
-  - `provision_impl.py` and `sync_impl.py` currently copy the entire methodology package (`update_python_with_ai/`) into the role workspace: dumping all `.toml` and `.json` files into the workspace root (`cleanroom_roles.toml`, `pyright_spec.json`), all 8 methodology guides into `guides/`, all starter templates into `templates/`, and creating a redundant `update_python_with_ai/` subdirectory.
-  - When role agents (such as `test` or `lib`) inspect their working directory via `ls` or file lookups, they see `cleanroom_roles.toml`, irrelevant guides, and templates. This distracts the model from its assigned task, prompts unnecessary inspection loops, pollutes context windows, and wastes tokens.
-  - Additionally, references to the non-existent legacy ghost file `cleanroom_python_roles.toml` persist across fallback search loops in `roles_impl.py`, `provision_impl.py`, `manifest_loader_impl.py`, and `benchmark_impl.py`.
-- **Implementation Steps**:
-  1. [x] **Purge Ghost File References (`cleanroom_python_roles.toml`)**:
-     - Remove all fallback references to `cleanroom_python_roles.toml` across `roles_impl.py`, `provision_impl.py`, `role_registry_impl.py`, `manifest_loader_impl.py`, `benchmark_impl.py`, and specification stubs.
-     - Enforce `cleanroom_roles.toml` as the sole canonical role manifest name.
-  2. [x] **Bundle Role Configuration Inside Zipapps**:
-     - Update `scaffold_impl.py` to package `cleanroom_roles.toml` directly into the `bin/*` runner zipapps.
-     - Update `roles_impl.py` to load role definitions directly from the zipapp bundle or in-memory cache, decoupling tool execution from workspace root files.
-  3. [x] **Strip Unneeded Files from Role Workspace Root**:
-     - Update `provision_impl.py` and `sync_impl.py` to **never** copy `cleanroom_roles.toml`, `cleanroom_python_roles.toml`, or `pyright_spec.json` into the role workspace root.
-     - Never copy `templates/` into the role workspace.
-     - Never create a redundant `update_python_with_ai/` directory in the workspace root.
-  4. [x] **Selective Single-Guide Provisioning**:
-     - Ensure `guides/` in the role workspace contains strictly the single companion guide designated for the assigned role (e.g. `guides/low_to_test.md` for `test`, `guides/low_to_lib.md` for `lib`).
-     - Cease copying all other 7 methodology guides into the role workspace.
-  5. [x] **Preserve Minimal Runtime Support for Code Execution**:
-     - Maintain strictly `support/lib/` containing only the user-facing runtime primitives (`framework.py`, `framework.pyi`, `lifecycle.py`, `lifecycle.pyi`) so that `pyright` and `pytest` cleanly resolve runtime dependencies of code under test without import errors.
-     - Maintain minimal project scaffolding: `pyproject.toml`, `uv.lock`, `.python-version`, `.cleanroom_role.json`, `AGENTS.md`, and `bin/` tools.
-  6. [x] **Cascade Specification Alignment & Verification**:
-     - Author HLS, Planning, Scenarios, and Low-level specifications under `update_with_ai/parts/workspace/` before code modifications.
-     - Verify with `bin/test update_with_ai/parts/workspace` and test on live commissioned workspaces.
-
----
-
-### [COMPLETED] Task 3: Refine Broad Exception Linter (`check_exception_eating`) for Task Executors & Boundary Handlers
-- **Priority**: Medium
-- **Status**: Completed (2026-10-22)
-- **Component**: `update_with_ai/support/lib/build_lint_common.py` (`check_exception_eating`), `update_python_with_ai/support/lib/lib_lint.py`
-- **Objective**: Prevent agent flailing and false-positive rejections in executor/runner components by allowing legitimate exception reification and boundary handling while continuing to prohibit silent bug suppression.
-- **Problem Statement**:
-  - `check_exception_eating` currently implements a blunt AST check that flags any `try...except Exception:` or bare except block lacking an immediate `raise` statement within the handler.
-  - In execution engines, DAG runners, scheduler loops, and retry handlers (e.g. `dag_engine_impl.py`), the component is contractually required to invoke arbitrary user-supplied callbacks (`action()`), catch arbitrary `Exception` failures, record them into `NodeResult(state=NodeState.FAILED, error=exc)`, and continue running independent nodes according to failure policies (such as `CONTINUE_ON_ERROR`).
-  - Re-raising `exc` would crash the entire runner, breaking contracts and preventing `DAGRunReport` generation.
-  - Because the linter treats all non-reraising broad exception handlers as "exception eating", `lib` agents become trapped in extensive trial-and-error loops (often >80 steps) attempting awkward AST workarounds (like custom wrapper exception classes) to satisfy the linter.
-- **Implementation Completed**:
-  1. [x] **Recognize Reification & Structured Capture**:
-     - Enhanced the AST analyzer in `check_exception_eating` to inspect the handler body: if the caught exception instance (`except Exception as exc:`) is assigned into a result data structure, passed as an argument to a failure handler, or stored into an error attribute (e.g. `error=exc`, `_result.error = exc`), classify it as legitimate exception reification rather than unhandled suppression.
-  2. [x] **Support Explicit Pragma Directives**:
-     - Provided an inline comment escape hatch (such as `# cleanroom: allow-broad-exception` or `# intentional-catch`) for boundary execution layers and foreign callback runners where broad exception capture is required by architectural design.
-  3. [x] **Preserve Anti-Suppression for Logic Code**:
-     - Maintained strict rejection of genuine silent suppression (e.g. `except Exception: pass`, empty handlers, or handlers that return arbitrary uncontracted fallbacks without recording the error).
-  4. [x] **Add Unit Tests for Linter Boundaries**:
-     - Added test cases in `build_lint_common_test.py` and `lib_lint_test.sh` verifying that runner patterns and pragma comments pass cleanly while empty exception suppression continues to fail.
-
----
-
-### Task 4: Standalone Ephemeral Distribution (`uvx cleanroom`)
+### Task 2: Standalone Ephemeral Distribution (`uvx cleanroom`)
 - **Priority**: Low
 - **Component**: `pyproject.toml`, distribution scripts
 - **Objective**: Enable developers to run Cleanroom on any target project without cloning the Cleanroom codebase (`uvx cleanroom orchestrate .`).
@@ -617,10 +574,10 @@ The following prioritized roadmap outlines the active forward engineering tasks 
 
 ---
 
-### Task 5: Contract Slug Integration in Low-Level Specifications & Test Requirement Traceability
+### Task 3: Contract Slug Integration in Low-Level Specifications & Test Requirement Traceability
 - **Priority**: High
 - **Component**: `update_python_with_ai/` (`support/tools/`), `update_with_ai/guides/low_to_test.md`
-- **Design Specification**: [`hypothesis_todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/hypothesis_todo.md) Section 6 & [`cross_model_defect_analysis_and_coincident_blindspots.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/cross_model_defect_analysis_and_coincident_blindspots.md)
+- **Design Specification**: [`pretense.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/pretense.md) Section 6 & Section 2
 - **Objective**: Eliminate errors of omission and test suite blind spots without requiring expensive frontier models by formalizing requirement slugs in Low-Level Specifications (`low/*.pyi`) and asserting that every postcondition clause has matching comment/docstring slug tags in tests (`# [slug:<id>]`) verified via zero-token AST/regex linters, avoiding runtime decorators or metadata overhead.
 - **Problem Statement**:
   - In `dag_engine_lite`, the Qwen Cleanroom run greenlit three genuine soundness defects (off-by-one retry counter, node re-registration edge retention, and scheduler state removal desynchronization) while achieving 100% test pass rates, 95% statement coverage, and 90% branch coverage.
@@ -639,6 +596,43 @@ The following prioritized roadmap outlines the active forward engineering tasks 
      - Update `update_python_with_ai/guides/low_to_test.md` to instruct the Certifier ($W_{\text{test}}$) to systematically enumerate and tag test methods with the exact slug comments matching specification clauses.
   5. **Corpus Migration**:
      - Retrofit contract slugs into benchmark suites (`benchmarks/parts/dag_engine_lite/low/`), establishing the baseline for the upcoming `semver_solver` benchmark.
+
+---
+
+### Task 4: Feedback Embargo Checker Sub-Agent & Anti-Pruning Verification Gate
+- **Priority**: High
+- **Component**: `update_with_ai/parts/workspace_cli/` & `update_with_ai/parts/agent/`
+- **Design Specification**: [`benchmark_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/benchmark_design_doc.md)
+- **Objective**: Prevent auditor overreach, code micromanagement, and destructive pruning during Cleanroom convergence by intercepting `bin/blame` and verifying that all auditor feedback strictly conforms to the information embargo and common specification grounding.
+- **Problem Statement**:
+  - In `semver_solver` benchmark runs, the `pretense_coverage` auditor repeatedly cited private internal helper lines in the library implementation (`_check_bare_partial`, lines 211 and 321) and demanded that valid defensive edge-case handling (empty clauses in `||` and wildcards `*`, `x`) be pruned as "dead code" because existing tests did not exercise them.
+  - This bullied the library worker into deleting valid specification-compliant edge handling, causing cross-soundness failures against foreign test suites.
+- **Implementation Steps**:
+  1. **Information Embargo Filter**: Verify that blame messages do not cite or leak implementation details, private symbols (`_*`), or line numbers of companion files (line numbers permitted only for the file being blamed).
+  2. **Specification Grounding Gate**: Require blame critiques to explicitly cite a contract, clause, or assumption from the common specification (`low/*.pyi`).
+  3. **Anti-Pruning Gate**: Reject claims that input validation is "unreachable" when the input space is permitted by the specification; redirect critiques to the test author (`pretense`) to add test coverage instead of forcing the library author to delete functional code.
+  4. **Sub-Agent / Verification Hook**: Implement either as a deterministic pre-check in `bin/blame` or a dedicated lightweight `feedback_checker` subagent.
+
+---
+
+### Task 5: 100% Statement & Branch Coverage Enforcement in Property Fuzzing
+- **Priority**: High
+- **Component**: `update_python_with_ai/` (`pretense/`, `support/tools/`), `update_python_with_ai/guides/pretense_coverage.md`
+- **Design Specification**: [`pretense.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/pretense.md) Section 5 & Section 11
+- **Objective**: Ensure that Hypothesis stateful property fuzzing suites (`Test<Target>Fuzz` / `compile_hypothesis_test_case`) achieve 100% statement and branch coverage across the library implementation under test, independently from or combined with fixed/deterministic unit tests (`Test<Target>Unit` / `Test<Target>ImplReal`).
+- **Problem Statement**:
+  - Historically, coverage certification was evaluated primarily under `--no-fuzz --cov`, measuring only deterministic scenario replay in `Test<Target>ImplReal`.
+  - The stateful fuzzing suite was treated as an unmeasured "best-effort" execution pass. Consequently, test authors could achieve 100% coverage using static, hand-written unit tests while leaving state-machine transition argument generators crippled with single-sample constants (`generate=lambda: ("1.0.0",)`).
+  - When state machines only execute static constants during fuzzing, random walks do not explore the data domain, and defensive branches in `lib/` are left unexercised by property tests.
+- **Implementation Steps**:
+  1. **Dual-Mode Coverage Instrumentation**:
+     - Update `PretenseRunnerConfig` and `PretenseEngine` to measure statement and branch coverage during the fuzzing pass (`pretense run --fuzz --cov`).
+     - Support isolated fuzz coverage reporting alongside deterministic scenario coverage reporting.
+  2. **100% Fuzz Coverage Certification Gate**:
+     - Update the `pretense_coverage` role verifier (`bin/check_files`) to enforce that the SUT achieves 100% statement and branch coverage under the fuzzing pass.
+     - When unreached branches remain during property fuzzing, `pretense_coverage` blames the test author (`pretense`) to broaden transition argument strategies (`ctx.arguments(generate=...)`) with generative combinators (`st.integers`, `st.sampled_from`, `st.builds`) rather than blaming `lib` to prune defensive code.
+  3. **Guide Alignment**:
+     - Update `update_python_with_ai/guides/pretense.md` and `update_python_with_ai/guides/pretense_coverage.md` with explicit criteria requiring 100% branch coverage from state-machine fuzz transitions.
 
 
 

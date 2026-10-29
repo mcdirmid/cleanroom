@@ -8,8 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from update_with_ai.parts.loop.lib import guard, guard_impl
 from update_with_ai.parts.loop.lib.guard import (
     FailureExplanation,
@@ -32,115 +31,81 @@ class LoopGuardState:
     failure_threshold: int = 4
 
 
-proto = StateMachineProto[LoopGuardState]()
+class LoopGuardStateMachine(StateMachine[LoopGuardState]):
+    """Unified Pretense State Machine for LoopGuard."""
+
+    def __init__(
+        self,
+        state: Optional[LoopGuardState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or LoopGuardState(), singletons=singletons)
+
+    @transition.seeding(name="seed_guard_thresholds")
+    def seed_guard_thresholds(
+        self,
+        ctx: TransitionContext[Any, [int, int], None],
+    ) -> None:
+        ctx.arguments(
+                    reminder_threshold=Domain(strategy=lambda: 2),
+                    failure_threshold=Domain(strategy=lambda: 4),
+                )
+        ctx.returns(lambda reminder_threshold=2, failure_threshold=4: None)
+        ctx.update(lambda res, reminder_threshold=2, failure_threshold=4: (
+            setattr(self.state, "reminder_threshold", int(reminder_threshold)),
+            setattr(self.state, "failure_threshold", int(failure_threshold)),
+        ))
+
+    @transition(LoopGuard.evaluate)
+    def evaluate(
+        self,
+        ctx: TransitionContext[LoopGuard, [tool_provider.ToolName | str, Optional[Mapping[Any, Any]]], Optional[Union[LoopReminder, LoopFailure]]],
+    ) -> None:
+        ctx.arguments(
+                    tool_name=Domain(strategy=lambda: tool_provider.ToolName('read_file')),
+                    arguments=Domain(strategy=lambda: {}),
+                )
+        def returns(tool_name: tool_provider.ToolName | str = "read_file", arguments: Optional[Mapping[Any, Any]] = None) -> Optional[Union[LoopReminder, LoopFailure]]:
+            args = arguments or {}
+            sig = f"{tool_name}:{sorted(str(k) + '=' + str(v) for k, v in args.items())}"
+            new_count = self.state.consecutive_count + 1 if sig == self.state.last_signature else 1
+
+            if new_count >= self.state.failure_threshold:
+                return LoopFailure(
+                    explanation=FailureExplanation(f"Tool {tool_name} repeated {new_count} times without forward progress.")
+                )
+            elif new_count >= self.state.reminder_threshold:
+                return LoopReminder(
+                    feedback=LoopFeedback(f"Warning: Tool {tool_name} repeated {new_count} times.")
+                )
+            return None
+
+        ctx.returns(returns)
+
+        def provide(res: Optional[Union[LoopReminder, LoopFailure]], tool_name: tool_provider.ToolName | str = "read_file", arguments: Optional[Mapping[Any, Any]] = None) -> None:
+            args = arguments or {}
+            sig = f"{tool_name}:{sorted(str(k) + '=' + str(v) for k, v in args.items())}"
+            if sig == self.state.last_signature:
+                self.state.consecutive_count += 1
+            else:
+                self.state.last_signature = sig
+                self.state.consecutive_count = 1
+        ctx.update(provide)
+
+    @transition(LoopGuard.reset)
+    def reset(
+        self,
+        ctx: TransitionContext[LoopGuard, [], None],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: None)
+        ctx.update(lambda res: (
+            setattr(self.state, "consecutive_count", 0),
+            setattr(self.state, "last_signature", ""),
+        ))
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_guard_thresholds(): pass
-
-@seed_guard_thresholds.arguments
-def _(
-    state: LoopGuardState,
-    this: Any,
-    reminder_threshold: int | NotBoundType = NotBound,
-    failure_threshold: int | NotBoundType = NotBound,
-) -> Optional[Tuple[int, int]]:
-    r = 2 if isinstance(reminder_threshold, NotBoundType) else int(reminder_threshold)
-    f = 4 if isinstance(failure_threshold, NotBoundType) else int(failure_threshold)
-    return (r, f)
-
-@seed_guard_thresholds.provide
-def _(
-    state: LoopGuardState,
-    this: Any,
-    reminder_threshold: int,
-    failure_threshold: int,
-    result: None = None,
-) -> None:
-    state.reminder_threshold = reminder_threshold
-    state.failure_threshold = failure_threshold
-
-
-# ==============================================================================
-# 2. LoopGuard Transitions
-# ==============================================================================
-
-@proto.transition(LoopGuard.evaluate)
-def evaluate(): pass
-
-@evaluate.arguments
-def _(
-    state: LoopGuardState,
-    this: Any,
-    tool_name: tool_provider.ToolName | str | NotBoundType = NotBound,
-    arguments: Optional[Mapping[Any, Any]] | NotBoundType = NotBound,
-) -> Optional[Tuple[tool_provider.ToolName, Mapping[Any, Any]]]:
-    tn = tool_provider.ToolName("read_file") if isinstance(tool_name, NotBoundType) else tool_provider.ToolName(str(tool_name))
-    args: Mapping[Any, Any] = {} if isinstance(arguments, NotBoundType) or arguments is None else arguments
-    return (tn, args)
-
-@evaluate.returns
-def _(
-    state: LoopGuardState,
-    this: Any,
-    tool_name: tool_provider.ToolName,
-    arguments: Mapping[Any, Any],
-    outcome: object = NotBound,
-) -> Optional[Outcome[Optional[Union[LoopReminder, LoopFailure]]]]:
-    sig = f"{tool_name}:{sorted(str(k) + '=' + str(v) for k, v in arguments.items())}"
-    if sig == state.last_signature:
-        new_count = state.consecutive_count + 1
-    else:
-        new_count = 1
-
-    if new_count >= state.failure_threshold:
-        expected: Optional[Union[LoopReminder, LoopFailure]] = LoopFailure(
-            explanation=FailureExplanation(f"Tool {tool_name} repeated {new_count} times without forward progress.")
-        )
-    elif new_count >= state.reminder_threshold:
-        expected = LoopReminder(
-            feedback=LoopFeedback(f"Warning: Tool {tool_name} repeated {new_count} times.")
-        )
-    else:
-        expected = None
-
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@evaluate.provide
-def _(
-    state: LoopGuardState,
-    this: Any,
-    tool_name: tool_provider.ToolName,
-    arguments: Mapping[Any, Any],
-    result: Optional[Union[LoopReminder, LoopFailure]],
-) -> None:
-    sig = f"{tool_name}:{sorted(str(k) + '=' + str(v) for k, v in arguments.items())}"
-    if sig == state.last_signature:
-        state.consecutive_count += 1
-    else:
-        state.last_signature = sig
-        state.consecutive_count = 1
-
-
-@proto.transition(LoopGuard.reset)
-def reset(): pass
-
-@reset.arguments
-def _(state: LoopGuardState, this: Any) -> Optional[Tuple[()]]:
-    return ()
-
-@reset.provide
-def _(state: LoopGuardState, this: Any, result: None = None) -> None:
-    state.consecutive_count = 0
-    state.last_signature = ""
+proto = LoopGuardStateMachine()
 
 
 # ==============================================================================

@@ -10,6 +10,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
@@ -27,101 +28,70 @@ class ManifestLoaderState:
     manifests: PretenseDict[str, TargetManifest] = field(default_factory=PretenseDict)
 
 
-proto = StateMachineProto[ManifestLoaderState]()
+class ManifestLoaderStateMachine(StateMachine[ManifestLoaderState]):
+    """Pretense StateMachine for UvManifestLoader."""
+
+    def __init__(self, state: Optional[ManifestLoaderState] = None):
+        super().__init__(state=state or ManifestLoaderState())
+
+    # ==============================================================================
+    # 1. Seeding Transitions
+    # ==============================================================================
+
+    @transition.seeding()
+    def seed_manifest(
+        self,
+        ctx: TransitionContext[None, [str, str, str], None],
+    ) -> None:
+        ctx.arguments(
+                    unit_address=Domain(strategy=lambda: '//parts/core:core'),
+                    role_address=Domain(strategy=lambda: 'lib'),
+                    label=Domain(strategy=lambda: '//parts/core:core#lib'),
+                )
+        def _consequent(
+            res: None,
+            unit_address: str = "//parts/core:core",
+            role_address: str = "lib",
+            label: str = "//parts/core:core#lib",
+        ) -> None:
+            manifest = TargetManifest(
+                label=TargetLabel(label),
+                dependencies=(),
+                silent_dependencies=(),
+                star_dependencies=(),
+                feedback_dependencies=(),
+            )
+            key = f"{unit_address}#{role_address}"
+            self.state.manifests[key] = manifest
+        ctx.update(_consequent)
+
+    # ==============================================================================
+    # 2. Manifest Loader Transitions
+    # ==============================================================================
+
+    @transition(UvManifestLoader.retrieve_manifest)
+    def retrieve_manifest(
+        self,
+        ctx: TransitionContext[UvManifestLoader, [DagNode], Optional[TargetManifest]],
+    ) -> None:
+        ctx.arguments(node=Domain(strategy=lambda: DagNode(UnitAddress('//parts/core:core'), RoleAddress('lib'))))
+        def _returns(node: Optional[DagNode] = None) -> Optional[TargetManifest]:
+            if node is None:
+                return None
+            key = f"{node.unit_address}#{node.role_address}"
+            return self.state.manifests.get(key)
+        ctx.returns(_returns)
+
+    @transition(UvManifestLoader.load_manifest)
+    def load_manifest(
+        self,
+        ctx: TransitionContext[UvManifestLoader, [DagNode], None],
+    ) -> None:
+        ctx.arguments(node=Domain(strategy=lambda: DagNode(UnitAddress('//parts/core:core'), RoleAddress('lib'))))
+        ctx.returns(lambda node=None: None)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_manifest(): pass
-
-@seed_manifest.arguments
-def _(
-    state: ManifestLoaderState,
-    this: Any,
-    unit_address: str | NotBoundType = NotBound,
-    role_address: str | NotBoundType = NotBound,
-    label: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str]]:
-    u = "//parts/core:core" if isinstance(unit_address, NotBoundType) else str(unit_address)
-    r = "lib" if isinstance(role_address, NotBoundType) else str(role_address)
-    l = f"{u}#{r}" if isinstance(label, NotBoundType) else str(label)
-    return (u, r, l)
-
-@seed_manifest.provide
-def _(
-    state: ManifestLoaderState,
-    this: Any,
-    unit_address: str,
-    role_address: str,
-    label: str,
-    result: None = None,
-) -> None:
-    manifest = TargetManifest(
-        label=TargetLabel(label),
-        dependencies=(),
-        silent_dependencies=(),
-        star_dependencies=(),
-        feedback_dependencies=(),
-    )
-    key = f"{unit_address}#{role_address}"
-    state.manifests[key] = manifest
-
-
-# ==============================================================================
-# 2. Manifest Loader Transitions
-# ==============================================================================
-
-@proto.transition(UvManifestLoader.retrieve_manifest)
-def retrieve_manifest(): pass
-
-@retrieve_manifest.arguments
-def _(
-    state: ManifestLoaderState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode]]:
-    n = DagNode(UnitAddress("//parts/core:core"), RoleAddress("lib")) if isinstance(node, NotBoundType) else node
-    return (n,)
-
-@retrieve_manifest.returns
-def _(
-    state: ManifestLoaderState,
-    this: Any,
-    node: DagNode,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Optional[TargetManifest]]]:
-    key = f"{node.unit_address}#{node.role_address}"
-    expected = state.manifests.get(key)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(UvManifestLoader.load_manifest)
-def load_manifest(): pass
-
-@load_manifest.arguments
-def _(
-    state: ManifestLoaderState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode]]:
-    n = DagNode(UnitAddress("//parts/core:core"), RoleAddress("lib")) if isinstance(node, NotBoundType) else node
-    return (n,)
-
-@load_manifest.returns
-def _(
-    state: ManifestLoaderState,
-    this: Any,
-    node: DagNode,
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    return Value(None)
+proto = ManifestLoaderStateMachine()
 
 
 # ==============================================================================
@@ -130,8 +100,7 @@ def _(
 
 def make_manifest_loader_fake(state: Optional[ManifestLoaderState] = None) -> UvManifestLoader:
     """Instantiate a synthesized UvManifestLoader fake."""
-    st = state or ManifestLoaderState()
-    sm = proto.make_state_machine(st)
+    sm = ManifestLoaderStateMachine(state)
     return sm.as_fake(UvManifestLoader)
 
 
@@ -144,7 +113,7 @@ class TestManifestLoaderUnit(unittest.TestCase):
 
     def setUp(self) -> None:
         self.state = ManifestLoaderState()
-        self.sm = proto.make_state_machine(self.state)
+        self.sm = ManifestLoaderStateMachine(self.state)
         self.sm.seed_manifest("//parts/core:core", "lib", "//parts/core:core#lib")
         self.fake: UvManifestLoader = self.sm.as_fake(UvManifestLoader)
 
@@ -211,7 +180,7 @@ class TestManifestLoaderFuzz(unittest.TestCase):
     )
     def test_manifest_invariants(self, unit: str, role: str) -> None:
         state = ManifestLoaderState()
-        sm = proto.make_state_machine(state)
+        sm = ManifestLoaderStateMachine(state)
         sm.seed_manifest(f"//pkg:{unit}", role, f"//pkg:{unit}#{role}")
         fake = sm.as_fake(UvManifestLoader)
 

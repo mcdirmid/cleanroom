@@ -8,8 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from update_with_ai.parts.subagent.lib import subagent_coordinator, subagent_tool
 from update_with_ai.parts.subagent.lib.subagent_tool import SubagentToolRunner
 
@@ -21,99 +20,51 @@ class SubagentToolState:
     executed_commands: List[Tuple[str, ...]] = field(default_factory=list)
 
 
-proto = StateMachineProto[SubagentToolState]()
+class SubagentToolStateMachine(StateMachine[SubagentToolState]):
+    """Unified Pretense State Machine for SubagentToolRunner."""
+
+    def __init__(
+        self,
+        state: Optional[SubagentToolState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or SubagentToolState(), singletons=singletons)
+
+    @transition(SubagentToolRunner.execute_command)
+    def execute_command(
+        self,
+        ctx: TransitionContext[SubagentToolRunner, [Sequence[str]], int],
+    ) -> None:
+        ctx.arguments(argv=Domain(strategy=lambda: ()))
+        ctx.returns(lambda argv=(): 0 if self.state.converged else 1)
+        def provide(res: int, argv: Sequence[str] = ()) -> None:
+            self.state.executed_commands.append(tuple(argv))
+        ctx.update(provide)
+
+    @transition(SubagentToolRunner.run_orchestrate)
+    def run_orchestrate(
+        self,
+        ctx: TransitionContext[SubagentToolRunner, ..., int],
+    ) -> None:
+        ctx.arguments(
+                    arg_0=Domain(strategy=lambda: 'staging'),
+                    arg_1=Domain(strategy=lambda: None),
+                    arg_2=Domain(strategy=lambda: None),
+                    arg_3=Domain(strategy=lambda: None),
+                    arg_4=Domain(strategy=lambda: 50),
+                    arg_5=Domain(strategy=lambda: None),
+                    arg_6=Domain(strategy=lambda: None),
+                    arg_7=Domain(strategy=lambda: None),
+                    arg_8=Domain(strategy=lambda: None),
+                    arg_9=Domain(strategy=lambda: None),
+                    arg_10=Domain(strategy=lambda: None),
+                    arg_11=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda *args, **kwargs: 0 if self.state.converged else 1)
+        ctx.update(lambda res, *args, **kwargs: None)
 
 
-# ==============================================================================
-# 1. SubagentToolRunner Transitions
-# ==============================================================================
-
-@proto.transition(SubagentToolRunner.execute_command)
-def execute_command(): pass
-
-@execute_command.arguments
-def _(
-    state: SubagentToolState,
-    this: Any,
-    argv: Sequence[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[str]]]:
-    args = () if isinstance(argv, NotBoundType) else tuple(argv)
-    return (args,)
-
-@execute_command.returns
-def _(
-    state: SubagentToolState,
-    this: Any,
-    argv: Sequence[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    state.executed_commands.append(tuple(argv))
-    ret = 0 if state.converged else 1
-    if isinstance(outcome, Value) and outcome.val == ret:
-        return outcome
-    if outcome is NotBound:
-        return Value(ret)
-    return None
-
-
-@proto.transition(SubagentToolRunner.run_orchestrate)
-def run_orchestrate(): pass
-
-@run_orchestrate.arguments
-def _(
-    state: SubagentToolState,
-    this: Any,
-    dir_scope: str | NotBoundType = NotBound,
-    target_role: Optional[str] | NotBoundType = NotBound,
-    harness: Optional[str] | NotBoundType = NotBound,
-    model: Optional[str] | NotBoundType = NotBound,
-    max_waves: int | NotBoundType = NotBound,
-    batch_size: Optional[int] | NotBoundType = NotBound,
-    timeout: Optional[float] | NotBoundType = NotBound,
-    max_context_tokens: Optional[int] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    max_unproductive_turns: Optional[int] | NotBoundType = NotBound,
-    target_node: Optional[str] | NotBoundType = NotBound,
-    max_unproductive_rounds: Optional[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str], Optional[str], Optional[str], int, Optional[int], Optional[float], Optional[int], Optional[str], Optional[int], Optional[str], Optional[int]]]:
-    ds = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    tr = None if isinstance(target_role, NotBoundType) else target_role
-    h = None if isinstance(harness, NotBoundType) else harness
-    m = None if isinstance(model, NotBoundType) else model
-    mw = 50 if isinstance(max_waves, NotBoundType) else int(max_waves)
-    bs = None if isinstance(batch_size, NotBoundType) else batch_size
-    to = None if isinstance(timeout, NotBoundType) else timeout
-    mct = None if isinstance(max_context_tokens, NotBoundType) else max_context_tokens
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    mut = None if isinstance(max_unproductive_turns, NotBoundType) else max_unproductive_turns
-    tn = None if isinstance(target_node, NotBoundType) else target_node
-    mur = None if isinstance(max_unproductive_rounds, NotBoundType) else max_unproductive_rounds
-    return (ds, tr, h, m, mw, bs, to, mct, rr, mut, tn, mur)
-
-@run_orchestrate.returns
-def _(
-    state: SubagentToolState,
-    this: Any,
-    dir_scope: str,
-    target_role: Optional[str],
-    harness: Optional[str],
-    model: Optional[str],
-    max_waves: int,
-    batch_size: Optional[int],
-    timeout: Optional[float],
-    max_context_tokens: Optional[int],
-    repo_root: Optional[str],
-    max_unproductive_turns: Optional[int],
-    target_node: Optional[str],
-    max_unproductive_rounds: Optional[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    ret = 0 if state.converged else 1
-    if isinstance(outcome, Value) and outcome.val == ret:
-        return outcome
-    if outcome is NotBound:
-        return Value(ret)
-    return None
+proto = SubagentToolStateMachine()
 
 
 # ==============================================================================

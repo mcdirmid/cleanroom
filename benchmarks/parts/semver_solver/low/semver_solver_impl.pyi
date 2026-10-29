@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, List, Mapping, Optional, Sequence, Set, Tuple
 from support.lib.framework import operation, override, singleton_type
+import backtracking_solver_ext
 import semver_solver
 
 
@@ -12,7 +13,7 @@ class VersionEngine(semver_solver.VersionEngine):
     """Concrete realization of SemVer 2.0.0 parsing, precedence, and range engine.
 
     GROUNDING:
-    - Employs regular expression scanners for version and range tokenization.
+    - Realizes SemVer 2.0.0 regular expression grammar, precedence comparison, and range expansion algebra.
     """
 
     @operation
@@ -21,11 +22,11 @@ class VersionEngine(semver_solver.VersionEngine):
         """Parses a version string conforming to SemVer 2.0.0.
 
         GROUNDING:
+        - Validates SemVer 2.0.0 grammar and numerical leading zero constraints.
         - Matches text against regular expression enforcing non-negative numeric components without leading zeroes.
         - Extracts optional dot-separated pre-release segments and plus-separated build metadata segments.
-        - Validates that numeric pre-release segments contain no leading zeroes.
         - Raises semver_solver.InvalidVersionError upon syntax mismatch or leading zero violation.
-        - Constructs and returns immutable semver_solver.Version record.
+        - Produces an immutable semver_solver.Version record.
         """
         ...
 
@@ -39,8 +40,8 @@ class VersionEngine(semver_solver.VersionEngine):
         """Determines ordering precedence between two semantic versions.
 
         GROUNDING:
+        - Evaluates SemVer 2.0.0 numeric, pre-release, and build metadata ordering rules.
         - Compares major, minor, and patch numbers numerically in sequence.
-        - Returns negative integer if v1 component is smaller, or positive integer if v1 component is larger.
         - Evaluates pre-release presence when numeric components are identical.
         - Ranks normal version higher than pre-release version.
         - Iterates through pre-release segments comparing each position.
@@ -48,7 +49,7 @@ class VersionEngine(semver_solver.VersionEngine):
         - Ranks numeric segments lower than string segments.
         - Ranks longer pre-release segment sequences higher when common prefix segments match.
         - Excludes build metadata entirely from comparison.
-        - Returns zero when precedence is identical.
+        - Evaluates to a negative integer if v1 is smaller, a positive integer if v1 is larger, or zero when identical.
         """
         ...
 
@@ -58,13 +59,12 @@ class VersionEngine(semver_solver.VersionEngine):
         """Parses a version range expression into an immutable VersionRange record.
 
         GROUNDING:
-        - Trims whitespace and splits range expression across union operator tokens.
-        - Tokenizes comparison operators, caret prefixes, tilde prefixes, wildcards, and hyphen ranges within each clause.
-        - Expands caret prefixes based on first non-zero component boundaries.
-        - Expands tilde prefixes into lower and upper minor boundaries.
-        - Normalizes wildcards and hyphen ranges into paired comparator inequalities.
-        - Raises semver_solver.InvalidRangeError upon encountering malformed syntax.
-        - Returns semver_solver.VersionRange holding the canonical expression.
+        - Trims surrounding whitespace around range expressions and individual clauses, storing trimmed expression in semver_solver.VersionRange.
+        - Accepts optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0').
+        - Delimits comparators within clauses strictly by whitespace, rejecting comma-separated comparators.
+        - Validates syntax of basic comparators, caret, tilde, wildcard, and hyphen expressions across union alternatives.
+        - Raises semver_solver.InvalidRangeError when input is empty, contains only whitespace, contains empty clauses between union tokens, uses commas, supplies bare partial versions lacking wildcards across any comparator or hyphen expression, or contains malformed syntax.
+        - Produces semver_solver.VersionRange holding the trimmed range expression.
         """
         ...
 
@@ -80,10 +80,15 @@ class VersionEngine(semver_solver.VersionEngine):
 
         GROUNDING:
         - Compiles range expression into disjunctive normal form comparator sets.
+        - Expands caret prefixes based on first non-zero component boundaries.
+        - Expands tilde prefixes into lower and upper minor boundaries.
+        - Normalizes wildcards and hyphen ranges into paired comparator inequalities.
+        - When version is a prerelease and include_prerelease is False, evaluates to False unless range explicitly targets that prerelease by specifying a prerelease identifier sharing the same major, minor, and patch numbers.
+        - When include_prerelease is True, evaluates candidate prerelease version directly against comparator boundary inequalities using precedence ordering without shifting numerical boundaries.
         - Tests candidate version against each comparator in a clause.
-        - Returns True if version satisfies all comparators in at least one clause.
+        - Evaluates to True if version satisfies all comparators in at least one clause.
         - Filters out pre-release versions when include_prerelease is False unless range explicitly targets that pre-release version.
-        - Returns False if all clauses fail satisfaction.
+        - Evaluates to False if all clauses fail satisfaction.
         """
         ...
 
@@ -116,7 +121,7 @@ class PackageRepository(semver_solver.PackageRepository):
         GROUNDING:
         - Looks up name in _packages.
         - Raises semver_solver.PackageNotFoundError if name is missing.
-        - Returns a shallow copy of the sorted release list.
+        - Produces a shallow copy of the sorted release list.
         """
         ...
 
@@ -136,7 +141,7 @@ class PackageRepository(semver_solver.PackageRepository):
         """Returns the set of all registered package names.
 
         GROUNDING:
-        - Returns a set containing all keys of _packages.
+        - Produces a set containing all keys of _packages.
         """
         ...
 
@@ -147,6 +152,7 @@ class DependencySolver(semver_solver.DependencySolver):
 
     GROUNDING:
     - Coordinates with semver_solver.VersionEngine and semver_solver.PackageRepository to resolve compatible release assignments.
+    - Delegates search heuristics and conflict recording to backtracking_solver_ext.
     """
 
     @operation
@@ -158,7 +164,9 @@ class DependencySolver(semver_solver.DependencySolver):
         """Computes a mutually compatible version assignment for root dependencies.
 
         GROUNDING:
+        - Coordinates with backtracking_solver_ext for Minimum Remaining Values variable selection, descending precedence candidate evaluation, and conflict trail collection.
         - Initializes accumulated constraint mapping and decision queue from root_dependencies.
+        - Treats unregistered packages absent from repository as having zero candidate releases, adding them to conflict trail without allowing PackageNotFoundError to escape.
         - Executes recursive backtracking depth-first search to assign package releases.
         - Selects unassigned package with fewest candidate releases satisfying current accumulated constraints.
         - Iterates through available releases in descending version precedence order.
@@ -170,3 +178,11 @@ class DependencySolver(semver_solver.DependencySolver):
         - Compiles selected package release mapping and decision sequence into semver_solver.ResolutionOutcome upon successful assignment.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-27T03:48:22Z
+# LAST_CHANGED: 2026-10-27T22:35:00Z
+# CHANGE: Delegate search heuristics and conflict attribution to backtracking_solver_ext
+# CODE_HASH: 5d3abdbcce44
+# SPEC_QA_AUDIT: 2026-10-27T03:48:22Z
+# --- END CLEANROOM METADATA ---

@@ -19,7 +19,7 @@ The dsh workspace configurer customizes role agent documentation and generates o
 
 When configuring role workspaces:
 
-- The dsh workspace configurer incorporates explicit isolation boundaries, tripwires, permitted in-workspace shell and harness tool execution, and auditor rules tailored for DeepSeek Harness into role agent documentation, mandating in-workspace code and change header inspection while prohibiting code edits, mandating check_files as initial ground truth oracle, enforcing continuous tool execution without conversational halts or dangling colons, requiring round resolution via submit or fail (and blame only for roles declaring feedback capability or auditor tags), and mandating immediate round conclusion without further tools when get_work reports only blocked targets or zero ready targets.
+- The dsh workspace configurer incorporates explicit isolation boundaries, tripwires, permitted in-workspace shell and harness tool execution, and auditor rules tailored for DeepSeek Harness into role agent documentation, mandating in-workspace code and change header inspection while prohibiting code edits, mandating check_files as initial ground truth oracle, enforcing continuous tool execution while work remains without conversational halts or dangling colons, requiring round resolution via submit or fail (and blame only for roles declaring feedback capability or auditor tags), and mandating that when the worker has no outstanding work to do and get_work gives no more work to do (all ready targets have been resolved or only blocked targets remain), the worker can and must conclude the round immediately by delivering its text summary without further tool calls.
 
 - When configuring role workspaces for local or output-constrained models (such as local MLX, oMLX, or models with low output ceilings), the dsh workspace configurer embeds payload ceiling and incremental staged writing directives into role agent documentation to prevent mid-turn tool envelope truncation, omitting this guidance when targeting cloud models with large output capacities.
 
@@ -31,7 +31,7 @@ When configuring role workspaces:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-20T22:50:00Z
-LAST_CHANGED: 2026-10-20T22:50:00Z
-CHANGE: Tailor round resolution to submit or fail, omitting blame for roles without feedback capability
+LAST_CHANGED: 2026-10-27T20:50:00Z
+CHANGE: Instruct workers to conclude immediately with text and no tool calls when work is resolved and get_work gives no more work
 SPEC_QA_AUDIT: 2026-10-19T22:33:00Z
 -->

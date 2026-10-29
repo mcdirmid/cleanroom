@@ -72,6 +72,7 @@ class VerificationOutcomes:
     line_coverage_pct: float = 0.0
     branch_coverage_pct: float = 0.0
     mutation_score_pct: float = 0.0
+    converged: bool = True
 
 
 @dataclasses.dataclass
@@ -155,8 +156,8 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-10-25T17:50:00Z
-# CHANGE: Add pretense flag to execute_flight contract
+# LAST_CHANGED: 2026-10-27T22:45:00Z
+# CHANGE: Specify failed flight scope preservation with role workspaces, failure status reporting, and non-zero exit code on verification failure
 # --- END CLEANROOM METADATA ---
 
 

@@ -8,8 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from update_with_ai.parts.dsh.lib import dsh_harness, dsh_telemetry
 from update_with_ai.parts.dsh.lib.dsh_harness import DshHarnessAdapter, DshHarnessManager
 from update_with_ai.parts.subagent.lib import subagent_coordinator
@@ -27,157 +26,94 @@ class DshHarnessState:
     interrupted_handles: List[str] = field(default_factory=list)
 
 
-proto = StateMachineProto[DshHarnessState]()
+class DshHarnessStateMachine(StateMachine[DshHarnessState]):
+    """Unified Pretense State Machine for DshHarnessAdapter."""
+
+    def __init__(
+        self,
+        state: Optional[DshHarnessState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or DshHarnessState(), singletons=singletons)
+
+    @transition(DshHarnessAdapter.dispatch_role)
+    def dispatch_role(
+        self,
+        ctx: TransitionContext[DshHarnessAdapter, [RoleDispatch], str],
+    ) -> None:
+        ctx.arguments(dispatch=Domain(strategy=lambda: RoleDispatch(role_name='lib', workspace_dir='/tmp/ws/lib', ready_targets=['//parts/core:core#lib'], dir_scope='staging', batch_size=1)))
+        def returns(dispatch: Optional[RoleDispatch] = None) -> str:
+            d = dispatch or RoleDispatch(
+                role_name="lib",
+                workspace_dir="/tmp/ws/lib",
+                ready_targets=["//parts/core:core#lib"],
+                dir_scope="staging",
+                batch_size=1,
+            )
+            handle = f"dsh-task-{d.role_name}-{len(self.state.active_dispatches) + 1}"
+            self.state.active_dispatches[handle] = d
+            return handle
+        ctx.returns(returns)
+        ctx.update(lambda res, dispatch=None: None)
+
+    @transition(DshHarnessAdapter.poll_role)
+    def poll_role(
+        self,
+        ctx: TransitionContext[DshHarnessAdapter, [str], Optional[RoleRoundResult]],
+    ) -> None:
+        ctx.arguments(task_handle=Domain(strategy=lambda: 'dsh-task-1'))
+        def returns(task_handle: str = "dsh-task-1") -> Optional[RoleRoundResult]:
+            if task_handle in self.state.completed_handles:
+                return self.state.completed_handles[task_handle]
+            elif task_handle in self.state.active_dispatches:
+                return None
+            return RoleRoundResult(
+                role="lib",
+                status="completed",
+                submitted_targets=(),
+                blamed_targets=(),
+                failure_reason=None,
+            )
+        ctx.returns(returns)
+        ctx.update(lambda res, task_handle="dsh-task-1": None)
+
+    @transition(DshHarnessAdapter.await_role)
+    def await_role(
+        self,
+        ctx: TransitionContext[DshHarnessAdapter, [str], RoleRoundResult],
+    ) -> None:
+        ctx.arguments(task_handle=Domain(strategy=lambda: 'dsh-task-1'))
+        def returns(task_handle: str = "dsh-task-1") -> RoleRoundResult:
+            disp = self.state.active_dispatches.get(
+                task_handle,
+                RoleDispatch(role_name="lib", workspace_dir="/tmp", ready_targets=[], dir_scope=""),
+            )
+            result = self.state.completed_handles.get(
+                task_handle,
+                RoleRoundResult(
+                    role=disp.role_name,
+                    status="completed",
+                    submitted_targets=tuple(disp.ready_targets),
+                    blamed_targets=(),
+                    failure_reason=None,
+                ),
+            )
+            self.state.completed_handles[task_handle] = result
+            return result
+        ctx.returns(returns)
+        ctx.update(lambda res, task_handle="dsh-task-1": None)
+
+    @transition(DshHarnessAdapter.interrupt_role)
+    def interrupt_role(
+        self,
+        ctx: TransitionContext[DshHarnessAdapter, [str], None],
+    ) -> None:
+        ctx.arguments(task_handle=Domain(strategy=lambda: 'dsh-task-1'))
+        ctx.returns(lambda task_handle="dsh-task-1": None)
+        ctx.update(lambda res, task_handle="dsh-task-1": self.state.interrupted_handles.append(task_handle))
 
 
-# ==============================================================================
-# 1. DshHarnessAdapter Transitions
-# ==============================================================================
-
-@proto.transition(DshHarnessAdapter.dispatch_role)
-def dispatch_role(): pass
-
-@dispatch_role.arguments
-def _(
-    state: DshHarnessState,
-    this: Any,
-    dispatch: RoleDispatch | NotBoundType = NotBound,
-) -> Optional[Tuple[RoleDispatch]]:
-    if isinstance(dispatch, NotBoundType):
-        disp = RoleDispatch(
-            role_name="lib",
-            workspace_dir="/tmp/ws/lib",
-            ready_targets=["//parts/core:core#lib"],
-            dir_scope="staging",
-            batch_size=1,
-        )
-    else:
-        disp = dispatch
-    return (disp,)
-
-@dispatch_role.returns
-def _(
-    state: DshHarnessState,
-    this: Any,
-    dispatch: RoleDispatch,
-    outcome: object = NotBound,
-) -> Optional[Outcome[str]]:
-    handle = f"dsh-task-{dispatch.role_name}-{len(state.active_dispatches) + 1}"
-    state.active_dispatches[handle] = dispatch
-
-    if isinstance(outcome, Value) and outcome.val.startswith("dsh-task-"):
-        return outcome
-    if outcome is NotBound:
-        return Value(handle)
-    return None
-
-
-@proto.transition(DshHarnessAdapter.poll_role)
-def poll_role(): pass
-
-@poll_role.arguments
-def _(
-    state: DshHarnessState,
-    this: Any,
-    task_handle: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    h = "dsh-task-1" if isinstance(task_handle, NotBoundType) else str(task_handle)
-    return (h,)
-
-@poll_role.returns
-def _(
-    state: DshHarnessState,
-    this: Any,
-    task_handle: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Optional[RoleRoundResult]]]:
-    if task_handle in state.completed_handles:
-        res = state.completed_handles[task_handle]
-    elif task_handle in state.active_dispatches:
-        res = None
-    else:
-        res = RoleRoundResult(
-            role="lib",
-            status="completed",
-            submitted_targets=(),
-            blamed_targets=(),
-            failure_reason=None,
-        )
-
-    if isinstance(outcome, Value) and (outcome.val == res or (outcome.val is None and res is None)):
-        return outcome
-    if outcome is NotBound:
-        return Value(res)
-    return None
-
-
-@proto.transition(DshHarnessAdapter.await_role)
-def await_role(): pass
-
-@await_role.arguments
-def _(
-    state: DshHarnessState,
-    this: Any,
-    task_handle: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    h = "dsh-task-1" if isinstance(task_handle, NotBoundType) else str(task_handle)
-    return (h,)
-
-@await_role.returns
-def _(
-    state: DshHarnessState,
-    this: Any,
-    task_handle: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[RoleRoundResult]]:
-    disp = state.active_dispatches.get(
-        task_handle,
-        RoleDispatch(role_name="lib", workspace_dir="/tmp", ready_targets=[], dir_scope=""),
-    )
-    result = state.completed_handles.get(
-        task_handle,
-        RoleRoundResult(
-            role=disp.role_name,
-            status="completed",
-            submitted_targets=tuple(disp.ready_targets),
-            blamed_targets=(),
-            failure_reason=None,
-        ),
-    )
-    state.completed_handles[task_handle] = result
-
-    if isinstance(outcome, Value) and outcome.val.status == result.status:
-        return outcome
-    if outcome is NotBound:
-        return Value(result)
-    return None
-
-
-@proto.transition(DshHarnessAdapter.interrupt_role)
-def interrupt_role(): pass
-
-@interrupt_role.arguments
-def _(
-    state: DshHarnessState,
-    this: Any,
-    task_handle: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    h = "dsh-task-1" if isinstance(task_handle, NotBoundType) else str(task_handle)
-    return (h,)
-
-@interrupt_role.returns
-def _(
-    state: DshHarnessState,
-    this: Any,
-    task_handle: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    state.interrupted_handles.append(task_handle)
-    if isinstance(outcome, Value) and outcome.val is None:
-        return outcome
-    if outcome is NotBound:
-        return Value(None)
-    return None
+proto = DshHarnessStateMachine()
 
 
 # ==============================================================================

@@ -11,9 +11,8 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.workspace_cli.lib.check import WorkspaceChecker
 
 
@@ -25,158 +24,89 @@ class CheckState:
     checked_targets: PretenseDict[str, bool] = field(default_factory=PretenseDict)
 
 
-proto = StateMachineProto[CheckState]()
+class WorkspaceCheckStateMachine(StateMachine[CheckState]):
+    """Unified Pretense State Machine for WorkspaceChecker."""
+
+    def __init__(
+        self,
+        state: Optional[CheckState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or CheckState(), singletons=singletons)
+
+    @transition.seeding(name="seed_check_data")
+    def seed_check_data(
+        self,
+        ctx: TransitionContext[Any, [int, int], None],
+    ) -> None:
+        ctx.arguments(
+                    check_files_code=Domain(strategy=lambda: 0),
+                    get_work_code=Domain(strategy=lambda: 0),
+                )
+        ctx.returns(lambda check_files_code=0, get_work_code=0: None)
+        ctx.update(lambda res, check_files_code=0, get_work_code=0: (
+            setattr(self.state, "check_files_code", int(check_files_code)),
+            setattr(self.state, "get_work_code", int(get_work_code)),
+        ))
+
+    @transition(WorkspaceChecker.run_get_work)
+    def run_get_work(
+        self,
+        ctx: TransitionContext[WorkspaceChecker, [Optional[str], Optional[str], bool, Optional[int]], int],
+    ) -> None:
+        ctx.arguments(
+                    dir_scope=Domain(strategy=lambda: None),
+                    repo_root=Domain(strategy=lambda: None),
+                    force=Domain(strategy=lambda: False),
+                    batch_size=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda dir_scope=None, repo_root=None, force=False, batch_size=None: self.state.get_work_code)
+        ctx.update(lambda res, dir_scope=None, repo_root=None, force=False, batch_size=None: None)
+
+    @transition(WorkspaceChecker.run_check_files)
+    def run_check_files(
+        self,
+        ctx: TransitionContext[WorkspaceChecker, [Optional[str], Optional[str]], int],
+    ) -> None:
+        ctx.arguments(
+                    target=Domain(strategy=lambda: None),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda target=None, repo_root=None: self.state.check_files_code)
+        def provide(res: int, target: Optional[str] = None, repo_root: Optional[str] = None) -> None:
+            if target:
+                self.state.checked_targets[target] = (self.state.check_files_code == 0)
+        ctx.update(provide)
+
+    @transition(WorkspaceChecker.is_checked_since_modification)
+    def is_checked_since_modification(
+        self,
+        ctx: TransitionContext[WorkspaceChecker, [str, str], bool],
+    ) -> None:
+        ctx.arguments(
+                    ws_root=Domain(strategy=lambda: '/tmp/ws'),
+                    target_path=Domain(strategy=lambda: 'lib/foo.py'),
+                )
+        ctx.returns(lambda ws_root="/tmp/ws", target_path="lib/foo.py": self.state.checked_targets.get(target_path, False))
+        ctx.update(lambda res, ws_root="/tmp/ws", target_path="lib/foo.py": None)
+
+    @transition(WorkspaceChecker.record_check_executed)
+    def record_check_executed(
+        self,
+        ctx: TransitionContext[WorkspaceChecker, [str, str, bool], None],
+    ) -> None:
+        ctx.arguments(
+                    ws_root=Domain(strategy=lambda: '/tmp/ws'),
+                    target_path=Domain(strategy=lambda: 'lib/foo.py'),
+                    passed=Domain(strategy=lambda: True),
+                )
+        ctx.returns(lambda ws_root="/tmp/ws", target_path="lib/foo.py", passed=True: None)
+        ctx.update(lambda res, ws_root="/tmp/ws", target_path="lib/foo.py", passed=True: (
+            self.state.checked_targets.__setitem__(target_path, passed)
+        ))
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_check_data(): pass
-
-@seed_check_data.arguments
-def _(
-    state: CheckState,
-    this: Any,
-    check_files_code: int | NotBoundType = NotBound,
-    get_work_code: int | NotBoundType = NotBound,
-) -> Optional[Tuple[int, int]]:
-    c = 0 if isinstance(check_files_code, NotBoundType) else int(check_files_code)
-    g = 0 if isinstance(get_work_code, NotBoundType) else int(get_work_code)
-    return (c, g)
-
-@seed_check_data.provide
-def _(
-    state: CheckState,
-    this: Any,
-    check_files_code: int,
-    get_work_code: int,
-    result: None = None,
-) -> None:
-    state.check_files_code = check_files_code
-    state.get_work_code = get_work_code
-
-
-# ==============================================================================
-# 2. Check Transitions
-# ==============================================================================
-
-@proto.transition(WorkspaceChecker.run_get_work)
-def run_get_work(): pass
-
-@run_get_work.arguments
-def _(
-    state: CheckState,
-    this: Any,
-    dir_scope: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    force: bool | NotBoundType = NotBound,
-    batch_size: Optional[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], Optional[str], bool, Optional[int]]]:
-    ds = None if isinstance(dir_scope, NotBoundType) else dir_scope
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    f = False if isinstance(force, NotBoundType) else bool(force)
-    bs = None if isinstance(batch_size, NotBoundType) else batch_size
-    return (ds, rr, f, bs)
-
-@run_get_work.returns
-def _(
-    state: CheckState,
-    this: Any,
-    dir_scope: Optional[str],
-    repo_root: Optional[str],
-    force: bool,
-    batch_size: Optional[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    return Value(state.get_work_code)
-
-
-@proto.transition(WorkspaceChecker.run_check_files)
-def run_check_files(): pass
-
-@run_check_files.arguments
-def _(
-    state: CheckState,
-    this: Any,
-    target: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], Optional[str]]]:
-    t = None if isinstance(target, NotBoundType) else target
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (t, rr)
-
-@run_check_files.returns
-def _(
-    state: CheckState,
-    this: Any,
-    target: Optional[str],
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    if target:
-        state.checked_targets[target] = (state.check_files_code == 0)
-    return Value(state.check_files_code)
-
-
-@proto.transition(WorkspaceChecker.is_checked_since_modification)
-def is_checked_since_modification(): pass
-
-@is_checked_since_modification.arguments
-def _(
-    state: CheckState,
-    this: Any,
-    ws_root: str | NotBoundType = NotBound,
-    target_path: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str]]:
-    ws = "/tmp/ws" if isinstance(ws_root, NotBoundType) else str(ws_root)
-    tp = "lib/foo.py" if isinstance(target_path, NotBoundType) else str(target_path)
-    return (ws, tp)
-
-@is_checked_since_modification.returns
-def _(
-    state: CheckState,
-    this: Any,
-    ws_root: str,
-    target_path: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[bool]]:
-    expected = state.checked_targets.get(target_path, False)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceChecker.record_check_executed)
-def record_check_executed(): pass
-
-@record_check_executed.arguments
-def _(
-    state: CheckState,
-    this: Any,
-    ws_root: str | NotBoundType = NotBound,
-    target_path: str | NotBoundType = NotBound,
-    passed: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, bool]]:
-    ws = "/tmp/ws" if isinstance(ws_root, NotBoundType) else str(ws_root)
-    tp = "lib/foo.py" if isinstance(target_path, NotBoundType) else str(target_path)
-    p = True if isinstance(passed, NotBoundType) else bool(passed)
-    return (ws, tp, p)
-
-@record_check_executed.returns
-def _(
-    state: CheckState,
-    this: Any,
-    ws_root: str,
-    target_path: str,
-    passed: bool,
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    state.checked_targets[target_path] = passed
-    return Value(None)
+proto = WorkspaceCheckStateMachine()
 
 
 # ==============================================================================

@@ -37,7 +37,7 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
         target_role: Optional[str] = None,
         harness: Optional[str] = None,
         model: Optional[str] = None,
-        max_waves: int = 50,
+        max_waves: int = 100,
         batch_size: Optional[int] = None,
         timeout: Optional[float] = None,
         max_context_tokens: Optional[int] = None,

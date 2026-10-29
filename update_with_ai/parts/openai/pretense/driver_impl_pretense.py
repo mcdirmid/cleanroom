@@ -8,6 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import StateMachine, TransitionContext, transition
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.loop.lib import conversation, driver
@@ -38,33 +39,32 @@ class DriverState:
     has_run: bool = False
 
 
-proto = StateMachineProto[DriverState]()
+class DriverStateMachine(StateMachine[DriverState]):
+    """Pretense StateMachine for LoopDriver."""
+
+    def __init__(self, state: Optional[DriverState] = None):
+        super().__init__(state=state or DriverState())
+
+    # ==============================================================================
+    # 1. LoopDriver Transitions
+    # ==============================================================================
+
+    @transition(LoopDriver.run)
+    def run(
+        self,
+        ctx: TransitionContext[LoopDriver, [], LoopOutcome],
+    ) -> None:
+        def _returns() -> LoopOutcome:
+            req = ModelRequest(messages=tuple(self.state.outcome_messages))
+            return LoopOutcome(
+                response=self.state.outcome_response,
+                conversation=req,
+            )
+        ctx.returns(_returns)
+        ctx.update(lambda res: setattr(self.state, "has_run", True))
 
 
-# ==============================================================================
-# 1. LoopDriver Transitions
-# ==============================================================================
-
-@proto.transition(LoopDriver.run)
-def run(): pass
-
-@run.arguments
-def _(state: DriverState, this: Any) -> Optional[Tuple[()]]:
-    return ()
-
-@run.returns
-def _(state: DriverState, this: Any, outcome: object = NotBound) -> Optional[Outcome[LoopOutcome]]:
-    state.has_run = True
-    req = ModelRequest(messages=tuple(state.outcome_messages))
-    expected = LoopOutcome(
-        response=state.outcome_response,
-        conversation=req,
-    )
-    if isinstance(outcome, Value) and outcome.val.response.is_terminated == expected.response.is_terminated:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = DriverStateMachine()
 
 
 # ==============================================================================
@@ -73,8 +73,7 @@ def _(state: DriverState, this: Any, outcome: object = NotBound) -> Optional[Out
 
 def make_driver_fake(state: Optional[DriverState] = None) -> LoopDriver:
     """Instantiate a synthesized LoopDriver fake."""
-    st = state or DriverState()
-    sm = proto.make_state_machine(st)
+    sm = DriverStateMachine(state)
     return sm.as_fake(LoopDriver)
 
 

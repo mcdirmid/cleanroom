@@ -9,6 +9,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
@@ -23,9 +24,6 @@ from update_with_ai.parts.uv.lib.target import NodeDirectory, TargetIdentifier, 
 class TargetState:
     """Canonical model state for UvTarget."""
     overrides: PretenseDict[str, DagNode] = field(default_factory=PretenseDict)
-
-
-proto = StateMachineProto[TargetState]()
 
 
 def _canonical_normalize(raw: str) -> DagNode:
@@ -52,69 +50,45 @@ def _canonical_normalize(raw: str) -> DagNode:
     return DagNode(UnitAddress(s), RoleAddress(role))
 
 
-# ==============================================================================
-# 1. UvTarget Transitions
-# ==============================================================================
+class TargetStateMachine(StateMachine[TargetState]):
+    """Pretense StateMachine for UvTarget."""
 
-@proto.transition(UvTarget.normalize_target)
-def normalize_target(): pass
+    def __init__(self, state: Optional[TargetState] = None):
+        super().__init__(state=state or TargetState())
 
-@normalize_target.arguments
-def _(
-    state: TargetState,
-    this: Any,
-    target_identifier: TargetIdentifier | str | NotBoundType = NotBound,
-) -> Optional[Tuple[TargetIdentifier]]:
-    t = TargetIdentifier("//parts/core:core") if isinstance(target_identifier, NotBoundType) else TargetIdentifier(str(target_identifier))
-    return (t,)
+    # ==============================================================================
+    # 1. UvTarget Transitions
+    # ==============================================================================
 
-@normalize_target.returns
-def _(
-    state: TargetState,
-    this: Any,
-    target_identifier: TargetIdentifier,
-    outcome: object = NotBound,
-) -> Optional[Outcome[DagNode]]:
-    raw = str(target_identifier)
-    if raw in state.overrides:
-        expected = state.overrides[raw]
-    else:
-        expected = _canonical_normalize(raw)
+    @transition(UvTarget.normalize_target)
+    def normalize_target(
+        self,
+        ctx: TransitionContext[UvTarget, [TargetIdentifier | str], DagNode],
+    ) -> None:
+        ctx.arguments(target_identifier=Domain(strategy=lambda: TargetIdentifier('//parts/core:core')))
+        def _returns(target_identifier: TargetIdentifier | str = TargetIdentifier("//parts/core:core")) -> DagNode:
+            raw = str(target_identifier)
+            if raw in self.state.overrides:
+                return self.state.overrides[raw]
+            return _canonical_normalize(raw)
+        ctx.returns(_returns)
 
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+    @transition(UvTarget.extract_node_dir)
+    def extract_node_dir(
+        self,
+        ctx: TransitionContext[UvTarget, [DagNode], NodeDirectory],
+    ) -> None:
+        ctx.arguments(node=Domain(strategy=lambda: DagNode(UnitAddress('//parts/core:core'), RoleAddress('lib'))))
+        def _returns(node: Optional[DagNode] = None) -> NodeDirectory:
+            if node is None:
+                node = DagNode(UnitAddress("//parts/core:core"), RoleAddress("lib"))
+            addr = str(node.unit_address)
+            pkg = addr.split(":")[0].lstrip("/").strip()
+            return NodeDirectory(file_paths.PathString(pkg))
+        ctx.returns(_returns)
 
 
-@proto.transition(UvTarget.extract_node_dir)
-def extract_node_dir(): pass
-
-@extract_node_dir.arguments
-def _(
-    state: TargetState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode]]:
-    n = DagNode(UnitAddress("//parts/core:core"), RoleAddress("lib")) if isinstance(node, NotBoundType) else node
-    return (n,)
-
-@extract_node_dir.returns
-def _(
-    state: TargetState,
-    this: Any,
-    node: DagNode,
-    outcome: object = NotBound,
-) -> Optional[Outcome[NodeDirectory]]:
-    addr = str(node.unit_address)
-    pkg = addr.split(":")[0].lstrip("/").strip()
-    expected = NodeDirectory(file_paths.PathString(pkg))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = TargetStateMachine()
 
 
 # ==============================================================================
@@ -123,8 +97,7 @@ def _(
 
 def make_uv_target_fake(state: Optional[TargetState] = None) -> UvTarget:
     """Instantiate a synthesized UvTarget fake."""
-    st = state or TargetState()
-    sm = proto.make_state_machine(st)
+    sm = TargetStateMachine(state)
     return sm.as_fake(UvTarget)
 
 

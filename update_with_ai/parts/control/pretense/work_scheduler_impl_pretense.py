@@ -9,6 +9,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
@@ -28,175 +29,131 @@ class WorkSchedulerState:
     role_precedence: PretenseDict[str, int] = field(default_factory=PretenseDict)
 
 
-proto = StateMachineProto[WorkSchedulerState]()
+class WorkSchedulerStateMachine(StateMachine[WorkSchedulerState]):
+    """Pretense StateMachine for WorkScheduler."""
+
+    def __init__(self, state: Optional[WorkSchedulerState] = None):
+        super().__init__(state=state or WorkSchedulerState())
+
+    # ==============================================================================
+    # 1. Seeding Transitions
+    # ==============================================================================
+
+    @transition.seeding()
+    def seed_scheduled_task(
+        self,
+        ctx: TransitionContext[
+            None,
+            [DagNode, str, Optional[Sequence[str]], Optional[Sequence[FeedbackMessage]]],
+            None,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    node=Domain(strategy=lambda: DagNode(UnitAddress('target'), RoleAddress('lib'))),
+                    task_prompt=Domain(strategy=lambda: 'Task prompt'),
+                    dependency_paths=Domain(strategy=lambda: ()),
+                    feedback_messages=Domain(strategy=lambda: ()),
+                )
+        def _consequent(
+            res: None,
+            node: DagNode = DagNode(UnitAddress("target"), RoleAddress("lib")),
+            task_prompt: str = "Task prompt",
+            dependency_paths: Optional[Sequence[str]] = None,
+            feedback_messages: Optional[Sequence[FeedbackMessage]] = None,
+        ) -> None:
+            task = ScheduledTask(
+                node=node,
+                task_prompt=task_prompt,
+                dependency_paths=tuple(dependency_paths or ()),
+                feedback_messages=tuple(feedback_messages or ()),
+            )
+            self.state.tasks[node] = task
+        ctx.update(_consequent)
+
+    # ==============================================================================
+    # 2. WorkScheduler Transitions
+    # ==============================================================================
+
+    @transition(WorkScheduler.schedule_work)
+    def schedule_work(
+        self,
+        ctx: TransitionContext[
+            WorkScheduler,
+            [Optional[subgraph.DagSubgraph], Optional[str], Optional[int]],
+            WorkSchedule,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    subgraph=Domain(strategy=lambda: None),
+                    dir_scope=Domain(strategy=lambda: None),
+                    max_batch_size=Domain(strategy=lambda: None),
+                )
+        def _returns(
+            subgraph: Optional[subgraph.DagSubgraph] = None,
+            dir_scope: Optional[str] = None,
+            max_batch_size: Optional[int] = None,
+        ) -> WorkSchedule:
+            candidates = list(self.state.tasks.values())
+            if max_batch_size is not None and max_batch_size > 0:
+                candidates = candidates[:max_batch_size]
+            return WorkSchedule(tasks=tuple(candidates))
+        ctx.returns(_returns)
+
+    @transition(WorkScheduler.compute_role_precedence)
+    def compute_role_precedence(
+        self,
+        ctx: TransitionContext[
+            WorkScheduler,
+            [Mapping[str, Sequence[str]]],
+            Mapping[str, int],
+        ],
+    ) -> None:
+        ctx.arguments(role_dependencies=Domain(strategy=lambda: {'lib': ['low'], 'test': ['low']}))
+        def _returns(role_dependencies: Mapping[str, Sequence[str]] = {"lib": ["low"], "test": ["low"]}) -> Mapping[str, int]:
+            precedence: Dict[str, int] = {}
+            all_roles = set(role_dependencies.keys())
+            for deps in role_dependencies.values():
+                all_roles.update(deps)
+
+            in_degree: Dict[str, int] = {r: 0 for r in all_roles}
+            for r, deps in role_dependencies.items():
+                in_degree[r] = len(deps)
+
+            queue = deque([r for r, deg in in_degree.items() if deg == 0])
+            for r in queue:
+                precedence[r] = 0
+
+            while queue:
+                curr = queue.popleft()
+                curr_dist = precedence[curr]
+                for dependent, upstreams in role_dependencies.items():
+                    if curr in upstreams:
+                        precedence[dependent] = max(precedence.get(dependent, 0), curr_dist + 1)
+                        in_degree[dependent] -= 1
+                        if in_degree[dependent] == 0:
+                            queue.append(dependent)
+
+            for r in all_roles:
+                if r not in precedence:
+                    precedence[r] = 0
+            return precedence
+        ctx.returns(_returns)
+
+    @transition(WorkScheduler.format_task_prompt)
+    def format_task_prompt(
+        self,
+        ctx: TransitionContext[WorkScheduler, [Sequence[DagNode]], str],
+    ) -> None:
+        ctx.arguments(nodes=Domain(strategy=lambda: (DagNode(UnitAddress('target'), RoleAddress('lib')),)))
+        def _returns(nodes: Sequence[DagNode] = ()) -> str:
+            lines = [f"# Task for {len(nodes)} node(s):"]
+            for n in nodes:
+                lines.append(f"- {n.unit_address} ({n.role_address})")
+            return "\n".join(lines)
+        ctx.returns(_returns)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_scheduled_task(): pass
-
-@seed_scheduled_task.arguments
-def _(
-    state: WorkSchedulerState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-    task_prompt: str | NotBoundType = NotBound,
-    dependency_paths: Optional[Sequence[str]] | NotBoundType = NotBound,
-    feedback_messages: Optional[Sequence[FeedbackMessage]] | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode, str, Sequence[str], Sequence[FeedbackMessage]]]:
-    n = DagNode(UnitAddress("target"), RoleAddress("lib")) if isinstance(node, NotBoundType) else node
-    prompt = "Task prompt" if isinstance(task_prompt, NotBoundType) else str(task_prompt)
-    deps = () if isinstance(dependency_paths, NotBoundType) or dependency_paths is None else tuple(dependency_paths)
-    fb = () if isinstance(feedback_messages, NotBoundType) or feedback_messages is None else tuple(feedback_messages)
-    return (n, prompt, deps, fb)
-
-@seed_scheduled_task.provide
-def _(
-    state: WorkSchedulerState,
-    this: Any,
-    node: DagNode,
-    task_prompt: str,
-    dependency_paths: Sequence[str],
-    feedback_messages: Sequence[FeedbackMessage],
-    result: None = None,
-) -> None:
-    task = ScheduledTask(
-        node=node,
-        task_prompt=task_prompt,
-        dependency_paths=dependency_paths,
-        feedback_messages=feedback_messages,
-    )
-    state.tasks[node] = task
-
-
-# ==============================================================================
-# 2. WorkScheduler Transitions
-# ==============================================================================
-
-@proto.transition(WorkScheduler.schedule_work)
-def schedule_work(): pass
-
-@schedule_work.arguments
-def _(
-    state: WorkSchedulerState,
-    this: Any,
-    subgraph: Optional[subgraph.DagSubgraph] | NotBoundType = NotBound,
-    dir_scope: Optional[str] | NotBoundType = NotBound,
-    max_batch_size: Optional[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[subgraph.DagSubgraph], Optional[str], Optional[int]]]:
-    sg = None if isinstance(subgraph, NotBoundType) else subgraph
-    scope = None if isinstance(dir_scope, NotBoundType) else dir_scope
-    limit = None if isinstance(max_batch_size, NotBoundType) else max_batch_size
-    return (sg, scope, limit)
-
-@schedule_work.returns
-def _(
-    state: WorkSchedulerState,
-    this: Any,
-    subgraph: Optional[subgraph.DagSubgraph],
-    dir_scope: Optional[str],
-    max_batch_size: Optional[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[WorkSchedule]]:
-    candidates = list(state.tasks.values())
-    if max_batch_size is not None and max_batch_size > 0:
-        candidates = candidates[:max_batch_size]
-
-    expected = WorkSchedule(tasks=tuple(candidates))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkScheduler.compute_role_precedence)
-def compute_role_precedence(): pass
-
-@compute_role_precedence.arguments
-def _(
-    state: WorkSchedulerState,
-    this: Any,
-    role_dependencies: Mapping[str, Sequence[str]] | NotBoundType = NotBound,
-) -> Optional[Tuple[Mapping[str, Sequence[str]]]]:
-    deps = {"lib": ["low"], "test": ["low"]} if isinstance(role_dependencies, NotBoundType) else role_dependencies
-    return (deps,)
-
-@compute_role_precedence.returns
-def _(
-    state: WorkSchedulerState,
-    this: Any,
-    role_dependencies: Mapping[str, Sequence[str]],
-    outcome: object = NotBound,
-) -> Optional[Outcome[Mapping[str, int]]]:
-    # Topological longest-path computation
-    precedence: Dict[str, int] = {}
-    all_roles = set(role_dependencies.keys())
-    for deps in role_dependencies.values():
-        all_roles.update(deps)
-
-    # In-degree computation
-    in_degree: Dict[str, int] = {r: 0 for r in all_roles}
-    for r, deps in role_dependencies.items():
-        in_degree[r] = len(deps)
-
-    # Queue of root roles
-    queue = deque([r for r, deg in in_degree.items() if deg == 0])
-    for r in queue:
-        precedence[r] = 0
-
-    while queue:
-        curr = queue.popleft()
-        curr_dist = precedence[curr]
-        for dependent, upstreams in role_dependencies.items():
-            if curr in upstreams:
-                precedence[dependent] = max(precedence.get(dependent, 0), curr_dist + 1)
-                in_degree[dependent] -= 1
-                if in_degree[dependent] == 0:
-                    queue.append(dependent)
-
-    for r in all_roles:
-        if r not in precedence:
-            precedence[r] = 0
-
-    if isinstance(outcome, Value) and outcome.val == precedence:
-        return outcome
-    if outcome is NotBound:
-        return Value(precedence)
-    return None
-
-
-@proto.transition(WorkScheduler.format_task_prompt)
-def format_task_prompt(): pass
-
-@format_task_prompt.arguments
-def _(
-    state: WorkSchedulerState,
-    this: Any,
-    nodes: Sequence[DagNode] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[DagNode]]]:
-    ns = (DagNode(UnitAddress("target"), RoleAddress("lib")),) if isinstance(nodes, NotBoundType) else tuple(nodes)
-    return (ns,)
-
-@format_task_prompt.returns
-def _(
-    state: WorkSchedulerState,
-    this: Any,
-    nodes: Sequence[DagNode],
-    outcome: object = NotBound,
-) -> Optional[Outcome[str]]:
-    lines = [f"# Task for {len(nodes)} node(s):"]
-    for n in nodes:
-        lines.append(f"- {n.unit_address} ({n.role_address})")
-    expected = "\n".join(lines)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = WorkSchedulerStateMachine()
 
 
 # ==============================================================================
@@ -205,8 +162,7 @@ def _(
 
 def make_work_scheduler_fake(state: Optional[WorkSchedulerState] = None) -> WorkScheduler:
     """Instantiate a synthesized WorkScheduler fake."""
-    st = state or WorkSchedulerState()
-    sm = proto.make_state_machine(st)
+    sm = WorkSchedulerStateMachine(state)
     return sm.as_fake(WorkScheduler)
 
 
@@ -427,7 +383,7 @@ class TestWorkSchedulerUnit(unittest.TestCase):
 
     def setUp(self) -> None:
         self.state = WorkSchedulerState()
-        self.sm = proto.make_state_machine(self.state)
+        self.sm = WorkSchedulerStateMachine(self.state)
         self.node1 = DagNode(UnitAddress("core"), RoleAddress("lib"))
         self.node2 = DagNode(UnitAddress("core"), RoleAddress("test"))
         self.sm.seed_scheduled_task(self.node1, "Implement core lib")
@@ -473,7 +429,7 @@ class TestWorkSchedulerFuzz(unittest.TestCase):
     )
     def test_batch_limit_invariant(self, num_tasks: int, batch_limit: int) -> None:
         state = WorkSchedulerState()
-        sm = proto.make_state_machine(state)
+        sm = WorkSchedulerStateMachine(state)
         for i in range(num_tasks):
             node = DagNode(UnitAddress(f"unit_{i}"), RoleAddress("lib"))
             sm.seed_scheduled_task(node, f"Task {i}")

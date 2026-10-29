@@ -9,6 +9,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
@@ -42,161 +43,100 @@ class ConversationState:
     messages: List[ConversationMessage] = field(default_factory=list)
 
 
-proto = StateMachineProto[ConversationState]()
+class ConversationStateMachine(StateMachine[ConversationState]):
+    """Pretense StateMachine for Conversation."""
 
+    def __init__(self, state: Optional[ConversationState] = None):
+        super().__init__(state=state or ConversationState())
 
-# ==============================================================================
-# 1. Conversation Transitions
-# ==============================================================================
+    # ==============================================================================
+    # 1. Conversation Transitions
+    # ==============================================================================
 
-@proto.transition(Conversation.initialize)
-def initialize(): pass
-
-@initialize.arguments
-def _(
-    state: ConversationState,
-    this: Any,
-    initial_messages: Sequence[ConversationMessage] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[ConversationMessage]]]:
-    msgs = () if isinstance(initial_messages, NotBoundType) else tuple(initial_messages)
-    return (msgs,)
-
-@initialize.returns
-def _(
-    state: ConversationState,
-    this: Any,
-    initial_messages: Sequence[ConversationMessage],
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    state.messages = []
-    for msg in initial_messages:
-        if msg.role == MessageRole("tool"):
-            has_assistant = any(
-                m.role == MessageRole("assistant") and m.tool_call_id == msg.tool_call_id
-                for m in state.messages
-            )
-            if not has_assistant:
-                state.messages.append(
-                    ConversationMessage(
-                        role=MessageRole("assistant"),
-                        content=ConversationContent(""),
-                        tool_call_id=msg.tool_call_id,
-                        tool_name=msg.tool_name,
-                        tool_arguments=msg.tool_arguments,
+    @transition(Conversation.initialize)
+    def initialize(
+        self,
+        ctx: TransitionContext[Conversation, [Sequence[ConversationMessage]], None],
+    ) -> None:
+        ctx.arguments(initial_messages=Domain(strategy=lambda: ()))
+        def _consequent(res: None, initial_messages: Sequence[ConversationMessage] = ()) -> None:
+            self.state.messages = []
+            for msg in initial_messages:
+                if msg.role == MessageRole("tool"):
+                    has_assistant = any(
+                        m.role == MessageRole("assistant") and m.tool_call_id == msg.tool_call_id
+                        for m in self.state.messages
                     )
+                    if not has_assistant:
+                        self.state.messages.append(
+                            ConversationMessage(
+                                role=MessageRole("assistant"),
+                                content=ConversationContent(""),
+                                tool_call_id=msg.tool_call_id,
+                                tool_name=msg.tool_name,
+                                tool_arguments=msg.tool_arguments,
+                            )
+                        )
+                self.state.messages.append(msg)
+        ctx.update(_consequent)
+
+    @transition(Conversation.append_message)
+    def append_message(
+        self,
+        ctx: TransitionContext[Conversation, [ConversationMessage], None],
+    ) -> None:
+        ctx.arguments(message=Domain(strategy=lambda: ConversationMessage(role=MessageRole('user'), content=ConversationContent('hello'))))
+        def _consequent(res: None, message: Optional[ConversationMessage] = None) -> None:
+            if message is not None:
+                self.state.messages.append(message)
+        ctx.update(_consequent)
+
+    @transition(Conversation.append_tool_response)
+    def append_tool_response(
+        self,
+        ctx: TransitionContext[
+            Conversation,
+            [ToolResponse, ToolCallId, ToolName, SerializedArguments],
+            None,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    tool_response=Domain(strategy=lambda: ToolResponse(is_failed=False, is_terminated=False, content=ToolResponseContent('ok'))),
+                    tool_call_id=Domain(strategy=lambda: ToolCallId('call_1')),
+                    tool_name=Domain(strategy=lambda: ToolName('read_file')),
+                    tool_arguments=Domain(strategy=lambda: SerializedArguments('{}')),
                 )
-        state.messages.append(msg)
+        def _consequent(
+            res: None,
+            tool_response: Optional[ToolResponse] = None,
+            tool_call_id: Optional[ToolCallId] = None,
+            tool_name: Optional[ToolName] = None,
+            tool_arguments: Optional[SerializedArguments] = None,
+        ) -> None:
+            resp = tool_response or ToolResponse(is_failed=False, is_terminated=False, content=ToolResponseContent("ok"))
+            tcid = tool_call_id or ToolCallId("call_1")
+            tname = tool_name or ToolName("read_file")
+            targs = tool_arguments or SerializedArguments("{}")
+            msg = ConversationMessage(
+                role=MessageRole("tool"),
+                content=ConversationContent(str(resp.content)),
+                tool_call_id=tcid,
+                tool_name=tname,
+                reminder=resp.reminder,
+                tool_arguments=targs,
+            )
+            self.state.messages.append(msg)
+        ctx.update(_consequent)
 
-    if isinstance(outcome, Value) and outcome.val is None:
-        return outcome
-    if outcome is NotBound:
-        return Value(None)
-    return None
-
-
-@proto.transition(Conversation.append_message)
-def append_message(): pass
-
-@append_message.arguments
-def _(
-    state: ConversationState,
-    this: Any,
-    message: ConversationMessage | NotBoundType = NotBound,
-) -> Optional[Tuple[ConversationMessage]]:
-    if isinstance(message, NotBoundType):
-        msg = ConversationMessage(
-            role=MessageRole("user"),
-            content=ConversationContent("hello"),
-        )
-    else:
-        msg = message
-    return (msg,)
-
-@append_message.returns
-def _(
-    state: ConversationState,
-    this: Any,
-    message: ConversationMessage,
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    state.messages.append(message)
-    if isinstance(outcome, Value) and outcome.val is None:
-        return outcome
-    if outcome is NotBound:
-        return Value(None)
-    return None
+    @transition(Conversation.get_model_request)
+    def get_model_request(
+        self,
+        ctx: TransitionContext[Conversation, [], ModelRequest],
+    ) -> None:
+        ctx.returns(lambda: ModelRequest(messages=tuple(self.state.messages)))
 
 
-@proto.transition(Conversation.append_tool_response)
-def append_tool_response(): pass
-
-@append_tool_response.arguments
-def _(
-    state: ConversationState,
-    this: Any,
-    tool_response: ToolResponse | NotBoundType = NotBound,
-    tool_call_id: ToolCallId | NotBoundType = NotBound,
-    tool_name: ToolName | NotBoundType = NotBound,
-    tool_arguments: SerializedArguments | NotBoundType = NotBound,
-) -> Optional[Tuple[ToolResponse, ToolCallId, ToolName, SerializedArguments]]:
-    if isinstance(tool_response, NotBoundType):
-        resp = ToolResponse(
-            is_failed=False,
-            is_terminated=False,
-            content=ToolResponseContent("ok"),
-        )
-    else:
-        resp = tool_response
-    tcid = ToolCallId("call_1") if isinstance(tool_call_id, NotBoundType) else tool_call_id
-    tname = ToolName("read_file") if isinstance(tool_name, NotBoundType) else tool_name
-    targs = SerializedArguments("{}") if isinstance(tool_arguments, NotBoundType) else tool_arguments
-    return (resp, tcid, tname, targs)
-
-@append_tool_response.returns
-def _(
-    state: ConversationState,
-    this: Any,
-    tool_response: ToolResponse,
-    tool_call_id: ToolCallId,
-    tool_name: ToolName,
-    tool_arguments: SerializedArguments,
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    msg = ConversationMessage(
-        role=MessageRole("tool"),
-        content=ConversationContent(str(tool_response.content)),
-        tool_call_id=tool_call_id,
-        tool_name=tool_name,
-        reminder=tool_response.reminder,
-        tool_arguments=tool_arguments,
-    )
-    state.messages.append(msg)
-    if isinstance(outcome, Value) and outcome.val is None:
-        return outcome
-    if outcome is NotBound:
-        return Value(None)
-    return None
-
-
-@proto.transition(Conversation.get_model_request)
-def get_model_request(): pass
-
-@get_model_request.arguments
-def _(state: ConversationState, this: Any) -> Optional[Tuple[()]]:
-    return ()
-
-@get_model_request.returns
-def _(
-    state: ConversationState,
-    this: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[ModelRequest]]:
-    req = ModelRequest(messages=tuple(state.messages))
-    if isinstance(outcome, Value) and len(outcome.val.messages) == len(req.messages):
-        return outcome
-    if outcome is NotBound:
-        return Value(req)
-    return None
+proto = ConversationStateMachine()
 
 
 # ==============================================================================
@@ -207,8 +147,7 @@ def make_conversation_fake(
     state: Optional[ConversationState] = None,
 ) -> Conversation:
     """Instantiate a synthesized Conversation fake."""
-    st = state or ConversationState()
-    sm = proto.make_state_machine(st)
+    sm = ConversationStateMachine(state)
     return sm.as_fake(Conversation)
 
 

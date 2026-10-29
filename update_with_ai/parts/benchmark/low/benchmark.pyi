@@ -65,6 +65,7 @@ class VerificationOutcomes:
     line_coverage_pct: float = 0.0
     branch_coverage_pct: float = 0.0
     mutation_score_pct: float = 0.0
+    converged: bool = True
 
 
 @data_type
@@ -128,7 +129,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         POSTCONDITIONS:
         - MUST execute the flight under the requested harness or simulation mode.
         - WHEN baseline is True and harness is 'loop', MUST raise ValueError rejecting loop harness.
-        - WHEN baseline is True, MUST provide the low-level specification and instruct the agent to consult it, implement the two-file library structure in lib/, test _impl.py (or author pretense suites in pretense/), and achieve 100% test coverage with opt-outs.
+        - WHEN baseline is True, MUST provide the low-level specification and instruct the agent to consult it, implement the two-file library structure in lib/ while consulting guides/low_to_lib.md for singleton lifecycle conventions, test _impl.py (or author pretense suites in pretense/ consulting guides/pretense.md), and achieve 100% test coverage with opt-outs.
         - WHEN baseline is True, MUST record exactly one execution round under baseline role.
         - WHEN pretense is True, MUST execute synthesis and verification using Pretense state machines, fakes, and property fuzzing.
         - WHEN baseline is True and pretense is True, MUST provision pretense/ and guides/pretense.md, scaffold starter pretense suite, instruct the agent to author pretense state machine/fakes/fuzz tests, evaluate verification gates with pretense, and record methodology as pretense_baseline.
@@ -164,7 +165,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         - MUST remove all files and directories under unit.unit_dir/lib and unit.unit_dir/tests.
         - MUST mark specifications clean up to specification QA within the flight scope to isolate code and test generation.
         - MUST purge ephemeral role workspaces associated with the unit.
-        - MUST remove ephemeral flight scopes when present.
+        - MUST remove ephemeral flight scopes when present for successful flights, preserving them as <flight_scope>.failed along with associated role workspaces under <flight_scope>.failed/role_workspaces when flights fail verification.
         """
         ...
 
@@ -173,7 +174,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         """Formats flight records into a markdown summary report.
 
         POSTCONDITIONS:
-        - MUST format a markdown summary table containing model tiers, token metrics, costs, and test results.
+        - MUST format a markdown summary table containing model tiers, token metrics, costs, test results, and status indicators marking PASS or FAILED.
         - WHEN an output path is provided, MUST write the markdown report to disk.
         """
         ...
@@ -217,7 +218,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-10-25T22:45:00Z
-# CHANGE: Specify Pretense baseline execution postconditions
+# LAST_CHANGED: 2026-10-27T22:45:00Z
+# CHANGE: Specify failed flight scope preservation with role workspaces, failure status reporting, and non-zero exit code on verification failure
 # SPEC_QA_AUDIT: 2026-10-19T18:45:00Z
 # --- END CLEANROOM METADATA ---

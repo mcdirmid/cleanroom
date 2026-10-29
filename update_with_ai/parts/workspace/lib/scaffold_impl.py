@@ -132,6 +132,38 @@ def _missing_target_skeleton(
     workspace_dir: Optional[str] = None,
 ) -> Optional[str]:
     """Synthesizes starter skeleton content for a declared writable target file."""
+    if rel_path.endswith("_pretense.py"):
+        pyi_path = _find_spec_pyi(
+            os.path.join(repo_root, unit_dir), unit_name, main_root=repo_root
+        )
+        if pyi_path is not None and os.path.isfile(pyi_path):
+            try:
+                generate_pretense_scaffold = None
+                try:
+                    from support.lib.pretense_lint import generate_pretense_scaffold
+                except ImportError:
+                    pass
+                if generate_pretense_scaffold is None:
+                    import importlib
+                    for entry in os.listdir(repo_root):
+                        pkg_dir = os.path.join(repo_root, entry)
+                        if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
+                            try:
+                                mod = importlib.import_module(f"{entry}.support.lib.pretense_lint")
+                                generate_pretense_scaffold = getattr(mod, "generate_pretense_scaffold", None)
+                                if generate_pretense_scaffold is not None:
+                                    break
+                            except ImportError:
+                                pass
+                if generate_pretense_scaffold is not None:
+                    stem = unit_name[:-5] if unit_name.endswith("_impl") else unit_name
+                    lib_pkg = f"{unit_dir.replace('/', '.')}.lib"
+                    impl_file = os.path.join(workspace_dir or repo_root, unit_dir, "lib", f"{unit_name}.py")
+                    return generate_pretense_scaffold(
+                        pyi_path, stem, unit_name, lib_pkg, impl_path=impl_file
+                    )
+            except Exception:
+                pass
     if role_def.template:
         template_candidates: List[str] = []
         if workspace_dir:
@@ -199,6 +231,10 @@ def _create_missing_target_skeletons(
         return created
     scope_dir = os.path.join(repo_root, dir_scope) if dir_scope else repo_root
     for unit_dir, unit_name in _declared_units(repo_root, scope_dir):
+        if role_def.active_component_types:
+            ctype = "implementation" if unit_name.endswith("_impl") else "interface"
+            if ctype not in role_def.active_component_types:
+                continue
         rel_path = role_def.src_pattern.format(unit_dir=unit_dir, unit_name=unit_name)
         if not _matches_any_pattern(rel_path, role_def.writable_file_patterns):
             continue
@@ -446,7 +482,11 @@ def _find_roles_toml_content(bin_dir: str) -> Optional[bytes]:
     return None
 
 
-def package_runner_zipapps(bin_dir: str, can_blame: bool = True) -> None:
+def package_runner_zipapps(
+    bin_dir: str,
+    can_blame: bool = True,
+    role_def: Optional[roles.RoleDefinition] = None,
+) -> None:
     """Packages runner zipapps into bin_dir with executable permissions."""
     os.makedirs(bin_dir, exist_ok=True)
     tools = {
@@ -466,6 +506,15 @@ def package_runner_zipapps(bin_dir: str, can_blame: bool = True) -> None:
                     os.remove(bp)
                 except OSError:
                     pass
+
+    if role_def and role_def.fused_roles:
+        for cr in role_def.fused_roles:
+            tools[f"verify_{cr}"] = f"verify_{cr}"
+        if "pretense_coverage" in role_def.fused_roles and "verify_coverage" not in tools:
+            tools["verify_coverage"] = "verify_coverage"
+        if "pretense" in role_def.fused_roles and "verify_test" not in tools:
+            tools["verify_test"] = "verify_test"
+
     cov_path = os.path.join(bin_dir, "coverage")
     # Contract: Removes stale coverage script if present in bin_dir.
     if os.path.isfile(cov_path):
@@ -538,6 +587,8 @@ def write_role_metadata(
     model: Optional[str] = None,
     batch_size: Optional[int] = None,
     max_feedback_chars: Optional[int] = None,
+    fused_roles: Optional[Sequence[str]] = None,
+    common_spec_roles: Optional[Sequence[str]] = None,
 ) -> None:
     """Writes .cleanroom_role.json in workspace root."""
     meta_path = os.path.join(workspace_dir, ROLE_CONFIG_FILE)
@@ -547,6 +598,10 @@ def write_role_metadata(
         "parts_dir": dir_scope,
         "dir_scope": dir_scope,
     }
+    if fused_roles:
+        data["fused_roles"] = list(fused_roles)
+    if common_spec_roles:
+        data["common_spec_roles"] = list(common_spec_roles)
     if model:
         data["model"] = model
     if batch_size is not None:
@@ -600,7 +655,89 @@ def write_role_agents_md(
             "- **Incremental Authoring (Output Token Ceiling Protection)**: Your engine enforces a strict output token ceiling (e.g. 8K tokens). Emitting a massive monolithic file (>400 lines or >4,000 tokens) in a single tool call truncates output mid-generation, corrupting tool envelopes and causing fatal harness crashes. You MUST author extensive implementations or test suites incrementally in staged passes: write a minimal skeleton with core tests/methods first, verify with `bin/check_files`, and then incrementally append or edit remaining tests or methods in separate focused steps.\n"
         )
 
-    if is_auditor:
+    if role_def.fused_roles:
+        is_pretense = any("pretense" in r for r in role_def.fused_roles)
+        if is_pretense:
+            workflow = """1. Run `bin/get_work` ONCE at session start to inspect assigned ready targets across constituent roles.
+2. Low-Level Specification Grounding: Inspect `low/*.pyi` to understand all protocols, method contracts, and invariant postconditions.
+3. Phase 1 — Pretense State Machine & Verification Suite (`pretense/*_pretense.py`):
+   - Author state-machine models in `<unit_dir>/pretense/<unit>_pretense.py` following `guides/pretense.md`.
+   - Embed contract postconditions in `ctx.ensures(...)` on transitions.
+   - In `Test<Target>ImplReal`, bind real instances into `self.sm = TargetStateMachine(singletons={...})` and drive scenarios via `self.sm.dispatch_transition(...)` without manual assertions; `ctx.ensures(...)` verifies postconditions automatically.
+   - Type Contract Respect: NEVER pass `None` or invalid types into strictly-typed non-optional parameters unless explicitly contracted in specifications.
+   - Non-Concerns as Undefined Behavior: If an anomalous condition or failure mode is uncontracted in the specification, it is undefined behavior; testing it is strictly prohibited.
+   - Public Attribution Purity: Do NOT couple tests or assertions to synthetic internal placeholders (e.g. graph root keys) or private attributes.
+   - Verify syntax and types: `bin/verify_pretense <unit_dir>/pretense/<unit>_pretense.py`
+4. Phase 2 — Library Implementation (`lib/*.py`):
+   - Implement interfaces in `<unit>.py` and concrete realizations in `<unit>_impl.py` following `guides/low_to_lib.md`.
+   - Targeted Reads Over Full Dumps: Never dump or read entire large files repeatedly. Use grep or narrow line ranges to inspect code.
+   - Verify syntax and types: `bin/verify_lib <unit_dir>/lib/<unit>.py`
+5. Phase 3 — QA Arbiter Self-Audit (`guides/pretense_qa.md`):
+   - Run tests: `bin/verify_pretense_qa` (or `uv run pretense <unit_dir>/pretense/<unit>_pretense.py`)
+   - AUDIT CHECKLIST: Verify tests test true behavioral contracts and invariants from `low/*.pyi` and pass all property fuzzing. Blame and fix any tests violating type contracts, asserting uncontracted non-concerns, or asserting unmandated internal implementation details.
+6. Phase 4 — Coverage Arbiter Semantic Closure Audit (`guides/pretense_coverage.md`):
+   - Run coverage: `bin/verify_pretense_coverage` (or `bin/verify_coverage --pretense <unit_dir>/pretense/<unit>_pretense.py`)
+   - AUDIT CHECKLIST: Inspect all branches in `<unit>_impl.py`. PRUNE uncontracted dead defensive code rather than writing synthetic tests to artificially cover it. Ensure 100% statement and branch coverage.
+7. Completion:
+   - When all checks pass with 0 type errors, 100% test pass, 100% coverage, and both arbiter self-audits are completed:
+   - Report completion by sending: `COMPLETED: All library code, pretense models, and coverage passing for <scope>.`
+   - DO NOT run `bin/submit`. The coordinator executes verification and atomically harvests and marks all nodes clean.
+"""
+            feedback_section = """## Arbiter Self-Audit Directives (Fused Role Requirements)
+- **QA Arbiter Contract Fidelity Audit (`guides/pretense_qa.md`)**:
+  - Type Contract Respect: Tests must respect static type contracts; never pass `None` or invalid types to strictly-typed non-optional parameters unless contracted.
+  - Non-Concerns as Undefined Behavior: If behavior during a failure mode or anomalous input is uncontracted, it is undefined behavior; testing it is strictly prohibited.
+  - Public Attribution Purity: Verify tests assert public postconditions and invariant properties without coupling to private attributes or synthetic internal graph nodes.
+- **Coverage Arbiter Semantic Closure Audit (`guides/pretense_coverage.md`)**:
+  - Never write synthetic tests solely to exercise defensive branches that are unreachable under valid contract inputs.
+  - When unreachable defensive code exists, delete the dead code from `lib/*.py`.
+  - Only annotate legitimately unreachable platform or fatal conditions with `# pragma: no cover`."""
+        else:
+            workflow = """1. Run `bin/get_work` ONCE at session start to inspect assigned ready targets across constituent roles.
+2. Low-Level Specification Grounding: Inspect `low/*.pyi` to understand all protocols, method contracts, and invariant postconditions.
+3. Phase 1 — Unit Test Suite Authoring (`tests/*_test.py`):
+   - Author comprehensive unit tests in `<unit_dir>/tests/<unit>_test.py` following `guides/low_to_test.md`.
+   - Type Contract Respect: NEVER pass `None` or invalid types into strictly-typed non-optional parameters unless explicitly contracted in specifications.
+   - Non-Concerns as Undefined Behavior: If an anomalous condition or failure mode is uncontracted in the specification, it is undefined behavior; testing it is strictly prohibited.
+   - Public Attribution Purity: Do NOT couple tests to synthetic internal placeholders (e.g. graph root keys) or private attributes.
+   - Verify syntax and types: `bin/verify_test <unit_dir>/tests/<unit>_test.py`
+4. Phase 2 — Library Implementation (`lib/*.py`):
+   - Implement interfaces in `<unit>.py` and concrete realizations in `<unit>_impl.py` following `guides/low_to_lib.md`.
+   - Targeted Reads Over Full Dumps: Never dump or read entire large files repeatedly. Use grep or narrow line ranges to inspect code.
+   - Verify syntax and types: `bin/verify_lib <unit_dir>/lib/<unit>.py`
+5. Phase 3 — QA Arbiter Self-Audit (`guides/qa.md`):
+   - Run test suite: `uv run pytest <unit_dir>/tests/<unit>_test.py --timeout=10 --timeout-method=thread`
+   - AUDIT CHECKLIST: Verify tests verify genuine behavioral contracts from `low/*.pyi`. Blame and fix any tests violating type contracts, asserting uncontracted non-concerns, or asserting unmandated internal implementation details.
+6. Phase 4 — Coverage Arbiter Semantic Closure Audit (`guides/coverage.md`):
+   - Run coverage: `bin/verify_coverage --impl <unit_dir>/lib/<unit>.py --test <unit_dir>/tests/<unit>_test.py --threshold 100.0`
+   - AUDIT CHECKLIST: Inspect all branches in `<unit>_impl.py`. PRUNE uncontracted dead defensive code rather than writing synthetic tests to artificially cover it. Ensure 100% statement and branch coverage.
+7. Completion:
+   - When all checks pass with 0 type errors, 100% test pass, 100% coverage, and both arbiter self-audits are completed:
+   - Report completion by sending: `COMPLETED: All library code, unit tests, and coverage passing for <scope>.`
+   - DO NOT run `bin/submit`. The coordinator executes verification and atomically harvests and marks all nodes clean.
+"""
+            feedback_section = """## Arbiter Self-Audit Directives (Fused Role Requirements)
+- **QA Arbiter Contract Fidelity Audit (`guides/qa.md`)**:
+  - Type Contract Respect: Tests must respect static type contracts; never pass `None` or invalid types to strictly-typed non-optional parameters unless contracted.
+  - Non-Concerns as Undefined Behavior: If behavior during a failure mode or anomalous input is uncontracted, it is undefined behavior; testing it is strictly prohibited.
+  - Public Attribution Purity: Verify tests assert public postconditions and invariant properties without coupling to private attributes or synthetic internal graph nodes.
+- **Coverage Arbiter Semantic Closure Audit (`guides/coverage.md`)**:
+  - Never write synthetic tests solely to exercise defensive branches that are unreachable under valid contract inputs.
+  - When unreachable defensive code exists, delete the dead code from `lib/*.py`.
+  - Only annotate legitimately unreachable platform or fatal conditions with `# pragma: no cover`."""
+
+        resolution_rules = """- **Completion Protocol**: When all micro-binaries pass with 0 errors, 100% coverage, and both arbiter self-audits are completed, report completion by sending:
+  `COMPLETED: All library code, tests, and coverage passing for <scope>.`
+  Do NOT execute `bin/submit`. The coordinator verifies the workspace and marks nodes clean atomically.
+- **Fail on Impasse**: If you reach an unresolvable impasse where success is impossible, execute `bin/fail <target_file> "<reason>"` immediately."""
+        resolution_methods = "(send `COMPLETED` message or `bin/fail`)"
+        workflow_binaries_blame = ""
+        round_res_line = "Never attempt to manually commit, push, or copy files across workspace boundaries; conclude by reporting `COMPLETED` or `bin/fail`."
+        runner_tools_list = "`get_work`, `verify_lib`, `verify_test`, `verify_pretense`, `verify_coverage`, `fail`"
+        fail_stop_tools = "`bin/get_work`, `bin/verify_lib`, `bin/verify_test`, `bin/verify_pretense`, `bin/verify_coverage`, `bin/fail`"
+        metadata_tools = "(`bin/fail`)"
+        test_failure_action = "code edits or `bin/fail`"
+    elif is_auditor:
         workflow = f"""1. Run `bin/get_work` to synchronize with main and inspect pending dirty units.
 2. Read the `# CHANGE:` metadata header in the target file (`lib/*.py` or `tests/*_test.py`) using host file-reading tools to inspect what the author attempted to fix.
 3. Follow companion guide `{guide}` to verify target compliance against `low/*.pyi` contracts.
@@ -657,7 +794,32 @@ Any library files under `lib/*.py` imported from role dependencies in this works
 - **DO NOT ASSERT STUB ERRORS**: Never write tests expecting or asserting `NotImplementedError` or stub error outcomes. Author tests that verify the real behavioral contracts, postconditions, and invariants specified in `low/*.pyi`.
 """
 
-    if can_blame:
+    if role_def.fused_roles:
+        fused_bins = [f"verify_{cr}" for cr in role_def.fused_roles]
+        if "verify_coverage" not in fused_bins and any("coverage" in cr for cr in role_def.fused_roles):
+            fused_bins.append("verify_coverage")
+        if "verify_test" not in fused_bins and any("test" in cr for cr in role_def.fused_roles):
+            fused_bins.append("verify_test")
+        fused_bins_bullets = "\n".join(f"- `bin/{b}` — Run verification for {b.replace('verify_', '')}." for b in fused_bins)
+        fused_bins_cmds = ", ".join(f"`bin/{b}`" for b in fused_bins)
+        resolution_rules = f"""- **Verification on All Constituent Gates**: You MUST run {fused_bins_cmds} until all checks pass with 100% statement and branch coverage.
+- **Arbiter Self-Audit**: Before concluding, you MUST audit your implementation and tests against the QA and Coverage guides in `guides/` (zero uncontracted defensive branches, zero unmandated test assertions).
+- **Prune Uncontracted Defensive Code**: When `bin/verify_coverage` reports missing coverage on defensive branches, fallback checks, or error paths for uncontracted conditions, prune and delete the unreachable defensive code from your implementation rather than writing elaborate uncontracted tests.
+- **Conclude Without `bin/submit`**: Do NOT call `bin/submit` or `bin/check_files`; the coordinator harvests and marks all targets clean after running formal verification.
+- **Fail on Impasse**: If you reach an unresolvable impasse where success is impossible, execute `bin/fail <target_file> "<reason>"` immediately."""
+        resolution_methods = f"(via {fused_bins_cmds}, or `bin/fail`)"
+        round_res_line = "Never attempt to manually commit, push, or copy files across workspace boundaries; the coordinator handles atomic harvest after verifying your workspace."
+        runner_tools_list = ", ".join([f"`{b}`" for b in ["get_work"] + fused_bins + ["fail"]])
+        fail_stop_tools = ", ".join([f"`bin/{b}`" for b in ["get_work"] + fused_bins + ["fail"]])
+        metadata_tools = "(`bin/fail` or coordinator harvest)"
+        test_failure_action = "code edits or `bin/fail`"
+        workflow_binaries_section = f"""## Mandatory Cleanroom Workflow Binaries
+All Cleanroom verification and resolution in this fused role workspace must proceed through the prescribed micro-binaries:
+- `bin/get_work` — Discover pending units and tasks across constituent roles (call ONCE at session start).
+{fused_bins_bullets}
+- `bin/fail` — Report an unresolvable impasse."""
+        ground_truth_bullet = f"- **Ground Truth First (Oracle Diagnostics Over Prose)**: Always run {fused_bins_cmds} to establish deterministic ground truth errors. Do NOT speculate, guess, or infer defects from prose descriptions before checking oracle output."
+    elif can_blame:
         resolution_rules = """- **ZERO TOLERANCE FOR COMPLAINING OR IDLING IN CHAT**: When `bin/check_files` fails, stopping with conversational commentary, explaining why output did not change, or complaining without executing `bin/blame` is STRICTLY PROHIBITED. Conversational complaints do not mutate build state, and upstream authoring roles cannot inspect chat transcripts.
 - **Actionable Blame Delivery**: When checks fail due to defects in library code, test code, or upstream specifications, you MUST execute `bin/blame <culprit_file> "<actionable critique>"` immediately. Auditors can blame both the lib and test files if both contain defects.
 - **Submission on Success**: When checks pass, you MUST execute `bin/submit <target_file>` immediately.
@@ -670,6 +832,13 @@ Any library files under `lib/*.py` imported from role dependencies in this works
         fail_stop_tools = "`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/submit`, `bin/fail`"
         metadata_tools = "(`bin/submit`, `bin/blame`, `bin/fail`)"
         test_failure_action = "`bin/blame`, `bin/fail`, or code edits"
+        workflow_binaries_section = f"""## Mandatory Cleanroom Workflow Binaries
+All Cleanroom target resolution must proceed through the prescribed workspace binaries:
+- `bin/get_work` — Discover pending units and tasks.
+- `bin/check_files` — Run static verification, linting, and type checking on targets.
+- `bin/submit` — Submit verified targets to main.
+{workflow_binaries_blame}- `bin/fail` — Report an unresolvable impasse."""
+        ground_truth_bullet = "- **Ground Truth First (Oracle Diagnostics Over Prose)**: Always run `bin/check_files <target>` to establish deterministic ground truth errors before writing or editing code. Do NOT speculate, guess, or infer defects from prose descriptions before checking oracle output."
     else:
         resolution_rules = """- **Submission on Success**: When checks pass and all feedback is addressed, you MUST execute `bin/submit <target_file> "<summary>"` immediately.
 - **Fail on Impasse**: If you reach an unresolvable impasse where success is impossible, execute `bin/fail <target_file> "<reason>"` immediately.
@@ -681,6 +850,13 @@ Any library files under `lib/*.py` imported from role dependencies in this works
         fail_stop_tools = "`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/fail`"
         metadata_tools = "(`bin/submit` or `bin/fail`)"
         test_failure_action = "code edits or `bin/fail`"
+        workflow_binaries_section = f"""## Mandatory Cleanroom Workflow Binaries
+All Cleanroom target resolution must proceed through the prescribed workspace binaries:
+- `bin/get_work` — Discover pending units and tasks.
+- `bin/check_files` — Run static verification, linting, and type checking on targets.
+- `bin/submit` — Submit verified targets to main.
+{workflow_binaries_blame}- `bin/fail` — Report an unresolvable impasse."""
+        ground_truth_bullet = "- **Ground Truth First (Oracle Diagnostics Over Prose)**: Always run `bin/check_files <target>` to establish deterministic ground truth errors before writing or editing code. Do NOT speculate, guess, or infer defects from prose descriptions before checking oracle output."
 
     content = f"""# Cleanroom Role Instructions: {role_def.role_name.capitalize()}
 
@@ -690,8 +866,8 @@ Any library files under `lib/*.py` imported from role dependencies in this works
 - Companion Guide: `{guide}`
 {stub_section}
 ## Continuous Tool Execution & Operational Rules
-- **Continuous Tool Execution (No Idling or Dangling Colons)**: You are an autonomous agent step runner. You must ALWAYS invoke a tool in every step. Never output conversational text, explanations, or sentences ending in colons without invoking tools in the same step. Every step MUST execute a tool call.
-- **Ground Truth First (Oracle Diagnostics Over Prose)**: Always run `bin/check_files <target>` to establish deterministic ground truth errors before writing or editing code. Do NOT speculate, guess, or infer defects from prose descriptions before checking oracle output.
+- **Continuous Tool Execution (No Idling or Dangling Colons)**: You are an autonomous agent step runner. While ready targets remain unresolved, you must ALWAYS invoke a tool in every step. Never output conversational text, explanations, or sentences ending in colons without invoking tools in the same step. Every in-progress step MUST execute a tool call.
+{ground_truth_bullet}
 - **Targeted Reads Over Full Dumps**: Never dump or read entire large files repeatedly. Use grep to locate symbols, or read narrow line ranges using offset and limit parameters.
 - **Restricted Targets**: Edit ONLY your assigned target files. Do NOT create scratch tests, temporary test scripts, or auxiliary test runners.
 - **No Runner Binary Inspection or Linter Hunting**: Runner executables in `bin/` ({runner_tools_list}) are encapsulated self-contained tools. Do NOT search for internal linters (`*_lint.py`, `test_lint`, `build_lint`), and do NOT attempt to read, disassemble, decompile, or run inspection utilities (`file`, `strings`, `unzip`, `head`, `od`, `xxd`) on `bin/` executables. All required structural rules and conventions are documented in your Companion Guide.
@@ -704,10 +880,10 @@ Every ready target acquired via `bin/get_work` MUST be explicitly resolved befor
 {resolution_rules}
 
 ## Round Conclusion Protocol
-Once all ready targets have been resolved {resolution_methods}, or when `bin/get_work` indicates that only blocked targets remain (or no ready targets exist):
-- **STOP IMMEDIATELY**: Do NOT execute any further tool calls.
-- **DO NOT CALL `bin/get_work` OR `bin/check_files` IN A LOOP**: Repeatedly running tools when there are no ready targets wastes steps and triggers impasse warnings.
-- **Conclude the Round**: Output a concise summary of the resolved actions and end your round.
+When you have no outstanding work to do and `bin/get_work` does not give you more work to do (all ready targets have been resolved {resolution_methods}, or `bin/get_work` indicates that only blocked targets remain or no ready targets exist):
+- **YOU CAN AND MUST CONCLUDE IMMEDIATELY**: Your round is complete.
+- **STOP IMMEDIATELY — NO FURTHER TOOL CALLS**: Do NOT execute any further tool calls (`ls`, `bin/get_work`, `cat`, `rm`, `echo`, dummy shell commands, or inspecting directories). Repeatedly running tools when there are no ready targets wastes steps and triggers impasse warnings.
+- **Conclude with Text Only**: Output a concise final summary of your resolved actions and end your round. The continuous tool execution rule applies ONLY while work remains; delivering a text summary with ZERO tool calls is the expected and required signal that concludes your round cleanly in the runtime harness.
 
 ## Strict Boundary Rules (Zero Exceptions)
 1. **Workspace Boundary**: All commands and tool invocations MUST execute strictly within this workspace directory (`.`). You are strictly prohibited from passing any other directory as `Cwd` or running commands outside this workspace.
@@ -727,12 +903,7 @@ The Contamination Tripwire applies strictly to reading files OUTSIDE this worksp
 You ARE permitted to run standard shell utilities and scripts (`cat`, `grep`, `find`, `python`, etc.) or native harness tools strictly WITHIN this workspace directory (`.`) to inspect files, run local diagnostics, and complete your tasks.
 Git operations (`git checkout`, `git restore`, `git reset`, etc.) and accessing files outside this workspace remain strictly prohibited.
 
-## Mandatory Cleanroom Workflow Binaries
-All Cleanroom target resolution must proceed through the prescribed workspace binaries:
-- `bin/get_work` — Discover pending units and tasks.
-- `bin/check_files` — Run static verification, linting, and type checking on targets.
-- `bin/submit` — Submit verified targets to main.
-{workflow_binaries_blame}- `bin/fail` — Report an unresolvable impasse.
+{workflow_binaries_section}
 
 {round_res_line}
 
@@ -796,7 +967,7 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
     ) -> None:
         if role_def is not None:
             can_blame = bool(role_def.feedback_role_deps or role_def.audit_tag or not role_def.writable_file_patterns)
-        package_runner_zipapps(bin_dir, can_blame=can_blame)
+        package_runner_zipapps(bin_dir, can_blame=can_blame, role_def=role_def)
 
     # Contract: Writes role configuration metadata (.cleanroom_role.json) in workspace root.
     def write_role_metadata(
@@ -808,6 +979,8 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
         model: Optional[str] = None,
         batch_size: Optional[int] = None,
         max_feedback_chars: Optional[int] = None,
+        fused_roles: Optional[Sequence[str]] = None,
+        common_spec_roles: Optional[Sequence[str]] = None,
     ) -> None:
         write_role_metadata(
             workspace_dir,
@@ -817,6 +990,8 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
             model=model,
             batch_size=batch_size,
             max_feedback_chars=max_feedback_chars,
+            fused_roles=fused_roles,
+            common_spec_roles=common_spec_roles,
         )
 
     # Contract: Synthesizes role-tailored AGENTS.md instructions in workspace root.
@@ -850,9 +1025,9 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
     ) -> None:
         write_file_with_perms(dst, content, readonly=readonly, executable=executable)
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-26T12:40:00Z
-# LAST_CHANGED: 2026-10-26T12:40:00Z
-# CHANGE: Clarify in fail-stop protocol that test execution timeouts and SIGTERM are code defects rather than infrastructure failures
+# LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-10-27T20:49:00Z
+# CHANGE: Instruct workers to conclude immediately with text and no tool calls when work is resolved and get_work gives no more work
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

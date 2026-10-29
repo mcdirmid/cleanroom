@@ -196,7 +196,9 @@ def _topological_sort_units(
     units_list: List[Dict[str, Any]],
     module_deps: Dict[str, List[str]],
 ) -> List[Dict[str, Any]]:
-    unit_map = {item["unit_name"]: item for item in units_list}
+    unit_items: Dict[str, List[Dict[str, Any]]] = {}
+    for item in units_list:
+        unit_items.setdefault(item["unit_name"], []).append(item)
     visited: Set[str] = set()
     temp_mark: Set[str] = set()
     order: List[Dict[str, Any]] = []
@@ -206,11 +208,11 @@ def _topological_sort_units(
             return
         temp_mark.add(uname)
         for dep in sorted(module_deps.get(uname, [])):
-            if dep in unit_map:
+            if dep in unit_items:
                 visit(dep)
         temp_mark.remove(uname)
         visited.add(uname)
-        order.append(unit_map[uname])
+        order.extend(unit_items[uname])
 
     for item in sorted(units_list, key=lambda x: str(x.get("unit_name", ""))):
         uname = str(item.get("unit_name", ""))
@@ -332,13 +334,13 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
 
         reg = get_singleton(role_registry.WorkspaceRegistry)
         active_role_def = reg.resolve_role_definition(clean_role, repo_root=repo_root)
-        upstream_roles = _get_role_upstream_chain(clean_role, repo_root=repo_root)
-        is_auditor = _is_auditor_role(clean_role, repo_root=repo_root)
-        feedback_roles = [d.split(":")[-1] for d in active_role_def.feedback_role_deps]
-        silent_cross = [d.split(":")[-1] for d in active_role_def.silent_cross_role_deps]
-        star_roles = [d.split(":")[-1] for d in active_role_def.star_role_deps]
+        fused_roles_set = set(active_role_def.fused_roles) if active_role_def.fused_roles else set()
 
-        dirty_in_role = [item for item in all_dirty if item["role"] == clean_role]
+        if fused_roles_set:
+            dirty_in_role = [item for item in all_dirty if item["role"] in fused_roles_set]
+        else:
+            dirty_in_role = [item for item in all_dirty if item["role"] == clean_role]
+
         if not dirty_in_role:
             return (), ()
 
@@ -370,12 +372,22 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
 
         for item in dirty_in_role:
             uname = item["unit_name"]
+            item_role = item["role"]
+            item_role_def = reg.resolve_role_definition(item_role, repo_root=repo_root)
+            item_upstream_roles = _get_role_upstream_chain(item_role, repo_root=repo_root)
+            item_is_auditor = _is_auditor_role(item_role, repo_root=repo_root)
+            item_feedback_roles = [d.split(":")[-1] for d in item_role_def.feedback_role_deps]
+            item_silent_cross = [d.split(":")[-1] for d in item_role_def.silent_cross_role_deps]
+            item_star_roles = [d.split(":")[-1] for d in item_role_def.star_role_deps]
+
             part_dir = item.get("part_dir", "") or all_units.get(uname, "")
             blocked_reasons: List[str] = []
 
             # Check 1: Intra-unit upstream roles
             u_ctype = _classify_unit_type(uname)
-            for up_r in upstream_roles:
+            for up_r in item_upstream_roles:
+                if fused_roles_set and up_r in fused_roles_set:
+                    continue
                 up_r_def = reg.resolve_role_definition(up_r, repo_root=repo_root)
                 if up_r_def.active_component_types and u_ctype not in up_r_def.active_component_types:
                     continue
@@ -388,8 +400,10 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
                     )
 
             # Check 2: Auditor feedback dependencies
-            if is_auditor:
-                for fb_r in feedback_roles:
+            if item_is_auditor:
+                for fb_r in item_feedback_roles:
+                    if fused_roles_set and fb_r in fused_roles_set:
+                        continue
                     fb_r_def = reg.resolve_role_definition(fb_r, repo_root=repo_root)
                     if fb_r_def.active_component_types and u_ctype not in fb_r_def.active_component_types:
                         continue
@@ -400,11 +414,13 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
 
             # Check 3: Inter-unit module dependencies
             transitive_deps = get_transitive_deps(uname)
-            roles_to_check = [r for r in upstream_roles if not _is_auditor_role(r, repo_root=repo_root)]
+            roles_to_check = [r for r in item_upstream_roles if not _is_auditor_role(r, repo_root=repo_root)]
             for dep_u in sorted(transitive_deps):
                 dep_part = all_units.get(dep_u, part_dir)
                 dep_ctype = _classify_unit_type(dep_u)
                 for r_check in roles_to_check:
+                    if fused_roles_set and r_check in fused_roles_set:
+                        continue
                     r_check_def = reg.resolve_role_definition(r_check, repo_root=repo_root)
                     if r_check_def.active_component_types and dep_ctype not in r_check_def.active_component_types:
                         continue
@@ -423,8 +439,8 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
                 if not dep.startswith("//"):
                     dep_pkg = all_units.get(dep_u, part_dir)
 
-                for star_r in star_roles:
-                    if star_r in silent_cross:
+                for star_r in item_star_roles:
+                    if star_r in item_silent_cross:
                         continue
                     star_def = reg.resolve_role_definition(star_r, repo_root=repo_root)
                     star_pat = star_def.src_pattern
@@ -498,20 +514,24 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
 
         eval_root = workspace_dir or os.getcwd()
         meta_p = os.path.join(eval_root, ".cleanroom_role.json")
+        reg = get_singleton(role_registry.WorkspaceRegistry)
         if os.path.isfile(meta_p):
             try:
-                reg = get_singleton(role_registry.WorkspaceRegistry)
                 m_root = reg.discover_repository_root(eval_root)
                 if m_root and os.path.isdir(m_root) and os.path.realpath(m_root) != os.path.realpath(eval_root):
                     eval_root = os.path.realpath(m_root)
             except Exception:
                 pass
 
+        active_role_def = reg.resolve_role_definition(clean_role, repo_root=eval_root)
+        fused_roles_set = set(active_role_def.fused_roles) if active_role_def.fused_roles else set()
+
         scheduler = None
-        try:
-            scheduler = get_singleton(work_scheduler.WorkScheduler)
-        except (LifecycleResolutionError, LookupError, AttributeError):
-            pass
+        if not fused_roles_set:
+            try:
+                scheduler = get_singleton(work_scheduler.WorkScheduler)
+            except (LifecycleResolutionError, LookupError, AttributeError):
+                pass
 
         if scheduler is not None:
             try:

@@ -1,5 +1,30 @@
 # Pretense: Stateful State-Machine Verification & Fake Synthesis in Cleanroom (`pretense.md`)
 
+## Table of Contents
+
+1. [Executive Summary & Terminology Lexicon](#1-executive-summary--terminology-lexicon)
+   - [Standardized Terminology Lexicon](#standardized-terminology-lexicon)
+2. [Empirical Genesis: Cross-Model Differential Defect Analysis & Coincident Cognitive Blind Spots](#2-empirical-genesis-cross-model-differential-defect-analysis--coincident-cognitive-blind-spots)
+   - [The Empirical Phenomenon & Cross-Model Outcomes](#the-empirical-phenomenon--cross-model-outcomes)
+   - [Anatomy of the Three Undetected Defects](#anatomy-of-the-three-undetected-defects)
+   - [Theoretical Analysis: Why Single-Model Cleanroom Missed These Defects](#theoretical-analysis-why-single-model-cleanroom-missed-these-defects)
+   - [Why Foreign Models Did Not Share the Blind Spots](#why-foreign-models-did-not-share-the-blind-spots)
+   - [Architectural Remedies: The Necessity of Pretense](#architectural-remedies-the-necessity-of-pretense)
+3. [Theoretical Architecture: Why Hypothesis State Machines?](#3-theoretical-architecture-why-hypothesis-state-machines)
+4. [Cleanroom Pipeline Integration: Author & Auditor Roles](#4-cleanroom-pipeline-integration-author--auditor-roles)
+5. [State Machines as Dual-Role Assets: Fakes and Test Drivers](#5-state-machines-as-dual-role-assets-fakes-and-test-drivers)
+   - [Dynamic Input Generation: The "Strategies as Values" Architecture](#dynamic-input-generation-the-strategies-as-values-architecture)
+6. [Path Coverage vs. Hypothesis State-Machine Transitions](#6-path-coverage-vs-hypothesis-state-machine-transitions)
+7. [Contract Traceability: Requirements in Comments vs. Slugs](#7-contract-traceability-requirements-in-comments-vs-slugs)
+8. [Comparison Matrix: Verification Strategies](#8-comparison-matrix-verification-strategies)
+9. [The Pretense CLI Runner & Repository Architecture](#9-the-pretense-cli-runner--repository-architecture)
+10. [Implementation Roadmap & Milestones](#10-implementation-roadmap--milestones)
+11. [Role Architecture Plan: `pretense`, `pretense_qa`, and `pretense_coverage`](#11-role-architecture-plan-pretense-pretense_qa-and-pretense_coverage)
+12. [Empirical Benchmarking: Pretense as a Baseline Equalizer](#12-empirical-benchmarking-pretense-as-a-baseline-equalizer)
+13. [Future Empirical Study: Cleanroom vs. State-Machine-Driven TDD](#13-future-empirical-study-cleanroom-vs-state-machine-driven-tdd)
+
+---
+
 ## 1. Executive Summary & Terminology Lexicon
 
 Empirical benchmarking across model tiers on `dag_engine_lite` revealed a critical blind spot in LLM-generated software verification:
@@ -28,7 +53,329 @@ To prevent conflation across specifications, state machines, implementations, an
 
 ---
 
-## 2. Theoretical Architecture: Why Hypothesis State Machines?
+## 2. Empirical Genesis: Cross-Model Differential Defect Analysis & Coincident Cognitive Blind Spots
+
+### The Empirical Phenomenon & Cross-Model Outcomes
+
+In the empirical evaluation of Cleanroom architectures against traditional software engineering baselines on the `dag_engine_lite` benchmark suite, the single-model Cleanroom run using **Qwen3.6-35B-A3B-oQ6-mtp** (Tier 1 Local MoE) achieved an ostensibly perfect verification outcome:
+- **Internal Cleanroom Status**: Verified & Passed (Pass 1 and Pass 2 gates cleared).
+- **Static Type Checking**: 0 Pyright diagnostics.
+- **Self-Authored Test Suite ($V_{\text{self}} \to P_{\text{self}}$)**: 60/60 tests passing (100%).
+- **Structural Code Coverage**: 95.0% Statement Coverage, 90.0% Branch Coverage.
+- **Specification Linter Diagnostics**: 0 errors.
+
+Under standard software engineering quality metrics, this library implementation ($P_{\text{qwen}}$) would be certified for production deployment. Furthermore, because Cleanroom enforced strict double-blind physical isolation ($\mathcal{I} = 0$) between the Synthesizer workspace ($W_{\text{lib}}$) and the Certifier workspace ($W_{\text{test}}$), the test suite did not suffer from the classic **Contamination Trap** of single-agent joint context TDD (where an agent rewrites test assertions to tautologically affirm broken code).
+
+However, when independent foreign test suites authored from the exact same formal Low-Level Specification (`low/*.pyi`) by different frontier and cloud model families (**DeepSeek-V3/Flash**, **Gemini 3.8 Flash**, and **Gemini 4 Argon**) were executed against Qwen's Cleanroom implementation via the differential cross-testing runner (`bin/run_cross_tests.py`), **three genuine soundness defects** were immediately exposed:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│               CROSS-MODEL DIFFERENTIAL VERIFICATION OUTCOMES (ON P_qwen)               │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│   Certifier Test Suite (V)             Pass / Fail Rate   Soundness Status             │
+│   ──────────────────────────────────   ────────────────   ──────────────────────────   │
+│   Qwen Cleanroom (Self: V_qwen)        60 / 60 (100.0%)   PASS (Coincident Blind Spot) │
+│   DeepSeek Cleanroom (V_deepseek)      47 / 48 ( 97.9%)   FAIL (Off-by-One Retry Bug)  │
+│   Gemini 3.8 Flash (V_gemini_flash)    32 / 36 ( 88.9%)   FAIL (3 Defects Exposed)     │
+│   Gemini 4 Argon (V_gemini_argon)      19 / 20 ( 95.0%)   FAIL (Dynamic Retry Bug)     │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+This empirical result established the core motivation for Pretense:
+1. The exact mechanical and semantic nature of the three undetected defects.
+2. Why Cleanroom's single-model double-blind isolation failed to prevent or detect them.
+3. Why 95% line and 90% branch coverage failed to flag the omissions.
+4. The theoretical implications for AI software engineering and the architectural necessity of state-machine transition fuzzing and heterogeneous multi-model ensembles.
+
+---
+
+### Anatomy of the Three Undetected Defects
+
+#### Defect 1: Off-by-One Retry Accounting on Action Recovery (`DAGRunner.run`)
+
+##### The Formal Contract (`low/dag_engine_lite.pyi` & `low/dag_engine_lite_impl.pyi`)
+```python
+@data_type
+@dataclass(frozen=True)
+class NodeResult(Generic[T]):
+    """Outcome record of a node execution.
+    Args:
+        ...
+        retries_attempted: Number of retries executed before final state.
+    """
+    node_id: str
+    state: NodeState
+    value: Optional[T] = None
+    error: Optional[Exception] = None
+    duration_seconds: float = 0.0
+    retries_attempted: int = 0
+```
+- **Contract Invariant**: An execution consists of 1 initial invocation (`attempt 0`) plus up to $N$ retry invocations (`attempt 1 .. N`). If an action fails once and succeeds on the second try, exactly **1 retry** was executed (`retries_attempted == 1`). If it fails twice and succeeds on the third try, exactly **2 retries** were executed (`retries_attempted == 2`).
+
+##### Qwen's Implementation Flaw (`P_qwen: lib_1.py:927`)
+```python
+retries_attempted = 0
+caught_exc: Optional[Exception] = None
+action_value: Any = None
+for attempt in range(1 + max_retries):
+    try:
+        action_value = definition.action()
+        node_succeeded = True
+        break
+    except Exception as exc:
+        caught_exc = exc
+        if attempt > 0:
+            retries_attempted += 1
+```
+- **The Defect**: Notice that Qwen placed `if attempt > 0: retries_attempted += 1` inside the `except` block.
+  - If `attempt 0` fails: `attempt > 0` is `False`, so `retries_attempted` remains `0`.
+  - If `attempt 1` executes and **succeeds**: the loop executes `action_value = definition.action(); node_succeeded = True; break`. It **never reaches the `except` block**!
+  - `retries_attempted` remains `0`, even though 1 retry was executed!
+  - If `attempt 1` fails and `attempt 2` succeeds: `retries_attempted` is incremented once during attempt 1, but attempt 2 succeeds and breaks before `except`, leaving `retries_attempted == 1` instead of `2`.
+- **The Only Case It Works**: When **all retries fail and the action is exhausted**. If `max_retries = 2`, and all 3 attempts fail, attempts 1 and 2 hit `except`, leaving `retries_attempted == 2`.
+
+##### Why Qwen's Self-Test ($V_{\text{qwen}}$) Missed It
+Qwen's Certifier ($W_{\text{test}}$) authored exactly one test for retries:
+```python
+def test_run_retries_on_failure(self) -> None:
+    ...
+    def eventually_fails():
+        call_count["count"] += 1
+        raise RuntimeError("still failing")
+    dag.add_node("a", action=eventually_fails, retries=2)
+    report = runner.run()
+    self.assertEqual(call_count["count"], 3)
+    self.assertEqual(report.results["a"].state, dag_engine_lite.NodeState.FAILED)
+    self.assertEqual(report.results["a"].retries_attempted, 2)
+```
+Qwen's test author tested **only the total exhaustion failure mode**. Because all 3 attempts failed, Qwen's buggy implementation coincidentally emitted `retries_attempted = 2`, matching the test assertion perfectly.
+
+##### How Foreign Tests Caught It
+DeepSeek-V3 authored:
+```python
+def test_run_retries_failed_action_until_success(self) -> None:
+    # Fails twice, succeeds on attempt index 2 (retry 2)
+    ...
+    self.assertEqual(result.retries_attempted, 2)
+# FAILED: AssertionError: 1 != 2
+```
+Gemini 3.8 Flash authored:
+```python
+def test_run_node_retries_and_recovers(self) -> None:
+    # Fails once, succeeds on retry 1
+    ...
+    self.assertEqual(result.retries_attempted, 1)
+# FAILED: AssertionError: 0 != 1
+```
+
+---
+
+#### Defect 2: Node Re-Registration Stale Edge Accumulation (`DAG.add_node`)
+
+##### The Formal Contract (`low/dag_engine_lite.pyi`)
+```python
+def add_node(
+    self,
+    node_id: str,
+    action: Callable[[], Any],
+    dependencies: Optional[Collection[str]] = None,
+    priority: int = 0,
+    retries: int = 0,
+) -> None:
+    """Adds a task node to the graph.
+    ...
+    POSTCONDITIONS:
+    - If a node with the same identifier exists, MUST replace the node definition and dependencies.
+    """
+```
+
+##### Qwen's Implementation Flaw (`P_qwen: lib_1.py:598`)
+```python
+def add_node(self, node_id: str, action: Callable[[], Any], dependencies=None, priority=0, retries=0) -> None:
+    deps = frozenset(dependencies) if dependencies else frozenset()
+    definition = dag_engine_lite.NodeDefinition(node_id, action, deps, priority, retries)
+    self._nodes[node_id] = definition
+    if node_id not in self._upstream:
+        self._upstream[node_id] = set()
+    if node_id not in self._downstream:
+        self._downstream[node_id] = set()
+    for dep in deps:
+        self.add_edge(dep, node_id)
+```
+- **The Defect**: `add_node` overwrites `self._nodes[node_id]`, but **fails to remove existing dependency edges** from `self._upstream[node_id]` or `self._downstream[old_dep]`.
+- If node `target` was initially registered with `dependencies=["dep1"]`, and then re-registered with `dependencies=["dep2"]`, `add_edge("dep2", "target")` adds the new edge, but the incoming edge from `dep1` remains in `self._upstream["target"]`!
+- Calling `dag.get_dependencies("target")` returns `{"dep1", "dep2"}` instead of `{"dep2"}`.
+
+##### Why Qwen's Self-Test Missed It
+Qwen's Certifier authored 4 unit tests for `add_node`:
+1. `test_add_node_registers_definition`
+2. `test_add_node_with_dependencies`
+3. `test_add_node_priority_stored`
+4. `test_add_node_retries_stored`
+
+Every single test initialized an empty DAG, added a node once, and verified properties on the fresh node. The Certifier never authored a scenario exercising the re-registration postcondition.
+
+##### How Foreign Tests Caught It
+Gemini 3.8 Flash authored:
+```python
+def test_re_register_node_replaces_definition_and_dependencies(self) -> None:
+    dag.add_node("target", action=lambda: 1, dependencies=["dep1"])
+    dag.add_node("target", action=lambda: 2, dependencies=["dep2"])
+    self.assertEqual(dag.get_dependencies("target"), {"dep2"})
+# FAILED: AssertionError: Items in the first set but not the second: 'dep1'
+```
+
+---
+
+#### Defect 3: Cross-Component State Desynchronization on Node Removal (`WaveScheduler`)
+
+##### The Formal Contract (`low/dag_engine_lite_impl.pyi`)
+```python
+@singleton_type("system")
+class WaveScheduler(dag_engine_lite.WaveScheduler):
+    """Concrete realization of sequential wave scheduler.
+    GROUNDING:
+    - Resolves the active DAG service via get_singleton(dag_engine_lite.DAG).
+    - Maintains scheduling state across _dag and _states dictionary mapping node identifiers to dag_engine_lite.NodeState.
+    - Synchronizes dynamic node state by discovering registered nodes from _dag.all_nodes(), initializing root nodes to dag_engine_lite.NodeState.READY and non-root nodes to dag_engine_lite.NodeState.PENDING.
+    """
+```
+
+##### Qwen's Implementation Flaw (`P_qwen: lib_1.py:773`)
+```python
+def _sync_states(self) -> None:
+    all_nodes = self._dag.all_nodes()
+    for node_id in all_nodes:
+        if node_id not in self._states:
+            deps = self._dag.get_dependencies(node_id)
+            if not deps:
+                self._states[node_id] = dag_engine_lite.NodeState.READY
+            else:
+                self._states[node_id] = dag_engine_lite.NodeState.PENDING
+```
+- **The Defect**: `_sync_states` is unidirectional additive. It scans `self._dag.all_nodes()` and adds new nodes to `self._states`.
+- If a caller calls `dag.remove_node("removable")`, the node is removed from the DAG. When `scheduler.get_all_states()` is invoked, `_sync_states()` runs, but does **not purge** keys from `self._states` that are no longer in `self._dag.all_nodes()`.
+- The removed node remains indefinitely in the scheduler's state dictionary as a zombie node.
+
+##### Why Qwen's Self-Test Missed It
+Qwen tested `dag.remove_node()` extensively in `TestDAGOperations` on the `DAG` class in isolation. It tested `WaveScheduler` in `TestWaveSchedulerOperations` on static graphs that were never mutated during the scheduler's lifecycle. It never authored an integration test combining dynamic graph removal with wave scheduler state queries.
+
+##### How Foreign Tests Caught It
+Gemini 3.8 Flash authored:
+```python
+def test_remove_node_synchronizes_scheduler_state(self) -> None:
+    dag.add_node("keeper", action=lambda: 1)
+    dag.add_node("removable", action=lambda: 2)
+    scheduler.next_wave()
+    dag.remove_node("removable")
+    self.assertNotIn("removable", scheduler.get_all_states())
+# FAILED: AssertionError: 'removable' unexpectedly found in {'keeper': <NodeState.READY>, 'removable': <NodeState.READY>}
+```
+
+---
+
+### Theoretical Analysis: Why Single-Model Cleanroom Missed These Defects
+
+The discovery that a single-model Cleanroom run greenlit three genuine defects provides profound insight into the mechanics of LLM-based software verification.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│               INFORMATION CONFINEMENT vs. COGNITIVE MODEL CONFINEMENT                  │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│   TRADITIONAL SINGLE AGENT (I > 0)          CLEANROOM SINGLE-MODEL (I = 0, θ_1 = θ_2)  │
+│   ┌──────────────────────────────────┐      ┌─────────────────┐      ┌───────────────┐ │
+│   │           Joint Context          │      │ Synthesizer     │      │ Certifier     │ │
+│   │                                  │      │ Model Weights θ │      │ Model Weights │ │
+│   │   [Code] ◄──────► [Tests]        │      │ (W_lib Sandbox) │      │ (W_test)      │ │
+│   │     ▲                │           │      └────────┬────────┘      └───────┬───────┘ │
+│   │     └────────────────┘           │               │ Physical Barrier      │         │
+│   │       Tautological Loop          │               │   (I = 0)             │         │
+│   └──────────────────────────────────┘               ▼                       ▼         │
+│     * Cheating & assertion mutation                  [ P_code ]             [ V_test ] │
+│     * Shared working memory                          Both share the same Prior Bias:   │
+│                                                      P(interpretation | spec text)     │
+│                                                      ==> Coincident Blind Spots!       │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### A. The Limits of Physical Isolation ($\mathcal{I} = 0$) Under Identical Weights ($\theta_{\text{synth}} = \theta_{\text{cert}}$)
+
+Cleanroom's double-blind isolation enforces an information-theoretic barrier:
+$$\mathcal{I}(W_{\text{test}}; W_{\text{lib}}) = 0$$
+The Certifier cannot read the Synthesizer's code, cannot inspect its variable names, and cannot modify assertions to match the Synthesizer's runtime behavior. This completely eliminates **intentional cheating** and **tautological self-affirmation**.
+
+However, if both $W_{\text{lib}}$ and $W_{\text{test}}$ are driven by the same frozen model weights ($\theta$), they sample from identical probability distributions over semantic interpretations:
+$$P(M \mid S, \theta)$$
+where $S$ is the specification and $M$ is the mental model of system behaviors.
+
+When an interface contract is slightly nuanced or multi-faceted:
+1. **The Synthesizer** samples an implementation that addresses the most salient, canonical interpretation of the contract (the "happy path" or the most obvious failure mode, such as retry exhaustion).
+2. **The Certifier**, prompted with the same specification text and governed by the same statistical priors, samples test cases for *that exact same salient interpretation*.
+3. Because both agents share the same cognitive blind spot, neither agent conceives of the complementary edge case (e.g., action recovery on attempt 1, re-registration replacing edges, or post-init dynamic node removal).
+4. The Certifier writes tests that certify the Synthesizer's incomplete implementation with 100% mathematical pass rates.
+
+This creates a **Coincident Error**:
+$$P\left(V_\theta(P_\theta) = \mathbf{PASS} \;\middle|\; V_{\text{oracle}}(P_\theta) = \mathbf{FAIL}\right) > 0$$
+
+#### B. The Structural Coverage Illusion: Statement & Branch Reachability $\ne$ Permutation Coverage
+
+Cleanroom recorded 95.0% statement coverage and 90.0% branch coverage on Qwen's library. This discrepancy exposes the fundamental flaw of relying exclusively on AST-based structural code coverage:
+
+1. **The Branch Coverage Trap on Defect 1**:
+   ```python
+   except Exception as exc:
+       caught_exc = exc
+       if attempt > 0:           # <--- Line covered? YES. Branch covered? YES!
+           retries_attempted += 1 # <--- Line covered? YES!
+   ```
+   When Qwen's test suite executed `test_run_retries_on_failure` (exhausting all 3 attempts):
+   - On attempt 0: `attempt > 0` was `False` (false branch evaluated).
+   - On attempt 1: `attempt > 0` was `True` (true branch evaluated, line executed).
+   - On attempt 2: `attempt > 0` was `True` (true branch evaluated, line executed).
+   **Coverage output**: Line 935 was executed 2 times. Both the `True` and `False` branches of `if attempt > 0` were fully covered. Statement coverage: 100%. Branch coverage: 100%. Yet the logic was completely broken for any action that recovered on attempt 1!
+
+2. **The State-Space Permutation Blind Spot on Defect 2 and 3**:
+   - `DAG.add_node` had 100% statement coverage because nodes were added in every test.
+   - `WaveScheduler._sync_states` had 100% statement coverage because waves were scheduled in every test.
+   - Structural coverage only records that code was executed; it does not measure whether the state-space transition graph $(\mathcal{S} \times \mathcal{A} \to \mathcal{S}')$ was explored across multi-action sequences (e.g. `add(A)` $\to$ `add(A, new_deps)` or `init_scheduler()` $\to$ `remove(B)` $\to$ `sync()`).
+
+#### C. The Upstream Scenario Derivation Bottleneck
+
+In `benchmarks/parts/dag_engine_lite/scenarios/dag_engine_lite.md`, the concrete scenarios written for the task included 7 distinct journeys. However, none walked an action that failed once and recovered on retry, none walked re-registering an existing node to modify dependencies, and none walked dynamic node removal after scheduler initialization. Because the scenario canvas contained these omissions, the formal contracts in `low/*.pyi` remained purely declarative docstrings without concrete operational walkthroughs.
+
+---
+
+### Why Foreign Models Did Not Share the Blind Spots
+
+When independent models authored test suites from the identical `low/*.pyi` specification, their differing training distributions, inductive biases, and reasoning heuristics generated radically different adversarial tests:
+
+| Model | Underlying Inductive Bias | Edge Case Prioritized in Test Suite |
+| :--- | :--- | :--- |
+| **DeepSeek-V3 / Flash** | Execution-trace simulation & loop invariants | *Retry Recovery Invariant*: Specifically created an action closure that tracks invocation count and raises an error on attempts 0 and 1, succeeding on attempt 2, then asserted `retries_attempted == 2`. |
+| **Gemini 3.8 Flash** | Idempotency & dynamic reconfiguration | *Graph Mutation Invariants*: Tested that re-adding a node replaces prior dependencies, and that removing a node cleans up incident edges and scheduler state. |
+| **Gemini 4 Argon** | Architectural contract robustness | *Failure Policy & Lifecycle Invariants*: Asserted rigorous scheduler-to-runner state consistency under mixed failure policies. |
+
+Because their cognitive priors were uncorrelated with Qwen's cognitive priors:
+$$\mathcal{I}(\text{Prior}_{\text{gemini}}; \text{Prior}_{\text{qwen}}) \approx 0$$
+The cross-model differential pass rate plummeted, unmasking defects that homogeneous self-testing could never detect.
+
+---
+
+### Architectural Remedies: The Necessity of Pretense
+
+This empirical finding demonstrates that **physical isolation alone is insufficient if agents share identical cognitive biases**. Pretense permanently closes this vulnerability through:
+1. **Hypothesis State Machines**: Transition-space fuzzing replaces example-based static sequences with thousands of randomized action permutations ($S \times A \to S'$).
+2. **Minimal Shrinking Traces**: Falsifications shrink to minimal 2-step counterexamples for instant blame attribution.
+3. **Automatic Fake Synthesis**: Decouples inter-component dependencies so tests cannot mask partner desynchronizations.
+4. **Pretense as an Equalizer**: Bridges the gap between single-model baselines and multi-agent Cleanroom pipelines.
+
+---
+
+## 3. Theoretical Architecture: Why Hypothesis State Machines?
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -66,7 +413,7 @@ Smaller models (e.g. Qwen 35B) fail when asked to *imagine* obscure edge cases f
 
 ---
 
-## 3. Cleanroom Pipeline Integration: Author & Auditor Roles
+## 4. Cleanroom Pipeline Integration: Author & Auditor Roles
 
 ### A. New Author Role: `property_test`
 Cleanroom introduces an independent author role: **`property_test`**.
@@ -120,7 +467,7 @@ The `qa` auditor automatically captures this shrunk trace and feeds it directly 
 
 ---
 
-## 4. State Machines as Dual-Role Assets: Fakes and Test Drivers
+## 5. State Machines as Dual-Role Assets: Fakes and Test Drivers
 
 In software testing, maintaining separate test harnesses, mock frameworks, and fake implementations leads to substantial code duplication and a well-known vulnerability: **Mock Drift** (where the fake behaves differently from the real implementation because the fake itself is unverified).
 
@@ -208,9 +555,63 @@ A fundamental insight of this dual architecture is that the **calling direction 
 
 ---
 
-### B. Interface Segregation vs. Implementation Semantic Binding
+### B. Interface Segregation, Semantic Binding & Importing vs. Implementing
 
-In modular software design, interfaces are segregated to decouple client components. Rather than conflating contracts into vague "static vs. dynamic dataflow" categories, Pretense formalizes the interplay between **Interface Segregation** and **Implementation Semantic Binding**:
+In modular software design, interfaces are segregated to decouple client components. Pretense formalizes two fundamentally different relationships between state machines: **Implementing** vs. **Importing**.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│               IMPLEMENTING vs. IMPORTING STATE MACHINES IN PREFENSE                    │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│   1. IMPLEMENTING A STATE MACHINE (Realization / Subtyping / Semantic Binding):        │
+│   • Relationship: Subclassing / Conformance (A_impl IS-A A_spec)                       │
+│   • Example: DagEngineLiteImplStateMachine(DagEngineLiteStateMachine)                  │
+│   • Purpose: Inherits interface transitions, replaces ungrounded/seeded behaviors with │
+│     concrete domain logic, and verifies the real implementation against the contract.  │
+│                                                                                        │
+│   ──────────────────────────────────────────────────────────────────────────────────   │
+│                                                                                        │
+│   2. IMPORTING A STATE MACHINE (Composition / Collaborator Fakes / Seeding):           │
+│   • Relationship: Object composition (A_sm HAS-A B_sm)                                 │
+│   • Example: DagEngineLiteStateMachine imports StorageStateMachine                     │
+│   • Purpose: B_sm compiles fake adapters (fake_storage = b_sm.as_fake(Storage))        │
+│     injected into the SUT under test. Seeding B_sm is modeled as TRANSITIONS on A_sm!  │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 1. Implementing Another State Machine (Realization / Semantic Binding)
+An implementation state machine **implements** an interface state machine through class inheritance:
+`class ComponentImplStateMachine(ComponentStateMachine): ...`
+
+* **Conforms to Interface**: Inherits the public interface transitions declared on the interface state machine.
+* **Semantic Binding**: Ties segregated interface contracts together. If `ToolManagerImpl` implements both `ToolInstaller` and `ToolExecutor`, its implementation state machine subclasses both interface machines:
+  $$\text{Executor State} = f(\text{Installer State})$$
+  It verifies that a tool installed via `install_tool` is dynamically executable via `execute_tool`, replacing static test seeds with real operational consistency.
+* **Intra-Component Verification**: Verifies all concrete intra-component objects (`_impl.py`) in lockstep within an active lifecycle scope.
+
+#### 2. Importing State Machines (Collaborators, Injected Fakes & Seeding Transitions)
+When a component under test depends on external collaborator components (e.g. `Scheduler` depends on `DagStorage`), its state machine **imports** the collaborator's interface state machine:
+`self.storage_sm = StorageStateMachine()`
+
+* **Drives Injected Fakes**: The imported state machine provides the fake singletons injected into the SUT:
+  `fake_storage = self.storage_sm.as_fake(DagStorage)`
+* **Seeding Fakes as First-Class Transitions**: Perturbing, configuring, or injecting faults into the collaborator fake (e.g. `storage_sm.seed_storage_error(...)`) **must be modeled as transitions on the host state machine**:
+  ```python
+  @transition
+  def seed_external_storage_error(
+      self,
+      ctx: TransitionContext[None, [str, str], None],
+  ) -> None:
+      ctx.arguments(generate=lambda: ("node_x", "Disk Full"))
+      ctx.consequent(lambda res, node_id, err: (
+          self.storage_sm.seed_node_error(node_id, error=err)
+      ))
+  ```
+* **Why Seeding Must Be a Transition**: In Hypothesis stateful property fuzzing, transitions are the operations selected during random walks. If collaborator seeding were only static pre-test setup, Hypothesis could only fuzz static happy-path configurations. By making seeding a transition, **Hypothesis interleaves collaborator faults with SUT operations** (e.g. `schedule_node` $\to$ `seed_storage_error` $\to$ `retry_node` $\to$ `seed_storage_recovery`), verifying resilience and recovery dynamics automatically.
+
+---
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -370,31 +771,57 @@ Pretense strictly delineates three distinct surfaces on an interface state machi
      - **Queries** are the observations checked by `@invariant`s.
      - **Seeding Methods** are the chaos and configuration hooks that perturb the environment.
 
-#### 4. Collaborator State Machine Embedding in Implementation State Machines
-When an implementation under test depends on external collaborator components, its Implementation State Machine embeds the collaborator's Interface State Machine directly:
+#### 4. Collaborator State Machine Importing & Seeding Transitions
+When an implementation under test depends on external collaborator components, its State Machine imports the collaborator's Interface State Machine directly:
 
 ```python
-# Instantiate the Implementation State Machine:
-foo_sm = FooImplStateMachineProto.make_state_machine()
+class FooStateMachine(StateMachine[FooState]):
+    def __init__(self, state: FooState | None = None, singletons: dict[type, Any] | None = None) -> None:
+        super().__init__(state=state or FooState(), singletons=singletons)
+        # Import collaborator interface state machine:
+        self.bar_sm = BarStateMachine()
 
-# 1. Wire real SUT singletons into the state machine:
-foo_sm.set_foo(scope.get_singleton(Foo))
+    # Seeding the imported collaborator fake is modeled as a first-class transition!
+    @transition
+    def seed_bar_outcome(
+        self,
+        ctx: TransitionContext[None, [str, BarResult], None],
+    ) -> None:
+        ctx.arguments(generate=lambda: ("action_x", BarResult(success=True)))
+        ctx.consequent(lambda res, action, outcome: (
+            self.bar_sm.seed_bar_outcome(action, outcome)
+        ))
 
-# 2. Extract collaborator fake from the embedded collaborator state machine:
+    @transition(Foo.do_foo)
+    def do_foo_transition(
+        self,
+        ctx: TransitionContext[Foo, [str], None],
+    ) -> None:
+        ctx.arguments(generate=lambda: ("param_1",))
+        ctx.returns(lambda param: None)
+        ctx.consequent(lambda res, param: (
+            self.state.executed_foos.append(param)
+        ))
+```
+
+Under test:
+```python
+# 1. Instantiate state machine with real SUT singletons:
+foo_sm = FooStateMachine(singletons={Foo: scope.get_singleton(Foo)})
+
+# 2. Extract collaborator fake from the imported collaborator state machine:
 bar_fake = foo_sm.bar_sm.as_fake(Bar)
 registry.register_instance(bar_fake, keys=[Bar])
 
-# 3. Seed collaborator behavior via the embedded state machine:
-foo_sm.bar_sm.seed_bar_outcome("action_x", BarResult(success=True))
+# 3. Hypothesis fuzzes both do_foo_transition and seed_bar_outcome!
+# Interleaving seeding transitions with SUT actions exercises error handling dynamically.
 
-# 4. Drive transitions on the implementation state machine:
-foo_sm.do_foo("param_1")
-
-# 5. Verify collaborator side-effects directly via embedded state machine queries:
+# 4. Verify collaborator side-effects directly via imported state machine queries:
 assert "action_x" in foo_sm.bar_sm.invoked_actions
 ```
 - The production code only ever sees `bar_fake` conforming to `Bar` (`low/bar.pyi`).
 - The test harness configures and observes collaborator state entirely through `foo_sm.bar_sm` without brittle mock introspection or call-recording wrappers.
+- Seeding transitions ensure environmental chaos and failure recoveries are actively explored during stateful fuzz walks.
 
 ---
 
@@ -1132,179 +1559,139 @@ _CURRENT_DRAW: ContextVar[Callable[..., Any] | None] = ContextVar(
 
 ---
 
-### M. The Pretense State-Machine DSL (Triple-Target Compilation)
+### M. The Pretense State-Machine DSL (Single-Method `TransitionContext` Architecture)
 
-Pretense formalizes a prototype-based state machine architecture (`StateMachineProto[StateT]`):
-1. **Prototype Registration**: Transitions are declared against interface Protocol methods (`DAG.add_node`).
-2. **Header Marker `def`**: A dummy marker `def transition_name(): pass` declares the transition, capturing its identifier name and establishing clean chronological order.
-3. **The Four-Lambda Transition Architecture**:
-   - `@transition.require(state, self) -> bool`: Declarative precondition evaluated before selection/dispatch.
-   - `@transition.arguments(state, self, *args) -> tuple | None`: Bidirectional input recognizer / generator (`NotBound`).
-   - `@transition.returns(state, self, *args, return_val | NotBound) -> R | None`: Bidirectional output recognizer / generator (`NotBound`). Synthesizes valid return value when `return_val is NotBound` (Fake mode); validates/recognizes SUT return value when concrete (Driver mode).
-   - `@transition.provide(state, self, *args, result: R) -> None`: State mutator and postcondition verifier (crashes on failure).
-   - `@proto.invariant`: Cross-cutting invariants checked after transitions.
+Pretense formalizes a class-based state machine architecture (`StateMachine[StateT]`):
+1. **Single Decorated Method per Transition**: Each transition is declared as a single method inside the state machine class decorated with `@transition(TargetClass.method)`.
+2. **Type-Parameterized Context (`ctx: TransitionContext[Target, P, R]`)**:
+   - `Target`: The target singleton type (e.g. `DAG`, `WaveScheduler`). Enforces static type alignment with `Target.method` via Pyright.
+   - `P`: Parameter specification (`ParamSpec`) matching the method's domain parameters.
+   - `R`: Return type (`TypeVar`).
+3. **Five Decoupled Lifecycle Blocks**:
+   - `ctx.requires(lambda check: check(cond, "reason"))` (formerly `antecedent`): Evaluates reference model state (`self.state`) before arguments are drawn. Precondition governing legal transition firing. If `check` fails, the transition is **not ready to fire**.
+   - `ctx.arguments(generate=lambda: tuple, recognize=lambda *args: bool | None)`: Bidirectional input binding. The `recognize` lambda receives domain arguments `*args: P`, keeping the reference model pure.
+   - `ctx.returns(lambda *args: R | Outcome[R])`: Computes simulated return value or validates return outcome matching `R`.
+   - `ctx.ensures(lambda res, target, check, *args: ...)`: **First-class postcondition verification (Mode B `check` pattern exclusively)**. Evaluated strictly during test execution against the real SUT (never during fake simulation). Receives the return value, the immediate singleton under test (`target`), and an assertion helper `check` (which also provides access to collaborating singletons via `check.get(OtherSingleton)`). If `check` fails, raises `AssertionError` (contract violation).
+   - `ctx.update(lambda res, *args: None)` (formerly `consequent`): Applies reference model state mutations and bookkeeping to `self.state`.
+   - `ctx.raises(exc_type, match=...)`: Shorthand for contracted error paths.
+4. **Dual-Role Execution**:
+   - **Under Test**: Initialized with real target objects (`objects={DAG: real_dag}`, `sut=instance`, or direct instance references). Underneath, the runner calls `real_dag.add_node(*args)` automatically, verifies `returns`, evaluates `ensures` against the concrete SUT, and updates `self.state`.
+   - **As a Fake**: Synthesizes in-memory fakes (`fake_dag = sm.as_fake(DAG)`). Dispatched calls update `self.state` with zero mock drift across collaborating singletons. **`ensures` is omitted during fake execution.**
+5. **Poly Types**: Polymorphic types without singletons are deferred to a subsequent design phase.
 
 ```
-                              ┌──────────────────────────────────┐
-                              │      Pretense Prototype DSL      │
-                              │  (StateMachineProto, Transition) │
-                              └─────────────────┬────────────────┘
-                                                │
-                 ┌──────────────────────────────┼──────────────────────────────┐
-                 ▼                              ▼                              ▼
-     ┌───────────────────────┐      ┌───────────────────────┐      ┌───────────────────────┐
-     │       TARGET 1        │      │       TARGET 2        │      │       TARGET 3        │
-     │  Unit Test Replay     │      │  In-Memory Fake       │      │  Hypothesis Machine   │
-     │                       │      │                       │      │                       │
-     │ * Static scenario     │      │ * Inward calling      │      │ * Outward calling     │
-     │   replay (<0.1ms)     │      │ * Implements .pyi     │      │ * Adversarial fuzzing │
-     │ * 100% deterministic  │      │   Protocol for parts  │      │ * Byte-stream shrink  │
-     │ * Direct scenario     │      │ * Disambiguates by    │      │ * Parity verification │
-     │   traceability        │      │   arguments/require   │      │   against SUT         │
-     └───────────────────────┘      └───────────────────────┘      └───────────────────────┘
+                              ┌────────────────────────────────────────┐
+                              │       Pretense State Machine DSL       │
+                              │    (class MySM(StateMachine[State]))   │
+                              └───────────────────┬────────────────────┘
+                                                  │
+                  ┌───────────────────────────────┼───────────────────────────────┐
+                  ▼                               ▼                               ▼
+      ┌────────────────────────┐      ┌────────────────────────┐      ┌────────────────────────┐
+      │        TARGET 1        │      │        TARGET 2        │      │        TARGET 3        │
+      │   Unit Test Replay     │      │   In-Memory Fake       │      │   Hypothesis Fuzzer    │
+      │                        │      │                        │      │                        │
+      │ • Static scenario      │      │ • Inward calling       │      │ • Outward calling      │
+      │   replay (<0.1ms)      │      │ • sm.as_fake(Protocol) │      │ • Adversarial fuzzing  │
+      │ • 100% deterministic   │      │ • Disambiguates by     │      │ • Calls real singleton │
+      │ • Direct scenario      │      │   recognize/antecedent │      │   underneath           │
+      │   traceability         │      │ • Shared self.state    │      │ • Parity against spec  │
+      └────────────────────────┘      └────────────────────────┘      └────────────────────────┘
 ```
 
 #### DSL Syntax Example: Cleanroom DAG State Machine
 
 ```python
-from pretense import StateMachineProto, NotBound, NotBoundType, make_tup
+from pretense import StateMachine, TransitionContext, transition
+from update_with_ai.parts.dag_engine_lite.low.dag_engine_lite import DAG, WaveScheduler
 
 class DAGState:
     def __init__(self) -> None:
         self.nodes: set[str] = set()
         self.edges: dict[str, set[str]] = {}
+        self.pending_nodes: set[str] = set()
+        self.active_waves: list[list[str]] = []
 
-proto = StateMachineProto[DAGState]()
+class DAGStateMachine(StateMachine[DAGState]):
+    state: DAGState
 
-# =========================================================================
-# Transition 1: Add Fresh Node (Success Mutation Path)
-# =========================================================================
-@proto.transition(DAG.add_node)
-def add_fresh_node(): pass
+    def __init__(self, state: DAGState | None = None, singletons: dict[type, Any] | None = None) -> None:
+        super().__init__(state=state or DAGState(), singletons=singletons)
 
-@add_fresh_node.require
-def _(state: DAGState, self: Any) -> bool:
-    return len(state.nodes) < 1000
+    # =========================================================================
+    # Transition 1: Add Fresh Node (Success Path on DAG singleton)
+    # =========================================================================
+    @transition(DAG.add_node)
+    def add_fresh_node(self, ctx: TransitionContext[DAG, [str, set[str]], None]) -> None:
+        # 1. Requires: pure state precondition using check (failing check = not ready to fire)
+        ctx.requires(lambda check: check(len(self.state.nodes) < 1000, "DAG at capacity"))
 
-@add_fresh_node.arguments
-def _(
-    state: DAGState,
-    self: Any,
-    node_id: str | NotBoundType = NotBound,
-    deps: set[str] | NotBoundType = NotBound,
-) -> tuple[str, set[str]] | None:
-    # Synthesize if NotBound; reject if violates fresh node contract
-    if node_id is NotBound:
-        node_id = f"task_{len(state.nodes)}"
-    elif node_id in state.nodes:
-        return None # Rejection: node already exists
+        # 2. Arguments: lambdas receive domain arguments (node_id: str, deps: set[str])
+        ctx.arguments(
+            generate=lambda: (f"task_{len(self.state.nodes)}", set()),
+            recognize=lambda node_id, deps: (
+                node_id not in self.state.nodes and deps.issubset(self.state.nodes)
+            ),
+        )
 
-    if deps is NotBound:
-        deps = set()
-    elif not deps.issubset(state.nodes):
-        return None # Rejection: dangling dependencies
+        # 3. Returns: computes expected outcome R (None)
+        ctx.returns(lambda node_id, deps: None)
 
-    return node_id, deps
+        # 4. Ensures: verifies real SUT postconditions (omitted during fakes)
+        # Receives (res, dag, check, node_id, deps); failing check = AssertionError
+        ctx.ensures(lambda res, dag, check, node_id, deps: (
+            check(dag.has_node(node_id), "Fresh node must be present in DAG"),
+            check.equal(dag.get_dependencies(node_id), deps, "Dependencies must match"),
+        ))
 
-@add_fresh_node.provide
-def _(state: DAGState, self: Any, node_id: str, deps: set[str], result: None) -> None:
-    assert result is None, f"Expected add_node to return None, got {result!r}"
-    state.nodes.add(node_id)
-    state.edges[node_id] = set(deps)
+        # 5. Update: applies reference model state mutations
+        ctx.update(lambda res, node_id, deps: (
+            self.state.nodes.add(node_id),
+            self.state.edges.setdefault(node_id, set()).update(deps),
+            self.state.pending_nodes.add(node_id),
+        ))
 
-# =========================================================================
-# Transition 2: Add Duplicate Node (Error Path -> Expect ValueError)
-# =========================================================================
-@proto.transition(DAG.add_node)
-def add_duplicate_node(): pass
+    # =========================================================================
+    # Transition 2: Add Duplicate Node (Error Path expecting ValueError)
+    # =========================================================================
+    @transition(DAG.add_node)
+    def add_duplicate_node(self, ctx: TransitionContext[DAG, [str, set[str]], None]) -> None:
+        ctx.requires(lambda check: check(len(self.state.nodes) > 0, "Must have existing nodes"))
 
-@add_duplicate_node.require
-def _(state: DAGState, self: Any) -> bool:
-    return len(state.nodes) > 0 # Can only collide if nodes exist
+        ctx.arguments(
+            generate=lambda: (next(iter(self.state.nodes)), set()),
+            recognize=lambda node_id, deps: node_id in self.state.nodes,
+        )
 
-@add_duplicate_node.arguments
-def _(
-    state: DAGState,
-    self: Any,
-    node_id: str | NotBoundType = NotBound,
-    deps: set[str] | NotBoundType = NotBound,
-) -> tuple[str, set[str]] | None:
-    if node_id is NotBound:
-        node_id = next(iter(state.nodes)) # Pick existing node to collide
-    elif node_id not in state.nodes:
-        return None # Only matches duplicate collisions
+        # Expected error outcome: raises ValueError in Fake mode, verifies in Driver mode
+        ctx.raises(ValueError, match="already exists")
 
-    if deps is NotBound:
-        deps = set()
+    # =========================================================================
+    # Transition 3: Schedule Wave (Collaborating WaveScheduler singleton)
+    # =========================================================================
+    @transition(WaveScheduler.schedule_next)
+    def schedule_wave(self, ctx: TransitionContext[WaveScheduler, [], list[str]]) -> None:
+        ctx.requires(lambda check: check(len(self.state.pending_nodes) > 0, "Must have pending nodes"))
+        ctx.arguments(generate=lambda: ())
+        ctx.returns(lambda: sorted(list(self.state.pending_nodes)))
+        ctx.ensures(lambda wave, scheduler, check: (
+            # scheduler is the immediate object under test;
+            # cross-object access to DAG is available via check.get(DAG):
+            check(len(wave) > 0, "Scheduled wave must not be empty"),
+            check(all(check.get(DAG).has_node(n) for n in wave), "All wave nodes must exist in DAG"),
+        ))
+        ctx.update(lambda wave: (
+            self.state.active_waves.append(wave),
+            self.state.pending_nodes.difference_update(wave),
+        ))
 
-    return node_id, deps
-
-@add_duplicate_node.returns
-def _(
-    state: DAGState,
-    self: Any,
-    node_id: str,
-    deps: set[str],
-    outcome: Any | NotBoundType = NotBound,
-) -> Any:
-    if outcome is NotBound:
-        # Fake mode: raises domain error directly! (provide() does NOT execute)
-        raise ValueError(f"Node '{node_id}' already exists in DAG")
-    # Driver mode: validates SUT raised the expected ValueError!
-    assert isinstance(outcome, Raised) and isinstance(outcome.exc, ValueError), (
-        f"Expected SUT to raise ValueError, but got {outcome!r}"
-    )
-    return outcome
-
-# Note: No @add_duplicate_node.provide block is needed!
-# When an operation aborts with a domain exception, state remains unmutated.
-
-# =========================================================================
-# Transition 3: Get Roots (State Projection / Query Method)
-# =========================================================================
-@proto.transition(DAG.get_roots)
-def get_roots(): pass
-
-@get_roots.require
-def _(state: DAGState, self: Any) -> bool:
-    return True
-
-@get_roots.arguments
-def _(state: DAGState, self: Any) -> tuple[()] | None:
-    return ()
-
-@get_roots.returns
-def _(
-    state: DAGState,
-    self: Any,
-    return_val: list[str] | NotBoundType = NotBound,
-) -> list[str] | None:
-    # Expected root set:
-    all_targets = {dep for deps in state.edges.values() for dep in deps}
-    expected_set = state.nodes - all_targets
-
-    # Generation mode (Fake): synthesize deterministic canonical order
-    if return_val is NotBound:
-        return sorted(list(expected_set))
-
-    # Recognition mode (SUT): accept any valid ordering of the root set!
-    return return_val if set(return_val) == expected_set else None
-
-@get_roots.provide
-def _(state: DAGState, self: Any, result: list[str]) -> None:
-    # Asserts postcondition: roots must have zero incoming edges!
-    for root in result:
-        assert root in state.nodes, f"Returned root {root} not in graph"
-    # Query does not mutate state
-
-# =========================================================================
-# Global Invariant: All Dependencies Must Exist in Graph
-# =========================================================================
-@proto.invariant
-def _(state: DAGState, self: Any) -> None:
-    for node, deps in state.edges.items():
-        for dep in deps:
-            assert dep in state.nodes, f"Missing dependency {dep} for node {node}"
+    # =========================================================================
+    # Global Invariant: Dependencies Must Exist
+    # =========================================================================
+    def invariant_dependencies_exist(self) -> None:
+        for node, deps in self.state.edges.items():
+            for dep in deps:
+                assert dep in self.state.nodes, f"Missing dependency {dep} for node {node}"
 ```
 
 #### How the Three Targets Execute:
@@ -1314,7 +1701,7 @@ def _(state: DAGState, self: Any) -> None:
    - The test author calls transitions sequentially:
      ```python
      def test_scenario_reregistration(self) -> None:
-         sm = proto.make_state_machine(DAGState())
+         sm = DAGStateMachine()
          sm.dispatch(DAG.add_node, "A", set())
          sm.dispatch(DAG.add_node, "B", {"A"})
          sm.check_invariants()
@@ -1322,58 +1709,40 @@ def _(state: DAGState, self: Any) -> None:
    - Execution is instant (<0.1ms), fully deterministic, and directly traceable to contract slugs.
 
 2. **Target 2: In-Memory Protocol Fake (for Downstream Consumer Parts)**
-   - Automatically generates a class implementing the interface Protocol:
+   - Synthesizes fake instances implementing interface Protocols:
      ```python
-     fake_dag = proto.make_fake(DAG, DAGState())
+     sm = DAGStateMachine()
+     fake_dag = sm.as_fake(DAG)
+     fake_scheduler = sm.as_fake(WaveScheduler)
+
      # Downstream component calls into fake_dag:
      scheduler = Scheduler(dag=fake_dag)
      scheduler.register_task("A", [])
      ```
-   - When consumer calls `fake.add_node(node_id, deps)`:
+   - When consumer calls `fake_dag.add_node(node_id, deps)`:
      - The Fake inspects candidate transitions (`add_fresh_node`, `add_duplicate_node`).
-     - It tests requirements (`require(state, self)`) and evaluates the `arguments` recognizer.
-     - If `node_id` is fresh, `add_fresh_node` recognizes it. The Fake calls `returns` (yielding `None`), calls `provide` to mutate state, and returns `None`.
-     - If `node_id` already exists, `add_fresh_node` rejects (`None`), `add_duplicate_node` recognizes it, calls `returns` which raises `ValueError`, propagating directly into the caller's handler.
-     - Zero hardcoded `if/else` multiplexers!
+     - It tests requirements (`ctx.requires()`) and evaluates `recognize(node_id, deps)`.
+     - If `node_id` is fresh, `add_fresh_node` recognizes it. The Fake executes `returns` (yielding `None`), calls `update` to mutate `self.state`, and returns `None`. Note: `ensures` is explicitly omitted during fake execution.
+     - If `node_id` already exists, `add_fresh_node` rejects, `add_duplicate_node` recognizes it, raises `ValueError`, propagating directly into the consumer's exception handler.
+     - **Shared State**: When `fake_scheduler.schedule_next()` is called, it reads the updated `self.state` directly. Zero mock drift between collaborating singletons!
 
-   - **Return Value Semantics for In-Memory Fakes**:
-     When consumer code invokes a method on the Fake, the Fake resolves the matching transition and executes `@transition.returns` followed by `@transition.provide`:
-     ```
-     ┌───────────────────────────────────────────────────────────────────────────────────┐
-     │                     FAKE RETURN VALUE TAXONOMY                                    │
-     ├──────────────────────────┬────────────────────────────────────────────────────────┤
-     │ Return Value Class       │ Fake Execution & Dispatch Mechanism                    │
-     ├──────────────────────────┼────────────────────────────────────────────────────────┤
-     │ 1. Void Mutations (None) │ provide() mutates internal reference state and returns │
-     │                          │ None (e.g. DAG.add_node).                              │
-     ├──────────────────────────┼────────────────────────────────────────────────────────┤
-     │ 2. State Projections     │ returns() computes and returns the query value         │
-     │    (Queries / Getters)   │ directly from state (e.g. DAG.get_roots() -> list).    │
-     │                          │ Defensive copying prevents caller corruption.          │
-     ├──────────────────────────┼────────────────────────────────────────────────────────┤
-     │ 3. Seeded Behavioral     │ For ungrounded collaborator calls (e.g. execute_tool), │
-     │    Envelopes             │ returns() pops from seeded queues configured in state  │
-     │                          │ (e.g. fake.seed_outcome("bash", ToolResult(...))).     │
-     ├──────────────────────────┼────────────────────────────────────────────────────────┤
-     │ 4. Child Fake Factories  │ For methods returning collaborator interfaces (e.g.    │
-     │                          │ commission() -> Workspace), returns() returns a child  │
-     │                          │ fake synthesized from another prototype.               │
-     ├──────────────────────────┼────────────────────────────────────────────────────────┤
-     │ 5. Contract Exceptions   │ If returns() or provide() raises an exception (e.g.    │
-     │                          │ ValueError or ToolNotFoundError), it propagates        │
-     │                          │ cleanly into the consumer's try/except block.          │
-     └──────────────────────────┴────────────────────────────────────────────────────────┘
-     ```
-
-3. **Target 3: Hypothesis `RuleBasedStateMachine` (Adversarial Fuzzing)**
-   - Automatically compiles the prototype into a standard Hypothesis `RuleBasedStateMachine`:
+3. **Target 3: Hypothesis `RuleBasedStateMachine` (Adversarial Parity & Postcondition Fuzzing)**
+   - Initialized with real SUT objects:
      ```python
-     TestDAGProperty = proto.to_hypothesis_test_case(
-         sut_factory=lambda: RealDAG(),
-         settings=hypothesis.settings(max_examples=100)
-     )
+     sm = DAGStateMachine(objects={
+         DAG: scope.get_singleton(DAG),
+         WaveScheduler: scope.get_singleton(WaveScheduler),
+     })
+     TestDAGProperty = sm.to_hypothesis_test_case(settings=hypothesis.settings(max_examples=100))
      ```
-   - Hypothesis drives thousands of interleaved transitions between `add_fresh_node` and `add_duplicate_node`, fuzzing for state inconsistencies and shrinking any discovered failure into a minimal trace.
+   - During each fuzz step:
+     - Hypothesis checks `requires()` and generates inputs via `generate()`.
+     - Pretense resolves the target object for the transition class (`DAG`) and calls `real_dag.add_node(*args)` underneath.
+     - Pretense verifies differential parity between real return value and `returns(*args)`.
+     - Pretense evaluates `ensures(res, target, check, *args)` against the real SUT, verifying behavioral postconditions across both immediate and collaborating objects on every random walk step!
+     - Pretense executes `update(res, *args)` on `sm.state`.
+     - State machine invariants are verified.
+   - Hypothesis drives thousands of interleaved transitions, actively verifying postconditions across complex operation permutations and shrinking any discovered failure into a minimal trace.
 
 ---
 
@@ -1517,9 +1886,271 @@ To validate this design against production Cleanroom components, we surveyed the
 From this survey, we formalize the Cleanroom Interface Design Rule:
 > **"An interface component MUST ground static dataflow completely (signatures, parameters, protocol sequences, error hierarchies) so that clients can be verified in isolation. It MUST leave dynamic dataflow ungrounded (leaving host bindings, concrete thresholds, and algorithmic derivations to `_impl`) so that interface fakes remain lightweight, seedable, and zero-dependency."**
 
+### Dynamic Input Generation: The "Strategies as Values" Architecture
+
+#### 1. The Core Defect: The "Single-Sample Trap" in State-Machine Fuzzing
+
+In state-machine-driven testing, API operations are defined as transitions consisting of five decoupled lifecycle blocks:
+1. `ctx.requires(...)`: Model state preconditions.
+2. `ctx.arguments(generate=..., recognize=...)`: Input generation and recognition.
+3. `ctx.returns(...)`: Expected outcome computation / validation.
+4. `ctx.ensures(...)`: Real SUT postcondition checks.
+5. `ctx.update(...)`: Reference model state mutation.
+
+Historically, the argument generation block was authored using zero-parameter lambdas returning a single, static sample tuple:
+```python
+ctx.arguments(
+    generate=lambda: (">=1.0.0",),
+    recognize=lambda req: isinstance(req, str),
+)
+```
+While Hypothesis state machines permuted the **temporal sequence** of transition invocations across random walks (e.g. `parse_range` $\to$ `solve` $\to$ `parse_range`), the input arguments supplied to each transition were **identical constant literals on every single iteration**.
+
+This created three severe systemic failure modes:
+1. **Zero Data-Domain Exploration**: Hypothesis never generated boundary inputs, empty strings, whitespace, wildcards (`*`, `x`), operator permutations (`~=`, `^`, `||`), negative integers, or structural variations. The test engine was blind to data-domain defects.
+2. **False Sense of Verification**: Test logs reported that hundreds of state-machine iterations passed with 0 failures, creating high confidence despite critical semantic holes.
+3. **The Coverage-Arbiter Anti-Pruning Cascade**: Because test runs only passed static happy-path literals, valid defensive branches in the library implementation (e.g., stripping trailing whitespace, handling empty clauses from `||`, parsing wildcard operators) recorded 0% statement coverage. Downstream `pretense_coverage` arbiters, under strict instruction to achieve 100% statement coverage, routinely violated the information embargo by reading private `lib/` implementation lines and blaming the implementer to delete or prune valid defensive code as "dead, unexecutable code". Once implementers pruned this code to satisfy coverage, the library failed soundness verification when evaluated against foreign test suites.
+
+#### 2. The Architectural Solution: "A Strategy Can Just Be a Value"
+
+Rather than introducing heavy meta-abstractions, complex wrapper classes, or separate generator hierarchies, Pretense treats Hypothesis `SearchStrategy` objects **directly as values** within generated argument collections.
+
+Anywhere an argument value is expected in `ctx.arguments(generate=...)`, the author can pass a concrete literal, a data structure, or a `SearchStrategy`:
+
+```python
+# 1. Direct standalone strategy for single-argument transitions:
+ctx.arguments(
+    generate=st.integers(min_value=0, max_value=100),
+    recognize=lambda count: isinstance(count, int) and 0 <= count <= 100,
+)
+
+# 2. Tuple mixing concrete values and dynamic strategies:
+ctx.arguments(
+    generate=(
+        st.text(min_size=1, max_size=50),
+        st.integers(min_value=-10, max_value=10),
+        "fixed_scope",
+    ),
+    recognize=lambda name, delta, scope: isinstance(name, str) and scope == "fixed_scope",
+)
+
+# 3. Callable factory returning a tuple of strategies:
+ctx.arguments(
+    generate=lambda: (
+        st.sampled_from([">=1.0.0", "^2.1.0", "~1.0", "*", ">=1.0.0, <2.0.0"]),
+        st.booleans(),
+    ),
+    recognize=lambda spec, prerelease: isinstance(spec, str) and isinstance(prerelease, bool),
+)
+
+# 4. Draw-aware callable for interdependent or complex multi-stage sampling:
+ctx.arguments(
+    generate=lambda draw: (
+        draw(st.integers(min_value=1, max_value=10)),
+        draw(st.text(alphabet="abcdef", min_size=1, max_size=10)),
+    ),
+    recognize=lambda count, tag: isinstance(count, int) and isinstance(tag, str),
+)
+```
+
+#### 3. Execution Dualism: Dynamic Draw vs. Deterministic Fallback
+
+Pretense transparently resolves argument strategies based on the active execution context:
+
+```
+                            ┌─────────────────────────────────────────┐
+                            │    ctx.arguments(generate=...)          │
+                            │  (strategies as values, sequences, fn)  │
+                            └────────────────────┬────────────────────┘
+                                                 │
+                                                 ▼
+                                     Is generation active?
+                                 (args_fn called without args)
+                                                 │
+                                ┌────────────────┴────────────────┐
+                                ▼                                 ▼
+                     Inside Hypothesis Fuzzing            Outside Hypothesis
+                   (with_draw(data.draw) active)       (Unit Tests / Fake Adapter)
+                                │                                 │
+                                ▼                                 ▼
+                    data.draw(search_strategy)          search_strategy.example()
+                                │                       (with warning suppression)
+                                ▼                                 │
+                     Dynamic adversarial sample                   ▼
+                   with shrinking on failure          Deterministic representative sample
+```
+
+1. **Inside Hypothesis Stateful Fuzzing (`compile_hypothesis_test_case`)**:
+   - The compiled `RuleBasedStateMachine` executes each rule within `with with_draw(data.draw):`.
+   - When `curr_t.args_fn` evaluates the argument generator, `_resolve_generated_arguments` unpacks the items.
+   - For every item satisfying `_is_strategy(val)` (detected duck-typed via `example`, `filter`, and `map` or `isinstance(val, SearchStrategy)`), Pretense invokes `draw(val)`.
+   - Hypothesis actively explores the entire combinatorial data space across all transitions, generating boundary values, extreme strings, empty collections, and edge-case permutations, while automatically shrinking any counterexample to its minimal reproduction trace.
+
+2. **Outside Hypothesis (Deterministic Unit Tests & Fake Adapters)**:
+   - When executing `Test<Target>Unit`, fake adapter method dispatch (`fake.method(...)`), or direct `sm.dispatch_transition(...)` calls outside a Hypothesis rule, `get_current_draw()` returns `None`.
+   - `_resolve_argument_value` automatically falls back to invoking `val.example()`.
+   - Pretense wraps the `.example()` evaluation inside a scoped `warnings.catch_warnings()` filter that suppresses Hypothesis's `NonInteractiveExampleWarning`, ensuring unit tests and CLI runners remain completely clean and free of spurious warning logs.
+   - Tests and fakes require zero additional test fixtures, mocks, or `@given` wrappers.
+
+#### 4. Systemic Impact & Soundness Guarantees
+
+This mechanism directly resolves the cross-model defect gap and the coverage arbiter ping-pong loop:
+1. **Full Temporal and Spatial Fuzzing**: State-machine testing now explores both **operation paths** (order of transitions) and **data domains** (boundary values within transitions).
+2. **Defensive Code Protection**: Edge-case inputs naturally exercise defensive branches in library implementations (e.g. whitespace stripping, empty input guards, syntax variations), legitimately satisfying 100% statement coverage.
+3. **Elimination of "Dead-Code" Pruning Blames**: Coverage arbiters no longer encounter unreached defensive branches. Because the branches are actively exercised by dynamic strategy values, arbiters cannot falsely demand their removal, preserving soundness against foreign test suites and real-world inputs.
+4. **Information Embargo Integrity**: Neither the test author nor the coverage auditor needs to inspect private library lines to hardcode arbitrary constants; declaring input domains declaratively via standard Hypothesis strategies (`st.text()`, `st.integers()`, `st.sampled_from()`) allows the verification engine to stress implementations autonomously.
+
+#### 5. Empirical Validation: Comparative Analysis on `semver_solver`
+
+The introduction of dynamic strategies as values was empirically benchmarked on the `semver_solver` suite, comparing Run 1 (static single-sample literals) against Run 2 (generative strategies as values).
+
+##### A. Convergence Velocity & Cost Reduction
+Because dynamic inputs exercised defensive branches naturally during test runs, Cleanroom eliminated the multi-round ping-pong cycle where coverage arbiters demanded dead-code deletions:
+
+| Model / Harness | Run 1 Rounds | Run 2 Rounds | Round Reduction | Run 1 Cost | Run 2 Cost | Cost Savings |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`deepseek-flash Cleanroom`** | 32 rounds | **17 rounds** | **-47%** | $0.4716 | **$0.4073** | **-14%** |
+| **`gemini-3.8-flash Cleanroom`** | 20 rounds | **14 rounds** | **-30%** | $1.2007 | **$0.8424** | **-30%** |
+| **`deepseek-flash Baseline`** | 1 round | 1 round | — | $0.0542 | $0.0863 | — |
+| **`gemini-3.8-flash Baseline`** | 1 round | 1 round | — | $0.0768 | $0.3466 | — |
+
+##### B. Test Oracle Transformation
+Test authors transitioned from hardcoded literals to comprehensive generative strategies:
+
+```python
+# Before (Run 1: Static Single-Sample Trap):
+@transition(VersionEngine.parse_version)
+def parse_version(self, ctx: TransitionContext) -> None:
+    ctx.arguments(
+        generate=lambda: ("1.0.0",),  # Invariant literal on every step!
+        recognize=lambda text: True,
+    )
+
+# After (Run 2: Strategies as Values):
+_VERSION_STRATEGY = st.builds(
+    Version,
+    st.integers(0, 20), st.integers(0, 20), st.integers(0, 20),
+    st.one_of(st.just(()), st.lists(st.sampled_from(["alpha", "beta", "rc", "1", "2"])).map(tuple)),
+    st.one_of(st.just(()), st.lists(st.sampled_from(["build", "001"])).map(tuple)),
+)
+
+_RANGE_TEXT_POOL = (
+    "*", "x", "X", "1.x", "1.*", "1.2.x", "1.2.*", "==1.0.0", "=1.0.0", "!=",
+    "<1.0.0", "<=1.0.0", ">1.0.0", ">=1.0.0", "^1.2.3", "^0.2.3", "^0.0.3",
+    "~1.2.3", "1.0.0 - 2.0.0", ">=1.0.0 <2.0.0", "1.0.0 || 2.0.0", ">=1.0.0-alpha",
+)
+
+@transition(VersionEngine.satisfies)
+def satisfies(self, ctx: TransitionContext) -> None:
+    ctx.arguments(
+        generate=(_VERSION_STRATEGY, st.sampled_from(_RANGE_TEXT_POOL).map(VersionRange), st.booleans()),
+        recognize=lambda v, r, p: True,
+    )
+```
+
+##### C. Diagnostic Rigor & Bug Hunting Power
+The defect detection rate of the synthesized test suites doubled, exposing subtle bugs across foreign implementations that static tests missed:
+
+| Test Suite | Run 1 Defect Detection Rate | Run 2 Defect Detection Rate | Foreign Bugs Uncovered |
+| :--- | :---: | :---: | :---: |
+| **`deepseek-flash Cleanroom`** | 6.33% (31 bugs) | **12.63% (36 bugs)** | **+100% Increase in Diagnostic Rigor** |
+| **`gemini-3.8-flash Cleanroom`** | 3.50% (8 bugs) | **3.92% (10 bugs)** | Higher coverage on wildcard & caret bounds |
+| **`gemini-3.8-flash Baseline`** | 0.00% (0 bugs) | **3.04% (7 bugs)** | Now catches foreign contract violations |
+
+New bugs caught include:
+- `ValueError: invalid literal for int() with base 10: 'x'` in caret wildcards (`^0.x`).
+- Inverted descending precedence sorting when prerelease versions are mixed with standard releases.
+- Unhandled crashes when bare wildcards (`*`) are supplied as dependency constraints to the solver.
+- Subtle relational operator and caret boundary miscalculations.
+
 ---
 
-## 5. Path Coverage vs. Hypothesis State-Machine Transitions
+### 5.6 Unified Domain Architecture: Symmetrical Generation, Validation, and Relational Perturbation
+
+#### The Generator-Recognizer Duality Problem
+In earlier iterations of Pretense, transition arguments were declared using separate generative and recognitive procedures:
+```python
+ctx.arguments(
+    generate=lambda: (st.sampled_from(["a", "b"]), st.integers(1, 10)),
+    recognize=lambda name=None, count=None: name in ("a", "b") and 1 <= count <= 10,
+)
+```
+This separation introduced three acute failure modes:
+1. **Redundant Boilerplate**: Specifying both constructive generation and analytical recognition duplicated the contract twice across distinct paradigms.
+2. **Alignment Drift**: In complex transitions, models frequently drifted between the generator and the recognizer (e.g. generating integers while validating strings, or generating values that the recognizer immediately rejected).
+3. **Single-Value Degeneration**: Under boilerplate fatigue or scaffold imitation, smaller models collapsed `generate` to static single constants (e.g. `lambda: ("sample_name",)` or `lambda: ("1.0.0",)`), destroying state-space fuzzing.
+
+#### The `Domain` Abstraction
+In formal specification theory, generator and recognizer are two operational facets of a single mathematical entity: a **Domain** $D$.
+- **Sampling (Generator)**: $x \sim D$ (constructive draw via Hypothesis `SearchStrategy[T]`).
+- **Membership (Recognizer)**: $x \in D$ (analytical predicate `validate(val) -> bool`).
+
+Pretense provides a first-class `Domain[T]` abstraction. Transitions declare parameter domains directly:
+
+```python
+ctx.arguments(
+    name=Domain.set(["alpha", "beta", "gamma"]),
+    count=Domain.range(1, 100),
+    active=Domain.boolean(),
+    pattern=Domain.regex(r"^[a-z]+_\d+$"),
+    target=Domain.type(TargetClass),
+)
+```
+
+Native Python primitives (`set`, `range`, `re.Pattern`, `type`) automatically promote to `Domain`:
+```python
+ctx.arguments(
+    name={"alpha", "beta", "gamma"},
+    count=range(1, 100),
+    active=bool,
+    pattern=re.compile(r"^[a-z]+_\d+$"),
+    target=TargetClass,
+)
+```
+
+Pretense automatically tuples the strategies for fuzzing (`st.tuples(...)`) and synthesizes the composite recognizer predicate (`lambda *args: all(...)`).
+
+#### Discriminated Cases & Dependent Domains
+State machine transitions must not merely wrap API signatures 1:1; they must represent **discriminated equivalence partitions** (e.g. `withdraw_success` vs `withdraw_insufficient_funds`, or `is_less_than_true` vs `is_less_than_false`).
+
+When arguments are inter-constrained across parameters (e.g., $B$ depends on $A$), `ctx.arguments` accepts **Dependent Domains** using closures:
+$$\text{arg}_N : \text{Domain} \mid (\text{arg}_1, \dots, \text{arg}_{N-1}) \to \text{Domain}$$
+
+```python
+ctx.arguments(
+    min_val=Domain.range(0, 50),
+    max_val=lambda min_val: Domain.range(min_val + 1, 100),
+)
+```
+
+#### Constructive Perturbation (`Domain.perturb`)
+For complex objects and non-scalar types where building an inverse constraint solver is impossible:
+- **Do NOT attempt to write general algorithmic constraint solvers** inside test harnesses (avoiding the Circular Oracle fallacy).
+- **Use constructive derivation via `Domain.perturb`**:
+  Derives candidate values constructively by applying targeted mutations to an anchor value (`anchor` can be a previous argument or current state machine state):
+  ```python
+  Domain.perturb(
+      anchor,
+      mutations=[
+          # Near-boundary deltas stressing adjacent edge cases
+          lambda v, draw: replace(v, major=v.major + draw(st.integers(1, 5))),
+          lambda v, draw: replace(v, minor=v.minor + draw(st.integers(1, 5))),
+          lambda v, draw: replace(v, patch=v.patch + draw(st.integers(1, 5))),
+      ],
+      validator=lambda v2: (v2.major, v2.minor, v2.patch) > (anchor.major, anchor.minor, anchor.patch),
+  )
+  ```
+- **Symmetry Rule**: The validator must recognize the union of all declared mutation branches.
+
+#### Anti-Dummy Scaffolding Enforcement
+The Pretense scaffolding generator (`pretense_lint.py --scaffold`) enforces this architecture strictly:
+1. It never emits static dummy literals (e.g., `"sample_name"`, `1`, `True`).
+2. Arguments with clear types or semantic naming are scaffolded into standard domains (`Domain.range`, `Domain.set`, `Domain.type`, `Domain.boolean`).
+3. For unresolved, ambiguous, or custom domain arguments, the scaffolder emits `Domain.required("parameter_name")`. `Domain.required` type-checks cleanly under Pyright but raises an explicit `NotImplementedError` at test runtime if left unspecialized, forcing the authoring model to supply an intentional domain rather than silently inheriting dummy constants.
+
+---
+
+## 6. Path Coverage vs. Hypothesis State-Machine Transitions
 
 ### Are There Path Coverage Tools for Python?
 - **Standard Tooling (`coverage.py`)**: Only supports Statement (C0) and Branch/Arc (C1) coverage. It does not measure path combinations.
@@ -1537,7 +2168,7 @@ Hypothesis state machines test **path coverage in the state transition graph** $
 
 ---
 
-## 6. Contract Traceability: Requirements in Comments vs. Slugs
+## 7. Contract Traceability: Requirements in Comments vs. Slugs
 
 ### Why Informal Comments Fail
 If tests use unstructured comments (e.g. `# Covers requirement: replace existing node`):
@@ -1585,7 +2216,7 @@ def test_re_register_node_replaces_dependencies(self) -> None:
 
 ---
 
-## 7. Comparison Matrix: Verification Strategies
+## 8. Comparison Matrix: Verification Strategies
 
 | Metric / Capability | AST Branch Coverage | `mutmut` Mutation | LLM Chaos Tester (#4) | Pretense State Machine (#3) |
 | :--- | :---: | :---: | :---: | :---: |
@@ -1607,7 +2238,7 @@ Mutation testing (`mutmut`) was previously evaluated as a certifier gate, but is
 
 ---
 
-## 8. The Pretense CLI Runner & Repository Architecture
+## 9. The Pretense CLI Runner & Repository Architecture
 
 ### A. Generic, Standalone CLI Tool (`uv run pretense`)
 Pretense is designed as a **generic, standalone testing and fake-synthesis tool**, completely decoupled from Cleanroom internal framework details:
@@ -1660,7 +2291,7 @@ Pretense strictly **eliminates Hypothesis `Bundle`** in favor of direct domain s
 
 ---
 
-## 9. Implementation Roadmap & TODO Checklist
+## 10. Implementation Roadmap & Milestones
 
 ### Phase 1: Pretense CLI & DSL Core
 - [x] Implement `pretense` CLI runner (`uv run pretense`) with pytest-compatible discovery, path arguments, and keyword filtering.
@@ -1685,44 +2316,70 @@ Pretense strictly **eliminates Hypothesis `Bundle`** in favor of direct domain s
 - [x] Clean static typing validation across all pretense suites (`uv run pyright update_with_ai/parts/*/pretense/` -> 0 errors).
 - [ ] Integrate parallel Cleanroom methodology roles: `pretense` (author role) and `pretense_qa` (arbiter role).
 
+### Phase 5: Ergonomics Redesign & Unified State Machine Architecture (Completed)
+- [x] **TODO 1: Class-Based State Machine DSL (`StateMachine` & `@transition`)**:
+  - Replaced the verbose `StateMachineProto` 4-function syntax with single decorated methods inside `StateMachine` subclasses (`@transition(TargetClass.method)` or `@transition.seeding()`).
+  - Implemented generic `TransitionContext[Target, P, R]` parameterized by the target singleton type, parameter specification (`ParamSpec` `P`), and return type (`R`).
+  - Decorated methods are callable at runtime (`sm.method(*args, **kwargs)`), dispatching via `method_proxy` to `dispatch_transition`, fully compliant with Pyright type checking.
+- [x] **TODO 2: Pure Reference Model (Decoupled Lambdas)**:
+  - Ensured lambdas (`antecedent`, `arguments`, `returns`, `consequent`) receive only domain parameters (`*args: P`, `res: R`) and reference `self.state`, keeping the reference model clean and pure.
+  - Concrete target instances are decoupled from transition lambdas; target singletons are managed by the runtime adapter.
+- [x] **TODO 3: Underneath Target Singleton Dispatch**:
+  - Supported initializing state machines under test with singleton instances keyed by type (`singletons={TargetClass: instance}`).
+  - When driving implementation logic under test, the runtime harness automatically dispatches calls to `instance.method(*args)` underneath and asserts parity against `returns` and `consequent`.
+- [x] **TODO 4: In-Memory Fake Synthesis (`sm.as_fake(Target)`)**:
+  - State machines synthesize dynamic fake adapters conforming to interface protocols: `fake = sm.as_fake(Target)`.
+  - Dispatched calls route to the matching transition, updating `sm.state` and returning synthesized results with zero mock drift across collaborating singletons.
+- [x] **TODO 5: Full Repository & Benchmark Migration**:
+  - Migrated all 54 canonical pretense suites across `update_with_ai/parts/` and `update_python_with_ai/parts/`.
+  - Migrated all 18 historical and baseline pretense suites under `benchmarks/results/` (`dag_engine_lite` and `semver_solver`).
+- [x] **TODO 6: Scaffolder & Template Alignment**:
+  - Updated `update_python_with_ai/templates/pretense_template.py` with the class-based `@transition` DSL.
+  - Updated `update_python_with_ai/support/lib/pretense_lint.py` scaffold generator and verified via `update_python_with_ai/support/tests/pretense_lint_test.py`.
+- [ ] **TODO 7: Collaborator State Machine Importing & Seeding Transitions (Next Step)**:
+  - Formalized architectural design for importing external collaborator state machines (`self.collab_sm = CollabStateMachine()`) and obtaining injected collaborator fakes (`fake_collab = self.collab_sm.as_fake(CollabProtocol)`).
+  - Next milestone: Implement multi-machine compositional integration tests validating Hypothesis dynamic interleaving of collaborator seeding transitions with SUT operational transitions.
+- [ ] **TODO 8: Semantic Binding / Implementing vs. Importing (Next Step)**:
+  - Architectural model formalized: implementation state machines *implement* interface state machines via class inheritance (`class ComponentImplStateMachine(ComponentStateMachine): ...`), distinct from importing collaborator state machines.
+  - Next milestone: Author composite implementation state machines for multi-interface components (e.g. `ToolManagerImpl` extending `ToolInstaller` and `ToolExecutor`).
+- [ ] **TODO 9: Poly Types (Deferred)**:
+  - Defer polymorphic types without singletons (such as dynamic tool instances) to a subsequent design phase.
+
+### Phase 6: First-Class Postconditions & DSL Refinement (`requires`, `update`, `ensures`) (Completed)
+- [x] **TODO 10: DSL Keyword Alignment (`requires` & `update`)**:
+  - Rename `ctx.antecedent` $\to$ `ctx.requires`.
+  - Rename `ctx.consequent` $\to$ `ctx.update`.
+  - Provide non-breaking aliases in `TransitionContext` (`ctx.antecedent` delegating to `ctx.requires`, and `ctx.consequent` delegating to `ctx.update`) to ensure 100% backward compatibility for existing test suites.
+- [x] **TODO 11: Direct Singleton Storage in the State Machine State**:
+  - Decouple `StateMachine` from Cleanroom lifecycle phases and phase runners. Singletons under test are stored directly in the state machine state (`self.singletons` or `self.state.singletons`), holding direct references to concrete service objects.
+  - In fake mode, singleton references are omitted/empty; in real/fuzz test mode, singletons are populated directly.
+  - Implement dynamic target resolution: when executing a transition bound to `TargetClass.method`, resolve the immediate target singleton instance matching `TargetClass` from the state machine's singletons dictionary.
+- [x] **TODO 12: Unified `check` Pattern for `requires` and `ensures` (Mode B Only)**:
+  - Eliminate boolean return ambiguity: standardise 100% on the **`check` pattern** across both contract blocks.
+  - **In `requires`**: `ctx.requires(lambda check: check(condition, "reason"))`
+    - Evaluated before arguments/firing on every candidate step.
+    - **Simple Flag-Based Evaluation**: `check` simply sets `self.ok = False` if condition fails and records the reason string. All checks execute sequentially (e.g. `(check(a), check(b))` in a lambda or statements in a `def`). No exceptions are raised, and all failure reasons are captured.
+    - The runner queries `check.ok` after the block to determine if the transition is **ready to fire**.
+    - If a fake call finds no matching transition, the collected reasons are formatted into `NoMatchingTransitionError` diagnostics.
+    - Preserves backward compatibility: if lambda takes 0 arguments (`lambda: bool`), evaluates truthiness directly.
+  - **In `ensures`**: `ctx.ensures(lambda res, target, check, *args: (check(...), check.equal(...)))`
+    - Evaluated strictly during real/fuzz tests after execution.
+    - Receives `res` (return value), `target` (immediate singleton under test), `check` (assertion & lookup helper), and `*args` (domain inputs).
+    - If `check` fails, raises `AssertionError` immediately with formatted message and diffs, indicating a **behavioral contract violation**.
+    - `check.get(OtherSingleton)` provides direct access to collaborating singletons under test for cross-object postconditions.
+    - `check.equal(actual, expected, msg="")` provides formatted diff assertions.
+- [x] **TODO 13: Execution Topology Wiring**:
+  - **In-Memory Fakes (`FakeAdapter`)**: Explicitly skip `ensures`. Fakes evaluate only `requires` $\to$ `arguments` $\to$ `returns` $\to$ `update`.
+  - **Hypothesis Stateful Fuzzer (`compile_hypothesis_test_case`)**: Evaluate `ensures` after every real method execution and outcome recognition, asserting postconditions across all random walk iterations.
+  - **Deterministic Dispatch (`dispatch_transition`)**: Evaluate `ensures` when singletons under test are present in the state machine.
+- [x] **TODO 14: Scaffold & Guide Realignment**:
+  - Update `update_python_with_ai/support/lib/pretense_lint.py --scaffold` to generate the 5-block transition structure using `check` for both `requires` and `ensures`.
+  - Update `update_python_with_ai/templates/pretense_template.py`.
+  - Update `update_python_with_ai/guides/pretense.md` to instruct models on authoring postconditions in `ensures`, deprecating redundant manual assertions in Sections 3 and 4.
+
 ---
 
-## 10. Future Empirical Study: Cleanroom vs. State-Machine-Driven TDD
-
-While Cleanroom is founded on the principle that independent, double-blind declarative specifications prevent specification drift and coincident blindspots, **TDD is an important empirical baseline that must be scientifically evaluated**.
-
-If an agent directly authors an executable State Machine test suite from high-level requirements and implements code against it in a tight TDD loop, **could it achieve comparable software reliability at a fraction of Cleanroom's token and round cost?**
-
-### A. The Core Empirical Hypotheses
-1. **Cost & Latency Hypothesis**: State-machine-driven TDD eliminates 3–4 specification stages (`high_to_planning`, `planning_to_low`, `spec_qa`, `coverage`), reducing total token consumption and execution steps by $50\%\text{--}70\%$.
-2. **Defect Detection Hypothesis**: Without an independent declarative specification (`low/*.pyi`), does TDD catch subtle integration defects (such as Defect 1: retry recovery, Defect 2: re-registration edge cases, Defect 3: multi-class desynchronization) as reliably as Cleanroom?
-
-### B. Identified Hazards to Measure
-In an LLM-driven TDD workflow, we must explicitly measure and monitor four critical hazards:
-1. **The "Test Gaming" (Reward Hacking) Hazard**:
-   When tests fail during the TDD loop, does the LLM genuinely fix the implementation, or does it "game" the test suite by weakening transition preconditions, deleting failing assertions, or altering the state machine to match buggy implementation behavior?
-2. **The Coincident Blindspot Hazard**:
-   In Cleanroom, `lib` and `test` are authored double-blind from an independent contract. In TDD, if the same model context generates the test suite and then implements the library, any cognitive misconceptions the model holds about the problem domain may be baked into both the tests and the code simultaneously.
-3. **The Loss of Objective Blame Attribution**:
-   When a test fails, who is blamed? Without an independent source of truth of record (`low/*.pyi`), the agent cannot objectively determine whether a failure is a defect in `lib` or a bug in the test state machine.
-4. **Architectural Decay Across Component Boundaries**:
-   Without explicit interface specifications (`low/*.pyi`), do multi-component boundaries degrade into tightly-coupled, ad-hoc implementations that cannot be cleanly faked or modularized?
-
-### C. Experimental Benchmark Design
-* **Benchmark Target**: `benchmarks/parts/dag_engine_lite` and `benchmarks/parts/semver_solver`.
-* **Treatment A (Cleanroom Double-Blind Pipeline)**:
-  `High` $\to$ `Planning` $\to$ `Low (.pyi)` $\to$ `Spec QA` $\to$ `Lib` + `Test` $\to$ `QA`.
-* **Treatment B (State-Machine-Driven TDD Loop)**:
-  `High` $\to$ `State Machine Test Suite` $\to$ `Lib Implementation` $\to$ `TDD Refactor Loop` (run until green).
-* **Evaluation Metrics**:
-  1. *Total Cost*: Tokens consumed (input/output) and total agent steps/rounds.
-  2. *Defect Catch Rate*: Percentage of seeded benchmark defects detected and repaired.
-  3. *Cross-Testing Pass Rate*: Running Treatment B's library against Treatment A's independently authored test suite, and vice-versa.
-  4. *Mutation Score (`mutmut`)*: Percentage of injected code mutants killed by the test suite.
-
----
-
-## 11. Role Architecture Plan: `pretense` and `pretense_qa`
+## 11. Role Architecture Plan: `pretense`, `pretense_qa`, and `pretense_coverage`
 
 To operationalize Pretense within autonomous Cleanroom execution, we establish two new roles parallel to `test` and `qa`:
 - **`pretense`**: Author role responsible for creating and maintaining `{unit_dir}/pretense/{unit_name}_pretense.py`.
@@ -1865,7 +2522,7 @@ verification_success_message = "All lines of {unit_name}.py are covered by {unit
 
 ---
 
-## 10. Empirical Benchmarking: Pretense as a Baseline Equalizer
+## 12. Empirical Benchmarking: Pretense as a Baseline Equalizer
 
 A key finding from empirical benchmarking across DeepSeek-Flash, Gemini 3.8 Flash, and local Qwen-MoE on the `dag_engine_lite` benchmark is that **Pretense fundamentally alters the baseline vs. Cleanroom economic calculus**.
 
@@ -1905,3 +2562,38 @@ A key finding from empirical benchmarking across DeepSeek-Flash, Gemini 3.8 Flas
 3. **When to Choose Each**:
    - Use **Pretense Baseline** when developer cost and execution speed are paramount on well-specified modular components.
    - Use **Cleanroom Double-Blind Pipeline** when developing mission-critical systems where zero-defect guarantees, spec-level verification (`spec_qa`), and independent bipartite arbitration are strictly required.
+
+---
+
+## 13. Future Empirical Study: Cleanroom vs. State-Machine-Driven TDD
+
+While Cleanroom is founded on the principle that independent, double-blind declarative specifications prevent specification drift and coincident blindspots, **TDD is an important empirical baseline that must be scientifically evaluated**.
+
+If an agent directly authors an executable State Machine test suite from high-level requirements and implements code against it in a tight TDD loop, **could it achieve comparable software reliability at a fraction of Cleanroom's token and round cost?**
+
+### A. The Core Empirical Hypotheses
+1. **Cost & Latency Hypothesis**: State-machine-driven TDD eliminates 3–4 specification stages (`high_to_planning`, `planning_to_low`, `spec_qa`, `coverage`), reducing total token consumption and execution steps by $50\%\text{--}70\%$.
+2. **Defect Detection Hypothesis**: Without an independent declarative specification (`low/*.pyi`), does TDD catch subtle integration defects (such as Defect 1: retry recovery, Defect 2: re-registration edge cases, Defect 3: multi-class desynchronization) as reliably as Cleanroom?
+
+### B. Identified Hazards to Measure
+In an LLM-driven TDD workflow, we must explicitly measure and monitor four critical hazards:
+1. **The "Test Gaming" (Reward Hacking) Hazard**:
+   When tests fail during the TDD loop, does the LLM genuinely fix the implementation, or does it "game" the test suite by weakening transition preconditions, deleting failing assertions, or altering the state machine to match buggy implementation behavior?
+2. **The Coincident Blindspot Hazard**:
+   In Cleanroom, `lib` and `test` are authored double-blind from an independent contract. In TDD, if the same model context generates the test suite and then implements the library, any cognitive misconceptions the model holds about the problem domain may be baked into both the tests and the code simultaneously.
+3. **The Loss of Objective Blame Attribution**:
+   When a test fails, who is blamed? Without an independent source of truth of record (`low/*.pyi`), the agent cannot objectively determine whether a failure is a defect in `lib` or a bug in the test state machine.
+4. **Architectural Decay Across Component Boundaries**:
+   Without explicit interface specifications (`low/*.pyi`), do multi-component boundaries degrade into tightly-coupled, ad-hoc implementations that cannot be cleanly faked or modularized?
+
+### C. Experimental Benchmark Design
+* **Benchmark Target**: `benchmarks/parts/dag_engine_lite` and `benchmarks/parts/semver_solver`.
+* **Treatment A (Cleanroom Double-Blind Pipeline)**:
+  `High` $\to$ `Planning` $\to$ `Low (.pyi)` $\to$ `Spec QA` $\to$ `Lib` + `Test` $\to$ `QA`.
+* **Treatment B (State-Machine-Driven TDD Loop)**:
+  `High` $\to$ `State Machine Test Suite` $\to$ `Lib Implementation` $\to$ `TDD Refactor Loop` (run until green).
+* **Evaluation Metrics**:
+  1. *Total Cost*: Tokens consumed (input/output) and total agent steps/rounds.
+  2. *Defect Catch Rate*: Percentage of seeded benchmark defects detected and repaired.
+  3. *Cross-Testing Pass Rate*: Running Treatment B's library against Treatment A's independently authored test suite, and vice-versa.
+  4. *Mutation Score (`mutmut`)*: Percentage of injected code mutants killed by the test suite.

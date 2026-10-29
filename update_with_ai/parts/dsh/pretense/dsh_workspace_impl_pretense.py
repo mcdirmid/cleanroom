@@ -11,8 +11,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.dsh.lib import dsh_workspace, dsh_workspace_impl
@@ -29,56 +28,43 @@ class DshWorkspaceState:
     configured_workspaces: Dict[str, DshWorkspaceConfinementReport] = field(default_factory=dict)
 
 
-proto = StateMachineProto[DshWorkspaceState]()
+class DshWorkspaceStateMachine(StateMachine[DshWorkspaceState]):
+    """Unified Pretense State Machine for DshWorkspaceConfigurer."""
+
+    def __init__(
+        self,
+        state: Optional[DshWorkspaceState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or DshWorkspaceState(), singletons=singletons)
+
+    @transition(DshWorkspaceConfigurer.configure_role_workspace)
+    def configure_role_workspace(
+        self,
+        ctx: TransitionContext[DshWorkspaceConfigurer, [str, str, Optional[str], Optional[str]], DshWorkspaceConfinementReport],
+    ) -> None:
+        ctx.arguments(
+                    workspace_dir=Domain(strategy=lambda: '/tmp/sample_ws'),
+                    role_name=Domain(strategy=lambda: 'low'),
+                    model_name=Domain(strategy=lambda: None),
+                    provider=Domain(strategy=lambda: None),
+                )
+        def returns(workspace_dir: str = "/tmp/sample_ws", role_name: str = "low", model_name: Optional[str] = None, provider: Optional[str] = None) -> DshWorkspaceConfinementReport:
+            agents_md = os.path.join(workspace_dir, "AGENTS.md")
+            patch_path = os.path.join(workspace_dir, ".cleanroom", "dsh_patch.yml")
+            expected = DshWorkspaceConfinementReport(
+                workspace_dir=workspace_dir,
+                role_name=role_name,
+                configured_files=[agents_md, patch_path],
+                status="configured",
+            )
+            self.state.configured_workspaces[workspace_dir] = expected
+            return expected
+        ctx.returns(returns)
+        ctx.update(lambda res, workspace_dir="/tmp/sample_ws", role_name="low", model_name=None, provider=None: None)
 
 
-# ==============================================================================
-# 1. DshWorkspaceConfigurer Transitions
-# ==============================================================================
-
-@proto.transition(DshWorkspaceConfigurer.configure_role_workspace)
-def configure_role_workspace(): pass
-
-@configure_role_workspace.arguments
-def _(
-    state: DshWorkspaceState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-    role_name: str | NotBoundType = NotBound,
-    model_name: Optional[str] | NotBoundType = NotBound,
-    provider: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, Optional[str], Optional[str]]]:
-    ws = "/tmp/sample_ws" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    r = "low" if isinstance(role_name, NotBoundType) else str(role_name)
-    m = None if isinstance(model_name, NotBoundType) else model_name
-    p = None if isinstance(provider, NotBoundType) else provider
-    return (ws, r, m, p)
-
-@configure_role_workspace.returns
-def _(
-    state: DshWorkspaceState,
-    this: Any,
-    workspace_dir: str,
-    role_name: str,
-    model_name: Optional[str],
-    provider: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[DshWorkspaceConfinementReport]]:
-    agents_md = os.path.join(workspace_dir, "AGENTS.md")
-    patch_path = os.path.join(workspace_dir, ".cleanroom", "dsh_patch.yml")
-    expected = DshWorkspaceConfinementReport(
-        workspace_dir=workspace_dir,
-        role_name=role_name,
-        configured_files=[agents_md, patch_path],
-        status="configured",
-    )
-    state.configured_workspaces[workspace_dir] = expected
-
-    if isinstance(outcome, Value) and outcome.val.status == "configured":
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = DshWorkspaceStateMachine()
 
 
 # ==============================================================================

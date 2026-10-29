@@ -63,8 +63,8 @@ def __orphan__() -> None:
     ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-25T21:55:00Z
-# CHANGE: Specify pipeline filtering in roles_impl low-level specification
+# LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-10-26T20:38:00Z
+# CHANGE: Add fused role parsing to roles_impl low-level specification
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

@@ -35,14 +35,14 @@ The workspace provisioner:
 
 - Copies upstream contract dependencies and guides into the workspace with read-only permissions, ensuring agents cannot alter an upstream specification in place.
 
-- Copies user-facing runtime libraries and type stubs (`lifecycle.py`, `lifecycle.pyi`, `framework.py`, `framework.pyi`) into support directories with read-only permissions, projecting constituent runtime support libraries directly into `./support/lib` and the role's assigned companion guide into `./guides`, strictly avoiding copying templates, unneeded methodology configurations (`cleanroom_roles.toml`, `pyright_spec.json`), redundant package directories, or unbound repository root directories into the role workspace root, while strictly excluding internal methodology oracles, AST linters, and role runners (`build_lint_common.py`, `*_lint.py`, `cleanroom_role_tool.py`, `cleanroom_uv_runner.py`) from role workspace filesystems.
+- Copies user-facing runtime libraries and type stubs (`lifecycle.py`, `lifecycle.pyi`, `framework.py`, `framework.pyi`) into support directories with read-only permissions, projecting constituent runtime support libraries directly into `./support/lib` and the role's assigned companion guide into `./guides` (copying all companion guides across all constituent roles when provisioning a fused role), strictly avoiding copying templates, unneeded methodology configurations (`cleanroom_roles.toml`, `pyright_spec.json`), redundant package directories, or unbound repository root directories into the role workspace root, while strictly excluding internal methodology oracles, AST linters, and role runners (`build_lint_common.py`, `*_lint.py`, `cleanroom_role_tool.py`, `cleanroom_uv_runner.py`) from role workspace filesystems.
 
-- Deploys self-contained executable zipapps into the `bin/` directory of the workspace, packaging compiled Python bytecode (`.pyc`) and source modules for cleanroom_role_tool, build_lint_common, and role verification linters inside the archive so that runners execute in-memory across Python runtime versions without exposing loose oracle files in the role workspace filesystem.
+- Deploys self-contained executable zipapps into the `bin/` directory of the workspace, packaging compiled Python bytecode (`.pyc`) and source modules for cleanroom_role_tool, build_lint_common, and role verification linters inside the archive so that runners execute in-memory across Python runtime versions without exposing loose oracle files in the role workspace filesystem, and deploying use-based micro-binaries (`bin/verify_lib`, `bin/verify_test`, `bin/verify_pretense`, `bin/verify_coverage`) for fused roles.
 
 
 - Writes the role descriptor configuration file recording the role address, role name, and directory scope, omitting host repository paths to preserve isolation, with optional model profile attributes.
 
-- Synthesizes an `AGENTS.md` guide containing the behavioral constraints, role instructions, and tool usage sequences tailored to the commissioned role.
+- Synthesizes an `AGENTS.md` guide containing the behavioral constraints, role instructions, and tool usage sequences tailored to the commissioned role, formatting fused authoring and arbiter self-audit directives for fused roles.
 
 - Writes boundary rules into the guide that confine the agent to the workspace, forbid git operations, and declare the main repository read-only, and writes a contamination tripwire that mandates an immediate abort upon reading an out-of-bounds file outside the workspace directory, while explicitly permitting and instructing file inspection of in-workspace specifications, tests, code implementations, and commit change metadata headers.
 
@@ -55,8 +55,8 @@ The workspace provisioner:
 - Registers the new workspace descriptor in the workspace registry.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T13:50:00Z
-LAST_CHANGED: 2026-10-22T13:50:00Z
-CHANGE: Restrict workspace provisioning exclusively to target scope and bound methodology package assets
+LAST_CLEANED: 2026-10-26T20:38:00Z
+LAST_CHANGED: 2026-10-26T20:38:00Z
+CHANGE: Provision all companion guides and use-based micro-binaries for fused roles
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

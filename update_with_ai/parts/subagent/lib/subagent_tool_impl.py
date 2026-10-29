@@ -74,8 +74,8 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
         orch_parser.add_argument(
             "--max-waves",
             type=int,
-            default=50,
-            help="Maximum execution wave iterations (default: 50).",
+            default=100,
+            help="Maximum execution wave iterations (default: 100).",
         )
         orch_parser.add_argument(
             "--batch-size",
@@ -162,7 +162,7 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
         target_role: Optional[str] = None,
         harness: Optional[str] = None,
         model: Optional[str] = None,
-        max_waves: int = 50,
+        max_waves: int = 100,
         batch_size: Optional[int] = None,
         timeout: Optional[float] = None,
         max_context_tokens: Optional[int] = None,

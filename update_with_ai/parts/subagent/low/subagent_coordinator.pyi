@@ -184,7 +184,7 @@ class SubagentCoordinator(Singleton[AgentSessionTier], Protocol):
         dir_scope: str,
         harness: HarnessAdapter,
         target_role: Optional[str] = None,
-        max_waves: int = 50,
+        max_waves: int = 100,
         batch_size: Optional[int] = None,
         repo_root: Optional[str] = None,
         model_name: Optional[str] = None,
@@ -208,7 +208,10 @@ class SubagentCoordinator(Singleton[AgentSessionTier], Protocol):
         - MUST persist effective batch size bounds into provisioned role workspace configurations.
         - MUST aggregate cumulative token usage and monetary expenditure in orchestration summary.
         - WHEN target_node is specified, MUST restrict work queue discovery and execution to target_node and its transitive dependencies.
+        - MUST evaluate work queues on polling intervals to dispatch newly unblocked roles without awaiting active worker completion.
+        - WHEN an active worker has resolved all assigned targets and holds zero pending items across consecutive polling intervals, MUST interrupt the idling worker.
         - WHEN orchestration is interrupted by cancellation signals, MUST interrupt active workers through harness.interrupt_role and delete all provisioned role workspaces in scope.
+        - WHEN supervising a fused role worker, MUST execute formal verification on completion, deliver error diagnostics up to 3 retries on failure, and atomically harvest and mark all constituent targets clean on success.
         """
         ...
 
@@ -246,8 +249,8 @@ def __orphan__() -> None:
     ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-12T21:00:00Z
-# CHANGE: author subagent_coordinator interface low-level specification
+# LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-10-28T20:20:00Z
+# CHANGE: Asynchronous unblocked role dispatch and idle worker reaping
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

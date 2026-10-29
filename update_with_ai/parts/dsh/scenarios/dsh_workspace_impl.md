@@ -5,7 +5,7 @@
 Given: a provisioned role workspace directory for role_a.
 
 1. The configurer customizes role agent documentation.
-   Observed: `AGENTS.md` is written or updated with explicit isolation boundaries, permitted in-workspace shell commands and native harness tools, auditor rules mandating in-workspace code and change header inspection while prohibiting code edits, mandating check_files for ground truth, enforcing continuous tool execution, and establishing round conclusion protocols directing the worker to stop immediately without tool calls when all ready targets are submitted or blamed or only blocked targets remain.
+   Observed: `AGENTS.md` is written or updated with explicit isolation boundaries, permitted in-workspace shell commands and native harness tools, auditor rules mandating in-workspace code and change header inspection while prohibiting code edits, mandating check_files for ground truth, enforcing continuous tool execution while work remains, and establishing round conclusion protocols directing the worker to stop immediately without tool calls and conclude with text summary when the worker has no outstanding work to do and get_work gives no more work to do (all ready targets are submitted or blamed or only blocked targets remain).
    Realized by: the component's file writer writing `AGENTS.md` with boundary constraints, role-specific editing rules, and round conclusion protocols.
 
 ### Scenario 2 — Generating Cordis overlay patch
@@ -38,6 +38,6 @@ Given: a provisioned role workspace directory with a local or output-constrained
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-20T22:12:00Z
-CHANGE: document model-contingent payload ceiling protection in customized AGENTS.md instructions
+LAST_CHANGED: 2026-10-27T20:50:00Z
+CHANGE: Instruct workers to conclude immediately with text and no tool calls when work is resolved and get_work gives no more work
 -->

@@ -11,6 +11,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
@@ -65,141 +66,92 @@ class EditManagerState:
     file_hashes: PretenseDict[str, str] = field(default_factory=PretenseDict)
 
 
-proto = StateMachineProto[EditManagerState]()
+class EditManagerStateMachine(StateMachine[EditManagerState]):
+    """Pretense StateMachine for EditManager."""
+
+    def __init__(self, state: Optional[EditManagerState] = None):
+        super().__init__(state=state or EditManagerState())
+
+    # ==============================================================================
+    # 1. Seeding Transitions
+    # ==============================================================================
+
+    @transition.seeding()
+    def seed_writable_file(
+        self,
+        ctx: TransitionContext[None, [str], None],
+    ) -> None:
+        ctx.arguments(relative_path=Domain(strategy=lambda: 'lib/module.py'))
+        def _consequent(res: None, relative_path: str = "lib/module.py") -> None:
+            node = DagNode(UnitAddress("target"), RoleAddress("lib"))
+            rel = file_alias.RelativePath(relative_path)
+            ws = file_paths.WorkspacePath(file_paths.PathString(f"ws/{relative_path}"))
+            self.state.writable_files.add(file_alias.ReadWriteFile(rel, ws, node))
+        ctx.update(_consequent)
+
+    # ==============================================================================
+    # 2. Interface Transitions
+    # ==============================================================================
+
+    @transition(name="has_modifications")
+    def has_modifications(
+        self,
+        ctx: TransitionContext[EditManager, [], bool],
+    ) -> None:
+        ctx.returns(lambda: self.state.has_modifications)
+
+    @transition(name="file_update_revision")
+    def file_update_revision(
+        self,
+        ctx: TransitionContext[EditManager, [], FileUpdateRevision],
+    ) -> None:
+        ctx.returns(lambda: FileUpdateRevision(self.state.revision))
+
+    @transition(name="last_read_or_edited_file")
+    def last_read_or_edited_file(
+        self,
+        ctx: TransitionContext[EditManager, [], Optional[file_alias.FileAlias]],
+    ) -> None:
+        ctx.returns(lambda: self.state.last_file)
+
+    @transition(EditManager.can_write)
+    def can_write(
+        self,
+        ctx: TransitionContext[EditManager, [file_alias.RelativePath], tool_provider.ToolResponse],
+    ) -> None:
+        ctx.arguments(file_path=Domain(strategy=lambda: file_alias.RelativePath('lib/module.py')))
+        def _returns(file_path: Optional[file_alias.RelativePath] = None) -> tool_provider.ToolResponse:
+            p = file_path or file_alias.RelativePath("lib/module.py")
+            writable_paths = {str(f.relative_path) for f in self.state.writable_files}
+            path_str = str(p)
+            if path_str in writable_paths:
+                return tool_provider.ToolResponse(
+                    is_failed=False,
+                    is_terminated=True,
+                    content=tool_provider.ToolResponseContent(f"Write permitted for '{path_str}'."),
+                )
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=True,
+                content=tool_provider.ToolResponseContent(f"Error: Permission denied for writing '{path_str}'."),
+            )
+        ctx.returns(_returns)
+
+    @transition(EditManager.record_file_edit)
+    def record_file_edit(
+        self,
+        ctx: TransitionContext[EditManager, [file_alias.FileAlias], None],
+    ) -> None:
+        ctx.arguments(file=Domain(strategy=lambda: file_alias.UnboundFile(file_alias.RelativePath('lib/module.py'))))
+        def _consequent(res: None, file: Optional[file_alias.FileAlias] = None) -> None:
+            f = file or file_alias.UnboundFile(file_alias.RelativePath("lib/module.py"))
+            self.state.has_modifications = True
+            self.state.revision += 1
+            self.state.last_file = f
+        ctx.update(_consequent)
 
 
-@proto.seeding()
-def seed_writable_file(): pass
-
-@seed_writable_file.arguments
-def _(
-    state: EditManagerState,
-    this: Any,
-    relative_path: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    p = "lib/module.py" if isinstance(relative_path, NotBoundType) else str(relative_path)
-    return (p,)
-
-@seed_writable_file.provide
-def _(
-    state: EditManagerState,
-    this: Any,
-    relative_path: str,
-    result: None = None,
-) -> None:
-    node = DagNode(UnitAddress("target"), RoleAddress("lib"))
-    rel = file_alias.RelativePath(relative_path)
-    ws = file_paths.WorkspacePath(file_paths.PathString(f"ws/{relative_path}"))
-    state.writable_files.add(file_alias.ReadWriteFile(rel, ws, node))
-
-
-@proto.transition(name="has_modifications")
-def has_modifications(): pass
-
-@has_modifications.returns
-def _(state: EditManagerState, this: Any, outcome: object = NotBound) -> Optional[Outcome[bool]]:
-    expected = state.has_modifications
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(name="file_update_revision")
-def file_update_revision(): pass
-
-@file_update_revision.returns
-def _(state: EditManagerState, this: Any, outcome: object = NotBound) -> Optional[Outcome[FileUpdateRevision]]:
-    expected = FileUpdateRevision(state.revision)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(name="last_read_or_edited_file")
-def last_read_or_edited_file(): pass
-
-@last_read_or_edited_file.returns
-def _(state: EditManagerState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Optional[file_alias.FileAlias]]]:
-    expected = state.last_file
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(EditManager.can_write)
-def can_write(): pass
-
-@can_write.arguments
-def _(
-    state: EditManagerState,
-    this: Any,
-    file_path: file_alias.RelativePath | NotBoundType = NotBound,
-) -> Optional[Tuple[file_alias.RelativePath]]:
-    if isinstance(file_path, NotBoundType):
-        p = file_alias.RelativePath("lib/module.py")
-    else:
-        p = file_path
-    return (p,)
-
-@can_write.returns
-def _(
-    state: EditManagerState,
-    this: Any,
-    file_path: file_alias.RelativePath,
-    outcome: object = NotBound,
-) -> Optional[Outcome[tool_provider.ToolResponse]]:
-    writable_paths = {str(f.relative_path) for f in state.writable_files}
-    path_str = str(file_path)
-    if path_str in writable_paths:
-        res = tool_provider.ToolResponse(
-            is_failed=False,
-            is_terminated=True,
-            content=tool_provider.ToolResponseContent(f"Write permitted for '{path_str}'."),
-        )
-    else:
-        res = tool_provider.ToolResponse(
-            is_failed=True,
-            is_terminated=True,
-            content=tool_provider.ToolResponseContent(f"Error: Permission denied for writing '{path_str}'."),
-        )
-    if isinstance(outcome, Value) and outcome.val == res:
-        return outcome
-    if outcome is NotBound:
-        return Value(res)
-    return None
-
-
-@proto.transition(EditManager.record_file_edit)
-def record_file_edit(): pass
-
-@record_file_edit.arguments
-def _(
-    state: EditManagerState,
-    this: Any,
-    file: file_alias.FileAlias | NotBoundType = NotBound,
-) -> Optional[Tuple[file_alias.FileAlias]]:
-    if isinstance(file, NotBoundType):
-        f: file_alias.FileAlias = file_alias.UnboundFile(file_alias.RelativePath("lib/module.py"))
-    else:
-        f = file
-    return (f,)
-
-@record_file_edit.provide
-def _(
-    state: EditManagerState,
-    this: Any,
-    file: file_alias.FileAlias,
-    result: None = None,
-) -> None:
-    state.has_modifications = True
-    state.revision += 1
-    state.last_file = file
+proto = EditManagerStateMachine()
 
 
 class TestEditManagerUnit(unittest.TestCase):
@@ -207,7 +159,7 @@ class TestEditManagerUnit(unittest.TestCase):
 
     def setUp(self) -> None:
         self.state = EditManagerState()
-        self.sm = proto.make_state_machine(self.state)
+        self.sm = EditManagerStateMachine(self.state)
         self.sm.seed_writable_file("lib/demo.py")
         self.fake: EditManager = self.sm.as_fake(EditManager)
 
@@ -632,7 +584,7 @@ class TestFileEditorReal(unittest.TestCase):
             self.assertEqual(str(h), expected)
 
     def test_parameter_converters(self) -> None:
-        from update_with_ai.parts.sandbox.lib.file_editor_impl import (
+        from update_with_ai.parts.sandbox.lib.file_editor_impl import (  # cleanroom: allow-private-import
             _TargetContentParamType,
             _ReplacementContentParamType,
             _LineNumberParamType,
@@ -762,7 +714,7 @@ class TestEditManagerFuzz(unittest.TestCase):
     )
     def test_revision_strictly_monotonically_increases(self, num_edits: int) -> None:
         state = EditManagerState()
-        sm = proto.make_state_machine(state)
+        sm = EditManagerStateMachine(state)
         fake = sm.as_fake(EditManager)
 
         for i in range(1, num_edits + 1):

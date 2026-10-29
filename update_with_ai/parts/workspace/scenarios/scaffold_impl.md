@@ -25,7 +25,7 @@ Given: role `alpha` commissioned for scope `scope_a`, with model profile `gpt-4o
 Given: role `alpha` is a writable authoring role with companion guide `guides/alpha_guide.md` and scope `parts/alpha`.
 
 1. The scaffolder writes the role agents guide into `/ws/alpha_scope_a`.
-   Observed: `AGENTS.md` exists in `/ws/alpha_scope_a` with permissions 0o644; it contains boundary rules confining execution to the workspace and explaining that in-band metadata in role workspaces is projected to show change, feedback, and code hash fields while canonical lifecycle timestamps are maintained in the main repository, the contamination tripwire with permitted in-workspace code and spec reading, instructions directing workers to rely on their assigned companion guide (resolved to `./guides/alpha_guide.md` at workspace root) rather than searching for workspace reference files, prohibitions against searching for linters or inspecting runner executables, instructions permitting in-workspace shell commands and native harness tools while mandating round resolution through prescribed `bin/` tools (omitting blame for roles without feedback capability) and round conclusion when only blocked targets or zero ready targets remain, instructions for acting on blame and feedback (explaining that static checks do not verify runtime behavior, referencing assigned targets, and explaining compilation stubs when stub dependencies are declared), and fail-stop protocols (distinguishing normal test failures, timeouts, and SIGTERM as code defects rather than infrastructure crashes).
+   Observed: `AGENTS.md` exists in `/ws/alpha_scope_a` with permissions 0o644; it contains boundary rules confining execution to the workspace and explaining that in-band metadata in role workspaces is projected to show change, feedback, and code hash fields while canonical lifecycle timestamps are maintained in the main repository, the contamination tripwire with permitted in-workspace code and spec reading, instructions directing workers to rely on their assigned companion guide (resolved to `./guides/alpha_guide.md` at workspace root) rather than searching for workspace reference files, prohibitions against searching for linters or inspecting runner executables, instructions permitting in-workspace shell commands and native harness tools while mandating round resolution through prescribed `bin/` tools (omitting blame for roles without feedback capability) and round conclusion when the worker has no outstanding work to do and get_work gives no more work to do (all ready targets have been resolved or only blocked targets remain) directing the worker to stop immediately without tool calls and conclude with text summary, instructions for acting on blame and feedback (explaining that static checks do not verify runtime behavior, referencing assigned targets, and explaining compilation stubs when stub dependencies are declared), and fail-stop protocols (distinguishing normal test failures, timeouts, and SIGTERM as code defects rather than infrastructure crashes).
    Realized by: the component's markdown formatter generating workflow instructions for author roles and writing the guide file.
 
 ### Scenario 4 — Synthesizing role AGENTS.md guide instructions for auditor role
@@ -44,8 +44,17 @@ Given: role `alpha` declares source pattern `parts/alpha/lib/{unit_name}.py` and
    Observed: `parts/alpha/lib/widget.py` is generated in `/ws/alpha_scope_a` with starter skeleton content derived from `widget.pyi` or templates resolved from workspace root `./templates/` or repository root, and has permissions 0o644.
    Realized by: the component's target skeleton generator inspecting unit declarations and generating skeleton function signatures from companion specifications or resolved templates.
 
+### Scenario 6 — Synthesizing role AGENTS.md guide instructions for fused role
+
+Given: role `baseline` is a fused role combining `lib`, `test`, `qa`, and `coverage` with companion guides in `guides/` and scope `parts/alpha`.
+
+1. The scaffolder writes the role agents guide into `/ws/baseline_scope_a`.
+   Observed: `AGENTS.md` exists with multi-phase workflow instructions dynamically derived from constituent role metadata (contract sources, implementation targets, verification targets), incorporating contract grounding, test authoring embedding operational postconditions into transition `ctx.ensures(...)` handlers and driving scenarios via transition dispatch without redundant manual assertions while forbidding assertions on uncontracted non-concerns or synthetic graph placeholders, implementation realization, and targeted reads, use-based micro-binary verification (`bin/verify_lib`, `bin/verify_test`, `bin/verify_coverage`), QA arbiter contract fidelity and type contract respect self-audit directives, coverage arbiter semantic closure directives requiring pruning uncontracted dead defensive code upon coverage failure, and an atomic completion protocol omitting per-target submission.
+   Realized by: the component's markdown formatter detecting `fused_roles` on the role definition and generating dynamic fused workflow instructions and arbiter self-audit directives.
+
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T13:50:00Z
-LAST_CHANGED: 2026-10-22T13:50:00Z
-CHANGE: Enforce strict workspace root sys.path isolation in runner zipapps
+LAST_CLEANED: 2026-10-27T11:35:00Z
+LAST_CHANGED: 2026-10-29T15:30:00Z
+CHANGE: Derive fused role micro-binaries strictly and dynamically from constituent role names with zero hardcoded role names
+SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

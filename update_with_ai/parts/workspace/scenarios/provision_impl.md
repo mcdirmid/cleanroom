@@ -162,8 +162,16 @@ Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a`.
    Realized by: the component's own descriptor writing, and the role definition resolved through
    `role_registry`.
 
+### Scenario 11 — Commissioning a fused role workspace
+
+Given: fused role baseline is commissioned for scope_a, combining roles lib, test, qa, and coverage, with respective companion guides.
+
+1. The provisioner commissions the baseline workspace.
+   Observed: all companion guides for constituent roles are projected to `./guides/`, use-based micro-binaries (`bin/verify_lib`, `bin/verify_test`, `bin/verify_coverage`) are deployed to `bin/`, and the role descriptor records constituent roles.
+   Realized by: the component's own guide copying across constituent roles and micro-binary deployment delegated to `scaffold`.
+
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T13:50:00Z
-LAST_CHANGED: 2026-10-22T13:50:00Z
-CHANGE: Restrict workspace provisioning exclusively to target scope and bound methodology package assets
+LAST_CLEANED: 2026-10-26T20:38:00Z
+LAST_CHANGED: 2026-10-26T20:38:00Z
+CHANGE: Add scenario for commissioning a fused role workspace with all guides and use-based binaries
 -->

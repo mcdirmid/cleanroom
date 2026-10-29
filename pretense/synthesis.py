@@ -1,29 +1,7 @@
 """Automated unit test synthesis from shrunken Hypothesis counterexample traces."""
 
 from typing import Any, Dict, List, Optional
-
-
-class TraceStep:
-    """Represents a recorded transition execution in a counterexample trace."""
-
-    def __init__(
-        self,
-        transition_name: str,
-        target_name: Optional[str],
-        is_seeding: bool,
-        args: tuple[Any, ...],
-        kwargs: Dict[str, Any],
-        outcome: Any,
-    ) -> None:
-        self.transition_name = transition_name
-        self.target_name = target_name
-        self.is_seeding = is_seeding
-        self.args = args
-        self.kwargs = kwargs
-        self.outcome = outcome
-
-    def __repr__(self) -> str:
-        return f"<TraceStep {self.transition_name} args={self.args!r}>"
+from update_python_with_ai.parts.pretense.lib.pretense import TraceStep
 
 
 def synthesize_unit_test(
@@ -61,3 +39,6 @@ def synthesize_unit_test(
     lines.append("    # Verify invariants hold at conclusion")
     lines.append("    sm.check_invariants()")
     return "\n".join(lines)
+
+
+__all__ = ["TraceStep", "synthesize_unit_test"]

@@ -89,8 +89,10 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
           coverage.ModuleCoverage.missed, coverage.ModuleCoverage.test_passed,
           and coverage.ModuleCoverage.test_error, delegates uncovered source span
           context to this evaluator's format_spans_report under the supplied threshold and
-          max_spans, and appends agent guidance for translating uncovered lines into
-          grounding defects.
+          max_spans, and appends agent guidance directing the agent to formulate blame feedback
+          strictly in terms of how the blamed file is not compliant with the common source of truth
+          specification, permitting line numbers only within the blamed file while strictly forbidding
+          exposing details of other files.
         """
         ...
 
@@ -180,7 +182,7 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-19T17:15:00Z
-# CHANGE: Inject local part package root into module search paths and purge package namespaces to prevent cross-workspace module shadowing
+# LAST_CHANGED: 2026-10-29T00:30:00Z
+# CHANGE: Appends agent guidance directing blame feedback in terms of common specification compliance, permitting line numbers only in blamed file while forbidding exposing details of other files
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

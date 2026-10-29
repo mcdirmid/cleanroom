@@ -8,8 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from update_with_ai.parts.subagent.lib import subagent_coordinator
 from update_with_ai.parts.subagent.lib.subagent_coordinator import (
     HarnessAdapter,
@@ -31,174 +30,123 @@ class SubagentCoordinatorState:
     blamed_targets: List[str] = field(default_factory=list)
 
 
-proto = StateMachineProto[SubagentCoordinatorState]()
+class SubagentCoordinatorStateMachine(StateMachine[SubagentCoordinatorState]):
+    """Unified Pretense State Machine for SubagentCoordinator."""
 
+    def __init__(
+        self,
+        state: Optional[SubagentCoordinatorState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or SubagentCoordinatorState(), singletons=singletons)
 
-# ==============================================================================
-# 1. SubagentCoordinator Transitions
-# ==============================================================================
+    @transition(SubagentCoordinator.compute_execution_waves)
+    def compute_execution_waves(
+        self,
+        ctx: TransitionContext[SubagentCoordinator, [str, Optional[str], Optional[str], Optional[int]], Sequence[Sequence[RoleDispatch]]],
+    ) -> None:
+        ctx.arguments(
+                    dir_scope=Domain(strategy=lambda: 'staging'),
+                    target_role=Domain(strategy=lambda: None),
+                    repo_root=Domain(strategy=lambda: None),
+                    batch_size=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda dir_scope="staging", target_role=None, repo_root=None, batch_size=None: (
+            tuple(tuple(w) for w in self.state.pending_waves)
+        ))
+        ctx.update(lambda res, dir_scope="staging", target_role=None, repo_root=None, batch_size=None: None)
 
-@proto.transition(SubagentCoordinator.compute_execution_waves)
-def compute_execution_waves(): pass
+    @transition(SubagentCoordinator.run_wave)
+    def run_wave(
+        self,
+        ctx: TransitionContext[SubagentCoordinator, [Sequence[RoleDispatch], Any], Sequence[RoleRoundResult]],
+    ) -> None:
+        ctx.arguments(
+                    wave=Domain(strategy=lambda: ()),
+                    harness=Domain(strategy=lambda: None),
+                )
+        def returns(wave: Sequence[RoleDispatch] = (), harness: Any = None) -> Sequence[RoleRoundResult]:
+            results: List[RoleRoundResult] = []
+            for disp in wave:
+                if harness is not None and hasattr(harness, "dispatch_role"):
+                    handle = harness.dispatch_role(disp)
+                    res = harness.await_role(handle)
+                else:
+                    res = RoleRoundResult(
+                        role=disp.role_name,
+                        status="completed",
+                        submitted_targets=tuple(disp.ready_targets),
+                        blamed_targets=(),
+                        failure_reason=None,
+                    )
+                results.append(res)
+                self.state.submitted_targets.extend(res.submitted_targets)
+                self.state.blamed_targets.extend(res.blamed_targets)
 
-@compute_execution_waves.arguments
-def _(
-    state: SubagentCoordinatorState,
-    this: Any,
-    dir_scope: str | NotBoundType = NotBound,
-    target_role: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    batch_size: Optional[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str], Optional[str], Optional[int]]]:
-    ds = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    tr = None if isinstance(target_role, NotBoundType) else target_role
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    bs = None if isinstance(batch_size, NotBoundType) else batch_size
-    return (ds, tr, rr, bs)
+            self.state.total_waves_executed += 1
+            return tuple(results)
 
-@compute_execution_waves.returns
-def _(
-    state: SubagentCoordinatorState,
-    this: Any,
-    dir_scope: str,
-    target_role: Optional[str],
-    repo_root: Optional[str],
-    batch_size: Optional[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[Sequence[Sequence[RoleDispatch]]]]:
-    expected = tuple(tuple(w) for w in state.pending_waves)
-    if isinstance(outcome, Value) and len(outcome.val) == len(expected):
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+        ctx.returns(returns)
+        ctx.update(lambda res, wave=(), harness=None: None)
 
+    @transition(SubagentCoordinator.orchestrate)
+    def orchestrate(
+        self,
+        ctx: TransitionContext[SubagentCoordinator, ..., OrchestrationSummary],
+    ) -> None:
+        ctx.arguments(
+                    arg_0=Domain(strategy=lambda: 'staging'),
+                    arg_1=Domain(strategy=lambda: None),
+                    arg_2=Domain(strategy=lambda: None),
+                    arg_3=Domain(strategy=lambda: 50),
+                    arg_4=Domain(strategy=lambda: None),
+                    arg_5=Domain(strategy=lambda: None),
+                    arg_6=Domain(strategy=lambda: None),
+                    arg_7=Domain(strategy=lambda: None),
+                    arg_8=Domain(strategy=lambda: None),
+                    arg_9=Domain(strategy=lambda: None),
+                    arg_10=Domain(strategy=lambda: None),
+                )
+        def returns(
+            dir_scope: str = "staging",
+            harness: Any = None,
+            target_role: Optional[str] = None,
+            max_waves: int = 100,
+            batch_size: Optional[int] = None,
+            repo_root: Optional[str] = None,
+            model_name: Optional[str] = None,
+            poll_interval: Optional[float] = None,
+            max_unproductive_turns: Optional[int] = None,
+            target_node: Optional[str] = None,
+            max_unproductive_rounds: Optional[int] = None,
+            *args: Any,
+            **kwargs: Any,
+        ) -> OrchestrationSummary:
+            for wave in self.state.pending_waves:
+                for disp in wave:
+                    if harness is not None and hasattr(harness, "dispatch_role"):
+                        handle = harness.dispatch_role(disp)
+                        res = harness.await_role(handle)
+                        self.state.submitted_targets.extend(res.submitted_targets)
+                        self.state.blamed_targets.extend(res.blamed_targets)
+                    else:
+                        self.state.submitted_targets.extend(disp.ready_targets)
+                self.state.total_waves_executed += 1
 
-@proto.transition(SubagentCoordinator.run_wave)
-def run_wave(): pass
-
-@run_wave.arguments
-def _(
-    state: SubagentCoordinatorState,
-    this: Any,
-    wave: Sequence[RoleDispatch] | NotBoundType = NotBound,
-    harness: HarnessAdapter | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[RoleDispatch], Any]]:
-    if isinstance(wave, NotBoundType):
-        w: Sequence[RoleDispatch] = ()
-    else:
-        w = wave
-    h = None if isinstance(harness, NotBoundType) else harness
-    return (w, h)
-
-@run_wave.returns
-def _(
-    state: SubagentCoordinatorState,
-    this: Any,
-    wave: Sequence[RoleDispatch],
-    harness: Any,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Sequence[RoleRoundResult]]]:
-    results: List[RoleRoundResult] = []
-    for disp in wave:
-        if harness is not None and hasattr(harness, "dispatch_role"):
-            handle = harness.dispatch_role(disp)
-            res = harness.await_role(handle)
-        else:
-            res = RoleRoundResult(
-                role=disp.role_name,
-                status="completed",
-                submitted_targets=tuple(disp.ready_targets),
-                blamed_targets=(),
-                failure_reason=None,
+            return OrchestrationSummary(
+                is_converged=self.state.converged,
+                total_waves=self.state.total_waves_executed,
+                submitted_count=len(self.state.submitted_targets),
+                blamed_count=len(self.state.blamed_targets),
+                total_telemetry=TokenUsage(total_tokens=100),
+                status_message="Orchestration completed successfully." if self.state.converged else "Convergence failed.",
             )
-        results.append(res)
-        state.submitted_targets.extend(res.submitted_targets)
-        state.blamed_targets.extend(res.blamed_targets)
 
-    state.total_waves_executed += 1
-    expected = tuple(results)
-    if isinstance(outcome, Value) and len(outcome.val) == len(expected):
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+        ctx.returns(returns)
+        ctx.update(lambda res, *args, **kwargs: None)
 
 
-@proto.transition(SubagentCoordinator.orchestrate)
-def orchestrate(): pass
-
-@orchestrate.arguments
-def _(
-    state: SubagentCoordinatorState,
-    this: Any,
-    dir_scope: str | NotBoundType = NotBound,
-    harness: HarnessAdapter | NotBoundType = NotBound,
-    target_role: Optional[str] | NotBoundType = NotBound,
-    max_waves: int | NotBoundType = NotBound,
-    batch_size: Optional[int] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    model_name: Optional[str] | NotBoundType = NotBound,
-    poll_interval: Optional[float] | NotBoundType = NotBound,
-    max_unproductive_turns: Optional[int] | NotBoundType = NotBound,
-    target_node: Optional[str] | NotBoundType = NotBound,
-    max_unproductive_rounds: Optional[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Any, Optional[str], int, Optional[int], Optional[str], Optional[str], Optional[float], Optional[int], Optional[str], Optional[int]]]:
-    ds = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    h = None if isinstance(harness, NotBoundType) else harness
-    tr = None if isinstance(target_role, NotBoundType) else target_role
-    mw = 50 if isinstance(max_waves, NotBoundType) else int(max_waves)
-    bs = None if isinstance(batch_size, NotBoundType) else batch_size
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    mn = None if isinstance(model_name, NotBoundType) else model_name
-    pi = None if isinstance(poll_interval, NotBoundType) else poll_interval
-    mut = None if isinstance(max_unproductive_turns, NotBoundType) else max_unproductive_turns
-    tn = None if isinstance(target_node, NotBoundType) else target_node
-    mur = None if isinstance(max_unproductive_rounds, NotBoundType) else max_unproductive_rounds
-    return (ds, h, tr, mw, bs, rr, mn, pi, mut, tn, mur)
-
-@orchestrate.returns
-def _(
-    state: SubagentCoordinatorState,
-    this: Any,
-    dir_scope: str,
-    harness: Any,
-    target_role: Optional[str],
-    max_waves: int,
-    batch_size: Optional[int],
-    repo_root: Optional[str],
-    model_name: Optional[str],
-    poll_interval: Optional[float],
-    max_unproductive_turns: Optional[int],
-    target_node: Optional[str],
-    max_unproductive_rounds: Optional[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[OrchestrationSummary]]:
-    # Execute any pending waves
-    for wave in state.pending_waves:
-        for disp in wave:
-            if harness is not None and hasattr(harness, "dispatch_role"):
-                handle = harness.dispatch_role(disp)
-                res = harness.await_role(handle)
-                state.submitted_targets.extend(res.submitted_targets)
-                state.blamed_targets.extend(res.blamed_targets)
-            else:
-                state.submitted_targets.extend(disp.ready_targets)
-        state.total_waves_executed += 1
-
-    summary = OrchestrationSummary(
-        is_converged=state.converged,
-        total_waves=state.total_waves_executed,
-        submitted_count=len(state.submitted_targets),
-        blamed_count=len(state.blamed_targets),
-        total_telemetry=TokenUsage(total_tokens=100),
-        status_message="Orchestration completed successfully." if state.converged else "Convergence failed.",
-    )
-    if isinstance(outcome, Value) and outcome.val.is_converged == summary.is_converged:
-        return outcome
-    if outcome is NotBound:
-        return Value(summary)
-    return None
+proto = SubagentCoordinatorStateMachine()
 
 
 # ==============================================================================

@@ -201,5 +201,5 @@ else
     uv run pytest -q --tb=short "$@"
     echo ""
     echo "=== Pretense Tests ==="
-    uv run pretense update_with_ai/parts/
+    uv run pretense update_with_ai/parts/ update_python_with_ai/parts/
 fi

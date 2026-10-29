@@ -10,6 +10,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
@@ -36,174 +37,117 @@ class AliasManagerState:
     unbound_files: PretenseDict[str, UnboundFile] = field(default_factory=PretenseDict)
 
 
-proto = StateMachineProto[AliasManagerState]()
+class AliasManagerStateMachine(StateMachine[AliasManagerState]):
+    """Pretense StateMachine for AliasManager."""
+
+    def __init__(self, state: Optional[AliasManagerState] = None):
+        super().__init__(state=state or AliasManagerState())
+
+    # ==============================================================================
+    # 1. Seeding Transitions
+    # ==============================================================================
+
+    @transition.seeding()
+    def seed_workspace_root(
+        self,
+        ctx: TransitionContext[None, [str], None],
+    ) -> None:
+        ctx.arguments(workspace_root=Domain(strategy=lambda: '/workspace'))
+        ctx.update(
+            lambda res, workspace_root="/workspace": setattr(self.state, "workspace_root", str(workspace_root))
+        )
+
+    @transition.seeding()
+    def seed_bound_file(
+        self,
+        ctx: TransitionContext[
+            None,
+            [str, Optional[str], Optional[str], Optional[str], bool],
+            None,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    relative_path=Domain(strategy=lambda: 'lib/module.py'),
+                    workspace_path=Domain(strategy=lambda: 'src/lib/module.py'),
+                    owning_unit=Domain(strategy=lambda: 'target'),
+                    owning_role=Domain(strategy=lambda: 'lib'),
+                    is_readonly=Domain(strategy=lambda: False),
+                )
+        def _consequent(
+            res: None,
+            relative_path: str = "lib/module.py",
+            workspace_path: Optional[str] = None,
+            owning_unit: Optional[str] = None,
+            owning_role: Optional[str] = None,
+            is_readonly: bool = False,
+        ) -> None:
+            rel = relative_path
+            ws = f"src/{rel}" if workspace_path is None else str(workspace_path)
+            unit = "target" if owning_unit is None else str(owning_unit)
+            role = "lib" if owning_role is None else str(owning_role)
+            cls = ReadOnlyFile if is_readonly else ReadWriteFile
+            bf = cls(
+                relative_path=RelativePath(rel),
+                workspace_path=file_paths.WorkspacePath(file_paths.PathString(ws)),
+                owning_node=DagNode(UnitAddress(unit), RoleAddress(role)),
+            )
+            self.state.bound_files[rel] = bf
+
+        ctx.update(_consequent)
+
+    # ==============================================================================
+    # 2. Interface Transitions
+    # ==============================================================================
+
+    @transition(name="workspace_root")
+    def workspace_root(
+        self,
+        ctx: TransitionContext[AliasManager, [], file_paths.WorkspaceRoot],
+    ) -> None:
+        ctx.returns(lambda: file_paths.WorkspaceRoot(file_paths.PathString(self.state.workspace_root)))
+
+    @transition(AliasManager.to_alias)
+    def to_alias(
+        self,
+        ctx: TransitionContext[AliasManager, [str], FileAlias],
+    ) -> None:
+        ctx.arguments(path=Domain(strategy=lambda: next(iter(self.state.bound_files.keys())) if self.state.bound_files else 'demo.py'))
+        def _returns(path: str = "demo.py") -> FileAlias:
+            p_str = str(path)
+            if p_str in self.state.bound_files:
+                return self.state.bound_files[p_str]
+            if p_str in self.state.unbound_files:
+                return self.state.unbound_files[p_str]
+            base = os.path.basename(p_str)
+            basename_matches = [bf for bf in self.state.bound_files.values() if os.path.basename(bf.relative_path) == base]
+            if len(basename_matches) == 1:
+                return basename_matches[0]
+            return UnboundFile(relative_path=RelativePath(p_str))
+        ctx.returns(_returns)
+
+    @transition(AliasManager.sanitize_text)
+    def sanitize_text(
+        self,
+        ctx: TransitionContext[AliasManager, [str], SanitizedText],
+    ) -> None:
+        ctx.arguments(text=Domain(strategy=lambda: UnsanitizedText('Hello /workspace/src/lib/module.py')))
+        def _returns(text: str = "") -> SanitizedText:
+            res = str(text)
+            root = self.state.workspace_root.rstrip("/")
+            for rel_path, bf in sorted(self.state.bound_files.items(), key=lambda item: len(item[1].workspace_path.path), reverse=True):
+                ws_norm = os.path.normpath(bf.workspace_path.path)
+                abs_p = os.path.normpath(f"{root}/{ws_norm}")
+                if abs_p in res:
+                    res = res.replace(abs_p, rel_path)
+                if ws_norm in res:
+                    res = res.replace(ws_norm, rel_path)
+            if root and root in res:
+                res = res.replace(f"{root}/", "").replace(root, "")
+            return SanitizedText(res)
+        ctx.returns(_returns)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_workspace_root(): pass
-
-@seed_workspace_root.arguments
-def _(
-    state: AliasManagerState,
-    this: Any,
-    workspace_root: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    root = "/workspace" if isinstance(workspace_root, NotBoundType) else str(workspace_root)
-    return (root,)
-
-@seed_workspace_root.provide
-def _(
-    state: AliasManagerState,
-    this: Any,
-    workspace_root: str,
-    result: None = None,
-) -> None:
-    state.workspace_root = workspace_root
-
-
-@proto.seeding()
-def seed_bound_file(): pass
-
-@seed_bound_file.arguments
-def _(
-    state: AliasManagerState,
-    this: Any,
-    relative_path: str | NotBoundType = NotBound,
-    workspace_path: Optional[str] | NotBoundType = NotBound,
-    owning_unit: Optional[str] | NotBoundType = NotBound,
-    owning_role: Optional[str] | NotBoundType = NotBound,
-    is_readonly: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str, str, bool]]:
-    rel = "lib/module.py" if isinstance(relative_path, NotBoundType) else str(relative_path)
-    ws = f"src/{rel}" if isinstance(workspace_path, NotBoundType) or workspace_path is None else str(workspace_path)
-    unit = "target" if isinstance(owning_unit, NotBoundType) or owning_unit is None else str(owning_unit)
-    role = "lib" if isinstance(owning_role, NotBoundType) or owning_role is None else str(owning_role)
-    ro = False if isinstance(is_readonly, NotBoundType) else bool(is_readonly)
-    return (rel, ws, unit, role, ro)
-
-@seed_bound_file.provide
-def _(
-    state: AliasManagerState,
-    this: Any,
-    relative_path: str,
-    workspace_path: str,
-    owning_unit: str,
-    owning_role: str,
-    is_readonly: bool,
-    result: None = None,
-) -> None:
-    cls = ReadOnlyFile if is_readonly else ReadWriteFile
-    bf = cls(
-        relative_path=RelativePath(relative_path),
-        workspace_path=file_paths.WorkspacePath(file_paths.PathString(workspace_path)),
-        owning_node=DagNode(UnitAddress(owning_unit), RoleAddress(owning_role)),
-    )
-    state.bound_files[relative_path] = bf
-
-
-# ==============================================================================
-# 2. Interface Transitions
-# ==============================================================================
-
-@proto.transition(name="workspace_root")
-def workspace_root(): pass
-
-@workspace_root.returns
-def _(state: AliasManagerState, this: Any, outcome: object = NotBound) -> Optional[Outcome[file_paths.WorkspaceRoot]]:
-    expected = file_paths.WorkspaceRoot(file_paths.PathString(state.workspace_root))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(AliasManager.to_alias)
-def to_alias(): pass
-
-@to_alias.arguments
-def _(
-    state: AliasManagerState,
-    this: Any,
-    path: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    if isinstance(path, NotBoundType):
-        if state.bound_files:
-            return (next(iter(state.bound_files.keys())),)
-        return ("demo.py",)
-    return (str(path),)
-
-@to_alias.returns
-def _(
-    state: AliasManagerState,
-    this: Any,
-    path: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[FileAlias]]:
-    p_str = str(path)
-    # Direct match on relative path
-    if p_str in state.bound_files:
-        expected: FileAlias = state.bound_files[p_str]
-    elif p_str in state.unbound_files:
-        expected = state.unbound_files[p_str]
-    else:
-        # Match by basename if unique
-        base = os.path.basename(p_str)
-        basename_matches = [bf for bf in state.bound_files.values() if os.path.basename(bf.relative_path) == base]
-        if len(basename_matches) == 1:
-            expected = basename_matches[0]
-        else:
-            expected = UnboundFile(relative_path=RelativePath(p_str))
-
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(AliasManager.sanitize_text)
-def sanitize_text(): pass
-
-@sanitize_text.arguments
-def _(
-    state: AliasManagerState,
-    this: Any,
-    text: str | NotBoundType = NotBound,
-) -> Optional[Tuple[UnsanitizedText]]:
-    t = "Hello /workspace/src/lib/module.py" if isinstance(text, NotBoundType) else str(text)
-    return (UnsanitizedText(t),)
-
-@sanitize_text.returns
-def _(
-    state: AliasManagerState,
-    this: Any,
-    text: UnsanitizedText,
-    outcome: object = NotBound,
-) -> Optional[Outcome[SanitizedText]]:
-    res = str(text)
-    # Mask absolute paths for bound files
-    root = state.workspace_root.rstrip("/")
-    for rel_path, bf in sorted(state.bound_files.items(), key=lambda item: len(item[1].workspace_path.path), reverse=True):
-        ws_norm = os.path.normpath(bf.workspace_path.path)
-        abs_p = os.path.normpath(f"{root}/{ws_norm}")
-        if abs_p in res:
-            res = res.replace(abs_p, rel_path)
-        if ws_norm in res:
-            res = res.replace(ws_norm, rel_path)
-    if root and root in res:
-        res = res.replace(f"{root}/", "").replace(root, "")
-
-    expected = SanitizedText(res)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = AliasManagerStateMachine()
 
 
 # ==============================================================================
@@ -212,8 +156,7 @@ def _(
 
 def make_alias_manager_fake(state: Optional[AliasManagerState] = None) -> AliasManager:
     """Instantiate a synthesized AliasManager fake with Pretense."""
-    st = state or AliasManagerState()
-    sm = proto.make_state_machine(st)
+    sm = AliasManagerStateMachine(state)
     return sm.as_fake(AliasManager)
 
 
@@ -226,7 +169,7 @@ class TestAliasManagerUnit(unittest.TestCase):
 
     def setUp(self) -> None:
         self.state = AliasManagerState(workspace_root="/home/user/project")
-        self.sm = proto.make_state_machine(self.state)
+        self.sm = AliasManagerStateMachine(self.state)
         self.sm.seed_bound_file("lib/utils.py", "pkg/lib/utils.py", "pkg", "lib", is_readonly=True)
         self.sm.seed_bound_file("tests/utils_test.py", "pkg/tests/utils_test.py", "pkg", "test", is_readonly=False)
         self.fake: AliasManager = self.sm.as_fake(AliasManager)
@@ -279,7 +222,7 @@ class TestAliasManagerFuzz(unittest.TestCase):
     )
     def test_alias_resolution_and_sanitization_invariants(self, root: str, file_names: list[str]) -> None:
         state = AliasManagerState(workspace_root=root)
-        sm = proto.make_state_machine(state)
+        sm = AliasManagerStateMachine(state)
         for i, fname in enumerate(file_names):
             sm.seed_bound_file(f"src/{fname}", f"ws/{fname}", f"node_{i}", "role", is_readonly=(i % 2 == 0))
 

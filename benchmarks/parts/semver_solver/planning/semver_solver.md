@@ -32,18 +32,21 @@ By factoring version tokenization, precedence evaluation, range compilation, and
 - When version text violates SemVer 2.0.0 syntax, the version engine raises invalid version error carrying the unparseable raw version text. [raise_invalid_version_on_syntax_error]
 - A semantic version reports itself as a pre-release version when its pre-release identifiers are non-empty. [report_prerelease_status]
 - A semantic version provides its canonical version string. [format_canonical_version_string]
+- Coercing a semantic version to a string delegates directly to formatting its canonical version string. [coerce_version_to_canonical_string]
 - A version engine compares major, minor, and patch numbers numerically in order of precedence. [compare_version_numeric_components]
 - A normal version has higher precedence than a pre-release version sharing identical major, minor, and patch numbers. [prefer_normal_over_prerelease]
 - A version engine compares pre-release identifiers segment by segment where numeric segments compare as integers and alphanumeric segments compare by ASCII code points. [compare_prerelease_segments]
 - Numeric pre-release segments have lower precedence than alphanumeric pre-release segments. [rank_numeric_below_alphanumeric_prerelease]
 - A larger set of pre-release segments has higher precedence than a smaller set when preceding segments match. [break_prerelease_ties_by_segment_count]
 - A version engine excludes build metadata from precedence comparison so that versions differing solely by build metadata share equal precedence. [exclude_build_metadata_from_precedence]
-- A version engine parses range expression text into a version range supporting basic comparators, caret ranges, tilde ranges, wildcards, hyphen ranges, and union alternatives. [parse_version_range]
-- When a range expression contains syntax errors, the version engine raises invalid range error carrying the unparseable raw range text. [raise_invalid_range_on_syntax_error]
+- A version engine parses range expression text into a version range supporting basic comparators, caret ranges, tilde ranges, wildcards, hyphen ranges, and union alternatives, trimming surrounding whitespace around range expressions and individual clauses while tolerating optional whitespace between operators and version targets, delimiting comparators within clauses strictly by whitespace. [parse_version_range]
+- When a range expression contains syntax errors, is empty, consists solely of whitespace, contains empty clauses between union delimiters, uses comma delimiters between comparators, or supplies bare partial versions lacking wildcard tokens across any comparator or hyphen expression, the version engine raises invalid range error carrying the unparseable raw range text. [raise_invalid_range_on_syntax_error]
 - A version range tests whether a semantic version matches its constraints. [match_range_against_version]
+- Coercing a version range to a string delegates to returning its range expression text. [coerce_range_to_expression_text]
 - A version range admits pre-release versions only upon an explicit pre-release inclusion request. [admit_prerelease_on_explicit_request]
 - A version engine evaluates whether a semantic version satisfies a version range. [evaluate_version_satisfaction]
 - When evaluating version satisfaction, the version engine excludes pre-release versions unless they are explicitly requested or explicitly specified in the range. [filter_unrequested_prerelease_versions]
+- When pre-release inclusion is requested, pre-release versions evaluate directly against comparator bounds using precedence comparison without shifting numerical boundaries. [evaluate_prerelease_direct_bounds]
 - A package repository registers a package release together with its declared dependencies. [register_package_release]
 - A package repository retrieves all releases for a package name ordered by descending version precedence. [retrieve_sorted_package_releases]
 - When a requested package name is absent from the repository, the package repository raises package not found error carrying the missing package name. [raise_package_not_found_on_missing_name]
@@ -52,8 +55,8 @@ By factoring version tokenization, precedence evaluation, range compilation, and
 - A dependency solver resolves package dependencies by exploring available package releases from the package repository. [resolve_package_dependencies]
 - When a candidate assignment conflicts with an existing assignment through diamond or transitive requirements, the dependency solver backtracks through alternative candidate assignments. [backtrack_alternative_candidate_assignments]
 - A dependency solver selects the highest precedence compatible release for each required package upon concluding resolution. [select_highest_precedence_compatible_release]
-- A dependency solver returns a resolution outcome carrying selected versions and derivation steps. [return_resolution_outcome]
-- When no combination of package releases satisfies all transitive dependencies, the dependency solver raises resolution conflict error identifying the conflicting packages and derivation explanation. [raise_resolution_conflict_on_unsatisfiable_constraints]
+- A dependency solver produces a resolution outcome carrying selected versions and derivation steps. [produce_resolution_outcome]
+- When no combination of package releases satisfies all transitive dependencies, or when a dependency references a package not present in the package repository, the dependency solver raises resolution conflict error identifying the conflicting packages and derivation explanation without allowing package not found error to escape. [raise_resolution_conflict_on_unsatisfiable_constraints]
 
 ### Woven Contracts
 
@@ -72,7 +75,8 @@ By factoring version tokenization, precedence evaluation, range compilation, and
   - Deferred: Realized by concrete realization in semver_solver_impl.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-21T20:59:16Z
-LAST_CHANGED: 2026-10-21T20:59:16Z
-CHANGE: Factor SemVer interface planning contracts: add pre-release status, canonical version string, explicit pre-release admission, highest-precedence selection, backtracking, and diagnostic payload contracts.
+LAST_CLEANED: 2026-10-27T02:19:04Z
+LAST_CHANGED: 2026-10-27T22:30:00Z
+CHANGE: Re-align planning contracts with HLS updates for basic comparators and clean value object strings
+SPEC_QA_AUDIT: 2026-10-27T02:19:04Z
 -->

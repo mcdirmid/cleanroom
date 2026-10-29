@@ -37,9 +37,9 @@ packages = ["update_with_ai", "update_python_with_ai", "benchmarks", "pretense"]
 [tool.pytest.ini_options]
 testpaths = [
     "update_with_ai/parts",
+    "update_python_with_ai/parts",
     "update_with_ai/support/tests",
     "update_python_with_ai/support/tests",
-    "benchmarks/parts",
 ]
 norecursedirs = [
     ".git",
@@ -54,7 +54,7 @@ pythonpath = [
     "update_python_with_ai",
     "benchmarks",
 ]
-python_files = ["*_test.py", "test_*.py"]
+python_files = ["*_test.py"]
 timeout = 45
 timeout_method = "signal"
 addopts = []

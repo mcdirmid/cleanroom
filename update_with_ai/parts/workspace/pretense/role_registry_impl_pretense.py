@@ -9,9 +9,8 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.workspace.lib.role_registry import (
     WorkspaceDescriptor,
     WorkspaceRegistry,
@@ -27,306 +26,149 @@ class WorkspaceRegistryState:
     workspaces: PretenseDict[str, WorkspaceDescriptor] = field(default_factory=PretenseDict)
 
 
-proto = StateMachineProto[WorkspaceRegistryState]()
+class WorkspaceRegistryStateMachine(StateMachine[WorkspaceRegistryState]):
+    """Unified Pretense State Machine for WorkspaceRegistry."""
+
+    def __init__(
+        self,
+        state: Optional[WorkspaceRegistryState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or WorkspaceRegistryState(), singletons=singletons)
+
+    @transition.seeding(name="seed_registry_workspace")
+    def seed_registry_workspace(
+        self,
+        ctx: TransitionContext[Any, [str, str, str], None],
+    ) -> None:
+        ctx.arguments(
+                    workspace_dir=Domain(strategy=lambda: '/repo/staging/role_workspaces/lib'),
+                    directory_scope=Domain(strategy=lambda: 'staging'),
+                    role_name=Domain(strategy=lambda: 'lib'),
+                )
+        ctx.returns(lambda workspace_dir="/repo/staging/role_workspaces/lib", directory_scope="staging", role_name="lib": None)
+        def provide(res: None, workspace_dir: str = "/repo/staging/role_workspaces/lib", directory_scope: str = "staging", role_name: str = "lib") -> None:
+            role_def = self.state.roles.get(
+                role_name,
+                RoleDefinition(
+                    role_name=role_name,
+                    guide_path=f"guides/{role_name}.md",
+                    writable_file_patterns=(f"{role_name}/*",),
+                    readonly_file_patterns=(),
+                    feedback_role_deps=(),
+                ),
+            )
+            desc = WorkspaceDescriptor(
+                workspace_dir=workspace_dir,
+                main_repository_root=self.state.repo_root,
+                directory_scope=directory_scope,
+                role_definition=role_def,
+            )
+            self.state.workspaces[workspace_dir] = desc
+        ctx.update(provide)
+
+    @transition(WorkspaceRegistry.discover_repository_root)
+    def discover_repository_root(
+        self,
+        ctx: TransitionContext[WorkspaceRegistry, [Optional[str]], str],
+    ) -> None:
+        ctx.arguments(start_dir=Domain(strategy=lambda: None))
+        ctx.returns(lambda start_dir=None: self.state.repo_root)
+        ctx.update(lambda res, start_dir=None: None)
+
+    @transition(WorkspaceRegistry.resolve_role_definition)
+    def resolve_role_definition(
+        self,
+        ctx: TransitionContext[WorkspaceRegistry, [str, Optional[str], Optional[str]], RoleDefinition],
+    ) -> None:
+        ctx.arguments(
+                    role_name_or_address=Domain(strategy=lambda: 'lib'),
+                    repo_root=Domain(strategy=lambda: None),
+                    dir_scope=Domain(strategy=lambda: None),
+                )
+        def returns(role_name_or_address: str = "lib", repo_root: Optional[str] = None, dir_scope: Optional[str] = None) -> RoleDefinition:
+            clean_name = role_name_or_address.split(":")[-1].split("#")[-1].strip().lower()
+            return self.state.roles.get(
+                clean_name,
+                RoleDefinition(
+                    role_name=clean_name,
+                    guide_path=f"guides/{clean_name}.md",
+                    writable_file_patterns=(f"{clean_name}/*",),
+                    readonly_file_patterns=(),
+                    feedback_role_deps=(),
+                ),
+            )
+        ctx.returns(returns)
+        ctx.update(lambda res, role_name_or_address="lib", repo_root=None, dir_scope=None: None)
+
+    @transition(WorkspaceRegistry.list_roles)
+    def list_roles(
+        self,
+        ctx: TransitionContext[WorkspaceRegistry, [Optional[str], Optional[str]], Sequence[RoleDefinition]],
+    ) -> None:
+        ctx.arguments(
+                    repo_root=Domain(strategy=lambda: None),
+                    dir_scope=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda repo_root=None, dir_scope=None: tuple(self.state.roles.values()))
+        ctx.update(lambda res, repo_root=None, dir_scope=None: None)
+
+    @transition(WorkspaceRegistry.compute_workspace_dir)
+    def compute_workspace_dir(
+        self,
+        ctx: TransitionContext[WorkspaceRegistry, [str, str, Optional[str], Optional[str]], str],
+    ) -> None:
+        ctx.arguments(
+                    role_name=Domain(strategy=lambda: 'lib'),
+                    dir_scope=Domain(strategy=lambda: 'staging'),
+                    repo_root=Domain(strategy=lambda: None),
+                    custom_dest=Domain(strategy=lambda: None),
+                )
+        def returns(role_name: str = "lib", dir_scope: str = "staging", repo_root: Optional[str] = None, custom_dest: Optional[str] = None) -> str:
+            if custom_dest:
+                return custom_dest
+            root = repo_root or self.state.repo_root
+            return os.path.join(root, dir_scope, "role_workspaces", role_name)
+        ctx.returns(returns)
+        ctx.update(lambda res, role_name="lib", dir_scope="staging", repo_root=None, custom_dest=None: None)
+
+    @transition(WorkspaceRegistry.record_workspace)
+    def record_workspace(
+        self,
+        ctx: TransitionContext[WorkspaceRegistry, [WorkspaceDescriptor, Optional[str]], None],
+    ) -> None:
+        ctx.arguments(
+                    descriptor=Domain(strategy=lambda: WorkspaceDescriptor(workspace_dir='/repo/staging/role_workspaces/lib', main_repository_root=self.state.repo_root, directory_scope='staging', role_definition=RoleDefinition(role_name='lib', guide_path='guides/lib.md', writable_file_patterns=('lib/*',), readonly_file_patterns=(), feedback_role_deps=()))),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda descriptor, repo_root=None: None)
+        ctx.update(lambda res, descriptor, repo_root=None: self.state.workspaces.__setitem__(descriptor.workspace_dir, descriptor))
+
+    @transition(WorkspaceRegistry.unregister_workspace)
+    def unregister_workspace(
+        self,
+        ctx: TransitionContext[WorkspaceRegistry, [str, Optional[str]], bool],
+    ) -> None:
+        ctx.arguments(
+                    workspace_dir=Domain(strategy=lambda: '/repo/staging/role_workspaces/lib'),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda workspace_dir="/repo/staging/role_workspaces/lib", repo_root=None: workspace_dir in self.state.workspaces)
+        def provide(res: bool, workspace_dir: str = "/repo/staging/role_workspaces/lib", repo_root: Optional[str] = None) -> None:
+            self.state.workspaces.pop(workspace_dir, None)
+        ctx.update(provide)
+
+    @transition(WorkspaceRegistry.load_active_workspaces)
+    def load_active_workspaces(
+        self,
+        ctx: TransitionContext[WorkspaceRegistry, [Optional[str]], Sequence[WorkspaceDescriptor]],
+    ) -> None:
+        ctx.arguments(repo_root=Domain(strategy=lambda: None))
+        ctx.returns(lambda repo_root=None: tuple(self.state.workspaces.values()))
+        ctx.update(lambda res, repo_root=None: None)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_registry_workspace(): pass
-
-@seed_registry_workspace.arguments
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-    directory_scope: str | NotBoundType = NotBound,
-    role_name: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str]]:
-    ws = "/repo/staging/role_workspaces/lib" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    scope = "staging" if isinstance(directory_scope, NotBoundType) else str(directory_scope)
-    rn = "lib" if isinstance(role_name, NotBoundType) else str(role_name)
-    return (ws, scope, rn)
-
-@seed_registry_workspace.provide
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    workspace_dir: str,
-    directory_scope: str,
-    role_name: str,
-    result: None = None,
-) -> None:
-    role_def = state.roles.get(
-        role_name,
-        RoleDefinition(
-            role_name=role_name,
-            guide_path=f"guides/{role_name}.md",
-            writable_file_patterns=(f"{role_name}/*",),
-            readonly_file_patterns=(),
-            feedback_role_deps=(),
-        ),
-    )
-    desc = WorkspaceDescriptor(
-        workspace_dir=workspace_dir,
-        main_repository_root=state.repo_root,
-        directory_scope=directory_scope,
-        role_definition=role_def,
-    )
-    state.workspaces[workspace_dir] = desc
-
-
-# ==============================================================================
-# 2. WorkspaceRegistry Transitions
-# ==============================================================================
-
-@proto.transition(WorkspaceRegistry.discover_repository_root)
-def discover_repository_root(): pass
-
-@discover_repository_root.arguments
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    start_dir: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str]]]:
-    s = None if isinstance(start_dir, NotBoundType) else start_dir
-    return (s,)
-
-@discover_repository_root.returns
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    start_dir: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[str]]:
-    expected = state.repo_root
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceRegistry.resolve_role_definition)
-def resolve_role_definition(): pass
-
-@resolve_role_definition.arguments
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    role_name_or_address: str | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    dir_scope: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str], Optional[str]]]:
-    r = "lib" if isinstance(role_name_or_address, NotBoundType) else str(role_name_or_address)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    ds = None if isinstance(dir_scope, NotBoundType) else dir_scope
-    return (r, rr, ds)
-
-@resolve_role_definition.returns
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    role_name_or_address: str,
-    repo_root: Optional[str],
-    dir_scope: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[RoleDefinition]]:
-    clean_name = role_name_or_address.split(":")[-1].split("#")[-1].strip().lower()
-    expected = state.roles.get(
-        clean_name,
-        RoleDefinition(
-            role_name=clean_name,
-            guide_path=f"guides/{clean_name}.md",
-            writable_file_patterns=(f"{clean_name}/*",),
-            readonly_file_patterns=(),
-            feedback_role_deps=(),
-        ),
-    )
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceRegistry.list_roles)
-def list_roles(): pass
-
-@list_roles.arguments
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    dir_scope: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], Optional[str]]]:
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    ds = None if isinstance(dir_scope, NotBoundType) else dir_scope
-    return (rr, ds)
-
-@list_roles.returns
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    repo_root: Optional[str],
-    dir_scope: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[Sequence[RoleDefinition]]]:
-    expected = tuple(state.roles.values())
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceRegistry.compute_workspace_dir)
-def compute_workspace_dir(): pass
-
-@compute_workspace_dir.arguments
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    role_name: str | NotBoundType = NotBound,
-    dir_scope: str | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    custom_dest: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, Optional[str], Optional[str]]]:
-    rn = "lib" if isinstance(role_name, NotBoundType) else str(role_name)
-    ds = "staging" if isinstance(dir_scope, NotBoundType) else str(dir_scope)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    cd = None if isinstance(custom_dest, NotBoundType) else custom_dest
-    return (rn, ds, rr, cd)
-
-@compute_workspace_dir.returns
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    role_name: str,
-    dir_scope: str,
-    repo_root: Optional[str],
-    custom_dest: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[str]]:
-    if custom_dest:
-        expected = custom_dest
-    else:
-        root = repo_root or state.repo_root
-        expected = os.path.join(root, dir_scope, "role_workspaces", role_name)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceRegistry.record_workspace)
-def record_workspace(): pass
-
-@record_workspace.arguments
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    descriptor: WorkspaceDescriptor | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[WorkspaceDescriptor, Optional[str]]]:
-    if isinstance(descriptor, NotBoundType):
-        role_def = RoleDefinition(
-            role_name="lib",
-            guide_path="guides/lib.md",
-            writable_file_patterns=("lib/*",),
-            readonly_file_patterns=(),
-            feedback_role_deps=(),
-        )
-        desc = WorkspaceDescriptor(
-            workspace_dir="/repo/staging/role_workspaces/lib",
-            main_repository_root=state.repo_root,
-            directory_scope="staging",
-            role_definition=role_def,
-        )
-    else:
-        desc = descriptor
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (desc, rr)
-
-@record_workspace.provide
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    descriptor: WorkspaceDescriptor,
-    repo_root: Optional[str],
-    result: None = None,
-) -> None:
-    state.workspaces[descriptor.workspace_dir] = descriptor
-
-
-@proto.transition(WorkspaceRegistry.unregister_workspace)
-def unregister_workspace(): pass
-
-@unregister_workspace.arguments
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    workspace_dir: str | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str]]]:
-    ws = "/repo/staging/role_workspaces/lib" if isinstance(workspace_dir, NotBoundType) else str(workspace_dir)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (ws, rr)
-
-@unregister_workspace.returns
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    workspace_dir: str,
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[bool]]:
-    expected = workspace_dir in state.workspaces
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@unregister_workspace.provide
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    workspace_dir: str,
-    repo_root: Optional[str],
-    result: bool,
-) -> None:
-    state.workspaces.pop(workspace_dir, None)
-
-
-@proto.transition(WorkspaceRegistry.load_active_workspaces)
-def load_active_workspaces(): pass
-
-@load_active_workspaces.arguments
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str]]]:
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (rr,)
-
-@load_active_workspaces.returns
-def _(
-    state: WorkspaceRegistryState,
-    this: Any,
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[Sequence[WorkspaceDescriptor]]]:
-    expected = tuple(state.workspaces.values())
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = WorkspaceRegistryStateMachine()
 
 
 # ==============================================================================

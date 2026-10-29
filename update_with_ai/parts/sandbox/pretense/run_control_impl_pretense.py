@@ -8,6 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import StateMachine, TransitionContext, transition
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
@@ -53,7 +54,14 @@ class RunControllerState:
     diagnostic_output: str = ""
 
 
-proto = StateMachineProto[RunControllerState]()
+class RunControllerStateMachine(StateMachine[RunControllerState]):
+    """Pretense StateMachine for RunController."""
+
+    def __init__(self, state: Optional[RunControllerState] = None):
+        super().__init__(state=state or RunControllerState())
+
+
+proto = RunControllerStateMachine()
 
 
 # ==============================================================================

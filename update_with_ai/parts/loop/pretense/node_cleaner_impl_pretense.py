@@ -8,8 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system, get_singleton
 from update_with_ai.parts.agent.lib.node_config import (
     ExecutionVersion,
@@ -57,42 +56,29 @@ class NodeCleanerState:
     should_continue: bool = True
 
 
-proto = StateMachineProto[NodeCleanerState]()
+class NodeCleanerStateMachine(StateMachine[NodeCleanerState]):
+    """Unified Pretense State Machine for NodeCleaner."""
+
+    def __init__(
+        self,
+        state: Optional[NodeCleanerState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or NodeCleanerState(), singletons=singletons)
+
+    @transition(NodeCleaner.clean)
+    def clean(
+        self,
+        ctx: TransitionContext[NodeCleaner, [Sequence[DagNode]], bool],
+    ) -> None:
+        ctx.arguments(nodes=Domain(strategy=lambda: (DagNode(UnitAddress('//pkg:sample'), RoleAddress('lib')),)))
+        ctx.returns(lambda nodes=(): self.state.should_continue)
+        def provide(res: bool, nodes: Sequence[DagNode] = ()) -> None:
+            self.state.cleaned_batches.append(tuple(nodes))
+        ctx.update(provide)
 
 
-# ==============================================================================
-# 1. NodeCleaner Transitions
-# ==============================================================================
-
-@proto.transition(NodeCleaner.clean)
-def clean(): pass
-
-@clean.arguments
-def _(
-    state: NodeCleanerState,
-    this: Any,
-    nodes: Sequence[DagNode] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[DagNode]]]:
-    if isinstance(nodes, NotBoundType):
-        ns = (DagNode(UnitAddress("//pkg:sample"), RoleAddress("lib")),)
-    else:
-        ns = tuple(nodes)
-    return (ns,)
-
-@clean.returns
-def _(
-    state: NodeCleanerState,
-    this: Any,
-    nodes: Sequence[DagNode],
-    outcome: object = NotBound,
-) -> Optional[Outcome[bool]]:
-    state.cleaned_batches.append(tuple(nodes))
-    res = state.should_continue
-    if isinstance(outcome, Value) and outcome.val == res:
-        return outcome
-    if outcome is NotBound:
-        return Value(res)
-    return None
+proto = NodeCleanerStateMachine()
 
 
 def make_cleaner_fake(state: Optional[NodeCleanerState] = None) -> NodeCleaner:

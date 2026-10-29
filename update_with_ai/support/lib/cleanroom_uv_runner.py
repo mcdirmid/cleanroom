@@ -224,12 +224,10 @@ def resolve_scope_nodes(
     depths = _compute_role_depths(roles_dict)
     ordered_roles = sorted(roles_dict.keys(), key=lambda r: (depths.get(r, 0), r))
 
-    effective_up_to = up_to_role
-    if not effective_up_to and explicit_role:
-        effective_up_to = explicit_role
-
-    if effective_up_to:
-        target_clean = effective_up_to.strip().lower()
+    if role_filter:
+        roles_to_scan = [role_filter]
+    elif up_to_role:
+        target_clean = up_to_role.strip().lower()
         matching_idx = None
         for idx, r in enumerate(ordered_roles):
             if r.lower() == target_clean or r.split(":")[-1].strip().lower() == target_clean:
@@ -239,8 +237,6 @@ def resolve_scope_nodes(
             roles_to_scan = ordered_roles[: matching_idx + 1]
         else:
             roles_to_scan = ordered_roles
-    elif role_filter:
-        roles_to_scan = [role_filter]
     else:
         roles_to_scan = ordered_roles
 

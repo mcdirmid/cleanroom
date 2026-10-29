@@ -8,8 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from update_with_ai.parts.agent.lib.agent_config import (
     AgentConfig,
     ConversationLimit,
@@ -28,135 +27,95 @@ class AgentConfigState:
     supersede_arg_keep: int = 50
 
 
-proto = StateMachineProto[AgentConfigState]()
+class AgentConfigStateMachine(StateMachine[AgentConfigState]):
+    """Unified Pretense State Machine for AgentConfig."""
+
+    def __init__(
+        self,
+        state: Optional[AgentConfigState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or AgentConfigState(), singletons=singletons)
+
+    @transition.seeding(name="seed_config")
+    def seed_config(
+        self,
+        ctx: TransitionContext[Any, [int, bool, bool, bool, bool, int], None],
+    ) -> None:
+        ctx.arguments(
+                    conversation_limit=Domain(strategy=lambda: 30),
+                    inject_followups=Domain(strategy=lambda: True),
+                    is_step_mode=Domain(strategy=lambda: False),
+                    is_startup_reads=Domain(strategy=lambda: True),
+                    edit_delta_output=Domain(strategy=lambda: True),
+                    supersede_arg_keep=Domain(strategy=lambda: 50),
+                )
+        ctx.returns(lambda conversation_limit=30, inject_followups=True, is_step_mode=False, is_startup_reads=True, edit_delta_output=True, supersede_arg_keep=50: None)
+        ctx.update(lambda res, conversation_limit=30, inject_followups=True, is_step_mode=False, is_startup_reads=True, edit_delta_output=True, supersede_arg_keep=50: (
+            setattr(self.state, "conversation_limit", int(conversation_limit)),
+            setattr(self.state, "inject_followups", bool(inject_followups)),
+            setattr(self.state, "is_step_mode", bool(is_step_mode)),
+            setattr(self.state, "is_startup_reads", bool(is_startup_reads)),
+            setattr(self.state, "edit_delta_output", bool(edit_delta_output)),
+            setattr(self.state, "supersede_arg_keep", int(supersede_arg_keep)),
+        ))
+
+    @transition(name="conversation_limit")
+    def conversation_limit(
+        self,
+        ctx: TransitionContext[AgentConfig, [], ConversationLimit],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: ConversationLimit(self.state.conversation_limit))
+        ctx.update(lambda res: None)
+
+    @transition(name="inject_followups")
+    def inject_followups(
+        self,
+        ctx: TransitionContext[AgentConfig, [], bool],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: self.state.inject_followups)
+        ctx.update(lambda res: None)
+
+    @transition(name="is_step_mode")
+    def is_step_mode(
+        self,
+        ctx: TransitionContext[AgentConfig, [], bool],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: self.state.is_step_mode)
+        ctx.update(lambda res: None)
+
+    @transition(name="is_startup_reads")
+    def is_startup_reads(
+        self,
+        ctx: TransitionContext[AgentConfig, [], bool],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: self.state.is_startup_reads)
+        ctx.update(lambda res: None)
+
+    @transition(name="edit_delta_output")
+    def edit_delta_output(
+        self,
+        ctx: TransitionContext[AgentConfig, [], bool],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: self.state.edit_delta_output)
+        ctx.update(lambda res: None)
+
+    @transition(name="supersede_arg_keep")
+    def supersede_arg_keep(
+        self,
+        ctx: TransitionContext[AgentConfig, [], SupersedeArgKeepLimit],
+    ) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: SupersedeArgKeepLimit(self.state.supersede_arg_keep))
+        ctx.update(lambda res: None)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_config(): pass
-
-@seed_config.arguments
-def _(
-    state: AgentConfigState,
-    this: Any,
-    conversation_limit: int | NotBoundType = NotBound,
-    inject_followups: bool | NotBoundType = NotBound,
-    is_step_mode: bool | NotBoundType = NotBound,
-    is_startup_reads: bool | NotBoundType = NotBound,
-    edit_delta_output: bool | NotBoundType = NotBound,
-    supersede_arg_keep: int | NotBoundType = NotBound,
-) -> Optional[Tuple[int, bool, bool, bool, bool, int]]:
-    lim = 30 if isinstance(conversation_limit, NotBoundType) else conversation_limit
-    inj = True if isinstance(inject_followups, NotBoundType) else inject_followups
-    step = False if isinstance(is_step_mode, NotBoundType) else is_step_mode
-    start = True if isinstance(is_startup_reads, NotBoundType) else is_startup_reads
-    delta = True if isinstance(edit_delta_output, NotBoundType) else edit_delta_output
-    keep = 50 if isinstance(supersede_arg_keep, NotBoundType) else supersede_arg_keep
-    return (lim, inj, step, start, delta, keep)
-
-@seed_config.provide
-def _(
-    state: AgentConfigState,
-    this: Any,
-    conversation_limit: int,
-    inject_followups: bool,
-    is_step_mode: bool,
-    is_startup_reads: bool,
-    edit_delta_output: bool,
-    supersede_arg_keep: int,
-    result: None = None,
-) -> None:
-    state.conversation_limit = conversation_limit
-    state.inject_followups = inject_followups
-    state.is_step_mode = is_step_mode
-    state.is_startup_reads = is_startup_reads
-    state.edit_delta_output = edit_delta_output
-    state.supersede_arg_keep = supersede_arg_keep
-
-
-# ==============================================================================
-# 2. AgentConfig Interface Property Transitions
-# ==============================================================================
-
-@proto.transition(name="conversation_limit")
-def conversation_limit(): pass
-
-@conversation_limit.returns
-def _(state: AgentConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[ConversationLimit]]:
-    expected = ConversationLimit(state.conversation_limit)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(name="inject_followups")
-def inject_followups(): pass
-
-@inject_followups.returns
-def _(state: AgentConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[bool]]:
-    expected = state.inject_followups
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(name="is_step_mode")
-def is_step_mode(): pass
-
-@is_step_mode.returns
-def _(state: AgentConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[bool]]:
-    expected = state.is_step_mode
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(name="is_startup_reads")
-def is_startup_reads(): pass
-
-@is_startup_reads.returns
-def _(state: AgentConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[bool]]:
-    expected = state.is_startup_reads
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(name="edit_delta_output")
-def edit_delta_output(): pass
-
-@edit_delta_output.returns
-def _(state: AgentConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[bool]]:
-    expected = state.edit_delta_output
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(name="supersede_arg_keep")
-def supersede_arg_keep(): pass
-
-@supersede_arg_keep.returns
-def _(state: AgentConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[SupersedeArgKeepLimit]]:
-    expected = SupersedeArgKeepLimit(state.supersede_arg_keep)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = AgentConfigStateMachine()
 
 
 # ==============================================================================

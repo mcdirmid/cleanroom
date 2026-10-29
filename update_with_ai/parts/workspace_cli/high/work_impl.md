@@ -41,7 +41,7 @@ When evaluating work in a role workspace:
 
 - The work manager inspects the build definitions when present, extracting the imported, implemented, and assembled dependencies from the High-Level Specifications of the unit, or derives dependencies from the filesystem component stems when discovering units and dependencies in a part directory.
 
-- The work manager partitions candidate tasks into ready items whose forward dependencies are clean, and blocked items whose prerequisites remain dirty, evaluating role upstream prerequisites across role dependencies, feedback role dependencies, star role dependencies, and silent role dependencies, bounding presented ready items by the requested batch size when positive and tracking the remaining unpresented ready count.
+- The work manager partitions candidate tasks into ready items whose forward dependencies are clean, and blocked items whose prerequisites remain dirty, evaluating role upstream prerequisites across role dependencies, feedback role dependencies, star role dependencies, and silent role dependencies (treating intra-fuse upstream dependencies as satisfied and unblocking downstream constituent roles when evaluating a fused role cluster), bounding presented ready items by the requested batch size when positive and tracking the remaining unpresented ready count.
 
 - The work manager materializes starter templates via graph storage for any ready tasks of roles with declared source patterns and upstream dependencies whose target source files do not exist on disk.
 
@@ -56,8 +56,8 @@ When evaluating work in a role workspace:
 - The work manager compiles the results into a work queue summary detailing ready tasks, dirty reasons, dependency paths, companion contract files, blocked causes, and role-specific instructions.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-19T16:30:00Z
-CHANGE: evaluate role upstream prerequisites across silent role dependencies
+LAST_CLEANED: 2026-10-26T20:38:00Z
+LAST_CHANGED: 2026-10-26T20:38:00Z
+CHANGE: Relax intra-fuse upstream dependencies when evaluating work queues for fused roles
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

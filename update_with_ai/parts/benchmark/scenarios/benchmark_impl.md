@@ -53,7 +53,7 @@ Given: a completed flight trace and a target logs directory.
 Given: a list of completed flight records and an optional output file path.
 
 1. The benchmark evaluator generates the markdown report.
-   Observed: produces a structured Markdown table summarizing flight identifier, model, tier, task, token metrics, cost, time, and test results.
+   Observed: produces a structured Markdown table summarizing flight identifier, model, tier, task, status (marking PASS or FAILED with defect diagnostics), token metrics, cost, time, and test results.
 
 ## Scenario 8 — Flight artifact archival, scope isolation, and specification clean marking
 
@@ -71,8 +71,8 @@ Given: a completed flight for model `qwen-35b` on benchmark unit `dag_engine` wi
 4. A second run is executed concurrently for the same model and benchmark.
    Observed: provisions a separate ephemeral flight scope, operates without cross-flight collision, and creates `lib_2.py`, `test_2.py`, and `cleanroom_2.log` in the results directory without colliding with run 1.
 
-5. A third run fails verification gates (such as having failing unit tests or type errors).
-   Observed: the benchmark evaluator skips artifact archival, avoids writing results files, and returns None.
+5. A third run fails verification gates or fails DAG convergence (such as having failing unit tests, zero unit tests passed, type errors, or non-zero exit code).
+   Observed: the benchmark evaluator skips artifact archival, preserves the flight scope directory as `<flight_scope>.failed`, preserves associated role workspaces under `<flight_scope>.failed/role_workspaces`, emits diagnostics to stderr, avoids writing results files, and returns 1 from `run_cli`.
 
 ## Scenario 9 — Dry-run execution bypasses artifact archival and draining
 
@@ -103,7 +103,7 @@ Given: the benchmark evaluator and CLI argument parser.
    Observed: rejects execution with an exit code of 1 and outputs an error indicating the loop harness is not supported for baseline benchmarks.
 
 2. The caller runs a baseline flight in simulation mode or with an autonomous harness (such as Antigravity or DSH).
-   Observed: under DSH, the flight scope is initialized in the agent session tier to create AGENTS.md and .cleanroom/dsh_patch.yml before dispatching via DSH server JSON-RPC or headless runner; watchdog environment variables (`PYTHONFAULTHANDLER=1`, `PRETENSE_TIMEOUT=45.0`, `CLEANROOM_VERIFY_TIMEOUT=45.0`) are written to `.env` in the flight scope; the agent is provided with and instructed to inspect the low-level specification stubs (`low/*.pyi`), implement the two-file library structure in `lib/`, test `_impl.py`, achieve 100% test coverage with opt-outs, and troubleshoot test timeouts/hangs as infinite loops or deadlocks in code under test rather than modifying tests, the poller awaits completion by requiring candidate subagent transcripts to be present and to conclude their final step without tool calls, returns a flight record with methodology `baseline`, stages executed `["baseline"]`, exactly one role round tallied under `baseline`, and archives passing artifacts under a baseline results destination.
+   Observed: routes execution through the unified Cleanroom clean orchestrator targeting the fused role (`baseline` or `pretense_baseline`), returns a flight record with methodology `baseline` (or `pretense_baseline`), stages executed `["baseline"]`, exactly one role round tallied under `baseline`, and archives passing artifacts under a baseline results destination.
 
 ## Scenario 13 — Pretense benchmark flight execution and verification
 
@@ -117,11 +117,11 @@ Given: the benchmark evaluator and CLI argument parser.
 Given: the benchmark evaluator and CLI argument parser.
 
 1. The caller runs `cleanroom benchmark` with `--baseline` and `--pretense`.
-   Observed: the flight provisions `pretense/` and `guides/pretense.md` in the baseline workspace root, pre-scaffolds the starter pretense suite, configures watchdog environment variables (`PYTHONFAULTHANDLER=1`, `PRETENSE_TIMEOUT=45.0`, `CLEANROOM_VERIFY_TIMEOUT=45.0`) in `.env`, instructs the baseline agent to implement `lib/`, author the state machine and tests in `pretense/` rather than `tests/`, and diagnose test execution timeouts as infinite loops or deadlocks in code under test, verification gates evaluate Pretense test execution (`uv run pretense --no-fuzz --cov`) and statement coverage, methodology is `pretense_baseline`, and passing artifacts are archived with `-pretense-baseline` destination suffix.
+   Observed: routes execution through the unified Cleanroom clean orchestrator targeting the fused role `pretense_baseline`, verification gates evaluate Pretense test execution (`uv run pretense --no-fuzz --cov`) and statement coverage, methodology is `pretense_baseline`, and passing artifacts are archived with `-pretense-baseline` destination suffix.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-19T18:45:00Z
-LAST_CHANGED: 2026-10-26T21:55:00Z
-CHANGE: Specify execution watchdog environment provisioning (.env) and infinite loop troubleshooting guidance in baseline developer prompts
+LAST_CHANGED: 2026-10-27T22:45:00Z
+CHANGE: Specify robust failed flight directory preservation with role workspaces, prominent failure reporting, and non-zero exit code on verification failure
 SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 -->

@@ -8,8 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from update_with_ai.parts.openai.lib.openai_config import (
     ApiKey,
     BaseUrl,
@@ -32,160 +31,70 @@ class OpenAIConfigState:
     max_tokens: Optional[int] = 4096
 
 
-proto = StateMachineProto[OpenAIConfigState]()
+class OpenAIConfigStateMachine(StateMachine[OpenAIConfigState]):
+    """State machine for OpenAIConfig."""
+
+    @transition.seeding()
+    def seed_config(
+        self,
+        ctx: TransitionContext[
+            Any,
+            [str | None, str | None, str | None, float | None, float | None, int | None],
+            None,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    m=Domain(strategy=lambda: 'gpt-4o'),
+                    b=Domain(strategy=lambda: None),
+                    k=Domain(strategy=lambda: None),
+                    t=Domain(strategy=lambda: 60.0),
+                    temp=Domain(strategy=lambda: 0.0),
+                    mt=Domain(strategy=lambda: 4096),
+                )
+        ctx.returns(lambda m, b, k, t, temp, mt: None)
+        ctx.update(
+            lambda res, m, b, k, t, temp, mt: (
+                setattr(self.state, "model_name", "gpt-4o" if m is None else m),
+                setattr(self.state, "base_url", b),
+                setattr(self.state, "api_key", k),
+                setattr(self.state, "timeout", 60.0 if t is None else t),
+                setattr(self.state, "temperature", 0.0 if temp is None else temp),
+                setattr(self.state, "max_tokens", 4096 if mt is None else mt),
+            )
+        )
+
+    @transition(name="model_name")
+    def model_name(self, ctx: TransitionContext[OpenAIConfig, [], ModelName]) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: ModelName(self.state.model_name))
+
+    @transition(name="base_url")
+    def base_url(self, ctx: TransitionContext[OpenAIConfig, [], Optional[BaseUrl]]) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: BaseUrl(self.state.base_url) if self.state.base_url is not None else None)
+
+    @transition(name="api_key")
+    def api_key(self, ctx: TransitionContext[OpenAIConfig, [], Optional[ApiKey]]) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: ApiKey(self.state.api_key) if self.state.api_key is not None else None)
+
+    @transition(name="timeout")
+    def timeout(self, ctx: TransitionContext[OpenAIConfig, [], TimeoutSeconds]) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: TimeoutSeconds(self.state.timeout))
+
+    @transition(name="temperature")
+    def temperature(self, ctx: TransitionContext[OpenAIConfig, [], Temperature]) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: Temperature(self.state.temperature))
+
+    @transition(name="max_tokens")
+    def max_tokens(self, ctx: TransitionContext[OpenAIConfig, [], Optional[MaxTokens]]) -> None:
+        ctx.arguments()
+        ctx.returns(lambda: MaxTokens(self.state.max_tokens) if self.state.max_tokens is not None else None)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_config(): pass
-
-@seed_config.arguments
-def _(
-    state: OpenAIConfigState,
-    this: Any,
-    model_name: str | NotBoundType = NotBound,
-    base_url: Optional[str] | NotBoundType = NotBound,
-    api_key: Optional[str] | NotBoundType = NotBound,
-    timeout: float | NotBoundType = NotBound,
-    temperature: float | NotBoundType = NotBound,
-    max_tokens: Optional[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str], Optional[str], float, float, Optional[int]]]:
-    m = "gpt-4o" if isinstance(model_name, NotBoundType) else model_name
-    b = None if isinstance(base_url, NotBoundType) else base_url
-    k = None if isinstance(api_key, NotBoundType) else api_key
-    t = 60.0 if isinstance(timeout, NotBoundType) else timeout
-    temp = 0.0 if isinstance(temperature, NotBoundType) else temperature
-    mt = 4096 if isinstance(max_tokens, NotBoundType) else max_tokens
-    return (m, b, k, t, temp, mt)
-
-@seed_config.returns
-def _(
-    state: OpenAIConfigState,
-    this: Any,
-    model_name: str,
-    base_url: Optional[str],
-    api_key: Optional[str],
-    timeout: float,
-    temperature: float,
-    max_tokens: Optional[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[None]]:
-    state.model_name = model_name
-    state.base_url = base_url
-    state.api_key = api_key
-    state.timeout = timeout
-    state.temperature = temperature
-    state.max_tokens = max_tokens
-    return Value(None)
-
-
-# ==============================================================================
-# 2. Property Transitions
-# ==============================================================================
-
-@proto.transition(name="model_name")
-def model_name(): pass
-
-@model_name.arguments
-def _(state: OpenAIConfigState, this: Any) -> Optional[Tuple[()]]:
-    return ()
-
-@model_name.returns
-def _(state: OpenAIConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[ModelName]]:
-    val = ModelName(state.model_name)
-    if isinstance(outcome, Value) and outcome.val == val:
-        return outcome
-    if outcome is NotBound:
-        return Value(val)
-    return None
-
-
-@proto.transition(name="base_url")
-def base_url(): pass
-
-@base_url.arguments
-def _(state: OpenAIConfigState, this: Any) -> Optional[Tuple[()]]:
-    return ()
-
-@base_url.returns
-def _(state: OpenAIConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Optional[BaseUrl]]]:
-    val = BaseUrl(state.base_url) if state.base_url is not None else None
-    if isinstance(outcome, Value) and outcome.val == val:
-        return outcome
-    if outcome is NotBound:
-        return Value(val)
-    return None
-
-
-@proto.transition(name="api_key")
-def api_key(): pass
-
-@api_key.arguments
-def _(state: OpenAIConfigState, this: Any) -> Optional[Tuple[()]]:
-    return ()
-
-@api_key.returns
-def _(state: OpenAIConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Optional[ApiKey]]]:
-    val = ApiKey(state.api_key) if state.api_key is not None else None
-    if isinstance(outcome, Value) and outcome.val == val:
-        return outcome
-    if outcome is NotBound:
-        return Value(val)
-    return None
-
-
-@proto.transition(name="timeout")
-def timeout(): pass
-
-@timeout.arguments
-def _(state: OpenAIConfigState, this: Any) -> Optional[Tuple[()]]:
-    return ()
-
-@timeout.returns
-def _(state: OpenAIConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[TimeoutSeconds]]:
-    val = TimeoutSeconds(state.timeout)
-    if isinstance(outcome, Value) and outcome.val == val:
-        return outcome
-    if outcome is NotBound:
-        return Value(val)
-    return None
-
-
-@proto.transition(name="temperature")
-def temperature(): pass
-
-@temperature.arguments
-def _(state: OpenAIConfigState, this: Any) -> Optional[Tuple[()]]:
-    return ()
-
-@temperature.returns
-def _(state: OpenAIConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Temperature]]:
-    val = Temperature(state.temperature)
-    if isinstance(outcome, Value) and outcome.val == val:
-        return outcome
-    if outcome is NotBound:
-        return Value(val)
-    return None
-
-
-@proto.transition(name="max_tokens")
-def max_tokens(): pass
-
-@max_tokens.arguments
-def _(state: OpenAIConfigState, this: Any) -> Optional[Tuple[()]]:
-    return ()
-
-@max_tokens.returns
-def _(state: OpenAIConfigState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Optional[MaxTokens]]]:
-    val = MaxTokens(state.max_tokens) if state.max_tokens is not None else None
-    if isinstance(outcome, Value) and outcome.val == val:
-        return outcome
-    if outcome is NotBound:
-        return Value(val)
-    return None
+proto = OpenAIConfigStateMachine()
 
 
 # ==============================================================================
@@ -194,8 +103,7 @@ def _(state: OpenAIConfigState, this: Any, outcome: object = NotBound) -> Option
 
 def make_openai_config_fake(state: Optional[OpenAIConfigState] = None) -> OpenAIConfig:
     """Instantiate a synthesized OpenAIConfig fake."""
-    st = state or OpenAIConfigState()
-    sm = proto.make_state_machine(st)
+    sm = OpenAIConfigStateMachine(state or OpenAIConfigState())
     return sm.as_fake(OpenAIConfig)
 
 

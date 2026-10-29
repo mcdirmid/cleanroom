@@ -28,10 +28,10 @@ Given: a flight telemetry record with 10,000 uncached inbound tokens, 40,000 cac
 
 ## Scenario 4 — Verification outcomes record
 
-Given: a verification outcome record reporting spec linter pass true, 0 pyright errors, 15 unit tests passed, 0 unit tests failed, line coverage 96.4%, branch coverage 92.1%, and mutation score 88.5%.
+Given: a verification outcome record reporting spec linter pass true, 0 pyright errors, 15 unit tests passed, 0 unit tests failed, line coverage 96.4%, branch coverage 92.1%, mutation score 88.5%, and convergence status true.
 
 1. The caller inspects the quality gate status.
-   Observed: spec linter pass is true, pyright errors is 0, and all unit tests passed.
+   Observed: spec linter pass is true, pyright errors is 0, convergence status is true, and all unit tests passed.
 
 ## Scenario 5 — Flight trace structure
 
@@ -52,6 +52,9 @@ Given: a completed flight record and benchmark unit with synthesized library, te
 
 3. The caller requests artifact archival for a flight record whose verification outcomes indicate failure.
    Observed: returns None and skips writing files to the results directory.
+
+4. The caller completes a failed flight and tears down the flight scope.
+   Observed: skips artifact archival, preserves the ephemeral flight scope directory as `<flight_scope>.failed` with associated role workspaces under `<flight_scope>.failed/role_workspaces`, and reports failure status in the summary report.
 
 ## Scenario 8 — Baseline flight recording and execution
 
@@ -89,6 +92,6 @@ Given: a benchmark evaluator and a flight request with both `--baseline` and `--
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-19T18:45:00Z
-LAST_CHANGED: 2026-10-25T22:45:00Z
-CHANGE: Add scenario for Pretense baseline benchmark flight execution
+LAST_CHANGED: 2026-10-27T22:45:00Z
+CHANGE: Specify failed flight scope preservation with role workspaces, failure status reporting, and non-zero exit code on verification failure
 -->

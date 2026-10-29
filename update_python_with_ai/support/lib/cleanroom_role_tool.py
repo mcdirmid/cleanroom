@@ -365,17 +365,20 @@ Your sole, monomaniacal mission is coordinating multi-agent DAG convergence acro
    ```bash
    uv run cleanroom work-queue <scope> [role] --json
    ```
+   (Note: if the prompt specifies `up to <role>`, `<scope>#<role>`, or a fused role like `baseline` or `pretense_baseline`, pass `<role>` as the second positional argument or `--role <role>`).
    Parse the returned JSON to determine ready roles and targets, and retrieve role workspace directories from `workspace_dirs`. If `is_clean` is true, proceed to step 9!
 5. DISPATCH OR WAKE WORKSPACE-BOUND ROLE WORKERS:
    For each role with ready nodes in the queue:
    - Check active subagents using `manage_subagents` with action `list`.
    - Obtain the workspace directory for the role from `workspace_dirs[<role>]`.
+   - If the role is a fused role (e.g. `baseline` or `pretense_baseline`), instruct the worker to run `bin/get_work` once at start, consult its workspace `AGENTS.md` and `guides/`, verify via its provisioned `bin/verify_*` micro-binaries, and report `COMPLETED` via `send_message` when done (without calling `bin/submit` or `bin/check_files`).
    - If an active worker for that role already exists, wake it using `send_message`:
-     "Ready nodes detected in global DAG. Your assigned role workspace directory is '<workspace_dir>'. Set Cwd to '<workspace_dir>' for all tool calls. Immediately run bin/get_work to acquire pending ready nodes. Consult your workspace AGENTS.md and role guide, perform role verification via bin/check_files, resolve nodes via bin/submit, bin/blame, or bin/fail, and drain all ready nodes before completing. If success is impossible, run bin/fail <target> '<reason>' and report FAILED: <target> - <reason>."
+     "Ready nodes detected in global DAG. Your assigned role workspace directory is '<workspace_dir>'. Set Cwd to '<workspace_dir>' for all tool calls. Immediately run bin/get_work to acquire pending ready nodes. Consult your workspace AGENTS.md and role guide, perform role verification (via bin/check_files for standard roles, or bin/verify_* micro-binaries for fused roles), resolve nodes (via bin/submit, bin/blame, or bin/fail for standard roles, or report COMPLETED for fused roles), and drain all ready nodes before completing. If success is impossible, run bin/fail <target> '<reason>' and report FAILED: <target> - <reason>."
    - If no active worker for that role exists, spawn it via `invoke_subagent`:
      - TypeName: "cleanroom_worker"
      - Role: "Cleanroom <Role> Worker"
-     - Prompt: "You are an autonomous Cleanroom '<role>' worker for scope '<scope>'. Your assigned role workspace directory is '<workspace_dir>'. You must operate strictly inside your assigned role workspace directory, setting Cwd to '<workspace_dir>' for all tool calls. You may use standard shell commands (cat, grep, find, etc.) and native tools strictly within your workspace, but all target verification and round resolution must proceed through the prescribed bin/ executables (bin/get_work, bin/check_files, bin/submit, bin/blame, bin/fail). Immediately run bin/get_work to acquire pending ready nodes. Consult your workspace AGENTS.md and role guide, perform role verification via bin/check_files, resolve nodes via bin/submit, bin/blame, or bin/fail, and drain all ready nodes before completing. If success is impossible or an unresolvable impasse occurs, execute bin/fail <target> '<reason>' and report FAILED: <target> - <reason>."
+     - Model: "<antigravity_models[<role>]>" (MUST use `antigravity_models[<role>]` from `work-queue --json`: e.g. `"flash"` when `gemini-flash` is specified, `"flash_lite"` when `flash-lite` is specified, `"pro"` when `pro` is specified, and `"inherit"` when `gemini-argon` is specified since Antigravity does not expose Argon directly for subagents)
+     - Prompt: "You are an autonomous Cleanroom '<role>' worker for scope '<scope>'. Your assigned role workspace directory is '<workspace_dir>'. You must operate strictly inside your assigned role workspace directory, setting Cwd to '<workspace_dir>' for all tool calls. You may use standard shell commands (cat, grep, find, etc.) and native tools strictly within your workspace, but all target verification and round resolution must proceed through the prescribed bin/ executables in your workspace (consult AGENTS.md). Immediately run bin/get_work to acquire pending ready nodes. Consult your workspace AGENTS.md and companion guides in guides/, perform role verification (bin/check_files for standard roles; bin/verify_* micro-binaries for fused roles), resolve nodes (bin/submit, bin/blame, or bin/fail for standard roles; or report COMPLETED via send_message for fused roles without calling bin/submit), and drain all ready nodes before completing. If success is impossible or an unresolvable impasse occurs, execute bin/fail <target> '<reason>' and report FAILED: <target> - <reason>."
    - (Note: if `invoke_subagent` reports cleanroom_worker not found, call `define_subagent` with name "cleanroom_worker", write tools enabled, and retry).
 6. REACTIVE SLEEP:
    After dispatching or waking the ready role workers, STOP calling tools and wait for worker completion messages. Do NOT poll, loop, or sleep.
@@ -385,14 +388,26 @@ Your sole, monomaniacal mission is coordinating multi-agent DAG convergence acro
      2. Clean up all workers: `manage_subagents(Action="kill_all")`.
      3. Escalate the failure directly to your parent/user:
         "Cleanroom convergence aborted: Worker for role '<role>' failed target '<target>' with reason: <reason>"
-   - When a worker reports completion, re-run `uv run cleanroom work-queue <scope> [role] --json`.
+   - When a worker reports completion:
+     - Check if the worker is executing in a fused role workspace (e.g. role is `baseline` or `pretense_baseline`, or `.cleanroom_role.json` in `workspace_dir` has `fused_roles`).
+     - If it is a fused worker:
+       1. Run formal verification:
+          `uv run cleanroom verify-fused <workspace_dir>`
+       2. If verification fails:
+          Send diagnostic failure feedback to worker via `send_message`:
+          "Fused verification failed:\n<diagnostics>\nPlease fix these issues in your workspace ('<workspace_dir>'), re-verify using your workspace bin/verify_* micro-binaries, and send COMPLETED when ready."
+          Track retry count (enforce a hardcoded maximum of 3 retries). If failures persist after 3 retries, abort with failure.
+       3. If verification passes:
+          Run atomic harvest to mark all constituent targets clean:
+          `uv run cleanroom harvest-fused <workspace_dir>`
+     - Re-run `uv run cleanroom work-queue <scope> [role] --json`.
 8. ITERATE TO CONVERGENCE:
    Repeat step 4-7 until `is_clean` is true and all nodes evaluate clean.
 9. FINAL CLEANUP & REPORT:
    Once `is_clean` is true:
    - Clean up workers using `manage_subagents(Action="kill_all")`.
    - Decommission role workspaces via run_command:
-     `uv run cleanroom decommission <scope>`
+     `uv run cleanroom decommission <scope> [role]`
    - Send completion message back to parent:
      "Scope '<scope>' converged clean across all roles (up to '<role>'). All provisioned role workspaces decommissioned."
 """
@@ -421,12 +436,9 @@ You are fully permitted to run standard shell utilities and scripts (`cat`, `gre
 Git operations (`git checkout`, `git restore`, `git reset`, etc.) and accessing files outside your workspace remain strictly prohibited.
 
 ## MANDATORY WORKFLOW BINARIES:
-All Cleanroom target resolution must proceed through the prescribed workspace binaries:
-- `bin/get_work`
-- `bin/check_files`
-- `bin/submit`
-- `bin/blame`
-- `bin/fail`
+All Cleanroom target resolution must proceed through the prescribed workspace binaries in `bin/`:
+- Standard Role Workspaces: `bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`, `bin/fail`
+- Fused Role Workspaces: `bin/get_work` (call ONCE at session start), `bin/verify_*` (for each constituent role), `bin/fail`
 
 ## UNRESOLVABLE IMPASSE & FAILURE PROTOCOL:
 If you determine that success is not possible (e.g. unreachable code under test, contradictory specification contracts, or dead ends that blame cannot resolve):
@@ -443,26 +455,35 @@ If you determine that success is not possible (e.g. unreachable code under test,
 
 ## METADATA PROJECTION & INVIOLABILITY:
 - NEVER manually edit `# --- CLEANROOM METADATA ---` or `<!-- CLEANROOM METADATA -->` headers. Use only tools (`bin/submit`, `bin/blame`, `bin/fail`).
-- Files in your role workspace are projected to intentionally omit `LAST_CLEANED`, `LAST_CHANGED`, and audit timestamps. Canonical lifecycle timestamps are maintained exclusively in the main repository and managed by `bin/submit`.
+- Files in your role workspace are projected to intentionally omit `LAST_CLEANED`, `LAST_CHANGED`, and audit timestamps. Canonical lifecycle timestamps are maintained exclusively in the main repository and managed by `bin/submit` (or `cleanroom harvest-fused`).
 - Never attempt to manually add `LAST_CLEANED` or `LAST_CHANGED` to local workspace files, and never treat missing lifecycle timestamps in local workspace files as a defect.
 - If `bin/get_work` assigns a target, perform thorough semantic verification against contracts and test suites rather than assuming it is clean just because static syntax and type checks pass.
 
 ## STANDARD WORKFLOW:
 1. Run `bin/get_work` to acquire pending ready nodes and review unacted feedback.
-2. Consult your workspace `AGENTS.md` and companion guide to perform role duties.
-3. Perform role verification using `bin/check_files`.
-4. Resolve nodes:
-   - If clean and all feedback resolved: `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>`)
-   - If defective upstream contract: `bin/blame <culprit_file> "<explanation>"`
-   - If success is impossible / impasse: `bin/fail <target_file> "<reason>"` and send `FAILED: <target_file> - <reason>` to coordinator.
-5. Drain all ready nodes until `bin/get_work` confirms all units in scope are clean.
-6. Once all ready nodes in your workspace are drained, report completion to the coordinator via `send_message`:
-   `COMPLETED: All ready units in workspace drained clean.`
+   - Note: If `bin/get_work` outputs a `[CRITICAL MODEL MISMATCH]` error (because `gemini-argon` was requested via `inherit` while Antigravity is running a different model), DO NOT proceed. Immediately send `FAILED: <scope> - <exact error message instructing the user to manually switch their model to "Gemini Argon" before requesting the run again>` to the coordinator via `send_message` and stop.
+2. Consult your workspace `AGENTS.md` and companion guide(s) in `guides/` to perform role duties.
+3. For standard roles:
+   - Perform role verification using `bin/check_files`.
+   - Resolve nodes via `bin/submit <target_file> "<summary>"`, `bin/blame <culprit_file> "<explanation>"`, or `bin/fail <target_file> "<reason>"`.
+   - Drain all ready nodes until `bin/get_work` confirms all units in scope are clean, then report `COMPLETED: All ready units in workspace drained clean.` via `send_message`.
+4. For fused roles (`baseline` / `pretense_baseline`):
+   - Call `bin/get_work` ONCE at session start.
+   - Implement `lib/*.py` and author `tests/*_test.py` (or `pretense/*_pretense.py`) consulting `guides/`.
+   - Perform both Arbiter self-audits (QA contract fidelity and Coverage semantic closure—prune dead defensive code).
+   - Verify with your workspace `bin/verify_*` micro-binaries until all constituent checks pass with 0 errors and 100% coverage.
+   - Do NOT call `bin/submit`. Report `COMPLETED: All library code, tests, and coverage passing for <scope>.` to the coordinator via `send_message`.
+
+5. IMMEDIATE ROUND CONCLUSION WHEN WORK IS DONE:
+   When you have no outstanding work to do and `bin/get_work` does not give you more work to do (all ready targets have been submitted, blamed, or verified clean, or only blocked targets remain):
+   - You can and MUST conclude your round immediately.
+   - Do NOT execute any further tool calls (`ls`, `cat`, `bin/get_work`, dummy commands).
+   - Output your concise final summary text (or send `COMPLETED` via `send_message` for coordinator subagents). Delivering text with zero tool calls is the expected signal that completes your round cleanly.
 """
 
 BASELINE_WORKER_AGENT_MD = """---
 name: cleanroom_baseline_worker
-description: Autonomous baseline software developer subagent that implements the library, writes unit tests, and verifies testing in a single round.
+description: Autonomous baseline software developer subagent that implements code, authors tests, and verifies testing in a single round.
 tools:
     - send_message
     - view_file
@@ -477,37 +498,45 @@ inheritMcp: false
 
 # Agent System Instructions
 
-You are an autonomous software developer working directly on code and test implementation.
-Your goal is to implement the library module, write comprehensive unit tests, and verify that the tests pass and code is clean—all within this single round.
+You are an autonomous software developer working directly on code and test implementation within an assigned Cleanroom workspace.
+Your goal is to implement required code, author comprehensive verification suites, and verify that all checks pass and code is clean—all within this single round.
+
+## AUTHORITATIVE INSTRUCTIONS:
+Your workspace contains an `AGENTS.md` file in its root directory generated specifically for your assigned role and scope.
+You MUST read and follow `AGENTS.md` as your primary operational guide for target paths, verification commands, and completion protocols.
 
 ## PERMITTED TOOLS & SHELL COMMANDS:
 You are equipped with standard software development tools:
-- Shell / terminal commands (`run_command`) to run `pytest`, `pyright`, `python`, etc.
+- Shell / terminal commands (`run_command`) strictly WITHIN your assigned role workspace directory (`.`).
 - File viewing / reading (`view_file`, `cat`, etc.)
 - File editing / writing (`write_to_file`, `replace_file_content`, `multi_replace_file_content`)
+- Communication with the coordinator (`send_message`)
 
 ## WORKFLOW:
-1. Low-Level Specification Grounding:
-   - Read and inspect the specifications in `<target_dir>/low/*.pyi` (e.g. `<unit>.pyi` and `<unit>_impl.pyi`).
-   - Understand all protocols, dataclasses, class definitions, method signatures, and contract postconditions.
-2. Library Implementation (Two-File Structure in `lib/`):
-   - For `<unit>.pyi` and `<unit>_impl.pyi`, implement the corresponding two Python files in `<target_dir>/lib/`:
-     - `<target_dir>/lib/<unit>.py`: Public interfaces, protocols, dataclasses, enums, and exceptions matching `<unit>.pyi`.
-     - `<target_dir>/lib/<unit>_impl.py`: Concrete realization classes realizing those interfaces matching `<unit>_impl.pyi`.
+1. Workspace Initialization & Grounding:
+   - Call `bin/get_work` ONCE at start to discover your assigned targets, dependencies, and companion guides.
+   - Read `AGENTS.md` in your workspace root to understand assigned target patterns, verification binaries, and role rules.
+   - Targeted Reads Over Full Dumps: Never dump or read entire large files repeatedly. Use grep or narrow line ranges with offset and limit to inspect code.
+2. Specification Grounding:
+   - Read assigned specification contracts to understand all public protocols, interfaces, data structures, and contract postconditions.
+3. Verification Suite Authoring:
+   - Author comprehensive test or state machine verification suites following your assigned verification guide in `guides/`.
+   - Embed contract postconditions in `ctx.ensures(...)` handlers on state machine transitions.
+   - In fixed implementation tests (`Test<Target>ImplReal`), drive scenarios via transition dispatch (`self.sm.dispatch_transition(...)`) without redundant manual assertions; `ctx.ensures(...)` verifies postconditions automatically.
+   - Type Contract Respect: NEVER pass `None` or invalid types into strictly-typed non-optional parameters unless explicitly contracted in specifications.
+   - Non-Concerns as Undefined Behavior: If an anomalous condition or failure mode is uncontracted in the specification, it is undefined behavior; testing it is strictly prohibited.
+   - Public Attribution Purity: Do NOT couple tests to synthetic internal placeholders (e.g. graph root keys) or private attributes.
+4. Implementation Realization:
+   - Implement realization targets satisfying the specification contracts and passing your verification suites.
    - Maintain strict interface fidelity and type annotations matching the specifications.
-3. Unit Test Suite (in `tests/`):
-   - Author comprehensive unit tests in `<target_dir>/tests/<unit>_impl_test.py` targeting `<target_dir>/lib/<unit>_impl.py`.
-   - Test standard behaviors, edge cases, error conditions, and lifecycle transitions specified in the contracts.
-4. Verification & 100% Code Coverage Gate:
-   - Run type checker:
-     `pyright <target_dir>` (ensure 0 errors).
-   - Run tests with statement and branch coverage:
-     `pytest --cov=<target_dir>/lib --cov-report=term-missing <target_dir>/tests`
-   - Ensure all unit tests pass with zero failures.
-   - Achieve 100% code coverage across all library files. For code lines that cannot possibly be covered during tests (such as defensive assertion fallbacks or unreachable platform branches), annotate them with `# pragma: no cover`.
-5. Completion:
-   - Once all tests pass with 0 type errors and 100% coverage, report completion via `send_message`:
-     `COMPLETED: All library code and tests implemented and passing with full coverage.`
+5. Verification & Arbiter Self-Audits:
+   - Run your workspace provisioned `bin/verify_*` micro-binaries until all constituent checks pass with 0 errors and 100% coverage.
+   - Perform QA Arbiter self-audit: ensure tests test true public contracts and pass all property fuzzing.
+   - Perform Coverage Arbiter self-audit: inspect all branches; PRUNE uncontracted dead defensive code rather than writing synthetic tests to artificially cover it.
+6. Completion:
+   - Once all micro-binaries pass with 0 errors and 100% coverage, report completion via `send_message`:
+     `COMPLETED: All implementation, tests, and coverage passing for <scope>.`
+   - Do NOT run `bin/submit`.
 """
 
 
@@ -591,13 +620,7 @@ def dispatch_antigravity_coordination(
     if not agentapi_cmd:
         return False
 
-    if baseline:
-        prompt = (
-            f"AUTONOMOUS ANTIGRAVITY BASELINE DIRECTIVE for {target_display}: "
-            f"Invoke cleanroom_baseline_worker immediately to implement lib and tests satisfying the low-level specification."
-        )
-    else:
-        prompt = f"Clean all dirty nodes in {target_display} using cleanroom_coordinator."
+    prompt = f"Clean all dirty nodes in {target_display} using cleanroom_coordinator."
 
     if mode == "message":
         if not conv_id:
@@ -1011,6 +1034,11 @@ def run_work_queue(argv: list[str]) -> int:
         help="Inspect work queue for Pretense pipeline.",
     )
     parser.add_argument(
+        "--baseline",
+        action="store_true",
+        help="Inspect work queue for fused baseline role.",
+    )
+    parser.add_argument(
         "--repo-root",
         dest="repo_root",
         default=None,
@@ -1024,6 +1052,8 @@ def run_work_queue(argv: list[str]) -> int:
 
     scope, parsed_role, is_unit = parse_cleanroom_target(target_input)
     target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
+    if parsed.baseline and not target_role:
+        target_role = "pretense_baseline" if parsed.pretense else "baseline"
 
     root = parsed.repo_root or find_workspace_root()
     active_pipeline = resolve_scope_pipeline(
@@ -1068,19 +1098,63 @@ def run_work_queue(argv: list[str]) -> int:
                     matching_idx = idx
                     break
             if matching_idx is None:
-                valid_names = ", ".join(r.role_name for r in declared_roles)
-                print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
-                return 1
-            declared_roles = list(declared_roles[: matching_idx + 1])
+                try:
+                    fused_r_def = reg.resolve_role_definition(target_role, repo_root=root, dir_scope=scope)
+                    if fused_r_def and fused_r_def.fused_roles:
+                        declared_roles = [fused_r_def]
+                    else:
+                        valid_names = ", ".join(r.role_name for r in declared_roles)
+                        print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
+                        return 1
+                except Exception:
+                    valid_names = ", ".join(r.role_name for r in declared_roles)
+                    print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
+                    return 1
+            else:
+                declared_roles = list(declared_roles[: matching_idx + 1])
 
         # Auto-commission any missing role workspaces up to target_role
         default_model = resolve_default_model(root, harness="antigravity")
+        flight_file = os.path.join(root, ".cleanroom", "active_flight.json")
+        if os.path.isfile(flight_file):
+            try:
+                with open(flight_file, "r", encoding="utf-8") as f:
+                    fdata = json.load(f)
+                if fdata.get("flight_scope") == scope and fdata.get("model"):
+                    default_model = str(fdata["model"])
+            except Exception:
+                pass
         workspace_dirs: dict[str, str] = {}
+        role_models: dict[str, str] = {}
+        antigravity_models: dict[str, str] = {}
         for r in declared_roles:
             ws_dir = reg.compute_workspace_dir(r.role_name, dir_scope=scope, repo_root=root)
             if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
                 prov.commission(role_name=r.role_name, dir_scope=scope, repo_root=root, model=default_model)
             workspace_dirs[r.role_name] = ws_dir
+            ws_model = default_model or ""
+            rcfg = os.path.join(ws_dir, ".cleanroom_role.json")
+            if os.path.isfile(rcfg):
+                try:
+                    with open(rcfg, "r", encoding="utf-8") as f:
+                        rdata = json.load(f)
+                    if rdata.get("model"):
+                        ws_model = str(rdata["model"])
+                except Exception:
+                    pass
+            if ws_model:
+                role_models[r.role_name] = ws_model
+                m_low = ws_model.lower()
+                if "lite" in m_low:
+                    antigravity_models[r.role_name] = "flash_lite"
+                elif "flash" in m_low:
+                    antigravity_models[r.role_name] = "flash"
+                elif "argon" in m_low:
+                    antigravity_models[r.role_name] = "inherit"
+                elif "pro" in m_low:
+                    antigravity_models[r.role_name] = "pro"
+                else:
+                    antigravity_models[r.role_name] = "inherit"
 
         ready_by_role: dict[str, list[dict[str, Any]]] = {}
         blocked_by_role: dict[str, list[dict[str, Any]]] = {}
@@ -1104,7 +1178,6 @@ def run_work_queue(argv: list[str]) -> int:
 
         is_clean = not ready_by_role and not blocked_by_role
         if parsed.json:
-            import json
             payload: dict[str, Any] = {
                 "scope": scope,
                 "is_clean": is_clean,
@@ -1112,6 +1185,8 @@ def run_work_queue(argv: list[str]) -> int:
                 "ready": ready_by_role,
                 "blocked": blocked_by_role,
                 "workspace_dirs": workspace_dirs,
+                "role_models": role_models,
+                "antigravity_models": antigravity_models,
             }
             if target_role:
                 payload["up_to_role"] = target_role
@@ -1517,8 +1592,8 @@ def run_orchestrate(
     parser.add_argument(
         "--max-waves",
         type=int,
-        default=50,
-        help="Maximum execution wave iterations (default: 50).",
+        default=100,
+        help="Maximum execution wave iterations (default: 100).",
     )
     parser.add_argument(
         "--batch-size",
@@ -1564,6 +1639,11 @@ def run_orchestrate(
         help="Use Pretense testing pipeline (pretense, pretense_qa, pretense_coverage) instead of standard test/qa/coverage.",
     )
     parser.add_argument(
+        "--baseline",
+        action="store_true",
+        help="Execute fused baseline role instead of multi-agent DAG.",
+    )
+    parser.add_argument(
         "--antigravity-dispatch",
         choices=["message", "new-conversation", "none"],
         default="message",
@@ -1583,6 +1663,8 @@ def run_orchestrate(
 
     scope, parsed_role, is_unit = parse_cleanroom_target(target_input)
     target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
+    if parsed.baseline and not target_role:
+        target_role = "pretense_baseline" if parsed.pretense else "baseline"
 
     active_pipeline = resolve_scope_pipeline(
         scope=scope,
@@ -1627,7 +1709,7 @@ def run_orchestrate(
             h_model = parsed.model or resolve_default_model(parsed.repo_root, harness=active_harness)
             if h_model:
                 forward_args.extend(["--model", h_model])
-            if parsed.max_waves != 50:
+            if parsed.max_waves is not None:
                 forward_args.extend(["--max-waves", str(parsed.max_waves)])
             if parsed.batch_size is not None:
                 forward_args.extend(["--batch-size", str(parsed.batch_size)])
@@ -1686,10 +1768,20 @@ def run_orchestrate(
                     matching_idx = idx
                     break
             if matching_idx is None:
-                valid_names = ", ".join(r.role_name for r in declared_roles)
-                print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
-                return 1
-            declared_roles = list(declared_roles[: matching_idx + 1])
+                try:
+                    fused_r_def = reg.resolve_role_definition(target_role, repo_root=root, dir_scope=scope)
+                    if fused_r_def and fused_r_def.fused_roles:
+                        declared_roles = [fused_r_def]
+                    else:
+                        valid_names = ", ".join(r.role_name for r in declared_roles)
+                        print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
+                        return 1
+                except Exception:
+                    valid_names = ", ".join(r.role_name for r in declared_roles)
+                    print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
+                    return 1
+            else:
+                declared_roles = list(declared_roles[: matching_idx + 1])
 
         # Check DAG readiness across declared roles
         ready_nodes: list[tuple[str, str, list[str]]] = []
@@ -1748,8 +1840,8 @@ def run_orchestrate(
                 print(f"      [{r_name}] {t_file} -> {b_msg}")
 
         role_hint = f" up to {target_role}" if target_role else ""
-        target_display = target_input if is_unit else f"{scope}{role_hint}"
-        queue_hint = f" {target_input}" if is_unit else (f" {target_role}" if target_role else "")
+        target_display = f"{target_input}#{target_role}" if (is_unit and target_role) else (target_input if is_unit else f"{scope}{role_hint}")
+        queue_hint = f" {target_input} {target_role}" if (is_unit and target_role) else (f" {target_input}" if is_unit else (f" {target_role}" if target_role else ""))
 
         # Attempt Antigravity Desktop IPC dispatch
         dispatch_mode = getattr(parsed, "antigravity_dispatch", "message")
@@ -1760,6 +1852,18 @@ def run_orchestrate(
                 model=model_to_bind or "flash",
             )
 
+        ag_coord_model = "inherit"
+        if model_to_bind:
+            m_low = model_to_bind.lower()
+            if "lite" in m_low:
+                ag_coord_model = "flash_lite"
+            elif "flash" in m_low:
+                ag_coord_model = "flash"
+            elif "argon" in m_low:
+                ag_coord_model = "inherit"
+            elif "pro" in m_low:
+                ag_coord_model = "pro"
+
         print("\n" + "=" * 72)
         print("AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE:")
         print("The 'cleanroom_coordinator' subagent definition is installed and ready.")
@@ -1768,6 +1872,7 @@ def run_orchestrate(
         print("    Subagents=[{")
         print('      "TypeName": "cleanroom_coordinator",')
         print('      "Role": "Cleanroom Coordinator",')
+        print(f'      "Model": "{ag_coord_model}",')
         print(f'      "Prompt": "Clean all dirty nodes in {target_display} using cleanroom_coordinator."')
         print("    }]")
         print("  )")
@@ -2071,6 +2176,13 @@ def decommission_workspaces(
                     break
             if matching_idx is not None:
                 declared_roles = list(declared_roles[: matching_idx + 1])
+            else:
+                try:
+                    fused_r_def = reg.resolve_role_definition(target_clean, repo_root=root, dir_scope=dir_scope)
+                    if fused_r_def and fused_r_def.fused_roles:
+                        declared_roles = [fused_r_def]
+                except Exception:
+                    pass
 
         deleted_count = 0
         deleted_paths: set[str] = set()
@@ -2078,17 +2190,21 @@ def decommission_workspaces(
         def _delete_dir(path: str) -> None:
             if not os.path.isdir(path):
                 return
-            for dirpath, dirs, files in os.walk(path):
+            for dirpath, dirs, files in os.walk(path, followlinks=False):
                 for d in dirs:
-                    try:
-                        os.chmod(os.path.join(dirpath, d), 0o755)
-                    except OSError:
-                        pass
+                    dp = os.path.join(dirpath, d)
+                    if not os.path.islink(dp):
+                        try:
+                            os.chmod(dp, 0o755)
+                        except OSError:
+                            pass
                 for f in files:
-                    try:
-                        os.chmod(os.path.join(dirpath, f), 0o644)
-                    except OSError:
-                        pass
+                    fp = os.path.join(dirpath, f)
+                    if not os.path.islink(fp):
+                        try:
+                            os.chmod(fp, 0o644)
+                        except OSError:
+                            pass
             shutil.rmtree(path, ignore_errors=True)
 
         for r in declared_roles:
@@ -2214,6 +2330,408 @@ options:
 """)
 
 
+def _extract_unit_info(target_str: str, ws_root: str) -> tuple[str, str] | None:
+    clean = target_str.replace("\\", "/").lstrip("/")
+    if os.path.isabs(target_str):
+        try:
+            clean = os.path.relpath(target_str, ws_root).replace("\\", "/")
+        except ValueError:
+            pass
+    parts = clean.split("/")
+    base = os.path.splitext(os.path.basename(clean))[0]
+    if base == "__init__":
+        return None
+    unit_name = base
+    if unit_name.endswith("_test"):
+        unit_name = unit_name[:-5]
+    elif unit_name.endswith("_pretense"):
+        unit_name = unit_name[:-9]
+
+    part_dir = ""
+    if "parts" in parts:
+        idx = parts.index("parts")
+        if idx + 1 < len(parts):
+            part_dir = "/".join(parts[: idx + 2])
+    if not part_dir:
+        part_dir = os.path.dirname(os.path.dirname(clean)) or "."
+    return (part_dir, unit_name)
+
+
+def _resolve_role_def_dynamically(role_name: str, ws_root: str, main_root: str | None) -> Any:
+    # First attempt: WorkspaceRegistry via lifecycle
+    for cand_mod in (
+        "update_with_ai.parts.workspace.lib.role_registry",
+        "parts.workspace.lib.role_registry",
+        "role_registry",
+    ):
+        try:
+            mod = importlib.import_module(cand_mod)
+            from support.lib.lifecycle import enter_phase, get_singleton
+            from update_with_ai.parts.agent.lib import session as agent_session
+            with enter_phase(agent_session.agent_session):
+                reg = get_singleton(mod.WorkspaceRegistry)
+                r_def = reg.resolve_role_definition(role_name, repo_root=main_root or ws_root)
+                if r_def and r_def.verify_template:
+                    return r_def
+        except Exception:
+            pass
+
+    # Fallback: parse cleanroom_roles.toml directly from workspace or repo root
+    for root_cand in (ws_root, main_root):
+        if not root_cand:
+            continue
+        for toml_path in (
+            os.path.join(root_cand, "cleanroom_roles.toml"),
+            os.path.join(root_cand, "update_with_ai", "cleanroom_roles.toml"),
+            os.path.join(root_cand, "update_python_with_ai", "cleanroom_roles.toml"),
+        ):
+            if os.path.isfile(toml_path):
+                try:
+                    import tomllib
+                    with open(toml_path, "rb") as tf:
+                        tdata = tomllib.load(tf)
+                    r_sec = tdata.get("roles", {}).get(role_name)
+                    if r_sec:
+                        from types import SimpleNamespace
+                        return SimpleNamespace(
+                            name=r_sec.get("name", role_name),
+                            verify_template=r_sec.get("verify_template", ""),
+                            active_component_types=r_sec.get("active_component_types", []),
+                            src_pattern=r_sec.get("src_pattern", ""),
+                            fused_roles=r_sec.get("fused_roles", []),
+                            common_spec_roles=r_sec.get("common_spec_roles", []),
+                            star_role_deps=r_sec.get("star_role_deps", []),
+                        )
+                except Exception:
+                    pass
+    return None
+
+
+def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
+    ws_root = os.getcwd()
+    main_root = _find_main_repo_root()
+    meta_p = os.path.join(ws_root, ".cleanroom_role.json")
+    fused_roles: list[str] = []
+    d_scope = ""
+    if os.path.isfile(meta_p):
+        try:
+            with open(meta_p, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+                fused_roles = meta.get("fused_roles") or []
+                d_scope = meta.get("dir_scope") or ""
+        except Exception:
+            pass
+
+    raw_targets: list[str] = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in ("--threshold", "--pyi"):
+            i += 2
+            continue
+        elif arg.startswith("--threshold=") or arg.startswith("--pyi="):
+            i += 1
+            continue
+        elif arg in ("--impl", "--test", "--pretense"):
+            if i + 1 < len(argv) and not argv[i + 1].startswith("-"):
+                raw_targets.append(argv[i + 1])
+                i += 2
+                continue
+            i += 1
+            continue
+        elif arg.startswith("--impl=") or arg.startswith("--test=") or arg.startswith("--pretense="):
+            raw_targets.append(arg.split("=", 1)[1])
+            i += 1
+            continue
+        elif arg.startswith("-"):
+            i += 1
+            continue
+        else:
+            raw_targets.append(arg)
+            i += 1
+
+    target_units: list[tuple[str, str]] = []
+    if raw_targets:
+        for rt in raw_targets:
+            full_rt = os.path.join(ws_root, rt) if not os.path.isabs(rt) else rt
+            if os.path.isdir(full_rt):
+                for root_d, _, files_d in os.walk(full_rt):
+                    for fd in sorted(files_d):
+                        if fd.endswith((".py", ".pyi")) and not fd.startswith(".") and fd != "__init__.py":
+                            u_info = _extract_unit_info(os.path.join(root_d, fd), ws_root)
+                            if u_info and u_info not in target_units:
+                                target_units.append(u_info)
+            else:
+                u_info = _extract_unit_info(rt, ws_root)
+                if u_info and u_info not in target_units:
+                    target_units.append(u_info)
+    else:
+        parts_p = os.path.join(ws_root, d_scope, "parts") if d_scope else os.path.join(ws_root, "parts")
+        if not os.path.isdir(parts_p) and os.path.isdir(os.path.join(ws_root, "parts")):
+            parts_p = os.path.join(ws_root, "parts")
+        if os.path.isdir(parts_p):
+            for p_dir in sorted(os.listdir(parts_p)):
+                p_full = os.path.join(parts_p, p_dir)
+                if not os.path.isdir(p_full) or p_dir.startswith("."):
+                    continue
+                part_rel = os.path.relpath(p_full, ws_root).replace(os.sep, "/")
+                cand_files: set[str] = set()
+                for sub in ("low", "lib", "tests", "pretense"):
+                    sub_d = os.path.join(p_full, sub)
+                    if os.path.isdir(sub_d):
+                        for f in os.listdir(sub_d):
+                            if f.endswith((".py", ".pyi")) and not f.startswith(".") and f != "__init__.py":
+                                cand_files.add(f)
+                for f in sorted(cand_files):
+                    base = os.path.splitext(f)[0]
+                    if base.endswith("_test"):
+                        base = base[:-5]
+                    elif base.endswith("_pretense"):
+                        base = base[:-9]
+                    pair = (part_rel, base)
+                    if pair not in target_units:
+                        target_units.append(pair)
+
+    if not target_units:
+        print(f"[OK] No targets found to verify for role '{role_name}'.")
+        return 0
+
+    # Resolve role definition dynamically
+    r_def = _resolve_role_def_dynamically(role_name, ws_root, main_root)
+    if not r_def and f"pretense_{role_name}" in fused_roles:
+        r_def = _resolve_role_def_dynamically(f"pretense_{role_name}", ws_root, main_root)
+    if not r_def and any("test" in r for r in fused_roles) and role_name == "pretense":
+        r_def = _resolve_role_def_dynamically("test", ws_root, main_root)
+
+    if not r_def:
+        print(f"Error: Unknown role verification definition for '{role_name}'.", file=sys.stderr)
+        return 1
+
+    cmd_tmpl = getattr(r_def, "verify_template", "") or ""
+    if not cmd_tmpl or cmd_tmpl.strip().startswith("#"):
+        print(f"[OK] No verification check required for role '{role_name}'.")
+        return 0
+
+    active_types = getattr(r_def, "active_component_types", []) or []
+    src_pattern = getattr(r_def, "src_pattern", "") or ""
+
+    env = dict(os.environ)
+    env["BUILD_WORKSPACE_DIRECTORY"] = ws_root
+    if "UV_PROJECT" not in env and main_root and os.path.isdir(main_root):
+        env["UV_PROJECT"] = main_root
+    pypaths = [ws_root]
+    sup_lib = os.path.join(ws_root, "support", "lib")
+    if os.path.isdir(sup_lib):
+        pypaths.append(sup_lib)
+    if main_root and os.path.isdir(main_root):
+        pypaths.append(main_root)
+        for cand_sup in (
+            os.path.join(main_root, "support", "lib"),
+            os.path.join(main_root, "update_with_ai"),
+            os.path.join(main_root, "update_python_with_ai"),
+        ):
+            if os.path.isdir(cand_sup) and cand_sup not in pypaths:
+                pypaths.append(cand_sup)
+    if "PYTHONPATH" in env:
+        pypaths.extend(p for p in env["PYTHONPATH"].split(os.pathsep) if p and p not in pypaths)
+    env["PYTHONPATH"] = os.pathsep.join(pypaths)
+
+    verified_count = 0
+    for part_dir, unit_name in target_units:
+        # Classify component type: _impl is implementation, else interface
+        ctype = "implementation" if unit_name.endswith("_impl") else "interface"
+        if active_types and ctype not in active_types:
+            continue
+
+        if src_pattern:
+            expected_file = os.path.join(ws_root, src_pattern.format(unit_dir=part_dir, unit_name=unit_name))
+            if not os.path.isfile(expected_file):
+                continue
+
+        formatted_cmd = cmd_tmpl.format(
+            unit_dir=part_dir,
+            unit_name=unit_name,
+            max_failures=1,
+            maxfail_arg="--maxfail=1",
+        )
+
+        target_display = f"{part_dir}/{unit_name}"
+        print(f"=== Verifying {role_name} on {target_display} ===")
+        res = subprocess.run(formatted_cmd, shell=True, cwd=ws_root, env=env, capture_output=True, text=True)
+        if res.returncode != 0:
+            print(f"[FAIL] Verification failed for {target_display} ({role_name}):\n{res.stdout}\n{res.stderr}".strip())
+            spec_roles = list(getattr(r_def, "common_spec_roles", None) or getattr(r_def, "star_role_deps", None) or [])
+            resolved_specs: list[str] = []
+            base_unit = unit_name[:-5] if unit_name.endswith("_impl") else unit_name
+            for s_role in spec_roles:
+                s_def = _resolve_role_def_dynamically(s_role, ws_root, main_root)
+                if not s_def or not getattr(s_def, "src_pattern", ""):
+                    continue
+                cands = [s_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)]
+                if base_unit != unit_name:
+                    cands.append(s_def.src_pattern.format(unit_dir=part_dir, unit_name=base_unit))
+                found_any = False
+                for c in cands:
+                    full_ws = os.path.join(ws_root, c) if not os.path.isabs(c) else c
+                    full_repo = os.path.join(main_root, c) if (main_root and not os.path.isabs(c)) else None
+                    if os.path.isfile(full_ws):
+                        rel = os.path.relpath(full_ws, ws_root)
+                        if rel not in resolved_specs:
+                            resolved_specs.append(rel)
+                        found_any = True
+                    elif full_repo and os.path.isfile(full_repo):
+                        rel = os.path.relpath(full_repo, main_root) if main_root else c
+                        if rel not in resolved_specs:
+                            resolved_specs.append(rel)
+                        found_any = True
+                if not found_any and cands:
+                    if cands[0] not in resolved_specs:
+                        resolved_specs.append(cands[0])
+
+            spec_desc = ", ".join(resolved_specs) if resolved_specs else "the common specification"
+
+            if "coverage" in role_name:
+                print(
+                    "\n" + "=" * 80 + "\n"
+                    "[COVERAGE ARBITER REMINDER - EXPLAIN FEEDBACK IN TERMS OF SPECIFICATION]\n"
+                    f"• Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification ({spec_desc}).\n"
+                    "• Line numbers MAY be mentioned ONLY IF they reference the file being blamed.\n"
+                    "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
+                    "• Translate uncovered statements and branches into missing specification requirements or scenario cases.\n"
+                    "• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable according to the methodology.\n"
+                    + "=" * 80
+                )
+            elif "qa" in role_name:
+                print(
+                    "\n" + "=" * 80 + "\n"
+                    "[QA ARBITER REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]\n"
+                    f"• Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification ({spec_desc}).\n"
+                    "• Line numbers MAY be mentioned ONLY IF they reference the file being blamed.\n"
+                    "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
+                    "• Frame test failures strictly as contract discrepancies against the specification.\n"
+                    "• Explain the expected postcondition outcome versus the observed behavior.\n"
+                    + "=" * 80
+                )
+            return res.returncode
+        else:
+            if res.stdout.strip():
+                print(res.stdout.strip())
+            print(f"[OK] Verification passed for {target_display} ({role_name}).")
+            verified_count += 1
+
+    if verified_count == 0:
+        print(f"[OK] No applicable component targets to verify for role '{role_name}'.")
+    return 0
+
+
+def run_verify_fused_cli(argv: list[str]) -> int:
+    ws_dir = os.path.abspath(argv[0] if argv else os.getcwd())
+    meta_p = os.path.join(ws_dir, ".cleanroom_role.json")
+    if not os.path.isfile(meta_p):
+        print(f"Error: Not a cleanroom role workspace: {ws_dir}", file=sys.stderr)
+        return 1
+
+    with open(meta_p, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+
+    fused_roles = meta.get("fused_roles") or []
+    if not fused_roles:
+        print(f"Error: Workspace at {ws_dir} is not a fused role workspace.", file=sys.stderr)
+        return 1
+
+    for r in fused_roles:
+        print(f"[VERIFY-FUSED] Verifying constituent role '{r}' in {ws_dir}...")
+        orig_cwd = os.getcwd()
+        try:
+            os.chdir(ws_dir)
+            code = run_verify_micro_binary(r, [])
+            if code != 0:
+                print(f"[FAIL] Fused verification failed for role '{r}' in {ws_dir}.", file=sys.stderr)
+                return code
+        finally:
+            os.chdir(orig_cwd)
+
+    print(f"[OK] All fused role verifications passed in {ws_dir}.")
+    return 0
+
+
+def run_harvest_fused_cli(argv: list[str]) -> int:
+    ws_dir = os.path.abspath(argv[0] if argv else os.getcwd())
+    meta_p = os.path.join(ws_dir, ".cleanroom_role.json")
+    if not os.path.isfile(meta_p):
+        print(f"Error: Not a cleanroom role workspace: {ws_dir}", file=sys.stderr)
+        return 1
+
+    with open(meta_p, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+
+    fused_roles = meta.get("fused_roles") or []
+    dir_scope = meta.get("dir_scope") or meta.get("parts_dir", "")
+    main_root = _find_main_repo_root()
+    if not main_root or main_root == ws_dir:
+        parent = os.path.dirname(ws_dir)
+        if os.path.basename(parent) == "role_workspaces":
+            main_root = os.path.dirname(parent)
+        else:
+            main_root = os.getcwd()
+
+    parts_p = os.path.join(ws_dir, dir_scope, "parts") if dir_scope else os.path.join(ws_dir, "parts")
+    if not os.path.isdir(parts_p) and os.path.isdir(os.path.join(ws_dir, "parts")):
+        parts_p = os.path.join(ws_dir, "parts")
+
+    harvested_files: list[str] = []
+    if os.path.isdir(parts_p):
+        for root, dirs, files in os.walk(parts_p):
+            for f in files:
+                if f.endswith((".py", ".pyi", ".md")) and not f.startswith("."):
+                    rel = os.path.relpath(os.path.join(root, f), ws_dir).replace(os.sep, "/")
+                    is_constituent = False
+                    for r in fused_roles:
+                        if f"/{r}/" in f"/{rel}/" or (r == "test" and "/tests/" in f"/{rel}/"):
+                            is_constituent = True
+                            break
+                    if not is_constituent and ("lib/" in rel or "tests/" in rel or "pretense/" in rel):
+                        is_constituent = True
+
+                    if is_constituent:
+                        src_f = os.path.join(ws_dir, rel)
+                        dst_f = os.path.join(main_root, rel)
+                        os.makedirs(os.path.dirname(dst_f), exist_ok=True)
+                        shutil.copy2(src_f, dst_f)
+                        os.chmod(dst_f, 0o644)
+
+                        if f != "__init__.py":
+                            src_metadata = None
+                            for mod_cand in (
+                                "update_with_ai.parts.metadata.lib.src_metadata",
+                                "parts.metadata.lib.src_metadata",
+                                "src_metadata",
+                            ):
+                                try:
+                                    src_metadata = importlib.import_module(mod_cand)
+                                    break
+                                except Exception:
+                                    pass
+
+                            if src_metadata:
+                                src_metadata.record_change(dst_f, "Fused role implementation and verification")
+                                for c_role in fused_roles:
+                                    if "qa" in c_role or "coverage" in c_role:
+                                        src_metadata.stamp_audit(dst_f, c_role)
+                                if "qa" in fused_roles or "pretense_qa" in fused_roles:
+                                    src_metadata.stamp_audit(dst_f, "qa")
+                                if "coverage" in fused_roles or "pretense_coverage" in fused_roles:
+                                    src_metadata.stamp_audit(dst_f, "coverage")
+                                src_metadata.mark_clean(dst_f)
+                                src_metadata.update_metadata(dst_f, clear_dirty=True)
+                            harvested_files.append(rel)
+
+    print(f"[OK] Harvested {len(harvested_files)} files from {ws_dir} to {main_root}:")
+    for hf in harvested_files:
+        print(f"  - {hf}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     discovered_pkgs: list[str] = []
     for _r in _get_roots():
@@ -2266,9 +2784,9 @@ def main(argv: list[str] | None = None) -> int:
         os.path.isfile(os.path.join(os.getcwd(), ".cleanroom_role.json"))
         or os.environ.get("CLEANROOM_ROLE_WORKSPACE")
     )
+    cmd_0 = args_list[0] if args_list else ""
     is_worker_cmd = bool(
-        args_list
-        and args_list[0] in (
+        cmd_0 in (
             "coverage",
             "check_files",
             "check-files",
@@ -2278,7 +2796,13 @@ def main(argv: list[str] | None = None) -> int:
             "blame",
             "fail",
             "status",
+            "verify-fused",
+            "verify_fused",
+            "harvest-fused",
+            "harvest_fused",
         )
+        or cmd_0.startswith("verify_")
+        or cmd_0.startswith("verify-")
     )
     if not is_role_ws and not is_worker_cmd:
         try:
@@ -2333,6 +2857,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args_list[0] == "decommission":
         return run_decommission_cli(args_list[1:])
+
+    if args_list[0] in ("verify-fused", "verify_fused"):
+        return run_verify_fused_cli(args_list[1:])
+
+    if args_list[0] in ("harvest-fused", "harvest_fused"):
+        return run_harvest_fused_cli(args_list[1:])
+
+    if args_list[0].startswith("verify_") or args_list[0].startswith("verify-"):
+        sub_role = args_list[0][7:]
+        if sub_role not in ("fused",):
+            return run_verify_micro_binary(sub_role, args_list[1:])
 
     if "--loop" in args_list:
         clean_args = [a for a in args_list if a != "--loop"]

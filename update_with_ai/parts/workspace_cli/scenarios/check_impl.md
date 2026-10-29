@@ -21,12 +21,12 @@ Given: an active role workspace with local test stubs shadowing canonical module
 1. The caller runs `run_check_files`.
    Observed: executes verification tools with PYTHONPATH bounded strictly to the active role workspace and its package directories, isolating verification from the canonical repository root.
 
-## Scenario 4 — Blocked queue actionable next step formatting
+## Scenario 4 — Zero ready targets round conclusion directive formatting
 
-Given: an active role workspace where all assigned targets are blocked waiting on prerequisites and zero ready targets exist.
+Given: an active role workspace where all assigned targets are resolved, clean, or blocked waiting on prerequisites and zero ready targets exist.
 
 1. The caller runs `run_get_work`.
-   Observed: outputs the blocked target list and an actionable next step directing the worker that all targets are blocked waiting on prerequisites and the round must be concluded immediately without executing further tools.
+   Observed: outputs the round conclusion directive instructing the worker that all work assigned to their role is resolved and the round must be concluded immediately without executing further tools.
 
 ## Scenario 5 — Model failure limit propagation in test verification
 
@@ -49,8 +49,22 @@ Given: an active role workspace with an assigned role declaring a repository-rel
 1. The caller runs `run_get_work`.
    Observed: formats the actionable next steps displaying the workspace-relative companion guide path (`guides/pretense.md`) rather than the uncopied repository-relative path.
 
+## Scenario 8 — Gemini Argon active model verification in get_work
+
+Given: an active role workspace configured with model `gemini-argon` on the `antigravity` harness where the active subagent conversation is running on a non-Argon model (e.g. `gemini-3.8-flash`).
+
+1. The caller runs `run_get_work`.
+   Observed: aborts with exit code 1 and outputs an error telling the user to manually switch their model to "Gemini Argon" before requesting the run again.
+
+## Scenario 9 — Auditor specification grounding reminders upon verification failure
+
+Given: an active auditor role workspace (such as QA or Coverage) where verification checks fail.
+
+1. The caller runs `run_check_files`.
+   Observed: upon verification failure, outputs prominent auditor reminders directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-21T21:50:00Z
-LAST_CHANGED: 2026-10-25T22:12:00Z
-CHANGE: Add scenario for workspace-relative companion guide path resolution
+LAST_CHANGED: 2026-10-29T00:30:00Z
+CHANGE: Format auditor specification grounding reminders permitting line numbers in blamed file while forbidding exposing details of other files
 -->

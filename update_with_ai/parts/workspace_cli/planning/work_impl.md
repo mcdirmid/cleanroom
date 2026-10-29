@@ -24,7 +24,7 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
 - The workspace work manager evaluates producer unit dirtiness by checking intra-unit role dependencies against local cleaning timestamps. [evaluate_producer_unit_dirtiness]
 - The workspace work manager evaluates unit dirtiness by testing star role dependency modification timestamps. [evaluate_star_dependency_dirtiness]
 - The workspace work manager discovers part units and dependencies from build definitions, High-Level Specifications, or filesystem component stems. [discover_part_units_and_dependencies]
-- The workspace work manager inspects parts in scope to compute ready and blocked role units with topological ordering across role dependencies, feedback role dependencies, star role dependencies, and silent role dependencies. [compute_and_sort_role_work_queue]
+- The workspace work manager inspects parts in scope to compute ready and blocked role units with topological ordering across role dependencies, feedback role dependencies, star role dependencies, and silent role dependencies, relaxing intra-fuse upstream dependencies when evaluating a fused role cluster. [compute_and_sort_role_work_queue]
 - The workspace work manager bounds work queue discovery to a designated target unit and its transitive upstream dependencies when a target unit is specified. [bound_work_queue_to_target_unit]
 - The workspace work manager materializes starter templates via graph storage for missing ready target files of roles with source patterns and upstream dependencies. [materialize_ready_target_templates]
 
@@ -69,8 +69,8 @@ Guiding autonomous agents through multi-step pipeline tasks requires distinguish
   - Grounded: [pending_work_buffer_mechanics, queue_diagnostic_rendering_logic]
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-19T16:30:00Z
-CHANGE: evaluate role upstream prerequisites across silent role dependencies
+LAST_CLEANED: 2026-10-26T20:38:00Z
+LAST_CHANGED: 2026-10-26T20:38:00Z
+CHANGE: Relax intra-fuse upstream dependencies when computing work queues for fused roles
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

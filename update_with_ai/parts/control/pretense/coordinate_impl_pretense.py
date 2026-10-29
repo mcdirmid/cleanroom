@@ -9,6 +9,8 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense.collections import PretenseDict, PretenseSet
+from pretense import Domain, StateMachine, TransitionContext, transition
+from pretense.collections import PretenseDict, PretenseSet
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.control.lib.coordinate import (
@@ -32,428 +34,234 @@ class SessionCoordinatorState:
     tasks: List[ScheduledTask] = field(default_factory=list)
 
 
-proto = StateMachineProto[SessionCoordinatorState]()
+class SessionCoordinatorStateMachine(StateMachine[SessionCoordinatorState]):
+    """Pretense StateMachine for SessionCoordinator."""
 
+    def __init__(self, state: Optional[SessionCoordinatorState] = None):
+        super().__init__(state=state or SessionCoordinatorState())
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
+    # ==============================================================================
+    # 1. Seeding Transitions
+    # ==============================================================================
 
-@proto.seeding()
-def seed_session_node(): pass
+    @transition.seeding()
+    def seed_session_node(
+        self,
+        ctx: TransitionContext[None, [DagNode, str, TargetState], None],
+    ) -> None:
+        ctx.arguments(
+                    node=Domain(strategy=lambda: DagNode(UnitAddress('core'), RoleAddress('lib'))),
+                    alias=Domain(strategy=lambda: 'lib/core.py'),
+                    target_state=Domain(strategy=lambda: TargetState.OPEN),
+                )
+        def _consequent(
+            res: None,
+            node: DagNode = DagNode(UnitAddress("core"), RoleAddress("lib")),
+            alias: str = "lib/core.py",
+            target_state: TargetState = TargetState.OPEN,
+        ) -> None:
+            self.state.node_states[node] = target_state
+            self.state.node_to_alias[node] = alias
+            self.state.alias_to_node[alias] = node
+        ctx.update(_consequent)
 
-@seed_session_node.arguments
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-    alias: str | NotBoundType = NotBound,
-    target_state: TargetState | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode, str, TargetState]]:
-    n = DagNode(UnitAddress("core"), RoleAddress("lib")) if isinstance(node, NotBoundType) else node
-    a = "lib/core.py" if isinstance(alias, NotBoundType) else str(alias)
-    s = TargetState.OPEN if isinstance(target_state, NotBoundType) else target_state
-    return (n, a, s)
+    # ==============================================================================
+    # 2. SessionCoordinator Transitions
+    # ==============================================================================
 
-@seed_session_node.provide
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    node: DagNode,
-    alias: str,
-    target_state: TargetState,
-    result: None = None,
-) -> None:
-    state.node_states[node] = target_state
-    state.node_to_alias[node] = alias
-    state.alias_to_node[alias] = node
+    @transition(name="open_targets")
+    def open_targets(
+        self,
+        ctx: TransitionContext[SessionCoordinator, [], Sequence[DagNode]],
+    ) -> None:
+        ctx.returns(lambda: tuple(n for n, s in self.state.node_states.items() if s == TargetState.OPEN))
 
+    @transition(SessionCoordinator.register_node)
+    def register_node(
+        self,
+        ctx: TransitionContext[SessionCoordinator, [DagNode, str, TargetState], None],
+    ) -> None:
+        ctx.arguments(
+                    node=Domain(strategy=lambda: DagNode(UnitAddress('mod'), RoleAddress('lib'))),
+                    alias=Domain(strategy=lambda: 'lib/mod.py'),
+                    target_state=Domain(strategy=lambda: TargetState.OPEN),
+                )
+        def _consequent(
+            res: None,
+            node: DagNode = DagNode(UnitAddress("mod"), RoleAddress("lib")),
+            alias: str = "lib/mod.py",
+            target_state: TargetState = TargetState.OPEN,
+        ) -> None:
+            self.state.node_states[node] = target_state
+            self.state.node_to_alias[node] = alias
+            self.state.alias_to_node[alias] = node
+        ctx.update(_consequent)
 
-# ==============================================================================
-# 2. SessionCoordinator Transitions
-# ==============================================================================
+    @transition(SessionCoordinator.reset_nodes)
+    def reset_nodes(
+        self,
+        ctx: TransitionContext[SessionCoordinator, [Sequence[DagNode]], None],
+    ) -> None:
+        ctx.arguments(nodes=Domain(strategy=lambda: ()))
+        def _consequent(res: None, nodes: Sequence[DagNode] = ()) -> None:
+            self.state.node_states.clear()
+            self.state.node_to_alias.clear()
+            self.state.alias_to_node.clear()
+            for n in nodes:
+                alias = f"{n.role_address}/{n.unit_address}.py"
+                self.state.node_states[n] = TargetState.OPEN
+                self.state.node_to_alias[n] = alias
+                self.state.alias_to_node[alias] = n
+        ctx.update(_consequent)
 
-@proto.transition(name="open_targets")
-def open_targets(): pass
+    @transition(SessionCoordinator.resolve_default_target)
+    def resolve_default_target(
+        self,
+        ctx: TransitionContext[SessionCoordinator, [Optional[Any]], Optional[DagNode]],
+    ) -> None:
+        ctx.arguments(last_accessed_file=Domain(strategy=lambda: None))
+        def _returns(last_accessed_file: Optional[Any] = None) -> Optional[DagNode]:
+            open_nodes = [n for n, s in self.state.node_states.items() if s == TargetState.OPEN]
+            return open_nodes[0] if len(open_nodes) == 1 else None
+        ctx.returns(_returns)
 
-@open_targets.returns
-def _(state: SessionCoordinatorState, this: Any, outcome: object = NotBound) -> Optional[Outcome[Sequence[DagNode]]]:
-    expected = tuple(n for n, s in state.node_states.items() if s == TargetState.OPEN)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+    @transition(SessionCoordinator.get_node_for_alias)
+    def get_node_for_alias(
+        self,
+        ctx: TransitionContext[SessionCoordinator, [str], Optional[DagNode]],
+    ) -> None:
+        ctx.arguments(alias=Domain(strategy=lambda: 'lib/core.py'))
+        ctx.returns(lambda alias="lib/core.py": self.state.alias_to_node.get(alias))
 
+    @transition(SessionCoordinator.get_alias_for_node)
+    def get_alias_for_node(
+        self,
+        ctx: TransitionContext[SessionCoordinator, [DagNode], str],
+    ) -> None:
+        ctx.arguments(node=Domain(strategy=lambda: (next(iter(self.state.node_to_alias.keys())),) if self.state.node_to_alias else (DagNode(UnitAddress('u'), RoleAddress('r')),)))
+        ctx.returns(lambda node: self.state.node_to_alias.get(node, f"{node.role_address}/{node.unit_address}"))
 
-@proto.transition(SessionCoordinator.register_node)
-def register_node(): pass
+    @transition(SessionCoordinator.dispatch_get_work)
+    def dispatch_get_work(
+        self,
+        ctx: TransitionContext[SessionCoordinator, [Optional[subgraph.DagSubgraph], Optional[str], Optional[int]], WorkSchedule],
+    ) -> None:
+        ctx.arguments(
+                    subgraph=Domain(strategy=lambda: None),
+                    dir_scope=Domain(strategy=lambda: None),
+                    max_batch_size=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda subgraph=None, dir_scope=None, max_batch_size=None: WorkSchedule(tasks=tuple(self.state.tasks)))
 
-@register_node.arguments
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-    alias: str | NotBoundType = NotBound,
-    target_state: TargetState | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode, str, TargetState]]:
-    n = DagNode(UnitAddress("mod"), RoleAddress("lib")) if isinstance(node, NotBoundType) else node
-    a = "lib/mod.py" if isinstance(alias, NotBoundType) else str(alias)
-    s = TargetState.OPEN if isinstance(target_state, NotBoundType) else target_state
-    return (n, a, s)
-
-@register_node.provide
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    node: DagNode,
-    alias: str,
-    target_state: TargetState,
-    result: None = None,
-) -> None:
-    state.node_states[node] = target_state
-    state.node_to_alias[node] = alias
-    state.alias_to_node[alias] = node
-
-
-@proto.transition(SessionCoordinator.reset_nodes)
-def reset_nodes(): pass
-
-@reset_nodes.arguments
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    nodes: Sequence[DagNode] | NotBoundType = NotBound,
-) -> Optional[Tuple[Sequence[DagNode]]]:
-    ns = () if isinstance(nodes, NotBoundType) else tuple(nodes)
-    return (ns,)
-
-@reset_nodes.provide
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    nodes: Sequence[DagNode],
-    result: None = None,
-) -> None:
-    state.node_states.clear()
-    state.node_to_alias.clear()
-    state.alias_to_node.clear()
-    for n in nodes:
-        alias = f"{n.role_address}/{n.unit_address}.py"
-        state.node_states[n] = TargetState.OPEN
-        state.node_to_alias[n] = alias
-        state.alias_to_node[alias] = n
-
-
-@proto.transition(SessionCoordinator.resolve_default_target)
-def resolve_default_target(): pass
-
-@resolve_default_target.arguments
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    last_accessed_file: Optional[Any] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[Any]]]:
-    f = None if isinstance(last_accessed_file, NotBoundType) else last_accessed_file
-    return (f,)
-
-@resolve_default_target.returns
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    last_accessed_file: Optional[Any],
-    outcome: object = NotBound,
-) -> Optional[Outcome[Optional[DagNode]]]:
-    open_nodes = [n for n, s in state.node_states.items() if s == TargetState.OPEN]
-    expected = open_nodes[0] if len(open_nodes) == 1 else None
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SessionCoordinator.get_node_for_alias)
-def get_node_for_alias(): pass
-
-@get_node_for_alias.arguments
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    alias: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str]]:
-    a = "lib/core.py" if isinstance(alias, NotBoundType) else str(alias)
-    return (a,)
-
-@get_node_for_alias.returns
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    alias: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Optional[DagNode]]]:
-    expected = state.alias_to_node.get(alias)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SessionCoordinator.get_alias_for_node)
-def get_alias_for_node(): pass
-
-@get_alias_for_node.arguments
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode]]:
-    if isinstance(node, NotBoundType):
-        if not state.node_to_alias:
-            return None
-        return (next(iter(state.node_to_alias.keys())),)
-    return (node,)
-
-@get_alias_for_node.returns
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    node: DagNode,
-    outcome: object = NotBound,
-) -> Optional[Outcome[str]]:
-    expected = state.node_to_alias.get(node, f"{node.role_address}/{node.unit_address}")
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SessionCoordinator.dispatch_get_work)
-def dispatch_get_work(): pass
-
-@dispatch_get_work.arguments
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    subgraph: Optional[subgraph.DagSubgraph] | NotBoundType = NotBound,
-    dir_scope: Optional[str] | NotBoundType = NotBound,
-    max_batch_size: Optional[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[subgraph.DagSubgraph], Optional[str], Optional[int]]]:
-    sg = None if isinstance(subgraph, NotBoundType) else subgraph
-    ds = None if isinstance(dir_scope, NotBoundType) else dir_scope
-    mb = None if isinstance(max_batch_size, NotBoundType) else max_batch_size
-    return (sg, ds, mb)
-
-@dispatch_get_work.returns
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    subgraph: Optional[subgraph.DagSubgraph],
-    dir_scope: Optional[str],
-    max_batch_size: Optional[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[WorkSchedule]]:
-    expected = WorkSchedule(tasks=tuple(state.tasks))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SessionCoordinator.dispatch_check_files)
-def dispatch_check_files(): pass
-
-@dispatch_check_files.arguments
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    target_alias: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str]]]:
-    ta = None if isinstance(target_alias, NotBoundType) else target_alias
-    return (ta,)
-
-@dispatch_check_files.returns
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    target_alias: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[VerificationResult]]:
-    expected = VerificationResult(
-        passed=state.verification_passed,
-        diagnostic_output="All checks passed." if state.verification_passed else "Verification failed.",
-    )
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SessionCoordinator.dispatch_submit)
-def dispatch_submit(): pass
-
-@dispatch_submit.arguments
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    target_alias: Optional[str] | NotBoundType = NotBound,
-    change_summary: Optional[str] | NotBoundType = NotBound,
-    has_modifications: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], Optional[str], bool]]:
-    ta = None if isinstance(target_alias, NotBoundType) else target_alias
-    cs = "Change" if isinstance(change_summary, NotBoundType) else change_summary
-    hm = True if isinstance(has_modifications, NotBoundType) else bool(has_modifications)
-    return (ta, cs, hm)
-
-@dispatch_submit.returns
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    target_alias: Optional[str],
-    change_summary: Optional[str],
-    has_modifications: bool,
-    outcome: object = NotBound,
-) -> Optional[Outcome[ControlDispatchOutcome]]:
-    node = state.alias_to_node.get(target_alias or "")
-    if not node:
-        open_nodes = [n for n, s in state.node_states.items() if s == TargetState.OPEN]
-        node = open_nodes[0] if len(open_nodes) == 1 else None
-
-    if node is None:
-        expected = ControlDispatchOutcome(
-            success=False,
-            message="No target node resolved for submission.",
-            remaining_open_targets=tuple(n for n, s in state.node_states.items() if s == TargetState.OPEN),
-        )
-    elif not state.verification_passed:
-        expected = ControlDispatchOutcome(
-            success=False,
-            message="Verification checks failed for target.",
-            remaining_open_targets=tuple(n for n, s in state.node_states.items() if s == TargetState.OPEN),
-        )
-    else:
-        rem = tuple(n for n, s in state.node_states.items() if s == TargetState.OPEN and n != node)
-        expected = ControlDispatchOutcome(
-            success=True,
-            message=f"Submitted target {node} successfully.",
-            remaining_open_targets=rem,
+    @transition(SessionCoordinator.dispatch_check_files)
+    def dispatch_check_files(
+        self,
+        ctx: TransitionContext[SessionCoordinator, [Optional[str]], VerificationResult],
+    ) -> None:
+        ctx.arguments(target_alias=Domain(strategy=lambda: None))
+        ctx.returns(
+            lambda target_alias=None: VerificationResult(
+                passed=self.state.verification_passed,
+                diagnostic_output="All checks passed." if self.state.verification_passed else "Verification failed.",
+            )
         )
 
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+    @transition(SessionCoordinator.dispatch_submit)
+    def dispatch_submit(
+        self,
+        ctx: TransitionContext[SessionCoordinator, [Optional[str], Optional[str], bool], ControlDispatchOutcome],
+    ) -> None:
+        ctx.arguments(
+                    target_alias=Domain(strategy=lambda: None),
+                    change_summary=Domain(strategy=lambda: 'Change'),
+                    has_modifications=Domain(strategy=lambda: True),
+                )
+        def _returns(target_alias: Optional[str] = None, change_summary: Optional[str] = None, has_modifications: bool = True) -> ControlDispatchOutcome:
+            node = self.state.alias_to_node.get(target_alias or "")
+            if not node:
+                open_nodes = [n for n, s in self.state.node_states.items() if s == TargetState.OPEN]
+                node = open_nodes[0] if len(open_nodes) == 1 else None
 
-@dispatch_submit.provide
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    target_alias: Optional[str],
-    change_summary: Optional[str],
-    has_modifications: bool,
-    result: ControlDispatchOutcome,
-) -> None:
-    if result.success:
-        node = state.alias_to_node.get(target_alias or "")
-        if not node:
-            open_nodes = [n for n, s in state.node_states.items() if s == TargetState.OPEN]
-            node = open_nodes[0] if len(open_nodes) == 1 else None
-        if node:
-            state.node_states[node] = TargetState.CLEAN
+            if node is None:
+                return ControlDispatchOutcome(
+                    success=False,
+                    message="No target node resolved for submission.",
+                    remaining_open_targets=tuple(n for n, s in self.state.node_states.items() if s == TargetState.OPEN),
+                )
+            elif not self.state.verification_passed:
+                return ControlDispatchOutcome(
+                    success=False,
+                    message="Verification checks failed for target.",
+                    remaining_open_targets=tuple(n for n, s in self.state.node_states.items() if s == TargetState.OPEN),
+                )
+            else:
+                rem = tuple(n for n, s in self.state.node_states.items() if s == TargetState.OPEN and n != node)
+                return ControlDispatchOutcome(
+                    success=True,
+                    message=f"Submitted target {node} successfully.",
+                    remaining_open_targets=rem,
+                )
+        ctx.returns(_returns)
+
+        def _consequent(res: ControlDispatchOutcome, target_alias: Optional[str] = None, change_summary: Optional[str] = None, has_modifications: bool = True) -> None:
+            if res.success:
+                node = self.state.alias_to_node.get(target_alias or "")
+                if not node:
+                    open_nodes = [n for n, s in self.state.node_states.items() if s == TargetState.OPEN]
+                    node = open_nodes[0] if len(open_nodes) == 1 else None
+                if node:
+                    self.state.node_states[node] = TargetState.CLEAN
+        ctx.update(_consequent)
+
+    @transition(SessionCoordinator.dispatch_blame)
+    def dispatch_blame(
+        self,
+        ctx: TransitionContext[SessionCoordinator, [Optional[str], Optional[str], str], ControlDispatchOutcome],
+    ) -> None:
+        ctx.arguments(
+                    source_alias=Domain(strategy=lambda: None),
+                    blame_target_alias=Domain(strategy=lambda: 'lib/core.py'),
+                    explanation=Domain(strategy=lambda: 'Defect found'),
+                )
+        def _returns(source_alias: Optional[str] = None, blame_target_alias: Optional[str] = None, explanation: str = "Defect found") -> ControlDispatchOutcome:
+            if "\n" in explanation.strip():
+                return ControlDispatchOutcome(
+                    success=False,
+                    message="Critique must be a single paragraph without newline characters.",
+                    remaining_open_targets=tuple(n for n, s in self.state.node_states.items() if s == TargetState.OPEN),
+                )
+            return ControlDispatchOutcome(
+                success=True,
+                message=f"Blame recorded for {blame_target_alias}.",
+                remaining_open_targets=(),
+            )
+        ctx.returns(_returns)
+
+    @transition(SessionCoordinator.dispatch_fail)
+    def dispatch_fail(
+        self,
+        ctx: TransitionContext[SessionCoordinator, [Optional[str], Optional[str]], ControlDispatchOutcome],
+    ) -> None:
+        ctx.arguments(
+                    target_alias=Domain(strategy=lambda: None),
+                    reason=Domain(strategy=lambda: 'Unrecoverable error'),
+                )
+        def _returns(target_alias: Optional[str] = None, reason: Optional[str] = None) -> ControlDispatchOutcome:
+            r = "Unrecoverable error" if reason is None else str(reason)
+            return ControlDispatchOutcome(
+                success=True,
+                message=f"Target failure recorded: {r}",
+                remaining_open_targets=(),
+            )
+        ctx.returns(_returns)
+
+        def _consequent(res: ControlDispatchOutcome, target_alias: Optional[str] = None, reason: Optional[str] = None) -> None:
+            for n in self.state.node_states:
+                self.state.node_states[n] = TargetState.FAILED
+        ctx.update(_consequent)
 
 
-@proto.transition(SessionCoordinator.dispatch_blame)
-def dispatch_blame(): pass
-
-@dispatch_blame.arguments
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    source_alias: Optional[str] | NotBoundType = NotBound,
-    blame_target_alias: Optional[str] | NotBoundType = NotBound,
-    explanation: str | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], Optional[str], str]]:
-    sa = None if isinstance(source_alias, NotBoundType) else source_alias
-    ta = "lib/core.py" if isinstance(blame_target_alias, NotBoundType) else str(blame_target_alias)
-    exp = "Defect found" if isinstance(explanation, NotBoundType) else str(explanation)
-    return (sa, ta, exp)
-
-@dispatch_blame.returns
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    source_alias: Optional[str],
-    blame_target_alias: Optional[str],
-    explanation: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[ControlDispatchOutcome]]:
-    if "\n" in explanation.strip():
-        expected = ControlDispatchOutcome(
-            success=False,
-            message="Critique must be a single paragraph without newline characters.",
-            remaining_open_targets=tuple(n for n, s in state.node_states.items() if s == TargetState.OPEN),
-        )
-    else:
-        expected = ControlDispatchOutcome(
-            success=True,
-            message=f"Blame recorded for {blame_target_alias}.",
-            remaining_open_targets=(),
-        )
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SessionCoordinator.dispatch_fail)
-def dispatch_fail(): pass
-
-@dispatch_fail.arguments
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    target_alias: Optional[str] | NotBoundType = NotBound,
-    reason: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], Optional[str]]]:
-    ta = None if isinstance(target_alias, NotBoundType) else target_alias
-    r = "Unrecoverable error" if isinstance(reason, NotBoundType) or reason is None else str(reason)
-    return (ta, r)
-
-@dispatch_fail.returns
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    target_alias: Optional[str],
-    reason: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[ControlDispatchOutcome]]:
-    expected = ControlDispatchOutcome(
-        success=True,
-        message=f"Target failure recorded: {reason}",
-        remaining_open_targets=(),
-    )
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@dispatch_fail.provide
-def _(
-    state: SessionCoordinatorState,
-    this: Any,
-    target_alias: Optional[str],
-    reason: Optional[str],
-    result: ControlDispatchOutcome,
-) -> None:
-    for n in state.node_states:
-        state.node_states[n] = TargetState.FAILED
+proto = SessionCoordinatorStateMachine()
 
 
 # ==============================================================================
@@ -462,8 +270,7 @@ def _(
 
 def make_session_coordinator_fake(state: Optional[SessionCoordinatorState] = None) -> SessionCoordinator:
     """Instantiate a synthesized SessionCoordinator fake."""
-    st = state or SessionCoordinatorState()
-    sm = proto.make_state_machine(st)
+    sm = SessionCoordinatorStateMachine(state)
     return sm.as_fake(SessionCoordinator)
 
 
@@ -767,7 +574,7 @@ class TestSessionCoordinatorUnit(unittest.TestCase):
 
     def setUp(self) -> None:
         self.state = SessionCoordinatorState()
-        self.sm = proto.make_state_machine(self.state)
+        self.sm = SessionCoordinatorStateMachine(self.state)
         self.node = DagNode(UnitAddress("core"), RoleAddress("lib"))
         self.sm.seed_session_node(self.node, "lib/core.py", TargetState.OPEN)
         self.fake: SessionCoordinator = self.sm.as_fake(SessionCoordinator)
@@ -807,7 +614,7 @@ class TestSessionCoordinatorFuzz(unittest.TestCase):
     )
     def test_node_registration_and_open_target_invariants(self, count: int) -> None:
         state = SessionCoordinatorState()
-        sm = proto.make_state_machine(state)
+        sm = SessionCoordinatorStateMachine(state)
         nodes = [DagNode(UnitAddress(f"unit_{i}"), RoleAddress("lib")) for i in range(count)]
         for i, n in enumerate(nodes):
             sm.seed_session_node(n, f"alias_{i}", TargetState.OPEN)

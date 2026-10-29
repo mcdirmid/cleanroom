@@ -10,9 +10,7 @@ import unittest
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
-
+from pretense import Domain, StateMachine, TransitionContext, transition
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib import session as agent_session
 from update_with_ai.parts.antigravity.lib import (
@@ -31,52 +29,39 @@ class TelemetryParserState:
     parsed_files: int = 0
 
 
-proto = StateMachineProto[TelemetryParserState]()
+class AntigravityHarnessStateMachine(StateMachine[TelemetryParserState]):
+    """Unified Pretense State Machine for TranscriptTelemetryParser."""
+
+    def __init__(
+        self,
+        state: Optional[TelemetryParserState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or TelemetryParserState(), singletons=singletons)
+
+    @transition(antigravity_harness.TranscriptTelemetryParser.parse_transcript_file)
+    def parse_transcript_file(
+        self,
+        ctx: TransitionContext[antigravity_harness.TranscriptTelemetryParser, [str, Optional[str]], antigravity_harness.TranscriptTokenMetrics],
+    ) -> None:
+        ctx.arguments(
+                    transcript_path=Domain(strategy=lambda: '/tmp/transcript.jsonl'),
+                    model_name=Domain(strategy=lambda: 'gemini-2.5-flash'),
+                )
+        ctx.returns(lambda transcript_path="/tmp/transcript.jsonl", model_name="gemini-2.5-flash": (
+            antigravity_harness.TranscriptTokenMetrics(
+                input_tokens=100,
+                output_tokens=50,
+                cached_tokens=20,
+                cost_usd=0.001,
+            )
+        ))
+        def provide(res: antigravity_harness.TranscriptTokenMetrics, transcript_path: str = "/tmp/transcript.jsonl", model_name: Optional[str] = "gemini-2.5-flash") -> None:
+            self.state.parsed_files += 1
+        ctx.update(provide)
 
 
-# ==============================================================================
-# 2. TelemetryParser Transitions
-# ==============================================================================
-
-@proto.transition(antigravity_harness.TranscriptTelemetryParser.parse_transcript_file)
-def parse_transcript_file(): pass
-
-@parse_transcript_file.arguments
-def _(
-    state: TelemetryParserState,
-    this: Any,
-    transcript_path: str | NotBoundType = NotBound,
-    model_name: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str]]]:
-    f = "/tmp/transcript.jsonl" if isinstance(transcript_path, NotBoundType) else transcript_path
-    m = "gemini-2.5-flash" if isinstance(model_name, NotBoundType) else model_name
-    return (f, m)
-
-@parse_transcript_file.returns
-def _(
-    state: TelemetryParserState,
-    this: Any,
-    transcript_path: str | NotBoundType = NotBound,
-    model_name: Optional[str] | NotBoundType = NotBound,
-    outcome: object = None,
-) -> Optional[Outcome[antigravity_harness.TranscriptTokenMetrics]]:
-    metrics = antigravity_harness.TranscriptTokenMetrics(
-        input_tokens=100,
-        output_tokens=50,
-        cached_tokens=20,
-        cost_usd=0.001,
-    )
-    return Value(metrics)
-
-@parse_transcript_file.provide
-def _(
-    state: TelemetryParserState,
-    this: Any,
-    transcript_path: str | NotBoundType = NotBound,
-    model_name: Optional[str] | NotBoundType = NotBound,
-    result: Optional[antigravity_harness.TranscriptTokenMetrics] = None,
-) -> None:
-    state.parsed_files += 1
+proto = AntigravityHarnessStateMachine()
 
 
 # ==============================================================================

@@ -93,11 +93,43 @@ Given: active workers are executing in provisioned workspaces for scope_a when a
 Given: a role worker completes a round without submitting, blaming, or failing assigned ready targets and its assigned ready targets remain unresolved in the repository.
 
 1. The coordinator reaps the unresolved round and dispatches a subsequent round for the role.
-   Observed: the subsequent role dispatch directive includes an actionable reminder in its task prompt instructing the worker to verify with check_files and conclude the round via submit, blame, or fail without conversational stopping; reminders are suppressed when assigned ready targets were resolved or cleaned in the repository.
+   Observed: the subsequent role dispatch directive includes an actionable reminder in its task prompt instructing the worker to verify with check_files and resolve the targets via submit, blame, or fail without conversational stopping while work remains, and to conclude immediately with summary text and no tool calls once no work remains; reminders are suppressed when assigned ready targets were resolved or cleaned in the repository.
    Realized by: the component's unresolved round tracker recording a reminder string upon observing zero submitted and zero blamed targets on unresolved targets without failure, and setting task_prompt on the next RoleDispatch.
 
+### Scenario 13 — Supervising a fused role worker with coordinator verification and 3 retries
+
+Given: a fused role worker completes a round and emits a completion message for scope_a.
+
+1. The coordinator receives the completion message and runs formal verification across the targets in the fused workspace.
+   Observed: when verification fails, error diagnostics are delivered back to the worker with up to 3 retries; when verification passes, all targets are atomically harvested, stamped with audit tags, and marked clean in the main repository.
+   Realized by: the component's fused verification runner, retry-counted feedback delivery up to a maximum of 3 retries, and atomic harvest routine.
+
+### Scenario 14 — Orchestrating execution targeted to a fused role boundary
+
+Given: orchestration is initiated with target_role resolving to a fused role definition in scope_a.
+
+1. The coordinator initiates orchestration.
+   Observed: workspace resetting, commissioning, and DAG evaluation are restricted exclusively to the designated fused role without provisioning or dispatching unrequested standard pipeline roles.
+   Realized by: the component resolving target_role against the role registry, detecting the fused role definition, and scoping all_scope_roles exclusively to the fused role.
+
+### Scenario 15 — Draining or interrupting active workers upon reaching maximum wave iterations
+
+Given: an active worker is executing in a provisioned workspace when the maximum wave limit is reached.
+
+1. The coordinator evaluates wave progress against the wave limit.
+   Observed: the coordinator halts dispatching new waves, polls in-flight active workers until completion or cleanly interrupts them upon termination, and prevents orphaned workers from executing in deallocated workspaces.
+   Realized by: the component's dynamic supervision loop draining active workers before emitting the non-converged summary.
+
+### Scenario 16 — Early asynchronous role dispatch and idle worker reaping
+
+Given: an active worker is executing in role_a and submits or blames work that unblocks ready targets in role_b, while role_a has zero pending items remaining.
+
+1. The coordinator executes its polling iteration.
+   Observed: the coordinator detects unblocked work in role_b and dispatches role_b immediately without awaiting role_a completion, and if role_a remains running with zero pending items across consecutive intervals, interrupts role_a through the harness.
+   Realized by: the component evaluating work queues across inactive roles on each polling interval and tracking idle worker cycles.
+
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-20T23:45:00Z
-CHANGE: Suppress unproductive rounds and scolding reminders when assigned targets are resolved or cleaned in the repository
+LAST_CLEANED: 2026-10-26T20:38:00Z
+LAST_CHANGED: 2026-10-28T20:20:00Z
+CHANGE: Asynchronous unblocked role dispatch and idle worker reaping
 -->

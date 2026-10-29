@@ -9,6 +9,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
@@ -28,212 +29,160 @@ class SubmissionState:
     verification_passed: bool = True
 
 
-proto = StateMachineProto[SubmissionState]()
+class SubmissionStateMachine(StateMachine[SubmissionState]):
+    """Pretense StateMachine for SubmissionCoordinator."""
+
+    def __init__(self, state: Optional[SubmissionState] = None):
+        super().__init__(state=state or SubmissionState())
+
+    # ==============================================================================
+    # 1. Seeding Transitions
+    # ==============================================================================
+
+    @transition.seeding()
+    def seed_submission_node(
+        self,
+        ctx: TransitionContext[None, [DagNode, bool, bool], None],
+    ) -> None:
+        ctx.arguments(
+                    node=Domain(strategy=lambda: DagNode(UnitAddress('target'), RoleAddress('lib'))),
+                    is_dirty=Domain(strategy=lambda: True),
+                    verification_passed=Domain(strategy=lambda: True),
+                )
+        def _consequent(
+            res: None,
+            node: DagNode = DagNode(UnitAddress("target"), RoleAddress("lib")),
+            is_dirty: bool = True,
+            verification_passed: bool = True,
+        ) -> None:
+            if is_dirty:
+                self.state.dirty_nodes.add(node)
+                self.state.clean_nodes.discard(node)
+            else:
+                self.state.clean_nodes.add(node)
+                self.state.dirty_nodes.discard(node)
+            self.state.verification_passed = verification_passed
+        ctx.update(_consequent)
+
+    # ==============================================================================
+    # 2. SubmissionCoordinator Transitions
+    # ==============================================================================
+
+    @transition(SubmissionCoordinator.submit_target)
+    def submit_target(
+        self,
+        ctx: TransitionContext[
+            SubmissionCoordinator,
+            [DagNode, Optional[str], bool, Optional[Sequence[DagNode]]],
+            SubmissionOutcome,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    target_node=Domain(strategy=lambda: DagNode(UnitAddress('node'), RoleAddress('lib'))),
+                    change_summary=Domain(strategy=lambda: 'Implement logic'),
+                    has_modifications=Domain(strategy=lambda: True),
+                    in_batch_dependencies=Domain(strategy=lambda: None),
+                )
+        def _returns(
+            target_node: DagNode = DagNode(UnitAddress("node"), RoleAddress("lib")),
+            change_summary: Optional[str] = "Implement logic",
+            has_modifications: bool = True,
+            in_batch_dependencies: Optional[Sequence[DagNode]] = None,
+        ) -> SubmissionOutcome:
+            if not self.state.verification_passed:
+                return SubmissionOutcome(
+                    accepted=False,
+                    message="Verification checks failed for target node.",
+                )
+            elif in_batch_dependencies and any(dep in self.state.dirty_nodes for dep in in_batch_dependencies):
+                return SubmissionOutcome(
+                    accepted=False,
+                    message="Cannot submit target: one or more in-batch dependencies remain dirty.",
+                )
+            elif has_modifications and not change_summary:
+                return SubmissionOutcome(
+                    accepted=False,
+                    message="Submission rejected: change summary required when files are modified.",
+                )
+            else:
+                return SubmissionOutcome(
+                    accepted=True,
+                    message=f"Target {target_node} submitted successfully.",
+                )
+        ctx.returns(_returns)
+
+        def _consequent(
+            res: SubmissionOutcome,
+            target_node: DagNode = DagNode(UnitAddress("node"), RoleAddress("lib")),
+            change_summary: Optional[str] = "Implement logic",
+            has_modifications: bool = True,
+            in_batch_dependencies: Optional[Sequence[DagNode]] = None,
+        ) -> None:
+            if res.accepted:
+                self.state.dirty_nodes.discard(target_node)
+                self.state.clean_nodes.add(target_node)
+                if change_summary:
+                    self.state.change_summaries[target_node] = change_summary
+        ctx.update(_consequent)
+
+    @transition(SubmissionCoordinator.submit_target_file)
+    def submit_target_file(
+        self,
+        ctx: TransitionContext[
+            SubmissionCoordinator,
+            [str, Optional[str], Optional[str], Optional[str], Optional[str]],
+            SubmissionOutcome,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    target=Domain(strategy=lambda: 'lib/module.py'),
+                    summary=Domain(strategy=lambda: 'Update logic'),
+                    repo_root=Domain(strategy=lambda: None),
+                    workspace_root=Domain(strategy=lambda: None),
+                    role_name=Domain(strategy=lambda: 'lib'),
+                )
+        def _returns(
+            target: str = "lib/module.py",
+            summary: Optional[str] = "Update logic",
+            repo_root: Optional[str] = None,
+            workspace_root: Optional[str] = None,
+            role_name: Optional[str] = "lib",
+        ) -> SubmissionOutcome:
+            if not self.state.verification_passed:
+                return SubmissionOutcome(
+                    accepted=False,
+                    message="Verification checks failed for file.",
+                )
+            return SubmissionOutcome(
+                accepted=True,
+                message=f"File {target} submitted successfully.",
+            )
+        ctx.returns(_returns)
+
+    @transition(SubmissionCoordinator.parse_unit_from_file_path)
+    def parse_unit_from_file_path(
+        self,
+        ctx: TransitionContext[SubmissionCoordinator, [str, str], Tuple[str, str, str]],
+    ) -> None:
+        ctx.arguments(
+                    file_path=Domain(strategy=lambda: 'parts/core/lib/demo.py'),
+                    repo_root=Domain(strategy=lambda: '/workspace'),
+                )
+        def _returns(file_path: str = "parts/core/lib/demo.py", repo_root: str = "/workspace") -> Tuple[str, str, str]:
+            norm = file_path.replace("\\", "/").strip("/")
+            parts = norm.split("/")
+            part_dir, unit_name, role_name = "parts/core", "demo", "lib"
+            for i, seg in enumerate(parts):
+                if seg == "parts" and i + 3 < len(parts):
+                    part_dir = f"parts/{parts[i+1]}"
+                    role_name = parts[i+2]
+                    unit_name = os.path.splitext(parts[i+3])[0]
+                    break
+            return (part_dir, unit_name, role_name)
+        ctx.returns(_returns)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_submission_node(): pass
-
-@seed_submission_node.arguments
-def _(
-    state: SubmissionState,
-    this: Any,
-    node: DagNode | NotBoundType = NotBound,
-    is_dirty: bool | NotBoundType = NotBound,
-    verification_passed: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode, bool, bool]]:
-    n = DagNode(UnitAddress("target"), RoleAddress("lib")) if isinstance(node, NotBoundType) else node
-    d = True if isinstance(is_dirty, NotBoundType) else bool(is_dirty)
-    v = True if isinstance(verification_passed, NotBoundType) else bool(verification_passed)
-    return (n, d, v)
-
-@seed_submission_node.provide
-def _(
-    state: SubmissionState,
-    this: Any,
-    node: DagNode,
-    is_dirty: bool,
-    verification_passed: bool,
-    result: None = None,
-) -> None:
-    if is_dirty:
-        state.dirty_nodes.add(node)
-        state.clean_nodes.discard(node)
-    else:
-        state.clean_nodes.add(node)
-        state.dirty_nodes.discard(node)
-    state.verification_passed = verification_passed
-
-
-# ==============================================================================
-# 2. SubmissionCoordinator Transitions
-# ==============================================================================
-
-@proto.transition(SubmissionCoordinator.submit_target)
-def submit_target(): pass
-
-@submit_target.arguments
-def _(
-    state: SubmissionState,
-    this: Any,
-    target_node: DagNode | NotBoundType = NotBound,
-    change_summary: Optional[str] | NotBoundType = NotBound,
-    has_modifications: bool | NotBoundType = NotBound,
-    in_batch_dependencies: Optional[Sequence[DagNode]] | NotBoundType = NotBound,
-) -> Optional[Tuple[DagNode, Optional[str], bool, Optional[Sequence[DagNode]]]]:
-    tgt = DagNode(UnitAddress("node"), RoleAddress("lib")) if isinstance(target_node, NotBoundType) else target_node
-    sumry = "Implement logic" if isinstance(change_summary, NotBoundType) else change_summary
-    has_mods = True if isinstance(has_modifications, NotBoundType) else bool(has_modifications)
-    in_deps = None if isinstance(in_batch_dependencies, NotBoundType) else in_batch_dependencies
-    return (tgt, sumry, has_mods, in_deps)
-
-@submit_target.returns
-def _(
-    state: SubmissionState,
-    this: Any,
-    target_node: DagNode,
-    change_summary: Optional[str],
-    has_modifications: bool,
-    in_batch_dependencies: Optional[Sequence[DagNode]],
-    outcome: object = NotBound,
-) -> Optional[Outcome[SubmissionOutcome]]:
-    # Gating 1: Verification failure
-    if not state.verification_passed:
-        expected = SubmissionOutcome(
-            accepted=False,
-            message="Verification checks failed for target node.",
-        )
-    # Gating 2: In-batch dependencies must be clean
-    elif in_batch_dependencies and any(dep in state.dirty_nodes for dep in in_batch_dependencies):
-        expected = SubmissionOutcome(
-            accepted=False,
-            message="Cannot submit target: one or more in-batch dependencies remain dirty.",
-        )
-    # Gating 3: Summary required when modifications exist
-    elif has_modifications and not change_summary:
-        expected = SubmissionOutcome(
-            accepted=False,
-            message="Submission rejected: change summary required when files are modified.",
-        )
-    else:
-        expected = SubmissionOutcome(
-            accepted=True,
-            message=f"Target {target_node} submitted successfully.",
-        )
-
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@submit_target.provide
-def _(
-    state: SubmissionState,
-    this: Any,
-    target_node: DagNode,
-    change_summary: Optional[str],
-    has_modifications: bool,
-    in_batch_dependencies: Optional[Sequence[DagNode]],
-    result: SubmissionOutcome,
-) -> None:
-    if result.accepted:
-        state.dirty_nodes.discard(target_node)
-        state.clean_nodes.add(target_node)
-        if change_summary:
-            state.change_summaries[target_node] = change_summary
-
-
-@proto.transition(SubmissionCoordinator.submit_target_file)
-def submit_target_file(): pass
-
-@submit_target_file.arguments
-def _(
-    state: SubmissionState,
-    this: Any,
-    target: str | NotBoundType = NotBound,
-    summary: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    workspace_root: Optional[str] | NotBoundType = NotBound,
-    role_name: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str], Optional[str], Optional[str], Optional[str]]]:
-    t = "lib/module.py" if isinstance(target, NotBoundType) else str(target)
-    s = "Update logic" if isinstance(summary, NotBoundType) else summary
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    wr = None if isinstance(workspace_root, NotBoundType) else workspace_root
-    rn = "lib" if isinstance(role_name, NotBoundType) else role_name
-    return (t, s, rr, wr, rn)
-
-@submit_target_file.returns
-def _(
-    state: SubmissionState,
-    this: Any,
-    target: str,
-    summary: Optional[str],
-    repo_root: Optional[str],
-    workspace_root: Optional[str],
-    role_name: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[SubmissionOutcome]]:
-    if not state.verification_passed:
-        expected = SubmissionOutcome(
-            accepted=False,
-            message="Verification checks failed for file.",
-        )
-    else:
-        expected = SubmissionOutcome(
-            accepted=True,
-            message=f"File {target} submitted successfully.",
-        )
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(SubmissionCoordinator.parse_unit_from_file_path)
-def parse_unit_from_file_path(): pass
-
-@parse_unit_from_file_path.arguments
-def _(
-    state: SubmissionState,
-    this: Any,
-    file_path: str | NotBoundType = NotBound,
-    repo_root: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str]]:
-    p = "parts/core/lib/demo.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    r = "/workspace" if isinstance(repo_root, NotBoundType) else str(repo_root)
-    return (p, r)
-
-@parse_unit_from_file_path.returns
-def _(
-    state: SubmissionState,
-    this: Any,
-    file_path: str,
-    repo_root: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Tuple[str, str, str]]]:
-    # Extract part, unit, role from standard layout parts/<part>/<role>/<unit>.<ext>
-    norm = file_path.replace("\\", "/").strip("/")
-    parts = norm.split("/")
-    part_dir, unit_name, role_name = "parts/core", "demo", "lib"
-    for i, seg in enumerate(parts):
-        if seg == "parts" and i + 3 < len(parts):
-            part_dir = f"parts/{parts[i+1]}"
-            role_name = parts[i+2]
-            unit_name = os.path.splitext(parts[i+3])[0]
-            break
-    expected = (part_dir, unit_name, role_name)
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = SubmissionStateMachine()
 
 
 # ==============================================================================
@@ -242,8 +191,7 @@ def _(
 
 def make_submission_fake(state: Optional[SubmissionState] = None) -> SubmissionCoordinator:
     """Instantiate a synthesized SubmissionCoordinator fake."""
-    st = state or SubmissionState()
-    sm = proto.make_state_machine(st)
+    sm = SubmissionStateMachine(state)
     return sm.as_fake(SubmissionCoordinator)
 
 
@@ -439,7 +387,7 @@ class TestSubmissionCoordinatorUnit(unittest.TestCase):
 
     def setUp(self) -> None:
         self.state = SubmissionState()
-        self.sm = proto.make_state_machine(self.state)
+        self.sm = SubmissionStateMachine(self.state)
         self.target = DagNode(UnitAddress("core"), RoleAddress("lib"))
         self.dep = DagNode(UnitAddress("core"), RoleAddress("low"))
         self.fake: SubmissionCoordinator = self.sm.as_fake(SubmissionCoordinator)
@@ -488,7 +436,7 @@ class TestSubmissionCoordinatorFuzz(unittest.TestCase):
     )
     def test_submission_gating_invariants(self, has_mods: bool, has_summary: bool, dep_is_dirty: bool) -> None:
         state = SubmissionState()
-        sm = proto.make_state_machine(state)
+        sm = SubmissionStateMachine(state)
         fake = sm.as_fake(SubmissionCoordinator)
 
         target = DagNode(UnitAddress("target"), RoleAddress("lib"))

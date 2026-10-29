@@ -8,9 +8,8 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.workspace_cli.lib.dirtiness import (
     UnitDirtinessResult,
     WorkspaceDirtinessEvaluator,
@@ -26,165 +25,84 @@ class DirtinessState:
     dependencies: PretenseDict[str, List[Tuple[str, str]]] = field(default_factory=PretenseDict)
 
 
-proto = StateMachineProto[DirtinessState]()
+class WorkspaceDirtinessStateMachine(StateMachine[DirtinessState]):
+    """Unified Pretense State Machine for WorkspaceDirtinessEvaluator."""
+
+    def __init__(
+        self,
+        state: Optional[DirtinessState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or DirtinessState(), singletons=singletons)
+
+    @transition.seeding(name="seed_unit_dirtiness")
+    def seed_unit_dirtiness(
+        self,
+        ctx: TransitionContext[Any, [str, bool, Optional[Sequence[str]]], None],
+    ) -> None:
+        ctx.arguments(
+                    unit_key=Domain(strategy=lambda: 'parts/core:core#lib'),
+                    is_dirty=Domain(strategy=lambda: True),
+                    reasons=Domain(strategy=lambda: ()),
+                )
+        ctx.returns(lambda unit_key="parts/core:core#lib", is_dirty=True, reasons=None: None)
+        ctx.update(lambda res, unit_key="parts/core:core#lib", is_dirty=True, reasons=None: (
+            (self.state.dirty_units.add(unit_key), self.state.reasons.__setitem__(unit_key, list(reasons or ())))
+            if is_dirty else
+            (self.state.dirty_units.discard(unit_key), self.state.reasons.pop(unit_key, None))
+        ))
+
+    @transition(WorkspaceDirtinessEvaluator.evaluate_unit_dirty)
+    def evaluate_unit_dirty(
+        self,
+        ctx: TransitionContext[WorkspaceDirtinessEvaluator, [str, str, str, str, Optional[str]], UnitDirtinessResult],
+    ) -> None:
+        ctx.arguments(
+                    ws_root=Domain(strategy=lambda: '/repo/staging/role_workspaces/lib'),
+                    part_dir=Domain(strategy=lambda: 'parts/core'),
+                    unit_name=Domain(strategy=lambda: 'core'),
+                    eval_role=Domain(strategy=lambda: 'lib'),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda ws_root, part_dir, unit_name, eval_role, repo_root=None: (
+            UnitDirtinessResult(
+                is_dirty=f"{part_dir}:{unit_name}#{eval_role}" in self.state.dirty_units,
+                dirtiness_reasons=tuple(self.state.reasons.get(f"{part_dir}:{unit_name}#{eval_role}", ())),
+                dependency_files=(),
+                contract_files=(),
+            )
+        ))
+        ctx.update(lambda res, ws_root, part_dir, unit_name, eval_role, repo_root=None: None)
+
+    @transition(WorkspaceDirtinessEvaluator.resolve_contract_files)
+    def resolve_contract_files(
+        self,
+        ctx: TransitionContext[WorkspaceDirtinessEvaluator, [str, str, Optional[str], Optional[str]], Sequence[str]],
+    ) -> None:
+        ctx.arguments(
+                    target_file=Domain(strategy=lambda: 'parts/core/lib/demo.py'),
+                    ws_root=Domain(strategy=lambda: '/repo'),
+                    main_root=Domain(strategy=lambda: None),
+                    role_name=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda target_file, ws_root, main_root=None, role_name=None: tuple(self.state.contract_files.get(target_file, ())))
+        ctx.update(lambda res, target_file, ws_root, main_root=None, role_name=None: None)
+
+    @transition(WorkspaceDirtinessEvaluator.extract_cross_unit_dependencies)
+    def extract_cross_unit_dependencies(
+        self,
+        ctx: TransitionContext[WorkspaceDirtinessEvaluator, [str, str, str], Sequence[Tuple[str, str]]],
+    ) -> None:
+        ctx.arguments(
+                    repo_root=Domain(strategy=lambda: '/repo'),
+                    part_dir=Domain(strategy=lambda: 'parts/core'),
+                    unit_name=Domain(strategy=lambda: 'core'),
+                )
+        ctx.returns(lambda repo_root, part_dir, unit_name: tuple(self.state.dependencies.get(f"{part_dir}:{unit_name}", ())))
+        ctx.update(lambda res, repo_root, part_dir, unit_name: None)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_unit_dirtiness(): pass
-
-@seed_unit_dirtiness.arguments
-def _(
-    state: DirtinessState,
-    this: Any,
-    unit_key: str | NotBoundType = NotBound,
-    is_dirty: bool | NotBoundType = NotBound,
-    reasons: Optional[Sequence[str]] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, bool, Sequence[str]]]:
-    k = "parts/core:core#lib" if isinstance(unit_key, NotBoundType) else str(unit_key)
-    d = True if isinstance(is_dirty, NotBoundType) else bool(is_dirty)
-    r = () if isinstance(reasons, NotBoundType) or reasons is None else tuple(reasons)
-    return (k, d, r)
-
-@seed_unit_dirtiness.provide
-def _(
-    state: DirtinessState,
-    this: Any,
-    unit_key: str,
-    is_dirty: bool,
-    reasons: Sequence[str],
-    result: None = None,
-) -> None:
-    if is_dirty:
-        state.dirty_units.add(unit_key)
-        state.reasons[unit_key] = list(reasons)
-    else:
-        state.dirty_units.discard(unit_key)
-        state.reasons.pop(unit_key, None)
-
-
-# ==============================================================================
-# 2. WorkspaceDirtinessEvaluator Transitions
-# ==============================================================================
-
-@proto.transition(WorkspaceDirtinessEvaluator.evaluate_unit_dirty)
-def evaluate_unit_dirty(): pass
-
-@evaluate_unit_dirty.arguments
-def _(
-    state: DirtinessState,
-    this: Any,
-    ws_root: str | NotBoundType = NotBound,
-    part_dir: str | NotBoundType = NotBound,
-    unit_name: str | NotBoundType = NotBound,
-    eval_role: str | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str, str, Optional[str]]]:
-    ws = "/repo/staging/role_workspaces/lib" if isinstance(ws_root, NotBoundType) else str(ws_root)
-    pd = "parts/core" if isinstance(part_dir, NotBoundType) else str(part_dir)
-    un = "core" if isinstance(unit_name, NotBoundType) else str(unit_name)
-    er = "lib" if isinstance(eval_role, NotBoundType) else str(eval_role)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (ws, pd, un, er, rr)
-
-@evaluate_unit_dirty.returns
-def _(
-    state: DirtinessState,
-    this: Any,
-    ws_root: str,
-    part_dir: str,
-    unit_name: str,
-    eval_role: str,
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[UnitDirtinessResult]]:
-    key = f"{part_dir}:{unit_name}#{eval_role}"
-    is_dirty = key in state.dirty_units
-    reasons = tuple(state.reasons.get(key, ()))
-    expected = UnitDirtinessResult(
-        is_dirty=is_dirty,
-        dirtiness_reasons=reasons,
-        dependency_files=(),
-        contract_files=(),
-    )
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceDirtinessEvaluator.resolve_contract_files)
-def resolve_contract_files(): pass
-
-@resolve_contract_files.arguments
-def _(
-    state: DirtinessState,
-    this: Any,
-    target_file: str | NotBoundType = NotBound,
-    ws_root: str | NotBoundType = NotBound,
-    main_root: Optional[str] | NotBoundType = NotBound,
-    role_name: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, Optional[str], Optional[str]]]:
-    tf = "parts/core/lib/demo.py" if isinstance(target_file, NotBoundType) else str(target_file)
-    ws = "/repo" if isinstance(ws_root, NotBoundType) else str(ws_root)
-    mr = None if isinstance(main_root, NotBoundType) else main_root
-    rn = None if isinstance(role_name, NotBoundType) else role_name
-    return (tf, ws, mr, rn)
-
-@resolve_contract_files.returns
-def _(
-    state: DirtinessState,
-    this: Any,
-    target_file: str,
-    ws_root: str,
-    main_root: Optional[str],
-    role_name: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[Sequence[str]]]:
-    expected = tuple(state.contract_files.get(target_file, ()))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceDirtinessEvaluator.extract_cross_unit_dependencies)
-def extract_cross_unit_dependencies(): pass
-
-@extract_cross_unit_dependencies.arguments
-def _(
-    state: DirtinessState,
-    this: Any,
-    repo_root: str | NotBoundType = NotBound,
-    part_dir: str | NotBoundType = NotBound,
-    unit_name: str | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, str]]:
-    rr = "/repo" if isinstance(repo_root, NotBoundType) else str(repo_root)
-    pd = "parts/core" if isinstance(part_dir, NotBoundType) else str(part_dir)
-    un = "core" if isinstance(unit_name, NotBoundType) else str(unit_name)
-    return (rr, pd, un)
-
-@extract_cross_unit_dependencies.returns
-def _(
-    state: DirtinessState,
-    this: Any,
-    repo_root: str,
-    part_dir: str,
-    unit_name: str,
-    outcome: object = NotBound,
-) -> Optional[Outcome[Sequence[Tuple[str, str]]]]:
-    key = f"{part_dir}:{unit_name}"
-    expected = tuple(state.dependencies.get(key, ()))
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
+proto = WorkspaceDirtinessStateMachine()
 
 
 # ==============================================================================

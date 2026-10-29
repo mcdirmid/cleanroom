@@ -7,6 +7,7 @@ import unittest
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 
@@ -28,75 +29,48 @@ class LoopState:
     build_success: bool = True
 
 
-proto = StateMachineProto[LoopState]()
+class LoopStateMachine(StateMachine[LoopState]):
+    """Pretense StateMachine for Loop."""
+
+    def __init__(self, state: Optional[LoopState] = None):
+        super().__init__(state=state or LoopState())
+
+    # ==============================================================================
+    # 2. Loop Transitions
+    # ==============================================================================
+
+    @transition(loop.Loop.clean_subgraph)
+    def clean_subgraph(
+        self,
+        ctx: TransitionContext[loop.Loop, [dag_storage.DagNode], loop.BuildResult],
+    ) -> None:
+        ctx.arguments(target=Domain(strategy=lambda: dag_storage.DagNode(dag_storage.UnitAddress('//pkg/unit'), dag_storage.RoleAddress('lib'))))
+        def _returns(target: Optional[dag_storage.DagNode] = None) -> loop.BuildResult:
+            summary = "Cleaning pass succeeded" if self.state.build_success else "Cleaning pass failed"
+            return loop.BuildResult(success=self.state.build_success, summary=loop.BuildSummary(summary))
+        ctx.returns(_returns)
+
+        def _consequent(res: loop.BuildResult, target: Optional[dag_storage.DagNode] = None) -> None:
+            if self.state.build_success and target is not None:
+                self.state.dirty_nodes.discard(target)
+        ctx.update(_consequent)
+
+    @transition(loop.Loop.mark_dirty)
+    def mark_dirty(
+        self,
+        ctx: TransitionContext[loop.Loop, [dag_storage.DagNode, Optional[dag_storage.ChangeMessage]], None],
+    ) -> None:
+        ctx.arguments(
+                    target=Domain(strategy=lambda: dag_storage.DagNode(dag_storage.UnitAddress('//pkg/unit'), dag_storage.RoleAddress('lib'))),
+                    message=Domain(strategy=lambda: None),
+                )
+        def _consequent(res: None, target: Optional[dag_storage.DagNode] = None, message: Optional[dag_storage.ChangeMessage] = None) -> None:
+            if target is not None:
+                self.state.dirty_nodes.add(target)
+        ctx.update(_consequent)
 
 
-# ==============================================================================
-# 2. Loop Transitions
-# ==============================================================================
-
-@proto.transition(loop.Loop.clean_subgraph)
-def clean_subgraph(): pass
-
-@clean_subgraph.arguments
-def _(state: LoopState, this: Any, target: dag_storage.DagNode | NotBoundType = NotBound) -> Optional[Tuple[dag_storage.DagNode]]:
-    if isinstance(target, NotBoundType):
-        target = dag_storage.DagNode(dag_storage.UnitAddress("//pkg/unit"), dag_storage.RoleAddress("lib"))
-    return (target,)
-
-@clean_subgraph.returns
-def _(
-    state: LoopState, this: Any, target: dag_storage.DagNode | NotBoundType = NotBound, outcome: object = None
-) -> Optional[Outcome[loop.BuildResult]]:
-    summary = "Cleaning pass succeeded" if state.build_success else "Cleaning pass failed"
-    return Value(loop.BuildResult(success=state.build_success, summary=loop.BuildSummary(summary)))
-
-@clean_subgraph.provide
-def _(
-    state: LoopState,
-    this: Any,
-    target: dag_storage.DagNode | NotBoundType = NotBound,
-    result: Optional[loop.BuildResult] = None,
-) -> None:
-    if state.build_success and not isinstance(target, NotBoundType):
-        state.dirty_nodes.discard(target)
-
-
-@proto.transition(loop.Loop.mark_dirty)
-def mark_dirty(): pass
-
-@mark_dirty.arguments
-def _(
-    state: LoopState,
-    this: Any,
-    target: dag_storage.DagNode | NotBoundType = NotBound,
-    message: Optional[dag_storage.ChangeMessage] | NotBoundType = NotBound,
-) -> Optional[Tuple[dag_storage.DagNode, Optional[dag_storage.ChangeMessage]]]:
-    if isinstance(target, NotBoundType):
-        target = dag_storage.DagNode(dag_storage.UnitAddress("//pkg/unit"), dag_storage.RoleAddress("lib"))
-    msg = None if isinstance(message, NotBoundType) else message
-    return (target, msg)
-
-@mark_dirty.returns
-def _(
-    state: LoopState,
-    this: Any,
-    target: dag_storage.DagNode | NotBoundType = NotBound,
-    message: Optional[dag_storage.ChangeMessage] | NotBoundType = NotBound,
-    outcome: object = None,
-) -> Optional[Outcome[None]]:
-    return Value(None)
-
-@mark_dirty.provide
-def _(
-    state: LoopState,
-    this: Any,
-    target: dag_storage.DagNode | NotBoundType = NotBound,
-    message: Optional[dag_storage.ChangeMessage] | NotBoundType = NotBound,
-    result: None = None,
-) -> None:
-    if not isinstance(target, NotBoundType):
-        state.dirty_nodes.add(target)
+proto = LoopStateMachine()
 
 
 # ==============================================================================
@@ -105,8 +79,7 @@ def _(
 
 def make_loop_fake(state: Optional[LoopState] = None) -> loop.Loop:
     """Instantiate a synthesized Loop fake."""
-    st = state or LoopState()
-    sm = proto.make_state_machine(st)
+    sm = LoopStateMachine(state)
     return sm.as_fake(loop.Loop)
 
 

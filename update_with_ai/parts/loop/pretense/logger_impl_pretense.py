@@ -10,8 +10,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
+from pretense import Domain, StateMachine, TransitionContext, transition
 from support.lib.lifecycle import LifecycleRegistry
 from update_with_ai.parts.loop.lib import logger, logger_impl
 from update_with_ai.parts.loop.lib.logger import (
@@ -29,40 +28,34 @@ class RunnerLoggerState:
     events: List[RunnerLogEvent] = field(default_factory=list)
 
 
-proto = StateMachineProto[RunnerLoggerState]()
+class RunnerLoggerStateMachine(StateMachine[RunnerLoggerState]):
+    """Unified Pretense State Machine for RunnerLogger."""
+
+    def __init__(
+        self,
+        state: Optional[RunnerLoggerState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or RunnerLoggerState(), singletons=singletons)
+
+    @transition(RunnerLogger.consume)
+    def consume(
+        self,
+        ctx: TransitionContext[RunnerLogger, [RunnerLogEvent], None],
+    ) -> None:
+        ctx.arguments(event=Domain(strategy=lambda: RunnerLogEvent(event_name=EventName('step'), summary=EventSummary('Executed step 1'), transcript=EventTranscript('Tool invocation transcript'))))
+        ctx.returns(lambda event=None: None)
+        def provide(res: None, event: Optional[RunnerLogEvent] = None) -> None:
+            ev = event or RunnerLogEvent(
+                event_name=EventName("step"),
+                summary=EventSummary("Executed step 1"),
+                transcript=EventTranscript("Tool invocation transcript"),
+            )
+            self.state.events.append(ev)
+        ctx.update(provide)
 
 
-# ==============================================================================
-# 1. RunnerLogger Transitions
-# ==============================================================================
-
-@proto.transition(RunnerLogger.consume)
-def consume(): pass
-
-@consume.arguments
-def _(
-    state: RunnerLoggerState,
-    this: Any,
-    event: RunnerLogEvent | NotBoundType = NotBound,
-) -> Optional[Tuple[RunnerLogEvent]]:
-    if isinstance(event, NotBoundType):
-        ev = RunnerLogEvent(
-            event_name=EventName("step"),
-            summary=EventSummary("Executed step 1"),
-            transcript=EventTranscript("Tool invocation transcript"),
-        )
-    else:
-        ev = event
-    return (ev,)
-
-@consume.provide
-def _(
-    state: RunnerLoggerState,
-    this: Any,
-    event: RunnerLogEvent,
-    result: None = None,
-) -> None:
-    state.events.append(event)
+proto = RunnerLoggerStateMachine()
 
 
 # ==============================================================================

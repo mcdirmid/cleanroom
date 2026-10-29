@@ -4,7 +4,7 @@
 
 The coverage_impl implementation component provides concrete algorithms for AST-aware non-executable line filtering, Python trace execution capture, span grouping, and structured report serialization.
 
-The implementation traverses abstract syntax trees to identify docstrings, signatures, and pragma exclusion lines, resets module loader state to ensure clean test imports, executes unittest suites under trace instrumentation to tally line hits, groups uncovered statements into contiguous spans, and formats console and log outputs with actionable agent guidance.
+The implementation traverses abstract syntax trees to identify docstrings, signatures, and pragma exclusion lines, resets module loader state to ensure clean test imports, executes unittest suites under trace instrumentation to tally line hits, groups uncovered statements into contiguous spans, and formats console and log outputs with actionable agent guidance directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files.
 
 ## Factored Contracts
 
@@ -54,7 +54,7 @@ The implementation traverses abstract syntax trees to identify docstrings, signa
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-19T17:15:00Z
-CHANGE: Inject local part package root into module search paths and purge package namespaces to prevent cross-workspace module shadowing
+LAST_CHANGED: 2026-10-29T00:30:00Z
+CHANGE: Format grounding attribution instructions permitting line numbers in blamed file while forbidding exposing details of other files
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

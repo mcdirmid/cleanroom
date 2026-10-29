@@ -116,6 +116,7 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
           evaluates producer units across intra-unit role dependencies and star role dependencies,
           bounds candidates to target_unit and its transitive dependencies when specified,
           checks upstream prerequisite roles across role dependencies, feedback role dependencies, star role dependencies, and silent role dependencies,
+          relaxing intra-fuse upstream dependencies when evaluating a fused role cluster,
           sorts ready tasks topologically, and materializes starter templates via
           dag_storage.DagStorage.materialize_template for missing ready files.
         """
@@ -209,8 +210,8 @@ def __orphan__() -> None:
     ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-19T16:30:00Z
-# CHANGE: evaluate role upstream prerequisites across silent role dependencies
+# LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-10-26T20:38:00Z
+# CHANGE: Add intra-fuse dependency relaxation grounding to work_impl specification
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

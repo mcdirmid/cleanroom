@@ -235,8 +235,14 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.phase_cm.__exit__(None, None, None)
 
     def test_run_get_work_clean(self) -> None:
-        ret = self.checker.run_get_work(dir_scope="pkg")
+        import io
+        from unittest.mock import patch
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            ret = self.checker.run_get_work(dir_scope="pkg")
+            out = mock_out.getvalue()
         self.assertEqual(ret, 0)
+        self.assertIn("[ROUND CONCLUSION DIRECTIVE]", out)
+        self.assertIn("You have 0 ready targets", out)
 
     def test_run_get_work_ready_items(self) -> None:
         self.fake_work.ready_items = [
@@ -275,7 +281,8 @@ class WorkspaceCheckImplTest(unittest.TestCase):
             out = mock_out.getvalue()
         self.assertEqual(ret, 0)
         self.assertIn("BLOCKED (Waiting on prerequisites):", out)
-        self.assertIn("Conclude your round immediately without executing additional tools", out)
+        self.assertIn("[ROUND CONCLUSION DIRECTIVE]", out)
+        self.assertIn("All targets are blocked waiting on upstream prerequisites", out)
 
     def test_run_check_files_no_targets(self) -> None:
         ret = self.checker.run_check_files()
@@ -487,14 +494,172 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertIn("guides/lib.md", out)
         self.assertNotIn("update_python_with_ai/guides/lib.md", out)
 
+    def test_run_get_work_fails_when_gemini_argon_mismatched_in_antigravity(self) -> None:
+        with open(os.path.join(self.test_dir, ".cleanroom_role.json"), "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "role": "lib",
+                    "parts_dir": "pkg/parts",
+                    "dir_scope": "pkg",
+                    "model": "gemini-argon",
+                    "harness": "antigravity",
+                },
+                f,
+            )
+        ag_root = os.path.join(self.test_dir, "fake_ag")
+        cid = "00000000-1111-2222-3333-444444444444"
+        logs_dir = os.path.join(ag_root, "brain", cid, ".system_generated", "logs")
+        conv_dir = os.path.join(ag_root, "conversations")
+        os.makedirs(logs_dir, exist_ok=True)
+        os.makedirs(conv_dir, exist_ok=True)
+        with open(os.path.join(logs_dir, "transcript.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"content": f"assigned role workspace directory is '{self.test_dir}'"}) + "\n")
+
+        import sqlite3
+        db_path = os.path.join(conv_dir, f"{cid}.db")
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB)")
+        conn.execute("INSERT INTO gen_metadata (idx, data) VALUES (1, ?)", (b"model: gemini-3.8-flash",))
+        conn.commit()
+        conn.close()
+
+        import io
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"ANTIGRAVITY_BRAIN_DIR": ag_root}), patch(
+            "sys.stdout", new_callable=io.StringIO
+        ) as mock_out:
+            ret = self.checker.run_get_work(dir_scope="pkg")
+            out = mock_out.getvalue()
+
+        self.assertEqual(ret, 1)
+        self.assertIn("Gemini Argon", out)
+        self.assertIn("gemini-3.8-flash", out)
+
+    def test_resolve_common_spec_files(self) -> None:
+        role_low = role_registry.RoleDefinition(
+            role_name="low",
+            guide_path="guides/low.md",
+            writable_file_patterns=["*/low/*.pyi"],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            src_pattern="{unit_dir}/low/{unit_name}.pyi",
+            role_deps=[],
+            verify_template="# noop",
+            verification_success_message="",
+            active_component_types=["interface", "implementation"],
+        )
+        role_qa = role_registry.RoleDefinition(
+            role_name="qa",
+            guide_path="guides/qa.md",
+            writable_file_patterns=[],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            src_pattern="",
+            role_deps=["lib", "test"],
+            common_spec_roles=["low"],
+            audit_tag="QA_AUDIT",
+            verify_template="# noop",
+            verification_success_message="",
+            active_component_types=["interface", "implementation"],
+        )
+        self.fake_reg.roles = [self.role_lib, role_low, role_qa]
+
+        spec_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "low", "foo.pyi")
+        os.makedirs(os.path.dirname(spec_file), exist_ok=True)
+        with open(spec_file, "w", encoding="utf-8") as f:
+            f.write("# low spec\n")
+
+        resolved = check_impl.resolve_common_spec_files(
+            role_name="qa",
+            part_dir="pkg/parts/foo",
+            unit_name="foo_impl",
+            ws_root=self.test_dir,
+            repo_root=self.test_dir,
+        )
+        self.assertEqual(resolved, ["pkg/parts/foo/low/foo.pyi"])
+
+    def test_run_check_files_auditor_spec_reminder_upon_failure(self) -> None:
+        role_low = role_registry.RoleDefinition(
+            role_name="low",
+            guide_path="guides/low.md",
+            writable_file_patterns=["*/low/*.pyi"],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            src_pattern="{unit_dir}/low/{unit_name}.pyi",
+            role_deps=[],
+            verify_template="# noop",
+            verification_success_message="",
+            active_component_types=["interface", "implementation"],
+        )
+        role_qa = role_registry.RoleDefinition(
+            role_name="qa",
+            guide_path="guides/qa.md",
+            writable_file_patterns=[],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            src_pattern="",
+            role_deps=["lib", "test"],
+            common_spec_roles=["low"],
+            audit_tag="QA_AUDIT",
+            verify_template="echo 'Assertion failed: expected 42 got 0' && exit 1",
+            verification_success_message="",
+            active_component_types=["interface", "implementation"],
+        )
+        self.fake_reg.roles = [self.role_lib, role_low, role_qa]
+
+        with open(os.path.join(self.test_dir, ".cleanroom_role.json"), "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "role_name": "qa",
+                    "dir_scope": "pkg",
+                    "parts_dir": "pkg/parts",
+                    "common_spec_roles": ["low"],
+                },
+                f,
+            )
+
+        spec_file = os.path.join(self.test_dir, "parts", "test_pkg", "low", "foo.pyi")
+        os.makedirs(os.path.dirname(spec_file), exist_ok=True)
+        with open(spec_file, "w", encoding="utf-8") as f:
+            f.write("# low spec\n")
+
+        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# target file\n")
+
+        import io
+        from unittest.mock import patch
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            ret = self.checker.run_check_files(target=target_file)
+            out = mock_out.getvalue()
+
+        self.assertNotEqual(ret, 0)
+        self.assertIn("[QA ARBITER REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]", out)
+        self.assertIn("parts/test_pkg/low/foo.pyi", out)
+        self.assertIn(
+            "Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification",
+            out,
+        )
+        self.assertIn(
+            "Line numbers MAY be mentioned ONLY IF they reference the file being blamed",
+            out,
+        )
+        self.assertIn(
+            "DO NOT expose details (line numbers, code snippets, or internal symbols) of other files",
+            out,
+        )
+        self.assertNotIn("# pragma: no cover", out)
+        self.assertNotIn("names starting with '_'", out)
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-10-25T22:12:00Z
-# CHANGE: Add test for workspace-relative companion guide path resolution
+# LAST_CHANGED: 2026-10-29T00:45:00Z
+# CHANGE: Add tests for resolve_common_spec_files and auditor specification grounding reminders in run_check_files
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

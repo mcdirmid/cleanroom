@@ -9,6 +9,7 @@ import unittest
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
+from pretense import StateMachine, TransitionContext, transition
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 
@@ -34,35 +35,32 @@ class DagConfigState:
     batch_size: int = 1
 
 
-proto = StateMachineProto[DagConfigState]()
+class DagConfigStateMachine(StateMachine[DagConfigState]):
+    """Pretense StateMachine for DagConfig."""
+
+    def __init__(self, state: Optional[DagConfigState] = None):
+        super().__init__(state=state or DagConfigState())
+
+    # ==============================================================================
+    # 2. DagConfig Transitions
+    # ==============================================================================
+
+    @transition(getattr(DagConfig, "node_visit_limit"))
+    def node_visit_limit(
+        self,
+        ctx: TransitionContext[DagConfig, [], int],
+    ) -> None:
+        ctx.returns(lambda: self.state.node_visit_limit)
+
+    @transition(getattr(DagConfig, "batch_size"))
+    def batch_size(
+        self,
+        ctx: TransitionContext[DagConfig, [], int],
+    ) -> None:
+        ctx.returns(lambda: self.state.batch_size)
 
 
-# ==============================================================================
-# 2. DagConfig Transitions
-# ==============================================================================
-
-@proto.transition(getattr(DagConfig, "node_visit_limit"))
-def node_visit_limit(): pass
-
-@node_visit_limit.arguments
-def _(state: DagConfigState, this: Any) -> Optional[Tuple[()]]:
-    return ()
-
-@node_visit_limit.returns
-def _(state: DagConfigState, this: Any, outcome: object = None) -> Optional[Any]:
-    return Value(state.node_visit_limit)
-
-
-@proto.transition(getattr(DagConfig, "batch_size"))
-def batch_size(): pass
-
-@batch_size.arguments
-def _(state: DagConfigState, this: Any) -> Optional[Tuple[()]]:
-    return ()
-
-@batch_size.returns
-def _(state: DagConfigState, this: Any, outcome: object = None) -> Optional[Any]:
-    return Value(state.batch_size)
+proto = DagConfigStateMachine()
 
 
 # ==============================================================================
@@ -71,8 +69,7 @@ def _(state: DagConfigState, this: Any, outcome: object = None) -> Optional[Any]
 
 def make_dag_config_fake(state: Optional[DagConfigState] = None) -> DagConfig:
     """Instantiate a synthesized DagConfig fake."""
-    st = state or DagConfigState()
-    sm = proto.make_state_machine(st)
+    sm = DagConfigStateMachine(state)
     return sm.as_fake(DagConfig)
 
 

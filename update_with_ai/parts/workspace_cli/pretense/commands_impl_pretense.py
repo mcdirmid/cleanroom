@@ -9,9 +9,8 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.collections import PretenseDict, PretenseSet
-from pretense.proto import StateMachineProto
-from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from update_with_ai.parts.workspace_cli.lib.commands import (
     WorkspaceCommandHandler,
 )
@@ -26,242 +25,106 @@ class CommandHandlerState:
     failed_files: PretenseDict[str, str] = field(default_factory=PretenseDict)
 
 
-proto = StateMachineProto[CommandHandlerState]()
+class WorkspaceCommandStateMachine(StateMachine[CommandHandlerState]):
+    """Unified Pretense State Machine for WorkspaceCommandHandler."""
+
+    def __init__(
+        self,
+        state: Optional[CommandHandlerState] = None,
+        singletons: Optional[dict[type[Any], Any]] = None,
+    ) -> None:
+        super().__init__(state=state or CommandHandlerState(), singletons=singletons)
+
+    @transition.seeding(name="seed_command_state")
+    def seed_command_state(
+        self,
+        ctx: TransitionContext[Any, [int], None],
+    ) -> None:
+        ctx.arguments(check_files_exit_code=Domain(strategy=lambda: 0))
+        ctx.returns(lambda check_files_exit_code=0: None)
+        ctx.update(lambda res, check_files_exit_code=0: setattr(self.state, "check_files_exit_code", int(check_files_exit_code)))
+
+    @transition(WorkspaceCommandHandler.run_get_work)
+    def run_get_work(
+        self,
+        ctx: TransitionContext[WorkspaceCommandHandler, [Optional[str], Optional[str], bool, Optional[int]], int],
+    ) -> None:
+        ctx.arguments(
+                    dir_scope=Domain(strategy=lambda: None),
+                    repo_root=Domain(strategy=lambda: None),
+                    force=Domain(strategy=lambda: False),
+                    batch_size=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda dir_scope=None, repo_root=None, force=False, batch_size=None: 0)
+        ctx.update(lambda res, dir_scope=None, repo_root=None, force=False, batch_size=None: None)
+
+    @transition(WorkspaceCommandHandler.run_check_files)
+    def run_check_files(
+        self,
+        ctx: TransitionContext[WorkspaceCommandHandler, [Optional[str], Optional[str]], int],
+    ) -> None:
+        ctx.arguments(
+                    target=Domain(strategy=lambda: None),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda target=None, repo_root=None: self.state.check_files_exit_code)
+        ctx.update(lambda res, target=None, repo_root=None: None)
+
+    @transition(WorkspaceCommandHandler.run_submit)
+    def run_submit(
+        self,
+        ctx: TransitionContext[WorkspaceCommandHandler, [str, Optional[str], Optional[str], bool], int],
+    ) -> None:
+        ctx.arguments(
+                    target=Domain(strategy=lambda: 'lib/module.py'),
+                    summary=Domain(strategy=lambda: 'Implemented'),
+                    repo_root=Domain(strategy=lambda: None),
+                    no_verify=Domain(strategy=lambda: False),
+                )
+        ctx.returns(lambda target="lib/module.py", summary="Implemented", repo_root=None, no_verify=False: (
+            0 if no_verify else self.state.check_files_exit_code
+        ))
+        def provide(res: int, target: str = "lib/module.py", summary: Optional[str] = "Implemented", repo_root: Optional[str] = None, no_verify: bool = False) -> None:
+            if res == 0:
+                self.state.submitted_targets.add(target)
+        ctx.update(provide)
+
+    @transition(WorkspaceCommandHandler.run_blame)
+    def run_blame(
+        self,
+        ctx: TransitionContext[WorkspaceCommandHandler, [str, str, Optional[str]], int],
+    ) -> None:
+        ctx.arguments(
+                    culprit_file=Domain(strategy=lambda: 'lib/culprit.py'),
+                    critique=Domain(strategy=lambda: 'Missing error check'),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda culprit_file="lib/culprit.py", critique="Missing error check", repo_root=None: (
+            0 if "\n" not in critique else 1
+        ))
+        def provide(res: int, culprit_file: str = "lib/culprit.py", critique: str = "Missing error check", repo_root: Optional[str] = None) -> None:
+            if res == 0:
+                self.state.blamed_files[culprit_file] = critique
+        ctx.update(provide)
+
+    @transition(WorkspaceCommandHandler.run_fail)
+    def run_fail(
+        self,
+        ctx: TransitionContext[WorkspaceCommandHandler, [str, Optional[str], Optional[str]], int],
+    ) -> None:
+        ctx.arguments(
+                    file_path=Domain(strategy=lambda: 'lib/module.py'),
+                    reason=Domain(strategy=lambda: 'Verification failed'),
+                    repo_root=Domain(strategy=lambda: None),
+                )
+        ctx.returns(lambda file_path="lib/module.py", reason="Verification failed", repo_root=None: 0)
+        def provide(res: int, file_path: str = "lib/module.py", reason: Optional[str] = "Verification failed", repo_root: Optional[str] = None) -> None:
+            if reason:
+                self.state.failed_files[file_path] = reason
+        ctx.update(provide)
 
 
-# ==============================================================================
-# 1. Seeding Transitions
-# ==============================================================================
-
-@proto.seeding()
-def seed_command_state(): pass
-
-@seed_command_state.arguments
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    check_files_exit_code: int | NotBoundType = NotBound,
-) -> Optional[Tuple[int]]:
-    code = 0 if isinstance(check_files_exit_code, NotBoundType) else int(check_files_exit_code)
-    return (code,)
-
-@seed_command_state.provide
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    check_files_exit_code: int,
-    result: None = None,
-) -> None:
-    state.check_files_exit_code = check_files_exit_code
-
-
-# ==============================================================================
-# 2. WorkspaceCommandHandler Transitions
-# ==============================================================================
-
-@proto.transition(WorkspaceCommandHandler.run_get_work)
-def run_get_work(): pass
-
-@run_get_work.arguments
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    dir_scope: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    force: bool | NotBoundType = NotBound,
-    batch_size: Optional[int] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], Optional[str], bool, Optional[int]]]:
-    ds = None if isinstance(dir_scope, NotBoundType) else dir_scope
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    f = False if isinstance(force, NotBoundType) else bool(force)
-    bs = None if isinstance(batch_size, NotBoundType) else batch_size
-    return (ds, rr, f, bs)
-
-@run_get_work.returns
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    dir_scope: Optional[str],
-    repo_root: Optional[str],
-    force: bool,
-    batch_size: Optional[int],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    expected = 0
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceCommandHandler.run_check_files)
-def run_check_files(): pass
-
-@run_check_files.arguments
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    target: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[Optional[str], Optional[str]]]:
-    t = None if isinstance(target, NotBoundType) else target
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (t, rr)
-
-@run_check_files.returns
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    target: Optional[str],
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    expected = state.check_files_exit_code
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-
-@proto.transition(WorkspaceCommandHandler.run_submit)
-def run_submit(): pass
-
-@run_submit.arguments
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    target: str | NotBoundType = NotBound,
-    summary: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-    no_verify: bool | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str], Optional[str], bool]]:
-    t = "lib/module.py" if isinstance(target, NotBoundType) else str(target)
-    s = "Implemented" if isinstance(summary, NotBoundType) else summary
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    nv = False if isinstance(no_verify, NotBoundType) else bool(no_verify)
-    return (t, s, rr, nv)
-
-@run_submit.returns
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    target: str,
-    summary: Optional[str],
-    repo_root: Optional[str],
-    no_verify: bool,
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    expected = state.check_files_exit_code if not no_verify else 0
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@run_submit.provide
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    target: str,
-    summary: Optional[str],
-    repo_root: Optional[str],
-    no_verify: bool,
-    result: int,
-) -> None:
-    if result == 0:
-        state.submitted_targets.add(target)
-
-
-@proto.transition(WorkspaceCommandHandler.run_blame)
-def run_blame(): pass
-
-@run_blame.arguments
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    culprit_file: str | NotBoundType = NotBound,
-    critique: str | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, str, Optional[str]]]:
-    cf = "lib/culprit.py" if isinstance(culprit_file, NotBoundType) else str(culprit_file)
-    c = "Missing error check" if isinstance(critique, NotBoundType) else str(critique)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (cf, c, rr)
-
-@run_blame.returns
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    culprit_file: str,
-    critique: str,
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    expected = 0 if "\n" not in critique else 1
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@run_blame.provide
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    culprit_file: str,
-    critique: str,
-    repo_root: Optional[str],
-    result: int,
-) -> None:
-    if result == 0:
-        state.blamed_files[culprit_file] = critique
-
-
-@proto.transition(WorkspaceCommandHandler.run_fail)
-def run_fail(): pass
-
-@run_fail.arguments
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    file_path: str | NotBoundType = NotBound,
-    reason: Optional[str] | NotBoundType = NotBound,
-    repo_root: Optional[str] | NotBoundType = NotBound,
-) -> Optional[Tuple[str, Optional[str], Optional[str]]]:
-    fp = "lib/module.py" if isinstance(file_path, NotBoundType) else str(file_path)
-    r = "Verification failed" if isinstance(reason, NotBoundType) or reason is None else str(reason)
-    rr = None if isinstance(repo_root, NotBoundType) else repo_root
-    return (fp, r, rr)
-
-@run_fail.returns
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    file_path: str,
-    reason: Optional[str],
-    repo_root: Optional[str],
-    outcome: object = NotBound,
-) -> Optional[Outcome[int]]:
-    expected = 0
-    if isinstance(outcome, Value) and outcome.val == expected:
-        return outcome
-    if outcome is NotBound:
-        return Value(expected)
-    return None
-
-@run_fail.provide
-def _(
-    state: CommandHandlerState,
-    this: Any,
-    file_path: str,
-    reason: Optional[str],
-    repo_root: Optional[str],
-    result: int,
-) -> None:
-    if reason:
-        state.failed_files[file_path] = reason
+proto = WorkspaceCommandStateMachine()
 
 
 # ==============================================================================

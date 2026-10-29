@@ -8,6 +8,7 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from pretense import Domain, StateMachine, TransitionContext, transition
 from pretense.proto import StateMachineProto
 from pretense.sentinels import NotBound, NotBoundType, Outcome, Value
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
@@ -66,40 +67,45 @@ class TemplateFormatterState:
     pass
 
 
-proto = StateMachineProto[TemplateFormatterState]()
+class TemplateFormatterStateMachine(StateMachine[TemplateFormatterState]):
+    """Pretense StateMachine for TemplateFormatter."""
+
+    def __init__(self, state: Optional[TemplateFormatterState] = None):
+        super().__init__(state=state or TemplateFormatterState())
+
+    @transition(template_format.TemplateFormatter.format_template)
+    def format_template(
+        self,
+        ctx: TransitionContext[
+            template_format.TemplateFormatter,
+            [template_format.TemplateText, Mapping[template_format.TemplateKey, Any]],
+            template_format.FormattedText,
+        ],
+    ) -> None:
+        ctx.arguments(
+                    text=Domain(strategy=lambda: template_format.TemplateText('Hello <name>')),
+                    parameters=Domain(strategy=lambda: {template_format.TemplateKey('name'): 'World'}),
+                )
+        def _returns(
+            text: Optional[template_format.TemplateText] = None,
+            parameters: Optional[Mapping[template_format.TemplateKey, Any]] = None,
+        ) -> template_format.FormattedText:
+            t = text or template_format.TemplateText("Hello <name>")
+            params = parameters or {template_format.TemplateKey("name"): "World"}
+            res = str(t)
+            for k, v in params.items():
+                res = res.replace(f"<{k}>", str(v))
+            return template_format.FormattedText(res)
+        ctx.returns(_returns)
 
 
-@proto.transition(template_format.TemplateFormatter.format_template)
-def format_template(): pass
+proto = TemplateFormatterStateMachine()
 
-@format_template.arguments
-def _(
-    state: TemplateFormatterState,
-    this: Any,
-    text: template_format.TemplateText | NotBoundType = NotBound,
-    parameters: Mapping[template_format.TemplateKey, Any] | NotBoundType = NotBound,
-) -> Optional[Tuple[template_format.TemplateText, Mapping[template_format.TemplateKey, Any]]]:
-    t = template_format.TemplateText("Hello <name>") if isinstance(text, NotBoundType) else text
-    p = {template_format.TemplateKey("name"): "World"} if isinstance(parameters, NotBoundType) else parameters
-    return (t, p)
 
-@format_template.returns
-def _(
-    state: TemplateFormatterState,
-    this: Any,
-    text: template_format.TemplateText,
-    parameters: Mapping[template_format.TemplateKey, Any],
-    outcome: object = NotBound,
-) -> Optional[Outcome[template_format.FormattedText]]:
-    res = str(text)
-    for k, v in parameters.items():
-        res = res.replace(f"<{k}>", str(v))
-    formatted = template_format.FormattedText(res)
-    if isinstance(outcome, Value) and outcome.val == formatted:
-        return outcome
-    if outcome is NotBound:
-        return Value(formatted)
-    return None
+def make_template_formatter_fake(state: Optional[TemplateFormatterState] = None) -> template_format.TemplateFormatter:
+    """Instantiate a synthesized TemplateFormatter fake."""
+    sm = TemplateFormatterStateMachine(state)
+    return sm.as_fake(template_format.TemplateFormatter)
 
 
 # ==============================================================================

@@ -8,19 +8,17 @@ from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, List, Ma
 from support.lib.framework import data_type, operation, poly_type
 
 
-@data_type
-@dataclass(frozen=True)
+@dataclass
 class SemVerError(Exception):
     """Base exception for all semantic versioning and dependency solver errors.
 
     Args:
-        message: Diagnostic description of the error.
+        message: Diagnostic description of the error. Verification suites MUST NOT assert on specific wording or prefixes within message, and MUST assert on exception types and structured attributes.
     """
     message: str
 
 
-@data_type
-@dataclass(frozen=True)
+@dataclass
 class InvalidVersionError(SemVerError):
     """Raised when an unparseable or grammar-violating version string is encountered.
 
@@ -31,8 +29,7 @@ class InvalidVersionError(SemVerError):
     raw_text: str
 
 
-@data_type
-@dataclass(frozen=True)
+@dataclass
 class InvalidRangeError(SemVerError):
     """Raised when a version range expression contains malformed syntax.
 
@@ -43,8 +40,7 @@ class InvalidRangeError(SemVerError):
     raw_range: str
 
 
-@data_type
-@dataclass(frozen=True)
+@dataclass
 class ResolutionConflictError(SemVerError):
     """Raised when dependency constraints cannot be satisfied mutually.
 
@@ -57,8 +53,7 @@ class ResolutionConflictError(SemVerError):
     explanation: str
 
 
-@data_type
-@dataclass(frozen=True)
+@dataclass
 class PackageNotFoundError(SemVerError):
     """Raised when a referenced package name does not exist in the repository.
 
@@ -106,6 +101,10 @@ class Version:
         """Formats the version into a canonical SemVer 2.0.0 string representation."""
         ...
 
+    def __str__(self) -> str:
+        """Returns the canonical SemVer string representation, equivalent to format()."""
+        ...
+
 
 @data_type
 @dataclass(frozen=True)
@@ -116,6 +115,10 @@ class VersionRange:
         raw_text: Canonical text representation of the range expression.
     """
     raw_text: str
+
+    def __str__(self) -> str:
+        """Returns the raw range text representation."""
+        ...
 
 
 @data_type
@@ -194,7 +197,7 @@ class VersionEngine(Protocol):
             Negative integer if v1 < v2, zero if v1 == v2, positive integer if v1 > v2.
 
         POSTCONDITIONS:
-        - MUST return negative if v1 < v2, zero if v1 == v2, and positive if v1 > v2 under SemVer 2.0.0 RFC rules.
+        - MUST evaluate to a negative integer when v1 < v2, zero when v1 == v2, and a positive integer when v1 > v2 under SemVer 2.0.0 RFC rules.
         - MUST compare major, minor, and patch numerically.
         - MUST rank normal versions higher than prerelease versions sharing identical major, minor, and patch numbers.
         - MUST compare prerelease segments numerically when both numeric, ASCII-lexicographically when string, and rank numeric below string.
@@ -216,8 +219,12 @@ class VersionEngine(Protocol):
             InvalidRangeError: If text contains malformed range syntax.
 
         POSTCONDITIONS:
-        - MUST parse range expression text supporting basic comparators, caret ranges, tilde ranges, wildcards, hyphen ranges, and unions.
-        - WHEN range syntax is invalid, MUST raise InvalidRangeError.
+        - MUST parse range expression text supporting basic comparators (==, =, !=, <, <=, >, >=), caret ranges (^), tilde ranges (~), wildcards (*, x, X, M.x, M.*, M.m.x, M.m.*), hyphen ranges (M1.m1.p1 - M2.m2.p2), and unions (||).
+        - MUST trim surrounding whitespace around range expressions and individual clauses, storing the trimmed range expression in raw_text.
+        - MUST accept optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0').
+        - MUST delimit comparators within clauses strictly by whitespace; commas are not permitted.
+        - WHEN text supplies bare partial versions lacking wildcard characters across any comparator or hyphen expression (such as '1', '1.2', '^0.0', or '1.2 - 2.3'), MUST raise InvalidRangeError.
+        - WHEN text is empty, contains only whitespace, contains empty union clauses, uses comma delimiters, or violates range syntax, MUST raise InvalidRangeError.
         """
         ...
 
@@ -239,8 +246,9 @@ class VersionEngine(Protocol):
             True if the version satisfies the range, False otherwise.
 
         POSTCONDITIONS:
-        - MUST return True if version satisfies range_constraint, False otherwise.
-        - WHEN version is a prerelease and include_prerelease is False, MUST return False unless range explicitly targets that prerelease.
+        - MUST evaluate to True when version satisfies range_constraint, and False otherwise.
+        - WHEN version is a prerelease and include_prerelease is False, MUST evaluate to False unless range explicitly targets that prerelease by specifying a prerelease identifier sharing the same major, minor, and patch numbers.
+        - WHEN include_prerelease is True, MUST evaluate candidate prerelease version directly against comparator boundary inequalities using precedence ordering without shifting numerical boundaries (e.g. 1.0.0-alpha ranks strictly lower than 1.0.0 and does not satisfy >=1.0.0).
         """
         ...
 
@@ -275,7 +283,7 @@ class PackageRepository(Protocol):
             PackageNotFoundError: If name is not registered in the repository.
 
         POSTCONDITIONS:
-        - MUST return all registered releases for package name ordered by version precedence descending.
+        - MUST yield all registered releases for package name ordered by version precedence descending.
         - WHEN name is not registered, MUST raise PackageNotFoundError.
         """
         ...
@@ -291,19 +299,19 @@ class PackageRepository(Protocol):
             True if the package exists, False otherwise.
 
         POSTCONDITIONS:
-        - MUST return True if package name exists in repository, False otherwise.
+        - MUST evaluate to True when package name exists in repository, and False otherwise.
         """
         ...
 
     @operation
     def all_packages(self) -> Set[str]:
-        """Returns the set of all registered package names.
+        """Provides the set of all registered package names.
 
         Returns:
             Set of registered package name strings.
 
         POSTCONDITIONS:
-        - MUST return set of all registered package names.
+        - MUST produce the set of all registered package names.
         """
         ...
 
@@ -331,6 +339,14 @@ class DependencySolver(Protocol):
         POSTCONDITIONS:
         - MUST compute a mutually compatible set of package releases satisfying root and transitive dependencies.
         - MUST select the highest precedence compatible version for each package.
-        - WHEN dependencies are unsatisfiable, MUST raise ResolutionConflictError detailing conflicting packages and derivation explanation.
+        - WHEN dependencies are unsatisfiable or reference unregistered packages absent from repository, MUST raise ResolutionConflictError detailing conflicting packages and derivation explanation without allowing PackageNotFoundError to escape.
         """
         ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-27T02:19:04Z
+# LAST_CHANGED: 2026-10-27T22:30:00Z
+# CHANGE: Remove overconstrained exact range formatting, specify storing trimmed expression in raw_text
+# CODE_HASH: ee7fcc7cb7f3
+# SPEC_QA_AUDIT: 2026-10-27T02:19:04Z
+# --- END CLEANROOM METADATA ---
