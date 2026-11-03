@@ -96,3 +96,9 @@ If a test doesn't matter, don't run the test! Do not edit pyrightconfig.json to 
      `invoke_subagent(TypeName="autofab_coordinator", Role="Autofab Coordinator", Prompt="Clean all dirty nodes in <scope> using autofab_coordinator")`
   In other environments (such as DeepSeek Harness / DSH Desktop), run `uv run autofab clean <scope> [target_role]` directly via the terminal tool (configured with a model using the `dsh` harness in `model_configs.toml`).
   For autonomous DAG convergence under Antigravity, run `uv run autofab clean <target>` with a model using the `antigravity` harness.
+
+## Credentials & Package Publishing
+
+- **Credentials Location**: External service and publishing credentials live in `~/.config/autofab/credentials.toml` outside the working tree (contains `UV_PUBLISH_TOKEN`, `OPENAI_API_KEY`, etc.). NEVER log, commit, or duplicate tokens from this file.
+- **Publishing Instructions**: Detailed procedures for bumping versions, building wheels/sdists, and publishing the three repository packages (`autofab`, `autofab-py`, and `pretense-py`) to PyPI are maintained in [`docs/publishing.md`](file:///Users/seanmcdirmid/projects/cleanroom/docs/publishing.md).
+- **Publishing Execution**: When directed to update or publish PyPI packages, extract `UV_PUBLISH_TOKEN` from `~/.config/autofab/credentials.toml`, build all distributions with `uv build` in their respective package directories (`.`, `autofab_python`, `pretense`), and publish via `uv publish`.

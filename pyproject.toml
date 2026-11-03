@@ -4,9 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autofab"
-version = "0.2.3"
+version = "0.2.4"
 description = "Literate, specification-driven software engineering framework for autonomous AI pair-programming"
-readme = "README.md"
+readme = "autofab/README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [

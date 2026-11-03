@@ -68,7 +68,7 @@ from pretense.compiler import compile_hypothesis_test_case
 from pretense.synthesis import synthesize_unit_test
 
 
-__version__ = "0.2.0"
+__version__ = "0.2.4"
 
 __all__ = [
     "AmbiguousTransitionError",

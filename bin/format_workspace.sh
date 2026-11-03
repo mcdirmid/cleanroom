@@ -54,12 +54,13 @@ fi
 echo "==> Formatting Python files (ruff)..."
 RUFF_ARGS=(
     format
-    --exclude "update_python_with_ai/templates"
+    --exclude "autofab_python/templates"
     --exclude "*.pyi"
     --exclude "staging"
     --exclude "testing"
-    update_with_ai
-    update_python_with_ai
+    autofab
+    autofab_python
+    pretense
 )
 
 if [ "$CHECK_MODE" -eq 1 ]; then
@@ -73,21 +74,23 @@ MD_FILES=()
 
 # AGENTS.md and READMEs
 [ -f "AGENTS.md" ] && MD_FILES+=("AGENTS.md")
-[ -f "update_with_ai/README.md" ] && MD_FILES+=("update_with_ai/README.md")
+[ -f "autofab/README.md" ] && MD_FILES+=("autofab/README.md")
+[ -f "autofab_python/README.md" ] && MD_FILES+=("autofab_python/README.md")
+[ -f "pretense/README.md" ] && MD_FILES+=("pretense/README.md")
 
 # High-level specs in parts
 while IFS= read -r f; do
     [ -n "$f" ] && MD_FILES+=("$f")
-done < <(find update_with_ai/parts -name "*.md" 2>/dev/null | sort)
+done < <(find autofab/parts -name "*.md" 2>/dev/null | sort)
 
 # Active guides
 while IFS= read -r f; do
     [ -n "$f" ] && MD_FILES+=("$f")
-done < <(find update_python_with_ai/guides -maxdepth 1 -name "*.md" 2>/dev/null | sort)
+done < <(find autofab_python/guides -maxdepth 1 -name "*.md" 2>/dev/null | sort)
 
 while IFS= read -r f; do
     [ -n "$f" ] && MD_FILES+=("$f")
-done < <(find update_with_ai/guides -name "*.md" 2>/dev/null | sort)
+done < <(find autofab/guides -name "*.md" 2>/dev/null | sort)
 
 if [ ${#MD_FILES[@]} -gt 0 ]; then
     if [ "$CHECK_MODE" -eq 1 ]; then
