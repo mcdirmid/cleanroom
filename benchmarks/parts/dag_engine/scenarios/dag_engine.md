@@ -54,9 +54,16 @@ Given: A directed acyclic graph with root `node_start` having duration 2.5, inte
 1. Compute critical path across the graph.
 Observed: The critical path sequence is `node_start`, `node_branch`, `node_end` with cumulative weight 8.0.
 
+## Scenario 7 — Runner cancellation status inspection
+
+Given: A DAG runner initialized for graph execution.
+
+1. Cancel active execution on the runner.
+Observed: The runner indicates that cancellation has been signaled via the test-only is_cancelled accessor.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-21T18:13:00Z
-LAST_CHANGED: 2026-10-21T18:13:00Z
-CHANGE: Specify failure policy argument on mark_failed step
+LAST_CHANGED: 2026-11-02T19:55:00Z
+CHANGE: Add scenario for runner cancellation status inspection
 SPEC_QA_AUDIT: 2026-10-19T20:00:00Z
 -->

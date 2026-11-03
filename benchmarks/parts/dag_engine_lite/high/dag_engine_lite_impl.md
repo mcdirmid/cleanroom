@@ -12,7 +12,7 @@ Reliable task graph execution requires deterministic topological evaluation with
 
 ## Types and Behavior
 
-A *concrete directed acyclic graph* realizes the directed acyclic graph protocol by indexing node definitions in an internal *node registry* and maintaining bidirectional dependency relationships across an *adjacency index*. The adjacency index partitions connections into:
+A *concrete directed acyclic graph* realizes the directed acyclic graph protocol by indexing node definitions in an internal *node registry* and maintaining bidirectional dependency relationships across an *adjacency index*. Attempting to register a node identifier that is already present in the node registry raises duplicate node error without modifying existing nodes or adjacency mappings. The adjacency index partitions connections into:
 
 - Upstream prerequisite neighbor sets updated during node registration and edge addition.
 
@@ -38,7 +38,7 @@ Execution advances by iteratively polling the wave scheduler, running unblocked 
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-26T20:55:00Z
-LAST_CHANGED: 2026-10-26T20:55:00Z
-CHANGE: Specify scheduler state purge on node removal, tie-breaking lexicographical ordering, and terminal state transitions under continue on error
+LAST_CHANGED: 2026-11-02T19:35:00Z
+CHANGE: Specify duplicate node error on add_node for already registered node identifiers
 SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 -->

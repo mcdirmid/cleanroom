@@ -2,7 +2,7 @@
 
 ## 1. Overview & Architectural Purpose
 
-In the Cleanroom engineering pipeline, the **Low-Level Specification** (`low/<name>.pyi` and `low/<name>_impl.pyi`) defines formal Python interface and implementation stubs derived from the Planning Canvas (`planning/<name>.md`). It directly precedes runtime library code (`lib/*.py`) and deterministic unit tests (`tests/*_test.py`).
+In the Autofab engineering pipeline, the **Low-Level Specification** (`low/<name>.pyi` and `low/<name>_impl.pyi`) defines formal Python interface and implementation stubs derived from the Planning Canvas (`planning/<name>.md`). It directly precedes runtime library code (`lib/*.py`) and deterministic unit tests (`tests/*_test.py`).
 
 ```
 ┌──────────────────────────────────────────────┐

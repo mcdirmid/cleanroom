@@ -233,7 +233,7 @@ class VersionEngine(Protocol):
         self,
         version: Version,
         range_constraint: VersionRange,
-        include_prerelease: bool = False,
+        include_prerelease: bool,
     ) -> bool:
         """Evaluates whether a semantic version satisfies a range constraint.
 
@@ -344,9 +344,9 @@ class DependencySolver(Protocol):
         ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-27T02:19:04Z
-# LAST_CHANGED: 2026-10-27T22:30:00Z
-# CHANGE: Remove overconstrained exact range formatting, specify storing trimmed expression in raw_text
-# CODE_HASH: ee7fcc7cb7f3
-# SPEC_QA_AUDIT: 2026-10-27T02:19:04Z
+# LAST_CLEANED: 2026-10-30T19:20:00Z
+# LAST_CHANGED: 2026-10-30T19:20:00Z
+# CHANGE: Align timestamps with planning grounding update
+# CODE_HASH: 000000000000
+# SPEC_QA_AUDIT: 2026-10-30T19:20:00Z
 # --- END CLEANROOM METADATA ---

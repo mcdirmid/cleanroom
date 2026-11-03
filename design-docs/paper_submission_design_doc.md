@@ -1,9 +1,9 @@
-# Design Document: How to Stop Worrying About Executable Code with AI Cleanroom Synthesis
+# Design Document: How to Stop Worrying About Executable Code with AI Autofab Synthesis
 
 **Target Venue:** ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI) / OOPSLA / ICSE  
 **Track:** Research Track (Language Design, Program Synthesis, Formal Methods, Type Systems, Runtime Systems)  
 **Status:** Authoritative Submission Design & Theoretical Specification  
-**Working Title:** *How to Stop Worrying About Executable Code with AI Cleanroom Synthesis*  
+**Working Title:** *How to Stop Worrying About Executable Code with AI Autofab Synthesis*  
 
 ---
 
@@ -12,7 +12,7 @@
 ### 1.0 Working Title Candidates & Selection Matrix
 
 **Selected Primary Working Title:**  
-> **How to Stop Worrying About Executable Code with AI Cleanroom Synthesis**  
+> **How to Stop Worrying About Executable Code with AI Autofab Synthesis**  
 
 To ensure the paper is **prolific without over-promising**—balancing academic gravitas, visionary impact, and technical honesty—this section catalogs candidate titles across multiple strategic registers: from direct, plain-English titles that avoid heavy jargon to formal PL-theoretic formulations.
 
@@ -23,7 +23,7 @@ To ensure the paper is **prolific without over-promising**—balancing academic 
 │ 1. Plain English & Direct: Zero jargon, everyday software words.           │
 │ 2. The Paradigm Shift: Code as ephemeral bytecode / pushing code back.      │
 │ 3. PL Theory & Game-Theoretic: Primal-Dual games, coincident error bounds.   │
-│ 4. Historical Heritage: Mechanizing Harlan Mills' Cleanroom and IV&V.       │
+│ 4. Historical Heritage: Mechanizing Harlan Mills' Autofab and IV&V.       │
 │ 5. Systems & Concurrency Rigor: Compositional stubs, stateful invariants.    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -35,13 +35,13 @@ To ensure the paper is **prolific without over-promising**—balancing academic 
    - *Why it works*: Directly states what the human does (writes specs), what the machine does (builds systems), and the core mechanism (two independent AIs). Completely devoid of jargon.
 2. **Code You Never Read: Generating Software from Verified Specs**  
    - *Why it works*: Provocative, punchy, and memorable. Communicates the concept of "disposable code" in simple, everyday words.
-3. **Cleanroom: Building Real Software with Two AIs That Never Talk**  
+3. **Autofab: Building Real Software with Two AIs That Never Talk**  
    - *Why it works*: Vividly explains the "Chinese Wall" isolation constraint ($\mathcal{I} = 0$) in plain language.
 4. **The Blind Test: Why AI Coders and AI Testers Must Never Meet**  
    - *Why it works*: High-curiosity hook. Translates the mutual information theorem into an intuitive, memorable rule.
 5. **Making Code Disposable: Building Reliable Software with Independent AI Testers**  
    - *Why it works*: Grounded and honest. Captures the death of code debugging without over-promising formal perfection.
-6. **Behind the Scenes: Pushing Code into the Background with AI Cleanrooms**  
+6. **Behind the Scenes: Pushing Code into the Background with AI Autofabs**  
    - *Why it works*: Direct translation of the author's core thesis into accessible, visual language.
 7. **Two AIs, One Spec: Building Working Code Without Shared Mistakes**  
    - *Why it works*: Plain-English translation of solving Knight & Leveson's coincident error problem.
@@ -77,18 +77,18 @@ To ensure the paper is **prolific without over-promising**—balancing academic 
 #### Category 4: Historical Heritage (Mechanizing Harlan Mills & Aerospace IV&V)
 *Best for establishing historical authority and justifying the system's namesake.*
 
-18. **Mechanizing the Cleanroom: Autonomous Independent Verification and Validation at Machine Speed**  
-    - *Why it works*: Connects 1987 IBM Cleanroom and RTCA DO-178C Level A IV&V to modern AI, demonstrating how neural agents remove the historic cost barrier.
-19. **Cleanroom: Certified Neural Program Synthesis via Hermetic Bipartite Verification**  
+18. **Mechanizing the Autofab: Autonomous Independent Verification and Validation at Machine Speed**  
+    - *Why it works*: Connects 1987 IBM Autofab and RTCA DO-178C Level A IV&V to modern AI, demonstrating how neural agents remove the historic cost barrier.
+19. **Autofab: Certified Neural Program Synthesis via Hermetic Bipartite Verification**  
     - *Why it works*: Classic SIGPLAN convention (`System: What It Does`). Confident and clean.
-20. **The Autonomous Cleanroom: Restoring Verification Independence to Neural Software Engineering**  
-    - *Why it works*: Identifies the root flaw in single-developer TDD and Copilot prompting (lack of independence) and explains how Cleanroom fixes it.
+20. **The Autonomous Autofab: Restoring Verification Independence to Neural Software Engineering**  
+    - *Why it works*: Identifies the root flaw in single-developer TDD and Copilot prompting (lack of independence) and explains how Autofab fixes it.
 
 #### Category 5: Systems & Concurrency Rigor
 *Best for emphasizing real-world systems engineering (schedulers, SQLite, Git, Raft) and adversarial multi-threaded verification.*
 
 21. **From Interface Stubs to Invariant Proofs: Compositional Neural Synthesis of Systems Software**  
-    - *Why it works*: Emphasizes assume-guarantee composition and highlights that Cleanroom builds complex systems, not toy functions.
+    - *Why it works*: Emphasizes assume-guarantee composition and highlights that Autofab builds complex systems, not toy functions.
 22. **Adversarial Interleaving and Bipartite Certification: Sound Neural Synthesis of Concurrent Systems**  
     - *Why it works*: Highlights the multi-threaded race detection and deadlock triage contributions.
 
@@ -98,13 +98,13 @@ To ensure the paper is **prolific without over-promising**—balancing academic 
 
 | Option | Memorability | Technical Precision | Jargon Level | Risk of Over-Promising | Best Fit Venue / Audience |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **How to Stop Worrying About Executable Code with AI Cleanroom Synthesis** *(Selected)* | ★★★★★ | ★★★★☆ | **Low** (Direct & grounded) | **Minimal** | Primary Paper Title / PLDI, OOPSLA, ICSE |
+| **How to Stop Worrying About Executable Code with AI Autofab Synthesis** *(Selected)* | ★★★★★ | ★★★★☆ | **Low** (Direct & grounded) | **Minimal** | Primary Paper Title / PLDI, OOPSLA, ICSE |
 | **Writing Specs, Not Code: Building Systems with Two Independent AIs** | ★★★★★ | ★★★★☆ | **Very Low** (No big words) | **Minimal** (Accurate to what it delivers) | Keynote / Broad Systems & PL Audience |
 | **Code You Never Read: Generating Software from Verified Specs** | ★★★★★ | ★★★☆☆ | **Very Low** (No big words) | **Minimal** | General Software Engineering / OOPSLA |
-| **Cleanroom: Building Real Software with Two AIs That Never Talk** | ★★★★★ | ★★★★☆ | **Very Low** (Punchy & direct) | **Minimal** | High-Impact Systems Track |
+| **Autofab: Building Real Software with Two AIs That Never Talk** | ★★★★★ | ★★★★☆ | **Very Low** (Punchy & direct) | **Minimal** | High-Impact Systems Track |
 | **Code as Ephemeral Bytecode: Autonomous Program Synthesis under Double-Blind Dynamic Verification** | ★★★★☆ | ★★★★★ | **Moderate** (Academic) | **Very Low** (Explicitly specifies dynamic verification) | Top Recommendation for PLDI |
 | **The Primal-Dual Certificate Game: Eliminating Coincident Errors in Neural Program Synthesis** | ★★★★☆ | ★★★★★ | **High** (PL Theory) | **Very Low** (Grounded in Littlewood-Miller theory) | Top Recommendation for POPL |
-| **Mechanizing the Cleanroom: Autonomous Independent Verification and Validation at Machine Speed** | ★★★★☆ | ★★★★★ | **Moderate** (Classical SE) | **Very Low** (Direct realization of DO-178C) | Top Recommendation for Historical / ICSE / OOPSLA |
+| **Mechanizing the Autofab: Autonomous Independent Verification and Validation at Machine Speed** | ★★★★☆ | ★★★★★ | **Moderate** (Classical SE) | **Very Low** (Direct realization of DO-178C) | Top Recommendation for Historical / ICSE / OOPSLA |
 
 ---
 
@@ -113,13 +113,13 @@ For over seven decades, general-purpose programming languages (such as C++, Java
 
 The emergence of Large Language Models (LLMs) has sparked widespread interest in synthesizing programs from natural language specifications. However, contemporary approaches to AI-assisted software engineering ("vibe coding", agentic software engineers, copilot completions) preserve the traditional paradigm: **human developers must inspect, maintain, and debug the synthesized executable code**. This status quo persists because natural language is inherently ambiguous, and neural models are stochastic, hallucination-prone, and lack sound semantic guarantees. When LLM-generated code fails, developers are forced back into the low-level mechanics of the target programming language to diagnose runtime failures, patch subtle edge-case bugs, and resolve specification drift.
 
-**The Cleanroom Thesis:**  
+**The Autofab Thesis:**  
 > *General-purpose programming languages can be pushed entirely to the background—demoted to disposable, machine-synthesized intermediate representations (IR/bytecode) that humans never author or maintain—if and only if program synthesis is governed by:*
 > 1. *A formal **Typed Interface Specification Model** ($S = \langle \Sigma, \mathcal{C} \rangle$) combining explicit API type signatures with fine-grained, bi-conditional behavioral contracts;*
 > 2. *A **Primal-Dual Certified Synthesis Model** that formulates synthesis as a zero-sum certificate game between isolated, untrusted neural oracles under double hermetic confinement ($\mathcal{I}(P; V \mid S) = 0$ and $\mathcal{I}(\{P, V\}; \text{Internet} \mid S) = 0$); and*
 > 3. *A deterministic, closed-world **Verification Gateway** with fine-grained blame attribution that guarantees semantic preservation before target execution.*
 
-Under Cleanroom, the human developer works within typed interface specifications and behavioral contracts. The executable code and its corresponding verification certifiers are synthesized ephemerally by isolated model instances, cross-validated via dual-blind execution gates, and discarded or re-synthesized automatically whenever specifications evolve.
+Under Autofab, the human developer works within typed interface specifications and behavioral contracts. The executable code and its corresponding verification certifiers are synthesized ephemerally by isolated model instances, cross-validated via dual-blind execution gates, and discarded or re-synthesized automatically whenever specifications evolve.
 
 ```
 TRADITIONAL SE vs. THE CLEANROOM COMPILATION PARADIGM
@@ -130,7 +130,7 @@ Traditional Software Engineering & "AI Pair Programming":
 │ Language Intent / PRD │                              │ (Python, C++, Rust)   │     (Manual debugging & maintenance)
 └───────────────────────┘                              └───────────────────────┘
 
-The Cleanroom Synthesis-as-Compilation Paradigm:
+The Autofab Synthesis-as-Compilation Paradigm:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ Specification S = ⟨Σ_API, C_req⟩                                            │ ◄── PRIMARY SPECIFICATION ARTIFACT
 │ - Typed API Signatures (Classes, Functions, Explicit Types)                 │     (Authoritative Source of Truth)
@@ -173,8 +173,8 @@ The rapid emergence of autonomous Developer AI (DevAI) has fundamentally broken 
    - **Alert Fatigue from Hallucinated Nitpicks**: Ungrounded reviewers generate generic stylistic critiques or invent non-existent rules, resulting in developer rejection rates exceeding 75%.
    
    To combat this, recent industrial software engineering frameworks have pioneered **Specification-Grounded Code Review (SGCR)** (featured in IEEE/ACM ASE 2024–2026). SGCR frameworks ground the review process in human-authored specifications via a **Dual-Pathway Architecture**: an *explicit deterministic pathway* that validates interface schemas, type boundaries, and hard constraints with zero tokens and zero hallucinations, paired with an *implicit context-guided pathway* that directs neural LLMs to search for semantic omissions and contract violations. Industrial deployments demonstrate that anchoring critiques to explicit specification clauses doubles or triples developer acceptance rates.
-5. **The Cleanroom Synthesis-as-Compilation Paradigm: Advancing Beyond Post-Hoc SGCR**:
-   While SGCR marks a vital step forward for pull request auditing, Cleanroom takes its core insight to its logical conclusion. Post-hoc SGCR still treats code as the primary artifact and relies on humans to inspect, debug, and patch the code when alerts fire. Cleanroom asks: *if specifications are the ground truth against which code must be evaluated, why author, review, or maintain the procedural code at all?* Cleanroom elevates specification grounding from a post-hoc pull request audit into a **generative compiler**: human engineers curate typed interface specifications ($S = \langle \Sigma, \mathcal{C} \rangle$), while isolated, statistically independent neural agents compile those specifications into disposable, double-blind verified bytecode.
+5. **The Autofab Synthesis-as-Compilation Paradigm: Advancing Beyond Post-Hoc SGCR**:
+   While SGCR marks a vital step forward for pull request auditing, Autofab takes its core insight to its logical conclusion. Post-hoc SGCR still treats code as the primary artifact and relies on humans to inspect, debug, and patch the code when alerts fire. Autofab asks: *if specifications are the ground truth against which code must be evaluated, why author, review, or maintain the procedural code at all?* Autofab elevates specification grounding from a post-hoc pull request audit into a **generative compiler**: human engineers curate typed interface specifications ($S = \langle \Sigma, \mathcal{C} \rangle$), while isolated, statistically independent neural agents compile those specifications into disposable, double-blind verified bytecode.
 
 ### 1.2 The Human Developer: Specification Custodian and Reviewer
 In a paradigm where programming language code is demoted to ephemeral intermediate bytecode, what is the role of the human developer? Human engineers are not eliminated; rather, their cognitive labor is elevated from low-level mechanical debugging to architectural curation:
@@ -186,21 +186,21 @@ In a paradigm where programming language code is demoted to ephemeral intermedia
 
 ### 1.3 Specifications as the New Programming Language: Density, Disposable Bytecode, and the Death of Code Debuggers
 
-The Cleanroom paradigm fundamentally recasts how software is authored, maintained, and verified:
+The Autofab paradigm fundamentally recasts how software is authored, maintained, and verified:
 
 1. **Specification Density vs. Code Density**:
    Specifications are inherently declarative and relational, not procedural. A typed contract declares *what* invariant or relational property must hold ($X \times Y \to \mathbb{B}$), while implementation code must explicitly orchestrate all procedural mechanics: loop indexing, variable bindings, dynamic imports, container allocations, string munging, and defensive try-catch blocks. In our self-hosting corpus, specifications are dramatically more compact than target code:
    $$\text{Lines}(S) \ll \text{Lines}(P) + \text{Lines}(V)$$
    Across our production codebase, specification line counts represent a small fraction of the combined target implementation and test suite lines. The human developer's cognitive labor is concentrated entirely on dense, high-level intent.
 2. **Transforming the Fundamental Problem of Computer Science**:
-   Cleanroom transforms the central challenge of software engineering: **from the problem of writing working code to the problem of writing working specifications.** 
-   In classical programming, developers write code and test it with unit tests. But when the specification becomes the primary language for humans, a new dilemma emerges: **how do humans test their specifications?** Specifications cannot be executed directly on hardware. Cleanroom's Primal-Dual game solves this by acting as the *compiler and runtime tester for specifications*: by attempting to synthesize an implementation that satisfies an independently synthesized test oracle, Cleanroom exposes contradictory, ambiguous, or ungrounded specifications before they can ever execute in production.
+   Autofab transforms the central challenge of software engineering: **from the problem of writing working code to the problem of writing working specifications.** 
+   In classical programming, developers write code and test it with unit tests. But when the specification becomes the primary language for humans, a new dilemma emerges: **how do humans test their specifications?** Specifications cannot be executed directly on hardware. Autofab's Primal-Dual game solves this by acting as the *compiler and runtime tester for specifications*: by attempting to synthesize an implementation that satisfies an independently synthesized test oracle, Autofab exposes contradictory, ambiguous, or ungrounded specifications before they can ever execute in production.
 3. **Code as Ephemeral Disposable Output & The Non-Deterministic to Reliable Inversion**:
-   In conventional development, source code is treated as precious, handcrafted intellectual property. In Cleanroom, target code is **ephemeral bytecode**. Like compiled object files in a build cache, the developer can delete `lib/` and `tests/` at any time (`rm -rf lib/ tests/`), spend a few thousand tokens, and the Cleanroom compiler will deterministically regenerate and re-verify the codebase from scratch. Cleanroom takes a non-deterministic generative oracle (an LLM) and—through double-blind primal-dual confinement—constructs a **reliable, deterministic compiler**.
+   In conventional development, source code is treated as precious, handcrafted intellectual property. In Autofab, target code is **ephemeral bytecode**. Like compiled object files in a build cache, the developer can delete `lib/` and `tests/` at any time (`rm -rf lib/ tests/`), spend a few thousand tokens, and the Autofab compiler will deterministically regenerate and re-verify the codebase from scratch. Autofab takes a non-deterministic generative oracle (an LLM) and—through double-blind primal-dual confinement—constructs a **reliable, deterministic compiler**.
 4. **The Reality of Developer Experience: The Death of Code Debugging & TDD's Broken Promise**:
    When Test-Driven Development (TDD) emerged, pioneers like Kent Beck and Robert C. Martin ("Uncle Bob") declared that *"a debugger is an admission of failure"* and promised that disciplined testing would eliminate interactive debuggers entirely. Yet two decades of empirical software engineering research showed that real-world TDD practitioners still spent 30–50% of their time inside debuggers (e.g., Beller et al. 2015). Why? Because of the **Fatal Contamination Trap**: human developers author both the code and the test, sharing identical mental blind spots; when the software is integrated, it crashes unexpectedly, forcing developers back into interactive step-debuggers.
    
-   Cleanroom finally delivers on TDD's unfulfilled promise. Because target code is synthesized under double-blind isolation and certified to 100% statement and branch coverage against an adversarial certifier, **developers building systems under Cleanroom literally never open a debugger on target code**. When a completed system behaves unexpectedly at runtime, the implementation code is completely faithful to the specification—**the flaw was in the specification itself**. This shifts developer tooling requirements fundamentally: **we do not need better code debuggers; we need specification debuggers**.
+   Autofab finally delivers on TDD's unfulfilled promise. Because target code is synthesized under double-blind isolation and certified to 100% statement and branch coverage against an adversarial certifier, **developers building systems under Autofab literally never open a debugger on target code**. When a completed system behaves unexpectedly at runtime, the implementation code is completely faithful to the specification—**the flaw was in the specification itself**. This shifts developer tooling requirements fundamentally: **we do not need better code debuggers; we need specification debuggers**.
 5. **The Challenge of Non-Convergence**:
    While the Fail-Safe Invariant (Section 2.9) guarantees that flawed specifications halt fail-stop rather than silently emitting buggy code, **non-convergence is an unsatisfying failure mode**. Halting compilation with a blame trace tells the developer that the specification failed to converge, but does not automatically fix the specification. To address this, the compiler must provide pre-synthesis static analyzers—such as Pass 1 Static Specification Validation (Spec QA) and ungrounded dependency checkers—to catch defective specifications upfront before spending synthesis tokens.
 6. **The Modularity-Specification Trade-Off (The Hidden Cost of Factoring)**:
@@ -215,7 +215,7 @@ The Cleanroom paradigm fundamentally recasts how software is authored, maintaine
 
 A fundamental conceptual distinction in this paradigm concerns the nature of testability: *If specifications have become the authoritative source of truth, why do unit tests not exist for specifications directly?*
 
-The answer is straightforward: **specifications are inherently untestable. The specification itself has zero tests. All verification tests in Cleanroom exist solely to ensure that the synthesized library implementation adheres to the specification.**
+The answer is straightforward: **specifications are inherently untestable. The specification itself has zero tests. All verification tests in Autofab exist solely to ensure that the synthesized library implementation adheres to the specification.**
 
 To clarify why this asymmetry exists, we examine the formal foundations of testability across programming language semantics, the philosophy of language (Wittgenstein), and requirements engineering (Zave & Jackson 1997):
 
@@ -241,20 +241,20 @@ To clarify why this asymmetry exists, we examine the formal foundations of testa
      $$W, S \vdash R$$
      where $R$ represents informal customer requirements in the world, $W$ represents real-world physical domain assumptions, and $S$ represents the specification at the machine boundary. Requirements ($R$) and domain assumptions ($W$) live in natural language because the analog physical universe cannot be executed inside a CPU. Only the machine specification $S$ can be made formal.
 
-3. **The Role of Tests in Cleanroom: Strictly Verifying Adherence**:
+3. **The Role of Tests in Autofab: Strictly Verifying Adherence**:
    Because specifications cannot be executed, **the specification itself cannot be tested**. 
    
-   Instead, Cleanroom maintains a strict division of responsibilities:
+   Instead, Autofab maintains a strict division of responsibilities:
    - **The Specification ($S = \langle \Sigma, \mathcal{C} \rangle$)** is the untestable, authoritative definition of intent.
    - **The Library Implementation ($P \in \mathcal{L}_{IR}$)** is the machine-executable artifact that computes results.
    - **The Verification Test Suite ($V \in \mathcal{V}_{cert}$)** exists for one purpose only: **to ensure that the library code faithfully adheres to the specification contracts**.
    
-   By generating tests independently from the specification under double-blind isolation ($\mathcal{I}(P; V \mid S) = 0$), Cleanroom guarantees that the implementation cannot deviate from the written contracts without triggering a test failure. The specification remains the un-tested anchor; the tests ensure the code never drifts from it.
+   By generating tests independently from the specification under double-blind isolation ($\mathcal{I}(P; V \mid S) = 0$), Autofab guarantees that the implementation cannot deviate from the written contracts without triggering a test failure. The specification remains the un-tested anchor; the tests ensure the code never drifts from it.
 
 ### 1.4 Theoretical Framing: Depth Over Empirical Heuristics
 A rigorous PL submission cannot simply report empirical benchmark scores on SWE-bench or HumanEval; it must address fundamental questions of programming language design, formal semantics, and rigorous verification:
 
-| Dimension | AI / Empirical SE Focus (Reject for PLDI) | Cleanroom PLDI Focus (Core PL Contribution) |
+| Dimension | AI / Empirical SE Focus (Reject for PLDI) | Autofab PLDI Focus (Core PL Contribution) |
 | :--- | :--- | :--- |
 | **Source of Truth** | Treating code as truth; prompt engineering to generate code directly. | **Language Design**: Formalizing a typed interface specification calculus where typed signatures and atomic behavioral contracts form constructive epistemic DAGs. |
 | **Synthesis Oracle** | Evaluating model accuracy ($Pass@k$) and prompt variants. | **Soundness Bounding**: Defining a formal framework that guarantees deterministic safety and contract adherence despite using untrusted, non-deterministic neural oracles. |
@@ -266,11 +266,11 @@ A rigorous PL submission cannot simply report empirical benchmark scores on SWE-
 
 Foundational systems and verification engineering rest upon the classic duality between **Liveness** ("something good eventually happens") and **Safety** ("nothing bad ever happens") (Lamport 1977). In automated software engineering and neural code generation, this duality manifests as an existential trade-off:
 - **The Liveness Trap (Output Generation at All Costs)**: Traditional multi-version programming (NVP) and contemporary DevAI pipelines prioritize liveness. They assume that if an ensemble votes or an agent debate loop terminates, the resulting code is fit for execution. When models encounter difficult edge cases, this priority collapses into the **Knight-Leveson trap**: correlated failure distributions cause independent agents to replicate identical, coincident defects. Under majority voting, the system falsely converges on the shared bug, yielding **silent runtime corruption**.
-- **The Safety Pivot (Cleanroom Non-Convergence)**: Cleanroom fundamentally rejects the prioritization of liveness over safety. The architecture introduces **aggressive edge-case coverage as a structural wedge**. While the synthesized implementation code ($P$) and the test certifier ($V$) might experience confusion in the same difficult parts of the specification, their task asymmetry ($X \to Y$ vs. $X \times Y \to \mathbb{B}$) makes them highly unlikely to replicate the exact same execution defect.
+- **The Safety Pivot (Autofab Non-Convergence)**: Autofab fundamentally rejects the prioritization of liveness over safety. The architecture introduces **aggressive edge-case coverage as a structural wedge**. While the synthesized implementation code ($P$) and the test certifier ($V$) might experience confusion in the same difficult parts of the specification, their task asymmetry ($X \to Y$ vs. $X \times Y \to \mathbb{B}$) makes them highly unlikely to replicate the exact same execution defect.
 
 By enforcing this design constraint, the failure mode of the entire synthesis system shifts decisively:
 - **Traditional Failure Mode**: Silent runtime defect escape (false convergence on an undetectable shared bug).
-- **Cleanroom Failure Mode**: System Deadlock or Oscillation (**Deterministic Non-Convergence / Fail-Stop**).
+- **Autofab Failure Mode**: System Deadlock or Oscillation (**Deterministic Non-Convergence / Fail-Stop**).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -283,7 +283,7 @@ By enforcing this design constraint, the failure mode of the entire synthesis sy
 │                                                ▼                            │
 │                                         SILENT RUNTIME DEFECT ESCAPE        │
 │                                                                             │
-│  Cleanroom Synthesis Matrix:                                                │
+│  Autofab Synthesis Matrix:                                                │
 │  Prioritize SAFETY   ──► Aggressive Edge-Case Wedge ──► Discordant Clashing │
 │                                                          │                  │
 │                                                          ▼                  │
@@ -346,7 +346,7 @@ How does an autonomous multi-agent system judge code quality when no formal requ
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Architectural Attribute | The Implicit Paradigm ("Codebase as Truth") | The Explicit Paradigm (Agentic SDD) | Cleanroom Synthesis-as-Compilation |
+| Architectural Attribute | The Implicit Paradigm ("Codebase as Truth") | The Explicit Paradigm (Agentic SDD) | Autofab Synthesis-as-Compilation |
 | :--- | :--- | :--- | :--- |
 | **Ground Truth Source** | Live Codebase, AST Index, & Local Environment | Version-Controlled Manifests / JSON Graphs | Typed Interface Model ($S = \langle \Sigma, \mathcal{C} \rangle$) |
 | **Primary Artifact** | Executable Code (Python, Rust, C++) | Natural Language / Markdown Manifest | Typed Stubs (`.pyi`) & Bipartite Contracts |
@@ -364,11 +364,11 @@ While the implicit paradigm is popular for rapid prototyping ("vibe coding"), it
 3. **Statistically Dominant Hallucinations (Pre-Training Distribution Drift)**:  
    In the absence of a rigid, explicit specification contract, neural models default to the most probable token paths in their pre-training distributions ($\mathcal{D}_\theta$). When encountering complex, proprietary, or domain-specific architectural patterns, the agent unconsciously substitutes generic open-source idioms found in public GitHub training corpora. This pulls bespoke enterprise architectures backward toward generic boilerplate, introducing subtle incompatibilities with upstream subsystem assumptions.
 
-#### 2.0.4 Cleanroom's Resolution: Transcending the Battle via Epistemic Isolation
-Cleanroom resolves the conflict between implicit context engines and explicit specifications by synthesizing their core strengths into a mathematically sound compilation calculus:
-* **Explicit Business Logic Boundaries ("The What")**: Cleanroom mandates formal **Typed Interface Specifications** ($S = \langle \Sigma, \mathcal{C} \rangle$). By expressing intent as typed stubs with bi-conditional bipartite contracts ($[s^+], [s^-]$), Cleanroom eliminates the "Summary of a Summary" effect and immunizes the system against pre-training distribution drift.
-* **Closed-World Hermetic Verification ("The How")**: Rather than relying on conversational peer debates between critic agents, Cleanroom enforces **Double Hermetic Confinement ($\mathcal{I} = 0$)**. The Primal Synthesizer $\mathcal{S}$ and Dual Certifier $\mathcal{D}$ are physically isolated into separate processes with zero cross-talk, deriving implementations and verification harnesses independently.
-* **Trust Calibration via Deterministic Gatekeeping**: Cleanroom transforms the DevAI trust crisis from a human code comprehension burden into a **deterministic compiler gate**: code is admitted into the executable build cache if, and only if, it achieves 100% statement and branch coverage against the independently synthesized adversarial certifier.
+#### 2.0.4 Autofab's Resolution: Transcending the Battle via Epistemic Isolation
+Autofab resolves the conflict between implicit context engines and explicit specifications by synthesizing their core strengths into a mathematically sound compilation calculus:
+* **Explicit Business Logic Boundaries ("The What")**: Autofab mandates formal **Typed Interface Specifications** ($S = \langle \Sigma, \mathcal{C} \rangle$). By expressing intent as typed stubs with bi-conditional bipartite contracts ($[s^+], [s^-]$), Autofab eliminates the "Summary of a Summary" effect and immunizes the system against pre-training distribution drift.
+* **Closed-World Hermetic Verification ("The How")**: Rather than relying on conversational peer debates between critic agents, Autofab enforces **Double Hermetic Confinement ($\mathcal{I} = 0$)**. The Primal Synthesizer $\mathcal{S}$ and Dual Certifier $\mathcal{D}$ are physically isolated into separate processes with zero cross-talk, deriving implementations and verification harnesses independently.
+* **Trust Calibration via Deterministic Gatekeeping**: Autofab transforms the DevAI trust crisis from a human code comprehension burden into a **deterministic compiler gate**: code is admitted into the executable build cache if, and only if, it achieves 100% statement and branch coverage against the independently synthesized adversarial certifier.
 
 ### 2.1 The Fallacy of Naive N-Version Synthesis & Its Mitigation
 
@@ -383,7 +383,7 @@ Three primary structural criticisms invalidate naive independence in multi-versi
 3. **The Non-Functional Blindspot**: Statistical independence breaks down entirely when applied to non-functional properties like concurrency, timing, cache locality, or memory consumption. These properties cannot be isolated into discrete functional input/output spaces and are fundamentally bound to the same physical, shared runtime environment and hardware substrate.
 
 #### 2.1.2 Architectural Contrast: NVP Voting vs. Constraint-Matrix Pipeline
-Instead of relying on the mathematical myth of statistical independence to guarantee reliability, Cleanroom uses **deterministic constraint-satisfaction, physical information confinement ($\mathcal{I} = 0$), and explicit context-grounding** to convert traditional silent failures into visible, fail-stop non-convergence:
+Instead of relying on the mathematical myth of statistical independence to guarantee reliability, Autofab uses **deterministic constraint-satisfaction, physical information confinement ($\mathcal{I} = 0$), and explicit context-grounding** to convert traditional silent failures into visible, fail-stop non-convergence:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -408,7 +408,7 @@ Instead of relying on the mathematical myth of statistical independence to guara
 │                 ▼                                                           │
 │      [SILENT RUNTIME FAILURE: Majority Voter Accepts Wrong Result]          │
 │                                                                             │
-│  Cleanroom Constraint-Matrix Pipeline (Succeeds):                           │
+│  Autofab Constraint-Matrix Pipeline (Succeeds):                           │
 │  ┌──────────────────────────────────────────┐                               │
 │  │   Purely Declarative Spec (No Code)      │                               │
 │  └────────────────────┬─────────────────────┘                               │
@@ -432,16 +432,16 @@ Instead of relying on the mathematical myth of statistical independence to guara
 ```
 
 #### 2.1.3 The Four Architectural Mitigations
-Cleanroom systematically neutralizes each of the three foundational criticisms through four explicit mechanisms:
-1. **The Edge-Case Test Wedge**: Rather than querying $N$ symmetric coding agents and voting on outputs, Cleanroom introduces a primal-dual system where one agent writes implementation code ($P$) and the other independently synthesizes verification tests ($V$). While both agents may introduce defects on flawed or ambiguous specification regions, their task asymmetry ($X \to Y$ vs. $X \times Y \to \mathbb{B}$) makes them highly unlikely to replicate the exact same execution defect. Aggressive edge-case mining acts as a structural wedge: divergent interpretations force immediate test failures, trading silent runtime corruption for visible non-convergence (system deadlock / fail-stop).
-2. **Purely Declarative Contracts**: Cleanroom completely strips specifications of procedural execution logic, operational steps, temporary variables, and low-level loop bounds. This prevents neural synthesizers from copying flawed procedural structures or bounds-checking errors directly from the requirement text.
-3. **External Algorithmic and Context Guides**: To stop models from relying on biased pre-training weights during the realization phase, Cleanroom injects external, mathematically verified algorithmic guides $\mathcal{G}$ (e.g., explicit step-by-step pseudo-code for topological sorting, cycle detection, or balanced indexing) and strict hardware templates. The models function merely as stateless compilation engines mapping abstract requirements onto a verified algorithmic template.
-4. **A Blind, Stateful Performance Auditor**: To address non-functional and concurrency properties without triggering Goodhart's Law, Cleanroom deploys a stateful Performance Auditor observing a hidden benchmark. It feeds abstract, architectural guidance to the implementation agent (*"Your code violates memory ceiling $C$ due to in-memory list accumulation; migrate to streaming coroutine generators"*) without permitting the model to observe or overfit the raw performance metrics.
+Autofab systematically neutralizes each of the three foundational criticisms through four explicit mechanisms:
+1. **The Edge-Case Test Wedge**: Rather than querying $N$ symmetric coding agents and voting on outputs, Autofab introduces a primal-dual system where one agent writes implementation code ($P$) and the other independently synthesizes verification tests ($V$). While both agents may introduce defects on flawed or ambiguous specification regions, their task asymmetry ($X \to Y$ vs. $X \times Y \to \mathbb{B}$) makes them highly unlikely to replicate the exact same execution defect. Aggressive edge-case mining acts as a structural wedge: divergent interpretations force immediate test failures, trading silent runtime corruption for visible non-convergence (system deadlock / fail-stop).
+2. **Purely Declarative Contracts**: Autofab completely strips specifications of procedural execution logic, operational steps, temporary variables, and low-level loop bounds. This prevents neural synthesizers from copying flawed procedural structures or bounds-checking errors directly from the requirement text.
+3. **External Algorithmic and Context Guides**: To stop models from relying on biased pre-training weights during the realization phase, Autofab injects external, mathematically verified algorithmic guides $\mathcal{G}$ (e.g., explicit step-by-step pseudo-code for topological sorting, cycle detection, or balanced indexing) and strict hardware templates. The models function merely as stateless compilation engines mapping abstract requirements onto a verified algorithmic template.
+4. **A Blind, Stateful Performance Auditor**: To address non-functional and concurrency properties without triggering Goodhart's Law, Autofab deploys a stateful Performance Auditor observing a hidden benchmark. It feeds abstract, architectural guidance to the implementation agent (*"Your code violates memory ceiling $C$ due to in-memory list accumulation; migrate to streaming coroutine generators"*) without permitting the model to observe or overfit the raw performance metrics.
 
-#### 2.1.4 The Cleanroom Single-LLM Thesis
+#### 2.1.4 The Autofab Single-LLM Thesis
 Attempting to revive N-version programming simply by querying multiple LLMs or prompting the same LLM $N$ times for duplicate implementations repeats the classical NVP fallacy. Foundation models are trained on overlapping open-source corpora and share identical inductive priors ($\mathcal{D}_\theta$). Conversely, if an agent synthesizes an implementation and its verification tests in the *same* conversational context window, it falls into **tautological self-affirmation**: the test suite tests the model's mistaken mental model rather than the true specification.
 
-Cleanroom establishes the foundational claim that **different foundation models are not needed**. In our approach, **a single LLM performs both translations**—deriving the library implementation $P$ and deriving the executable test oracle $V$—strictly in **isolated, separated conversations ($\mathcal{I} = 0$)**. Context isolation prevents the agents from interacting or reading each other's interpretation of the specification, while task asymmetry (constructive code vs. relational invariant assertions) ensures that their reasoning trajectories and failure modes do not intersect.
+Autofab establishes the foundational claim that **different foundation models are not needed**. In our approach, **a single LLM performs both translations**—deriving the library implementation $P$ and deriving the executable test oracle $V$—strictly in **isolated, separated conversations ($\mathcal{I} = 0$)**. Context isolation prevents the agents from interacting or reading each other's interpretation of the specification, while task asymmetry (constructive code vs. relational invariant assertions) ensures that their reasoning trajectories and failure modes do not intersect.
 
 ### 2.2 Reframing Knight & Leveson: Gatekeeping vs. Voting, and Discordant Failure vs. Exact Concordant Agreement
 
@@ -462,7 +462,7 @@ This objection confuses **coincident failure on specification difficulty** with 
 │       the voter silently accepts the wrong answer (y_1 = y_2 = y_bad).      │
 │       Result: SILENT RUNTIME DEFECT ESCAPE.                                 │
 │                                                                             │
-│  2. Cleanroom Primal-Dual Certification (Gatekeeping):                      │
+│  2. Autofab Primal-Dual Certification (Gatekeeping):                      │
 │     P(x) ────> Output y ──┐                                                 │
 │                           ├──> Sandboxed Gatekeeper: V(x, y) == PASS?       │
 │     V(x, y) ─> Oracle   ──┘                                                 │
@@ -478,7 +478,7 @@ This objection confuses **coincident failure on specification difficulty** with 
 Let $x \in \mathcal{D}$ be a difficult boundary condition or ambiguous specification region (high intrinsic difficulty $\theta(x)$). 
 In classical N-version programming, independent implementations $P_1$ and $P_2$ frequently collapse into the same approximation shortcut or arithmetic mistake, causing the runtime majority voter to emit an erroneous output.
 
-In Cleanroom, the test certifier $V$ is **not a majority voter; it is an adversarial gatekeeper**:
+In Autofab, the test certifier $V$ is **not a majority voter; it is an adversarial gatekeeper**:
 $$\text{Gateway}(P, V) = \begin{cases} \mathbf{PASS} & \text{if } \forall x \in \text{Tests}, \ V(x, P(x)) = \mathbf{True} \ \land \ \mathbf{BranchCov}(P, V) = 100\% \\ \mathbf{FAIL\_STOP} & \text{otherwise} \end{cases}$$
 
 Suppose both the primal synthesizer $\mathcal{S}$ and the dual certifier $\mathcal{D}$ misinterpret an ambiguous specification (e.g., *"Handle empty collections gracefully"*):
@@ -491,17 +491,17 @@ $$\mathbf{RESULT: \quad FAIL-STOP!}$$
 
 The compilation pipeline halts, the candidate implementation is rejected, and diagnostic blame is attributed back to the ambiguous contract. 
 
-> **Theorem (Discordant Safety)**: *Coincident failure on difficult or ambiguous specification regions does NOT cause silent defect escape in Cleanroom; it produces deterministic non-convergence (fail-stop safety).*
+> **Theorem (Discordant Safety)**: *Coincident failure on difficult or ambiguous specification regions does NOT cause silent defect escape in Autofab; it produces deterministic non-convergence (fail-stop safety).*
 
 #### 2.2.2 Exact Concordant Agreement: The Only Pathway to Defect Escape
-A defect can silently escape the Cleanroom gateway if, and only if, the primal and dual agents achieve **exact concordant agreement on incorrect behavior**:
+A defect can silently escape the Autofab gateway if, and only if, the primal and dual agents achieve **exact concordant agreement on incorrect behavior**:
 1. Primal synthesizer $\mathcal{S}$ must synthesize an erroneous output $y_{\text{bad}} \in Y$; **and**
 2. Dual certifier $\mathcal{D}$ must independently synthesize an assertion that evaluates to $\mathbf{True}$ on $y_{\text{bad}}$ ($V(x, y_{\text{bad}}) = \mathbf{True}$).
 
 In non-trivial systems software (with structured objects, exception hierarchies, graph topologies, and string representations), the space of possible incorrect behaviors is vast. The probability of two isolated agents independently making the **exact matching semantic mistake to the exact same value or type** is vanishingly small:
 $$\Pr(\text{Concordant Escape}) = \Pr(P \text{ fails}) \cdot \Pr(V \text{ fails}) \cdot \Pr(V \text{ accepts } P(x) \mid \text{Both Fail}) \ll 1$$
 
-Furthermore, because Cleanroom enforces **Task Asymmetry** (constructive algorithmic generation $X \to Y$ vs. relational property verification $X \times Y \to \mathbb{B}$), their internal reasoning search spaces do not share dimensions, driving the conditional probability $\Pr(V \text{ accepts } P(x) \mid \text{Both Fail})$ toward zero.
+Furthermore, because Autofab enforces **Task Asymmetry** (constructive algorithmic generation $X \to Y$ vs. relational property verification $X \times Y \to \mathbb{B}$), their internal reasoning search spaces do not share dimensions, driving the conditional probability $\Pr(V \text{ accepts } P(x) \mid \text{Both Fail})$ toward zero.
 
 #### 2.2.3 Why Exhaustive Edge-Case Coverage is the Crucial Linchpin
 There is, however, one catastrophic vulnerability that can allow a defect to bypass the gatekeeper: **Omission**.
@@ -511,35 +511,35 @@ If a test certifier $V$ tests only the "happy path" (the positive domain $\mathc
 * The discordant failure mechanism is never triggered.
 * The test suite passes green ($\mathbf{PASS}$) despite the library being broken on edge cases.
 
-This is why **Exhaustive Edge-Case Coverage is the indispensable linchpin of Cleanroom's soundness**:
+This is why **Exhaustive Edge-Case Coverage is the indispensable linchpin of Autofab's soundness**:
 1. **Without Edge-Case Coverage**: Un-executed edge-case defects escape silently by omission.
 2. **With Edge-Case Coverage**: Every boundary condition is forced into physical runtime execution. If the agents agree on correct behavior, the test passes. If the agents are coincidentally confused by the specification, their discordant interpretations clash, triggering a visible test failure and halting compilation.
 
-To guarantee that no boundary condition escapes through omission, Cleanroom establishes three interlocking structural layers: the **Bipartite Boundary Principle**, **AST Branch Mining**, and **AST-Normalized Branch Coverage**.
+To guarantee that no boundary condition escapes through omission, Autofab establishes three interlocking structural layers: the **Bipartite Boundary Principle**, **AST Branch Mining**, and **AST-Normalized Branch Coverage**.
 
 ---
 
 ### 2.3 The Bipartite Boundary Principle: Focusing on Both Sides of Edge Cases
-Cleanroom eliminates omission at the specification layer through the **Bipartite Boundary Principle**:
+Autofab eliminates omission at the specification layer through the **Bipartite Boundary Principle**:
 
 > **The Bipartite Boundary Principle**: *No contract or boundary condition is legally specified unless both sides of the boundary partition are explicitly, exhaustively, and symmetrically defined.*
 
 Mathematically, let $\mathcal{D}$ be the input/state domain. Any condition $C(x)$ partitions $\mathcal{D}$ into two disjoint, exhaustive sub-domains:
 $$\mathcal{D} = \mathcal{D}^+ \uplus \mathcal{D}^- \quad \text{where } \mathcal{D}^+ = \{x \in \mathcal{D} \mid C(x)\}, \quad \mathcal{D}^- = \{x \in \mathcal{D} \mid \neg C(x)\}$$
 
-Rather than directional implications ($C(x) \implies \text{Success}$), Cleanroom contracts enforce **bi-conditional semantics**:
+Rather than directional implications ($C(x) \implies \text{Success}$), Autofab contracts enforce **bi-conditional semantics**:
 $$C(x) \iff \text{Output}(x) = Y^+$$
 which decomposes into two symmetric, atomic obligations:
 1. **Positive Boundary Contract ($[s^+]$)**: $\forall x \in \mathcal{D}^+, \ \text{Exec}(x) = Y^+$
 2. **Negative Boundary Contract ($[s^-]$)**: $\forall x \in \mathcal{D}^-, \ \text{Exec}(x) = Y^- \quad (\text{or } \mathbf{Raise}(\text{DomainException}))$
 
-In Cleanroom behavioral specifications, this is enforced by the canonical linguistic form:
+In Autofab behavioral specifications, this is enforced by the canonical linguistic form:
 $$\text{"\dots holds if, but only if, \dots"}$$
-Crucially, Cleanroom's verification gates demand that test certifiers witness **both sides** of the partition ($\mathcal{D}^+$ and $\mathcal{D}^-$) with explicit assertions (e.g. `assertTrue` and `assertFalse`). Paired with AST-normalized 100% statement and branch coverage, an implementation branching on $C(x)$ cannot pass verification unless the test certifier exercises and validates both branches, ensuring that any discordant interpretation immediately triggers a fail-stop halt.
+Crucially, Autofab's verification gates demand that test certifiers witness **both sides** of the partition ($\mathcal{D}^+$ and $\mathcal{D}^-$) with explicit assertions (e.g. `assertTrue` and `assertFalse`). Paired with AST-normalized 100% statement and branch coverage, an implementation branching on $C(x)$ cannot pass verification unless the test certifier exercises and validates both branches, ensuring that any discordant interpretation immediately triggers a fail-stop halt.
 
 ### 2.4 Primal-Dual Synthesis as a Zero-Sum Certificate Game
 
-Cleanroom synthesizes these principles not through runtime voting among redundant implementations, but as a **Primal-Dual Certificate Game** between untrusted neural oracles under kernel-enforced information confinement:
+Autofab synthesizes these principles not through runtime voting among redundant implementations, but as a **Primal-Dual Certificate Game** between untrusted neural oracles under kernel-enforced information confinement:
 
 $$\max_{P \in \mathcal{L}_{IR}} \min_{V \in \mathcal{V}_{cert}} \mathcal{U}(P, V; S)$$
 
@@ -581,14 +581,14 @@ $$\max_{P \in \mathcal{L}_{IR}} \min_{V \in \mathcal{V}_{cert}} \mathcal{U}(P, V
 Let $\mathcal{O}_{\mathcal{S}}$ and $\mathcal{O}_{\mathcal{D}}$ be two untrusted stochastic synthesis oracles. Let $\mathcal{E}$ be the event that candidate program $P$ contains an ungrounded semantic defect $\delta \neq \emptyset$ ($P \not\models S$), yet certifier $V$ passes $P$ ($V(P) = \mathbf{PASS}$).
 1. Under joint conversational synthesis (where $P$ and $V$ are generated in the same context window), the mutual information $\mathcal{I}(P; V \mid S) > 0$. The probability of an undetected defect escaping is lower-bounded by the model's self-affirmation bias:
    $$P_{\text{joint}}(\mathcal{E}) \ge \gamma_{\text{self}} > 0$$
-2. Under Cleanroom's physically isolated Primal-Dual synthesis, the communication channel between $\mathcal{S}$ and $\mathcal{D}$ is closed, giving $\mathcal{I}(P; V \mid S) = 0$. The escape probability factors into the conditional product of independent error distributions:
+2. Under Autofab's physically isolated Primal-Dual synthesis, the communication channel between $\mathcal{S}$ and $\mathcal{D}$ is closed, giving $\mathcal{I}(P; V \mid S) = 0$. The escape probability factors into the conditional product of independent error distributions:
    $$P_{\text{dual}}(\mathcal{E}) = \sum_{\delta \in \Delta} P(\mathcal{S} \text{ emits defect } \delta \mid S) \cdot P(\mathcal{D} \text{ accepts defect } \delta \mid S)$$
 3. Furthermore, when contracts enforce the Bipartite Boundary Principle over edge cases and $V$ satisfies AST-normalized statement coverage ($\mathbf{Cov}(P, V) = 100\%$), the term $P(\mathcal{D} \text{ accepts defect } \delta \mid S)$ is bounded to zero for all boundary mutations, eliminating accidental agreement.
 
 *Proof Sketch:* When $\mathcal{I}(P; V \mid S) = 0$, $P$ and $V$ are conditionally independent given $S$. For any boundary defect $\delta$ (e.g. off-by-one or missing check on $\mathcal{D}^-$) to escape, $V$ must omit testing $\mathcal{D}^-$. However, $P$'s implementation must branch to handle both $[s^+]$ and $[s^-]$ to avoid static type or syntax deadlocks. If $V$ only tests $\mathcal{D}^+$, the basic block in $P$ handling $\mathcal{D}^-$ remains un-executed, yielding $\mathbf{Cov}(P, V) < 100\%$. The verification gateway rejects the candidate. Hence, defect $\delta$ cannot escape. $\blacksquare$
 
 #### 2.4.1 Double Hermetic Confinement: Anti-Cheating & Starving Model Weight Reliance
-To preserve the mathematical validity of the Primal-Dual game, Cleanroom enforces **Double Hermetic Confinement**:
+To preserve the mathematical validity of the Primal-Dual game, Autofab enforces **Double Hermetic Confinement**:
 
 1. **Physical Anti-Cheating Invariants (Air-Gapped Sandboxing)**:
    - Untrusted neural agents must not be allowed to cheat by searching for reference implementations or existing tests online:
@@ -598,7 +598,7 @@ To preserve the mathematical validity of the Primal-Dual game, Cleanroom enforce
 2. **Minimizing Reliance on Pre-Trained Model Weights**:
    - When a specification is underspecified or informal, neural models naturally fall back to their internal pre-training weights ($\mathcal{D}_\theta$).
    - This introduces the risk of **coincident hallucination**: both $\mathcal{S}$ and $\mathcal{D}$ might rely on the same common GitHub naming conventions or unspoken language defaults, leading them to agree on an uncontracted, unintended behavior.
-   - To starve the model's reliance on weights, Cleanroom mandates that specifications be **maximally explicit**:
+   - To starve the model's reliance on weights, Autofab mandates that specifications be **maximally explicit**:
      - *Typed Interface Signatures ($\Sigma$)*: Explicit class names, method signatures, parameter names, type annotations, and return types. This guarantees that $\mathcal{S}$ and $\mathcal{D}$ agree on the API by construction, preventing spurious linking errors.
      - *Exhaustive Boundary Contracts ($\mathcal{C}$)*: Explicit pre-conditions, post-conditions, and bi-conditional partitions ($C(x) \iff \text{Post}(x)$).
    - By making the specification fully ground the system's syntax and semantics, the model's degrees of freedom are bounded, reducing reliance on training-set heuristics to near zero (and preventing the *Language Primitive Illusion*, Section 2.6.5).
@@ -610,7 +610,7 @@ To preserve the mathematical validity of the Primal-Dual game, Cleanroom enforce
 ### 2.5 Modularity & Compositional Soundness: Why Unit Tests Merge into Integration Without Integration Tests
 
 #### 2.5.1 The Modularity Mandate: Fine-Grained Units (< 500 LOC)
-Cleanroom intentionally constrains implementation modules to be small—strictly under 500 lines of code, and typically under 250 LOC.
+Autofab intentionally constrains implementation modules to be small—strictly under 500 lines of code, and typically under 250 LOC.
 - **The Rationale**: This constraint is **not** because coincident error suppression fails on large modules, but because **fine-grained modularity makes the state space and boundary partitions humanly and neurally tractable to identify, factor, and comprehensively verify**.
 - In a 5,000 LOC monolithic system, the combinatorial explosion of internal execution paths creates an intractably large boundary surface area. Neural models inevitably overlook subtle corner cases, and human specification authors struggle to formulate exhaustive bi-conditional partitions.
 - By decomposing software into small, highly cohesive units (< 500 LOC), each component manages a compact contract footprint (typically 5 to 15 atomic contracts). Edge cases are obvious, boundary conditions are binary and clean, and bipartite test assertions can exhaustively cover both $\mathcal{D}^+$ and $\mathcal{D}^-$.
@@ -622,8 +622,8 @@ Because in conventional programming:
 1. **Interfaces are leaky abstractions**: Developers peek into dependency implementations (`B.py`) and write code in `A.py` that relies on uncontracted implementation quirks, caching behavior, mutable internal state, or undocumented side-effects.
 2. **Mock Drift**: Unit tests for $A$ use handcrafted mocks that reflect the test author's optimistic assumptions about $B$, rather than $B$'s actual behavior.
 
-#### 2.5.3 Why Dedicated Integration Tests are Unnecessary in Cleanroom
-Cleanroom solves the integration problem through **Contract-Bounded Compositional Verification**:
+#### 2.5.3 Why Dedicated Integration Tests are Unnecessary in Autofab
+Autofab solves the integration problem through **Contract-Bounded Compositional Verification**:
 1. **Physical Prohibition of Implementation Peeking**:
    When $A$ depends on $B$, $A$'s implementation workspace ($W_{lib}^A$) and test workspace ($W_{test}^A$) are physically prohibited from seeing $B$'s implementation (`lib/B.py`). They receive strictly $B$'s typed interface stubs and contracts ($S_B = \langle \Sigma_B, \mathcal{C}_B \rangle$).
 2. **The Impossibility of Writing Around Underspecified Dependencies**:
@@ -633,7 +633,7 @@ Cleanroom solves the integration problem through **Contract-Bounded Compositiona
      **If they guess based on API naming, the system cannot converge:**
      - Because $A$'s implementation oracle $\mathcal{S}_A$ and certifier $\mathcal{D}_A$ are physically isolated ($\mathcal{I}(L_A; T_A \mid \text{Spec}) = 0$), their independent guesses based on loose naming will diverge immediately ($L_A$ assumes `None`, while $T_A$ assumes raising a domain exception). $T_A(L_A)$ fails immediately at verification!
      - Static type checking flags missing methods or incompatible signatures.
-     - **The Only Resolution**: The developer must modify $B$'s specification to explicitly add the required typed contract. This triggers Cleanroom's dependency engine: $B$ is marked $\mathbf{DIRTY}$, re-synthesized, verified, and certified. Once certified, $B$ exports the new contract, enabling $A$ to compile legally.
+     - **The Only Resolution**: The developer must modify $B$'s specification to explicitly add the required typed contract. This triggers Autofab's dependency engine: $B$ is marked $\mathbf{DIRTY}$, re-synthesized, verified, and certified. Once certified, $B$ exports the new contract, enabling $A$ to compile legally.
 3. **Assume-Guarantee Compositional Soundness**:
    Because:
    - $B$ is certified to satisfy its contracts: $\models B \text{ sat } \mathcal{C}_B$;
@@ -658,7 +658,7 @@ However, the model routinely fails to hypothesize or test the critical boundary 
 - *What happens when two nodes share the same role tier precedence but have identical unit addresses?*
 
 #### 2.6.2 The Code Coverage Illusion: Why 100% Statement Coverage is Insufficient
-A pervasive assumption in software engineering is that high code coverage guarantees edge-case testing. Cleanroom's toolchain indeed enforces 100% normalized statement coverage at Pass 2. However, from a formal PL perspective:
+A pervasive assumption in software engineering is that high code coverage guarantees edge-case testing. Autofab's toolchain indeed enforces 100% normalized statement coverage at Pass 2. However, from a formal PL perspective:
 > **The Code Coverage Illusion**: *Code coverage is strictly an implementation-relative metric. It measures what statements were written, but is completely blind to missing code (un-written branches, omitted invariants, and unhandled edge cases).*
 
 If the synthesized implementation completely omits the boundary check:
@@ -667,8 +667,8 @@ If the synthesized implementation completely omits the boundary check:
 ```
 then that conditional statement does not exist in the Abstract Syntax Tree! The test certifier can execute 100% of the statements present in the implementation without ever probing the boundary. Both the implementation and the test certifier remain happily in **accidental agreement** within the CUJ subspace, while the software remains broken at its boundaries.
 
-#### 2.6.3 Cleanroom's 5-Tier Defense for Systematic Edge-Case Identification
-Cleanroom addresses the edge-case identification problem not through stochastic prompting, but through language-level constraints, static extraction, and adversarial verification mechanisms:
+#### 2.6.3 Autofab's 5-Tier Defense for Systematic Edge-Case Identification
+Autofab addresses the edge-case identification problem not through stochastic prompting, but through language-level constraints, static extraction, and adversarial verification mechanisms:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -717,17 +717,17 @@ Cleanroom addresses the edge-case identification problem not through stochastic 
    To defeat the "Code Coverage Illusion", Pass 2 does not rely on naive line counts. It parses the synthesized AST to extract all conditional branch predicates, requiring the test suite to witness both positive and negative activation branches. In evaluation, we optionally pair this with off-the-shelf AST mutation analysis (e.g., `mutmut` in Python) as an empirical diagnostic to measure surviving boundary mutants.
 
    **Why Primal-Dual Executable Test Harnesses Beat SMT and Property Fuzzing for Systems Software**:  
-   A critical architectural advantage of Cleanroom is executing dynamic test harnesses directly in the host runtime rather than relying on SMT-based concolic execution (e.g. `CrossHair`, `PyExZ3`) or property-based input fuzzing (e.g. `Hypothesis`):
-   - *The Limits of SMT Concolic Execution (CrossHair/Z3)*: SMT solvers require encoding program paths into mathematical first-order logic. While highly effective for pure numerical algorithms, bitvectors, and arithmetic transforms, SMT solvers break down on real-world, object-oriented systems software (such as Cleanroom's DAG scheduler and workspace managers). Systems code deals with stateful service registries (`get_singleton(...)`), string slicing (`split(":")`), complex graph dictionaries of sets, and subprocess/filesystem operations. Z3 chokes on symbolic unrolling of such structures, leading to symbolic state explosion and solver timeouts.
+   A critical architectural advantage of Autofab is executing dynamic test harnesses directly in the host runtime rather than relying on SMT-based concolic execution (e.g. `CrossHair`, `PyExZ3`) or property-based input fuzzing (e.g. `Hypothesis`):
+   - *The Limits of SMT Concolic Execution (CrossHair/Z3)*: SMT solvers require encoding program paths into mathematical first-order logic. While highly effective for pure numerical algorithms, bitvectors, and arithmetic transforms, SMT solvers break down on real-world, object-oriented systems software (such as Autofab's DAG scheduler and workspace managers). Systems code deals with stateful service registries (`get_singleton(...)`), string slicing (`split(":")`), complex graph dictionaries of sets, and subprocess/filesystem operations. Z3 chokes on symbolic unrolling of such structures, leading to symbolic state explosion and solver timeouts.
    - *The Friction of Property-Based Testing (Hypothesis)*: Property-based tools mutate *inputs*. Generating valid, structured inputs for complex stateful systems (e.g., generating a coherent acyclic `DagStorage` graph with mock role tiers) requires authoring massive `@st.composite` strategy generators that are often more complex than the implementation itself. Random fuzzing mostly produces malformed inputs that fail basic syntax parsing at the entrance, rather than probing subtle semantic edge cases.
-   - *The Power of Native Executable Test Harnesses*: Cleanroom's dual certifier synthesizes native, idiomatic test harnesses (using standard runners like `pytest`, mocking, and virtual schedulers). These harnesses execute directly in sandboxed Python/OS processes, testing real-world stateful logic, graph traversals, async runners, and file processors natively—with **zero SMT modeling, zero input generator scaffolding, and zero friction on systems code**.
+   - *The Power of Native Executable Test Harnesses*: Autofab's dual certifier synthesizes native, idiomatic test harnesses (using standard runners like `pytest`, mocking, and virtual schedulers). These harnesses execute directly in sandboxed Python/OS processes, testing real-world stateful logic, graph traversals, async runners, and file processors natively—with **zero SMT modeling, zero input generator scaffolding, and zero friction on systems code**.
 
 #### 2.6.4 Mining Edge Cases from Implementation Code: The Branch-to-Specification Reflection Loop
 A fundamental question in neural synthesis is: *Can we systematically discover edge cases by mining the implementation code?*
 
 In practice, human developers and initial specifications often focus on Critical User Journeys (CUJs). When the primal synthesizer $\mathcal{S}$ is tasked with implementing these CUJs, Large Language Models—trained on millions of defensive programming idioms in open-source repositories—naturally synthesize defensive guard clauses, sanity checks, and exception branches (e.g., `if not items: return ...`, `if batch_size <= 0: raise ValueError`, `except KeyError:`).
 
-Cleanroom exploits this neural defensive habit via the **Branch-to-Specification Reflection Loop**:
+Autofab exploits this neural defensive habit via the **Branch-to-Specification Reflection Loop**:
 1. **Initial Synthesis & Baseline CUJ Coverage**: Primal synthesizer $\mathcal{S}$ synthesizes implementation $P$; dual certifier $\mathcal{D}$ synthesizes test suite $V_{\text{cuj}}$ exercising the primary user journeys to 100% statement coverage.
 2. **Edge-Case Detection via Static AST Branch Extraction**: A deterministic AST extractor (`branch_miner.py`) inspects $P$'s AST and enumerates all conditional branch predicates $\mathcal{B}(P) = \{ c_1, c_2, \dots, c_m \}$. (Optionally, mutation analysis can be run to detect any unconstrained boundary mutants).
 3. **Specification Slug Reconciliation**: For each AST branch condition $c_k$, the extractor checks whether the condition corresponds to an existing atomic contract slug in $S$ ($[s_i]$). Any branch without a corresponding specification contract represents an **implicit, uncontracted edge case**.
@@ -738,7 +738,7 @@ Cleanroom exploits this neural defensive habit via the **Branch-to-Specification
    The human developer reviews and approves (or adjusts) the specification.
 6. **Kernel-Enforced Confinement Preserved**: Crucially, this mechanism **does not violate information-flow isolation ($\mathcal{I}(P; V \mid S) = 0$)**. The test certifier never inspects $P$'s implementation code or internal diffs. It receives only the elevated, abstract specification contract in $S$. Once promoted, Pass 2's verification mandate forces the dual certifier to author explicit test witnesses for both branches ($[s_{\text{mined}}^+]$ and $[s_{\text{mined}}^-]$).
 
-By combining static branch extraction with bipartite specification reflection, Cleanroom transforms implicit neural coding instincts into explicit, verifiable contracts.
+By combining static branch extraction with bipartite specification reflection, Autofab transforms implicit neural coding instincts into explicit, verifiable contracts.
 
 #### 2.6.5 The "Language Primitive Illusion": Syntactic Platform Symmetry & The Delimiter Trap
 
@@ -776,8 +776,8 @@ Why did this defect escape? The breakdown was twofold:
 1. **The Informal Exemplar Anti-Pattern**: The specification used the informal phrase *"like 'admin_user' or 'siteadmin'"*. In formal language theory, an illustrative example is **not a partition**. By failing to specify the delimiter alphabet $\Sigma_{\text{delim}}$ (which exact characters separate words vs. compound identifiers), the specification left the boundary ungrounded. Both models defaulted to their pre-trained prior for "word character": the ASCII `\w` regex shorthand.
 2. **The AST Branch Blind Spot**: Because `re.sub` encapsulates its matching logic inside a C-extension primitive, the Python AST contained zero branch statements. The test certifier executed 100% of the visible AST statements with just three happy-path strings, falling victim to the **Code Coverage Illusion (§2.6.2)**.
 
-##### Cleanroom's 4-Tier Defense Against Syntactic Platform Symmetry
-Cleanroom neutralizes the Language Primitive Illusion through four interlocking language and compiler mechanisms:
+##### Autofab's 4-Tier Defense Against Syntactic Platform Symmetry
+Autofab neutralizes the Language Primitive Illusion through four interlocking language and compiler mechanisms:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -805,7 +805,7 @@ Cleanroom neutralizes the Language Primitive Illusion through four interlocking 
 ```
 
 1. **Pass 1 Spec QA Rejection of Exemplar Clauses**:
-   In Cleanroom, Pass 1 (`spec_qa`) audits contract docstrings using deterministic AST linters. Any contract containing informal illustrative phrases (*"like"*, *"such as"*, *"e.g."*) is flagged as a static specification defect. Cleanroom contracts must define explicit boundary partitions:
+   In Autofab, Pass 1 (`spec_qa`) audits contract docstrings using deterministic AST linters. Any contract containing informal illustrative phrases (*"like"*, *"such as"*, *"e.g."*) is flagged as a static specification defect. Autofab contracts must define explicit boundary partitions:
    $$\text{Delimiter Set } \Sigma_D = \{ \mathtt{'\ '}, \mathtt{'\backslash t'}, \mathtt{'-'} \} \quad \text{holds if, but only if, } \dots$$
    By forcing the author (human or LLM) to specify the exact delimiter set or character equivalence class, reliance on unstated platform regex defaults is completely eliminated.
 2. **Orthogonal Delimiter & Character-Class Probing**:
@@ -813,15 +813,15 @@ Cleanroom neutralizes the Language Primitive Illusion through four interlocking 
    - For any string-processing or tokenizing interface, the certifier must systematically probe across the **Punctuation and Delimiter Grid**: non-alphanumeric ASCII (`-`, `.`, `/`, `_`), whitespace variants (`\t`, `\r\n`, non-breaking spaces), and Unicode category boundaries.
    - Probing the hyphen immediately exposes the `\b` flaw, causing discordant test failure ($V(P) = \mathbf{FAIL}$) and triggering fail-stop compilation with blame.
 3. **The Principle of Domain-Specific Generator Preemption (§5.2.2)**:
-   In Section 5.2.2, we established that closed mathematical domains should never rely on generative LLM heuristics. Regex synthesis is notoriously brittle across POSIX, PCRE, JavaScript, and Python engines (e.g., Unicode word boundaries, possessive quantifiers, lookaround quirks). For tokenization and grammar parsing, Cleanroom enforces deterministic state machines or character scanners where every branch is an explicit Python AST node subject to 100% statement and branch coverage.
+   In Section 5.2.2, we established that closed mathematical domains should never rely on generative LLM heuristics. Regex synthesis is notoriously brittle across POSIX, PCRE, JavaScript, and Python engines (e.g., Unicode word boundaries, possessive quantifiers, lookaround quirks). For tokenization and grammar parsing, Autofab enforces deterministic state machines or character scanners where every branch is an explicit Python AST node subject to 100% statement and branch coverage.
 4. **Differential Execution Against Pre-Existing Golden Oracles**:
-   For our systems benchmarks (§5.2.1), Cleanroom-synthesized code is evaluated differentially against mature reference implementations (CPython stdlib test suites, canonical C `sqlite3`, native `git`). CPython's official test suites (such as `test_fnmatch`, `test_difflib`, and `test_heapq`) already contain thousands of adversarial punctuation, hyphen, and malformed inputs, guaranteeing that any subtle platform-level discrepancy is caught deterministically.
+   For our systems benchmarks (§5.2.1), Autofab-synthesized code is evaluated differentially against mature reference implementations (CPython stdlib test suites, canonical C `sqlite3`, native `git`). CPython's official test suites (such as `test_fnmatch`, `test_difflib`, and `test_heapq`) already contain thousands of adversarial punctuation, hyphen, and malformed inputs, guaranteeing that any subtle platform-level discrepancy is caught deterministically.
 
 ---
 
-### 2.7 The Historical Lineage: From N-Version Programming, IBM Cleanroom, and DO-178C to Neural Dual-Blind Certification
+### 2.7 The Historical Lineage: From N-Version Programming, IBM Autofab, and DO-178C to Neural Dual-Blind Certification
 
-To appreciate why Cleanroom achieves what classical software engineering could not, one must trace the historical lineage of redundancy, independent testing, and dual verification across six decades of programming language and software engineering research:
+To appreciate why Autofab achieves what classical software engineering could not, one must trace the historical lineage of redundancy, independent testing, and dual verification across six decades of programming language and software engineering research:
 
 ```
 THE HISTORICAL EVOLUTION OF INDEPENDENT VERIFICATION & REDUNDANT SYSTEMS
@@ -850,7 +850,7 @@ THE HISTORICAL EVOLUTION OF INDEPENDENT VERIFICATION & REDUNDANT SYSTEMS
    └─────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
-4. IBM Cleanroom Software Engineering (Mills, Dyer, Linger 1987)
+4. IBM Autofab Software Engineering (Mills, Dyer, Linger 1987)
    ┌─────────────────────────────────────────────────────────────┐
    │ Spec ──┬──> Development Team (Box Proofs; EXECUTION BANNED) │
    │        │                                                    │
@@ -869,7 +869,7 @@ THE HISTORICAL EVOLUTION OF INDEPENDENT VERIFICATION & REDUNDANT SYSTEMS
    └─────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
-6. Neural Dual-Blind Cleanroom (This Work)
+6. Neural Dual-Blind Autofab (This Work)
    ┌─────────────────────────────────────────────────────────────┐
    │ Literate Spec & Factored Bipartite Contracts                │
    │        │                                                    │
@@ -906,33 +906,33 @@ Did Avizienis explore coincident failure when proposing N-Version Programming? *
 4. **1989: Littlewood & Miller (The Covariance Model of Diversity)**:
    Bev Littlewood and Douglas Miller (*IEEE TSE 1989*) unified these results into the covariance model $\mathbf{Cov}(\theta_A(x), \theta_B(x))$. They proved that when independent teams perform the *same constructive task* ($X \to Y$), covariance is positive ($\mathbf{Cov} > 0$). However, if the development processes are assigned **fundamentally diverse, asymmetric tasks**, covariance can become **zero or negative ($\mathbf{Cov} \le 0$)**, finally beating independent random chance.
 
-#### 2.7.2 What Did IBM Cleanroom Actually Do? The Triad, the "Chinese Wall", and the Anti-Debugging Principle
-In 1987, Harlan Mills, Michael Dyer, and Richard Linger at IBM Federal Systems Division introduced **Cleanroom Software Engineering**. Confronting the software reliability crisis and the coincident error vulnerabilities that doomed classical N-version programming, IBM Cleanroom introduced a radical departure from conventional software engineering by establishing three strictly partitioned engineering functions separated by an institutional **"Chinese Wall"**:
+#### 2.7.2 What Did IBM Autofab Actually Do? The Triad, the "Chinese Wall", and the Anti-Debugging Principle
+In 1987, Harlan Mills, Michael Dyer, and Richard Linger at IBM Federal Systems Division introduced **Autofab Software Engineering**. Confronting the software reliability crisis and the coincident error vulnerabilities that doomed classical N-version programming, IBM Autofab introduced a radical departure from conventional software engineering by establishing three strictly partitioned engineering functions separated by an institutional **"Chinese Wall"**:
 
-1. **The Cleanroom Triad of Engineering Functions**:
+1. **The Autofab Triad of Engineering Functions**:
    - **Specification Engineers**: Authored mathematically formal, box-structured requirements (black box $\to$ state box $\to$ clear box). Both developers and certifiers worked from this common specification, but they were strictly segregated organizationally.
    - **Development Engineers (Implementation)**: Wrote the implementation code using formal stepwise refinement and mental proofs of correctness.
    - **Certification Engineers (Testing)**: Operated as an independent test team that had **never seen the source code**. Treating the software as a strict "black box", they generated dynamic test cases derived exclusively from the mathematical specification and operational user profiles.
 
 2. **The "Chinese Wall" Isolation Constraint**:
-   IBM Cleanroom recognized that whenever developers and testers interact, their cognitive biases cross-pollinate. The certification team was physically and organizationally segregated from the development team: they did not share office space, were forbidden from reading developer source code or data structures, and never discussed implementation internals. Both teams read the formal specification, but never communicated directly.
+   IBM Autofab recognized that whenever developers and testers interact, their cognitive biases cross-pollinate. The certification team was physically and organizationally segregated from the development team: they did not share office space, were forbidden from reading developer source code or data structures, and never discussed implementation internals. Both teams read the formal specification, but never communicated directly.
 
 3. **The Anti-Debugging Principle: Strict Prohibition of Developer Compilation & Testing**:
    The most radical, controversial rule in Mills' methodology was that **developers were strictly forbidden from compiling, executing, or dynamically debugging their own code**:
    - *The Pathology of "Debugging into Correctness"*: Harlan Mills observed that when developers have access to a compiler, REPL, or interactive debugger, they stop thinking mathematically. They write speculative, sloppy code, hit compile, inspect the runtime error, patch a line, and loop. This trial-and-error approach lures developers into "debugging their way into a local optimum"—patching immediate syntax or assert failures without ever understanding the global behavioral invariants.
    - *The Modern AI Parallel*: Commercial AI coding assistants (Copilot, Cursor, SWE-bench agents) suffer from this exact pathology. When placed in an interactive edit-test-debug loop, LLMs behave like undisciplined human novices: they guess superficial diff patches to satisfy a failing assert, overfitting to the test suite and breaking latent invariants elsewhere in the system.
-   - *Cleanroom's Mechanization*: Neural Cleanroom enforces Mills' anti-debugging principle with mathematical finality: the Synthesizer ($\mathcal{S}$) is never provided with a compiler-test loop or test suite access. It must synthesize complete modules from typed specification contracts ($S = \langle \Sigma, \mathcal{C} \rangle$) in a single shot. When verification fails, the Auditor strips all test code and assertion syntax, translating errors into **abstract, declarative specification blame**—forcing the model to reason about invariants rather than trial-and-error patch hacking.
+   - *Autofab's Mechanization*: Neural Autofab enforces Mills' anti-debugging principle with mathematical finality: the Synthesizer ($\mathcal{S}$) is never provided with a compiler-test loop or test suite access. It must synthesize complete modules from typed specification contracts ($S = \langle \Sigma, \mathcal{C} \rangle$) in a single shot. When verification fails, the Auditor strips all test code and assertion syntax, translating errors into **abstract, declarative specification blame**—forcing the model to reason about invariants rather than trial-and-error patch hacking.
 
 4. **Statistical Usage Testing under Statistical Quality Control (SQC)**:
-   Crucially, IBM Cleanroom's certification team did not write functional unit tests or mock suites. Instead, they imported W. Edwards Deming's **Statistical Quality Control (SQC)** from manufacturing, modeling user interaction as Markov chains (operational profiles) and executing randomized test sequences to mathematically certify Mean Time To Failure (MTTF). If a test sequence failed, the binary was returned to developers with an operational failure trace; the certifiers never suggested code repairs.
+   Crucially, IBM Autofab's certification team did not write functional unit tests or mock suites. Instead, they imported W. Edwards Deming's **Statistical Quality Control (SQC)** from manufacturing, modeling user interaction as Markov chains (operational profiles) and executing randomized test sequences to mathematically certify Mean Time To Failure (MTTF). If a test sequence failed, the binary was returned to developers with an operational failure trace; the certifiers never suggested code repairs.
 
 #### 2.7.3 The Lineage of "Testing as a Second System": Closer to Test Oracles Than N-Versions
-A foundational question in classifying this work is: *Is Cleanroom closer to N-Version Programming or to the Test Oracle Problem?*
+A foundational question in classifying this work is: *Is Autofab closer to N-Version Programming or to the Test Oracle Problem?*
 
-Cleanroom is fundamentally an **Autonomous Test Oracle Synthesis & Dynamic Certification** system, not runtime N-version redundancy:
+Autofab is fundamentally an **Autonomous Test Oracle Synthesis & Dynamic Certification** system, not runtime N-version redundancy:
 * **N-Version Programming (Avizienis 1977, 1985)** is a *runtime fault-tolerance mechanism*. It requires deploying $N$ redundant constructive implementations ($f_1, f_2, \dots, f_N : X \to Y$) into live production and executing an online majority voter. It produces no offline certificate of correctness, incurs $N\times$ runtime resource overhead, and fails silently whenever independent implementations suffer coincident errors (Knight & Leveson 1986).
 * **The Test Oracle Problem (Davis & Weyuker 1981, Barr et al. 2015)** is an *offline verification mechanism*. It asks: *Given program $P$ and input $x$, how can we mechanically determine whether output $y = P(x)$ is semantically correct with respect to specification $S$?*
-* **Our Primal-Dual Paradigm**: Cleanroom solves the Test Oracle Problem by treating the test certifier ($V$) as an independently synthesized, executable test oracle. $V$ does not compete with $P$ at runtime; instead, $V$ serves as an offline dynamic gatekeeper that probes $P$'s state space, asserts invariant postconditions, and evaluates branch coverage before $P$ is ever certified.
+* **Our Primal-Dual Paradigm**: Autofab solves the Test Oracle Problem by treating the test certifier ($V$) as an independently synthesized, executable test oracle. $V$ does not compete with $P$ at runtime; instead, $V$ serves as an offline dynamic gatekeeper that probes $P$'s state space, asserts invariant postconditions, and evaluates branch coverage before $P$ is ever certified.
 
 The conceptualization of tests as an independent "second system" or dual program traces through four distinct milestones:
 
@@ -945,18 +945,18 @@ The conceptualization of tests as an independent "second system" or dual program
    \text{\textbf{Validation:}} & \quad \text{"Did we build the right thing?"} \iff S \models \text{Domain / Operational Intent}
    \end{aligned}$$
    
-   - **Verification is Mechanized at Machine Speed**: In Cleanroom, *Verification* is completely autonomous. The Primal-Dual compilation loop ($\mathcal{S} \leftrightarrow \mathcal{D}$ via $\mathcal{A}$) proves whether the synthesized executable code ($P$) mathematically and dynamically conforms to the typed specification ($S$) under absolute double-blind confinement ($\mathcal{I}(P; V \mid S) = 0$). What previously cost \$1,000–\$2,000 per line of code and required dual human engineering hierarchies is executed in seconds for pennies in token burn.
-   - **Validation is the True Domain of Human Intellect**: Humans cannot reliably verify 15,000 lines of disposable bytecode against boundary conditions. However, humans excel at *Validation*—judging whether a high-level specification ($S$) accurately captures domain intent, safety constraints, and user workflows. By pushing programming languages to the background and mechanizing verification, Cleanroom frees human developers from the toil of code debugging, elevating them to their proper role as **Specification Custodians**.
+   - **Verification is Mechanized at Machine Speed**: In Autofab, *Verification* is completely autonomous. The Primal-Dual compilation loop ($\mathcal{S} \leftrightarrow \mathcal{D}$ via $\mathcal{A}$) proves whether the synthesized executable code ($P$) mathematically and dynamically conforms to the typed specification ($S$) under absolute double-blind confinement ($\mathcal{I}(P; V \mid S) = 0$). What previously cost \$1,000–\$2,000 per line of code and required dual human engineering hierarchies is executed in seconds for pennies in token burn.
+   - **Validation is the True Domain of Human Intellect**: Humans cannot reliably verify 15,000 lines of disposable bytecode against boundary conditions. However, humans excel at *Validation*—judging whether a high-level specification ($S$) accurately captures domain intent, safety constraints, and user workflows. By pushing programming languages to the background and mechanizing verification, Autofab frees human developers from the toil of code debugging, elevating them to their proper role as **Specification Custodians**.
 2. **Davis & Weyuker (1981): "Pseudo-Oracles" as Testing-Community N-Versions**:
    In their seminal ACM '81 paper *"Pseudo-oracles for non-testable programs"*, Martin Davis and Elaine Weyuker addressed the classical **Oracle Problem**—the inability to mechanically decide whether an output is correct when testing complex or non-testable programs. They proposed synthesizing a **pseudo-oracle**: a second, independently developed program written to the same specification (often an inefficient, simplified reference model). The primary program and the pseudo-oracle are executed on identical inputs, and their outputs are cross-checked. 
    
-   Crucially, **pseudo-oracles are essentially an offline software testing variant of N-version programming**. While Avizienis (1977) emerged from the aerospace and fault-tolerant computing community seeking runtime hardware voting, Davis and Weyuker emerged from the software testing and computability community seeking an automated test oracle. Yet both approaches relied on the exact same mechanism: writing a second redundant constructive program ($P' : X \to Y$) from the same specification. And both hit the exact same wall: writing multiple constructive implementations is economically unsustainable, and independent human programmers make coincident errors on the same hard inputs (Knight & Leveson 1986). Cleanroom breaks with both by replacing redundant constructive implementations with an asymmetric **Primal-Dual certificate game** ($X \to Y$ vs. $X \times Y \to \mathbb{B}$).
+   Crucially, **pseudo-oracles are essentially an offline software testing variant of N-version programming**. While Avizienis (1977) emerged from the aerospace and fault-tolerant computing community seeking runtime hardware voting, Davis and Weyuker emerged from the software testing and computability community seeking an automated test oracle. Yet both approaches relied on the exact same mechanism: writing a second redundant constructive program ($P' : X \to Y$) from the same specification. And both hit the exact same wall: writing multiple constructive implementations is economically unsustainable, and independent human programmers make coincident errors on the same hard inputs (Knight & Leveson 1986). Autofab breaks with both by replacing redundant constructive implementations with an asymmetric **Primal-Dual certificate game** ($X \to Y$ vs. $X \times Y \to \mathbb{B}$).
 3. **The Common Specification as Ground Truth & The Fallibility of Oracle Generation**:
-   In Cleanroom, the specification $S$ is the common source of truth—the conceptual oracle. However, written specifications (natural language, types, contracts) are non-executable. To verify software, the specification must be translated into an **executable oracle** (the test harness). 
+   In Autofab, the specification $S$ is the common source of truth—the conceptual oracle. However, written specifications (natural language, types, contracts) are non-executable. To verify software, the specification must be translated into an **executable oracle** (the test harness). 
    
    Crucially, **synthesizing the test oracle from the specification is an engineering task just as fallible as synthesizing the implementation code**. An agent or human generating tests can misread contracts, misinterpret boundary conditions, or introduce assertions that reflect flawed assumptions. This is why single-developer TDD and single-agent LLM self-debugging fail: the author's flawed mental model is shared across both artifacts. 
    
-   Cleanroom resolves this by performing both translations using **a single LLM operating in strictly isolated, separated conversations ($\mathcal{I} = 0$)**. Heterogeneous models from different vendors are not required: conversational isolation prevents the two sessions from interacting or reading each other's interpretations of the specification, while prompt and task asymmetry ensures that their reasoning paths and failure modes remain uncorrelated.
+   Autofab resolves this by performing both translations using **a single LLM operating in strictly isolated, separated conversations ($\mathcal{I} = 0$)**. Heterogeneous models from different vendors are not required: conversational isolation prevents the two sessions from interacting or reading each other's interpretations of the specification, while prompt and task asymmetry ensures that their reasoning paths and failure modes remain uncorrelated.
 4. **Kent Beck (2002): "Double-Entry Bookkeeping" in TDD**:
    In *Test-Driven Development: By Example*, Kent Beck popularized the accounting metaphor for unit testing. In accounting, every financial event is entered twice (once as debit, once as credit); if the ledger balance does not equal zero, a discrepancy is caught. Beck argued that unit testing is double-entry bookkeeping for software: the tests describe the program via assertions and examples, while the code describes it via algorithms and state. 
 5. **QuickCheck & Property-Based Testing (Claessen & Hughes, 2000)**:
@@ -973,21 +973,21 @@ Because the exact same human brain alternates between writing the test assertion
    $$\mathcal{I}(\text{Code}; \text{Test} \mid \text{Spec}) = 1.0 \implies P(\text{Coincident Defect}) = P(\text{Defect})$$
 TDD provides strong protection against *regression churn* (breaking yesterday's code), but provides virtually **zero protection against conceptual blind spots and boundary misunderstandings**.
 
-#### 2.7.5 The Cultural Rejection of Cleanroom & Why Neural Agents Flourish
-Why was Harlan Mills's IBM Cleanroom abandoned despite its proven track record of near-zero defects in aerospace systems? The failure was entirely human, cultural, and psychological:
-1. **Developer "Debugging Addiction"**: Human programmers overwhelmingly crave the interactive edit-compile-debug REPL loop. Cleanroom dogmatically banned developers from executing code or running debuggers, demanding they sit with pen and paper conducting formal mental proofs and box-structure reductions. This created immense psychological friction, resentment, and burnout.
-2. **The Agile & XP Rebellion**: The Extreme Programming (XP) and Agile movements swept the software industry precisely as a **cultural rebellion against Cleanroom's ascetic discipline**. Beck and Cunningham told developers: *"Throw away formal specs; start coding immediately; run tests every 30 seconds."* While this catered to human developer psychology, it threw out the baby with the bathwater by destroying independent verification.
+#### 2.7.5 The Cultural Rejection of Autofab & Why Neural Agents Flourish
+Why was Harlan Mills's IBM Autofab abandoned despite its proven track record of near-zero defects in aerospace systems? The failure was entirely human, cultural, and psychological:
+1. **Developer "Debugging Addiction"**: Human programmers overwhelmingly crave the interactive edit-compile-debug REPL loop. Autofab dogmatically banned developers from executing code or running debuggers, demanding they sit with pen and paper conducting formal mental proofs and box-structure reductions. This created immense psychological friction, resentment, and burnout.
+2. **The Agile & XP Rebellion**: The Extreme Programming (XP) and Agile movements swept the software industry precisely as a **cultural rebellion against Autofab's ascetic discipline**. Beck and Cunningham told developers: *"Throw away formal specs; start coding immediately; run tests every 30 seconds."* While this catered to human developer psychology, it threw out the baby with the bathwater by destroying independent verification.
 3. **The Leaky Human Firewall**: Enforcing independent verification between human teams failed in practice because human developers leak information constantly: they chat in hallways, share Slack channels, attend the same standups, and unconsciously align on implementation quirks over lunch.
 
 **Why Neural Agents Flourish Where Humans Failed**:
-Large Language Models resolve every single human obstacle that doomed Cleanroom:
+Large Language Models resolve every single human obstacle that doomed Autofab:
 * **Zero Ego and Zero Debugging Addiction**: Neural models have no psychological craving for interactive terminal feedback, no boredom, and no ego. An LLM synthesizer is perfectly content taking a set of interface stubs and contracts, generating an entire module in a single shot without running it, and halting.
 * **Trivial Kernel-Enforced Isolation**: Unlike humans who leak assumptions through social interaction, neural agents are trivially and hermetically isolated. Operating system file permissions (`chmod 444`), disjoint workspaces ($W_{lib}$ vs $W_{test}$), and completely independent API prompts enforce $\mathcal{I}(P; V \mid S) = 0$ with absolute mathematical finality.
 * **Zero Marginal Labor Cost**: Creating a dedicated, independent verification agent ($\mathcal{D}$) does not require doubling human engineering headcount; it costs pennies in token expenditure and executes in seconds.
 
 #### 2.7.6 The Divergence from Mills: Why Statistical Usage Testing Fails for Neural Synthesis
 
-While Cleanroom mechanizes Mills' Chinese Wall and anti-debugging discipline, we introduce a **fundamental mathematical departure** from IBM Cleanroom's testing philosophy: **we deliberately reject Statistical Usage Testing in favor of Bipartite Adversarial Invariant Certification**.
+While Autofab mechanizes Mills' Chinese Wall and anti-debugging discipline, we introduce a **fundamental mathematical departure** from IBM Autofab's testing philosophy: **we deliberately reject Statistical Usage Testing in favor of Bipartite Adversarial Invariant Certification**.
 
 1. **Why Statistical Usage Testing Succeeded for Human Software (1987)**:
    Mills' use of Markov chain operational profiles was designed to certify software reliability under Statistical Quality Control (SQC). In human software engineering, defects are distributed semi-randomly across control paths due to human cognitive fatigue, typos, or localized misunderstandings. Under this stochastic distribution, testing the highest-frequency state transitions in a Markov chain provides a sound mathematical estimate of operational Mean Time To Failure (MTTF). If a defect lurks in an obscure control path executed only once in 10,000,000 user transactions, SQC certifies that the software will operate reliably for thousands of hours between field failures.
@@ -1001,10 +1001,10 @@ While Cleanroom mechanizes Mills' Chinese Wall and anti-debugging discipline, we
      - Boundary partition flips ($x = 0$, empty collections, disconnected graph DAG components).
    A neural system verified solely by statistical usage testing produces a dangerous illusion of safety: declaring a buggy implementation "certified" simply because normal users rarely sample its flawed boundary edge cases.
 
-3. **Modern Cleanroom's Pivot: Adversarial Invariant Certification & AST Mutation Inoculation**:
+3. **Modern Autofab's Pivot: Adversarial Invariant Certification & AST Mutation Inoculation**:
    For neural synthesis, we replace Mills' Markov-based MTTF certification with **Bipartite Adversarial Certification**:
    - Rather than sampling inputs based on operational probability, the Dual Certifier ($\mathcal{D}$) explicitly divides the contract domain into bipartite partitions ($\mathcal{D}^+ \cup \mathcal{D}^-$), deliberately generating adversarial counterexamples designed to falsify boundary postconditions.
-   - Rather than certifying average-case MTTF, Cleanroom certifies **100% AST-normalized branch coverage** and **adversarial mutation survival** (via AST Inoculation, §2.6.4). Cleanroom does not ask *"How often will this program run without crashing?"*; it asks *"Does this program strictly satisfy its relational invariants across all boundary partitions?"*
+   - Rather than certifying average-case MTTF, Autofab certifies **100% AST-normalized branch coverage** and **adversarial mutation survival** (via AST Inoculation, §2.6.4). Autofab does not ask *"How often will this program run without crashing?"*; it asks *"Does this program strictly satisfy its relational invariants across all boundary partitions?"*
 
 #### 2.7.7 The Software Verification Dilemma Resolved
 For four decades, software engineering was trapped in an insoluble trade-off:
@@ -1023,7 +1023,7 @@ For four decades, software engineering was trapped in an insoluble trade-off:
        • Accidental agreement on edge cases.    • Months of bureaucratic latency.
 ```
 
-Neural Cleanroom resolves this dilemma by delivering **machine-speed DO-178C Level A verification independence at near-zero marginal cost**, restoring Kent Beck's double-entry bookkeeping to its true mathematical foundation: two isolated, non-communicating agents generating constructive code and adversarial test oracles across asymmetric representation spaces.
+Neural Autofab resolves this dilemma by delivering **machine-speed DO-178C Level A verification independence at near-zero marginal cost**, restoring Kent Beck's double-entry bookkeeping to its true mathematical foundation: two isolated, non-communicating agents generating constructive code and adversarial test oracles across asymmetric representation spaces.
 
 ---
 
@@ -1045,7 +1045,7 @@ Modern foundation models rely heavily on Chain-of-Thought (CoT) reasoning, where
 
 1. **The Fallacy of Identical Mistakes Under Chain of Thought**: Even when running at low temperature ($\tau \approx 0.0$ or $0.2$), models tasked with generative synthesis explore complex internal reasoning trajectories.
 2. **Task Homogeneity Induces Correlated Failure**: When the same model (or two foundation models) is assigned the **same task**—synthesizing two implementations $P_1$ and $P_2$ from specification $S$—both CoT traces share an identical cognitive objective: *algorithmic state transformation*. Both traces query the same pre-training priors regarding procedural control-flow shortcuts, default return values, and edge-case assumptions. Consequently, their internal search trees frequently collapse into the same blind spots, reproducing Knight & Leveson's coincident error phenomenon.
-3. **Task Asymmetry Eliminates Coincident Blind Spots**: In contrast, Cleanroom assigns the model to **two fundamentally asymmetric tasks**:
+3. **Task Asymmetry Eliminates Coincident Blind Spots**: In contrast, Autofab assigns the model to **two fundamentally asymmetric tasks**:
    - $\mathcal{S}$ (Synthesizer): Solves *constructive operational synthesis* ("How do I compute $Y$ from $X$?"). Its CoT trace explores variable bindings, control-flow branches, and data structure mutations.
    - $\mathcal{D}$ (Certifier): Solves *adversarial property verification* ("What relational invariant must hold between $X$ and $Y$, and what inputs would violate it?"). Its CoT trace explores domain boundaries, partition predicates ($\mathcal{D}^+, \mathcal{D}^-$), and counterexample witnesses.
 4. **Disjoint Reasoning Trajectories**: Because the reasoning prompts, cognitive objectives, and output modalities are completely disjoint, the CoT search trajectories of $\mathcal{S}$ and $\mathcal{D}$ do not intersect in their failure modes. Even when executed on the exact same foundation model at low temperature, the probability of $\mathcal{S}$ making an algorithmic error on boundary $C(x)$ and $\mathcal{D}$ independently making the exact matching error in its property assertion is statistically negligible.
@@ -1054,7 +1054,7 @@ This constitutes a testable scientific hypothesis that we validate empirically i
 
 #### 2.8.2 The Mathematical Theory of Task Asymmetry: Littlewood & Miller's Covariance Model (1989)
 
-The superiority of Cleanroom's Primal-Dual task asymmetry over symmetric multi-version programming can be proven mathematically using the classical reliability theory of multiversion software:
+The superiority of Autofab's Primal-Dual task asymmetry over symmetric multi-version programming can be proven mathematically using the classical reliability theory of multiversion software:
 
 1. **The Eckhardt & Lee Homogeneous Model (1985)**:
    In their foundational model of multiversion software, Dave Eckhardt and Larry Lee analyzed $N$ versions developed under the same methodology. Let $\theta(x) \in [0, 1]$ represent the "difficulty" of input $x$—the probability that a randomly chosen synthesizer fails to implement correct behavior for input $x$.
@@ -1069,10 +1069,10 @@ The superiority of Cleanroom's Primal-Dual task asymmetry over symmetric multi-v
    where the covariance across the difficulty surfaces is defined as:
    $$\mathbf{Cov}(\theta_A(x), \theta_B(x)) = E[(\theta_A(x) - E[\theta_A(x)])(\theta_B(x) - E[\theta_B(x)])]$$
 
-3. **Why Primal-Dual Cleanroom Forces Negative Covariance**:
+3. **Why Primal-Dual Autofab Forces Negative Covariance**:
    In classical N-version programming, both teams write implementations ($X \to Y$). Even if they use different programming languages, the algorithmic difficulty profile $\theta(x)$ is driven by the problem's constructive intrinsic complexity (e.g., maintaining pointer topologies, caching invariants, boundary indexes). Thus, $\mathbf{Cov}(\theta_{P_1}, \theta_{P_2}) \gg 0$.
    
-   In Cleanroom, the two agents are assigned **mathematically asymmetric tasks**:
+   In Autofab, the two agents are assigned **mathematically asymmetric tasks**:
    - $\mathcal{S}$ solves constructive mapping: $P : X \to Y$;
    - $\mathcal{D}$ solves relational invariant checking: $V : X \times Y \to \mathbb{B}$.
    
@@ -1087,7 +1087,7 @@ The superiority of Cleanroom's Primal-Dual task asymmetry over symmetric multi-v
    **The system performs strictly better than if the two agents were purely independent random processes.** This formal result provides the definitive mathematical proof that synthesizing one implementation and one independent test certifier is theoretically superior to synthesizing two implementations.
 
 4. **Preserving Negative Covariance Against the Language Primitive Illusion**:
-   The only boundary condition where task asymmetry could theoretically yield positive covariance ($\mathbf{Cov} > 0$) is when both agents fall prey to the **Language Primitive Illusion** (Section 2.6.5): sharing an identical blind spot regarding an uncontracted runtime primitive (such as regex `\b` word boundaries). Cleanroom's Pass 1 Spec QA (banning informal illustrative exemplars) and Orthogonal Boundary Probing (forcing systematic delimiter/punctuation testing) actively eliminate this shared correlation, guaranteeing that $\mathbf{Cov}(\theta_P, \theta_V) \le 0$ holds strictly across all execution paths.
+   The only boundary condition where task asymmetry could theoretically yield positive covariance ($\mathbf{Cov} > 0$) is when both agents fall prey to the **Language Primitive Illusion** (Section 2.6.5): sharing an identical blind spot regarding an uncontracted runtime primitive (such as regex `\b` word boundaries). Autofab's Pass 1 Spec QA (banning informal illustrative exemplars) and Orthogonal Boundary Probing (forcing systematic delimiter/punctuation testing) actively eliminate this shared correlation, guaranteeing that $\mathbf{Cov}(\theta_P, \theta_V) \le 0$ holds strictly across all execution paths.
 
 ---
 
@@ -1095,9 +1095,9 @@ The superiority of Cleanroom's Primal-Dual task asymmetry over symmetric multi-v
 
 A common critique of formal synthesis systems is: *"What if the human specification itself is wrong, incomplete, or ambiguous?"*
 
-It is essential to bound the scope of our contribution: **Cleanroom does not claim to solve the philosophical problem of human intentionality, nor does it assume that human authors write perfect specifications.** Human intent can never be formally verified from nothing.
+It is essential to bound the scope of our contribution: **Autofab does not claim to solve the philosophical problem of human intentionality, nor does it assume that human authors write perfect specifications.** Human intent can never be formally verified from nothing.
 
-Instead, Cleanroom provides a foundational programming language guarantee:
+Instead, Autofab provides a foundational programming language guarantee:
 
 > **The Fail-Safe Invariant**: *Any semantic flaw, inconsistency, or ambiguity in a specification results in deterministic **fail-stop non-convergence with diagnostic blame attribution**; it NEVER results in the silent synthesis and execution of an incorrect system.*
 
@@ -1130,7 +1130,7 @@ We categorize specification defects into three canonical failure modes:
 │                                                                             │
 │  CORE SAFETY PROPERTY:                                                      │
 │  Silent Defect Escape Rate = 0.0%                                           │
-│  Cleanroom compiles to certified code OR halts with diagnostic blame.       │
+│  Autofab compiles to certified code OR halts with diagnostic blame.       │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -1138,32 +1138,32 @@ We categorize specification defects into three canonical failure modes:
 1. **Over-Constrained Specifications**: If a human authors contradictory contracts (e.g., asserting that an empty batch both returns an empty list and raises `ValueError`), the dual certifier will assert the exception while the primal implementation attempts to return the list (or vice versa). Pass 2 fails immediately, halting the pipeline and attributing blame to the conflicting specification slugs.
 2. **Ungrounded Specifications**: If a module requires an ambient capability or collaborator method that is not formally declared by an imported component's interface stub $\Sigma_B$, Pass 1 (Static Specification Validation) detects the missing or incompatible symbol via hermetic type analysis. The compilation pipeline statically halts *before any executable code or tests are even synthesized*.
 3. **Under-Constrained Specifications**: If a specification omits behavior on an edge-case boundary, the primal implementation and dual certifier operate under strict physical information confinement ($\mathcal{I}(P; V \mid S) = 0$). Because they cannot coordinate or observe each other's guesses, their independent completions diverge on the unconstrained subspace, or the synthesized branching logic fails AST-normalized statement coverage ($\mathbf{Cov} < 100\%$). Pass 2 rejects the pair, demanding that the author refine the contract into a bi-conditional partition.
-4. **Plumbing and Resource Management**: Architectural plumbing (such as resource cleanup, object lifecycles, and initialization order) is treated simply as standard interface contracts. If an LLM synthesizer misconfigures plumbing or leaks state, it violates exported interface invariants or preconditions. Under Cleanroom, this terminates in **non-convergence**, never in an incorrect system silently executing in production.
+4. **Plumbing and Resource Management**: Architectural plumbing (such as resource cleanup, object lifecycles, and initialization order) is treated simply as standard interface contracts. If an LLM synthesizer misconfigures plumbing or leaks state, it violates exported interface invariants or preconditions. Under Autofab, this terminates in **non-convergence**, never in an incorrect system silently executing in production.
 
-**The PL Analogy:** Just as a sound static type system (such as Rust or Standard ML) does not guarantee that a developer implemented Quicksort instead of Mergesort, it **does** guarantee type preservation and progress (well-typed programs do not go wrong). In exactly the same sense, Cleanroom does not claim that the human wrote what was in their head; it guarantees that **if the pipeline converges, the target code soundly and comprehensively satisfies the written contracts—and if the contracts are flawed, the pipeline halts fail-stop with blame**.
+**The PL Analogy:** Just as a sound static type system (such as Rust or Standard ML) does not guarantee that a developer implemented Quicksort instead of Mergesort, it **does** guarantee type preservation and progress (well-typed programs do not go wrong). In exactly the same sense, Autofab does not claim that the human wrote what was in their head; it guarantees that **if the pipeline converges, the target code soundly and comprehensively satisfies the written contracts—and if the contracts are flawed, the pipeline halts fail-stop with blame**.
 
 **Non-Convergence as a Safety Victory**:
-Under this calculus, non-convergence (deadlock or oscillation in the synthesis loop) is not an operational breakdown; it is the system's primary protective mechanism. Traditional software development views non-convergence as an operational failure ("the system failed to generate code"). Cleanroom reframes non-convergence as a safety-critical triumph: the architecture's aggressive edge-case wedge successfully exposed specification ambiguity or contradictory assumptions, refusing to synthesize a silently corrupted binary. Non-convergence safely halts execution and escalates diagnostic blame to the auditor or human custodian.
+Under this calculus, non-convergence (deadlock or oscillation in the synthesis loop) is not an operational breakdown; it is the system's primary protective mechanism. Traditional software development views non-convergence as an operational failure ("the system failed to generate code"). Autofab reframes non-convergence as a safety-critical triumph: the architecture's aggressive edge-case wedge successfully exposed specification ambiguity or contradictory assumptions, refusing to synthesize a silently corrupted binary. Non-convergence safely halts execution and escalates diagnostic blame to the auditor or human custodian.
 
 ---
 
 ### 2.10 The Testability Horizon: Concurrency as Executable Verification Harnesses
 
-A critical architectural question is whether Cleanroom's synthesis paradigm scales to complex systems programming challenges such as **concurrency, asynchronous event dispatching, and lock-free data structures**. 
+A critical architectural question is whether Autofab's synthesis paradigm scales to complex systems programming challenges such as **concurrency, asynchronous event dispatching, and lock-free data structures**. 
 
-The answer reveals a foundational distinction between deductive formal methods and Cleanroom:
+The answer reveals a foundational distinction between deductive formal methods and Autofab:
 
-> **The Boundary of Cleanroom is *Testability*, not *Provability*.**
+> **The Boundary of Autofab is *Testability*, not *Provability*.**
 
 #### 2.10.1 Deductive Verification vs. Executable Test Oracles
 In classical deductive verification (e.g., Coq, Iris, Dafny, or recent PLDI papers on concurrent separation logic such as *PulseCore* or *RefinedRust*), verifying concurrency requires synthesizing inductive loop invariants, thread-rely/guarantee conditions, and ghost state across an unbounded space of thread interleavings. This requires complex, manual proof engineering; automated SMT solvers (Z3) notoriously fail or timeout on concurrent systems software.
 
-Cleanroom fundamentally alters the synthesis contract. It does not ask the dual agent to synthesize a machine-checked proof in separation logic. **It requires only that the concurrent property be expressed as an executable verification harness (oracle).**
+Autofab fundamentally alters the synthesis contract. It does not ask the dual agent to synthesize a machine-checked proof in separation logic. **It requires only that the concurrent property be expressed as an executable verification harness (oracle).**
 
 If a concurrent property can be written as a deterministic or invariant-bound unit test:
 1. The dual agent ($\mathcal{A}_{\text{test}}$) can synthesize the verification harness from the specification contract.
 2. The primal agent ($\mathcal{A}_{\text{lib}}$) can synthesize the concurrent implementation.
-3. The cleanroom gateway compiles, executes, and verifies convergence in an isolated sandbox.
+3. The autofab gateway compiles, executes, and verifies convergence in an isolated sandbox.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -1175,24 +1175,24 @@ If a concurrent property can be written as a deterministic or invariant-bound un
 │           ├── Requires unbounded thread interleaving reasoning              │
 │           └── SMT solvers choke on systems software (timeouts, undecidability)
 │                                                                             │
-│  Cleanroom Primal-Dual Synthesis:                                           │
+│  Autofab Primal-Dual Synthesis:                                           │
 │  Spec ──┬──> Primal Agent (A_lib):  Synthesize Concurrent Code (P)          │
 │         └──> Dual Agent   (A_test): Synthesize Executable Oracle Harness (V)│
 │                                      │                                      │
 │              Pass 2 Execution ───────┴──> Sandboxed Deterministic Gateway   │
 │                                                                             │
 │  Key Principle: If a concurrent invariant is testable via an automated     │
-│  harness, it is synthesizable under Cleanroom.                              │
+│  harness, it is synthesizable under Autofab.                              │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 #### 2.10.2 The Three Paradigms of Concurrent Test Oracles
-Cleanroom leverages three established paradigms in programming languages and systems engineering to express concurrent properties as executable tests:
+Autofab leverages three established paradigms in programming languages and systems engineering to express concurrent properties as executable tests:
 
 1. **Deterministic Schedule & Virtual Time Interleaving**:
    Rather than relying on non-deterministic OS thread schedulers, the dual agent synthesizes deterministic test environments:
-   - *Asyncio & Coroutine Dispatchers*: Stepping through event loops deterministically to control the precise interleaving of asynchronous tasks (as used in Cleanroom's own DAG scheduler and async worker pool).
+   - *Asyncio & Coroutine Dispatchers*: Stepping through event loops deterministically to control the precise interleaving of asynchronous tasks (as used in Autofab's own DAG scheduler and async worker pool).
    - *Synchronization Barriers*: Injecting controllable latencies, event flags, or deterministic thread gates to pause thread $A$, allow thread $B$ to execute, and resume thread $A$, explicitly asserting behavior across known race windows.
 2. **Linearizability & Trace Checking (The Jepsen / Lincheck Model)**:
    For concurrent data structures (e.g., lock-free queues, atomic caches), the dual certifier generates concurrent operation traces and checks for **linearizability**:
@@ -1209,12 +1209,12 @@ Cleanroom leverages three established paradigms in programming languages and sys
 #### 2.10.3 Concurrency Soundness: Deterministic Interleaving and Contention Invariants
 A classical critique of concurrent testing is **flakiness and false negatives**: a race condition might trigger in only 1 out of 10,000 runs, allowing a broken concurrent implementation to silently pass a naive test suite.
 
-Cleanroom neutralizes this vulnerability by mandating that the dual certifier synthesize **deterministic interleaving harnesses**:
+Autofab neutralizes this vulnerability by mandating that the dual certifier synthesize **deterministic interleaving harnesses**:
 1. Rather than spawning unconstrained OS threads and relying on non-deterministic thread scheduling, the test harness explicitly pauses and resumes concurrent coroutines or workers at defined synchronization barriers.
 2. For high-contention stateful operations, the test harness exercises stress iterations with strict conservation assertions, detecting races deterministically.
 3. As an auxiliary verification check, mutation testing can optionally inject synchronization faults (e.g., removing a lock or moving a state update outside a critical section); if the test harness passes, the surviving mutant alerts the scheduler that contention testing is inadequate.
 
-Consequently, concurrency does not require altering Cleanroom's theoretical model. It confirms the thesis: **the expressive reach of Cleanroom extends to any domain that admits executable, automated test oracles.**
+Consequently, concurrency does not require altering Autofab's theoretical model. It confirms the thesis: **the expressive reach of Autofab extends to any domain that admits executable, automated test oracles.**
 
 #### 2.10.4 The Two-Tier Specialized Concurrency Agent Architecture
 
@@ -1226,7 +1226,7 @@ Scaling neural synthesis to concurrency introduces two distinct cognitive challe
    Generic test agents generate tests that do not exercise preemption points, allowing race conditions and deadlocks to pass silently with 100% statement coverage.
 2. **The Concurrency Blame Paralysis (Triage Failure)**: When a concurrent execution fails, it manifests as a **deadlock hang/timeout** or an **intermittent lost update**. A generic auditor inspects `assert count == 1000` (observed 984) and emits naive functional blame: *"in increment(), you implemented addition incorrectly"*. The implementation agent responds by tweaking arithmetic expressions, falling into infinite blame ping-pong and non-convergence.
 
-To solve this, Cleanroom introduces a **Two-Tier Specialized Concurrency Pipeline**:
+To solve this, Autofab introduces a **Two-Tier Specialized Concurrency Pipeline**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -1272,7 +1272,7 @@ Modern generative language models do not fail randomly; they exhibit high-probab
 
 If a specification intermingles algorithmic code with behavioral requirements, neural synthesizers inevitably fall into these semantic attractor spots. Worse, if the test certifier shares that procedural framing, both models reproduce identical low-level flaws, threatening the gatekeeping invariant.
 
-To structurally immunize the synthesis pipeline against deterministic model bias, Cleanroom enforces a strict tripartite separation of **intent, algorithm, and realization**:
+To structurally immunize the synthesis pipeline against deterministic model bias, Autofab enforces a strict tripartite separation of **intent, algorithm, and realization**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -1329,7 +1329,7 @@ In neural code synthesis, if an LLM is directly exposed to benchmark metrics (e.
 The proxy benchmark reports massive synthetic "performance gains", but the system's real-world operational efficiency and safety collapse.
 
 #### 2.12.2 The Performance Firewall
-Cleanroom neutralizes this failure mode by treating the non-functional validation suite as a **hidden benchmark**:
+Autofab neutralizes this failure mode by treating the non-functional validation suite as a **hidden benchmark**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -1364,7 +1364,7 @@ Cleanroom neutralizes this failure mode by treating the non-functional validatio
 
 ## 3. The Typed Specification Model & Verification Calculus
 
-We formalize Cleanroom through a concise, typed specification model where low-level typed interface stubs and bi-conditional behavioral contracts serve as the canonical source of truth.
+We formalize Autofab through a concise, typed specification model where low-level typed interface stubs and bi-conditional behavioral contracts serve as the canonical source of truth.
 
 ### 3.1 Syntax of Low-Level Specifications ($S$)
 
@@ -1407,7 +1407,7 @@ A specification unit $S = \langle \Sigma, \mathcal{C}, \mathcal{G} \rangle$ cons
 
 #### 3.1.1 Architectural Distinction: Interface Components vs. Implementation Components (`_impl`)
 
-A fundamental invariant of Cleanroom's language design is the rigorous separation between declarative interface contracts and executable implementations:
+A fundamental invariant of Autofab's language design is the rigorous separation between declarative interface contracts and executable implementations:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -1444,11 +1444,11 @@ A fundamental invariant of Cleanroom's language design is the rigorous separatio
 
 3. **Dual Verification Certifiers ($V$, files `tests/<name>_impl_test.py`)**:
    Verification test suites are synthesized independently by dual certifier $\mathcal{D}$ strictly from the implementation specification $S_{\text{impl}}$ and associated interface contracts.
-   - **Crucial Invariant**: While interface components can define concrete data types, public constructors, and polytype method overrides (e.g., standard parameter converters in `tool_provider.py`), **only implementation components (`_impl`) have standalone verification test suites**. Every verification test suite in Cleanroom is an `_impl_test.py` certifying an implementation component `_impl.py` against its specification contracts.
+   - **Crucial Invariant**: While interface components can define concrete data types, public constructors, and polytype method overrides (e.g., standard parameter converters in `tool_provider.py`), **only implementation components (`_impl`) have standalone verification test suites**. Every verification test suite in Autofab is an `_impl_test.py` certifying an implementation component `_impl.py` against its specification contracts.
 
 4. **The Modularity Invariant for Implementation Components**:
-   - In Cleanroom's dependency DAG, when component $A$ depends on component $B$, $A$'s implementation $A_{\text{impl}}$ imports strictly $B$'s interface component $S_{B,\text{iface}}$ (`import B`), never $B$'s implementation $B_{\text{impl}}$ ($\mathcal{I}(A_{\text{impl}}; B_{\text{impl}} \mid S_{B,\text{iface}}) = 0$).
-   - Consequently, evaluating Cleanroom's **modularization strategy** does not mean dividing interface definitions; it means **evaluating the decomposition of a large, monolithic implementation component (`_impl`) into multiple smaller, decoupled `_impl` components**, each realizing a distinct interface abstraction and verified by its own independent dual certifier test suite.
+   - In Autofab's dependency DAG, when component $A$ depends on component $B$, $A$'s implementation $A_{\text{impl}}$ imports strictly $B$'s interface component $S_{B,\text{iface}}$ (`import B`), never $B$'s implementation $B_{\text{impl}}$ ($\mathcal{I}(A_{\text{impl}}; B_{\text{impl}} \mid S_{B,\text{iface}}) = 0$).
+   - Consequently, evaluating Autofab's **modularization strategy** does not mean dividing interface definitions; it means **evaluating the decomposition of a large, monolithic implementation component (`_impl`) into multiple smaller, decoupled `_impl` components**, each realizing a distinct interface abstraction and verified by its own independent dual certifier test suite.
 
 ### 3.2 The Primal-Dual Synthesis Model
 
@@ -1495,7 +1495,7 @@ By finite induction over $G$, whole-system correctness holds. $\blacksquare$
 
 ## 4. Verification Toolchain & Blame Calculus
 
-Verification in Cleanroom operates as a closed-world, two-pass deterministic compiler gateway:
+Verification in Autofab operates as a closed-world, two-pass deterministic compiler gateway:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -1529,7 +1529,7 @@ Verification in Cleanroom operates as a closed-world, two-pass deterministic com
 ### 4.1 AST-Normalized Statement Coverage & Specification Reverse-Engineering
 Standard statement coverage (e.g., Python `coverage.py`) is unsound for neural synthesis because it can be trivially satisfied by synthesizing unreachable dead code, multi-line string docstrings, or tautological assertions.
 
-Cleanroom introduces an AST normalization operator $\mathcal{N} : \text{AST} \to \text{AST}_{\text{norm}}$ implemented in `evaluate_coverage.py`:
+Autofab introduces an AST normalization operator $\mathcal{N} : \text{AST} \to \text{AST}_{\text{norm}}$ implemented in `evaluate_coverage.py`:
 1. **Docstring Stripping**: All module, class, and function docstrings are erased from the executable statement table.
 2. **Type-Only Declaration Elimination**: Unassigned type annotations (`x: int`) and `pass` statements are eliminated.
 3. **Branch Normalization**: Compound conditionals are decomposed into atomic basic blocks.
@@ -1537,7 +1537,7 @@ Cleanroom introduces an AST normalization operator $\mathcal{N} : \text{AST} \to
 $$\mathbf{Cov}(P, V) = \frac{|\text{ExecutedStatements}(\mathcal{N}(P), V)|}{|\text{TotalStatements}(\mathcal{N}(P))|} = 1.0 \ (100\%)$$
 
 #### Reverse-Engineering Uncovered Code to Specifications (Anti-Contamination Coverage Blame)
-When normalized statement coverage is incomplete ($\mathbf{Cov}(P, V) < 1.0$), the coverage auditor detects unexecuted basic blocks in $\mathcal{N}(P)$. A naive system would simply dump raw line numbers or code snippets of `lib.py` into the test agent's context. In Cleanroom, **doing so is strictly prohibited because it would contaminate the test agent with implementation details, collapsing $\mathcal{I}(P; V \mid S) = 0$**.
+When normalized statement coverage is incomplete ($\mathbf{Cov}(P, V) < 1.0$), the coverage auditor detects unexecuted basic blocks in $\mathcal{N}(P)$. A naive system would simply dump raw line numbers or code snippets of `lib.py` into the test agent's context. In Autofab, **doing so is strictly prohibited because it would contaminate the test agent with implementation details, collapsing $\mathcal{I}(P; V \mid S) = 0$**.
 
 Instead, the coverage engine **reverse-engineers uncovered basic blocks back to the specification**:
 1. **Semantic Contract Attribution**: The coverage auditor inspects the AST context of the unexecuted branch (enclosing function $f$, branching predicate $C(\sigma)$, and associated parameter mappings) and maps it to the corresponding behavioral contract slug $[s_i] \in \mathcal{C}$ in specification $S$.
@@ -1572,7 +1572,7 @@ stateDiagram-v2
 #### The Contaminated Auditor & Non-Prescriptive Blame Operator
 Because the verification auditor inspects both candidate program $P$ and test suite $V$, executes $V(P)$, and evaluates coverage, **the auditor is an epistemically contaminated source** ($\mathcal{I}(\text{Auditor}; \{P, V\}) > 0$). If the auditor provides prescriptive repair advice, suggests code edits, or transfers snippets between agents, it creates an illegal communication side-channel.
 
-To preserve the Primal-Dual game, Cleanroom enforces two non-negotiable blame constraints:
+To preserve the Primal-Dual game, Autofab enforces two non-negotiable blame constraints:
 1. **Strictly Non-Prescriptive**: The auditor **must never specify how to fix the problem**, even if it believes it knows the exact code repair. The receiving agent must determine its revisions exclusively from its own reading of specification $S$.
 2. **Specification-Anchored with Vague Directional Guidance**: Blame is formulated exclusively in the vocabulary of $S = \langle \Sigma, \mathcal{C} \rangle$, providing only vague directional guidance on where the discrepancy occurred (function or method name), never citing internal test setup variables, mock mechanics, or private control paths.
 
@@ -1606,7 +1606,7 @@ Achieving mutual convergence between two independent stochastic agents is subjec
 - **Semi-Decidability of Convergence**: In formal terms, distinguishing whether non-convergence is caused by stochastic model search limitations versus an inherently unsatisfiable specification is **semi-decidable**. Therefore, automated spec fault recognition and monotonic progress are **best-effort heuristics**, not theoretical certainties.
 
 #### The Core Theoretical Guarantee: Verification Soundness (Partial Correctness)
-While convergence itself cannot be guaranteed unconditionally for arbitrary neural models and complex specifications, Cleanroom provides an uncompromising **Soundness Guarantee (Safety Property)**:
+While convergence itself cannot be guaranteed unconditionally for arbitrary neural models and complex specifications, Autofab provides an uncompromising **Soundness Guarantee (Safety Property)**:
 
 **Theorem 3 (Verification Soundness & Safety Preservation).**  
 Let $S = \langle \Sigma, \mathcal{C} \rangle$ be a specification unit. If the synthesis-verification loop terminates and converges to a certified state $\mathbf{CLEAN}$—that is, $\mathbf{Verify}(P, V; S)$ holds with:
@@ -1630,12 +1630,12 @@ Hence, defect $\delta$ cannot escape into $\mathbf{CLEAN}$. $\blacksquare$
 
 ### 4.3 The Auditor's Role: Semantic Failure Translation (Not Code Debugging)
 
-A fundamental distinction in Cleanroom's architecture is that **neither the human developer nor the automated Auditor engages in code-level debugging**. 
+A fundamental distinction in Autofab's architecture is that **neither the human developer nor the automated Auditor engages in code-level debugging**. 
 
 #### Semantic Failure Translation vs. Automated Program Repair
 In contemporary agentic software engineering frameworks (e.g., SWE-agent, AutoCodeRover, Agentless), agents engage in heavy, interactive "printf debugging" and automated program repair (APR)—inspecting stack traces, inserting debug logging statements, examining runtime variables, and iteratively synthesizing code patches to force failing tests to pass green.
 
-In Cleanroom, performing this type of code debugging within the Auditor is strictly prohibited. Because the Auditor inspects both candidate library $P$ and dual certifier $V$, **the Auditor is an epistemically contaminated entity** ($\mathcal{I}(\text{Auditor}; \{P, V\}) > 0$). If the Auditor attempts to "debug" library $P$ to make it pass $V$, it falls into the **Overfitting Trap**: forcing the library to accommodate erroneous or over-constrained test assertions, thereby bypassing specification $S$. Conversely, if the Auditor debugs test $V$ to accommodate $P$, it falls into the **Rubber-Stamp Trap**: leaking implementation details into the certifier and converting an adversarial test into a tautological mirror of $P$'s implementation assumptions.
+In Autofab, performing this type of code debugging within the Auditor is strictly prohibited. Because the Auditor inspects both candidate library $P$ and dual certifier $V$, **the Auditor is an epistemically contaminated entity** ($\mathcal{I}(\text{Auditor}; \{P, V\}) > 0$). If the Auditor attempts to "debug" library $P$ to make it pass $V$, it falls into the **Overfitting Trap**: forcing the library to accommodate erroneous or over-constrained test assertions, thereby bypassing specification $S$. Conversely, if the Auditor debugs test $V$ to accommodate $P$, it falls into the **Rubber-Stamp Trap**: leaking implementation details into the certifier and converting an adversarial test into a tautological mirror of $P$'s implementation assumptions.
 
 Therefore, the **only debugging the Auditor performs is translating a runtime test failure into a specification failure (or deciding that the test asserted an uncontracted detail)**:
 1. **Contracted Failure Translation ($\mathbf{Blame} \to \mathcal{S}$)**: When test $t \in V$ fails ($t(P) = \mathbf{FAIL}$), the Auditor inspects the failure trace to identify which specification contract clause $[s_i]$ was being exercised. If $t$ faithfully asserted a behavior mandated by $[s_i]$, the Auditor translates the failure into a **specification failure**:
@@ -1683,17 +1683,17 @@ When adversarial concurrency test harnesses fail (under Stage 2 verification of 
 Could the Auditor ever suggest logging statements or printf probes to the library? 
 In theory, if a runtime failure is completely opaque (for example, an unhandled low-level C-extension fault, segmentation fault, or an ambiguous silent return where the failure cause cannot be mapped to any contract), the Auditor *could* suggest that the library emit diagnostic logging statements to isolate the fault.
 
-In practice, however, this capability is currently unnecessary in Cleanroom. Because Cleanroom enforces strict modular decomposition (< 500 LOC per unit) and atomic contract slugs $[s_i]$, failure attribution is direct: standard assertion failures and AST-normalized coverage traces immediately identify the governing contract clause. The Auditor never needs to request diagnostic logging or inspect intermediate variable dumps to complete its triage.
+In practice, however, this capability is currently unnecessary in Autofab. Because Autofab enforces strict modular decomposition (< 500 LOC per unit) and atomic contract slugs $[s_i]$, failure attribution is direct: standard assertion failures and AST-normalized coverage traces immediately identify the governing contract clause. The Auditor never needs to request diagnostic logging or inspect intermediate variable dumps to complete its triage.
 
 #### The Developer Experience: Specification Debuggers, Not Code Debuggers
 Because the Auditor does not debug code and general-purpose programming language code is treated as disposable bytecode, **the human developer never attaches a debugger (such as `gdb` or `pdb`) or inserts print statements into target code**.
 - If the synthesized system passes the double-blind verification gateway ($\mathbf{Verify}(P, V; S) = \mathbf{PASS}$), Theorem 3 guarantees that the target code is sound with respect to specification $S$.
 - If the converged application behaves unexpectedly at runtime, **the code is faithful to the specification—the defect is in the specification itself**.
-- Consequently, developer tooling in Cleanroom shifts entirely from code debuggers to **Specification Debuggers**: analyzers that detect ungrounded types, vacuous postconditions, missing negative boundary contracts ($[s^-]$), and contradictory invariants before synthesis tokens are ever spent.
+- Consequently, developer tooling in Autofab shifts entirely from code debuggers to **Specification Debuggers**: analyzers that detect ungrounded types, vacuous postconditions, missing negative boundary contracts ($[s^-]$), and contradictory invariants before synthesis tokens are ever spent.
 
 ### 4.4 The Multi-Agent Auditing Matrix: Two-Phase Gated Verification
 
-To reconcile fine-grained semantic isolation with macro-architectural optimization, Cleanroom structures the verification pipeline into a **Multi-Agent Auditing Matrix** operating across two strictly decoupled, phased loops:
+To reconcile fine-grained semantic isolation with macro-architectural optimization, Autofab structures the verification pipeline into a **Multi-Agent Auditing Matrix** operating across two strictly decoupled, phased loops:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -1762,7 +1762,7 @@ Instead, our evaluation is designed as an **evidence-based scientific investigat
 │                                                                             │
 │  RQ1: Coincident Error Manifestation & Information Confinement              │
 │       Empirical evidence of coincident error rates under joint context      │
-│       (I > 0) vs. Cleanroom physical isolation (I = 0).                     │
+│       (I > 0) vs. Autofab physical isolation (I = 0).                     │
 │                                                                             │
 │  RQ2: Accidental Agreement Suppression via Bipartite Boundary Contracts     │
 │       Evidence that one-sided directional contracts cause accidental        │
@@ -1793,14 +1793,14 @@ Instead, our evaluation is designed as an **evidence-based scientific investigat
 
 ### 5.2 Benchmark Suites, Subject Systems, & Model Spectrum
 
-To evaluate Cleanroom rigorously, we evaluate across four benchmark suites with pre-existing, independent ground-truth oracles, four distinct foundation models spanning local consumer hardware to frontier APIs, and three comparative baselines:
+To evaluate Autofab rigorously, we evaluate across four benchmark suites with pre-existing, independent ground-truth oracles, four distinct foundation models spanning local consumer hardware to frontier APIs, and three comparative baselines:
 
 #### 5.2.1 Benchmark Suites with Pre-Existing Complete Oracles
-To eliminate evaluation bias and avoid circular dependencies where the evaluation oracle shares the authors' assumptions, we evaluate Cleanroom on benchmark problems equipped with **pre-existing, independent golden oracles**:
+To eliminate evaluation bias and avoid circular dependencies where the evaluation oracle shares the authors' assumptions, we evaluate Autofab on benchmark problems equipped with **pre-existing, independent golden oracles**:
 
 1. **Mini-SQLite Relational Query & B-Tree Storage Engine**:
    - *Domain & Scope*: Relational query execution, B-tree indexed table storage, arithmetic expressions, 3-valued NULL boolean logic, inner and left outer joins, aggregation, and atomic transaction rollback.
-   - *Pre-Existing Complete Oracle*: The canonical C `sqlite3` binary. The evaluation runs thousands of randomized and boundary SQL query batches differentially against both the Cleanroom-synthesized implementation and `sqlite3`, asserting bit-for-bit equivalence in returned tuples, column types, row ordering, and SQL error codes.
+   - *Pre-Existing Complete Oracle*: The canonical C `sqlite3` binary. The evaluation runs thousands of randomized and boundary SQL query batches differentially against both the Autofab-synthesized implementation and `sqlite3`, asserting bit-for-bit equivalence in returned tuples, column types, row ordering, and SQL error codes.
    - *Why It Matters*: Relational algebra and 3-valued logic are notorious for subtle boundary bugs (e.g., `NULL = NULL` evaluating to NULL rather than TRUE, outer join row preservation, integer-float type affinities).
 
 2. **Mini-Git Content-Addressable Object & DAG Engine**:
@@ -1813,15 +1813,15 @@ To eliminate evaluation bias and avoid circular dependencies where the evaluatio
    - *Pre-Existing Complete Oracle*: Golden TLA+ formal model verification traces and differential execution against the canonical Raft reference implementation (`PySyncObj`).
    - *Why It Matters*: Distributed consensus is purely stateful, concurrent, and full of notorious edge cases (e.g., uncommitted log entries from previous terms, split votes, snapshot boundary off-by-one errors) where no parser generator or domain-specific compiler could ever be applied.
 
-4. **Cleanroom Self-Hosting Corpus (Production Systems Software)**:
-   - *Domain & Scope*: The production Cleanroom compiler, AST linkers, DAG scheduler, sandbox runtime, and Bazel orchestrator: **11 core packages, 50+ units, ~15,000 lines of verified Python systems code**. Demonstrates full-scale, end-to-end self-hosting compiler compilation on complex production systems software.
+4. **Autofab Self-Hosting Corpus (Production Systems Software)**:
+   - *Domain & Scope*: The production Autofab compiler, AST linkers, DAG scheduler, sandbox runtime, and Bazel orchestrator: **11 core packages, 50+ units, ~15,000 lines of verified Python systems code**. Demonstrates full-scale, end-to-end self-hosting compiler compilation on complex production systems software.
 
 5. **CPython Standard Library Benchmark Suite & Specification Reverse-Engineering**:
    - *Domain & Scope*: Foundational algorithmic and systems modules from the Python Standard Library: `heapq` (binary heap priority queues), `bisect` (bisection search and insertion), `fnmatch` (Unix filename pattern matching with shell wildcards), `difflib` (differencing and delta computation with Myers-style matching), and `graphlib` (topological sorting and cycle detection).
    - *Pre-Existing Complete Oracle*: CPython's official pre-existing golden test suites (`test.test_heapq`, `test.test_bisect`, `test.test_fnmatch`, `test.test_difflib`, `test.test_graphlib`). The synthesized library implementations ($P$) and dual verification certifiers ($V$) are completely real, production-grade components evaluated against CPython's official test suites.
    - *Specification Bootstrapping via Reverse-Engineering*: Rather than hand-authoring specifications from scratch, we can **reverse-engineer formal specifications directly from existing library code**. Reverse-engineering library implementations into typed interface stubs and bi-conditional contracts proves to be an exceptionally effective, practical methodology for bootstrapping specifications. The resulting specification is then used to synthesize both new executable code ($P$) and independent dual certifier tests ($V$) under double-blind isolation ($\mathcal{I} = 0$).
    - *The "Specification Gap": Inferred Specifications vs. Official Python Documentation*:
-     Official Python documentation was written for human developers, relying heavily on human intuition, common sense, and unspoken language conventions; it was never authored to serve as an executable specification for automated code synthesis. When we compare the reverse-engineered, contract-complete Cleanroom specifications against the official Python documentation, a stark **"Specification Gap"** is revealed:
+     Official Python documentation was written for human developers, relying heavily on human intuition, common sense, and unspoken language conventions; it was never authored to serve as an executable specification for automated code synthesis. When we compare the reverse-engineered, contract-complete Autofab specifications against the official Python documentation, a stark **"Specification Gap"** is revealed:
      - *Omitted Boundary Conditions*: Official docs regularly state happy paths (e.g. "returns the smallest item") while omitting exact exception types, empty collection handling, or tie-breaking behavior.
      - *Implicit Type Coercions & Sentinels*: Official docs frequently fail to specify behavior on non-comparable elements, custom key functions returning `None`, or generator re-entrancy.
      - *Unstated Invariants*: Official docs describe algorithms in informal prose without defining formal pre- and post-conditions.
@@ -1835,15 +1835,15 @@ A critical limitation of existing code generation benchmarks (e.g., HumanEval, M
 
 In real-world software engineering, systems are not monolithic single files or isolated functions; they are **compositional graphs of collaborating modules** communicating across typed interfaces. Standard benchmarks provide zero insight into how LLMs handle inter-module dependencies, interface stub linking, or modular decomposition strategies.
 
-Cleanroom directly addresses this gap: all four of our systems benchmark suites are structured as **acyclic dependency DAGs of fine-grained modular units**. Each unit imports strictly the typed interface stubs (`low/*.pyi`) of its dependencies under OS-enforced isolation (`chmod 444`), preventing implementation peeking ($\mathcal{I}(P_u; P_w \mid S) = 0$). Crucially, interface components (`*.pyi` / `*.py`) establish declarative protocols, data types, value constructors, and polytype method overrides (e.g., standard type converters in `tool_provider.py`) without requiring standalone verification suites. All core subsystem business logic lives strictly in implementation components (`*_impl.py`), which are the sole targets of library code synthesis ($P$) and verification test certification ($V$). Furthermore, Section 5.5 (RQ3) directly evaluates our modularization strategy by taking large monolithic implementation components (> 1,000–3,000 LOC) and dividing them into fine-grained collaborating `_impl` components.
+Autofab directly addresses this gap: all four of our systems benchmark suites are structured as **acyclic dependency DAGs of fine-grained modular units**. Each unit imports strictly the typed interface stubs (`low/*.pyi`) of its dependencies under OS-enforced isolation (`chmod 444`), preventing implementation peeking ($\mathcal{I}(P_u; P_w \mid S) = 0$). Crucially, interface components (`*.pyi` / `*.py`) establish declarative protocols, data types, value constructors, and polytype method overrides (e.g., standard type converters in `tool_provider.py`) without requiring standalone verification suites. All core subsystem business logic lives strictly in implementation components (`*_impl.py`), which are the sole targets of library code synthesis ($P$) and verification test certification ($V$). Furthermore, Section 5.5 (RQ3) directly evaluates our modularization strategy by taking large monolithic implementation components (> 1,000–3,000 LOC) and dividing them into fine-grained collaborating `_impl` components.
 
 #### 5.2.2 The "Parser Generator Question": Why Domain-Specific Generators Preempt Neural Synthesis
 
-A natural question arises when considering automated code synthesis: *If the problem is writing a parser, wouldn't a parser generator be strictly better than Cleanroom at generating code for a parser?*
+A natural question arises when considering automated code synthesis: *If the problem is writing a parser, wouldn't a parser generator be strictly better than Autofab at generating code for a parser?*
 
 The answer is **an unequivocal yes**. 
 
-If a problem can be formally expressed as a context-free grammar, a deterministic parser generator (e.g., ANTLR, Bison/Flex, Menhir, Lark) is vastly superior to Cleanroom or any LLM-based neural generator:
+If a problem can be formally expressed as a context-free grammar, a deterministic parser generator (e.g., ANTLR, Bison/Flex, Menhir, Lark) is vastly superior to Autofab or any LLM-based neural generator:
 1. **Zero Hallucination & Zero Token Expenditure**: Parser generators compile an EBNF grammar deterministically in milliseconds using classical automata algorithms (LALR, LR(1), LL(k), PEG). They consume zero API tokens and eliminate stochastic variability.
 2. **Grammar Ambiguity Detection**: Parser generators statically analyze the grammar specification itself, immediately flagging shift/reduce conflicts to prove whether the grammar is ambiguous.
 3. **Correctness by Construction**: The generated parser is guaranteed to recognize the exact language specified by the grammar rules.
@@ -1855,21 +1855,21 @@ In computer science, closed domains with rigorous mathematical theories already 
 - **Relational Algebra** $\implies$ **SQL Query Planners & Optimizers**
 - **Wire Protocols & Schemas** $\implies$ **IDL Compilers** (Protocol Buffers, FlatBuffers, Thrift)
 
-**Cleanroom establishes a strict methodological rule:** *Whenever a domain-specific compiler or generator exists for a closed problem class, developers should always use it.* Using an LLM to generate parser tables or regex state machines from an EBNF grammar is an inefficient anti-pattern. (Indeed, for Cleanroom's *own* low-level specification syntax `low/*.pyi`, Pass 1 uses Python's deterministic `ast` parser and Pyright rather than an LLM).
+**Autofab establishes a strict methodological rule:** *Whenever a domain-specific compiler or generator exists for a closed problem class, developers should always use it.* Using an LLM to generate parser tables or regex state machines from an EBNF grammar is an inefficient anti-pattern. (Indeed, for Autofab's *own* low-level specification syntax `low/*.pyi`, Pass 1 uses Python's deterministic `ast` parser and Pyright rather than an LLM).
 
 #### Why General-Purpose Software Requires Certified Neural Synthesis
-The necessity for Cleanroom arises because **99% of general-purpose software cannot be expressed as a formal grammar or synthesized by any domain-specific generator**:
+The necessity for Autofab arises because **99% of general-purpose software cannot be expressed as a formal grammar or synthesized by any domain-specific generator**:
 - No parser generator can synthesize a **relational database engine** with B-tree page splits, dynamic buffer management, 3-valued NULL boolean logic, and ACID transaction rollbacks (Mini-SQLite).
 - No parser generator can synthesize a **content-addressable storage engine** with Git octal tree sorting, object hashing, and Lowest Common Ancestor DAG reachability (Mini-Git).
 - No parser generator can synthesize a **distributed consensus engine** with randomized election timeouts, log compaction snapshots, and term step-downs (Raft).
-- No parser generator can synthesize the **Cleanroom DAG scheduler, role-tier dispatching, and AST linker runtime**.
+- No parser generator can synthesize the **Autofab DAG scheduler, role-tier dispatching, and AST linker runtime**.
 
-For this vast universe of general-purpose software, developers have historically had no alternative but to manually author, maintain, and debug thousands of lines of procedural executable code. Cleanroom brings the "generator" paradigm to this general-purpose space by pairing untrusted neural synthesis with double-blind kernel verification.
+For this vast universe of general-purpose software, developers have historically had no alternative but to manually author, maintain, and debug thousands of lines of procedural executable code. Autofab brings the "generator" paradigm to this general-purpose space by pairing untrusted neural synthesis with double-blind kernel verification.
 
 #### Discarding Parsers as an LLM Synthesis Benchmark
 A crucial consequence of this insight is that **pure parsers and lexers are flawed benchmarks for evaluating LLM program synthesis**. Evaluating an LLM on synthesizing a parser invites an immediate and valid objection from programming language reviewers: *"Why did you benchmark an LLM on generating a parser when ANTLR has solved this for 30 years with zero defects?"*
 
-Accordingly, we explicitly reject grammar parsers from our benchmark suite. Our evaluation focuses exclusively on **stateful systems software that cannot be generated by any existing domain-specific tool**, evaluating whether Cleanroom can reliably push general-purpose programming languages to the background where classical generators cannot reach.
+Accordingly, we explicitly reject grammar parsers from our benchmark suite. Our evaluation focuses exclusively on **stateful systems software that cannot be generated by any existing domain-specific tool**, evaluating whether Autofab can reliably push general-purpose programming languages to the background where classical generators cannot reach.
 
 #### 5.2.3 Model Spectrum: From Consumer Local Hardware to Frontier Models
 We evaluate across four models representing two distinct operating regimes:
@@ -1880,27 +1880,27 @@ We evaluate across four models representing two distinct operating regimes:
    - **DeepSeek V4.1 Flash**: High-speed, frontier-class reasoning model.
    - **Gemini 3.8 Flash**: Frontier API model with advanced instruction following.
 
-> **The Weaker-Model Stress-Test Hypothesis**: *Frontier models often succeed on textbook problems through massive pre-training memorization. In contrast, smaller local models exhibit frequent procedural errors and hallucinations. Evaluating smaller consumer models under Cleanroom demonstrates the true power of the architecture: showing that kernel-enforced gatekeeping forces even unreliable models to converge on certified code without human developer intervention—or fail-stop safely.*
+> **The Weaker-Model Stress-Test Hypothesis**: *Frontier models often succeed on textbook problems through massive pre-training memorization. In contrast, smaller local models exhibit frequent procedural errors and hallucinations. Evaluating smaller consumer models under Autofab demonstrates the true power of the architecture: showing that kernel-enforced gatekeeping forces even unreliable models to converge on certified code without human developer intervention—or fail-stop safely.*
 
 #### 5.2.4 Prior-Knowledge Probing Protocol: Model Weight Memorization vs. Specification Grounding
 
 A foundational critique of neural program synthesis evaluations is: *"Did the model succeed on benchmark libraries simply because it memorized them in its pre-training weights?"*
 
 To isolate the causal effect of specification grounding from pre-training memorization, we introduce the **Prior-Knowledge Probing Protocol**:
-1. **Unconditioned Prior Probing**: Before exposing the Cleanroom specification to the model, we query the model directly on the problem domain without specification contracts:
+1. **Unconditioned Prior Probing**: Before exposing the Autofab specification to the model, we query the model directly on the problem domain without specification contracts:
    - *"What do you know about implementing module X? Provide its exact function signatures, exception hierarchies, sentinel handling, and edge-case boundary behaviors."*
 2. **Quantifying Weight Hallucinations**:
    - When queried without formal specifications, models exhibit substantial hallucination rates on complex, obscure, or custom components: inventing non-existent parameters, assuming incorrect default return types, and misidentifying boundary conditions.
    - Even on standard modules, models recall common happy paths while hallucinating or omitting subtle boundary contracts (e.g., tie-breaking semantics in `heapq`, wildcard character escaping in `fnmatch`).
-3. **Conditioned Cleanroom Synthesis**: We then present the model with the formal Cleanroom specification $S = \langle \Sigma, \mathcal{C} \rangle$ under Double Hermetic Confinement.
+3. **Conditioned Autofab Synthesis**: We then present the model with the formal Autofab specification $S = \langle \Sigma, \mathcal{C} \rangle$ under Double Hermetic Confinement.
 4. **Adherence & Disproof of Contamination**:
    - We evaluate whether the synthesized implementation $P$ and certifier $V$ strictly abandon the model's hallucinated priors and conform 100% to the provided specification contracts.
-   - By demonstrating that synthesis succeeds identically on custom/unseen Cleanroom compiler modules as it does on standard libraries, and that the model strictly adheres to arbitrary contract mutations injected into the specification, we empirically disprove that Cleanroom is an artifact of pre-training memorization.
+   - By demonstrating that synthesis succeeds identically on custom/unseen Autofab compiler modules as it does on standard libraries, and that the model strictly adheres to arbitrary contract mutations injected into the specification, we empirically disprove that Autofab is an artifact of pre-training memorization.
 
 #### 5.2.5 Three-Way Comparative Baselines
 1. **Baseline 1 (Conventional "Vibe Coding")**: Developer prompts an LLM with natural language requirements, receives code, executes it, and pastes error traces back into the prompt in an ad-hoc iterative chat loop until it appears to work.
 2. **Baseline 2 (Single-Agent Spec-to-Code+Tests / Joint Context TDD)**: A single agent takes the formal specification $S$, generates both `lib.py` and `test.py` within the same conversational session, and iterates until the tests pass green.
-3. **Baseline 3 (Cleanroom Primal-Dual Architecture)**: Full double-blind Cleanroom with kernel-enforced session isolation ($\mathcal{I} = 0$), task asymmetry, and Pass 2 gateway verification.
+3. **Baseline 3 (Autofab Primal-Dual Architecture)**: Full double-blind Autofab with kernel-enforced session isolation ($\mathcal{I} = 0$), task asymmetry, and Pass 2 gateway verification.
 
 #### 5.2.6 Metrics: Correctness, Efficiency, and Economics
 - **Defect Escape Rate ($P_{\text{escape}}$)**: Percentage of compiled units that pass internal tests but fail against the independent ground-truth verification oracle ($V_{\text{ground\_truth}}$).
@@ -1917,13 +1917,13 @@ To isolate the causal effect of specification grounding from pre-training memori
 Provide rigorous empirical evidence that:
 1. When Large Language Models generate both implementation code and verification tests without information confinement ($\mathcal{I}(P; V \mid S) > 0$), they exhibit statistically significant rates of **coincident errors** and tautological self-affirmation;
 2. Task asymmetry under physical confinement ($\mathcal{I} = 0$) fundamentally breaks coincident error correlation, even when using a **single foundation model** at low temperature with Chain-of-Thought; and
-3. Smaller local models (Qwen 3.6/3.8) achieve near-zero defect escape rates under Cleanroom, demonstrating that architectural isolation compensates for model scale.
+3. Smaller local models (Qwen 3.6/3.8) achieve near-zero defect escape rates under Autofab, demonstrating that architectural isolation compensates for model scale.
 
 #### Experimental Conditions:
 1. **Condition 1 (Task Homogeneity: Dual Implementations)**: The model synthesizes two independent implementations $P_1$ and $P_2$ from specification $S$ at $\tau \in \{0.0, 0.2\}$. We measure how often $P_1$ and $P_2$ make identical, coincident errors on edge cases.
 2. **Condition 2 (Joint Context: $\mathcal{I} > 0$)**: Baseline 2, where a single agent generates both `lib.py` and `test.py` within the same conversational session.
-3. **Condition 3 (Cleanroom Single-Model: $\mathcal{I} = 0$)**: Full Cleanroom architecture where the *same* model is assigned to asymmetric tasks across isolated conversations: synthesizing $P$ in $W_{lib}$ and synthesizing $V$ in $W_{test}$ under OS-enforced `chmod 444` at $\tau \in \{0.0, 0.2\}$.
-4. **Condition 4 (Cleanroom Heterogeneous Models: $\mathcal{I} = 0$)**: Cleanroom where primal and dual tasks are assigned to different models (e.g., DeepSeek for $P$ and Gemini for $V$).
+3. **Condition 3 (Autofab Single-Model: $\mathcal{I} = 0$)**: Full Autofab architecture where the *same* model is assigned to asymmetric tasks across isolated conversations: synthesizing $P$ in $W_{lib}$ and synthesizing $V$ in $W_{test}$ under OS-enforced `chmod 444` at $\tau \in \{0.0, 0.2\}$.
+4. **Condition 4 (Autofab Heterogeneous Models: $\mathcal{I} = 0$)**: Autofab where primal and dual tasks are assigned to different models (e.g., DeepSeek for $P$ and Gemini for $V$).
 
 #### Evaluation Protocol & Metrics:
 - Each generated test suite $V$ and implementation $P$ is executed against an independent formal verification oracle $V_{\text{ground\_truth}}$ and evaluated against injected first-order boundary mutants.
@@ -1934,10 +1934,10 @@ Provide rigorous empirical evidence that:
   - **Token & Cost Efficiency**: Total tokens and cost required to achieve convergence across local and frontier models.
 
 #### 5.3.1 Experiment 1: The "Attractor State" Ambiguity Test
-- **Objective**: Prove that Cleanroom's Edge-Case Test Wedge successfully forces deterministic non-convergence (system deadlock / fail-stop) instead of silent runtime corruption when confronted with an ambiguous or broken specification.
-- **Setup**: We curate 50 complex programming tasks across the benchmark corpus. We introduce deliberate, subtle linguistic ambiguities and logical contradictions into the declarative specifications (e.g., authoring requirement clauses that can be interpreted as either `<` or `<=`, or specifying contradictory boundary returns on empty collections). We pass these through the Cleanroom pipeline using distinct coding and testing models (e.g., Claude 3.5 Sonnet and GPT-4o, or Gemini 1.5 Pro and DeepSeek V3).
+- **Objective**: Prove that Autofab's Edge-Case Test Wedge successfully forces deterministic non-convergence (system deadlock / fail-stop) instead of silent runtime corruption when confronted with an ambiguous or broken specification.
+- **Setup**: We curate 50 complex programming tasks across the benchmark corpus. We introduce deliberate, subtle linguistic ambiguities and logical contradictions into the declarative specifications (e.g., authoring requirement clauses that can be interpreted as either `<` or `<=`, or specifying contradictory boundary returns on empty collections). We pass these through the Autofab pipeline using distinct coding and testing models (e.g., Claude 3.5 Sonnet and GPT-4o, or Gemini 1.5 Pro and DeepSeek V3).
 - **The Control**: A standard N-version programming setup (Condition 1) without the edge-case mining matrix or isolated auditing, running majority voting across independent implementations.
-- **Evidence of Mitigation**: The Cleanroom experimental group exhibits a near **0.0% rate of silent false convergence** (passing incorrect code into production) and displays a **100% migration to non-convergence/oscillation** on the broken clauses, triggering deterministic fail-stop and diagnostic blame, significantly outperforming the NVP control which silently outputs corrupt artifacts.
+- **Evidence of Mitigation**: The Autofab experimental group exhibits a near **0.0% rate of silent false convergence** (passing incorrect code into production) and displays a **100% migration to non-convergence/oscillation** on the broken clauses, triggering deterministic fail-stop and diagnostic blame, significantly outperforming the NVP control which silently outputs corrupt artifacts.
 
 ---
 
@@ -1954,7 +1954,7 @@ Empirically demonstrate that:
    - **Regimen A (Directional / One-Sided)**: Contracts specify strictly the positive activation condition:
      $$\Phi(x) \implies \text{SuccessResult}(x)$$
      leaving behavior on the complement $\neg \Phi(x)$ implicit or under-specified.
-   - **Regimen B (Cleanroom Bipartite)**: Contracts enforce bi-conditional semantics with dual atomic slugs:
+   - **Regimen B (Autofab Bipartite)**: Contracts enforce bi-conditional semantics with dual atomic slugs:
      $$\langle [s^+]: \Phi(x) \implies \text{SuccessResult}(x), \quad [s^-]: \neg \Phi(x) \implies \text{AlternativeOrException}(x) \rangle$$
      mandating dual assertions and normalized 100% statement coverage.
 3. For each condition, inject subtle boundary mutants (using `mutmut`):
@@ -1974,13 +1974,13 @@ Empirically demonstrate that:
   $$P_{\text{accidental\_agree}} = \frac{|\{ \text{Boundary Mutants where } V(P_{\text{mutant}}) = \mathbf{PASS} \}|}{|\text{Total Boundary Mutants}|}$$
 - **Mined Edge-Case Yield**: Number of previously uncontracted boundary edge cases successfully mined from implementation ASTs and surviving mutants, and codified into specifications.
 - **Edge-Case Mutation Kill Lift ($\Delta MS_{\text{boundary}}$)**: Improvement in boundary mutation kill rate after branch-to-spec reflection.
-- **Hypothesis**: Under Regimen A (directional), $P_{\text{accidental\_agree}}$ is high due to correlated default paths. Under Regimen B (bipartite Cleanroom), $P_{\text{accidental\_agree}} = 0\%$, confirming that focusing on both sides of edge cases eliminates accidental agreement.
+- **Hypothesis**: Under Regimen A (directional), $P_{\text{accidental\_agree}}$ is high due to correlated default paths. Under Regimen B (bipartite Autofab), $P_{\text{accidental\_agree}} = 0\%$, confirming that focusing on both sides of edge cases eliminates accidental agreement.
 
 #### 5.4.2 Experiment 2: The Weight Suppression Baseline (Algorithmic Guidance)
 - **Objective**: Prove that providing external algorithmic guides ($\mathcal{G}$) effectively neutralizes internal pre-training data biases (model weights) of neural synthesizers during procedural realization.
 - **Setup**: We identify complex algorithmic structures known to exhibit high-frequency, subtle bugs inside open-source training corpora (such as Tarjan's SCC cycle-handling edge cases, red-black tree double-black deletion rotations, or subtle lock-ordering inversions in concurrent resource allocation). We prompt Code and Test agents to build a system utilizing these algorithms under two conditions:
   - *Group A (Unassisted Declarative Spec Only)*: Given only the abstract declarative specification contracts.
-  - *Group B (Cleanroom Grounded Algorithmic Guidance)*: Given the declarative specification paired with an explicit, mathematically verified, step-by-step algorithmic guide ($\mathcal{G}$).
+  - *Group B (Autofab Grounded Algorithmic Guidance)*: Given the declarative specification paired with an explicit, mathematically verified, step-by-step algorithmic guide ($\mathcal{G}$).
 - **Evidence of Mitigation**: Group A rapidly exhibits coincident faults, cleanly converging on the exact buggy implementation found in open-source training datasets. Group B shows a complete absence of legacy weight bias, realizing the algorithm cleanly or cleanly gridlocking at the translation interface where the Auditor safely steps in.
 
 ---
@@ -1996,7 +1996,7 @@ Empirically evaluate our **modularization strategy** by taking large, non-trivia
 5. **Compositional Correctness (Assume-Guarantee Validation)**: Do independently synthesized and verified `_impl` units compose soundly to pass end-to-end ground-truth test oracles without manual integration code or whole-program integration test suites?
 
 #### Architectural Grounding: Modularity in Implementation Components
-As established in Section 3.1.1, Cleanroom enforces a strict architectural dichotomy:
+As established in Section 3.1.1, Autofab enforces a strict architectural dichotomy:
 - **Interface Components (`*.pyi` / `*.py`)**: Pure declarative types, protocols, sum types (`@variant`), and frozen dataclasses. They contain **zero executable algorithmic code** and have **zero unit tests** ($\mathcal{V}_{\text{iface}} = \emptyset$).
 - **Implementation Components (`*_impl.pyi` / `*_impl.py`)**: The concrete realization of interface protocols. They are the **sole targets of library code synthesis ($P$)** and the **sole targets of verification test certification ($V$, located in `tests/*_impl_test.py`)**.
 
@@ -2009,11 +2009,11 @@ Therefore, evaluating our modularization strategy cannot mean dividing interface
 │          MODULARIZATION STRATEGY: MONOLITHIC VS. DIVIDED IMPL UNITS        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  CASE STUDY 1: Cleanroom Workspace Subsystem (~3,000 LOC of Target Code)    │
+│  CASE STUDY 1: Autofab Workspace Subsystem (~3,000 LOC of Target Code)    │
 │  ├─ Condition Monolith: workspace_monolith_impl (~2,800 LOC lib + 1,200 test│
 │  │  • Single massive implementation realizing registry, worktrees, sync,    │
 │  │    dispatch lifecycle, and sandboxed subprocess containment in one unit. │
-│  └─ Condition Modular Cleanroom: 5 Decoupled _impl Units (< 850 LOC each)   │
+│  └─ Condition Modular Autofab: 5 Decoupled _impl Units (< 850 LOC each)   │
 │     • workspace_registry_impl (~600 LOC lib, ~250 LOC test)                 │
 │       Role definition resolution, ancestor marker search, JSON persistence. │
 │     • workspace_provision_impl (~350 LOC lib, ~200 LOC test)                │
@@ -2030,7 +2030,7 @@ Therefore, evaluating our modularization strategy cannot mean dividing interface
 │  ├─ Condition Monolith: sqlite_engine_monolith_impl (~1,500 LOC + 800 test) │
 │  │  • Single implementation realizing pager buffer, B-tree, table heap,     │
 │  │    and relational query execution in one monolithic file.                │
-│  └─ Condition Modular Cleanroom: 3 Decoupled _impl Units (< 500 LOC each)   │
+│  └─ Condition Modular Autofab: 3 Decoupled _impl Units (< 500 LOC each)   │
 │     • btree_pager_impl (~450 LOC lib, ~250 LOC test)                        │
 │       Page buffer pool, eviction, B-tree node splitting, pointer balancing. │
 │     • table_heap_impl (~350 LOC lib, ~200 LOC test)                         │
@@ -2047,7 +2047,7 @@ Therefore, evaluating our modularization strategy cannot mean dividing interface
    - Synthesizer $\mathcal{S}$ must synthesize the entire 1,500–2,800 LOC implementation file in one shot; certifier $\mathcal{D}$ must synthesize the entire verification suite in one shot.
    - All iterative blame feedback is delivered to the single monolithic context.
 
-2. **Condition Modular Cleanroom (Divided Component Decomposition)**:
+2. **Condition Modular Autofab (Divided Component Decomposition)**:
    - The capability space is divided into decoupled implementation components (5 for Workspace, 3 for Mini-SQLite), with each component $< 850$ LOC (averaging ~400 LOC).
    - Each implementation component realizes its own declarative interface component (`*.pyi`), which defines typed protocols, data models, constructors, and polytype method overrides without requiring standalone verification test suites.
    - Components depend on upstream units strictly via imported interface stubs under `chmod 444` isolation ($\mathcal{I}(P_u; P_w \mid S) = 0$).
@@ -2076,7 +2076,7 @@ Therefore, evaluating our modularization strategy cannot mean dividing interface
 4. **Token Economics & KV Prompt-Cache Efficiency**:
    - Total input tokens, output tokens, and monetary cost required to reach $\mathbf{CLEAN}$.
    - In the monolith, every blame iteration must re-transmit the full 1,500–2,800 LOC context ($O(L \cdot K)$ tokens).
-   - In modular Cleanroom, synthesis prompts re-use cached static `.pyi` interface stubs and iterate on $< 850$ LOC targets, maximizing KV prompt-cache hits and reducing marginal token burn by $> 75\%$.
+   - In modular Autofab, synthesis prompts re-use cached static `.pyi` interface stubs and iterate on $< 850$ LOC targets, maximizing KV prompt-cache hits and reducing marginal token burn by $> 75\%$.
 
 5. **End-to-End Compositional Soundness**:
    - The independently certified modular `_impl` units are linked together via their interfaces into a whole system ($\prod_{u \in V_G} P_u$) and executed against the independent golden test oracles (canonical C `sqlite3` for Mini-SQLite; real filesystem and git worktree integration test suite for Workspace).
@@ -2085,7 +2085,7 @@ Therefore, evaluating our modularization strategy cannot mean dividing interface
 6. **The Modularity-Specification Trade-Off & Specification Pressure**:
    - We measure the **Specification Burden & Surface Area**:
      - *Monolith*: 1 specification file, coarse outer API, zero internal seam contracts.
-     - *Divided Modular Cleanroom*: $N$ interface specification files (`*.pyi`), $N$ implementation specification files (`*_impl.pyi`), and a multi-fold increase in formal contracts ($\mathcal{C}$) defining explicit protocols across internal boundaries (e.g., slotted page layout $\leftrightarrow$ table heap, B-tree balancing $\leftrightarrow$ buffer pager, worktree provisioning $\leftrightarrow$ sync coordinator).
+     - *Divided Modular Autofab*: $N$ interface specification files (`*.pyi`), $N$ implementation specification files (`*_impl.pyi`), and a multi-fold increase in formal contracts ($\mathcal{C}$) defining explicit protocols across internal boundaries (e.g., slotted page layout $\leftrightarrow$ table heap, B-tree balancing $\leftrightarrow$ buffer pager, worktree provisioning $\leftrightarrow$ sync coordinator).
    - **Specification Flaw Rate ($\text{Rate}_{\text{broken\_spec}}$)**: We measure the frequency with which initial specification drafts exhibit defects (ungrounded method calls, signature mismatches, incomplete preconditions, or contradictory requirements).
    - *Empirical Finding & Philosophical Contribution*: Decomposing a monolith into $N$ components solves the code generation and verification problem, but **puts immense pressure on specifications**, making broken specifications far more likely. In the monolith, internal seams were implicit and uncontracted, hiding design ambiguities inside procedural code; in the modular architecture, every internal seam is forced into a typed, binding contract.
    - *Why This Motivates the Paradigm*: While the modular specification burden is higher and broken initial specs are more frequent, **broken specifications are caught statically at Pass 1 or halt fail-stop with blame at Pass 2 (Fail-Safe Invariant)**, whereas monolithic code degenerates into silent runtime defect escapes and regression churn. Thus, modularity shifts the developer's cognitive battleground to where it belongs: specification engineering.
@@ -2103,7 +2103,7 @@ Provide empirical evidence that:
 
 #### Experimental Protocol:
 1. **Whole-System Composition Test**:
-   - Compile all 11 packages and 50+ units of Cleanroom exclusively using unit-verified synthesis.
+   - Compile all 11 packages and 50+ units of Autofab exclusively using unit-verified synthesis.
    - Execute an extensive end-to-end integration test suite across the compiled system.
    - Measure if any integration bugs emerge that were missed by unit contracts.
 2. **Underspecified Dependency Injection**:
@@ -2130,7 +2130,7 @@ Provide empirical evidence that:
    - We evaluate:
      - *Convergence Speed*: Frontier models converge significantly faster (averaging 1–2 iterations) due to superior reasoning and instruction fidelity; local consumer models require more iterative turns (averaging 3–5 iterations) guided by auditor contract blame.
      - *Blame Churn & Ping-Pong*: The frequency of blame oscillations between synthesizer $\mathcal{S}$ and certifier $\mathcal{D}$ across model tiers.
-     - *The Gatekeeper Equalizer Invariant*: Crucially, regardless of model size or vendor, **all model tiers achieve 0.0% silent defect escape**. The Cleanroom verification gateway acts as an absolute equalizer: weaker local consumer models take more refinement turns, but the gatekeeper guarantees that unverified or non-conforming code never enters the certified bytecode cache.
+     - *The Gatekeeper Equalizer Invariant*: Crucially, regardless of model size or vendor, **all model tiers achieve 0.0% silent defect escape**. The Autofab verification gateway acts as an absolute equalizer: weaker local consumer models take more refinement turns, but the gatekeeper guarantees that unverified or non-conforming code never enters the certified bytecode cache.
 
 #### Metrics:
 - **Integration Defect Escape Rate**: Number of whole-system integration failures detected after 100% of constituent units pass Pass 2. (Hypothesis: 0 defects, validating Theorem 2 and Theorem 3).
@@ -2159,7 +2159,7 @@ Validate the core operational thesis: Can software undergo continuous evolution 
 
 #### Protocol:
 1. Developer edits strictly low-level specification stubs and contracts (`low/*.pyi`).
-2. The Cleanroom DAG scheduler detects dirty nodes and dispatches autonomous synthesis workers.
+2. The Autofab DAG scheduler detects dirty nodes and dispatches autonomous synthesis workers.
 3. Record whether the repository converges to $\mathbf{CLEAN}$ without human edits to `lib/*.py` or `tests/*.py`.
 
 #### Metrics:
@@ -2181,7 +2181,7 @@ Empirically evaluate the two-tier specialized concurrency verification architect
 #### Benchmark Subject Systems & Concurrency Scope:
 We evaluate concurrency verification across two distinct multi-threaded and asynchronous systems software components drawn from our canonical benchmark corpus:
 
-1. **Concurrent Workspace Task Dispatcher & Worktree Lock Manager** (from Cleanroom Workspace Subsystem, §5.5):
+1. **Concurrent Workspace Task Dispatcher & Worktree Lock Manager** (from Autofab Workspace Subsystem, §5.5):
    - *Architecture & Concurrency Primitives*: Multi-threaded worker pool executing build and test actions concurrently; in-memory lease table guarded by `threading.Lock` and `threading.Condition`; POSIX advisory file locking (`fcntl.flock`) coordinating ephemeral git worktree allocations across external processes; and asynchronous coroutine pipelines (`asyncio`) streaming stdout/stderr buffers with timeouts.
    - *Critical Concurrency Invariants*:
      - *Mutual Exclusion*: No two worker tasks may simultaneously acquire an exclusive lock or checkout on the same physical git worktree directory.
@@ -2216,7 +2216,7 @@ To establish a rigorous ground truth, we inject **30 distinct, real-world concur
 To isolate the contribution of adversarial interleaving synthesis ($\mathcal{D}_{\text{conc}}$) and specialized concurrency triage ($\mathcal{A}_{\text{triage}}$), we evaluate across three strictly controlled experimental conditions:
 
 1. **Condition A: Baseline Primal-Dual Agent (Functional Only)**:
-   - Synthesizer $\mathcal{S}$ and functional certifier $\mathcal{D}_{\text{func}}$ operate under the standard Cleanroom protocol (§3).
+   - Synthesizer $\mathcal{S}$ and functional certifier $\mathcal{D}_{\text{func}}$ operate under the standard Autofab protocol (§3).
    - $\mathcal{D}_{\text{func}}$ synthesizes idiomatic, sequential unit tests targeting functional input-output contracts.
    - All tests run in the standard sequential pytest runner.
    - *Purpose*: Measures the extent of the "Concurrency Blind Spot" when systems rely on standard functional test generation and statement coverage.
@@ -2307,7 +2307,7 @@ Empirically evaluate the Multi-Agent Auditing Matrix (§4.4) on non-functional o
 #### Benchmark Systems & Non-Functional Workloads:
 We evaluate non-functional auditing across two performance-critical subsystems:
 1. **Mini-SQLite Event Stream Parser & Aggregator**: Processing 500,000 raw JSON/CSV log records under strict memory ceilings ($< 64\text{MB}$) and throughput constraints ($> 25,000\text{ records/sec}$).
-2. **Cleanroom DAG Task Scheduler & Dependency Indexer**: Graph topological sorting, cycle detection, and change propagation across 50,000 nodes under a $p99 < 30\text{ms}$ latency constraint.
+2. **Autofab DAG Task Scheduler & Dependency Indexer**: Graph topological sorting, cycle detection, and change propagation across 50,000 nodes under a $p99 < 30\text{ms}$ latency constraint.
 
 #### Experimental Conditions:
 - **Condition A (Unblinded Direct Metric Feedback)**: Implementation agent receives raw flame graphs, memory allocation traces, and benchmark latency numbers directly.
@@ -2326,14 +2326,14 @@ We evaluate non-functional auditing across two performance-critical subsystems:
 - **Objective**: Prove that maintaining the Hidden Benchmark Firewall ($\mathcal{I}(\text{Agent}; \text{Harness}) = 0$) and mediating optimization through the Stateful Performance Auditor defeats Goodhart's Law—compelling authentic macro-architectural optimization while preventing the catastrophic out-of-distribution collapse that results from unblinded metric gaming.
 - **Workload & System Setup**: We evaluate a high-throughput, multi-threaded event ingestion and stream-processing pipeline (handling JSON decoding, schema validation, windowed state aggregation, and persistent disk enqueueing) targeted at sustained processing of $\ge 100,000\text{ events/sec}$ under strict latency ($p99 < 5\text{ms}$) and heap memory ceilings ($< 128\text{MB}$). The system is synthesized and optimized under two competing regimens:
   - *Group A (Goodhart Control / Unblinded Direct Feedback)*: The synthesis agent is granted direct access to execution profilers, memory allocation dumps, flame graphs, and synthetic benchmark latency counters.
-  - *Group B (Cleanroom Experimental Group / Blind Stateful Auditor)*: The synthesis agent is strictly isolated behind the Hidden Benchmark Firewall ($\mathcal{I}(\text{Agent}; \text{Profiler}) = 0$). Optimization is guided exclusively by the Phase 2 Stateful Performance Auditor, which analyzes profiler traces and generates high-level architectural advice expressed entirely in terms of declarative specification data invariants (e.g., transitioning from eager in-memory list buffering to zero-copy ring buffers and push-based backpressure generators).
+  - *Group B (Autofab Experimental Group / Blind Stateful Auditor)*: The synthesis agent is strictly isolated behind the Hidden Benchmark Firewall ($\mathcal{I}(\text{Agent}; \text{Profiler}) = 0$). Optimization is guided exclusively by the Phase 2 Stateful Performance Auditor, which analyzes profiler traces and generates high-level architectural advice expressed entirely in terms of declarative specification data invariants (e.g., transitioning from eager in-memory list buffering to zero-copy ring buffers and push-based backpressure generators).
 - **Adversarial Out-of-Distribution (OOD) Stress Test**: Once both candidate implementations achieve nominal convergence on the synthetic in-distribution benchmark, both are subjected to an unannounced, out-of-distribution adversarial load test without agent retraining or warning:
   1. *Microburst Traffic Surges*: 5x volumetric traffic spikes testing backpressure resilience;
   2. *Network Jitter & Packet Reordering*: High-variance packet arrival deltas simulating distributed network degradation;
   3. *Adversarial Schema Variants*: Payloads containing deeply nested structures, edge-case null fields, and boundary-length unicode strings.
 - **Evidence of Mitigation & Results**:
   - *Group A (The Metric Gamers)* exhibits acute Goodhart divergence ($GDI = 4.82$): the unblinded agent optimizes synthetic benchmark throughput by stripping schema validation invariants, preallocating rigid fixed-size buffers, and disabling thread safety locks. Under OOD stress, Group A suffers catastrophic systemic collapse: 73.3% unhandled fatal crashes (Out-Of-Memory exceptions and dropped frames) and 43.3% functional regressions ($R_{\text{regress}}$).
-  - *Group B (Cleanroom Blind Auditor)* achieves structural, macro-architectural optimization (bounded non-blocking queues, pipelined coroutine generators, zero-copy buffer views). Under identical OOD adversarial stress, Group B achieves near-ideal proxy alignment ($GDI = 1.04$), 0.0% memory leaks or buffer crashes, and exactly **0.0% functional regression**, empirically demonstrating that Cleanroom eliminates metric gaming and produces robust production systems.
+  - *Group B (Autofab Blind Auditor)* achieves structural, macro-architectural optimization (bounded non-blocking queues, pipelined coroutine generators, zero-copy buffer views). Under identical OOD adversarial stress, Group B achieves near-ideal proxy alignment ($GDI = 1.04$), 0.0% memory leaks or buffer crashes, and exactly **0.0% functional regression**, empirically demonstrating that Autofab eliminates metric gaming and produces robust production systems.
 
 #### Experimental Results & Findings:
 
@@ -2373,32 +2373,32 @@ We evaluate non-functional auditing across two performance-critical subsystems:
 │   Classical Program Synthesis (Manna-Waldinger, CEGIS, Sketch, Rosette)     │
 │   - Synthesizes code against formal logic / SMT constraints.                │
 │   - Limitation: Scales poorly to complex multi-file architectural systems.  │
-│   - Cleanroom Innovation: Treats LLMs as untrusted synthesis oracles        │
+│   - Autofab Innovation: Treats LLMs as untrusted synthesis oracles        │
 │     bounded by an Epistemic Capability Logic and Primal-Dual certifiers.    │
 │                                                                             │
 │   Refinement Types & Capability Systems (Liquid Types, Cyclone, Rust)       │
 │   - Encodes behavioral invariants directly into static type signatures.     │
-│   - Cleanroom Innovation: Extends structural typing to closed-world         │
+│   - Autofab Innovation: Extends structural typing to closed-world         │
 │     hierarchies (@variant, @poly_type) and inheritance synchronization.     │
 │                                                                             │
 │   N-Version Programming & Pseudo-Oracles (Avizienis 1985, Davis-Weyuker 81) │
 │   - Classical fault-tolerance & testing via multi-team redundant programs.  │
 │   - Failed due to human cognitive correlation and high implementation cost. │
-│   - Cleanroom Innovation: Replaces dual implementations with a Primal-Dual  │
+│   - Autofab Innovation: Replaces dual implementations with a Primal-Dual  │
 │     certificate game under zero information leakage (I(P; V | S) = 0).      │
 │                                                                             │
-│   Cleanroom SE & Independent V&V (Mills 1987, DO-178C Level A, Beck 2002)   │
+│   Autofab SE & Independent V&V (Mills 1987, DO-178C Level A, Beck 2002)   │
 │   - Independent human verification or single-developer TDD ledgers.         │
 │   - Abandoned or flawed: Prohibitive human cost ($1000+/LOC) or total       │
 │     epistemic contamination in single-developer TDD (I = 1.0).              │
-│   - Cleanroom Innovation: Fully automates DO-178C independence at machine   │
+│   - Autofab Innovation: Fully automates DO-178C independence at machine   │
 │     speed, enforcing strict kernel isolation and representation asymmetry.  │
 │                                                                             │
 │   Concolic SMT & Property-Based Fuzzing (CrossHair, PyExZ3, Hypothesis)     │
 │   - SMT solvers & property fuzzers find bugs via symbolic execution/inputs. │
 │   - Limitation: Confined to numerical/primitive logic; chokes on stateful   │
 │     systems code (object registries, string munging, graph storage, I/O).   │
-│   - Cleanroom Innovation: Anchors edge-case detection in AST Mutation      │
+│   - Autofab Innovation: Anchors edge-case detection in AST Mutation      │
 │     Inoculation, operating on the code structure itself to provide          │
 │     domain-agnostic, input-agnostic verification on real systems software.  │
 │                                                                             │
@@ -2410,7 +2410,7 @@ We evaluate non-functional auditing across two performance-critical subsystems:
 A natural question in programming languages is whether formal symbolic execution (such as `CrossHair` or `PyExZ3` utilizing Z3) or property-based testing (such as `Hypothesis` or QuickCheck) could automate edge-case detection in synthesized code.
 
 1. **The Arithmetic Bias of SMT Solvers**:
-   SMT-based concolic testing operates by transforming program control-flow paths into first-order logical constraints solved by Z3. While remarkably effective on pure mathematical routines, arithmetic transforms, and bitvector logic, SMT solvers fail on practical, object-oriented systems software (such as Cleanroom's DAG scheduler, file synchronization engines, and Bazel orchestrators). Real systems code makes extensive use of:
+   SMT-based concolic testing operates by transforming program control-flow paths into first-order logical constraints solved by Z3. While remarkably effective on pure mathematical routines, arithmetic transforms, and bitvector logic, SMT solvers fail on practical, object-oriented systems software (such as Autofab's DAG scheduler, file synchronization engines, and Bazel orchestrators). Real systems code makes extensive use of:
    - Stateful object registries and dependency injection (`get_singleton(...)`);
    - Non-primitive string manipulations (e.g., parsing target labels `str(x).split(":")[-1]`);
    - Dynamic collection topologies (nested dictionaries of sets representing cyclic/acyclic graphs); and
@@ -2418,25 +2418,25 @@ A natural question in programming languages is whether formal symbolic execution
    Symbolically executing these constructs leads to state explosion, unsupported runtime exceptions, and solver timeouts.
 2. **The Generator Overhead of Property-Based Testing**:
    Property-based testing frameworks like `Hypothesis` generate pseudo-random *inputs*. For complex systems software, constructing meaningful inputs (such as a valid mock graph with acyclic topological order and multi-tier precedence) requires authoring massive `@st.composite` strategy generators that often exceed the complexity of the code under test. Unconstrained random fuzzing generates inputs that fail front-door syntax parsing rather than exercising deep semantic boundary logic.
-3. **The Cleanroom Solution: Primal-Dual Executable Test Harnesses**:
-   Cleanroom resolves this dilemma by executing **native, sandboxed test harnesses** derived from typed specifications rather than relying on mathematical solver theories or complex random input generators. Cleanroom's dual certifier synthesizes idiomatic unit and integration tests (using mocks, virtual event loops, and relational assertions) directly in the host runtime. Because these harnesses execute native code, they handle object registries, graph schedulers, async runners, and filesystem operations seamlessly with zero SMT friction. To verify that boundary edge cases are thoroughly probed, Cleanroom pairs AST branch coverage with optional mutation analysis (e.g., using `mutmut` in our Python evaluation) to ensure boundary edge cases are fully covered.
+3. **The Autofab Solution: Primal-Dual Executable Test Harnesses**:
+   Autofab resolves this dilemma by executing **native, sandboxed test harnesses** derived from typed specifications rather than relying on mathematical solver theories or complex random input generators. Autofab's dual certifier synthesizes idiomatic unit and integration tests (using mocks, virtual event loops, and relational assertions) directly in the host runtime. Because these harnesses execute native code, they handle object registries, graph schedulers, async runners, and filesystem operations seamlessly with zero SMT friction. To verify that boundary edge cases are thoroughly probed, Autofab pairs AST branch coverage with optional mutation analysis (e.g., using `mutmut` in our Python evaluation) to ensure boundary edge cases are fully covered.
 
 ### 6.2 Contrast with Independent Verification, Pseudo-Oracles, and Test-Driven Development
 
-Cleanroom occupies a unique position at the intersection of independent testing, test oracles, and agile methodologies:
+Autofab occupies a unique position at the intersection of independent testing, test oracles, and agile methodologies:
 
 1. **Independent Verification and DO-178C Level A**:
-   Commercial aerospace standards (RTCA DO-178C Level A) recognized decades ago that developers cannot reliably grade their own work. They solved this by legally mandating independent verification teams. Cleanroom adopts this exact epistemic separation ($\mathcal{I} = 0$), but mechanizes it using autonomous neural agents and operating system sandboxes (`chmod 444`), eliminating the \$1,000–\$2,000/LOC human cost and bureaucratic latency that confined DO-178C to avionics and nuclear systems.
+   Commercial aerospace standards (RTCA DO-178C Level A) recognized decades ago that developers cannot reliably grade their own work. They solved this by legally mandating independent verification teams. Autofab adopts this exact epistemic separation ($\mathcal{I} = 0$), but mechanizes it using autonomous neural agents and operating system sandboxes (`chmod 444`), eliminating the \$1,000–\$2,000/LOC human cost and bureaucratic latency that confined DO-178C to avionics and nuclear systems.
 2. **Pseudo-Oracles (Davis & Weyuker 1981) as Testing-Community N-Versions**:
-   Davis and Weyuker introduced pseudo-oracles to solve the oracle problem by synthesizing a second, independent program to cross-check outputs. **Pseudo-oracles are essentially an offline software testing variant of N-version programming.** While Avizienis (1977) developed N-version programming in the aerospace and fault-tolerance community for online runtime voting, Davis & Weyuker (1981) formulated the exact same multi-implementation concept in the software testing community to provide an automated oracle for non-testable programs. In both cases, the mechanism was identical: writing a second redundant constructive program ($P' : X \to Y$) from the same specification. And both hit the exact same wall: writing multiple constructive implementations is economically unsustainable, and independent human programmers make coincident errors on the same hard inputs (Knight & Leveson 1986). Cleanroom replaces redundant constructive programs with a **Primal-Dual certificate game**: the dual agent synthesizes invariant-bound verification harnesses ($X \times Y \to \mathbb{B}$) rather than an alternative implementation, maximizing representation asymmetry.
+   Davis and Weyuker introduced pseudo-oracles to solve the oracle problem by synthesizing a second, independent program to cross-check outputs. **Pseudo-oracles are essentially an offline software testing variant of N-version programming.** While Avizienis (1977) developed N-version programming in the aerospace and fault-tolerance community for online runtime voting, Davis & Weyuker (1981) formulated the exact same multi-implementation concept in the software testing community to provide an automated oracle for non-testable programs. In both cases, the mechanism was identical: writing a second redundant constructive program ($P' : X \to Y$) from the same specification. And both hit the exact same wall: writing multiple constructive implementations is economically unsustainable, and independent human programmers make coincident errors on the same hard inputs (Knight & Leveson 1986). Autofab replaces redundant constructive programs with a **Primal-Dual certificate game**: the dual agent synthesizes invariant-bound verification harnesses ($X \times Y \to \mathbb{B}$) rather than an alternative implementation, maximizing representation asymmetry.
 3. **The Common Specification as Ground Truth & The Fallibility of Oracle Generation**:
-   In Cleanroom, the specification $S$ is the common source of truth—the conceptual oracle. However, written specifications are non-executable. To verify software, the specification must be translated into an executable oracle (the test harness). Crucially, **synthesizing the test oracle from the specification is an engineering task just as fallible as synthesizing the implementation code**. An agent or human generating tests can misread contracts, misinterpret boundary conditions, or introduce assertions that reflect flawed assumptions. This is why single-developer TDD and single-agent LLM self-debugging fail: the author's flawed mental model is shared across both artifacts. 
+   In Autofab, the specification $S$ is the common source of truth—the conceptual oracle. However, written specifications are non-executable. To verify software, the specification must be translated into an executable oracle (the test harness). Crucially, **synthesizing the test oracle from the specification is an engineering task just as fallible as synthesizing the implementation code**. An agent or human generating tests can misread contracts, misinterpret boundary conditions, or introduce assertions that reflect flawed assumptions. This is why single-developer TDD and single-agent LLM self-debugging fail: the author's flawed mental model is shared across both artifacts. 
    
-   Cleanroom resolves this by performing both translations using **a single LLM operating in strictly isolated, separated conversations ($\mathcal{I} = 0$)**. Heterogeneous models from different vendors are not required: conversational isolation prevents the two sessions from interacting or reading each other's interpretations of the specification, while prompt and task asymmetry ensures that their reasoning paths and failure modes remain uncorrelated.
+   Autofab resolves this by performing both translations using **a single LLM operating in strictly isolated, separated conversations ($\mathcal{I} = 0$)**. Heterogeneous models from different vendors are not required: conversational isolation prevents the two sessions from interacting or reading each other's interpretations of the specification, while prompt and task asymmetry ensures that their reasoning paths and failure modes remain uncorrelated.
 4. **Test-Driven Development (TDD) & Double-Entry Bookkeeping (Beck 2002)**:
-   Kent Beck intuitively compared unit testing to double-entry bookkeeping in accounting. However, TDD fatally undermined its own metaphor by having the **same human programmer** author both entries in rapid 3-minute cycles. Whatever misconceptions or edge-case oversights exist in the developer's mind are faithfully reproduced in both the test assertion and the code implementation. Cleanroom restores the integrity of double-entry bookkeeping by enforcing absolute physical and cognitive separation between the credit (implementation) and debit (test certifier) agents.
+   Kent Beck intuitively compared unit testing to double-entry bookkeeping in accounting. However, TDD fatally undermined its own metaphor by having the **same human programmer** author both entries in rapid 3-minute cycles. Whatever misconceptions or edge-case oversights exist in the developer's mind are faithfully reproduced in both the test assertion and the code implementation. Autofab restores the integrity of double-entry bookkeeping by enforcing absolute physical and cognitive separation between the credit (implementation) and debit (test certifier) agents.
 5. **Metamorphic Testing (Chen et al. 1998)**:
-   Metamorphic testing verifies systems by checking relational properties across multiple executions (e.g., $f(2x) = 2f(x)$) without needing a full oracle. Cleanroom integrates metamorphic-style invariant checking directly into the dual certifier's contract-driven test assertions, but pairs it with AST statement and branch coverage to ensure the implementation is exhaustively probed.
+   Metamorphic testing verifies systems by checking relational properties across multiple executions (e.g., $f(2x) = 2f(x)$) without needing a full oracle. Autofab integrates metamorphic-style invariant checking directly into the dual certifier's contract-driven test assertions, but pairs it with AST statement and branch coverage to ensure the implementation is exhaustively probed.
 
 ### 6.3 Descendants of N-Version and Coincident Failure in ACM SIGPLAN
 
@@ -2449,33 +2449,33 @@ While the foundational N-version and coincident failure papers appeared in fault
 3. **Automated Program Repair (APR) and Test Suite Overfitting (POPL / OOPSLA)**:
    In automated program repair (e.g., Long & Rinard, POPL 2016, OOPSLA 2015; Le Goues et al.), synthesis engines generate candidate bug patches evaluated against test suites. The central theoretical challenge in APR is **"test suite overfitting"**—where synthesized patches satisfy test suites while breaking un-tested specification invariants. This is the exact program synthesis analog of Knight & Leveson's coincident error: the synthesized program and the test suite accidentally agreeing on under-specified behaviors.
 4. **Neural Program Synthesis and Coincident Hallucinations (POPL / PLDI / OOPSLA 2023–2026)**:
-   With the emergence of Large Language Models, recent SIGPLAN literature has actively revisited Knight & Leveson to investigate whether multi-agent LLM systems produce truly independent code or collapse into correlated pre-training biases. Cleanroom advances this SIGPLAN frontier by demonstrating that **Primal-Dual Task Asymmetry** (constructive implementation vs. relational property verification) and **Kernel-Enforced Confinement ($\mathcal{I} = 0$)** provide the formal and empirical guarantees needed to suppress coincident errors in neural synthesis.
+   With the emergence of Large Language Models, recent SIGPLAN literature has actively revisited Knight & Leveson to investigate whether multi-agent LLM systems produce truly independent code or collapse into correlated pre-training biases. Autofab advances this SIGPLAN frontier by demonstrating that **Primal-Dual Task Asymmetry** (constructive implementation vs. relational property verification) and **Kernel-Enforced Confinement ($\mathcal{I} = 0$)** provide the formal and empirical guarantees needed to suppress coincident errors in neural synthesis.
 
 ### 6.4 Contemporary LLM Program Synthesis & Specification Systems (PLDI & POPL 2023–2025)
 
-The PLDI and POPL communities have recently focused intense effort on making LLM program synthesis sound, well-typed, and verifiable. Cleanroom directly engages with and advances beyond several major recent SIGPLAN papers:
+The PLDI and POPL communities have recently focused intense effort on making LLM program synthesis sound, well-typed, and verifiable. Autofab directly engages with and advances beyond several major recent SIGPLAN papers:
 
 1. **Type-Constrained Decoding vs. Ephemeral Dual Systems (PLDI 2025)**:
    - *State of the Art*: At PLDI 2025, Mündler et al. introduced **"Type-Constrained Code Generation with Language Models"**, using prefix automata and inhabitable type searches during autoregressive decoding to guarantee that emitted code (e.g., TypeScript) is well-typed. Similarly, at POPL 2024, researchers integrated typed hole contexts (*"Statically Contextualizing LLMs with Typed Holes"* in Hazel) to ground LLM completions.
-   - *Cleanroom Advance*: While type-constrained decoding eliminates syntax and type errors at inference time, it provides *zero guarantee of semantic or functional correctness*—a well-typed program can still be thoroughly incorrect. Furthermore, these approaches treat the generated code as human-maintained source. Cleanroom leverages the static type interface ($\Sigma$) not merely as a local token mask, but as an **algebraic contract boundary** between two opposing, kernel-isolated agents. The resulting executable code is treated as disposable bytecode, verified against rich dynamic behavioral invariants.
+   - *Autofab Advance*: While type-constrained decoding eliminates syntax and type errors at inference time, it provides *zero guarantee of semantic or functional correctness*—a well-typed program can still be thoroughly incorrect. Furthermore, these approaches treat the generated code as human-maintained source. Autofab leverages the static type interface ($\Sigma$) not merely as a local token mask, but as an **algebraic contract boundary** between two opposing, kernel-isolated agents. The resulting executable code is treated as disposable bytecode, verified against rich dynamic behavioral invariants.
 2. **Whole-Project Translation and Multi-Stage Synthesis (PLDI 2025)**:
    - *State of the Art*: Zhang, David, Wang, Paulsen, and Kroening (**PLDI 2025**) presented **"Scalable, Validated Code Translation of Entire Projects using Large Language Models"**, decomposing legacy codebases across module boundaries and applying semantic validation to translations. In parallel, Wang et al. (**PLDI 2025**) introduced **"Program Skeletons for Automated Program Translation"** to constrain translation search spaces.
-   - *Cleanroom Advance*: These systems aim to translate and maintain human-written code across languages (e.g., C to Rust). In contrast, Cleanroom proposes an architectural paradigm shift: **pushing general-purpose programming languages to the background**. Human developers never author or edit target code; human effort is concentrated exclusively in typed interface specifications and behavioral contracts ($S = \langle \Sigma, \mathcal{C} \rangle$). The whole-project synthesis is driven by a deterministic DAG scheduler that re-synthesizes constituent units from scratch under double-blind verification.
+   - *Autofab Advance*: These systems aim to translate and maintain human-written code across languages (e.g., C to Rust). In contrast, Autofab proposes an architectural paradigm shift: **pushing general-purpose programming languages to the background**. Human developers never author or edit target code; human effort is concentrated exclusively in typed interface specifications and behavioral contracts ($S = \langle \Sigma, \mathcal{C} \rangle$). The whole-project synthesis is driven by a deterministic DAG scheduler that re-synthesizes constituent units from scratch under double-blind verification.
 3. **Deductive SMT Refinement vs. Asymmetric Dual Oracles (POPL 2025)**:
    - *State of the Art*: Recent POPL 2025 work explores neuro-symbolic deductive verification: **"Refine4LLM"** applies Dijkstra/Morgan refinement calculus step-by-step to guide LLMs toward verified code, while other works leverage **Dafny as a Verification-Aware Intermediate Language** to catch LLM errors using SMT solvers (Z3).
-   - *Cleanroom Advance*: SMT-backed deductive verification excels on pure mathematical algorithms, but notoriously chokes on stateful, real-world systems software (e.g., dependency registries, dynamic graph DAG schedulers, string parsers, asynchronous subprocess runners). Cleanroom solves this by replacing undecidable SMT invariant synthesis with a **Primal-Dual certificate game**. The dual agent synthesizes an invariant-bound test oracle ($X \times Y \to \mathbb{B}$) executed in an isolated sandbox. Supported by Littlewood & Miller's (1989) negative error covariance ($\mathbf{Cov} \le 0$), this dynamic dual harness achieves empirical verification soundness on real-world systems without SMT solver timeouts.
+   - *Autofab Advance*: SMT-backed deductive verification excels on pure mathematical algorithms, but notoriously chokes on stateful, real-world systems software (e.g., dependency registries, dynamic graph DAG schedulers, string parsers, asynchronous subprocess runners). Autofab solves this by replacing undecidable SMT invariant synthesis with a **Primal-Dual certificate game**. The dual agent synthesizes an invariant-bound test oracle ($X \times Y \to \mathbb{B}$) executed in an isolated sandbox. Supported by Littlewood & Miller's (1989) negative error covariance ($\mathbf{Cov} \le 0$), this dynamic dual harness achieves empirical verification soundness on real-world systems without SMT solver timeouts.
 4. **Interactive Specification Refinement (PLDI 2025)**:
    - *State of the Art*: Lubin, Ziegler, and Chasins (**PLDI 2025**) proposed **"Programming by Navigation"**, navigating ambiguous specification spaces with formal correctness guarantees.
-   - *Cleanroom Advance*: Cleanroom complements specification navigation by introducing **Branch-to-Specification Mining (AST Inoculation)**. Rather than relying solely on user prompts to clarify ambiguous specs, Cleanroom actively mutates the synthesized implementation AST to expose un-asserted boundary paths, mechanically surfacing hidden assumptions back into binding low-level specification contracts.
+   - *Autofab Advance*: Autofab complements specification navigation by introducing **Branch-to-Specification Mining (AST Inoculation)**. Rather than relying solely on user prompts to clarify ambiguous specs, Autofab actively mutates the synthesized implementation AST to expose un-asserted boundary paths, mechanically surfacing hidden assumptions back into binding low-level specification contracts.
 5. **The Missing Dimension: Double Hermetic Confinement ($\mathcal{I} = 0$)**:
-   - In all contemporary LLM synthesis literature (PLDI/POPL/ICSE), LLMs either operate in a single-agent self-repair loop or participate in unconstrained multi-agent dialogue where conversational history is shared. This causes fatal epistemic contamination and coincident hallucination. Cleanroom is the first to introduce **Kernel-Enforced Confinement** (`chmod 444`, isolated processes), formally proving that suppressing mutual information ($\mathcal{I}(C_P; C_V) = 0$) and maximizing task asymmetry eliminates accidental agreement.
+   - In all contemporary LLM synthesis literature (PLDI/POPL/ICSE), LLMs either operate in a single-agent self-repair loop or participate in unconstrained multi-agent dialogue where conversational history is shared. This causes fatal epistemic contamination and coincident hallucination. Autofab is the first to introduce **Kernel-Enforced Confinement** (`chmod 444`, isolated processes), formally proving that suppressing mutual information ($\mathcal{I}(C_P; C_V) = 0$) and maximizing task asymmetry eliminates accidental agreement.
 6. **Conversational Multi-Agent Consensus Loops vs. Primal-Dual Sandboxed Gatekeeping (2024–2026)**:
    - *State of the Art*: Emerging DevAI workflows (e.g., ChatDev, MetaGPT, CodeRabbit review bots) deploy multi-agent consensus loops where Coding, Critic, Security, and Executive agents critique code through iterative natural-language dialogues. Other industrial systems adopt the "Implicit Paradigm" ("the codebase is truth"), indexing ASTs and attempting differential testing without explicit specifications.
-   - *Cleanroom Advance*: Unconstrained conversational debate fails due to the **Confirmation Bias of the Self-Reviewer**, **Epistemic Contagion** across shared prompts, and the **"Summary of a Summary" context degradation effect**. Cleanroom demonstrates that conversational consensus is structurally unsuited for software verification. Instead, Cleanroom separates agents with **physical, process-level isolation ($\mathcal{I} = 0$)**, replaces conversational critiques with **asymmetric task derivation ($X \to Y$ vs. $X \times Y \to \mathbb{B}$)**, and enforces trust via an **uncompromising, deterministic dynamic compiler gate** requiring 100% statement and branch coverage.
+   - *Autofab Advance*: Unconstrained conversational debate fails due to the **Confirmation Bias of the Self-Reviewer**, **Epistemic Contagion** across shared prompts, and the **"Summary of a Summary" context degradation effect**. Autofab demonstrates that conversational consensus is structurally unsuited for software verification. Instead, Autofab separates agents with **physical, process-level isolation ($\mathcal{I} = 0$)**, replaces conversational critiques with **asymmetric task derivation ($X \to Y$ vs. $X \times Y \to \mathbb{B}$)**, and enforces trust via an **uncompromising, deterministic dynamic compiler gate** requiring 100% statement and branch coverage.
 
 ### 6.5 Specification-Grounded Code Review (SGCR) & Dual-Pathway Verification
 
-Recent software engineering literature (e.g., IEEE/ACM ASE 2024–2026, CodeRabbit, Meta) has formalized **Specification-Grounded Code Review (SGCR)** to address the unreliability and high false-alarm rates of automated AI code reviews. Cleanroom shares foundational motivations with SGCR while fundamentally advancing its operational architecture:
+Recent software engineering literature (e.g., IEEE/ACM ASE 2024–2026, CodeRabbit, Meta) has formalized **Specification-Grounded Code Review (SGCR)** to address the unreliability and high false-alarm rates of automated AI code reviews. Autofab shares foundational motivations with SGCR while fundamentally advancing its operational architecture:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -2506,13 +2506,13 @@ Recent software engineering literature (e.g., IEEE/ACM ASE 2024–2026, CodeRabb
 ```
 
 1. **The Dual-Pathway Insight**:
-   SGCR introduced the critical distinction between the **Explicit Pathway** (deterministic static linters, schema validators, and type checkers enforcing mandatory invariants with zero token cost) and the **Implicit Pathway** (context-guided LLM reasoning detecting semantic regressions and omissions). Cleanroom formalizes and unifies this dual-pathway architecture directly into its verification pipeline:
-   - Cleanroom's explicit pathway is enforced by native, zero-token static tooling under UV (`pyright`, `spec_lint`, `low_lint`, and AST statement coverage via `parts/tools`).
-   - Cleanroom's implicit pathway is driven by epistemic isolation: instead of an LLM reviewing a diff in natural language, the dual verification agent translates the specification contracts into executable, property-based test suites ($X \times Y \to \mathbb{B}$).
+   SGCR introduced the critical distinction between the **Explicit Pathway** (deterministic static linters, schema validators, and type checkers enforcing mandatory invariants with zero token cost) and the **Implicit Pathway** (context-guided LLM reasoning detecting semantic regressions and omissions). Autofab formalizes and unifies this dual-pathway architecture directly into its verification pipeline:
+   - Autofab's explicit pathway is enforced by native, zero-token static tooling under UV (`pyright`, `spec_lint`, `low_lint`, and AST statement coverage via `parts/tools`).
+   - Autofab's implicit pathway is driven by epistemic isolation: instead of an LLM reviewing a diff in natural language, the dual verification agent translates the specification contracts into executable, property-based test suites ($X \times Y \to \mathbb{B}$).
 2. **Eliminating the Circularity of Pull Request Reviews**:
-   In standard code review, reviewing code without an authoritative specification forces the reviewer to perform *circular intent inference*: guessing what the code was supposed to do from what the code actually does. SGCR solved this by anchoring reviews to human-authored PRDs and ADRs. Cleanroom extends this from loose natural language documents to a **rigorous typed contract calculus** ($S = \langle \Sigma, \mathcal{C} \rangle$), guaranteeing that every contract is atomic, non-conjunctional, and grounded in closed-world symbol bindings.
+   In standard code review, reviewing code without an authoritative specification forces the reviewer to perform *circular intent inference*: guessing what the code was supposed to do from what the code actually does. SGCR solved this by anchoring reviews to human-authored PRDs and ADRs. Autofab extends this from loose natural language documents to a **rigorous typed contract calculus** ($S = \langle \Sigma, \mathcal{C} \rangle$), guaranteeing that every contract is atomic, non-conjunctional, and grounded in closed-world symbol bindings.
 3. **From Post-Hoc Critique to Generative Synthesis**:
-   The defining limitation of post-hoc SGCR is economic and cognitive: humans must still manually read, debug, and patch the procedural code when the review bot identifies a violation. Cleanroom eliminates human code inspection entirely. The target library code ($P$) and verification certifier ($V$) are synthesized ephemerally by mutually oblivious neural agents under double hermetic confinement ($\mathcal{I}(P; V \mid S) = 0$). If verification fails, fine-grained blame attribution routes diagnostic traces back to the responsible agent, converging automatically without human code debugging.
+   The defining limitation of post-hoc SGCR is economic and cognitive: humans must still manually read, debug, and patch the procedural code when the review bot identifies a violation. Autofab eliminates human code inspection entirely. The target library code ($P$) and verification certifier ($V$) are synthesized ephemerally by mutually oblivious neural agents under double hermetic confinement ($\mathcal{I}(P; V \mid S) = 0$). If verification fails, fine-grained blame attribution routes diagnostic traces back to the responsible agent, converging automatically without human code debugging.
 
 ### 6.6 Goodhart's Law, Proxy Optimization, & Non-Functional Program Synthesis
 
@@ -2522,7 +2522,7 @@ Optimizing non-functional software properties (latency, memory footprint, throug
    - *Limitation*: Genetic mutations operate at the level of minor syntactic tweaks (e.g., loop unrolling, parameter tuning). They cannot discover macro-architectural reorganizations, such as replacing recursive graph traversals with iterative topological sorts, or converting in-memory list aggregations into streaming coroutine pipelines.
 2. **Adversarial Proxy Exploitation & Goodhart's Law in Formal ML**:
    - *Theoretical Context*: Manheim & Garrabrant (2018) formalize four variants of Goodhart's Law: *regressional*, *extremal*, *causal*, and *adversarial*. In adversarial Goodharting, an optimization agent exploits discrepancies between a proxy metric $M$ and the true goal $G$.
-   - *Contrast with Cleanroom*: When LLMs are prompted with raw execution profiles or flame graphs, they act as adversarial Goodhart optimizers: hardcoding test responses, removing security sanitization, and trading unbounded memory bloat for superficial CPU gains. Cleanroom's **Hidden Benchmark Firewall** (§2.12, §4.4) is the first multi-agent architecture to treat profiling suites as blinded testbeds, using the Performance Auditor as an epistemic firewall that translates physical bottlenecks into high-level architectural patterns framed strictly in specification data properties.
+   - *Contrast with Autofab*: When LLMs are prompted with raw execution profiles or flame graphs, they act as adversarial Goodhart optimizers: hardcoding test responses, removing security sanitization, and trading unbounded memory bloat for superficial CPU gains. Autofab's **Hidden Benchmark Firewall** (§2.12, §4.4) is the first multi-agent architecture to treat profiling suites as blinded testbeds, using the Performance Auditor as an epistemic firewall that translates physical bottlenecks into high-level architectural patterns framed strictly in specification data properties.
 
 ---
 
@@ -2532,17 +2532,17 @@ Optimizing non-functional software properties (latency, memory footprint, throug
 
 1. **Internal Validity (Stochastic Model Variance & Pre-Training Memorization)**:
    - *Threat*: Non-deterministic LLM sampling could produce variance across runs, or models might succeed on standard libraries simply through pre-training memorization.
-   - *Mitigation*: We execute all experimental conditions across multiple seeds ($\tau \in \{0.0, 0.2, 0.7\}$, $N = 5$ repetitions) and report statistical significance ($p < 0.01$). To isolate memorization from specification grounding, we implement the **Prior-Knowledge Probing Protocol** (Section 5.2.4), measuring hallucination baselines before specification exposure and demonstrating identical contract adherence on custom Cleanroom modules and synthetic contract mutations.
+   - *Mitigation*: We execute all experimental conditions across multiple seeds ($\tau \in \{0.0, 0.2, 0.7\}$, $N = 5$ repetitions) and report statistical significance ($p < 0.01$). To isolate memorization from specification grounding, we implement the **Prior-Knowledge Probing Protocol** (Section 5.2.4), measuring hallucination baselines before specification exposure and demonstrating identical contract adherence on custom Autofab modules and synthetic contract mutations.
 2. **External Validity (Corpus Generalizability)**:
-   - *Threat*: Cleanroom might only work for its own self-hosting compiler or synthetic tasks.
-   - *Mitigation*: We evaluate on four external benchmark suites equipped with pre-existing independent golden oracles: CPython Standard Library modules (`heapq`, `bisect`, `fnmatch`, `difflib`, `graphlib` verified against official `test.test_*` suites), Mini-SQLite (differentially verified against canonical C `sqlite3`), Mini-Git (differentially verified against canonical `git` / `libgit2`), and Distributed Raft Consensus (verified against TLA+ formal model traces and reference implementation `PySyncObj`), alongside the production Cleanroom self-hosting compiler.
+   - *Threat*: Autofab might only work for its own self-hosting compiler or synthetic tasks.
+   - *Mitigation*: We evaluate on four external benchmark suites equipped with pre-existing independent golden oracles: CPython Standard Library modules (`heapq`, `bisect`, `fnmatch`, `difflib`, `graphlib` verified against official `test.test_*` suites), Mini-SQLite (differentially verified against canonical C `sqlite3`), Mini-Git (differentially verified against canonical `git` / `libgit2`), and Distributed Raft Consensus (verified against TLA+ formal model traces and reference implementation `PySyncObj`), alongside the production Autofab self-hosting compiler.
 3. **Construct Validity (Adequacy of Test Certifiers)**:
    - *Threat*: Are dynamic tests sufficient to act as formal certifiers?
    - *Mitigation*: We pair test execution with AST-normalized 100% statement coverage, dynamic requirement citation tracing, and adversarial first-order mutation testing (instantiated via `mutmut`).
 
 ### 7.2 Structural Threats to Methodology & System Frontiers
 
-Beyond empirical experiment threats, the Cleanroom architecture is subject to fundamental structural limits where the mathematical assumptions of statistical independence, safe non-convergence, or fault-isolation can break down. We organize these limits into three foundational categories: **Convergence Failures (False Positives)**, **Systemic Integrity Limits (Non-Functional Boundaries)**, and **Process Liveness Limits (Operational Boundaries)**.
+Beyond empirical experiment threats, the Autofab architecture is subject to fundamental structural limits where the mathematical assumptions of statistical independence, safe non-convergence, or fault-isolation can break down. We organize these limits into three foundational categories: **Convergence Failures (False Positives)**, **Systemic Integrity Limits (Non-Functional Boundaries)**, and **Process Liveness Limits (Operational Boundaries)**.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -2594,7 +2594,7 @@ Boundaries where the Oracle Problem prevents declarative specifications from act
    - *Vulnerability*: They deterministically crash, leak memory, or deadlock under identical real-world timing pressures because they share identical hardware-level vulnerabilities that cannot be abstracted away by process isolation ($\mathcal{I} = 0$).
 
 2. **The Performance-Functional Deadlock (The Rigidity Wall)**:
-   - *The Dynamic*: Because Cleanroom forces absolute functional convergence before performance optimization begins (Phase 1 $\to$ Phase 2), the functional edge-case tests become an immutable constraint.
+   - *The Dynamic*: Because Autofab forces absolute functional convergence before performance optimization begins (Phase 1 $\to$ Phase 2), the functional edge-case tests become an immutable constraint.
    - *The Failure Mode*: Radical performance optimization often requires changing fundamental data structures or processing paradigms (e.g., replacing in-memory nested arrays with flat contiguous byte buffers or streaming coroutine generators).
    - *Vulnerability*: The system hits an absolute optimization ceiling where the rigidity of the pre-existing functional test harness completely paralyzes the agent's ability to refactor the code for speed, as any architectural change causes superficial functional test failures.
 
@@ -2625,7 +2625,7 @@ Threats where the system works exactly as intended by choosing non-convergence o
 
 ### 7.3 Architectural Mitigations & Defensive Protocols
 
-To insulate the Cleanroom methodology from these structural threats, the architecture incorporates two specialized defensive mechanisms:
+To insulate the Autofab methodology from these structural threats, the architecture incorporates two specialized defensive mechanisms:
 
 #### 7.3.1 Automated Circuit-Breakers for Degenerate Convergence & Horizon Loops
 1. **AST Oscillation Cycle Detector**:
@@ -2640,9 +2640,9 @@ To insulate the Cleanroom methodology from these structural threats, the archite
      - It computes the ratio of conditional branches to cyclomatic complexity: sudden spikes in branching without corresponding specification contract slugs trigger an **Overfitting Blame Fault**, rejecting the candidate implementation.
 
 #### 7.3.2 Formal Structure of Grounded Algorithmic Guides
-To eliminate the Compositional Translation Gap at the interface level and neutralize Semantic Attractor States, Cleanroom formalizes the structure of Algorithmic Guides ($\mathcal{G}$):
+To eliminate the Compositional Translation Gap at the interface level and neutralize Semantic Attractor States, Autofab formalizes the structure of Algorithmic Guides ($\mathcal{G}$):
 - **Closed-World Parameter Binding**: Every algorithmic guide specifies exact formal parameter types and algebraic bounds (e.g., requiring DAG vertices to map to explicit integer or string keys).
-- **Nominal Interface Signature Mapping**: Guides provide structural signature templates that align with Cleanroom's typed interface stubs ($\Sigma$), ensuring that models do not hallucinate ad-hoc data structures when bridging abstract intent into concrete code.
+- **Nominal Interface Signature Mapping**: Guides provide structural signature templates that align with Autofab's typed interface stubs ($\Sigma$), ensuring that models do not hallucinate ad-hoc data structures when bridging abstract intent into concrete code.
 
 ---
 
@@ -2650,16 +2650,16 @@ To eliminate the Compositional Translation Gap at the interface level and neutra
 
 ### 8.1 Reproducible Artifact Package
 The artifact package will be released under an open-source license with complete hermetic Bazel build and test reproducibility:
-- Docker container encapsulating Bazel, Python 3.12, Pyright, `mutmut`, and the complete Cleanroom compiler toolchain.
+- Docker container encapsulating Bazel, Python 3.12, Pyright, `mutmut`, and the complete Autofab compiler toolchain.
 - Single-command replication scripts (`bin/run_mutation_bench.sh` running `mutmut`, `bin/reproduce_all.sh`).
 - Raw evaluation logs, mutation kill tables, and LaTeX figure generators.
 
 ### 8.2 Paper Outline & Milestone Schedule (12 Pages ACM SIGPLAN Format)
-- **§1 Introduction**: The crisis of code maintenance; The operational review crisis and empirical risks of zero-review DevAI (CodeRabbit defect surges); The pivot from code comprehension to trust calibration; The Cleanroom Thesis; The Core Paradigm: Shift from Liveness to Safety (The Core Axiom: non-convergence as safety victory); The Human Developer as Specification Custodian (and LLMs as specification drafters); The Philosophy of Testability (why specs have zero tests and tests verify code adherence); The Modularity-Specification Trade-Off (seam pressure and why broken specs increase); Summary of contributions.
-- **§2 Theoretical Foundations**: The state of practice: Implicit vs. Explicit specifications (Codebase-as-Truth vs. Agentic SDD); Fatal vulnerabilities of implicit agent consensus (Summary-of-a-Summary effect, Self-Review Confirmation Bias, Statistically Dominant Hallucinations); Fallacy of N-version programming; Reframing Knight & Leveson (Gatekeeping vs. Voting, Discordant Failure vs. Concordant Agreement); The Crucial Role of Edge-Case Coverage; Bipartite Boundary Principle; Primal-Dual Certificate Game; Historical lineage (DO-178C Level A, IV&V Verification vs. Validation, IBM Cleanroom Triad and Chinese Wall, Anti-Debugging Principle, divergence from Statistical Usage Testing, Davis-Weyuker Pseudo-Oracles, Beck's Double-Entry Bookkeeping); Chain-of-Thought task asymmetry & Littlewood-Miller negative covariance; Compositional Assume-Guarantee; Branch-to-Specification Edge-Case Mining; The Fail-Safe Invariant (Non-convergence as a safety victory); Concurrency as Executable Verification Harnesses; Structural Defenses Against Deterministic Model Bias (Separation of Intent, Algorithm, and Realization); Defeating Goodhart's Law for Non-Functional Properties (The Hidden Benchmark Firewall).
+- **§1 Introduction**: The crisis of code maintenance; The operational review crisis and empirical risks of zero-review DevAI (CodeRabbit defect surges); The pivot from code comprehension to trust calibration; The Autofab Thesis; The Core Paradigm: Shift from Liveness to Safety (The Core Axiom: non-convergence as safety victory); The Human Developer as Specification Custodian (and LLMs as specification drafters); The Philosophy of Testability (why specs have zero tests and tests verify code adherence); The Modularity-Specification Trade-Off (seam pressure and why broken specs increase); Summary of contributions.
+- **§2 Theoretical Foundations**: The state of practice: Implicit vs. Explicit specifications (Codebase-as-Truth vs. Agentic SDD); Fatal vulnerabilities of implicit agent consensus (Summary-of-a-Summary effect, Self-Review Confirmation Bias, Statistically Dominant Hallucinations); Fallacy of N-version programming; Reframing Knight & Leveson (Gatekeeping vs. Voting, Discordant Failure vs. Concordant Agreement); The Crucial Role of Edge-Case Coverage; Bipartite Boundary Principle; Primal-Dual Certificate Game; Historical lineage (DO-178C Level A, IV&V Verification vs. Validation, IBM Autofab Triad and Chinese Wall, Anti-Debugging Principle, divergence from Statistical Usage Testing, Davis-Weyuker Pseudo-Oracles, Beck's Double-Entry Bookkeeping); Chain-of-Thought task asymmetry & Littlewood-Miller negative covariance; Compositional Assume-Guarantee; Branch-to-Specification Edge-Case Mining; The Fail-Safe Invariant (Non-convergence as a safety victory); Concurrency as Executable Verification Harnesses; Structural Defenses Against Deterministic Model Bias (Separation of Intent, Algorithm, and Realization); Defeating Goodhart's Law for Non-Functional Properties (The Hidden Benchmark Firewall).
 - **§3 The Typed Specification Model & Verification Calculus**: Syntax of low-level specifications $S = \langle \Sigma, \mathcal{C}, \mathcal{G} \rangle$ with decoupled algorithmic guides; Contract slugs as authoring scaffolding and their wipeability during synthesis; Interface vs. Implementation (`_impl`) architectural invariant; Primal-Dual game under Double Hermetic Confinement; Accidental Agreement Elimination (Theorem 1); and Compositional Inductive Soundness (Theorem 2).
 - **§4 Verification Toolchain & Blame Calculus**: Two-pass deterministic gateway; AST-normalized statement coverage and specification reverse-engineering; Semantic failure translation without code debugging; Concurrency failure triage & synchronization blame; The Multi-Agent Auditing Matrix: Phase 1 Functional QA Gate (stateless line pointers) vs. Phase 2 Performance Auditor (stateful architectural advice behind the Hidden Benchmark Firewall); Non-convergence spec fault escalation; and Verification Soundness (Theorem 3).
-- **§5 Evaluation**: Pre-existing complete oracle benchmarks (CPython Stdlib with Specification Gap analysis, Mini-SQLite, Mini-Git, Raft Consensus); The modularity gap in existing benchmarks; Prior-Knowledge Probing Protocol; Modular decomposition vs. monolithic synthesis (Cleanroom Workspace and Mini-SQLite component division); Specification Pressure evaluation; and empirical results across RQ1–RQ7 (coincident failure analysis, boundary mutation kill rate, Chain-of-Thought task asymmetry, branch-to-spec mining, controlled ungrounding, DAG batching concurrency, model spectrum dynamics, evolution benchmark, concurrency soundness with specialized triage, and non-functional auditing with Goodhart evasion and deadlock dynamics).
+- **§5 Evaluation**: Pre-existing complete oracle benchmarks (CPython Stdlib with Specification Gap analysis, Mini-SQLite, Mini-Git, Raft Consensus); The modularity gap in existing benchmarks; Prior-Knowledge Probing Protocol; Modular decomposition vs. monolithic synthesis (Autofab Workspace and Mini-SQLite component division); Specification Pressure evaluation; and empirical results across RQ1–RQ7 (coincident failure analysis, boundary mutation kill rate, Chain-of-Thought task asymmetry, branch-to-spec mining, controlled ungrounding, DAG batching concurrency, model spectrum dynamics, evolution benchmark, concurrency soundness with specialized triage, and non-functional auditing with Goodhart evasion and deadlock dynamics).
 - **§6 Related Work**: Detailed positioning relative to Program Synthesis, Type Systems, N-Version Programming & Pseudo-Oracles, Independent V&V (DO-178C, TDD Double-Entry Bookkeeping), SMT/Property-based Fuzzing, SIGPLAN descendants (Differential Testing/Csmith, MVE Compiler Diversity, APR Test Suite Overfitting), Conversational Multi-Agent DevAI Review Loops, Specification-Grounded Code Review (SGCR), and Goodhart's Law / Non-Functional Program Synthesis.
 - **§7 Threats to Validity & System Frontiers**: Empirical validity mitigations (Internal, External, Construct); Structural Threats Taxonomy (Convergence Failures/False Positives, Systemic Integrity/Non-Functional Limits, Process Liveness/Operational Limits); and Architectural Mitigations (Automated Circuit-Breakers for Oscillation/Degenerate Overfitting, and Formal Algorithmic Guide Schemas).
 - **§8 Conclusion**: Pushing programming languages to the background.

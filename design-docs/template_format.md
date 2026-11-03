@@ -1,15 +1,15 @@
-# Cleanroom Markdown Template Format & System Architecture
+# Autofab Markdown Template Format & System Architecture
 
 ## 1. Overview & System Context
 
-Cleanroom utilizes literate Markdown specifications (High-Level Specifications under `high/`, guides under `guides/`, and template bootstrapping files under `templates/`) to govern autonomous agent pairing and deterministic verification. 
+Autofab utilizes literate Markdown specifications (High-Level Specifications under `high/`, guides under `guides/`, and template bootstrapping files under `templates/`) to govern autonomous agent pairing and deterministic verification. 
 
-Prior to this specification, bootstrapping files and specifications relied on manual inspection or ad-hoc placeholder replacements. Standard templating engines such as Jinja2, Liquid, or Mustache cannot be used in Cleanroom because:
+Prior to this specification, bootstrapping files and specifications relied on manual inspection or ad-hoc placeholder replacements. Standard templating engines such as Jinja2, Liquid, or Mustache cannot be used in Autofab because:
 1. **Formatter Incompatibility**: Deterministic code and documentation formatters (e.g., Prettier, `mdformat`, `markdownlint`) parse Markdown into an Abstract Syntax Tree (AST). Non-Markdown tokens such as `{% for ... %}` or `{{#if ...}}` are parsed as plain text, leading formatters to re-indent closing tags into list continuations, wrap control tags mid-token across lines, or swallow loop directives into table cells.
 2. **Missing-Binding Brittleness**: Standard engines either fail with `UndefinedError` or erase unbound variables into empty strings (`""`), destroying the structural template.
-3. **Spec-as-Sample Principle**: Cleanroom templates must remain valid, intelligible Markdown even when bindings are absent. An unrendered template should render in standard Markdown viewers (GitHub, IDE previews) as a clean exemplar document showing sample structure and readable placeholder parameters (e.g., `<component-name>`).
+3. **Spec-as-Sample Principle**: Autofab templates must remain valid, intelligible Markdown even when bindings are absent. An unrendered template should render in standard Markdown viewers (GitHub, IDE previews) as a clean exemplar document showing sample structure and readable placeholder parameters (e.g., `<component-name>`).
 
-The Cleanroom Template Format defines a formatter-resilient, Markdown-native templating system that supports variable substitution, conditional inclusion, and collection looping, while integrating directly into Cleanroom's build rules, session configuration, read tooling, and startup template materialization.
+The Autofab Template Format defines a formatter-resilient, Markdown-native templating system that supports variable substitution, conditional inclusion, and collection looping, while integrating directly into Autofab's build rules, session configuration, read tooling, and startup template materialization.
 
 For external specification of CommonMark HTML block types and inline raw HTML comments, refer to the [CommonMark Spec (v0.31.2, Section 4.6 "HTML blocks" and Section 6.8 "Raw HTML")](https://spec.commonmark.org/0.31.2/).
 
@@ -77,12 +77,12 @@ In standard Markdown viewers, the `<!-- for: ... -->` comment is invisible in re
 
 ---
 
-## 3. Cleanroom System Integration
+## 3. Autofab System Integration
 
-The template system integrates across four core subsystems in Cleanroom:
+The template system integrates across four core subsystems in Autofab:
 
 ```
-[parts/cleanroom.toml / cleanroom_roles.toml]
+[parts/autofab.toml / autofab_roles.toml]
   Emits: template_parameters in project configuration
          |
          v
@@ -102,15 +102,15 @@ The template system integrates across four core subsystems in Cleanroom:
   read-write starter files                read-only markdown files
 ```
 
-### 3.1 Project Configuration (`parts/cleanroom.toml` / `cleanroom_roles.toml`)
-Cleanroom targets accept a `template_parameters` dictionary (mapping string keys to strings, booleans, lists, or nested mappings).
+### 3.1 Project Configuration (`parts/autofab.toml` / `autofab_roles.toml`)
+Autofab targets accept a `template_parameters` dictionary (mapping string keys to strings, booleans, lists, or nested mappings).
 - Project target definitions encode `template_parameters` into the node's target specification.
 - `uv_manifest_loader_impl` parses `template_parameters` into the target manifest dictionary.
 - Manifest schema validation in `json_manifest_ext` defines `template_parameters` as an optional dictionary.
 
 ### 3.2 Session Configuration (`node_config`)
 - The `node_config.NodeConfig` interface introduces a `template_parameters` property returning `Mapping[str, Any]`.
-- `uv_node_config_impl.py` in `update_with_ai/parts/uv` extracts `template_parameters` from the manifest loaded by `UvManifestLoader` and exposes it as an agent session property.
+- `uv_node_config_impl.py` in `autofab/parts/uv` extracts `template_parameters` from the manifest loaded by `UvManifestLoader` and exposes it as an agent session property.
 
 ### 3.3 Startup Template Materialization (`sandbox_file_editor_impl`)
 Template materialization occurs when an agent session initializes missing declared read-write files:
@@ -125,6 +125,6 @@ When the agent executes `read_file`:
 
 ### 3.5 External Boundary Specification (`commonmark_ext`)
 To maintain strict separation of concerns and avoid embedding grammar parsing recipes in high-level component specifications:
-- `commonmark_ext` is defined as an external boundary component (`high/commonmark_ext.md` and `grounding/commonmark_ext.pyi`), named after the external CommonMark and GitHub Flavored Markdown (GFM) standard to clearly distinguish external format mechanics from internal Cleanroom services.
+- `commonmark_ext` is defined as an external boundary component (`high/commonmark_ext.md` and `grounding/commonmark_ext.pyi`), named after the external CommonMark and GitHub Flavored Markdown (GFM) standard to clearly distinguish external format mechanics from internal Autofab services.
 - It documents the external mechanics, regular expressions, CommonMark HTML comment block/inline handling, and usage snippets for the template format.
 - Internal component specifications (`template_format`, `template_format_impl`) import `commonmark_ext` to fulfill their grounding promises.

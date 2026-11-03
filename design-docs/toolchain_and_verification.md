@@ -1,16 +1,16 @@
-# Cleanroom Toolchain & Verification Architecture
+# Autofab Toolchain & Verification Architecture
 
 ## 1. Executive Summary & Philosophy
 
-Cleanroom software engineering eliminates hallucinations, ambiguity, and implementation drift through a rigorous, closed-world verification pipeline. Rather than relying on non-deterministic LLMs to perform validation, synchronization, and coverage auditing, Cleanroom enforces an uncompromising principle:
+Autofab software engineering eliminates hallucinations, ambiguity, and implementation drift through a rigorous, closed-world verification pipeline. Rather than relying on non-deterministic LLMs to perform validation, synchronization, and coverage auditing, Autofab enforces an uncompromising principle:
 
 > **The Anti-Drift Principle**: Structural validation, requirements inheritance, symbol linking, and coverage auditing must be executed by **100% deterministic, zero-token Python tooling** running in milliseconds under native **`uv`**. LLMs are reserved for generative synthesis; deterministic tools enforce the guardrails.
 
-This document describes the complete toolchain architecture implemented in Cleanroom:
-1. **The Modular Coverage Evaluation Engine (`update_with_ai/parts/tools/`)**: Modular single-target test tracing, AST statement normalization, and contiguous span deficit reporting ([`tool_coverage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage.py), [`tool_coverage_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage_impl.py)), executed natively via `bin/check_files` under the `coverage` role.
-2. **The Modular Workspace & Tools Engine (`update_with_ai/parts/workspace/` & `update_with_ai/parts/tools/`)**: Pure Python workspace lifecycle management (`workspace_roles`, `workspace_scaffold`, `workspace_stub`, `workspace_provision`, `workspace_registry`, `workspace_sync`), convention-based role provisioning, and in-band work queue evaluation (`workspace_tool.py`, `workspace_work.py`, `workspace_check.py`, `workspace_dirtiness.py`).
-3. **The Specification Linters (`update_python_with_ai/support/lib/`)**: AST-based prose validation (`high_lint.py`), planning canvas structure validation (`spec_lint.py`), and pure interface stub verification (`low_lint.py`).
-4. **The Code & Test Linters (`update_python_with_ai/support/lib/`)**: Concrete implementation compliance (`lib_lint.py`), requirement comment citation validation (`test_lint.py`), and exception suppression vs. reification analysis (`build_lint_common.py: check_exception_eating`).
+This document describes the complete toolchain architecture implemented in Autofab:
+1. **The Modular Coverage Evaluation Engine (`autofab/parts/tools/`)**: Modular single-target test tracing, AST statement normalization, and contiguous span deficit reporting ([`tool_coverage.py`](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/lib/tool_coverage.py), [`tool_coverage_impl.py`](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/lib/tool_coverage_impl.py)), executed natively via `bin/check_files` under the `coverage` role.
+2. **The Modular Workspace & Tools Engine (`autofab/parts/workspace/` & `autofab/parts/tools/`)**: Pure Python workspace lifecycle management (`workspace_roles`, `workspace_scaffold`, `workspace_stub`, `workspace_provision`, `workspace_registry`, `workspace_sync`), convention-based role provisioning, Git-backed pre-tool checkpointing and rollback (`bin/revert`, `bin/checkpoint`), and in-band work queue evaluation (`workspace_tool.py`, `workspace_work.py`, `workspace_check.py`, `workspace_dirtiness.py`).
+3. **The Specification Linters (`autofab_python/support/lib/`)**: AST-based prose validation (`high_lint.py`), planning canvas structure validation (`spec_lint.py`), and pure interface stub verification (`low_lint.py`).
+4. **The Code & Test Linters (`autofab_python/support/lib/`)**: Concrete implementation compliance (`lib_lint.py`), requirement comment citation validation (`test_lint.py`), and exception suppression vs. reification analysis (`build_lint_common.py: check_exception_eating`).
 5. **Native Type Verification (`uv run pyright`)**: Hermetic, sub-second static type analysis driven by dynamic `PYTHONPATH` construction and package-level `pyproject.toml` configurations.
 
 ```
@@ -38,7 +38,7 @@ This document describes the complete toolchain architecture implemented in Clean
 |              [Single-Target 100% Statement Coverage: Gate 3]                          |
 |                               |                                                       |
 |                               v (uv run pyright && uv run pytest)                     |
-|                 [Verified Cleanroom Subsystem]                                        |
+|                 [Verified Autofab Subsystem]                                        |
 +---------------------------------------------------------------------------------------+
 ```
 
@@ -46,14 +46,14 @@ This document describes the complete toolchain architecture implemented in Clean
 
 ## 2. Emphasizing Canonical `parts/` Over Procedural `support/lib/`
 
-Cleanroom establishes a strict architectural boundary between **production domain logic** and **meta-framework primitives**:
+Autofab establishes a strict architectural boundary between **production domain logic** and **meta-framework primitives**:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                        PARTS/ VS. SUPPORT/LIB/ DIVISION                                │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                        │
-│  [update_with_ai/parts/*] (Modular 4-Stage Cleanroom Components)                       │
+│  [autofab/parts/*] (Modular 4-Stage Autofab Components)                       │
 │  ───────────────────────────────────────────────────────────────                       │
 │  • parts/tools: Statement coverage measurement, workspace tools, work queues, dirtiness │
 │    (tool_coverage.py, workspace_tool.py, workspace_work.py, workspace_check.py)        │
@@ -66,9 +66,9 @@ Cleanroom establishes a strict architectural boundary between **production domai
 │  • parts/uv: Target resolution, manifest loading, and loop execution                   │
 │    (uv_manifest_loader_impl.py, uv_loop_impl.py, uv_target_impl.py)                    │
 │  • parts/systems: Unified system assembly initialization                               │
-│    (uv_cleanroom_asm.py, uv_openai_loop_asm.py)                                        │
+│    (uv_autofab_asm.py, uv_openai_loop_asm.py)                                        │
 │                                                                                        │
-│  [update_python_with_ai/support/lib/*] (Meta-Framework & Procedural Linters)           │
+│  [autofab_python/support/lib/*] (Meta-Framework & Procedural Linters)           │
 │  ───────────────────────────────────────────────────────────────────────────           │
 │  • Metaclass Runtime Primitives: framework.py, lifecycle.py                            │
 │    (Foundational spec decorators: @singleton_type, @data_type, @variant, @operation)   │
@@ -78,9 +78,9 @@ Cleanroom establishes a strict architectural boundary between **production domai
 ```
 
 Monolithic scripts previously in `support/lib/` have been systematically modularized into canonical `parts/`:
-- `evaluate_coverage.py` $\to$ [`update_with_ai/parts/tools/lib/tool_coverage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage.py)
-- `cleanroom_workspace_tool.py` $\to$ [`update_with_ai/parts/tools/lib/workspace_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/workspace_tool.py) & [`update_with_ai/parts/workspace/`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/workspace/)
-- `src_metadata.py` $\to$ [`update_with_ai/parts/storage/lib/src_metadata.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/storage/lib/src_metadata.py)
+- `evaluate_coverage.py` $\to$ [`autofab/parts/tools/lib/tool_coverage.py`](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/lib/tool_coverage.py)
+- `autofab_workspace_tool.py` $\to$ [`autofab/parts/tools/lib/workspace_tool.py`](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/lib/workspace_tool.py) & [`autofab/parts/workspace/`](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/workspace/)
+- `src_metadata.py` $\to$ [`autofab/parts/storage/lib/src_metadata.py`](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/storage/lib/src_metadata.py)
 
 ---
 
@@ -88,14 +88,14 @@ Monolithic scripts previously in `support/lib/` have been systematically modular
 
 ### 3.1 Motivation & Single-Target 1:1 Isolation
 
-In traditional codebases, coverage tools run across the entire test suite simultaneously. In Cleanroom, this produces a critical flaw: **cross-test pollution**. If Test A indirectly touches an internal helper in Module B, Module B falsely appears covered even if its dedicated unit test suite never tested that behavior.
+In traditional codebases, coverage tools run across the entire test suite simultaneously. In Autofab, this produces a critical flaw: **cross-test pollution**. If Test A indirectly touches an internal helper in Module B, Module B falsely appears covered even if its dedicated unit test suite never tested that behavior.
 
-Cleanroom enforces **1:1 Test-to-Implementation Isolation**:
+Autofab enforces **1:1 Test-to-Implementation Isolation**:
 - Each `*_impl_test.py` unit test suite is evaluated strictly against its corresponding `*_impl.py` file.
 - The tool measures exactly one target at a time.
-- All Cleanroom implementation modules must independently achieve **100.0% statement coverage** against their dedicated unit tests.
+- All Autofab implementation modules must independently achieve **100.0% statement coverage** against their dedicated unit tests.
 
-The coverage evaluation engine is implemented as a 4-stage Cleanroom component in [`update_with_ai/parts/tools/lib/tool_coverage.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage.py) and [`tool_coverage_impl.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/tools/lib/tool_coverage_impl.py).
+The coverage evaluation engine is implemented as a 4-stage Autofab component in [`autofab/parts/tools/lib/tool_coverage.py`](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/lib/tool_coverage.py) and [`tool_coverage_impl.py`](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/lib/tool_coverage_impl.py).
 
 ### 3.2 AST Statement Normalization & Pragma Filtering
 
@@ -111,9 +111,9 @@ Standard Python `trace` and line coverage tools incorrectly count non-executable
 3. **Docstring Filtering**: Locates all `ast.Expr(value=ast.Constant(str))` docstring nodes across all scopes and excludes their line ranges.
 4. **Pragma Exclusion**: Recognizes comments containing `# pragma: no cover` or `# no cover`. When a statement or block is marked with pragma, its entire AST subtree line range is excluded from the executable statement denominator.
 
-### 3.3 Enforcement of Cleanroom Assumption Rules
+### 3.3 Enforcement of Autofab Assumption Rules
 
-A foundational rule of Cleanroom is:
+A foundational rule of Autofab is:
 > **Callees expect assumptions; callers satisfy them.**
 
 If callee code includes defensive checks for caller assumptions (e.g., checking if an acyclic graph contains a cycle when callers contractually guarantee acyclicity), those checks represent **dead assumption code**.
@@ -132,9 +132,9 @@ In role workspaces, coverage evaluation is executed directly by the `coverage` a
 bin/check_files
 
 # Direct tool runner invocation:
-uv run python -m update_with_ai.support.lib.cleanroom_role_tool coverage \
-    --impl update_with_ai/parts/sandbox/lib/sandbox_file_reader_impl.py \
-    --test update_with_ai/parts/sandbox/tests/sandbox_file_reader_impl_test.py \
+uv run python -m autofab.support.lib.autofab_role_tool coverage \
+    --impl autofab/parts/sandbox/lib/sandbox_file_reader_impl.py \
+    --test autofab/parts/sandbox/tests/sandbox_file_reader_impl_test.py \
     --threshold 100.0
 ```
 
@@ -161,9 +161,9 @@ Uncovered statement spans in sandbox_file_reader_impl.py:
 
 ---
 
-## 4. The Specification & Code Linters: `update_python_with_ai/support/lib/`
+## 4. The Specification & Code Linters: `autofab_python/support/lib/`
 
-Cleanroom provides specialized deterministic AST linters in `update_python_with_ai/support/lib/` that validate specification authoring and code alignment:
+Autofab provides specialized deterministic AST linters in `autofab_python/support/lib/` that validate specification authoring and code alignment:
 
 ### 4.1 `high_lint.py`: High-Level Specification Linter
 - Validates Markdown structure under `## Purpose` and `## Types and Behavior`.
@@ -172,7 +172,7 @@ Cleanroom provides specialized deterministic AST linters in `update_python_with_
 - Enforces component dependency rules: front-matter `imports:` and component isolation.
 
 ### 4.2 `spec_lint.py`: Planning Canvas Linter
-- Enforces the requirements of `update_python_with_ai/guides/spec_qa.md`.
+- Enforces the requirements of `autofab_python/guides/spec_qa.md`.
 - Verifies `## Intent` prose separation from `## Factored Contracts`.
 - Enforces the Zero-Conjunction Rule on atomic contract statements (`[slug]`).
 - Validates epistemic grounding completeness under `## Grounding`, verifying that all `### Knowledge Requirements` are grounded against imported capability provisions.
@@ -188,12 +188,12 @@ Cleanroom provides specialized deterministic AST linters in `update_python_with_
 - Enforces strict boundary rules preventing framework imports (`framework.py`) inside consumer library implementations.
 
 ### 4.5 `test_lint.py`: Unit Test Alignment Linter
-- Enforces the requirements of `update_python_with_ai/guides/low_to_test.md`.
+- Enforces the requirements of `autofab_python/guides/low_to_test.md`.
 - Verifies that test assertions carry `# Requirement: <exact text>` comments matching canonical contract statements.
 - Verifies that every test file concludes with `# Untested requirements: None` or an explicit bulleted list of untestable requirements.
 
 ### 4.6 `build_lint_common.py: check_exception_eating`: Exception Suppression vs. Reification Linter
-Cleanroom strictly prohibits silent exception eating (`except Exception: pass` or returning default values without error recording) to prevent latent bugs from hiding in production code. However, in execution engines, DAG runners, scheduler loops, and retry handlers (e.g., `dag_engine_impl.py`), components are contractually required to invoke arbitrary user-supplied callbacks (`action()`), catch arbitrary `Exception` failures, record them into structured outcome records (such as `NodeResult(state=NodeState.FAILED, error=exc)`), and continue running independent nodes according to failure policies (such as `CONTINUE_ON_ERROR`).
+Autofab strictly prohibits silent exception eating (`except Exception: pass` or returning default values without error recording) to prevent latent bugs from hiding in production code. However, in execution engines, DAG runners, scheduler loops, and retry handlers (e.g., `dag_engine_impl.py`), components are contractually required to invoke arbitrary user-supplied callbacks (`action()`), catch arbitrary `Exception` failures, record them into structured outcome records (such as `NodeResult(state=NodeState.FAILED, error=exc)`), and continue running independent nodes according to failure policies (such as `CONTINUE_ON_ERROR`).
 
 To prevent agent flailing and false-positive rejections in executor/runner components while continuing to prohibit silent bug suppression, `check_exception_eating` implements intelligent semantic AST analysis:
 
@@ -201,7 +201,7 @@ To prevent agent flailing and false-positive rejections in executor/runner compo
    - The AST analyzer inspects the handler block: if the caught exception instance (`except Exception as exc:`) is assigned into a result data structure, passed as an argument to a failure handler, or stored into an error attribute (e.g., `error=exc`, `_result.error = exc`), the linter classifies it as legitimate exception reification rather than unhandled suppression.
 
 2. **Explicit Pragma Escape Hatches**:
-   - For foreign boundary execution layers and external callback runners where broad exception capture is required by architectural design, inline comment escape hatches (`# cleanroom: allow-broad-exception` or `# intentional-catch`) are supported to explicitly bypass the check with clear human intent.
+   - For foreign boundary execution layers and external callback runners where broad exception capture is required by architectural design, inline comment escape hatches (`# autofab: allow-broad-exception` or `# intentional-catch`) are supported to explicitly bypass the check with clear human intent.
 
 3. **Strict Rejection of Silent Suppression**:
    - The linter maintains strict zero-tolerance for genuine silent suppression (e.g., `except Exception: pass`, empty exception handlers, or handlers that return arbitrary uncontracted fallbacks without recording or propagating the error).
@@ -213,20 +213,20 @@ To prevent agent flailing and false-positive rejections in executor/runner compo
 
 ## 5. Native Type Verification & Pyright Integration
 
-Cleanroom runs Pyright natively via **`uv`** with zero Bazel dependency:
+Autofab runs Pyright natively via **`uv`** with zero Bazel dependency:
 
 ```bash
 # Type-check entire repository:
 uv run pyright
 
 # Type-check specific package or target:
-uv run pyright update_with_ai/parts/workspace
+uv run pyright autofab/parts/workspace
 ```
 
 ### 5.1 Dynamic `PYTHONPATH` Resolution
 To ensure 100% type soundness without hardcoded static path lists:
 1. `bin/test` dynamically constructs `PYTHONPATH` from repository packages and constituent parts.
-2. Package-level `pyproject.toml` files (`update_with_ai/pyproject.toml`) configure standard `[tool.pyright]` settings.
+2. Package-level `pyproject.toml` files (`autofab/pyproject.toml`) configure standard `[tool.pyright]` settings.
 3. Role workspaces run `uv run pyright` directly against the unit stubs and implementations with zero configuration file duplication.
 
 ---
@@ -237,34 +237,34 @@ To ensure 100% type soundness without hardcoded static path lists:
 | :--- | :--- | :--- | :--- |
 | **AST Linting** | Framework import leakage into library code | **SOLVED** | AST visitor in `lib_lint.py` rejects `import framework`. |
 | **Coverage Engine** | Monolithic coverage script & AST path mismatch | **SOLVED** | Modularized into `parts/tools/lib/tool_coverage.py` with relative workspace AST evaluation. |
-| **Workspace Orchestration** | Monolithic `cleanroom_workspace_tool.py` | **SOLVED** | Modularized into 4-stage Cleanroom parts under `update_with_ai/parts/workspace/` and `update_with_ai/parts/tools/`. |
+| **Workspace Orchestration** | Monolithic `autofab_workspace_tool.py` | **SOLVED** | Modularized into 4-stage Autofab parts under `autofab/parts/workspace/` and `autofab/parts/tools/`. |
 | **Toolchain Runtime** | Multi-second Bazel server overhead | **SOLVED** | Replaced with pure `uv` + Hatchling, reducing verification cycle to sub-100ms. |
 | **Type Checking** | Brittle global `pyrightconfig.json` | **SOLVED** | Permanently deleted `pyrightconfig.json`; verification is driven by package-level `pyproject.toml` and dynamic `PYTHONPATH`. |
 | **Scaffolding vs. Verification** | Accidental file generation during `check_files` | **SOLVED** | Separated `--scaffold` mode (for `get_work`) from strict verification mode in linters. |
-| **Metadata Management** | Procedural `src_metadata.py` in support scripts | **SOLVED** | Canonicalized into `update_with_ai/parts/storage/lib/src_metadata.py`. |
-| **Systems Assembly** | Bazel-bound root assemblies | **SOLVED** | Unified systems assembly under `uv_cleanroom_asm.py` and `uv_openai_loop_asm.py`. |
+| **Metadata Management** | Procedural `src_metadata.py` in support scripts | **SOLVED** | Canonicalized into `autofab/parts/storage/lib/src_metadata.py`. |
+| **Systems Assembly** | Bazel-bound root assemblies | **SOLVED** | Unified systems assembly under `uv_autofab_asm.py` and `uv_openai_loop_asm.py`. |
 
 ---
 
 ## 7. Execution Commands & Verification CLI
 
-All verification is driven by Cleanroom's pure Python CLI:
+All verification is driven by Autofab's pure Python CLI:
 
 ```bash
 # Run complete test suite and type check:
 ./bin/test
 
 # Run type check and tests for specific unit or package:
-./bin/test update_with_ai/parts/workspace
+./bin/test autofab/parts/workspace
 
 # Refresh system files across role workspaces:
-uv run cleanroom refresh-sys
+uv run autofab refresh-sys
 
 # Inspect work queues across the DAG:
-uv run cleanroom work-queue staging
+uv run autofab work-queue staging
 
 # Run autonomous cleaning against target or scope:
-uv run cleanroom clean //staging/parts/sandbox:sandbox_file_reader_impl#lib
+uv run autofab clean //staging/parts/sandbox:sandbox_file_reader_impl#lib
 # or via convenient wrapper:
 ./bin/clean staging#lib
 ```

@@ -22,13 +22,14 @@ class DAG(dag_engine_lite.DAG):
         self,
         node_id: str,
         action: Callable[[], Any],
-        dependencies: Optional[Collection[str]] = None,
-        priority: int = 0,
-        retries: int = 0,
+        dependencies: Optional[Collection[str]],
+        priority: int,
+        retries: int,
     ) -> None:
         """Adds a task node to the graph.
 
         GROUNDING:
+        - Verifies node_id is not already present in _nodes; raises dag_engine_lite.DuplicateNodeError if present.
         - Constructs immutable dag_engine_lite.NodeDefinition with frozen dependency set without eagerly checking dependency existence.
         - Inserts definition into _nodes, registering empty neighbor sets in _upstream and _downstream if absent.
         - Adds directed edges from each dependency to node_id, deferring existence validation.
@@ -166,7 +167,7 @@ class DAG(dag_engine_lite.DAG):
     @override
     def compute_critical_path(
         self,
-        estimated_durations: Optional[Mapping[str, float]] = None,
+        estimated_durations: Optional[Mapping[str, float]],
     ) -> Tuple[List[str], float]:
         """Computes the longest weighted dependency path through the graph.
 
@@ -231,7 +232,7 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
     def mark_failed(
         self,
         node_id: str,
-        failure_policy: dag_engine_lite.FailurePolicy = dag_engine_lite.FailurePolicy.FAIL_FAST,
+        failure_policy: dag_engine_lite.FailurePolicy,
     ) -> None:
         """Transitions a node to the FAILED state and applies failure policies.
 
@@ -261,6 +262,7 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
         """Retrieves the current execution state of a node.
 
         GROUNDING:
+        - Checks whether node_id is registered in _dag.all_nodes(); raises dag_engine_lite.NodeNotFoundError if absent.
         - Ensures _states contains node_id by synchronizing with _dag.all_nodes() if absent.
         - Returns _states[node_id].
         """
@@ -291,7 +293,7 @@ class DAGRunner(dag_engine_lite.DAGRunner):
     @override
     def run(
         self,
-        failure_policy: dag_engine_lite.FailurePolicy = dag_engine_lite.FailurePolicy.FAIL_FAST,
+        failure_policy: dag_engine_lite.FailurePolicy,
     ) -> dag_engine_lite.DAGRunReport:
         """Executes the entire DAG sequentially to completion or failure.
 
@@ -314,7 +316,7 @@ class DAGRunner(dag_engine_lite.DAGRunner):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T20:55:00Z
-# LAST_CHANGED: 2026-10-26T20:55:00Z
-# CHANGE: Specify dynamic scheduler state synchronization on remove_node, ascending alphabetical tie-breaking, and SKIP state for blocked dependents
+# LAST_CHANGED: 2026-11-02T19:35:00Z
+# CHANGE: Specify DuplicateNodeError on add_node for already registered node identifiers
 # SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 # --- END CLEANROOM METADATA ---

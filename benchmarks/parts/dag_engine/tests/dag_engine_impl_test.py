@@ -479,7 +479,9 @@ class DAGEngineImplTest(unittest.TestCase):
         self.dag.add_node("pending", action, dependencies=["ready"])
         runner = self._runner()
 
+        self.assertFalse(runner.is_cancelled())
         runner.cancel()
+        self.assertTrue(runner.is_cancelled())
         report: Optional[dag_engine.DAGRunReport] = None
         cancelled = False
         try:

@@ -7,20 +7,34 @@ cd "$REPO_ROOT"
 
 TARGET="${1:-}"
 
-# Dynamically discover packages and methodologies via parts/cleanroom.toml
+# Dynamically discover packages and methodologies via parts configuration files
 DISCOVERED_PATHS="$(python3 -c '
-import os, tomllib
+import os, sys, tomllib
 from pathlib import Path
 
 repo_root = Path(".").resolve()
+sys.path.insert(0, str(repo_root))
+sys.path.insert(0, str(repo_root / "autofab_python"))
+try:
+    from support.lib import app_info
+    c_names = app_info.get_config_filenames()
+except Exception:
+    c_names = ("autofab.toml", "cleanroom.toml")
+
 pypaths = [str(repo_root)]
 seen_meth = set()
 
 for entry in sorted(repo_root.iterdir()):
     if entry.is_dir() and not entry.name.startswith((".", "bazel", "venv", "staging", "node_modules", "build", "dist")):
-        parts_cfg = entry / "parts" / "cleanroom.toml"
-        if parts_cfg.is_file():
-            pypaths.append(str(entry))
+        parts_cfg = None
+        for cand_name in c_names:
+            cand = entry / "parts" / cand_name
+            if cand.is_file():
+                parts_cfg = cand
+                break
+        if parts_cfg:
+            if not (entry / "__init__.py").is_file():
+                pypaths.append(str(entry))
             sup = entry / "support" / "lib"
             if sup.is_dir():
                 pypaths.append(str(sup))
@@ -45,7 +59,9 @@ PYPATHS=()
 IFS=: read -ra PYPATHS <<< "$DISCOVERED_PATHS"
 
 if [ -n "$TARGET" ] && [ -d "$REPO_ROOT/$TARGET" ]; then
-    PYPATHS+=("$REPO_ROOT/$TARGET")
+    if [ ! -f "$REPO_ROOT/$TARGET/__init__.py" ]; then
+        PYPATHS+=("$REPO_ROOT/$TARGET")
+    fi
     TARGET_PARENT="$(dirname "$REPO_ROOT/$TARGET")"
     if [ -d "$TARGET_PARENT" ]; then
         PYPATHS+=("$TARGET_PARENT")
@@ -63,27 +79,40 @@ fi
 
 export PYTHONPATH="$(IFS=:; echo "${PYPATHS[*]}"):${PYTHONPATH:-}"
 
-# Execute specification linters dynamically based on parts/cleanroom.toml and cleanroom_roles.toml
+# Execute specification linters dynamically based on parts/autofab.toml and autofab_roles.toml
 python3 -c '
 import os, sys, tomllib, subprocess
 from pathlib import Path
 
 repo_root = Path(".").resolve()
+sys.path.insert(0, str(repo_root))
+sys.path.insert(0, str(repo_root / "autofab_python"))
+try:
+    from support.lib import app_info
+    c_names = app_info.get_config_filenames()
+    r_names = app_info.get_roles_filenames()
+except Exception:
+    c_names = ("autofab.toml", "cleanroom.toml")
+    r_names = ("autofab_roles.toml", "cleanroom_roles.toml")
+
 target_arg = sys.argv[1] if len(sys.argv) > 1 else ""
 
-def find_parts_cleanroom_toml(p: Path) -> Path | None:
-    cand = p / "parts" / "cleanroom.toml"
-    if cand.is_file():
-        return cand
+def find_parts_config_toml(p: Path) -> Path | None:
+    for fname in c_names:
+        cand = p / "parts" / fname
+        if cand.is_file():
+            return cand
     curr = p if p.is_dir() else p.parent
     while curr != curr.parent and curr != repo_root.parent:
         if curr.name == "parts":
-            cand = curr / "cleanroom.toml"
+            for fname in c_names:
+                cand = curr / fname
+                if cand.is_file():
+                    return cand
+        for fname in c_names:
+            cand = curr / "parts" / fname
             if cand.is_file():
                 return cand
-        cand = curr / "parts" / "cleanroom.toml"
-        if cand.is_file():
-            return cand
         curr = curr.parent
     return None
 
@@ -93,8 +122,13 @@ def get_installed_roles(cfg_path: Path) -> tuple[str, dict]:
         meth = data.get("methodology", "").lstrip("./").lstrip("/")
         if not meth:
             return "", {}
-        roles_cfg = repo_root / meth / "cleanroom_roles.toml"
-        if not roles_cfg.is_file():
+        roles_cfg = None
+        for rname in r_names:
+            cand = repo_root / meth / rname
+            if cand.is_file():
+                roles_cfg = cand
+                break
+        if not roles_cfg:
             return meth, {}
         roles_data = tomllib.loads(roles_cfg.read_text(encoding="utf-8"))
         return meth, roles_data.get("roles", {})
@@ -133,16 +167,22 @@ def run_role_linters(target_path_str: str, parts_cfg: Path):
 
 if target_arg and not target_arg.startswith("-"):
     t_path = (repo_root / target_arg).resolve()
-    cfg = find_parts_cleanroom_toml(t_path)
+    cfg = find_parts_config_toml(t_path)
     if cfg:
         run_role_linters(target_arg, cfg)
 else:
     for entry in sorted(repo_root.iterdir()):
-        if entry.is_dir() and not entry.name.startswith((".", "bazel", "venv", "staging")):
-            cfg = entry / "parts" / "cleanroom.toml"
-            if cfg.is_file():
-                run_role_linters(str(entry.relative_to(repo_root)), cfg)
+        if entry.is_dir() and not entry.name.startswith((".", "bazel", "venv", "staging", "node_modules", "build", "dist")):
+            for fname in c_names:
+                cfg = entry / "parts" / fname
+                if cfg.is_file():
+                    run_role_linters(str(entry.relative_to(repo_root)), cfg)
+                    break
 ' "${TARGET:-}"
+
+if [[ " $* " == *" --spec-only "* ]] || [[ " $* " == *" --linters-only "* ]]; then
+    exit 0
+fi
 
 if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
     case "$TARGET" in
@@ -151,7 +191,11 @@ if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
             ;;
         *.pyi)
             echo "=== Type Checking Specification Stub: $TARGET ==="
-            uv run pyright --project update_python_with_ai/pyright_spec.json "$TARGET"
+            SPEC_PROJ="autofab_python/pyright_spec.json"
+            if [ ! -f "$SPEC_PROJ" ]; then
+                SPEC_PROJ="update_python_with_ai/pyright_spec.json"
+            fi
+            uv run pyright --project "$SPEC_PROJ" "$TARGET"
             exit 0
             ;;
         *_pretense.py)
@@ -181,7 +225,7 @@ if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
             shift || true
             PYTEST_EXIT=0
             if [ -d "$TARGET/tests" ] || find "$TARGET" -name "*_test.py" -print -quit 2>/dev/null | grep -q .; then
-                uv run pytest -q --tb=short "$TARGET" "$@" || PYTEST_EXIT=$?
+                uv run pytest -q --tb=short --testmon "$TARGET" "$@" || PYTEST_EXIT=$?
                 if [ "$PYTEST_EXIT" -ne 0 ] && [ "$PYTEST_EXIT" -ne 5 ]; then
                     exit "$PYTEST_EXIT"
                 fi
@@ -195,11 +239,16 @@ if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
     esac
 else
     echo "=== Type Checking (pyright) ==="
-    uv run pyright update_with_ai update_python_with_ai pretense
+    uv run pyright autofab autofab_python pretense
     echo ""
     echo "=== Tests (pytest) ==="
-    uv run pytest -q --tb=short "$@"
+    uv run pytest -q --tb=short -n auto --testmon "$@"
     echo ""
     echo "=== Pretense Tests ==="
-    uv run pretense update_with_ai/parts/ update_python_with_ai/parts/
+    PRE_FILES="$(find autofab/parts pretense/parts -name "*_pretense.py" -print -quit 2>/dev/null || true)"
+    if [ -n "$PRE_FILES" ]; then
+        uv run pretense autofab/parts/ pretense/parts/
+    else
+        echo "No Pretense test targets found (skipped)."
+    fi
 fi

@@ -76,9 +76,17 @@ Given: A DAG runner managing independent nodes `worker_1` and `worker_2`.
 Observed: Both `worker_1` and `worker_2` complete with state succeeded in the returned DAG run report.
 Realized by: Submitting ready wave nodes to a thread pool executor bounded by maximum concurrency, awaiting completion, and aggregating individual node results into a run report.
 
+### Scenario 8 — Runner cancellation observability
+
+Given: A DAG runner managing registered graph nodes.
+
+1. Cancel runner execution via cancel operation.
+Observed: The runner indicates that cancellation has been signaled via the test-only is_cancelled accessor.
+Realized by: Setting the internal cancellation event flag, which is_cancelled reflects under test inspection.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-21T18:13:00Z
-LAST_CHANGED: 2026-10-21T18:13:00Z
-CHANGE: Align scenarios with operation-driven failure policies and concurrency limits
+LAST_CHANGED: 2026-11-02T19:55:00Z
+CHANGE: Add scenario for runner cancellation observability
 SPEC_QA_AUDIT: 2026-10-19T23:50:00Z
 -->

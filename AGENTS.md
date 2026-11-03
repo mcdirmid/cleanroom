@@ -1,17 +1,18 @@
-# Cleanroom Behavioral Constraints & Guide References
+# Autofab Behavioral Constraints & Guide References
 
 ## Workspace Boundaries & File Locations
 
 - **NEVER modify or rely on the `staging/` directory**: The `staging/` directory is an ephemeral test consumer directory that can be deleted or wiped at any time. Running `bin/sync_staging.sh` counts as modifying the `staging/` directory.
 - **Canonical Codebase**: All production specifications, library implementations, and builds live exclusively in:
-  - `update_with_ai/`
-  - `update_python_with_ai/`
+  - `autofab/`
+  - `autofab_python/`
+  - `pretense/`
 
 ## Strict Prohibition on Hardcoding Specific Paths, Directory Names, and Role Names
 
-- **NO Hardcoded Directory Names or Paths**: Specific directory names, package scopes, or ephemeral workspace paths (such as `staging`, `update_with_ai`, `update_python_with_ai`, `role_workspaces`, or temporary directories) must NEVER be hardcoded into tools, linters, runners, verifiers, test assertions, or library implementations.
-- **NO Hardcoded Role Names**: Role names (such as `high`, `planning`, `low`, `spec_qa`, `lib`, `test`, `qa`, `coverage`, `scenario`, etc.) must NEVER be hardcoded into core tools, workspace provisioners, runners, orchestrators, or library logic. Roles must be discovered dynamically from the active methodology configuration (e.g., `cleanroom_roles.toml`, `cleanroom.toml`) and target definitions.
-- **Dynamic Scoping and Target Derivation**: Package scopes, workspace roots, role definitions, and directory paths must always be derived dynamically from the target address (e.g., `//<scope>/parts/...#<role>`), active configuration files (e.g., `cleanroom.toml`, `cleanroom_roles.toml`), environment variables (e.g., `BUILD_WORKSPACE_DIRECTORY`), or passed explicitly as arguments without hardcoded directory or role defaults.
+- **NO Hardcoded Directory Names or Paths**: Specific directory names, package scopes, or ephemeral workspace paths (such as `staging`, `autofab`, `autofab_python`, `pretense`, `autofab_role_workspaces`, `role_workspaces`, or temporary directories) must NEVER be hardcoded into tools, linters, runners, verifiers, test assertions, or library implementations.
+- **NO Hardcoded Role Names**: Role names (such as `high`, `planning`, `low`, `spec_qa`, `lib`, `test`, `qa`, `coverage`, `scenario`, `pretense`, `pretense_qa`, `pretense_coverage`, etc.) must NEVER be hardcoded into core tools, workspace provisioners, runners, orchestrators, or library logic. Roles must be discovered dynamically from the active methodology configuration (e.g., `autofab_roles.toml`, `cleanroom_roles.toml`, `autofab.toml`, `cleanroom.toml`) and target definitions.
+- **Dynamic Scoping and Target Derivation**: Package scopes, workspace roots, role definitions, and directory paths must always be derived dynamically from the target address (e.g., `//<scope>/parts/...#<role>`), active configuration files (e.g., `autofab.toml`, `autofab_roles.toml`), environment variables (e.g., `BUILD_WORKSPACE_DIRECTORY`), or passed explicitly as arguments without hardcoded directory or role defaults.
 - **Agnostic Linters, Runners, and Verifiers**: Linters, runners, and verification tools must verify imports, package structures, and role execution relative to the active target's resolved package root, methodology manifest, and declared dependencies, rather than asserting against hardcoded directory strings or static role enumerations.
 
 ## Mandatory Specification-First (HLS-First) Rule
@@ -38,39 +39,41 @@
 
 - **STRICT PROHIBITION ON "TURN"**: The term "turn" is ambiguous (historically conflated between a single tool-call step and a full role dispatch wave) and is strictly deprecated and prohibited in documentation, guides, design docs, specifications, prompts, and code. Use **step** or **round** explicitly.
 - **Step**: A single prompt $\leftrightarrow$ tool-call interaction cycle between an agent/model and the runtime/harness (e.g., model prompt $\to$ internal reasoning $\to$ tool call(s) $\to$ tool response).
-- **Round**: A full Cleanroom role dispatch wave or execution pass across assigned targets (from role dispatch into a role workspace until completion, submission, blame, or exhaustion). A round encompasses all model steps executed within that role dispatch pass. Re-entry of a role (e.g. after downstream rejection or loop propagation) initiates a subsequent round.
+- **Round**: A full Autofab role dispatch wave or execution pass across assigned targets (from role dispatch into a role workspace until completion, submission, blame, or exhaustion). A round encompasses all model steps executed within that role dispatch pass. Re-entry of a role (e.g. after downstream rejection or loop propagation) initiates a subsequent round.
 
 ## Mandatory Tool Execution and Round Conclusion (Prohibition on Conversational Halting)
 
 - **Ground Truth First (Anti-Speculation Rule)**: Always run `bin/check_files <target>` immediately as the first action after `bin/get_work` to obtain deterministic error diagnostics. Never guess, infer, or speculate about defects from reading prose before checking the actual oracle output.
 - **Continuous Tool Execution While Work Remains**: While ready targets remain unresolved, role workers operate exclusively via tool execution. Producing conversational commentary, explanations, or announcing actions in prose (such as ending a message with a colon or promising a tool call) without invoking tools in the same step is strictly prohibited and causes runtime harnesses to terminate rounds prematurely.
 - **Targeted Reads Over Repeated Dumps**: Never repeatedly read entire files when output is pruned. Use grep to locate symbols, or read narrow line ranges with offset and limit.
+- **Strict Prohibition on Runtime Testing and Inline Test Scripts**: Role workers are strictly prohibited from executing ad-hoc tests, runtime sanity checks, or test assertions (including via `python3 -c`, `python -c`, or stdin heredocs `python3 - <<'EOF'`) against their target implementation code. Target verification relies exclusively on `bin/check_files`. Runtime execution and test validation are performed solely by downstream auditor roles (QA/Pretense); role workers must never attempt to pre-test implementation code to avoid blame.
 - **Mandatory Round Conclusion When Work is Done**: When a role worker has no outstanding work to do and `bin/get_work` does not give it more work to do (all assigned ready targets have been resolved via `bin/check_files <target>` followed by `bin/submit`, `bin/blame`, or `bin/fail`, or only blocked targets remain), the worker can and MUST conclude the round immediately. The worker must output its concise summary text WITHOUT invoking any further tools (`ls`, `bin/get_work`, dummy commands). Delivering text with zero tool calls is the expected mechanism that cleanly concludes the round in autonomous harnesses. Leaving assigned targets unresolved without tool execution triggers coordinator reminders and trips the impasse circuit breaker.
 
 ## Guide Editing & Meta-Rules
 
-- **Editing Guides**: ALWAYS read and maintain in context `update_with_ai/guides/meta_guide.md` before creating, updating, or editing any guide.
+- **Editing Guides**: ALWAYS read and maintain in context `autofab/guides/meta_guide.md` before creating, updating, or editing any guide.
 
 ## Required Guides for Alignments & Tasks
 
-Always read and maintain in context the relevant guide from `update_python_with_ai/guides/` when modifying specs, implementations, tests, or doing alignments:
+Always read and maintain in context the relevant guide from `autofab_python/guides/` when modifying specs, implementations, tests, or doing alignments:
 
-- **High-Level Specs (HLS)**: `update_python_with_ai/guides/high_level_spec.md`
-- **HLS to Planning Alignment**: `update_python_with_ai/guides/high_to_planning.md`
-- **Planning to Low Alignment**: `update_python_with_ai/guides/planning_to_low.md`
-- **Spec QA Arbiter**: `update_python_with_ai/guides/spec_qa.md`
-- **Low-Level Specification to Library Code Alignment**: `update_python_with_ai/guides/low_to_lib.md`
-- **Low-Level Specification to Unit Tests Alignment**: `update_python_with_ai/guides/low_to_test.md`
-- **QA Verification**: `update_python_with_ai/guides/qa.md`
-- **Coverage Arbiter**: `update_python_with_ai/guides/coverage.md`
+- **High-Level Specs (HLS)**: `autofab_python/guides/high_level_spec.md`
+- **HLS to Planning Alignment**: `autofab_python/guides/high_to_planning.md`
+- **Planning to Low Alignment**: `autofab_python/guides/planning_to_low.md`
+- **Spec QA Arbiter**: `autofab_python/guides/spec_qa.md`
+- **Low-Level Specification to Library Code Alignment**: `autofab_python/guides/low_to_lib.md`
+- **Low-Level Specification to Unit Tests Alignment**: `autofab_python/guides/low_to_test.md`
+- **QA Verification**: `autofab_python/guides/qa.md`
+- **Coverage Arbiter**: `autofab_python/guides/coverage.md`
 
 ## Test Execution (bin/test)
 
 - **Required Test Runner**: Use `bin/test` to run repo verification and tests cleanly.
+- **NO bin/test for Design Doc Changes**: When authoring, updating, or reviewing design documentation (`design-docs/*.md`), guides, or markdown files without modifying executable code or production specifications in `parts/`, you do NOT need to run `bin/test`. Only invoke `bin/test` when code, specifications, or harness configurations are actually modified.
 
 ## Local Python Linter Invocations (test_lint.py)
 
-- **Required PYTHONPATH**: When running `test_lint.py` directly (such as during dry-run collection verification), ensure `PYTHONPATH` includes `update_python_with_ai` and all constituent library directories (`update_with_ai/parts/*/lib` or package roots) to prevent cross-package `ModuleNotFoundError` during test module dry runs.
+- **Required PYTHONPATH**: When running `test_lint.py` directly (such as during dry-run collection verification), ensure `PYTHONPATH` includes `autofab_python`, `pretense`, and all constituent library directories (`autofab/parts/*/lib`, `pretense/parts/*/lib`, or package roots) to prevent cross-package `ModuleNotFoundError` during test module dry runs.
 
 ## DO NOT EDIT pyrightconfig.json to fix type problems!
 
@@ -86,10 +89,10 @@ If a test doesn't matter, don't run the test! Do not edit pyrightconfig.json to 
 
 ## Autonomous Orchestration Antigravity Execution
 
-- **Immediate Coordinator Invocation on orchestrate & benchmarks (Antigravity Only)**: When running under the Google Antigravity agent, if any command with `--harness=antigravity` (such as `uv run cleanroom orchestrate ...`, `uv run cleanroom clean ...`, `uv run cleanroom benchmark ...`, or `uv run bin/evaluate_model_efficiency.py ...`) is executed (or emits the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE`):
+- **Immediate Coordinator Invocation on orchestrate & benchmarks (Antigravity Only)**: When running under the Google Antigravity agent, if any command resolving to the Antigravity harness (such as `uv run autofab orchestrate ...`, `uv run autofab clean ...`, `uv run autofab benchmark ...`, or `uv run bin/evaluate_model_efficiency.py ...`) is executed (or emits the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE`):
   1. If `agentapi send-message` reactive wakeup message is received in the chat, use the target scope specified directly in the message.
   2. If the command runs as a background task and no message arrived, immediately inspect the task log (`.system_generated/tasks/task-X.log`) or `logs/*_runner.log` to extract the scope name (`benchmarks_flight_*` or target scope). Do NOT wait for the background command to finish before launching the coordinator—the command is waiting for the coordinator to converge the DAG.
   3. Immediately invoke:
-     `invoke_subagent(TypeName="cleanroom_coordinator", Role="Cleanroom Coordinator", Prompt="Clean all dirty nodes in <scope> using cleanroom_coordinator")`
-  In other environments (such as DeepSeek Harness / DSH Desktop), run `uv run cleanroom clean <scope> [target_role] --harness dsh` directly via the terminal tool.
-  For autonomous in-process loop execution, run `uv run cleanroom clean <target>` (which defaults to `--harness loop`).
+     `invoke_subagent(TypeName="autofab_coordinator", Role="Autofab Coordinator", Prompt="Clean all dirty nodes in <scope> using autofab_coordinator")`
+  In other environments (such as DeepSeek Harness / DSH Desktop), run `uv run autofab clean <scope> [target_role]` directly via the terminal tool (configured with a model using the `dsh` harness in `model_configs.toml`).
+  For autonomous DAG convergence under Antigravity, run `uv run autofab clean <target>` with a model using the `antigravity` harness.

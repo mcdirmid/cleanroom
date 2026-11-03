@@ -1,7 +1,7 @@
 """Automated unit test synthesis from shrunken Hypothesis counterexample traces."""
 
 from typing import Any, Dict, List, Optional
-from update_python_with_ai.parts.pretense.lib.pretense import TraceStep
+from pretense.parts.pretense.lib.pretense import TraceStep
 
 
 def synthesize_unit_test(

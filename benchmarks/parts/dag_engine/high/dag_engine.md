@@ -62,11 +62,11 @@ The scheduler tests whether execution is finished when all registered nodes in t
 
 A *DAG runner* coordinates graph execution under concurrency limits, failure policies, and timeouts. The runner supports running graphs to completion under an assigned failure policy defaulting to fail fast and a maximum concurrency limit defaulting to four worker threads, dispatching ready waves concurrently, executing configured retries upon action failures, and compiling execution results into a DAG run report.
 
-Execution bounded by an overall timeout limit raises DAG timeout error when elapsed duration exceeds the timeout. The runner supports cancelling active execution, transitioning non-terminal nodes to cancelled and raising DAG cancelled error.
+Execution bounded by an overall timeout limit raises DAG timeout error when elapsed duration exceeds the timeout. The runner supports cancelling active execution, transitioning non-terminal nodes to cancelled and raising DAG cancelled error. The runner provides a test-only query accessor indicating whether execution has been cancelled.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-26T21:35:31Z
-LAST_CHANGED: 2026-10-21T18:13:00Z
-CHANGE: Specify operation-driven failure policy on mark_failed and run, and concurrency limit on run
+LAST_CHANGED: 2026-11-02T19:55:00Z
+CHANGE: Specify test-only is_cancelled observability query on DAGRunner
 SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
 -->

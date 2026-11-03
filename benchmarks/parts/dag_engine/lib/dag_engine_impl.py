@@ -116,6 +116,10 @@ class DAGRunner(dag_engine.DAGRunner):
         # TODO_cancel_body
         raise NotImplementedError
 
+    def is_cancelled(self) -> bool:
+        # TODO_is_cancelled_body
+        raise NotImplementedError
+
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

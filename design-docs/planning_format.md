@@ -2,7 +2,7 @@
 
 ## 1. Overview & Architectural Purpose
 
-In the Cleanroom engineering pipeline, the **Planning Canvas** (`planning/<name>.md`) bridges literate High-Level Specifications (`high/<name>.md`) and formal Low-Level Python interface stubs (`low/<name>.pyi`) before runtime library code (`lib/*.py`) or deterministic unit tests (`tests/*_test.py`) are created.
+In the Autofab engineering pipeline, the **Planning Canvas** (`planning/<name>.md`) bridges literate High-Level Specifications (`high/<name>.md`) and formal Low-Level Python interface stubs (`low/<name>.pyi`) before runtime library code (`lib/*.py`) or deterministic unit tests (`tests/*_test.py`) are created.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
@@ -43,7 +43,7 @@ The core objective of the Planning Canvas is **knowledge organization, semantic 
 
 ## 2. Canonical Document Structure
 
-Every planning specification conforms to canonical markdown sections. Cleanroom distinguishes between standard components (interfaces and implementations) and external boundary components (`_ext`).
+Every planning specification conforms to canonical markdown sections. Autofab distinguishes between standard components (interfaces and implementations) and external boundary components (`_ext`).
 
 ### 2.1 Standard Component Structure (Interface & Implementation)
 
@@ -74,7 +74,7 @@ Every planning specification conforms to canonical markdown sections. Cleanroom 
 
 External specifications (`planning/<name>_ext.md`) model third-party libraries, host operating system facilities, foreign serialization protocols, and runtime environment boundaries (e.g. `filesystem_ext`, `openai_ext`, `json_manifest_ext`). 
 
-Because external boundaries exist **solely to ground other Cleanroom components** rather than implement internal behavioral contracts, their structure is streamlined:
+Because external boundaries exist **solely to ground other Autofab components** rather than implement internal behavioral contracts, their structure is streamlined:
 
 ```markdown
 # <name>_ext external component
@@ -161,17 +161,17 @@ Under `### Woven Contracts`, these interactions are explicitly synthesized into 
 
 ## 6. Epistemic Grounding Architecture
 
-Cleanroom software construction relies on formal grounding specifications to ensure that high-level contracts are constructively feasible before writing runtime implementation code (`lib/`) and unit tests (`tests/`).
+Autofab software construction relies on formal grounding specifications to ensure that high-level contracts are constructively feasible before writing runtime implementation code (`lib/`) and unit tests (`tests/`).
 
-Historically, Cleanroom attempted to verify grounding through two paradigms:
+Historically, Autofab attempted to verify grounding through two paradigms:
 1. **Relational Groundtalk (`.gt`)**: Custom Datalog Horn-clause reachability solvers (struggled with complex expressions, nested collections, and custom toolchain friction).
 2. **Static Python Grounding (`grounding/*.py`)**: Straight-line typed Python feasibility proofs checked via Pyright. While this resolved toolchain friction, it introduced **Mechanistic Hallucination of Success**: because Pyright only verifies syntactic type assignability, LLMs routinely pacified the type checker by fabricating phantom literals, accessing arbitrary dictionary keys, or copying contract docstrings into hollow functions terminating in `raise NotImplementedError`.
 
-Cleanroom solves this through **Pure Epistemic Grounding via Slugs in Planning Specifications**, translated into Natural Language Grounding Arguments (`GROUNDING:`) in Low-Level Specifications, and verified by `spec_qa`.
+Autofab solves this through **Pure Epistemic Grounding via Slugs in Planning Specifications**, translated into Natural Language Grounding Arguments (`GROUNDING:`) in Low-Level Specifications, and verified by `spec_qa`.
 
 ### 6.1 Slug Asymmetry: Why Provisions Have Slugs and Requirements Do Not
 
-In Cleanroom Planning, slugs exist **exclusively for citation and reachability**:
+In Autofab Planning, slugs exist **exclusively for citation and reachability**:
 - **`### Contracts` have slugs** because they are cited in `### Woven Contracts` and traced into unit tests.
 - **`### Knowledge Provisions` have slugs** because they are cited in `Grounded: [...]` lists by consumers and internal operations.
 - **`### Typing` omits slugs** because static type definitions are not cited in reachability.
@@ -272,7 +272,7 @@ class Sandbox(sandbox.Sandbox, InTier[AgentSessionTier]):
 
 ## 8. Verification Architecture: The Auditor Roles (`spec_qa`, `qa`, `coverage`)
 
-Cleanroom coordinates verification through dedicated, independent **Auditor Roles**. To keep authoring agents in deep semantic reasoning mode and prevent mechanistic constraint-satisfaction gaming, Cleanroom enforces the foundational principle:
+Autofab coordinates verification through dedicated, independent **Auditor Roles**. To keep authoring agents in deep semantic reasoning mode and prevent mechanistic constraint-satisfaction gaming, Autofab enforces the foundational principle:
 
 > **"Authors Author; Arbiters Lint and Audit."**
 
@@ -282,7 +282,7 @@ Instead:
 - **Linters and verifiers are owned by Arbiters**: `high_lint.py`, `spec_lint.py`, `low_lint.py`, and Pyright are owned by `spec_qa`.
 - **Arbiters execute verification suites internally**: `spec_qa` runs linters and static analyzers as fast pre-flight sanity checks, translating any mechanical defects into actionable, non-prescriptive blame feedback for the author.
 
-### 8.1 The Two-Gate Cleanroom Pipeline
+### 8.1 The Two-Gate Autofab Pipeline
 
 1. **Gate 1 (`spec_qa`)**: Certifies conceptual specification integrity, Zero-Conjunction factorization, provision DAG acyclicity, epistemic reachability, static type soundness, structural stubs, and concrete collaborator grounding blueprints across `high/*.md`, `planning/*.md`, and `low/*.pyi`. Stamps `SPEC_QA_AUDIT: <timestamp>`.
 2. **Gate 2 (`qa` & `coverage`)**: Certifies double-blind runtime implementation correctness and 100% statement test coverage in `lib/*.py` and `tests/*_test.py`. Stamps `QA_AUDIT: <timestamp>` and `COVERAGE_AUDIT: <timestamp>`.

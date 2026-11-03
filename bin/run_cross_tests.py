@@ -241,7 +241,7 @@ def run_cross_test(
     for fname, fcontent in lib_files.items():
         # Normalize relative imports to be resilient to package and top-level execution
         normalized = re.sub(
-            rf"^from \. import {suite_name}",
+            rf"^from (?:lib|\.) import {suite_name}",
             f"try:\n    from . import {suite_name}\nexcept (ImportError, ValueError):\n    import {suite_name}",
             fcontent,
             flags=re.MULTILINE,
@@ -346,7 +346,39 @@ _initialize_ = __initialize__
 
     target_test_dir.mkdir(parents=True, exist_ok=True)
     (target_test_dir / "__init__.py").write_text("", encoding="utf-8")
-    test_file.write_text(test_normalized, encoding="utf-8")
+
+    test_files = parse_bundled_file(test_source)
+    if len(test_files) == 1 and list(test_files.keys())[0] == test_source.name:
+        default_name = f"{suite_name}_impl_pretense.py" if is_pretense else f"{suite_name}_impl_test.py"
+        test_files = {default_name: list(test_files.values())[0]}
+
+    target_test_paths: List[Path] = []
+    for fname, fcontent in test_files.items():
+        test_normalized = re.sub(r"benchmark_\d+", "benchmark_1", fcontent)
+        # Normalize relative imports to be resilient
+        test_normalized = re.sub(
+            rf"^from (?:lib|\.) import {suite_name}",
+            f"try:\n    from . import {suite_name}\nexcept (ImportError, ValueError):\n    import {suite_name}",
+            test_normalized,
+            flags=re.MULTILINE,
+        )
+        for alias_match in set(re.findall(r"benchmark_\d+", fcontent)):
+            if alias_match != "benchmark_1":
+                alias_path = sandbox / alias_match
+                if not alias_path.exists():
+                    os.symlink("benchmark_1", alias_path)
+        test_normalized = re.sub(
+            r"for\s+_k\s+in\s+\[[^\n]+\]:\s+del\s+sys\.modules\[_k\]",
+            "# sys.modules clearing removed\npass",
+            test_normalized,
+        )
+        test_normalized = re.sub(r"del\s+sys\.modules\[_k\]", "pass", test_normalized)
+        test_normalized = re.sub(r"benchmark_1\.__path__\s*=.*", "# benchmark_1.__path__ normalized", test_normalized)
+
+        target_test_file = target_test_dir / fname
+        target_test_file.write_text(test_normalized, encoding="utf-8")
+        if fname.endswith("_test.py") or fname.endswith("_pretense.py"):
+            target_test_paths.append(target_test_file)
 
     # 4. Inject pytest conftest in test directory to harmonize sys.modules and singleton registration
     conftest_path = target_test_dir / "conftest.py"
@@ -355,10 +387,13 @@ import sys
 import importlib
 
 # Force identical module identity between unqualified and qualified imports
-_pkg_mod = importlib.import_module("benchmark_1.parts.{suite_name}.lib.{suite_name}")
-sys.modules["{suite_name}"] = _pkg_mod
-for b in ("benchmark_1", "benchmark_2", "benchmark_3", "benchmark_4"):
-    sys.modules[f"{{b}}.parts.{suite_name}.lib.{suite_name}"] = _pkg_mod
+try:
+    _pkg_mod = importlib.import_module("benchmark_1.parts.{suite_name}.lib.{suite_name}")
+    sys.modules["{suite_name}"] = _pkg_mod
+    for b in ("benchmark_1", "benchmark_2", "benchmark_3", "benchmark_4"):
+        sys.modules[f"{{b}}.parts.{suite_name}.lib.{suite_name}"] = _pkg_mod
+except ImportError:
+    pass
 
 try:
     _pkg_impl = importlib.import_module("benchmark_1.parts.{suite_name}.lib.{suite_name}_impl")
@@ -374,27 +409,52 @@ except ImportError:
     env = os.environ.copy()
     env["PYTHONPATH"] = (
         f"{target_lib_dir}:{sandbox}:{REPO_ROOT}:"
-        f"{REPO_ROOT / 'update_with_ai'}:{REPO_ROOT / 'update_python_with_ai'}"
+        f"{REPO_ROOT / 'autofab'}:{REPO_ROOT / 'autofab_python'}:{REPO_ROOT / 'pretense'}"
     )
 
     cmd = [sys.executable, "-m", "pytest", "-q", "--tb=short"]
     if is_pretense and not include_fuzz:
         cmd.extend(["-k", "Real or Unit"])
-    cmd.append(str(test_file))
+    test_run_files = [p for p in target_test_paths if p.stem.endswith("_impl_pretense") or p.stem.endswith("_impl_test") or p.stem.endswith("_test")]
+    if not test_run_files:
+        test_run_files = target_test_paths
+    cmd.extend([str(p) for p in test_run_files])
 
-    res = subprocess.run(cmd, cwd=sandbox, env=env, capture_output=True, text=True)
-    output = res.stdout + "\n" + res.stderr
-
-    passed = 0
-    failed = 0
-    p_match = re.search(r"(\d+) passed", output)
-    if p_match:
-        passed = int(p_match.group(1))
-    f_match = re.search(r"(\d+) failed", output)
-    if f_match:
-        failed = int(f_match.group(1))
-    if failed == 0 and passed == 0 and res.returncode != 0:
+    try:
+        res = subprocess.run(cmd, cwd=sandbox, env=env, capture_output=True, text=True, timeout=60.0)
+        output = res.stdout + "\n" + res.stderr
+        passed = 0
+        failed = 0
+        p_match = re.search(r"(\d+) passed", output)
+        if p_match:
+            passed = int(p_match.group(1))
+        f_match = re.search(r"(\d+) failed", output)
+        if f_match:
+            failed = int(f_match.group(1))
+        if failed == 0 and passed == 0 and res.returncode != 0:
+            failed = 1
+    except subprocess.TimeoutExpired as e:
+        timed_out_stdout = e.stdout or ""
+        timed_out_stderr = e.stderr or ""
+        output = f"[FAIL] Cross-test execution timed out after 60s (possible infinite loop or hang in code under test).\n{timed_out_stdout}\n{timed_out_stderr}"
+        passed = 0
         failed = 1
+        failures = [
+            FailureDetail(
+                test_name=f"{test_dir.name} on {lib_dir.name}",
+                error_type="TimeoutError",
+                message="Cross-test execution timed out after 60s (possible infinite loop or hang in code under test)",
+                category="[ERROR]",
+            )
+        ]
+        return CrossTestResult(
+            target_lib=lib_dir.name,
+            test_suite=test_dir.name,
+            passed=passed,
+            failed=failed,
+            output=output,
+            failures=failures,
+        )
 
     failures = parse_failures(output)
     if failed > 0 and not failures:
@@ -601,6 +661,12 @@ def main() -> int:
         "--suite",
         default="semver_solver",
         help="Benchmark suite identifier (default: semver_solver)",
+    )
+    parser.add_argument(
+        "--pipeline",
+        choices=["standard", "pretense"],
+        default="standard",
+        help="Cleanroom pipeline under test (default: standard)",
     )
     parser.add_argument(
         "--mode",

@@ -36,11 +36,12 @@ By encapsulating adjacency index management under re-entrant locks, employing Ka
 - A concrete DAG runner checks wall clock elapsed duration against timeouts and raises DAG timeout error if exceeded. [enforce_runner_timeout]
 - A concrete DAG runner inspects cancellation events between waves, aborts active tasks, and raises DAG cancelled error when cancelled. [enforce_runner_cancellation]
 - A concrete DAG runner evaluates cancellation events and timeout limits sequentially as loop guards before dispatching ready waves. [enforce_runner_loop_guards]
+- A concrete DAG runner evaluates whether cancellation has been signaled via a test-only query accessor. [observe_cancellation_state]
 - A concrete DAG runner compiles node results and critical path metrics into a consolidated DAG run report upon finish. [compile_dag_run_report]
 
 ### Woven Contracts
 
-- Node registry, adjacency maps, cycle detection, topological sorting, wave state transitions, and thread pool runners coordinate to execute task graphs safely. [maintain_node_registry, maintain_adjacency_maps, enforce_node_presence, detect_graph_cycles, execute_deterministic_topological_sort, compute_critical_path_dp, initialize_scheduler_states, filter_and_order_ready_wave, promote_unblocked_dependents, apply_fail_fast_cancellation, apply_skip_downstream_marking, apply_continue_on_error_retention, verify_scheduler_completion, pre_validate_graph_before_run, dispatch_concurrent_waves, execute_node_action_with_retries, propagate_runner_failure_policy, enforce_runner_timeout, enforce_runner_cancellation, enforce_runner_loop_guards, compile_dag_run_report]
+- Node registry, adjacency maps, cycle detection, topological sorting, wave state transitions, and thread pool runners coordinate to execute task graphs safely. [maintain_node_registry, maintain_adjacency_maps, enforce_node_presence, detect_graph_cycles, execute_deterministic_topological_sort, compute_critical_path_dp, initialize_scheduler_states, filter_and_order_ready_wave, promote_unblocked_dependents, apply_fail_fast_cancellation, apply_skip_downstream_marking, apply_continue_on_error_retention, verify_scheduler_completion, pre_validate_graph_before_run, dispatch_concurrent_waves, execute_node_action_with_retries, propagate_runner_failure_policy, enforce_runner_timeout, enforce_runner_cancellation, enforce_runner_loop_guards, observe_cancellation_state, compile_dag_run_report]
 
 ## Grounding
 
@@ -60,7 +61,7 @@ By encapsulating adjacency index management under re-entrant locks, employing Ka
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-26T21:35:31Z
-LAST_CHANGED: 2026-10-22T10:20:00Z
-CHANGE: Restore system lifecycle tier and specify operation-driven failure propagation contracts
+LAST_CHANGED: 2026-11-02T19:55:00Z
+CHANGE: Ground observe_cancellation_state test-only query on DAGRunner
 SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
 -->

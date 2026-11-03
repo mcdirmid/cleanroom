@@ -59,8 +59,8 @@ A *dependency solver* resolves mutually compatible package versions satisfying r
 Resolution concludes by selecting the highest precedence compatible release for each required package and producing a resolution outcome. When no combination of package releases can satisfy all transitive dependencies, or when a dependency references a package not present in the package repository, the solver raises resolution conflict error identifying the conflicting packages and derivation explanation without allowing package not found error to escape.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-27T02:19:04Z
-LAST_CHANGED: 2026-10-27T22:30:00Z
-CHANGE: Remove overconstrained exact range text normalization, clarify basic equality operators and prerelease boundary satisfaction
-SPEC_QA_AUDIT: 2026-10-27T02:19:04Z
+LAST_CLEANED: 2026-10-30T19:20:00Z
+LAST_CHANGED: 2026-10-30T19:20:00Z
+CHANGE: Grounding specification alignment
+SPEC_QA_AUDIT: 2026-10-30T19:20:00Z
 -->

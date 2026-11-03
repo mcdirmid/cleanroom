@@ -1,9 +1,9 @@
-# Cleanroom System Architecture & Technical Design
+# Autofab System Architecture & Technical Design
 
 > **Authoritative Technical Design Document**  
-> This document provides the comprehensive technical design and architectural specifications for the Cleanroom system. It condenses and synthesizes the engineering designs for execution paradigms, double-blind physical workspaces, in-band metadata, logless auditor roles, specification grounding, packaging, and multi-harness telemetry.
+> This document provides the comprehensive technical design and architectural specifications for the Autofab system. It condenses and synthesizes the engineering designs for execution paradigms, double-blind physical workspaces, in-band metadata, logless auditor roles, specification grounding, packaging, and multi-harness telemetry.
 >
-> *(Note: Operational tracking, completed milestones, and forward development tasks are maintained in [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md). Academic research formulations and the formal specification calculus are in [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md) and [`grounded_specification_language_and_neural_compilation.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/grounded_specification_language_and_neural_compilation.md)).*
+> *(Note: Operational tracking, completed milestones, and forward development tasks are maintained in [`todo.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/todo.md). Academic research formulations and the formal specification calculus are in [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/paper_submission_design_doc.md) and [`grounded_specification_language_and_neural_compilation.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/grounded_specification_language_and_neural_compilation.md)).*
 
 ---
 
@@ -12,7 +12,7 @@
 1. [System Overview & Architectural Philosophy](#1-system-overview--architectural-philosophy)
    - [Core Invariants](#core-invariants)
    - [The 5-Stage Transformation Pipeline](#the-5-stage-transformation-pipeline)
-   - [Modular Package Decomposition (`update_with_ai/parts/*`)](#modular-package-decomposition-update_with_aiparts)
+   - [Modular Package Decomposition (`autofab/parts/*`)](#modular-package-decomposition-autofabparts)
 2. [Execution Paradigms & Isolation Architecture](#2-execution-paradigms--isolation-architecture)
    - [Paradigm Comparison Matrix](#paradigm-comparison-matrix)
    - [Option 4: Subagent-Driven Workspaces with Zero-Execution Coordinator (Primary)](#option-4-subagent-driven-workspaces-with-zero-execution-coordinator-primary)
@@ -51,7 +51,7 @@
 
 ## 1. System Overview & Architectural Philosophy
 
-Cleanroom is a literate, specification-driven neural compilation and software engineering framework. It guarantees that software produced by autonomous AI agents is mathematically verifiable, grounded in formal contracts, and free from hallucinations, context poisoning, and accidental implementation drift.
+Autofab is a literate, specification-driven neural compilation and software engineering framework. It guarantees that software produced by autonomous AI agents is mathematically verifiable, grounded in formal contracts, and free from hallucinations, context poisoning, and accidental implementation drift.
 
 ### Core Invariants
 
@@ -61,10 +61,10 @@ Cleanroom is a literate, specification-driven neural compilation and software en
    Every defect discovered in implementation or testing is treated as a defect in specification. Stealth edits to `lib/*.py` or `tests/*_test.py` are strictly blocked.
 
 2. **Physical Double-Blind Isolation via Operating System Filesystem Controls**:  
-   Prompt agreements and software interceptors fail under autonomous agent execution. Cleanroom enforces double-blind isolation physically using OS-level filesystem permissions (`chmod 444`) and isolated sibling directories. Implementation authors are physically denied access to test code, and test authors are physically denied access to implementation code.
+   Prompt agreements and software interceptors fail under autonomous agent execution. Autofab enforces double-blind isolation physically using OS-level filesystem permissions (`chmod 444`) and isolated sibling directories. Implementation authors are physically denied access to test code, and test authors are physically denied access to implementation code.
 
 3. **Logless State via In-Band Source Metadata**:  
-   External state databases, SQLite registries, and sidecar textproto files create synchronization drift and concurrency corruption. Cleanroom embeds all state (Git commit hashes, content hashes, auditor attestations, and failure feedback) directly into managed source files as in-band comment headers.
+   External state databases, SQLite registries, and sidecar textproto files create synchronization drift and concurrency corruption. Autofab embeds all state (Git commit hashes, content hashes, auditor attestations, and failure feedback) directly into managed source files as in-band comment headers.
 
 4. **Zero-Execution Multi-Agent Coordination**:  
    The top-level coordinator agent never executes code, never views source files, and never runs tests. Its sole purpose is calculating the directed acyclic graph (DAG) of dirty nodes, grouping unblocked nodes into parallel execution waves, provisioning physical sibling workspaces, and dispatching workspace-bound worker subagents.
@@ -118,9 +118,9 @@ Cleanroom is a literate, specification-driven neural compilation and software en
 
 ---
 
-### Modular Package Decomposition (`update_with_ai/parts/*`)
+### Modular Package Decomposition (`autofab/parts/*`)
 
-Cleanroom is decomposed into single-responsibility, decoupled Python packages under `update_with_ai/parts/`:
+Autofab is decomposed into single-responsibility, decoupled Python packages under `autofab/parts/`:
 
 | Package Path | Core Responsibility | Key Components |
 | :--- | :--- | :--- |
@@ -128,7 +128,7 @@ Cleanroom is decomposed into single-responsibility, decoupled Python packages un
 | **`parts/storage`** | In-band metadata persistence, hashing & DAG dirtiness | `src_metadata.py`, `manifest_ext.py`, `hash_util.py` |
 | **`parts/workspace`** | Physical sibling sandboxes & OS `chmod 444` permission masking | `workspace_factory.py`, `workspace_clean.py` |
 | **`parts/subagent`** | Multi-agent wave scheduler & worker life-cycle manager | `subagent_coordinator.py`, `subagent_worker.py` |
-| **`parts/control`** | CLI suite, target resolution, and methodology discovery | `cleanroom_cli.py`, `target_resolver.py` |
+| **`parts/control`** | CLI suite, target resolution, and methodology discovery | `autofab_cli.py`, `target_resolver.py` |
 | **`parts/loop`** | In-process autonomous agent execution loop (Option 1) | `loop_driver.py`, `loop_cleaner.py`, `loop_guard.py` |
 | **`parts/dsh`** | DeepSeek Harness (`dsh`) integration, telemetry daemon | `dsh_telemetry.py`, `dsh_harness_impl.py`, Cordis overlay |
 | **`parts/antigravity`** | Google Antigravity coordinator & subagent directives | `antigravity_harness_impl.py`, agent configurations |
@@ -140,7 +140,7 @@ Cleanroom is decomposed into single-responsibility, decoupled Python packages un
 
 ## 2. Execution Paradigms & Isolation Architecture
 
-Cleanroom defines three active operational paradigms, each tailored to distinct execution environments:
+Autofab defines three active operational paradigms, each tailored to distinct execution environments:
 
 ### Paradigm Comparison Matrix
 
@@ -148,7 +148,7 @@ Cleanroom defines three active operational paradigms, each tailored to distinct 
 | :--- | :--- | :--- | :--- | :--- |
 | **Execution Mode** | Headless in-process Python loop | Interactive developer CLI / IDE round | Autonomous multi-agent wave coordinator | Multi-subagent hierarchy in single working dir |
 | **Supervisor Role** | Algorithmic Python loop driver | Human developer or IDE agent | Zero-execution coordinator subagent | Subagent coordinator with file edit permissions |
-| **Isolation Mechanism** | Ephemeral in-process state | Sibling directories with `chmod 444` mounts | Sibling directories with `chmod 444` mounts | Software lifecycle hooks (`cleanroom_sandbox_hook.py`) |
+| **Isolation Mechanism** | Ephemeral in-process state | Sibling directories with `chmod 444` mounts | Sibling directories with `chmod 444` mounts | Software lifecycle hooks (`autofab_sandbox_hook.py`) |
 | **Double-Blind Safety** | Procedural tool-masking | Physical OS filesystem enforcement | Physical OS filesystem enforcement | Software prompt rules (Repeatedly bypassed) |
 | **Target Harness** | Any OpenAI/Gemini-compatible endpoint | Google Antigravity, Cursor, VS Code, CLI | Google Antigravity, DeepSeek Harness (`dsh`) | Antigravity FastMCP tool server |
 | **Token Consumption** | Low (Minimal prompt overhead) | Very Low (Zero supervisor overhead) | Low (Scoped worker contexts, parallel waves) | Catastrophic (1.5M+ tokens/run; rate-limit burst) |
@@ -162,7 +162,7 @@ Option 4 combines the physical isolation of Option 3's sibling workspaces with a
 
 ```
                       ┌────────────────────────────────────────┐
-                      │      Cleanroom Coordinator Agent       │
+                      │      Autofab Coordinator Agent       │
                       │       (Zero-Execution Supervisor)      │
                       └───────────────────┬────────────────────┘
                                           │
@@ -193,31 +193,31 @@ Option 4 combines the physical isolation of Option 3's sibling workspaces with a
 ```
 
 #### The Zero-Execution Coordinator Invariant
-The coordinator subagent (`cleanroom_coordinator`) is granted strictly restricted tool permissions:
+The coordinator subagent (`autofab_coordinator`) is granted strictly restricted tool permissions:
 - **Stripped Tools**: Denied all file editing tools (`write_to_file`, `replace_file_content`), viewing tools (`view_file`), web searching, and terminal execution except for query commands.
-- **Allowed Tools**: `run_command` (restricted to `uv run cleanroom work-queue`), `send_message`, `invoke_subagent`, and `manage_subagents`.
+- **Allowed Tools**: `run_command` (restricted to `uv run autofab work-queue`), `send_message`, `invoke_subagent`, and `manage_subagents`.
 - **Zero File Custody**: The coordinator never reads source code, runs tests, or touches project files.
 
 #### Wave-Based DAG Scheduling Algorithm
-1. Coordinator executes `uv run cleanroom work-queue <scope>`.
+1. Coordinator executes `uv run autofab work-queue <scope>`.
 2. Inspects returned topologically sorted list of dirty nodes.
 3. Groups all ready nodes (nodes whose upstream dependencies are 100% clean) into **Wave $N$**.
 4. Dispatches subagents in parallel, each pinned to its dedicated workspace:
-   `Workspace: "inherit"` is prohibited; each worker is pinned to `../role_workspaces/<session_id>/<scope>_<role>/`.
+   `Workspace: "inherit"` is prohibited; each worker is pinned to `../autofab_autofab_role_workspaces/<session_id>/<scope>_<role>/`.
 5. Awaits wave completion. When all nodes in Wave $N$ report clean, re-evaluates `work-queue` for Wave $N+1$.
 6. Terminates when `work-queue` returns empty (all nodes clean).
 
 #### Multi-Wave Orchestration, Wave Barriers & Blame Defect Propagation
-Cleanroom's subagent coordinator (`update_with_ai/parts/subagent/`) orchestrates multi-agent cleaning passes across complex dependency topologies (including deep diamond graphs and star dependencies):
+Autofab's subagent coordinator (`autofab/parts/subagent/`) orchestrates multi-agent cleaning passes across complex dependency topologies (including deep diamond graphs and star dependencies):
 
 1. **Dynamic Parallel Role Clustering**:
-   Ready nodes across decoupled targets or orthogonal roles (such as `lib` and `test` within a component, or across independent parts) cluster dynamically into concurrent waves. Workers execute in parallel inside dedicated physical sandboxes (`../role_workspaces/<session>/...`), preventing cross-agent crosstalk or filesystem lock collisions.
+   Ready nodes across decoupled targets or orthogonal roles (such as `lib` and `test` within a component, or across independent parts) cluster dynamically into concurrent waves. Workers execute in parallel inside dedicated physical sandboxes (`../autofab_autofab_role_workspaces/<session>/...`), preventing cross-agent crosstalk or filesystem lock collisions.
 
 2. **Downstream Wave Synchronization Barriers**:
    Downstream auditor and integration roles (such as `spec_qa`, `qa`, and `coverage`) are strictly blocked behind synchronization barriers. No downstream verification role is dispatched until all of its required upstream implementation dependencies have succeeded and stamped their artifacts clean.
 
 3. **Closed-Loop Blame Defect Propagation**:
-   When an auditor or worker discovers an upstream specification omission or contract defect, it executes `cleanroom blame <target>#<role> --upstream=<culprit> --reason="..."`.
+   When an auditor or worker discovers an upstream specification omission or contract defect, it executes `autofab blame <target>#<role> --upstream=<culprit> --reason="..."`.
    - The blame feedback is prepended directly into the culprit node's in-band metadata header.
    - The DAG dirtiness engine immediately invalidates the culprit node and all transitive downstream dependents.
    - Downstream workers halt execution; the coordinator schedules the culprit node for re-cleaning in the next wave with the critique provided in context.
@@ -227,7 +227,7 @@ Cleanroom's subagent coordinator (`update_with_ai/parts/subagent/`) orchestrates
 To prevent orphan child processes, zombie subagents, and filesystem clutter during user cancellation:
 - `SubagentCoordinator.orchestrate` traps interruption signals (`SIGINT`, `SIGTERM`, `KeyboardInterrupt`).
 - On signal capture, the coordinator issues immediate cancellation directives (`harness.interrupt_role`) to terminate all active child worker processes.
-- All provisioned ephemeral role workspaces in scope (`../role_workspaces/<session>/...`) are atomically decommissioned and purged from disk.
+- All provisioned ephemeral role workspaces in scope (`../autofab_autofab_role_workspaces/<session>/...`) are atomically decommissioned and purged from disk.
 
 ---
 
@@ -237,8 +237,8 @@ Designed for human-directed or single-agent interactive development:
 - **Workspace Directory Structure**:
   ```
   projects/
-  ├── cleanroom/                              # Main workspace (Supervisor context)
-  └── role_workspaces/                        # Sibling workspaces directory
+  ├── autofab/                              # Main workspace (Supervisor context)
+  └── autofab_autofab_role_workspaces/                        # Sibling workspaces directory
       └── session_12345/
           ├── parts_storage_high/             # High role workspace
           ├── parts_storage_planning/         # Planning role workspace
@@ -256,7 +256,7 @@ Designed for human-directed or single-agent interactive development:
 
 ### Option 1: Custom In-Process Headless Loop
 
-An autonomous in-process agent loop designed for unattended CI/CD environments (`uv run cleanroom clean --harness loop`):
+An autonomous in-process agent loop designed for unattended CI/CD environments (`uv run autofab clean --harness loop`):
 - **`loop_cleaner.py`**: Traverses the DAG in topological order, identifying the next dirty node.
 - **`loop_driver.py`**: Runs a closed ReAct cycle:
   $$\text{Prompt(Guide, Target, Header)} \longrightarrow \text{LLM Call} \longrightarrow \text{Tool Execution} \longrightarrow \text{Observation} \longrightarrow \text{Verification}$$
@@ -271,7 +271,7 @@ An autonomous in-process agent loop designed for unattended CI/CD environments (
 
 ### Option 2 Post-Mortem: Why In-Tree FastMCP Subagents Failed
 
-In Option 2, Cleanroom attempted to enforce role isolation in a single shared directory using an external FastMCP server daemon and Antigravity `PreToolUse` hooks (`cleanroom_sandbox_hook.py`).
+In Option 2, Autofab attempted to enforce role isolation in a single shared directory using an external FastMCP server daemon and Antigravity `PreToolUse` hooks (`autofab_sandbox_hook.py`).
 
 **Root Causes of Failure**:
 1. **Context Window Token Explosion**: The coordinator and all subagents shared a monolithic context. Tool definitions, JSON schemas, stdout/stderr streams, and diffs accumulated rapidly. A single 4-node cleaning pass consumed 1,500,000+ tokens in 40 minutes, burning through 5-hour Google One Ultra burst quotas ($30–$50 per run).
@@ -300,7 +300,7 @@ An experimental harness adapter for Block's Goose CLI agent (`--harness goose`) 
 
 ### The Logless State Invariant
 
-Cleanroom maintains **zero external state registries** (no `.update_with_ai.textproto`, no SQLite databases, and no out-of-band audit logs). The repository file system and Git object tree are the sole sources of truth. All lifecycle state is embedded directly inside managed source files.
+Autofab maintains **zero external state registries** (no `.autofab.textproto`, no SQLite databases, and no out-of-band audit logs). The repository file system and Git object tree are the sole sources of truth. All lifecycle state is embedded directly inside managed source files.
 
 ---
 
@@ -308,7 +308,7 @@ Cleanroom maintains **zero external state registries** (no `.update_with_ai.text
 
 #### Markdown Artifacts (`high/*.md`, `planning/*.md`, `scenarios/*.md`)
 ```markdown
-<!-- CLEANROOM METADATA
+<!-- AUTOFAB METADATA
 LAST_CLEANED: 047a949f2b8e3a1d9c7e5f4a8b2c1d0e9f8a7b6c
 LAST_CHANGED: 047a949f2b8e3a1d9c7e5f4a8b2c1d0e9f8a7b6c
 CODE_HASH: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
@@ -319,7 +319,7 @@ Verification failed: PathNormalizer rejects valid Windows UNC paths.
 
 #### Python / Python Interface Artifacts (`low/*.pyi`, `lib/*.py`, `tests/*_test.py`)
 ```python
-# CLEANROOM METADATA
+# AUTOFAB METADATA
 # LAST_CLEANED: 047a949f2b8e3a1d9c7e5f4a8b2c1d0e9f8a7b6c
 # LAST_CHANGED: 047a949f2b8e3a1d9c7e5f4a8b2c1d0e9f8a7b6c
 # CODE_HASH: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
@@ -346,17 +346,17 @@ To protect model context budgets and prevent subagents from misinterpreting inte
 
 To ensure hashing is deterministic and immune to metadata changes:
 1. Parse the file lines sequentially.
-2. Strip out all lines belonging to the metadata block (`<!-- CLEANROOM METADATA ... -->` or `# CLEANROOM METADATA ...`).
+2. Strip out all lines belonging to the metadata block (`<!-- AUTOFAB METADATA ... -->` or `# AUTOFAB METADATA ...`).
 3. Strip trailing whitespace from remaining lines and normalize line endings to `\n`.
 4. Compute `sha256(sanitized_utf8_bytes).hexdigest()`.
 
-When a file is submitted, Cleanroom checks if `current_code_hash == recorded_code_hash`. If equal, no substantive content changed, preventing redundant cascading invalidations.
+When a file is submitted, Autofab checks if `current_code_hash == recorded_code_hash`. If equal, no substantive content changed, preventing redundant cascading invalidations.
 
 ---
 
 ### Star-Dependency Cascades & Forward Dirtiness Evaluation
 
-Cleanroom models dependencies as a directed acyclic graph (DAG). Dirtiness is evaluated dynamically:
+Autofab models dependencies as a directed acyclic graph (DAG). Dirtiness is evaluated dynamically:
 
 $$\text{is\_dirty}(N) \iff \begin{cases}
 \text{True} & \text{if } N.\text{LAST\_CLEANED is missing} \\
@@ -365,7 +365,7 @@ $$\text{is\_dirty}(N) \iff \begin{cases}
 \text{False} & \text{otherwise}
 \end{cases}$$
 
-When an upstream specification ($U$) changes, `cleanroom submit` sets $U.\text{LAST\_CHANGED} = \text{HEAD}$.
+When an upstream specification ($U$) changes, `autofab submit` sets $U.\text{LAST\_CHANGED} = \text{HEAD}$.
 Every downstream dependent $N$ immediately evaluates to dirty because $U.\text{LAST\_CHANGED} \neq N.\text{LAST\_CLEANED}$, triggering an automatic downstream cleaning cascade.
 
 ---
@@ -385,7 +385,7 @@ Auditors are read-only certifiers that verify consistency between artifacts:
 
 In traditional build systems, tools require output files. Since an auditor does not author new code, running an audit produced 0 bytes of output, making it impossible to record that the audit passed without an external database.
 
-Cleanroom resolves the **0-byte paradox** by stamping verification attestations directly into the target file's in-band header:
+Autofab resolves the **0-byte paradox** by stamping verification attestations directly into the target file's in-band header:
 ```python
 # SPEC_QA_AUDIT: 2026-10-16T12:00:00Z PASSED git:047a949f2b8e
 ```
@@ -406,7 +406,7 @@ An auditor role is evaluated as dirty if:
 
 When an audit fails or a worker blames an upstream artifact, feedback is injected directly into the upstream file's `FEEDBACK:` header:
 ```markdown
-<!-- CLEANROOM METADATA
+<!-- AUTOFAB METADATA
 FEEDBACK: [from spec_qa at 2026-10-16T12:00:00Z]
 Low stub `PathNormalizer.normalize()` missing precondition checking for null bytes.
 Amend planning/core.md [contract:path_sanitization] before re-stamping.
@@ -445,8 +445,8 @@ class ManifestHasher:
 
 The `parts/workspace` module provisions isolated sibling sandboxes:
 ```
-../role_workspaces/<session_id>/<scope>_<role>/
-├── update_with_ai/                     # Symlinked package root
+../autofab_autofab_role_workspaces/<session_id>/<scope>_<role>/
+├── autofab/                     # Symlinked package root
 │   └── parts/
 │       └── storage/
 │           ├── high/                   # Upstream: chmod 444 (Read-Only)
@@ -459,36 +459,36 @@ The `parts/workspace` module provisions isolated sibling sandboxes:
 1. **Target File**: Staged as a writable file (`chmod 644`).
 2. **Upstream Specifications**: Mounted as read-only copies or symlinks with `chmod 444`. Any attempt by the worker to edit an upstream file results in an OS permission denied error.
 3. **Hidden Roles**: Sibling and downstream roles are omitted entirely. A `lib/` worker cannot see `tests/`; a `tests/` worker cannot see `lib/`.
-4. **Package Projections**: Top-level packages are symlinked so native imports (`import update_with_ai...`) work seamlessly without PYTHONPATH hacks.
+4. **Package Projections**: Top-level packages are symlinked so native imports (`import autofab...`) work seamlessly without PYTHONPATH hacks.
 
 ---
 
 ### Minimal Hermetic Role Workspace Provisioning & Clutter Eradication
 
-To prevent context pollution, token waste, and agent distraction during autonomous multi-agent execution, Cleanroom enforces strict hermetic minimalism when provisioning role workspaces (`parts/workspace/` via `provision_impl.py`, `sync_impl.py`, `scaffold_impl.py`, and `roles_impl.py`).
+To prevent context pollution, token waste, and agent distraction during autonomous multi-agent execution, Autofab enforces strict hermetic minimalism when provisioning role workspaces (`parts/workspace/` via `provision_impl.py`, `sync_impl.py`, `scaffold_impl.py`, and `roles_impl.py`).
 
 #### 1. Problem: Monolithic Workspace Clutter
-In earlier designs, workspace provisioners naively copied entire methodology directories (`update_python_with_ai/`) into the sibling sandbox:
-- Dumping full configuration manifests (`cleanroom_roles.toml`, `pyright_spec.json`) into the sandbox root.
+In earlier designs, workspace provisioners naively copied entire methodology directories (`autofab_python/`) into the sibling sandbox:
+- Dumping full configuration manifests (`autofab_roles.toml`, `pyright_spec.json`) into the sandbox root.
 - Dumping all 8 methodology guides into `guides/` and all starter templates into `templates/`.
 - Creating redundant methodology subdirectories in the workspace root.
-- Searching for non-existent legacy ghost files (such as `cleanroom_python_roles.toml`).
+- Searching for non-existent legacy ghost files (such as `autofab_python_roles.toml`).
 
 When LLM agents inspected their directory via tools (`ls`, file readers), these irrelevant files distracted the model, induced repetitive inspection loops, bloated input contexts, and consumed tokens unnecessarily.
 
 #### 2. Architecture: Zero-Clutter Hermetic Sandboxing
-Cleanroom eliminates workspace clutter through five architectural controls:
+Autofab eliminates workspace clutter through five architectural controls:
 
 1. **Purging Ghost Manifest References**:
-   - `cleanroom_roles.toml` is the sole canonical manifest. All fallback loops to `cleanroom_python_roles.toml` were completely purged across `roles_impl.py`, `provision_impl.py`, `role_registry_impl.py`, `manifest_loader_impl.py`, and `benchmark_impl.py`.
+   - `autofab_roles.toml` is the sole canonical manifest. All fallback loops to `autofab_python_roles.toml` were completely purged across `roles_impl.py`, `provision_impl.py`, `role_registry_impl.py`, `manifest_loader_impl.py`, and `benchmark_impl.py`.
 
 2. **Zipapp Bundling of Role Configurations**:
-   - `scaffold_impl.py` packages `cleanroom_roles.toml` directly inside the standalone runner zipapps (`bin/*`).
+   - `scaffold_impl.py` packages `autofab_roles.toml` directly inside the standalone runner zipapps (`bin/*`).
    - `roles_impl.py` dynamically loads role definitions directly from the internal zipapp bundle or in-memory caches, removing any requirement for role manifests to exist in the workspace filesystem.
 
 3. **Workspace Root Stripping**:
-   - `provision_impl.py` and `sync_impl.py` strictly prohibit copying `cleanroom_roles.toml`, `pyright_spec.json`, or starter templates into the workspace root.
-   - Redundant methodology directories (`update_python_with_ai/`) are never created in the sandbox root.
+   - `provision_impl.py` and `sync_impl.py` strictly prohibit copying `autofab_roles.toml`, `pyright_spec.json`, or starter templates into the workspace root.
+   - Redundant methodology directories (`autofab_python/`) are never created in the sandbox root.
 
 4. **Selective Single-Guide Provisioning**:
    - The provisioned `guides/` directory contains **strictly the single companion guide designated for the assigned role** (e.g., `guides/low_to_test.md` for `test`, `guides/low_to_lib.md` for `lib`, `guides/spec_qa.md` for `spec_qa`).
@@ -496,7 +496,32 @@ Cleanroom eliminates workspace clutter through five architectural controls:
 
 5. **Minimal Runtime Support for Hermetic Execution**:
    - The workspace maintains strictly `support/lib/` containing only the user-facing runtime primitives (`framework.py`, `framework.pyi`, `lifecycle.py`, `lifecycle.pyi`) so that `pyright` and `pytest` cleanly resolve runtime dependencies of code under test without import errors.
-   - Minimal project scaffolding is preserved: `pyproject.toml`, `uv.lock`, `.python-version`, `.cleanroom_role.json`, `AGENTS.md`, and `bin/` tools.
+   - Minimal project scaffolding is preserved: `pyproject.toml`, `uv.lock`, `.python-version`, `.autofab_role.json`, `AGENTS.md`, and `bin/` tools.
+
+---
+
+### Workspace Undo, Snapshotting & Pre-Tool Checkpoint Architecture
+
+To protect role workspaces from unrecoverable edit errors, tool envelope truncations, or accidental code wipes without interfering with fine-tuned harness editing tools, Autofab implements a non-invasive, Git-backed workspace snapshot and revert architecture:
+
+1. **Local Git Tracking Initialization**:
+   - During `provision_impl.commission`, an isolated local git repository (`git init`) is initialized inside the newly provisioned role workspace.
+   - Configures a local committer identity (`Autofab Worker <worker@cleanroom.local>`) and writes `.gitignore` excluding caches, logs, and dirty state buffers (`.pending_work.json`, `.blame_buffer.json`).
+   - Commits all scaffolded files as the `Initial workspace snapshot`.
+
+2. **Pre-Tool Lifecycle Checkpoints**:
+   - Before executing file mutation tools (`edit_file` / `write_file` in Antigravity; `edit` / `write` in DeepSeek Harness), agent harness lifecycle hooks (`PreToolUse` in `.agents/hooks.json`; `hooks.pre_tool` in `.cleanroom/dsh_patch.yml`) automatically invoke `./bin/checkpoint pre-edit`.
+   - If working directory changes exist, a git commit snapshot is recorded immediately before the destructive tool runs.
+   - For Antigravity hooks, `bin/checkpoint` outputs `{"decision": "allow"}` on stdout, allowing the tool execution to proceed without user intervention.
+
+3. **Milestone Verification Checkpoints**:
+   - In `check_impl.run_check_files`, whenever all static checks, linters, and test rules pass with zero errors, an automatic milestone git commit snapshot is recorded (`Checkpoint: verified <target>`).
+   - This ensures verified, passing code states are permanently preserved in git history.
+
+4. **Instant In-Workspace Rollback & Diff Utilities**:
+   - `bin/revert` and `bin/checkpoint` are packaged as standalone executable zipapps into `bin/`.
+   - `bin/revert [target]` restores a specific file or the entire workspace back to `HEAD` (reverting unviable edits or file truncations without resorting to `bin/fail`).
+   - `git restore <target>` and `git diff <target>` are explicitly permitted and instructed in `AGENTS.md` instructions, while external git operations (pushes/fetches) remain strictly prohibited.
 
 ---
 
@@ -512,14 +537,14 @@ All legacy Bazel markers have been purged:
 
 ### Native Python Packaging (`pyproject.toml` + `uv`)
 
-Cleanroom is packaged as a standard Python package managed with `hatchling` and `uv`:
+Autofab is packaged as a standard Python package managed with `hatchling` and `uv`:
 ```toml
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cleanroom"
+name = "autofab"
 version = "0.1.0"
 description = "Literate, specification-driven neural compilation and double-blind agentic engineering framework"
 readme = "README.md"
@@ -531,39 +556,39 @@ dependencies = [
 ]
 
 [project.scripts]
-cleanroom = "update_with_ai.parts.control.lib.cleanroom_cli:main"
+autofab = "autofab.parts.control.lib.autofab_cli:main"
 ```
 
 ---
 
 ### Dynamic Workspace Root Derivation
 
-Cleanroom tools derive the active workspace root dynamically in this precedence order:
+Autofab tools derive the active workspace root dynamically in this precedence order:
 1. Explicit `--workspace-root <path>` CLI argument.
 2. `BUILD_WORKSPACE_DIRECTORY` environment variable (if invoked via build runners).
 3. Ascending filesystem search for `pyproject.toml` or `.git`.
 4. Current working directory (`os.getcwd()`).
 
-Hardcoded repository paths or directory names are strictly prohibited by Cleanroom behavioral rules.
+Hardcoded repository paths or directory names are strictly prohibited by Autofab behavioral rules.
 
 ---
 
 ### Ephemeral Zero-Install Distribution (`uvx`)
 
-Cleanroom supports zero-install execution on arbitrary repositories via `uvx`:
+Autofab supports zero-install execution on arbitrary repositories via `uvx`:
 ```bash
-uvx cleanroom orchestrate //my_project/parts/auth#lib
+uvx autofab orchestrate //my_project/parts/auth#lib
 ```
-`uvx` downloads the ephemeral Cleanroom wheel, executes the coordinator, builds the sibling workspaces, and cleans the target without requiring Cleanroom to be cloned into the target project.
+`uvx` downloads the ephemeral Autofab wheel, executes the coordinator, builds the sibling workspaces, and cleans the target without requiring Autofab to be cloned into the target project.
 
 ---
 
 ### Unified CLI Command Architecture
 
-All CLI commands are routed through `update_with_ai/parts/control/lib/cleanroom_cli.py`:
+All CLI commands are routed through `autofab/parts/control/lib/autofab_cli.py`:
 
 ```
-cleanroom <subcommand> [arguments] [options]
+autofab <subcommand> [arguments] [options]
 ```
 
 - **`orchestrate <scope> [target_role]`**: Launches autonomous multi-agent wave coordinator (Option 4).
@@ -585,10 +610,10 @@ cleanroom <subcommand> [arguments] [options]
 
 ### DeepSeek Harness (`dsh`), Direct JSON-RPC Integration & Cordis Shell
 
-Cleanroom provides deep integration with DeepSeek Harness (`dsh`) across both direct JSON-RPC client-server communication and local CLI workflows:
+Autofab provides deep integration with DeepSeek Harness (`dsh`) across both direct JSON-RPC client-server communication and local CLI workflows:
 
 1. **Direct JSON-RPC Remote Orchestration**:
-   - Cleanroom connects directly to the running DeepSeek Harness server over JSON-RPC via HTTP.
+   - Autofab connects directly to the running DeepSeek Harness server over JSON-RPC via HTTP.
    - Discovers active desktop endpoints and authentication credentials dynamically from the Cordis desktop SQLite cookie store (`cookies.sqlite`).
    - Invokes structured RPC methods (`workspace/create`, `session/create`, `session/prompt`) to drive subagent rounds directly against the running server.
    - Completely eliminates kernel write-lease contention (`flock` on `session.lock`) when running alongside an active Cordis desktop UI session, preventing UI session forking and deadlocks.
@@ -607,40 +632,40 @@ Cleanroom provides deep integration with DeepSeek Harness (`dsh`) across both di
 
 ### Google Antigravity Integration, Native Desktop IPC (`agentapi`) & Rate Economics
 
-In Google Antigravity environments, Cleanroom operates seamlessly across interactive pair programming, autonomous multi-agent coordination, and automated benchmarking flights:
+In Google Antigravity environments, Autofab operates seamlessly across interactive pair programming, autonomous multi-agent coordination, and automated benchmarking flights:
 
 1. **Zero-Execution Coordinator Registration**:
-   - Registers the `cleanroom_coordinator` agent definition equipped strictly with DAG scheduling tools (`work-queue`, `invoke_subagent`, `manage_subagents`, `send_message`).
-   - Emits the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE` for zero-friction handoff when invoked via `cleanroom orchestrate` or `cleanroom clean --harness antigravity`.
+   - Registers the `autofab_coordinator` agent definition equipped strictly with DAG scheduling tools (`work-queue`, `invoke_subagent`, `manage_subagents`, `send_message`).
+   - Emits the `AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE` for zero-friction handoff when invoked via `autofab orchestrate` or `autofab clean --harness antigravity`.
 
 2. **Elimination of Background Prompt Starvation via Native Desktop IPC (`agentapi`)**:
    - In the Antigravity desktop IDE, CLI processes that run longer than 10 seconds (such as batch cleaning or cross-model benchmark evaluations) are automatically converted into background support tasks.
    - Standard stdout is directed to task logs (`.system_generated/tasks/task-X.log`), suppressing the flight target scope from the chat model's step context and risking process stall.
-   - Cleanroom detects the desktop app environment dynamically (`ANTIGRAVITY_AGENT == "1"`) and locates the bundled `agentapi` executable via `$ANTIGRAVITY_AGENTAPI_EXE`, `PATH`, or `~/.gemini/antigravity/bin/agentapi`.
+   - Autofab detects the desktop app environment dynamically (`ANTIGRAVITY_AGENT == "1"`) and locates the bundled `agentapi` executable via `$ANTIGRAVITY_AGENTAPI_EXE`, `PATH`, or `~/.gemini/antigravity/bin/agentapi`.
 
 3. **Reactive Wakeup Protocol (`agentapi send-message`)**:
-   - Cleanroom extracts `ANTIGRAVITY_CONVERSATION_ID` from the environment and executes:
+   - Autofab extracts `ANTIGRAVITY_CONVERSATION_ID` from the environment and executes:
      ```bash
-     agentapi send-message --title "Cleanroom Coordinator Directive" \
+     agentapi send-message --title "Autofab Coordinator Directive" \
        "$ANTIGRAVITY_CONVERSATION_ID" \
-       "Clean all dirty nodes in <scope> using cleanroom_coordinator"
+       "Clean all dirty nodes in <scope> using autofab_coordinator"
      ```
    - This delivers a high-priority reactive wakeup event directly into the active chat session, resuming the supervisor model immediately with the explicit flight scope without waiting for background stdout polling.
 
 4. **Headless Tab Dispatch (`agentapi new-conversation`)**:
-   - For empirical benchmarking and unattended flight execution, Cleanroom supports `--antigravity-dispatch=new-conversation`:
+   - For empirical benchmarking and unattended flight execution, Autofab supports `--antigravity-dispatch=new-conversation`:
      ```bash
-     agentapi new-conversation --title="Cleanroom Coordinator: <scope>" -- \
-       "Clean all dirty nodes in <scope> using cleanroom_coordinator"
+     agentapi new-conversation --title="Autofab Coordinator: <scope>" -- \
+       "Clean all dirty nodes in <scope> using autofab_coordinator"
      ```
    - This provisions a dedicated coordinator conversation tab in the desktop sidebar, isolating benchmark supervisor activity from the user's main chat canvas.
 
 5. **Flight State Persistence & Resilient Fallback**:
-   - Active flight metadata is written atomically to `.cleanroom/active_flight.json` upon launch and deleted upon DAG convergence.
-   - If `agentapi` or conversation IDs are unavailable (e.g. headless CI environments or standard bash terminals), Cleanroom falls back gracefully to standard synchronous stdout directives.
+   - Active flight metadata is written atomically to `.autofab/active_flight.json` upon launch and deleted upon DAG convergence.
+   - If `agentapi` or conversation IDs are unavailable (e.g. headless CI environments or standard bash terminals), Autofab falls back gracefully to standard synchronous stdout directives.
 
 6. **Rate Economics & Model Tier Allocation**:
-   Cleanroom employs token-conscious prompting adhering to production rate limits:
+   Autofab employs token-conscious prompting adhering to production rate limits:
 
 | Model Tier | Cost per 1M Input Tokens | Cost per 1M Output Tokens | Role Suitability |
 | :--- | :--- | :--- | :--- |

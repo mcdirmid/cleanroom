@@ -1,0 +1,57 @@
+"""Autofab target low-level interface specification."""
+
+from typing import NewType, Protocol
+from support.lib.framework import data_type, operation, singleton_type
+from support.lib.lifecycle import Singleton, SystemTier
+from autofab.parts.dag.lib import dag_storage
+from autofab.parts.core.lib import file_paths
+
+TargetIdentifier = NewType("TargetIdentifier", str)
+
+
+@data_type
+class NodeDirectory(file_paths.WorkspacePath):
+    """Workspace package directory containing a node."""
+    ...
+
+
+@singleton_type("system")
+class UvTarget(Singleton[SystemTier], Protocol):
+    """Normalizes Autofab target labels and extracts package directories."""
+
+    @operation
+    def normalize_target(self, target_identifier: TargetIdentifier) -> dag_storage.DagNode:
+        """Normalizes an arbitrary target identifier string into a canonical node.
+
+        Args:
+            target_identifier: The raw target label or shorthand string.
+
+        Returns:
+            The canonical dag node.
+
+        POSTCONDITIONS:
+        - MUST normalize an arbitrary target identifier string into a canonical node.
+        """
+        ...
+
+    @operation
+    def extract_node_dir(self, node: dag_storage.DagNode) -> NodeDirectory:
+        """Extracts the workspace package directory of a node.
+
+        Args:
+            node: The node whose package directory is extracted.
+
+        Returns:
+            The workspace package directory path.
+
+        POSTCONDITIONS:
+        - MUST extract a node directory from a node.
+        """
+        ...
+
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-15T17:42:47Z
+# LAST_CHANGED: 2026-10-07T00:00:00Z
+# CHANGE: new file
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---

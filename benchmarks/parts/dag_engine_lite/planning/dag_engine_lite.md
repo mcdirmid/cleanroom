@@ -11,8 +11,8 @@ By factoring graph construction, topological sorting, failure propagation polici
 ### Typing
 
 - A DAG error carries a diagnostic error message.
-- A cycle error carries an error message and a cycle sequence of node identifiers.
-- A node not found error carries an error message and a missing node identifier.
+- A cycle error carries an error message and a cycle sequence of node identifiers, designating an untestable checked precondition contract violation on cyclic graphs.
+- A node not found error carries an error message and a missing node identifier, designating an untestable checked precondition contract violation on unregistered node references.
 - A node execution error carries an error message, a failed node identifier, and an underlying caught cause.
 - A node state takes the form of pending, ready, running, succeeded, failed, cancelled, or skipped.
 - A failure policy takes the form of fail fast, continue on error, or skip downstream.
@@ -25,9 +25,10 @@ By factoring graph construction, topological sorting, failure propagation polici
 
 ### Contracts
 
-- A directed acyclic graph adds a task node with a callable action, dependency identifiers, a scheduling priority, and a retry count, deferring missing dependency validation to graph validation. [add_node_to_graph]
+- A directed acyclic graph adds a task node with a callable action, dependency identifiers, a scheduling priority, and a retry count, ensuring the node identifier is not already present in the graph, and deferring missing dependency validation to graph validation. [add_node_to_graph]
+- When attempting to add a node whose identifier already exists in the graph, the graph raises duplicate node error. [raise_duplicate_node_error_on_existing_node]
 - A directed acyclic graph adds a directed dependency edge from an upstream prerequisite to a downstream dependent. [add_edge_between_nodes]
-- When an edge addition or a node removal references a node absent from the graph, the graph raises node not found error. [raise_node_not_found_on_missing_reference]
+- When an edge addition, a node removal, or state retrieval references a node absent from the graph, the graph raises node not found error. [raise_node_not_found_on_missing_reference]
 - A directed acyclic graph removes a node together with its incident edges, purging removed nodes from wave scheduler tracking. [remove_node_from_graph]
 - A directed acyclic graph tests whether a node identifier is present. [test_node_presence]
 - A directed acyclic graph retrieves the immutable definition of a registered node. [retrieve_node_definition]
@@ -64,7 +65,7 @@ By factoring graph construction, topological sorting, failure propagation polici
 
 ### Woven Contracts
 
-- Graph construction, validation, topological evaluation, and critical path analysis coordinate with wave scheduling, failure propagation, and sequential execution. [add_node_to_graph, add_edge_between_nodes, validate_graph_invariants, compute_topological_sort, compute_critical_path, resolve_next_execution_wave, mark_node_succeeded, mark_node_failed, check_execution_finished, run_graph_execution]
+- Graph construction, validation, topological evaluation, and critical path analysis coordinate with wave scheduling, failure propagation, and sequential execution. [add_node_to_graph, raise_duplicate_node_error_on_existing_node, add_edge_between_nodes, validate_graph_invariants, compute_topological_sort, compute_critical_path, resolve_next_execution_wave, mark_node_succeeded, mark_node_failed, check_execution_finished, run_graph_execution]
 - Failure policy propagation and retry handling compose so that wave scheduling determines which nodes are cancelled, skipped, or left eligible while the DAG runner reports those terminal outcomes in a DAG run report. [apply_fail_fast_policy, apply_skip_downstream_policy, apply_continue_on_error_policy, execute_node_action_with_retries, capture_node_execution_error, compile_run_report]
 
 ## Grounding
@@ -81,6 +82,6 @@ By factoring graph construction, topological sorting, failure propagation polici
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-26T20:55:00Z
 LAST_CHANGED: 2026-10-26T20:55:00Z
-CHANGE: Specify deferred missing dependency validation, ascending alphabetical tie-breaking, and SKIP state for blocked dependents
+CHANGE: Specify duplicate node error on add_node for already registered node identifiers
 SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 -->

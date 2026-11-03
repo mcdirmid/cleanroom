@@ -3,13 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cleanroom"
-version = "0.2.0"
+name = "autofab"
+version = "0.2.3"
 description = "Literate, specification-driven software engineering framework for autonomous AI pair-programming"
+readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [
-    { name = "Cleanroom Authors" }
+    { name = "Sean McDirmid", email = "mcdirmid@outlook.com" }
 ]
 dependencies = [
     "pydantic>=2.5.0",
@@ -20,48 +21,62 @@ dependencies = [
     "tqdm>=4.66.0",
     "openai>=1.0.0",
     "pytest-timeout>=2.3.0",
+    "hypothesis>=6.100.0",
+    "pytest-cov>=5.0.0",
+    "coverage>=7.0.0",
+    "pytest-xdist>=3.8.0",
+    "pytest-testmon>=2.3.0",
 ]
 
 [project.scripts]
-cleanroom = "update_with_ai.support.lib.cleanroom_role_tool:main"
-cleanroom-loop = "update_with_ai.support.lib.cleanroom_uv_runner:main"
-cleanroom_loop = "update_with_ai.support.lib.cleanroom_uv_runner:main"
-clean = "update_with_ai.support.lib.cleanroom_role_tool:main_clean"
-orchestrate = "update_with_ai.support.lib.cleanroom_role_tool:main_orchestrate"
-benchmark = "update_with_ai.support.lib.cleanroom_role_tool:main_benchmark"
+autofab = "autofab.support.lib.autofab_role_tool:main"
 pretense = "pretense.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["update_with_ai", "update_python_with_ai", "benchmarks", "pretense"]
+packages = [
+    "autofab",
+    "autofab_python",
+    "benchmarks",
+    "pretense",
+]
 
 [tool.pytest.ini_options]
 testpaths = [
-    "update_with_ai/parts",
-    "update_python_with_ai/parts",
-    "update_with_ai/support/tests",
-    "update_python_with_ai/support/tests",
+    "autofab/parts",
+    "pretense/parts",
+    "autofab/support/tests",
+    "autofab_python/support/tests",
+    "pretense/support/tests",
 ]
 norecursedirs = [
     ".git",
     ".venv",
+    ".hypothesis",
     "bazel-*",
     "staging",
     "node_modules",
 ]
 pythonpath = [
     ".",
-    "update_with_ai",
-    "update_python_with_ai",
+    "autofab",
+    "autofab_python",
+    "autofab_python/support/lib",
+    "autofab/support/lib",
     "benchmarks",
 ]
 python_files = ["*_test.py"]
 timeout = 45
 timeout_method = "signal"
-addopts = []
+addopts = ["--import-mode=importlib"]
 
 [tool.pyright]
 extraPaths = [
-    "update_python_with_ai",
+    ".",
+    "autofab",
+    "autofab/support/lib",
+    "autofab_python",
+    "autofab_python/support/lib",
+    "pretense",
 ]
 exclude = [
     "**/node_modules",
@@ -77,3 +92,14 @@ reportMissingImports = "error"
 reportUnknownMemberType = false
 reportUnknownVariableType = false
 reportUnknownArgumentType = false
+
+[tool.coverage.report]
+exclude_also = [
+    'def unreachable\(',
+    'unreachable\(',
+    'assert_never\(',
+    'raise AssertionError\(',
+    'assert False',
+    'raise [A-Za-z0-9_]*Error\(',
+    'raise [A-Za-z0-9_]*Error$',
+]

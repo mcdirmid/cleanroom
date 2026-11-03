@@ -71,12 +71,18 @@ By factoring version tokenization, precedence evaluation, range compilation, and
 
 ### Knowledge Requirements
 
-- Parsing regexes, precedence ordering algorithms, range expression compilation, repository indexing, and backtracking constraint satisfaction.
-  - Deferred: Realized by concrete realization in semver_solver_impl.
+- Version parsing regular expression tokenization and SemVer 2.0.0 precedence ordering algorithms.
+  - Deferred: Realized by regular expression parsing and precedence comparison in semver_solver_impl.
+- Version range syntax parsing and constraint satisfiability algorithms.
+  - Deferred: Realized by range desugaring and disjunctive normal form compilation in semver_solver_impl.
+- Package release storage and descending precedence indexing.
+  - Deferred: Realized by repository registry mapping in semver_solver_impl.
+- Backtracking search heuristics, variable ordering, and conflict trail collection.
+  - Deferred: Realized by backtracking search mechanics in semver_solver_impl using backtracking_solver_ext.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-27T02:19:04Z
-LAST_CHANGED: 2026-10-27T22:30:00Z
-CHANGE: Re-align planning contracts with HLS updates for basic comparators and clean value object strings
-SPEC_QA_AUDIT: 2026-10-27T02:19:04Z
+LAST_CLEANED: 2026-10-30T19:20:00Z
+LAST_CHANGED: 2026-10-30T19:20:00Z
+CHANGE: Factor deferred knowledge requirements into atomic capabilities and connect backtracking search grounding
+SPEC_QA_AUDIT: 2026-10-30T19:20:00Z
 -->

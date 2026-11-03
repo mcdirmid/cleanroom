@@ -1,0 +1,40 @@
+# subagent_tool_impl scenarios
+
+### Scenario 1 — Running the orchestrate command via dynamic queue supervision
+
+Given: scope_a has unblocked roles and ready work targets.
+
+1. The caller runs the orchestrate command for scope_a through a designated harness adapter.
+   Observed: the coordinator executes dynamic queue-driven supervision until convergence, prints cumulative telemetry and financial expenditures, and returns an exit code of zero.
+   Realized by: the component's orchestrate argument parsing, resolving the command harness adapter through `subagent_harness`, invoking `orchestrate` on `subagent_coordinator`, and printing summary metrics.
+
+### Scenario 2 — Refusing an unknown subcommand
+
+Given: the caller provides an unsupported command.
+
+1. The caller runs the command `fly`.
+   Observed: the request is rejected with non-zero exit status and usage advice.
+   Realized by: the component's CLI argument parsing rejecting unknown subcommands.
+
+### Scenario 3 — Bounding orchestration to a target role
+
+Given: scope_a has unblocked roles across multiple development stages.
+
+1. The caller runs the orchestrate command specifying a target role.
+   Observed: the coordinator executes supervision only up to the target role, ignoring downstream stages.
+   Realized by: the component's orchestrate CLI parsing extracting the target role argument and passing it to the coordinator.
+
+### Scenario 4 — Configuring batch size, execution timeout, context token, and unproductive round limits
+
+Given: scope_a has unblocked roles and ready work targets.
+
+1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, `--max-context-tokens 100000`, `--max-unproductive-rounds 8`, and `--pretense`.
+   Observed: the coordinator and harness adapter receive the configured batch size, timeout, context compaction, and unproductive round limits, and pretense testing pipeline flag is accepted.
+   Realized by: the component's CLI options parsing `--batch-size`, `--timeout`, `--max-context-tokens`, `--max-unproductive-rounds` (or `--max-unproductive-turns`), and `--pretense` and propagating them to harness resolution and coordinator options.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-11-03T09:10:00Z
+CHANGE: Remove pretense2 pipeline flag from orchestrate CLI arguments
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

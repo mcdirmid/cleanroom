@@ -44,8 +44,8 @@ When candidate dependencies conflict with existing assignments, backtracking sea
 Successful search compiles the complete assignment into a resolution outcome.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-27T03:48:22Z
-LAST_CHANGED: 2026-10-27T22:35:00Z
-CHANGE: Delegate search ordering and conflict mechanics to backtracking_solver_ext algorithmic component
-SPEC_QA_AUDIT: 2026-10-27T03:48:22Z
+LAST_CLEANED: 2026-10-30T19:20:00Z
+LAST_CHANGED: 2026-10-30T19:20:00Z
+CHANGE: Grounding specification alignment
+SPEC_QA_AUDIT: 2026-10-30T19:20:00Z
 -->

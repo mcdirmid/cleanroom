@@ -27,6 +27,12 @@ class NodeNotFoundError(DAGError):
 
 
 @dataclass(frozen=True)
+class DuplicateNodeError(DAGError):
+    # TODO_DuplicateNodeError_body
+    node_id: str
+
+
+@dataclass(frozen=True)
 class NodeExecutionError(DAGError):
     # TODO_NodeExecutionError_body
     node_id: str

@@ -1,0 +1,829 @@
+"""Low-level implementation for subagent_coordinator_impl."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import time
+from typing import Dict, List, Optional, Sequence, Set, Tuple
+
+try:
+    import tomllib  # type: ignore
+except ImportError:
+    try:
+        import tomli as tomllib  # type: ignore
+    except ImportError:
+        tomllib = None  # type: ignore
+
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+from support.lib import app_info
+from autofab.parts.agent.lib import session as agent_session
+from autofab.parts.workspace_cli.lib import pending, work
+from autofab.parts.workspace.lib import (
+    provision,
+    role_registry,
+)
+from . import subagent_coordinator
+
+
+# Contract: __orphan__ - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
+def resolve_model_parameters(
+    repo_root: str,
+    model_name: Optional[str] = None,
+) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+    """Resolves (subagent_batch_size, conversation_max_tokens, max_unproductive_rounds) from model_configs.toml."""
+    if tomllib is None:
+        return None, None, None
+    cfg_path = os.path.join(repo_root, "model_configs.toml")
+    if not os.path.isfile(cfg_path):
+        env_cfg = app_info.get_model_config_file()
+        if env_cfg and os.path.isfile(env_cfg):
+            cfg_path = env_cfg
+        elif model_name:
+            candidates = [
+                os.path.join(os.path.dirname(repo_root), "model_configs.toml"),
+            ]
+            candidates.extend(app_info.get_candidate_user_model_config_files())
+            candidates.append(app_info.get_template_model_config_file())
+            for cand in candidates:
+                if cand and os.path.isfile(cand):
+                    cfg_path = cand
+                    break
+        else:
+            return None, None, None
+
+    if not cfg_path or not os.path.isfile(cfg_path):
+        return None, None, None
+    try:
+        with open(cfg_path, "rb") as f:
+            cfg = tomllib.load(f)
+    except Exception:
+        return None, None, None
+
+    global_unproductive: Optional[int] = None
+    u_top = cfg.get("max_unproductive_rounds")
+    if u_top is not None:
+        try:
+            global_unproductive = int(u_top)
+        except (ValueError, TypeError):
+            pass
+
+    models_dict = cfg.get("models", {})
+    if not isinstance(models_dict, dict):
+        return None, None, global_unproductive
+
+    target = model_name or cfg.get("default")
+    if not target or not isinstance(target, str):
+        return None, None, global_unproductive
+
+    target_clean = target.strip().lower()
+    matched_data = None
+
+    for k, v in models_dict.items():
+        if k.lower() == target_clean and isinstance(v, dict):
+            matched_data = v
+            break
+
+    if matched_data is None:
+        for k, v in models_dict.items():
+            if not isinstance(v, dict):
+                continue
+            m_field = str(v.get("model", "")).lower().strip()
+            if (
+                (m_field and (target_clean == m_field or target_clean in m_field or m_field in target_clean))
+                or target_clean in k.lower()
+            ):
+                matched_data = v
+                break
+
+    if matched_data is None:
+        return None, None, global_unproductive
+
+    resolved_batch: Optional[int] = None
+    b_val = matched_data.get("subagent_batch_size") or matched_data.get("batch_size")
+    if b_val is not None:
+        try:
+            resolved_batch = int(b_val)
+        except (ValueError, TypeError):
+            pass
+
+    resolved_tokens: Optional[int] = None
+    t_val = matched_data.get("conversation_max_tokens")
+    if t_val is not None:
+        try:
+            resolved_tokens = int(t_val)
+        except (ValueError, TypeError):
+            pass
+
+    resolved_unproductive = global_unproductive
+    u_val = matched_data.get("max_unproductive_rounds")
+    if u_val is not None:
+        try:
+            resolved_unproductive = int(u_val)
+        except (ValueError, TypeError):
+            pass
+
+    return resolved_batch, resolved_tokens, resolved_unproductive
+
+
+_resolve_model_parameters = resolve_model_parameters
+
+
+def _persist_batch_size(ws_dir: str, batch_size: int) -> None:
+    """Updates batch_size in role descriptor in the role workspace."""
+    descriptors = app_info.get_role_descriptors()
+
+    for desc in descriptors:
+        meta_p = os.path.join(ws_dir, desc)
+        if not os.path.isfile(meta_p):
+            continue
+        try:
+            with open(meta_p, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            if isinstance(meta, dict):
+                meta["batch_size"] = batch_size
+                with open(meta_p, "w", encoding="utf-8") as f:
+                    json.dump(meta, f, indent=2)
+        except Exception:
+            pass
+
+
+def _extract_blame_fingerprint(
+    workspace_dir: str, blamed_targets: Sequence[str]
+) -> Tuple[Tuple[str, ...], str]:
+    """Computes a deterministic fingerprint of blamed targets and critique content."""
+    sorted_targets = tuple(sorted(blamed_targets))
+    critique_parts: List[str] = []
+    for cand in app_info.get_blame_buffer_filenames():
+        buf_p = os.path.join(workspace_dir, cand)
+        if os.path.isfile(buf_p):
+            try:
+                with open(buf_p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict):
+                            crit = (item.get("explanation") or item.get("critique") or "").strip().lower()
+                            if crit:
+                                critique_parts.append(crit)
+            except Exception:
+                pass
+    critique_str = " ".join(sorted(critique_parts))
+    critique_hash = hashlib.sha256(critique_str.encode("utf-8")).hexdigest()[:16] if critique_str else ""
+    return (sorted_targets, critique_hash)
+
+
+class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
+    """Realizes zero-execution multi-agent workspace coordination across execution waves."""
+
+    tier = agent_session.agent_session
+
+    # Contract: discover ready dirty roles unblocked by upstream prerequisites across directory scope
+    # Contract: commission absent workspace directory via WorkspaceProvisioner
+    # Contract: separate sequential specification roles into single-role waves
+    # Contract: combine independent unblocked implementation roles into parallel waves
+    # Contract: return sequence of execution waves containing role dispatch directives
+    def compute_execution_waves(
+        self,
+        dir_scope: str,
+        target_role: Optional[str] = None,
+        repo_root: Optional[str] = None,
+        batch_size: Optional[int] = None,
+    ) -> Sequence[Sequence[subagent_coordinator.RoleDispatch]]:
+        """Evaluates DAG queues and groups unblocked ready roles into execution waves."""
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        work_mgr = get_singleton(work.WorkspaceWorkManager)
+
+        root = repo_root or reg.discover_repository_root()
+        all_roles = reg.list_roles(repo_root=root, dir_scope=dir_scope)
+        if target_role:
+            target_clean = target_role.strip().lower()
+            matching_idx = None
+            for idx, r_entry in enumerate(all_roles):
+                r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                if r_name.lower() == target_clean:
+                    matching_idx = idx
+                    break
+            if matching_idx is not None:
+                all_roles = all_roles[: matching_idx + 1]
+
+        ready_dispatches: Dict[str, subagent_coordinator.RoleDispatch] = {}
+        role_definitions: Dict[str, role_registry.RoleDefinition] = {}
+
+        for r_entry in all_roles:
+            role = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+            r_def = r_entry if hasattr(r_entry, "role_name") else reg.resolve_role_definition(role, repo_root=root)
+            role_definitions[role] = r_def
+            ready_items, _ = work_mgr.compute_role_work_queue(
+                role, dir_scope=dir_scope, repo_root=root
+            )
+            if ready_items:
+                target_paths = [item.target_file for item in ready_items]
+                if batch_size is not None and batch_size > 0:
+                    target_paths = target_paths[:batch_size]
+
+                ws_dir = reg.compute_workspace_dir(
+                    role, dir_scope=dir_scope, repo_root=root
+                )
+                if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
+                    prov = get_singleton(provision.WorkspaceProvisioner)
+                    prov.commission(role, dir_scope=dir_scope, repo_root=root)
+
+
+                dispatch = subagent_coordinator.RoleDispatch(
+                    role_name=role,
+                    workspace_dir=ws_dir,
+                    dir_scope=dir_scope,
+                    ready_targets=tuple(target_paths),
+                    batch_size=batch_size,
+                    task_prompt="",
+                )
+                ready_dispatches[role] = dispatch
+
+        if not ready_dispatches:
+            return ()
+
+        # Partition roles:
+        # Roles without stub_role_deps are sequential specification roles -> single-role waves.
+        # Roles with stub_role_deps are parallelizable implementation roles -> grouped parallel wave.
+        sequential_roles: List[str] = []
+        parallel_roles: List[str] = []
+
+        for role in ready_dispatches:
+            r_def = role_definitions[role]
+            if r_def.stub_role_deps:
+                parallel_roles.append(role)
+            else:
+                sequential_roles.append(role)
+
+        # Topological sorting for sequential roles based on role dependencies
+        ordered_sequential: List[str] = []
+        visited: Set[str] = set()
+        visiting: Set[str] = set()
+
+        def visit(r: str) -> None:
+            if r in visited:
+                return
+            if r in visiting:
+                return  # Break dependency cycles defensively
+            visiting.add(r)
+            r_def = role_definitions.get(r)
+            if r_def:
+                deps = set(r_def.role_deps) | set(r_def.star_role_deps)
+                for dep in deps:
+                    if dep in ready_dispatches and dep in sequential_roles:
+                        visit(dep)
+            visiting.remove(r)
+            visited.add(r)
+            ordered_sequential.append(r)
+
+        for r in sequential_roles:
+            visit(r)
+
+        waves: List[Sequence[subagent_coordinator.RoleDispatch]] = []
+        # Each sequential role forms its own wave
+        for r in ordered_sequential:
+            waves.append((ready_dispatches[r],))
+
+        # Parallel roles cluster into a single parallel wave
+        if parallel_roles:
+            parallel_wave = tuple(ready_dispatches[r] for r in parallel_roles)
+            waves.append(parallel_wave)
+
+        return tuple(waves)
+
+    # Contract: dispatch each role directive through harness.dispatch_role
+    # Contract: await completion of each dispatched role through harness.await_role
+    # Contract: return sequence of role round results
+    def run_wave(
+        self,
+        wave: Sequence[subagent_coordinator.RoleDispatch],
+        harness: subagent_coordinator.HarnessAdapter,
+    ) -> Sequence[subagent_coordinator.RoleRoundResult]:
+        """Dispatches all roles in an execution wave through the harness and awaits results."""
+        handles: List[str] = []
+        for dispatch in wave:
+            handle = harness.dispatch_role(dispatch)
+            handles.append(handle)
+
+        results: List[subagent_coordinator.RoleRoundResult] = []
+        for handle in handles:
+            res = harness.await_role(handle)
+            results.append(res)
+
+        return tuple(results)
+
+    # Contract: reset preexisting role workspaces for declared roles upon initiating orchestration
+    # Contract: iterate through execution waves until all units in scope evaluate clean, role fails, or max_waves reached
+    # Contract: periodically poll active workers through harness.poll_role or harness.await_role at configurable interval (default 10s)
+    # Contract: when role round reports status failed, stop execution and return non-converged summary with failure details
+    # Contract: when consecutive unproductive rounds exceed threshold (default 2), stop execution and return non-converged summary
+    # Contract: emit real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state
+    # Contract: when all units evaluate clean across all roles, automatically delete all provisioned role workspaces in scope and return converged summary
+    # Contract: aggregate cumulative token usage and monetary expenditure in orchestration summary
+    def orchestrate(
+        self,
+        dir_scope: str,
+        harness: subagent_coordinator.HarnessAdapter,
+        target_role: Optional[str] = None,
+        max_waves: int = 100,
+        batch_size: Optional[int] = None,
+        repo_root: Optional[str] = None,
+        model_name: Optional[str] = None,
+        poll_interval: Optional[float] = None,
+        max_unproductive_turns: Optional[int] = None,
+        target_node: Optional[str] = None,
+        max_unproductive_rounds: Optional[int] = None,
+    ) -> subagent_coordinator.OrchestrationSummary:
+        """Orchestrates iterative multi-agent execution until DAG convergence or failure."""
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        work_mgr = get_singleton(work.WorkspaceWorkManager)
+        root = repo_root or reg.discover_repository_root()
+
+        # Resolve model parameters from model_configs.toml
+        resolved_batch, _, resolved_unproductive = _resolve_model_parameters(root, model_name=model_name)
+        effective_batch_size = batch_size if batch_size is not None else resolved_batch
+        user_unproductive = max_unproductive_rounds if max_unproductive_rounds is not None else max_unproductive_turns
+        effective_max_unproductive = (
+            user_unproductive
+            if user_unproductive is not None
+            else (resolved_unproductive if resolved_unproductive is not None else 5)
+        )
+        unproductive_rounds: Dict[str, int] = {}
+        unresolved_reminders: Dict[str, str] = {}
+        consecutive_identical_blames: Dict[str, int] = {}
+        last_blame_fingerprints: Dict[str, Tuple[Tuple[str, ...], str]] = {}
+        subagent_restarts: Dict[str, int] = {}
+
+        print(f"[ORCHESTRATE] Starting orchestration: scope='{dir_scope}', max_waves={max_waves}", flush=True)
+
+        # Reset and recommission role workspaces for declared roles in scope to ensure clean initial state with model binding
+        all_scope_roles = reg.list_roles(repo_root=root, dir_scope=dir_scope)
+        if target_role:
+            target_clean = target_role.strip().lower()
+            matching_idx = None
+            for idx, r_entry in enumerate(all_scope_roles):
+                r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                if r_name.lower() == target_clean:
+                    matching_idx = idx
+                    break
+            if matching_idx is not None:
+                all_scope_roles = list(all_scope_roles[: matching_idx + 1])
+            else:
+                try:
+                    fused_r_def = reg.resolve_role_definition(target_role, repo_root=root, dir_scope=dir_scope)
+                    if fused_r_def and fused_r_def.fused_roles:
+                        all_scope_roles = [fused_r_def]
+                except Exception:
+                    pass
+
+        for r_entry in all_scope_roles:
+            r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+            ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
+            if os.path.isdir(ws_dir):
+                shutil.rmtree(ws_dir, ignore_errors=True)
+            try:
+                prov = get_singleton(provision.WorkspaceProvisioner)
+                prov.commission(
+                    role_name=r_name,
+                    dir_scope=dir_scope,
+                    repo_root=root,
+                    reset=True,
+                    model=model_name,
+                )
+            except Exception:
+                pass
+
+        # Filter roles up to target_role if specified
+        roles_to_evaluate = all_scope_roles
+
+        wave_count = 0
+        submitted_count = 0
+        blamed_count = 0
+        cumulative_input = 0
+        cumulative_cached = 0
+        cumulative_output = 0
+        cumulative_cost = 0.0
+        failure_msg: Optional[str] = None
+        active_workers: Dict[str, str] = {}  # role_name -> task_handle
+        assigned_targets_map: Dict[str, Sequence[str]] = {}  # role_name -> assigned targets
+        worker_idle_cycles: Dict[str, int] = {}  # role_name -> count of consecutive idle poll intervals
+        worker_start_times: Dict[str, float] = {}  # role_name -> timestamp of dispatch
+        try:
+            # Continuous dynamic queue-driven process supervision loop
+            sleep_interval = poll_interval if poll_interval is not None else 10.0
+
+            while wave_count < max_waves:
+                # 1. Harvest finished workers (non-blocking)
+                worker_finished = False
+                for role_name, handle in list(active_workers.items()):
+                    if hasattr(harness, "poll_role"):
+                        res = harness.poll_role(handle)
+                    else:
+                        res = harness.await_role(handle)
+                    if res is not None:
+                        del active_workers[role_name]
+                        assigned_for_role = assigned_targets_map.pop(role_name, ())
+                        worker_idle_cycles.pop(role_name, None)
+                        worker_start_times.pop(role_name, None)
+                        worker_finished = True
+                        submitted_count += len(res.submitted_targets)
+                        blamed_count += len(res.blamed_targets)
+                        if res.telemetry:
+                            cumulative_input += res.telemetry.input_tokens
+                            cumulative_cached += res.telemetry.cached_tokens
+                            cumulative_output += res.telemetry.output_tokens
+                            cumulative_cost += res.telemetry.cost_usd
+                        tok_info = f", tokens={res.telemetry.total_tokens} (${res.telemetry.cost_usd:.4f})" if res.telemetry else ""
+                        print(
+                            f"[ORCHESTRATE] Worker '{role_name}' finished [{res.status}]: "
+                            f"submitted={len(res.submitted_targets)}, blamed={len(res.blamed_targets)}{tok_info}, "
+                            f"elapsed={res.wall_clock_seconds:.1f}s",
+                            flush=True,
+                        )
+                        if res.status == "failed":
+                            failure_msg = res.failure_reason or f"Role {role_name} failed execution."
+                            break
+
+                        r_def = None
+                        try:
+                            r_def = reg.resolve_role_definition(role_name, repo_root=root)
+                        except Exception:
+                            pass
+
+                        is_auditor = False
+                        if r_def:
+                            is_auditor = bool(
+                                r_def.audit_tag or not r_def.src_pattern or not r_def.writable_file_patterns
+                            )
+
+                        if r_def and r_def.fused_roles and res.status != "failed":
+                            ws_dir = reg.compute_workspace_dir(role_name, dir_scope=dir_scope, repo_root=root)
+                            try:
+                                from autofab.support.lib import autofab_role_tool as role_tool
+                            except ImportError:
+                                from autofab.support.lib import autofab_role_tool as role_tool
+                            v_code = role_tool.run_verify_fused_cli([ws_dir])
+                            if v_code != 0:
+                                retry_key = f"fused_retry_{role_name}"
+                                retries = unproductive_rounds.get(retry_key, 0) + 1
+                                unproductive_rounds[retry_key] = retries
+                                if retries > 3:
+                                    failure_msg = f"Fused worker for role '{role_name}' failed verification and exceeded max 3 retries."
+                                    break
+                                unresolved_reminders[role_name] = (
+                                    f"Fused verification failed (attempt {retries}/3). "
+                                    f"Please run your workspace verification micro-binaries (bin/verify_*) to diagnose and fix errors."
+                                )
+                                queue_dirty = True
+                                continue
+                            else:
+                                unproductive_rounds.pop(f"fused_retry_{role_name}", None)
+                                role_tool.run_harvest_fused_cli([ws_dir])
+                                submitted_count += len(assigned_for_role) or 1
+
+                        if len(res.submitted_targets) == 0 and len(res.blamed_targets) == 0:
+                            # Verify whether assigned targets transitioned to clean or were resolved in active work queue
+                            ready_now, _ = work_mgr.compute_role_work_queue(
+                                role_name,
+                                dir_scope=dir_scope,
+                                repo_root=root,
+                                target_unit=target_node,
+                            )
+                            ready_targets_now = {item.target_file for item in ready_now}
+                            is_resolved = False
+                            if assigned_for_role:
+                                is_resolved = any(t not in ready_targets_now for t in assigned_for_role)
+                            elif not ready_now:
+                                is_resolved = True
+
+                            if is_resolved:
+                                unproductive_rounds[role_name] = 0
+                                unresolved_reminders.pop(role_name, None)
+                            else:
+                                unproductive_rounds[role_name] = unproductive_rounds.get(role_name, 0) + 1
+                                unresolved_reminders[role_name] = (
+                                    f"CRITICAL REMINDER: The previous round for role '{role_name}' concluded without submitting, blaming, or failing any assigned targets.\n"
+                                    f"While ready targets remain unresolved, conversational commentary without tool execution is strictly prohibited.\n"
+                                    f"You must verify your work with `bin/check_files <target>` and immediately resolve targets by running:\n"
+                                    f"  - `bin/submit <target> \"<summary>\"` (to certify valid targets),\n"
+                                    f"  - `bin/blame <culprit_target> \"<critique>\"` (if an upstream dependency has defects), or\n"
+                                    f"  - `bin/fail` (if encountering an unrecoverable failure).\n"
+                                    f"Once all ready targets are resolved, or when `bin/get_work` gives no further work to do, conclude your round immediately with summary text and NO tool calls."
+                                )
+                                if unproductive_rounds[role_name] >= effective_max_unproductive:
+                                    failure_msg = (
+                                        f"Role '{role_name}' made no progress (0 submitted, 0 blamed) "
+                                        f"for {unproductive_rounds[role_name]} consecutive rounds."
+                                    )
+                                    print(f"[ORCHESTRATE] Circuit breaker tripped: {failure_msg}", flush=True)
+                                    break
+                        else:
+                            unproductive_rounds[role_name] = 0
+                            unresolved_reminders.pop(role_name, None)
+
+                        if len(res.submitted_targets) > 0 and len(res.blamed_targets) == 0:
+                            consecutive_identical_blames[role_name] = 0
+                            last_blame_fingerprints.pop(role_name, None)
+
+                        if len(res.blamed_targets) > 0:
+                            ws_dir = reg.compute_workspace_dir(role_name, dir_scope=dir_scope, repo_root=root)
+                            blame_fp = _extract_blame_fingerprint(ws_dir, res.blamed_targets)
+                            prev_fp = last_blame_fingerprints.get(role_name)
+                            if prev_fp is not None and prev_fp == blame_fp:
+                                consecutive_identical_blames[role_name] = consecutive_identical_blames.get(role_name, 0) + 1
+                            else:
+                                last_blame_fingerprints[role_name] = blame_fp
+                                consecutive_identical_blames[role_name] = 1
+
+                            if consecutive_identical_blames[role_name] >= 2:
+                                restarts = subagent_restarts.get(role_name, 0) + 1
+                                subagent_restarts[role_name] = restarts
+                                if restarts >= 3:
+                                    failure_msg = (
+                                        f"Role '{role_name}' delivered identical blame repeatedly and exceeded max 3 restarts "
+                                        f"(blamed targets: {list(res.blamed_targets)})."
+                                    )
+                                    print(f"[ORCHESTRATE] Circuit breaker tripped: {failure_msg}", flush=True)
+                                    break
+                                else:
+                                    print(
+                                        f"[ORCHESTRATE] Circuit breaker: Subagent '{role_name}' delivered identical blame twice in a row. "
+                                        f"Restarting subagent with clean workspace and session (restart {restarts}/3)...",
+                                        flush=True,
+                                    )
+                                    try:
+                                        harness.interrupt_role(handle)
+                                    except Exception:
+                                        pass
+                                    if os.path.isdir(ws_dir):
+                                        shutil.rmtree(ws_dir, ignore_errors=True)
+                                    prov = get_singleton(provision.WorkspaceProvisioner)
+                                    prov.commission(role_name, dir_scope=dir_scope, repo_root=root, model=model_name)
+                                    if effective_batch_size is not None:
+                                        _persist_batch_size(ws_dir, effective_batch_size)
+                                    consecutive_identical_blames[role_name] = 0
+                                    last_blame_fingerprints.pop(role_name, None)
+
+                if failure_msg is not None:
+                    for h in active_workers.values():
+                        harness.interrupt_role(h)
+                    break
+
+                # 1b. Check active workers for idling after resolving all assigned targets
+                try:
+                    pending_mgr = get_singleton(pending.WorkspacePendingManager)
+                except Exception:
+                    pending_mgr = None
+
+                for role_name, handle in list(active_workers.items()):
+                    ws_dir = reg.compute_workspace_dir(role_name, dir_scope=dir_scope, repo_root=root)
+                    pending_work = pending_mgr.get_pending_work(ws_dir) if pending_mgr else []
+                    assigned_for_role = assigned_targets_map.get(role_name, ())
+                    ready_for_role, _ = work_mgr.compute_role_work_queue(
+                        role_name,
+                        dir_scope=dir_scope,
+                        repo_root=root,
+                        target_unit=target_node,
+                    )
+                    ready_targets_set = {item.target_file for item in ready_for_role}
+                    has_unresolved_assigned = any(t in ready_targets_set for t in assigned_for_role)
+
+                    # Enforce an initialization grace period before evaluating idle worker reaping
+                    worker_age = time.time() - worker_start_times.get(role_name, 0.0)
+                    grace_period = 15.0 if sleep_interval >= 0.1 else 0.0
+
+                    if worker_age >= grace_period and not pending_work and not has_unresolved_assigned and assigned_for_role:
+                        idle_count = worker_idle_cycles.get(role_name, 0) + 1
+                        worker_idle_cycles[role_name] = idle_count
+                        if idle_count >= 2:
+                            print(
+                                f"[ORCHESTRATE] Reaping idle worker '{role_name}' after {idle_count} polling intervals with all assigned work resolved.",
+                                flush=True,
+                            )
+                            try:
+                                harness.interrupt_role(handle)
+                            except Exception:
+                                pass
+                            if idle_count >= 4:
+                                del active_workers[role_name]
+                                assigned_targets_map.pop(role_name, None)
+                                worker_idle_cycles.pop(role_name, None)
+                                worker_start_times.pop(role_name, None)
+                                worker_finished = True
+                    else:
+                        worker_idle_cycles[role_name] = 0
+
+                # 2. Check work queues dynamically on each polling cycle for asynchronous unblocked role dispatch
+                all_clean = True
+                blocked_count = 0
+                ready_roles_map: Dict[str, Sequence[str]] = {}
+
+                for r_entry in roles_to_evaluate:
+                    r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                    ready, blocked = work_mgr.compute_role_work_queue(
+                        r_name,
+                        dir_scope=dir_scope,
+                        repo_root=root,
+                        target_unit=target_node,
+                    )
+                    if ready:
+                        all_clean = False
+                        if r_name not in active_workers:
+                            ready_roles_map[r_name] = [item.target_file for item in ready]
+                    if blocked:
+                        all_clean = False
+                        blocked_count += len(blocked)
+
+                # 3. Clean convergence check
+                if not active_workers and all_clean:
+                    for r_entry in all_scope_roles:
+                        r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                        ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
+                        if os.path.isdir(ws_dir):
+                            shutil.rmtree(ws_dir, ignore_errors=True)
+
+                    total_tokens = cumulative_input + cumulative_cached + cumulative_output
+                    telemetry = subagent_coordinator.TokenUsage(
+                        input_tokens=cumulative_input,
+                        cached_tokens=cumulative_cached,
+                        output_tokens=cumulative_output,
+                        total_tokens=total_tokens,
+                        cost_usd=cumulative_cost,
+                    )
+                    print(
+                        f"[ORCHESTRATE] Clean convergence achieved across all roles in scope '{dir_scope}'!",
+                        flush=True,
+                    )
+                    return subagent_coordinator.OrchestrationSummary(
+                        is_converged=True,
+                        total_waves=wave_count,
+                        submitted_count=submitted_count,
+                        blamed_count=blamed_count,
+                        total_telemetry=telemetry,
+                        status_message="All units converged cleanly across all roles.",
+                    )
+
+                # 4. Deadlock check: no active workers, no ready roles, but blocked units remain
+                if not active_workers and not ready_roles_map:
+                    total_tokens = cumulative_input + cumulative_cached + cumulative_output
+                    telemetry = subagent_coordinator.TokenUsage(
+                        input_tokens=cumulative_input,
+                        cached_tokens=cumulative_cached,
+                        output_tokens=cumulative_output,
+                        total_tokens=total_tokens,
+                        cost_usd=cumulative_cost,
+                    )
+                    print(
+                        f"[ORCHESTRATE] Deadlocked: {blocked_count} units blocked on unresolved prerequisites.",
+                        flush=True,
+                    )
+                    return subagent_coordinator.OrchestrationSummary(
+                        is_converged=False,
+                        total_waves=wave_count,
+                        submitted_count=submitted_count,
+                        blamed_count=blamed_count,
+                        total_telemetry=telemetry,
+                        status_message=f"Orchestration deadlocked: {blocked_count} units blocked on unresolved prerequisites.",
+                    )
+
+                # 5. Dispatch unblocked ready roles concurrently
+                dispatched_any = False
+                if wave_count < max_waves:
+                    for r_name, target_paths in ready_roles_map.items():
+                        if r_name not in active_workers:
+                            if effective_batch_size is not None and effective_batch_size > 0:
+                                target_paths = target_paths[:effective_batch_size]
+
+                            ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
+                            if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
+                                prov = get_singleton(provision.WorkspaceProvisioner)
+                                prov.commission(r_name, dir_scope=dir_scope, repo_root=root, model=model_name)
+
+                            if effective_batch_size is not None:
+                                _persist_batch_size(ws_dir, effective_batch_size)
+
+                            reminder = unresolved_reminders.pop(r_name, "")
+                            dispatch = subagent_coordinator.RoleDispatch(
+                                role_name=r_name,
+                                workspace_dir=ws_dir,
+                                dir_scope=dir_scope,
+                                ready_targets=tuple(target_paths),
+                                batch_size=effective_batch_size,
+                                task_prompt=reminder,
+                            )
+                            handle = harness.dispatch_role(dispatch)
+                            active_workers[r_name] = handle
+                            assigned_targets_map[r_name] = tuple(target_paths)
+                            worker_idle_cycles[r_name] = 0
+                            worker_start_times[r_name] = time.time()
+                            dispatched_any = True
+                            print(
+                                f"[ORCHESTRATE] Dispatched role '{r_name}' on {len(target_paths)} target(s): {', '.join(target_paths)}",
+                                flush=True,
+                            )
+
+                    if dispatched_any:
+                        wave_count += 1
+                elif not active_workers:
+                    # Max waves reached and all active workers have finished
+                    break
+
+                # 6. Sleep if active workers are still running
+                if active_workers:
+                    time.sleep(sleep_interval)
+        except (KeyboardInterrupt, SystemExit):
+            print(
+                f"[ORCHESTRATE] Interruption received; interrupting {len(active_workers)} active worker(s) and cleaning up workspaces...",
+                flush=True,
+            )
+            for h in active_workers.values():
+                try:
+                    harness.interrupt_role(h)
+                except Exception:
+                    pass
+            for r_entry in all_scope_roles:
+                r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
+                if os.path.isdir(ws_dir):
+                    shutil.rmtree(ws_dir, ignore_errors=True)
+            raise
+
+        if active_workers:
+            for h in active_workers.values():
+                try:
+                    harness.interrupt_role(h)
+                except Exception:
+                    pass
+
+        total_tokens = cumulative_input + cumulative_cached + cumulative_output
+        telemetry = subagent_coordinator.TokenUsage(
+            input_tokens=cumulative_input,
+            cached_tokens=cumulative_cached,
+            output_tokens=cumulative_output,
+            total_tokens=total_tokens,
+            cost_usd=cumulative_cost,
+        )
+
+        if failure_msg is not None:
+            print(f"[ORCHESTRATE] Execution halted: {failure_msg}", flush=True)
+            return subagent_coordinator.OrchestrationSummary(
+                is_converged=False,
+                total_waves=wave_count,
+                submitted_count=submitted_count,
+                blamed_count=blamed_count,
+                total_telemetry=telemetry,
+                status_message=f"Orchestration failed: {failure_msg}",
+            )
+
+        print(f"[ORCHESTRATE] Maximum wave limit ({max_waves}) reached before convergence.", flush=True)
+        return subagent_coordinator.OrchestrationSummary(
+            is_converged=False,
+            total_waves=wave_count,
+            submitted_count=submitted_count,
+            blamed_count=blamed_count,
+            total_telemetry=telemetry,
+            status_message=f"Maximum wave limit ({max_waves}) reached before convergence.",
+        )
+
+    # Contract: Resolves the canonical repository logs directory for a role workspace.
+    def resolve_log_dir(self, workspace_dir: str) -> str:
+        """Resolves the canonical repository logs directory for a role workspace."""
+        return subagent_coordinator.resolve_log_dir(workspace_dir)
+
+    def resolve_model_parameters(
+        self,
+        repo_root: str,
+        model_name: Optional[str] = None,
+    ) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+        """Dynamically resolves subagent batch sizes, token limits, and unproductive round thresholds."""
+        return _resolve_model_parameters(repo_root, model_name=model_name)
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-30T19:55:00Z
+# LAST_CHANGED: 2026-10-30T19:55:00Z
+# CHANGE: Enforce initialization grace period before evaluating idle worker reaping
+# COVERAGE_AUDIT: 2026-10-18T19:13:51Z
+# QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
+
+
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    """Registers constituent singletons into the lifecycle registry."""
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        SubagentCoordinator,
+        keys=[subagent_coordinator.SubagentCoordinator, SubagentCoordinator],
+        tier=agent_session.agent_session,
+    )
+
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---

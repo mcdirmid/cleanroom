@@ -1,320 +1,219 @@
-# Cleanroom CLI Reference & Invocation Guide
+# Autofab CLI Reference & Invocation Guide
 
-Cleanroom is a literate, specification-driven software engineering framework for autonomous AI pair programming, double-blind verification, and deterministic DAG convergence.
+Autofab is a literate, specification-driven software engineering framework for autonomous AI pair programming, double-blind verification, and deterministic DAG convergence.
 
-All workspace lifecycle, inspection, submission, and execution operations in the canonical repository are invoked via **`uv run cleanroom`** (or `./bin/cleanroom` as a convenience wrapper).
+All operations in the repository are invoked via **`uv run autofab <command>`**.
 
 ---
 
 ## 1. Quick Start
 
-### Autonomous Loop Execution (`--loop`)
-To execute in-process autonomous DAG cleaning using an LLM without setting up external subagent processes, pass `--loop`:
+### Autonomous Pair-Programming (`clean`)
+
+`autofab clean` is the primary entry point for converging software components. It evaluates dirty nodes across your project's dependency DAG, commissions isolated double-blind workspaces, and coordinates autonomous subagents to converge every node clean.
 
 ```bash
 # Clean an entire package scope across all roles in topological order
-uv run cleanroom orchestrate staging --loop
+uv run autofab clean my_project
 
 # Clean a package scope up to a specific role boundary (e.g., up to planning or lib)
-uv run cleanroom orchestrate staging#planning --loop
-uv run cleanroom orchestrate staging#lib --loop
+uv run autofab clean my_project#planning
+uv run autofab clean my_project#lib
 
 # Clean a specific component target node or implementation file
-uv run cleanroom orchestrate //staging/parts/agent:agent_config#lib --loop
-uv run cleanroom staging/parts/agent/lib/agent_config.py --loop
+uv run autofab clean //my_project/parts/agent:agent_config#lib
+uv run autofab clean my_project/parts/agent/lib/agent_config.py
 
-# Equivalent shorthand syntax for cleaning a target or scope
-uv run cleanroom clean staging
-uv run cleanroom clean staging#lib
-uv run cleanroom clean //staging/parts/agent:agent_config#lib
-
-# Specify a custom model configuration label or model name
-uv run cleanroom orchestrate staging --loop --model default
+# Select an explicit model profile defined in model_configs.toml
+uv run autofab clean my_project --model gemini-flash
+uv run autofab clean my_project --model deepseek-flash
 ```
 
-### Multi-Agent Subagent Orchestration
-To orchestrate multi-agent DAG convergence across isolated, double-blind role workspaces:
+> [!NOTE]
+> **Runtime Harness Resolution**: Harnesses are resolved automatically from your model profile in `model_configs.toml`. For example, `gemini-flash` uses the Google Antigravity harness, while `deepseek-flash` uses the DeepSeek Harness (DSH). When cleaning with an Antigravity model, `autofab` automatically installs and refreshes the Antigravity plugin and agent definitions in `~/.gemini/config/plugins/autofab`.
+
+### Marking Targets Dirty (`mark-dirty`)
+
+When you want to invalidate a node, trigger downstream re-verification, or prompt agents to rework an implementation, use `mark-dirty`:
 
 ```bash
-# Antigravity interactive pair-programming pre-flight (prints DAG state & directives)
-uv run cleanroom orchestrate staging
+# Mark an entire scope dirty with a default reason
+uv run autofab mark-dirty my_project
 
-# Orchestrate up to a specific role boundary
-uv run cleanroom orchestrate staging#qa
-
-# Headless multi-agent execution via DeepSeek Harness (DSH)
-uv run cleanroom orchestrate staging --harness dsh
-
-# Headless simulation run (useful for verification and test assertions)
-uv run cleanroom orchestrate staging --harness simulation
+# Mark a specific target dirty with an actionable diagnostic reason
+uv run autofab mark-dirty my_project/parts/agent/lib/agent_config.py "Type signature mismatch with low specification"
+uv run autofab mark-dirty //my_project/parts/agent:agent_config#lib -m "Unit test regression on timeout handling"
 ```
 
 ---
 
-## 2. Command Reference
+## 2. Advanced & Internal Subagent Tooling
 
-### `orchestrate`
-Orchestrates multi-agent convergence across topological waves until the DAG evaluates clean.
+The commands below are primarily used by autonomous subagents and role workers inside isolated workspaces, or by advanced operators inspecting the DAG:
 
-```bash
-uv run cleanroom orchestrate <scope_or_target> [options]
-```
-
-Examples:
-```bash
-# Orchestrate full scope
-uv run cleanroom orchestrate staging
-
-# Orchestrate up to and including role boundary (e.g. qa)
-uv run cleanroom orchestrate staging#qa
-```
-
-**Options:**
-- `--loop`: Run autonomous in-process loop execution rather than an external subagent harness.
-- `--harness <name>`: Subagent execution platform (`antigravity`, `dsh`, `simulation`, `loop`). Default: `antigravity`.
-- `--model <name>`: Model profile or configuration name (e.g. `default`, `deepseek-v41-flash`, `gemini-3.8-flash`).
-- `--max-waves <n>`: Maximum execution waves before stopping (default: `50`).
-- `--batch-size <n>`: Maximum targets dispatched per role wave.
-- `--timeout <seconds>`: Subprocess execution timeout in seconds.
-- `--headless`: Run in headless mode without interactive prompting (used in automated CI environments; `--harness dsh` and `--loop` run headlessly by default).
-
----
-
-### `work-queue` (alias: `queue`)
-Inspects the dependency DAG and prints ready vs. blocked tasks for a scope or role.
-
+### `work-queue`
+Inspects the dependency DAG and outputs ready vs. blocked tasks for a scope or role.
 ```bash
 # Inspect all ready and blocked nodes across a scope
-uv run cleanroom work-queue staging
+uv run autofab work-queue my_project
 
 # Inspect work queue for a specific role boundary
-uv run cleanroom work-queue staging#lib
-uv run cleanroom work-queue staging#qa
+uv run autofab work-queue my_project#lib
+uv run autofab work-queue my_project#qa
 
 # Output JSON structured task metadata (used by agent coordinators)
-uv run cleanroom work-queue staging --json
+uv run autofab work-queue my_project --json
 ```
-
----
 
 ### `mark-clean`
-Marks target nodes or entire directory scopes clean in metadata and DAG storage without invoking the generative LLM loop.
-
+Marks target nodes or entire directory scopes clean in metadata and DAG storage without invoking subagents.
 ```bash
 # Mark all nodes in a scope clean
-uv run cleanroom mark-clean staging
+uv run autofab mark-clean my_project
 
-# Mark a specific role within a scope clean
-uv run cleanroom mark-clean staging/parts/agent/lib
-
-# Mark a specific target or file clean
-uv run cleanroom mark-clean staging/parts/agent/lib/agent_config.py
-uv run cleanroom mark-clean //staging/parts/agent:agent_config#lib
+# Mark a specific target clean
+uv run autofab mark-clean my_project/parts/agent/lib/agent_config.py
 ```
 
----
-
-### `dirty`
-Marks target nodes or directory scopes dirty in DAG storage, recording an optional diagnostic reason.
-
+### `commission` & `decommission`
+Manages isolated, double-blind role workspaces (`autofab_role_workspaces/<role>_<scope>/`).
 ```bash
-# Mark a scope dirty with default reason
-uv run cleanroom dirty staging
+# Initialize role workspaces bound to a model profile
+uv run autofab commission --all my_project --model deepseek-flash
 
-# Mark a specific target dirty with an actionable reason
-uv run cleanroom dirty staging/parts/agent/lib/agent_config.py "Type signature mismatch with low spec"
-uv run cleanroom dirty //staging/parts/agent:agent_config#lib -m "Unit test regression"
+# Decommission and delete provisioned role workspaces
+uv run autofab decommission my_project
 ```
 
----
+### `refresh-sys`
+Synchronizes system tools, linters, methodology configs (`autofab_roles.toml`), and companion guides from canonical roots to provisioned role workspaces.
+```bash
+uv run autofab refresh-sys
+```
+
+### `get_work`
+Acquires the next assigned dirty target inside an isolated role workspace.
+```bash
+bin/get_work
+```
+
+### `check_files`
+Runs deterministic verification checks (linters, type checkers, test suites) against targets in a role workspace.
+```bash
+bin/check_files my_project/parts/agent/lib/agent_config.py
+```
 
 ### `submit`
-Verifies and submits changes for a file to the canonical repository with in-band metadata updates (`LAST_CLEANED`, `LAST_CHANGED`, and `CODE_HASH`).
-
+Verifies and submits changes for a file with in-band metadata updates (`LAST_CLEANED`, `LAST_CHANGED`, `CODE_HASH`).
 ```bash
-# Submit an updated implementation with verification checks
-uv run cleanroom submit staging/parts/agent/lib/agent_config.py "Implement timeout property"
-
-# Bypass verification checks during rapid authoring
-uv run cleanroom submit --no-verify staging/parts/agent/high/agent_config.md "Author HLS"
+bin/submit my_project/parts/agent/lib/agent_config.py "Implemented timeout helper"
 ```
 
----
-
-### `feedback` (alias: `blame`)
-Attributes an actionable defect critique or feedback to an upstream culprit contract, specification file, or DAG target node, triggering upstream invalidation and recording diagnostic feedback.
-
-Supports both positional critique syntax and `-m / --message` flags:
-
+### `blame`
+Attributes an actionable defect critique or feedback to an upstream culprit contract or specification file, triggering upstream invalidation.
 ```bash
-# Deliver blame feedback to an upstream contract or specification file (in-band metadata mutation)
-uv run cleanroom feedback staging/parts/agent/low/agent_config.pyi "Contract missing parameter 'timeout'"
-uv run cleanroom feedback staging/parts/agent/low/agent_config.pyi -m "Contract missing parameter 'timeout'"
-
-# Deliver feedback to a target node in the DAG
-uv run cleanroom feedback //staging/parts/agent:agent_config#low "Contract missing parameter 'timeout'"
-uv run cleanroom feedback //staging/parts/agent:agent_config#low -m "Contract missing parameter 'timeout'"
-
-# 'blame' is supported as a direct alias
-uv run cleanroom blame staging/parts/agent/low/agent_config.pyi "Contract missing parameter 'timeout'"
+bin/blame my_project/parts/agent/low/agent_config.pyi "Contract missing parameter 'timeout'"
 ```
-
----
 
 ### `fail`
-Records a verification failure for a target, forcing it into a dirty state with captured diagnostic failure logs.
-
+Records an unresolvable failure or impasse for a target, logging diagnostic failure details and leaving the node dirty.
 ```bash
-uv run cleanroom fail staging/parts/agent/lib/agent_config.py "Abstract method resolution error in pytest"
+bin/fail my_project/parts/agent/lib/agent_config.py "Abstract method resolution error in pytest"
 ```
-
----
-
-### `check_files` (alias: `check-files`)
-Runs role-specific deterministic verification checks (HLS prose linter, Planning epistemic linter, Low Pyright type checks, or unit test runners).
-
-```bash
-# Run verification checks on a specific target
-uv run cleanroom check_files staging/parts/agent/lib/agent_config.py
-
-# Run checks across pending work in the active scope
-uv run cleanroom check_files
-```
-
----
 
 ### `coverage`
-Evaluates statement test coverage between an implementation and its double-blind test suite.
-
+Evaluates statement test coverage between an implementation and its double-blind unit test suite.
 ```bash
-# Assert 100% test coverage on a module
-uv run cleanroom coverage --impl staging/parts/agent/lib/agent_config.py --test staging/parts/agent/tests/agent_config_test.py -t 100.0
-
-# Output coverage metrics in JSON
-uv run cleanroom coverage staging/parts/agent:agent_config --json
+uv run autofab coverage --impl my_project/parts/agent/lib/agent_config.py --test my_project/parts/agent/tests/agent_config_test.py -t 100.0
 ```
-
----
 
 ### `change` & `prompt`
 ```bash
 # Record an explicit manual change description on a target
-uv run cleanroom change staging/parts/agent/lib/agent_config.py "Refactored timeout helper"
+uv run autofab change my_project/parts/agent/lib/agent_config.py "Refactored timeout helper"
 
 # Print the task prompt and contract instructions for a target
-uv run cleanroom prompt //staging/parts/agent:agent_config#lib
+uv run autofab prompt //my_project/parts/agent:agent_config#lib
 ```
 
----
-
-### `commission` & `decommission`
-Manages isolated, double-blind role workspaces (`role_workspaces/<scope>_<role>/`).
-
-`commission` provisions and initializes role workspaces—binding model configurations, configuring harness-specific agent instructions (`AGENTS.md` and overlay patches), copying system files, and deploying role guides and tool wrappers—**without executing the subagent or running any LLM loop**:
-
+### `configure`
+Scaffolds user global configuration directory `~/.config/autofab` with starter `model_configs.toml` and credentials templates.
 ```bash
-# Initialize all declared role workspaces for a scope bound to a specific model profile without executing
-uv run cleanroom commission --all staging --model deepseek-v41-flash
-
-# Initialize role workspaces tailored for DeepSeek Harness (DSH)
-uv run cleanroom commission --all staging --harness dsh --model deepseek-v41-flash
-
-# Initialize a single role workspace bound to a specific model and harness
-uv run cleanroom commission staging#lib --harness antigravity --model deepseek-v41-flash
-uv run cleanroom commission staging#qa --harness dsh --model deepseek-v41-flash
-
-# Reset an existing role workspace back to a clean state
-uv run cleanroom commission staging#lib --reset
-
-# Decommission and delete provisioned workspaces for a scope (or up to a role)
-uv run cleanroom decommission staging
-uv run cleanroom decommission staging#lib
+uv run autofab configure
 ```
 
----
-
-### `refresh-sys`
-Synchronizes system tools, linters, methodology configs (`cleanroom_roles.toml`), and guides from canonical roots to provisioned role workspaces.
-
+### `install-antigravity-plugin`
+Installs or refreshes the Autofab Antigravity plugin and agent definitions into `~/.gemini/config/plugins/autofab`. When running `uv run autofab clean` with an Antigravity model profile, this is performed automatically.
 ```bash
-uv run cleanroom refresh-sys
-```
-
----
-
-### `install-plugin`
-Installs or refreshes the Cleanroom Antigravity extension, subagent role definitions, and coordinator tools into `~/.gemini/antigravity`.
-
-```bash
-uv run cleanroom install-plugin
+uv run autofab install-antigravity-plugin
 ```
 
 ---
 
 ## 3. Target Addressing Syntax
 
-Cleanroom targets can be addressed using multiple canonical notations:
+Autofab targets can be addressed using multiple canonical notations:
 
 | Format | Example | Description |
 | :--- | :--- | :--- |
-| **Fully Qualified Target** | `//staging/parts/agent:agent_config#lib` | Exact unit and role address |
-| **File Path** | `staging/parts/agent/lib/agent_config.py` | Automatically resolved to target address |
-| **Role Partition** | `staging/parts/agent/lib` or `staging#lib` | All units under the `lib` role |
-| **Part Directory** | `staging/parts/agent` | All roles and units under `agent` part |
-| **Scope Directory** | `staging` | Entire directory scope across all parts & roles |
+| **Fully Qualified Target** | `//my_project/parts/agent:agent_config#lib` | Exact unit and role address |
+| **File Path** | `my_project/parts/agent/lib/agent_config.py` | Automatically resolved to target address |
+| **Role Partition** | `my_project/parts/agent/lib` or `my_project#lib` | All units under the `lib` role |
+| **Part Directory** | `my_project/parts/agent` | All roles and units under `agent` part |
+| **Scope Directory** | `my_project` | Entire directory scope across all parts & roles |
 
 ---
 
-## 4. Test Suite Execution
+## 4. Model Configuration Schema (`model_configs.toml`)
 
-To run repository verification checks, static type checks, and pytest suites cleanly:
+Autofab resolves model profiles and rate cards from:
+1. Local workspace: `./model_configs.toml`
+2. User global configuration: `~/.config/autofab/model_configs.toml` (default)
+3. Canonical starter template: `autofab_python/templates/model_configs.toml`
 
-```bash
-bin/test
-```
+Run `uv run autofab configure` to scaffold `~/.config/autofab/model_configs.toml`.
 
----
-
-## 5. Model Configuration Schema (`model_configs.toml`)
-
-Cleanroom resolves model definitions, capability tiers, and financial rate cards from:
-1. Explicit CLI flag: `--model-config <path>` or `CLEANROOM_MODEL_CONFIG_FILE` environment override
-2. Local repository candidate: `./model_configs.toml`
-3. Canonical user configuration: `~/.config/cleanroom/model_configs.toml`
-4. Canonical starter template: [`update_python_with_ai/templates/model_configs.toml`](update_python_with_ai/templates/model_configs.toml)
-
-Run `uv run cleanroom configure` to scaffold `~/.config/cleanroom/model_configs.toml` and credentials templates.
-
-### TOML Schema Reference
+### TOML Schema
 
 ```toml
-# Top-Level Harness Defaults
-default = "qwen-moe-q6"                  # Default model profile name
-loop_default = "qwen-moe-q6"             # Default for autonomous loop harness
-antigravity_default = "gemini-4-argon"   # Default for Antigravity harness
-dsh_default = "deepseek-v41-flash"       # Default for DeepSeek Harness (DSH)
-max_unproductive_rounds = 5              # Global circuit-breaker round limit
+# Top-Level Configuration
+default = "deepseek-flash"               # Default model profile name (harness is derived from model)
+max_unproductive_rounds = 3              # Global circuit-breaker round limit
 
 # Model Profiles: [models.<profile-name>]
-# IMPORTANT: Model keys containing dots must be quoted in TOML, e.g. [models."gemini-3.8-flash"]
-
-[models.deepseek-v41-flash]
-model = "deepseek-flash"                 # Model identifier sent to provider API
-provider = "deepseek"                    # Protocol adapter ("deepseek", "google", "openai", "anthropic", "mlx", "omlx")
+[models.deepseek-flash]
+model = "deepseek-flash"                 # Model identifier passed to harness
+provider = "deepseek"                    # Provider adapter ("deepseek", "google", "mlx", "anthropic")
+harness = "dsh"                          # Runtime harness ("dsh", "antigravity")
 tier = 2                                 # Capability tier (1=Local, 2=Budget, 3=Mid-Tier, 4=Frontier)
 tier_label = "Budget API"                # Descriptive capability label
 rate_uncached_in = 0.15                  # USD per 1,000,000 uncached input tokens
 rate_cached_in = 0.003                   # USD per 1,000,000 cached input tokens (prompt cache hit)
-rate_out = 0.60                          # USD per 1,000,000 output tokens (including reasoning tokens)
-default_harness = "dsh"                  # Recommended runtime harness ("dsh", "antigravity", "loop")
-base_url = "https://api.deepseek.com/v1" # HTTP base endpoint
-api_key_env = "DEEPSEEK_API_KEY"         # Environment variable holding the API key
-max_tokens = 8192                        # Max completion tokens per request
+rate_out = 0.60                          # USD per 1,000,000 output tokens
 subagent_batch_size = 10                 # Maximum concurrent role subagent dispatches
-conversation_max_tokens = 256000         # Context window compaction threshold in tokens
-max_feedback_chars = 4000                # Max feedback buffer length preserved across rounds
-max_unproductive_rounds = 5              # Profile-level circuit breaker
-temperature = 0.7                        # Generation temperature
 timeout_seconds = 120.0                  # Request/process timeout in seconds
-```
 
+[models.gemini-flash]
+model = "gemini-flash"
+provider = "google"
+harness = "antigravity"
+tier = 2
+tier_label = "Budget Frontier API"
+rate_uncached_in = 0.10
+rate_cached_in = 0.025
+rate_out = 0.40
+subagent_batch_size = 5
+timeout_seconds = 120.0
+
+[models.gemini-pro]
+model = "gemini-pro"
+provider = "google"
+harness = "antigravity"
+tier = 3
+tier_label = "Mid-Tier Frontier API"
+rate_uncached_in = 1.25
+rate_cached_in = 0.3125
+rate_out = 5.00
+subagent_batch_size = 5
+timeout_seconds = 180.0
+```

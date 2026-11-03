@@ -125,8 +125,9 @@ def solve_search(
 """
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-27T03:40:00Z
-# LAST_CHANGED: 2026-10-27T22:35:00Z
-# CHANGE: Refactor backtracking_solver_ext to algorithmic reference mechanics without application requirements or exception raising
-# SPEC_QA_AUDIT: 2026-10-27T02:19:04Z
+# LAST_CLEANED: 2026-10-30T19:20:00Z
+# LAST_CHANGED: 2026-10-30T19:20:00Z
+# CHANGE: Grounding specification alignment
+# CODE_HASH: 000000000000
+# SPEC_QA_AUDIT: 2026-10-30T19:20:00Z
 # --- END CLEANROOM METADATA ---

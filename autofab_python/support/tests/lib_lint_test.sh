@@ -1,0 +1,1436 @@
+#!/bin/bash
+# lib_lint_test.sh — gate: lib_lint.py creates/fixes pyright_library entries.
+#
+# Runs under a bazel test sandbox; the linter arrives via runfiles under
+# $TEST_SRCDIR. Each case builds fixture BUILD files in a temp dir, runs the
+# linter from inside the case dir (so labels are package-relative), and
+# asserts the fixed output.
+
+set -euo pipefail
+
+if [ -n "${TEST_SRCDIR:-}" ]; then
+    ws="${TEST_SRCDIR}/${TEST_WORKSPACE:-_main}"
+    bin="$ws/autofab_python/support/lib"
+else
+    bin="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
+fi
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+fail=0
+
+check() { # check <desc> <file> <pattern>
+    if grep -q "$3" "$2"; then
+        echo "PASS: $1"
+    else
+        echo "FAIL: $1 (missing '$3' in $2)" >&2
+        fail=1
+    fi
+}
+
+# Case 1: BUILD.bazel missing -> created with load + target + deps.
+mkdir -p "$tmp/c1/lib"
+(
+    cd "$tmp/c1"
+    python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/module1.py --deps dag_storage,tool_provider
+)
+check "c1 load" "$tmp/c1/lib/BUILD.bazel" 'load("//bin:pyright_library.bzl", "pyright_library")'
+check "c1 target" "$tmp/c1/lib/BUILD.bazel" 'name = "module1"'
+check "c1 srcs" "$tmp/c1/lib/BUILD.bazel" 'srcs = \["module1.py"\]'
+check "c1 dep1" "$tmp/c1/lib/BUILD.bazel" '"//lib:dag_storage"'
+check "c1 dep2" "$tmp/c1/lib/BUILD.bazel" '"//lib:tool_provider"'
+check "c1 deps" "$tmp/c1/lib/BUILD.bazel" 'deps = \[\]'
+check "c1 visibility" "$tmp/c1/lib/BUILD.bazel" 'visibility = \["//visibility:public"\]'
+
+# Case 2: load missing -> added; existing target untouched.
+mkdir -p "$tmp/c2/lib"
+cat > "$tmp/c2/lib/BUILD.bazel" <<'EOF'
+pyright_library(
+    name = "module2",
+    srcs = ["module2.py"],
+    pyright_deps = [],
+    deps = [],
+    visibility = ["//visibility:public"],
+)
+EOF
+(
+    cd "$tmp/c2"
+    python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/module2.py --deps dag_storage
+)
+check "c2 load added" "$tmp/c2/lib/BUILD.bazel" 'load("//bin:pyright_library.bzl", "pyright_library")'
+check "c2 dep added" "$tmp/c2/lib/BUILD.bazel" '"//lib:dag_storage"'
+check "c2 target kept" "$tmp/c2/lib/BUILD.bazel" 'name = "module2"'
+
+# Case 3: target missing -> added; existing targets untouched.
+mkdir -p "$tmp/c3/lib"
+cat > "$tmp/c3/lib/BUILD.bazel" <<'EOF'
+load("//bin:pyright_library.bzl", "pyright_library")
+pyright_library(
+    name = "other",
+    srcs = ["other.py"],
+    pyright_deps = [],
+    deps = [],
+    visibility = ["//visibility:public"],
+)
+EOF
+(
+    cd "$tmp/c3"
+    python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/module3.py --deps tool_provider
+)
+check "c3 target added" "$tmp/c3/lib/BUILD.bazel" 'name = "module3"'
+check "c3 dep" "$tmp/c3/lib/BUILD.bazel" '"//lib:tool_provider"'
+check "c3 existing kept" "$tmp/c3/lib/BUILD.bazel" 'name = "other"'
+
+# Case 4: existing target with an extra dep -> missing dep added, extra kept.
+mkdir -p "$tmp/c4/lib"
+cat > "$tmp/c4/lib/BUILD.bazel" <<'EOF'
+load("//bin:pyright_library.bzl", "pyright_library")
+pyright_library(
+    name = "module4",
+    srcs = ["module4.py"],
+    pyright_deps = ["//lib:extra"],
+    deps = [],
+    visibility = ["//visibility:public"],
+)
+EOF
+(
+    cd "$tmp/c4"
+    python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/module4.py --deps dag_storage
+)
+check "c4 dep added" "$tmp/c4/lib/BUILD.bazel" '"//lib:dag_storage"'
+check "c4 extra kept" "$tmp/c4/lib/BUILD.bazel" '"//lib:extra"'
+
+# Case 5: no --deps (empty module deps) -> target created with empty deps.
+mkdir -p "$tmp/c5/lib"
+(
+    cd "$tmp/c5"
+    python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/module5.py
+)
+check "c5 target" "$tmp/c5/lib/BUILD.bazel" 'name = "module5"'
+check "c5 empty deps" "$tmp/c5/lib/BUILD.bazel" 'pyright_deps = \[\]'
+
+# Case 6: non-relative sibling import -> rewritten to relative syntax and accepted.
+mkdir -p "$tmp/c6/lib"
+cat > "$tmp/c6/lib/sibling.py" <<'EOF'
+class Sibling:
+    pass
+EOF
+cat > "$tmp/c6/lib/main.py" <<'EOF'
+from sibling import Sibling
+EOF
+if ( cd "$tmp/c6" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py ); then
+    echo "PASS: c6 rewrote and accepted non-relative sibling import"
+else
+    echo "FAIL: c6 expected success after rewriting non-relative sibling import" >&2
+    fail=1
+fi
+check "c6 rewritten to relative" "$tmp/c6/lib/main.py" 'from \.sibling import Sibling'
+
+
+# Case 7: relative sibling import -> accepted.
+mkdir -p "$tmp/c7/lib"
+cat > "$tmp/c7/lib/sibling.py" <<'EOF'
+class Sibling:
+    pass
+EOF
+cat > "$tmp/c7/lib/main.py" <<'EOF'
+from .sibling import Sibling
+EOF
+if ( cd "$tmp/c7" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py ); then
+    echo "PASS: c7 accepted relative sibling import"
+else
+    echo "FAIL: c7 expected success with relative sibling import" >&2
+    fail=1
+fi
+
+# Case 8: unittest.main() in library module -> rejected with error.
+mkdir -p "$tmp/c8/lib"
+cat > "$tmp/c8/lib/main.py" <<'EOF'
+import unittest
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c8" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>/dev/null ); then
+    echo "FAIL: c8 expected failure when unittest.main present in library module" >&2
+    fail=1
+else
+    echo "PASS: c8 rejected unittest.main in library module"
+fi
+
+# Case 9: External spec with requirement("openai") -> deps populated and pip load added.
+mkdir -p "$tmp/c9/lib" "$tmp/c9/specs"
+cat > "$tmp/c9/specs/openai_ext.pyi" <<'EOF'
+'''
+## External Mechanics & API Documentation
+## Build Dependencies
+
+- `requirement("openai")`
+
+## Usage Snippets
+'''
+EOF
+(
+    cd "$tmp/c9"
+    python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/agent_runner_impl.py --deps agent_runner,openai_ext --pyi-deps specs/openai_ext.pyi
+)
+check "c9 pip load added" "$tmp/c9/lib/BUILD.bazel" 'load("@pip//:requirements.bzl", "requirement")'
+check "c9 pyright load" "$tmp/c9/lib/BUILD.bazel" 'load("//bin:pyright_library.bzl", "pyright_library")'
+check "c9 target" "$tmp/c9/lib/BUILD.bazel" 'name = "agent_runner_impl"'
+check "c9 requirement in deps" "$tmp/c9/lib/BUILD.bazel" 'requirement("openai")'
+check "c9 lib dep in pyright_deps" "$tmp/c9/lib/BUILD.bazel" '"//lib:agent_runner"'
+if grep -q "openai_ext" "$tmp/c9/lib/BUILD.bazel"; then
+    echo "FAIL: c9 openai_ext should not be in pyright_deps" >&2
+    fail=1
+else
+    echo "PASS: c9 openai_ext excluded from pyright_deps"
+fi
+
+# Case 10: Idempotency with existing requirement("openai") in deps -> preserved without clobbering.
+(
+    cd "$tmp/c9"
+    python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/agent_runner_impl.py --deps agent_runner,openai_ext --pyi-deps specs/openai_ext.pyi
+)
+check "c10 requirement kept" "$tmp/c9/lib/BUILD.bazel" 'requirement("openai")'
+# Count occurrences of requirement("openai") to ensure no duplicates
+req_count=$(grep -c 'requirement("openai")' "$tmp/c9/lib/BUILD.bazel" || true)
+if [ "$req_count" -eq 1 ]; then
+    echo "PASS: c10 exactly one requirement in deps"
+else
+    echo "FAIL: c10 expected 1 requirement entry, found $req_count" >&2
+    fail=1
+fi
+
+# Case 11: Syntax error in module -> lib_lint fails with code 1 and outputs error.
+mkdir -p "$tmp/c11/lib"
+cat > "$tmp/c11/lib/syntax_err.py" <<'EOF'
+def broken(
+EOF
+if ( cd "$tmp/c11" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/syntax_err.py 2>"$tmp/c11/err.log" ); then
+    echo "FAIL: c11 expected failure when syntax error present" >&2
+    fail=1
+else
+    if grep -q "syntax error" "$tmp/c11/err.log"; then
+        echo "PASS: c11 rejected module with syntax error and printed error"
+    else
+        echo "FAIL: c11 did not report syntax error in err.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 11b: Compiler-level syntax error (e.g. misplaced from __future__ import) -> lib_lint fails with code 1
+mkdir -p "$tmp/c11b/lib"
+cat > "$tmp/c11b/lib/compiler_err.py" <<'EOF'
+x = 1
+from __future__ import annotations
+EOF
+if ( cd "$tmp/c11b" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/compiler_err.py 2>"$tmp/c11b/err.log" ); then
+    echo "FAIL: c11b expected failure when compiler syntax error present" >&2
+    fail=1
+else
+    if grep -q "from __future__ imports must occur at the beginning of the file" "$tmp/c11b/err.log"; then
+        echo "PASS: c11b rejected module with compiler syntax error and printed error"
+    else
+        echo "FAIL: c11b did not report compiler syntax error in err.log" >&2
+        cat "$tmp/c11b/err.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 12: Bare framework import in module -> rewritten to support.lib.framework.
+mkdir -p "$tmp/c12/lib"
+cat > "$tmp/c12/lib/main.py" <<'EOF'
+import framework
+
+class Service:
+    pass
+EOF
+if ( cd "$tmp/c12" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py ); then
+    echo "PASS: c12 accepted and rewrote bare framework import"
+else
+    echo "FAIL: c12 expected success when rewriting bare framework import" >&2
+    fail=1
+fi
+check "c12 rewritten framework" "$tmp/c12/lib/main.py" 'from support\.lib import framework'
+
+# Case 12b: Bare framework import in module -> rejected in pure-Python check mode.
+mkdir -p "$tmp/c12b/lib"
+cat > "$tmp/c12b/lib/main.py" <<'EOF'
+import framework
+
+class Service:
+    pass
+EOF
+if ( cd "$tmp/c12b" && python3 "$bin/lib_lint.py" lib/main.py 2>"$tmp/c12b/err.log" ); then
+    echo "FAIL: c12b expected failure when bare framework imported in check mode" >&2
+    fail=1
+else
+    if grep -q "bare 'import framework' is deprecated" "$tmp/c12b/err.log"; then
+        echo "PASS: c12b rejected bare import from framework in check mode"
+    else
+        echo "FAIL: c12b did not report framework import error" >&2
+        cat "$tmp/c12b/err.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 13: Specification decorators imported from support.lib.framework -> accepted.
+mkdir -p "$tmp/c13/lib"
+cat > "$tmp/c13/lib/main.py" <<'EOF'
+from support.lib.framework import operation, singleton_type
+
+@singleton_type("system")
+class Service:
+    @operation
+    def run(self) -> None:
+        pass
+EOF
+if ( cd "$tmp/c13" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>"$tmp/c13/err.log" ); then
+    echo "PASS: c13 accepted specification decorators from support.lib.framework"
+else
+    echo "FAIL: c13 expected success with support.lib.framework decorators" >&2
+    cat "$tmp/c13/err.log" >&2
+    fail=1
+fi
+
+# Case 13b: Framework operation and override imported from support.lib.framework -> accepted.
+mkdir -p "$tmp/c13b/lib"
+cat > "$tmp/c13b/lib/main.py" <<'EOF'
+from support.lib.framework import operation, override
+
+class Service:
+    @operation
+    def run(self) -> None:
+        pass
+
+    @override
+    def close(self) -> None:
+        pass
+EOF
+if ( cd "$tmp/c13b" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>"$tmp/c13b/err.log" ); then
+    echo "PASS: c13b accepted operation and override imported from support.lib.framework"
+else
+    echo "FAIL: c13b expected success when operation and override imported from support.lib.framework" >&2
+    fail=1
+fi
+
+# Case 13c: Standard typing.override decorator -> accepted.
+mkdir -p "$tmp/c13c/lib"
+cat > "$tmp/c13c/lib/main.py" <<'EOF'
+from typing import override
+
+class Service:
+    @override
+    def run(self) -> None:
+        pass
+EOF
+if ( cd "$tmp/c13c" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>"$tmp/c13c/err.log" ); then
+    echo "PASS: c13c accepted standard typing.override"
+else
+    echo "FAIL: c13c expected success with typing.override" >&2
+    fail=1
+fi
+
+# Case 13d: Bare from framework import -> rewritten to support.lib.framework.
+mkdir -p "$tmp/c13d/lib"
+cat > "$tmp/c13d/lib/main.py" <<'EOF'
+from framework import singleton_type, operation
+
+@singleton_type("system")
+class Service:
+    @operation
+    def run(self) -> None:
+        pass
+EOF
+if ( cd "$tmp/c13d" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>"$tmp/c13d/err.log" ); then
+    echo "PASS: c13d accepted and rewrote bare from framework import"
+else
+    echo "FAIL: c13d expected success with bare from framework import rewriting" >&2
+    cat "$tmp/c13d/err.log" >&2
+    fail=1
+fi
+check "c13d rewritten framework" "$tmp/c13d/lib/main.py" 'from support\.lib\.framework import singleton_type, operation'
+
+# Case 13e: Bare from framework import -> rejected in pure-Python check mode.
+mkdir -p "$tmp/c13e/lib"
+cat > "$tmp/c13e/lib/main.py" <<'EOF'
+from framework import singleton_type, operation
+
+class Service:
+    pass
+EOF
+if ( cd "$tmp/c13e" && python3 "$bin/lib_lint.py" lib/main.py 2>"$tmp/c13e/err.log" ); then
+    echo "FAIL: c13e expected failure when bare from framework imported in check mode" >&2
+    fail=1
+else
+    if grep -q "bare 'from framework' is deprecated" "$tmp/c13e/err.log"; then
+        echo "PASS: c13e rejected bare from framework import in check mode"
+    else
+        echo "FAIL: c13e did not report bare framework import error" >&2
+        cat "$tmp/c13e/err.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 14: '# type: ignore' in library module -> rejected with error.
+mkdir -p "$tmp/c14/lib"
+cat > "$tmp/c14/lib/main.py" <<'EOF'
+def compute(x: int) -> int:
+    return x  # type: ignore[return-value]
+EOF
+if ( cd "$tmp/c14" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>"$tmp/c14/err.log" ); then
+    echo "FAIL: c14 expected failure when '# type: ignore' used" >&2
+    fail=1
+else
+    if grep -q "'# type: ignore' is prohibited" "$tmp/c14/err.log"; then
+        echo "PASS: c14 rejected '# type: ignore' in library module"
+    else
+        echo "FAIL: c14 did not report type: ignore error" >&2
+        fail=1
+    fi
+fi
+
+# Case 15: Implementation class named with 'Impl' suffix -> rejected with mismatch against spec.
+mkdir -p "$tmp/c15/lib" "$tmp/c15/specs/grounding"
+cat > "$tmp/c15/specs/grounding/widget_impl.pyi" <<'EOF'
+class Widget:
+    ...
+EOF
+cat > "$tmp/c15/lib/widget_impl.py" <<'EOF'
+class WidgetImpl:
+    pass
+EOF
+if ( cd "$tmp/c15" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/widget_impl.py 2>"$tmp/c15/err.log" ); then
+    echo "FAIL: c15 expected failure when implementation class has Impl suffix" >&2
+    fail=1
+else
+    if grep -q "public type 'WidgetImpl' is defined in library code but is not declared in grounding specification" "$tmp/c15/err.log" && \
+       grep -q "type 'Widget' declared in grounding specification 'widget_impl.pyi' is not defined in library code" "$tmp/c15/err.log"; then
+        echo "PASS: c15 rejected WidgetImpl and required Widget from specification"
+    else
+        echo "FAIL: c15 did not report expected public type mismatch errors" >&2
+        fail=1
+    fi
+fi
+
+# Case 16: Extra public helper class without preceding underscore -> rejected with error.
+mkdir -p "$tmp/c16/lib" "$tmp/c16/specs/grounding"
+cat > "$tmp/c16/specs/grounding/service_impl.pyi" <<'EOF'
+class Service:
+    ...
+EOF
+cat > "$tmp/c16/lib/service_impl.py" <<'EOF'
+class Service:
+    pass
+
+class Helper:
+    pass
+EOF
+if ( cd "$tmp/c16" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/service_impl.py 2>"$tmp/c16/err.log" ); then
+    echo "FAIL: c16 expected failure when helper class lacks preceding underscore" >&2
+    fail=1
+else
+    if grep -q "public type 'Helper' is defined in library code but is not declared in grounding specification" "$tmp/c16/err.log"; then
+        echo "PASS: c16 rejected public helper class without underscore"
+    else
+        echo "FAIL: c16 did not report missing underscore error for helper class" >&2
+        fail=1
+    fi
+fi
+
+# Case 17: Helper class with preceding underscore and referenced -> passes cleanly.
+mkdir -p "$tmp/c17/lib" "$tmp/c17/specs/grounding"
+cat > "$tmp/c17/specs/grounding/clean_impl.pyi" <<'EOF'
+class CleanService:
+    ...
+EOF
+cat > "$tmp/c17/lib/clean_impl.py" <<'EOF'
+class _InternalHelper:
+    pass
+
+class CleanService:
+    _helper = _InternalHelper
+EOF
+if ( cd "$tmp/c17" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/clean_impl.py 2>"$tmp/c17/err.log" ); then
+    echo "PASS: c17 accepted helper class with preceding underscore"
+else
+    echo "FAIL: c17 failed unexpectedly on helper class with preceding underscore" >&2
+    cat "$tmp/c17/err.log" >&2
+    fail=1
+fi
+
+# Case 18: Unused private helper function -> rejected with dead code error.
+mkdir -p "$tmp/c18/lib" "$tmp/c18/specs/grounding"
+cat > "$tmp/c18/specs/grounding/service_impl.pyi" <<'EOF'
+class Service:
+    ...
+EOF
+cat > "$tmp/c18/lib/service_impl.py" <<'EOF'
+class Service:
+    pass
+
+def _unused_helper():
+    pass
+EOF
+if ( cd "$tmp/c18" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/service_impl.py 2>"$tmp/c18/err.log" ); then
+    echo "FAIL: c18 expected failure when private function is unreferenced" >&2
+    fail=1
+else
+    if grep -q "private function '_unused_helper' is defined in library code but never referenced (dead code)" "$tmp/c18/err.log"; then
+        echo "PASS: c18 rejected unused private function as dead code"
+    else
+        echo "FAIL: c18 did not report dead code error for unused private function" >&2
+        cat "$tmp/c18/err.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 19: cross-part import -> rewritten to full package path and added to pyright_deps.
+mkdir -p "$tmp/c19/lib"
+cat > "$tmp/c19/lib/consumer.py" <<'EOF'
+from dag_storage import DagStorage
+
+class Consumer:
+    def __init__(self, s: DagStorage) -> None:
+        self.s = s
+EOF
+if ( cd "$tmp/c19" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/consumer.py --deps //autofab/parts/dag/lib:dag_storage ); then
+    echo "PASS: c19 accepted and rewrote cross-part import"
+else
+    echo "FAIL: c19 expected success with cross-part import rewriting" >&2
+    fail=1
+fi
+check "c19 rewritten import" "$tmp/c19/lib/consumer.py" 'from autofab\.parts\.dag\.lib\.dag_storage import DagStorage'
+check "c19 dep in BUILD" "$tmp/c19/lib/BUILD.bazel" '"//autofab/parts/dag/lib:dag_storage"'
+
+# Case 20: lifecycle import -> rewritten to support.lib.lifecycle.
+mkdir -p "$tmp/c20/lib"
+cat > "$tmp/c20/lib/init_module.py" <<'EOF'
+from lifecycle import LifecycleRegistry
+
+def __initialize__(registry: LifecycleRegistry) -> None:
+    pass
+EOF
+if ( cd "$tmp/c20" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/init_module.py ); then
+    echo "PASS: c20 accepted and rewrote lifecycle import"
+else
+    echo "FAIL: c20 expected success with lifecycle import rewriting" >&2
+    fail=1
+fi
+check "c20 rewritten lifecycle" "$tmp/c20/lib/init_module.py" 'from support\.lib\.lifecycle import LifecycleRegistry'
+
+# Case 21: grounding imports rewritten to lib, DO NOT EDIT markers and _ext imports stripped.
+mkdir -p "$tmp/c21/lib"
+cat > "$tmp/c21/lib/consumer.py" <<'EOF'
+# --- DO NOT EDIT: Auto-generated dependencies ---
+from autofab.parts.dag.grounding.dag_storage import DagStorage
+import dummy_ext
+# --- END DO NOT EDIT ---
+
+class Consumer:
+    def __init__(self, s: DagStorage) -> None:
+        self.s = s
+EOF
+if ( cd "$tmp/c21" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/consumer.py --deps //autofab/parts/dag/lib:dag_storage,tool_provider ); then
+    echo "PASS: c21 lint succeeded"
+else
+    echo "FAIL: c21 expected success linting consumer" >&2
+    fail=1
+fi
+if grep -q 'DO NOT EDIT' "$tmp/c21/lib/consumer.py"; then
+    echo "FAIL: c21 DO NOT EDIT markers not stripped" >&2
+    fail=1
+else
+    echo "PASS: c21 DO NOT EDIT markers stripped"
+fi
+if grep -q 'dummy_ext' "$tmp/c21/lib/consumer.py"; then
+    echo "FAIL: c21 _ext import not stripped" >&2
+    fail=1
+else
+    echo "PASS: c21 _ext import stripped"
+fi
+check "c21 rewritten to lib" "$tmp/c21/lib/consumer.py" 'from autofab\.parts\.dag\.lib\.dag_storage import DagStorage'
+if grep -q '# Dependencies:' "$tmp/c21/lib/consumer.py"; then
+    echo "FAIL: c21 unexpected dependency comment line" >&2
+    fail=1
+else
+    echo "PASS: c21 no dependency comment line present"
+fi
+
+# Case 22: undeclared dependency import fails with diagnostic listing allowed dependencies.
+mkdir -p "$tmp/c22/lib"
+cat > "$tmp/c22/lib/bad_import.py" <<'EOF'
+import unauthorized_lib
+
+class Bad:
+    pass
+EOF
+if ( cd "$tmp/c22" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/bad_import.py --deps tool_provider 2>"$tmp/c22/err.log" ); then
+    echo "FAIL: c22 expected failure on undeclared import" >&2
+    fail=1
+else
+    echo "PASS: c22 rejected undeclared import"
+fi
+check "c22 undeclared error diagnostic" "$tmp/c22/err.log" "undeclared dependency 'unauthorized_lib'. Allowed dependencies: tool_provider"
+
+# Case 23: empty module with .pyi spec -> scaffolded with valid skeleton and rejected until implemented.
+mkdir -p "$tmp/c23/lib" "$tmp/c23/grounding"
+cat > "$tmp/c23/grounding/worker_impl.pyi" <<'EOF'
+from support.lib.framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+touch "$tmp/c23/lib/worker_impl.py"
+if ( cd "$tmp/c23" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/worker_impl.py --pyi "$tmp/c23/grounding/worker_impl.pyi" 2>"$tmp/c23/uninit.log" ); then
+    echo "FAIL: c23 expected rejection of empty module without --scaffold" >&2
+    fail=1
+else
+    echo "PASS: c23 rejected empty module without --scaffold"
+fi
+check "c23 uninit diagnostic" "$tmp/c23/uninit.log" "lib/worker_impl.py is uninitialized"
+
+if ( cd "$tmp/c23" && python3 "$bin/lib_lint.py" --scaffold lib/worker_impl.py --pyi "$tmp/c23/grounding/worker_impl.pyi" ); then
+    echo "PASS: c23 generated skeleton with --scaffold"
+else
+    echo "FAIL: c23 failed to generate skeleton with --scaffold" >&2
+    fail=1
+fi
+
+if ( cd "$tmp/c23" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/worker_impl.py --pyi "$tmp/c23/grounding/worker_impl.pyi" 2>"$tmp/c23/err.log" ); then
+    echo "FAIL: c23 expected rejection due to stubs in generated skeleton" >&2
+    fail=1
+else
+    echo "PASS: c23 rejected stubs in generated skeleton"
+fi
+check "c23 stub error" "$tmp/c23/err.log" "contains stub 'raise NotImplementedError'"
+check "c23 spec reference header" "$tmp/c23/lib/worker_impl.py" '# Requirements specified in worker_impl.pyi'
+check "c23 class skeleton" "$tmp/c23/lib/worker_impl.py" 'class Worker:'
+check "c23 tier" "$tmp/c23/lib/worker_impl.py" 'tier = agent_session'
+check "c23 init todo" "$tmp/c23/lib/worker_impl.py" '# TODO___init___body'
+check "c23 method todo" "$tmp/c23/lib/worker_impl.py" '# TODO_process_item_body'
+check "c23 initialize" "$tmp/c23/lib/worker_impl.py" 'def __initialize__(registry: Optional\[LifecycleRegistry\] = None) -> None:'
+check "c23 register singleton" "$tmp/c23/lib/worker_impl.py" 'reg.register_singleton('
+
+# Case 24: module containing uninitialized <TargetClass> placeholder -> replaced with skeleton.
+mkdir -p "$tmp/c24/lib" "$tmp/c24/grounding"
+cat > "$tmp/c24/grounding/service.pyi" <<'EOF'
+from typing import Protocol
+from support.lib.framework import poly_type
+
+@poly_type
+class Service(Protocol):
+    def serve(self) -> str:
+        ...
+EOF
+cat > "$tmp/c24/lib/service.py" <<'EOF'
+class <TargetClass>(Protocol):
+    pass
+EOF
+if ( cd "$tmp/c24" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/service.py --pyi "$tmp/c24/grounding/service.pyi" 2>"$tmp/c24/uninit.log" ); then
+    echo "FAIL: c24 expected rejection of <TargetClass> placeholder without --scaffold" >&2
+    fail=1
+else
+    echo "PASS: c24 rejected <TargetClass> placeholder without --scaffold"
+fi
+check "c24 uninit diagnostic" "$tmp/c24/uninit.log" "lib/service.py is uninitialized"
+
+if ( cd "$tmp/c24" && python3 "$bin/lib_lint.py" --scaffold lib/service.py --pyi "$tmp/c24/grounding/service.pyi" ); then
+    echo "PASS: c24 replaced <TargetClass> with valid skeleton via --scaffold"
+else
+    echo "FAIL: c24 failed to replace <TargetClass> via --scaffold" >&2
+    fail=1
+fi
+check "c24 spec reference header" "$tmp/c24/lib/service.py" '# Requirements specified in service.pyi'
+check "c24 protocol class" "$tmp/c24/lib/service.py" 'class Service(Protocol):'
+check "c24 method todo" "$tmp/c24/lib/service.py" '# TODO_serve_body'
+
+# Case 25: grounding specification containing a type alias is rejected.
+mkdir -p "$tmp/c25/lib" "$tmp/c25/grounding"
+cat > "$tmp/c25/grounding/aliased.pyi" <<'EOF'
+from support.lib.framework import poly_type
+
+WireTypeString = str
+
+@poly_type
+class Aliased:
+    def get_val(self) -> str:
+        ...
+EOF
+cat > "$tmp/c25/lib/aliased.py" <<'EOF'
+class Aliased:
+    def get_val(self) -> str:
+        return "val"
+EOF
+if ( cd "$tmp/c25" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/aliased.py --pyi "$tmp/c25/grounding/aliased.pyi" 2>"$tmp/c25/err.log" ); then
+    echo "FAIL: c25 expected failure on .pyi type alias" >&2
+    fail=1
+else
+    echo "PASS: c25 rejected .pyi type alias"
+fi
+check "c25 type alias error diagnostic" "$tmp/c25/err.log" "type aliasing is not permitted in grounding specifications ('WireTypeString')"
+
+# Case 26: library method return type mismatch against .pyi is rejected.
+mkdir -p "$tmp/c26/lib" "$tmp/c26/grounding"
+cat > "$tmp/c26/grounding/converter.pyi" <<'EOF'
+from support.lib.framework import poly_type
+
+@poly_type
+class Converter:
+    def convert(self, raw: str) -> int:
+        ...
+EOF
+cat > "$tmp/c26/lib/converter.py" <<'EOF'
+class Converter:
+    def convert(self, raw: str) -> str:
+        return raw
+EOF
+if ( cd "$tmp/c26" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/converter.py --pyi "$tmp/c26/grounding/converter.pyi" 2>"$tmp/c26/err.log" ); then
+    echo "FAIL: c26 expected failure on return type mismatch" >&2
+    fail=1
+else
+    echo "PASS: c26 rejected return type mismatch"
+fi
+check "c26 return type mismatch diagnostic" "$tmp/c26/err.log" "return type mismatch in 'Converter.convert': specification 'converter.pyi' declares 'int', implementation defines 'str'"
+
+# Case 27: library method parameter type mismatch against .pyi is rejected.
+mkdir -p "$tmp/c27/lib" "$tmp/c27/grounding"
+cat > "$tmp/c27/grounding/handler.pyi" <<'EOF'
+from support.lib.framework import poly_type
+
+@poly_type
+class Handler:
+    def handle(self, code: int) -> bool:
+        ...
+EOF
+cat > "$tmp/c27/lib/handler.py" <<'EOF'
+class Handler:
+    def handle(self, code: str) -> bool:
+        return True
+EOF
+if ( cd "$tmp/c27" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/handler.py --pyi "$tmp/c27/grounding/handler.pyi" 2>"$tmp/c27/err.log" ); then
+    echo "FAIL: c27 expected failure on parameter type mismatch" >&2
+    fail=1
+else
+    echo "PASS: c27 rejected parameter type mismatch"
+fi
+check "c27 parameter type mismatch diagnostic" "$tmp/c27/err.log" "parameter 'code' type mismatch in 'Handler.handle': specification 'handler.pyi' declares 'int', implementation defines 'str'"
+
+# Case 28: fully implemented module with no stubs -> lib_lint succeeds with code 0.
+mkdir -p "$tmp/c28/lib" "$tmp/c28/grounding"
+cat > "$tmp/c28/grounding/worker_impl.pyi" <<'EOF'
+from support.lib.framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+cat > "$tmp/c28/lib/worker_impl.py" <<'EOF'
+from __future__ import annotations
+from typing import Optional
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, system
+from autofab.parts.agent.lib.agent_session import agent_session
+
+# Requirements specified in worker_impl.pyi
+
+class Worker:
+    tier = agent_session
+
+    def __init__(self) -> None:
+        pass
+
+    def process_item(self, item: str) -> bool:
+        return True
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        Worker,
+        keys=[Worker],
+        tier=agent_session,
+    )
+
+_initialize_ = __initialize__
+EOF
+if ( cd "$tmp/c28" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/worker_impl.py --pyi "$tmp/c28/grounding/worker_impl.pyi" ); then
+    echo "PASS: c28 fully implemented module passed verification"
+else
+    echo "FAIL: c28 expected pass on fully implemented module" >&2
+    fail=1
+fi
+
+# Case 29: grounding specification containing NewType and union type alias is permitted.
+mkdir -p "$tmp/c29/lib" "$tmp/c29/grounding"
+cat > "$tmp/c29/grounding/domain_types.pyi" <<'EOF'
+from typing import NewType, Union
+from support.lib.framework import poly_type
+
+FileContent = NewType("FileContent", str)
+type WireType = str | int | float
+LegacyUnion = Union[str, int]
+
+@poly_type
+class DomainService:
+    def get_content(self) -> FileContent:
+        ...
+EOF
+cat > "$tmp/c29/lib/domain_types.py" <<'EOF'
+from typing import NewType, Union
+
+FileContent = NewType("FileContent", str)
+type WireType = str | int | float
+LegacyUnion = Union[str, int]
+
+class DomainService:
+    def get_content(self) -> FileContent:
+        return FileContent("data")
+EOF
+if ( cd "$tmp/c29" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/domain_types.py --pyi "$tmp/c29/grounding/domain_types.pyi" ); then
+    echo "PASS: c29 permitted NewType and union type aliases"
+else
+    echo "FAIL: c29 expected success on NewType and union type aliases" >&2
+    fail=1
+fi
+
+# Case 30: Python 3.12 non-union type alias in .pyi is rejected.
+mkdir -p "$tmp/c30/lib" "$tmp/c30/grounding"
+cat > "$tmp/c30/grounding/single_alias.pyi" <<'EOF'
+from support.lib.framework import poly_type
+
+type SingleAlias = str
+
+@poly_type
+class Service:
+    def get_val(self) -> str:
+        ...
+EOF
+cat > "$tmp/c30/lib/single_alias.py" <<'EOF'
+type SingleAlias = str
+
+class Service:
+    def get_val(self) -> str:
+        return "val"
+EOF
+if ( cd "$tmp/c30" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/single_alias.py --pyi "$tmp/c30/grounding/single_alias.pyi" 2>"$tmp/c30/err.log" ); then
+    echo "FAIL: c30 expected failure on Python 3.12 non-union type alias" >&2
+    fail=1
+else
+    echo "PASS: c30 rejected Python 3.12 non-union type alias"
+fi
+check "c30 non-union type alias error diagnostic" "$tmp/c30/err.log" "type aliasing is not permitted in grounding specifications ('SingleAlias')"
+
+# Case 32: from . import sibling_impl in non-assembly module -> rejected with error.
+mkdir -p "$tmp/c32/lib"
+cat > "$tmp/c32/lib/sibling_impl.py" <<'EOF'
+class Helper:
+    pass
+EOF
+cat > "$tmp/c32/lib/main.py" <<'EOF'
+from . import sibling_impl
+
+class Service:
+    pass
+EOF
+if ( cd "$tmp/c32" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>"$tmp/c32/err.log" ); then
+    echo "FAIL: c32 expected failure on relative impl import" >&2
+    fail=1
+else
+    if grep -q "non-assembly module must not import implementation class or module 'sibling_impl'" "$tmp/c32/err.log"; then
+        echo "PASS: c32 rejected relative impl import"
+    else
+        echo "FAIL: c32 did not report relative impl import error" >&2
+        cat "$tmp/c32/err.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 33: pure-Python lib_lint invocation on .py file with --pyi -> succeeds without creating BUILD.bazel
+mkdir -p "$tmp/c33/lib" "$tmp/c33/low"
+cat > "$tmp/c33/low/worker_impl.pyi" <<'EOF'
+from support.lib.framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+cat > "$tmp/c33/lib/worker_impl.py" <<'EOF'
+from __future__ import annotations
+from typing import Optional
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, system
+from autofab.parts.agent.lib.agent_session import agent_session
+
+# Requirements specified in worker_impl.pyi
+
+class Worker:
+    tier = agent_session
+
+    def __init__(self) -> None:
+        pass
+
+    def process_item(self, item: str) -> bool:
+        return True
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        Worker,
+        keys=[Worker],
+        tier=agent_session,
+    )
+
+_initialize_ = __initialize__
+EOF
+if ( cd "$tmp/c33" && python3 "$bin/lib_lint.py" lib/worker_impl.py --pyi low/worker_impl.pyi ); then
+    echo "PASS: c33 pure-Python lib_lint succeeded"
+else
+    echo "FAIL: c33 expected pass on pure-Python lib_lint" >&2
+    fail=1
+fi
+if [ -f "$tmp/c33/lib/BUILD.bazel" ] || [ -f "$tmp/c33/BUILD.bazel" ]; then
+    echo "FAIL: c33 BUILD.bazel should not be created" >&2
+    fail=1
+else
+    echo "PASS: c33 no BUILD.bazel created"
+fi
+
+# Case 34: pure-Python lib_lint invocation with undeclared import -> fails and creates no BUILD.bazel
+mkdir -p "$tmp/c34/lib" "$tmp/c34/low"
+cat > "$tmp/c34/low/worker_impl.pyi" <<'EOF'
+from support.lib.framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+cat > "$tmp/c34/lib/worker_impl.py" <<'EOF'
+from __future__ import annotations
+import unauthorized_package
+from support.lib.lifecycle import Singleton
+from autofab.parts.agent.lib.agent_session import agent_session
+
+class Worker:
+    tier = agent_session
+
+    def process_item(self, item: str) -> bool:
+        return True
+EOF
+if ( cd "$tmp/c34" && python3 "$bin/lib_lint.py" lib/worker_impl.py --pyi low/worker_impl.pyi 2>"$tmp/c34/err.log" ); then
+    echo "FAIL: c34 expected failure on undeclared import" >&2
+    fail=1
+else
+    if grep -q "undeclared dependency 'unauthorized_package'" "$tmp/c34/err.log"; then
+        echo "PASS: c34 rejected undeclared import in pure-Python mode"
+    else
+        echo "FAIL: c34 did not report undeclared dependency in err.log" >&2
+        cat "$tmp/c34/err.log" >&2
+        fail=1
+    fi
+fi
+if [ -f "$tmp/c34/lib/BUILD.bazel" ] || [ -f "$tmp/c34/BUILD.bazel" ]; then
+    echo "FAIL: c34 BUILD.bazel should not be created" >&2
+    fail=1
+else
+    echo "PASS: c34 no BUILD.bazel created on failure"
+fi
+
+# Case 35: scaffold interface with dataclass constructors, init=False, properties, and polytype overrides
+mkdir -p "$tmp/c35/parts/agent/low" "$tmp/c35/parts/agent/lib" "$tmp/c35/parts/sandbox/low" "$tmp/c35/parts/sandbox/lib"
+echo "class AgentSessionTier: pass" > "$tmp/c35/parts/agent/lib/agent_session.py"
+cat > "$tmp/c35/parts/sandbox/low/tool_provider.pyi" <<'EOF'
+from dataclasses import dataclass
+from typing import Any, Callable, Mapping, NewType, Optional, Protocol, Sequence, Set
+from support.lib.framework import data_type, operation, override, poly_type
+from agent_session import AgentSessionTier
+
+ParameterName = NewType("ParameterName", str)
+
+@dataclass(frozen=True, init=False)
+@data_type
+class NoInitData:
+    raw: str
+
+@poly_type
+class ParameterType[ActualT, WireT](Protocol):
+    @property
+    def actual_type(self) -> type[ActualT]:
+        ...
+
+    @property
+    def wire_type(self) -> type[WireT]:
+        ...
+
+    @operation
+    def convert(self, wire_value: WireT) -> ActualT:
+        ...
+
+@dataclass(frozen=True)
+@data_type
+class IdentityParameterType[T](ParameterType[T, T]):
+    target_type: type[T]
+
+    @property
+    @override
+    def actual_type(self) -> type[T]:
+        ...
+
+    @property
+    @override
+    def wire_type(self) -> type[T]:
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: T) -> T:
+        ...
+EOF
+
+(
+    cd "$tmp/c35"
+    python3 "$bin/lib_lint.py" --scaffold parts/sandbox/lib/tool_provider.py --pyi parts/sandbox/low/tool_provider.pyi
+)
+check "c35 scaffold created" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "class IdentityParameterType"
+check "c35 init=False preserved" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "@dataclass(frozen=True, init=False)"
+check "c35 target_type field preserved" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "target_type: type\[T\]"
+check "c35 property actual_type preserved" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "def actual_type"
+check "c35 polytype override returns target" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "return self.target_type"
+check "c35 convert returns wire" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "return wire_value"
+check "c35 import agent_session rewritten" "$tmp/c35/parts/sandbox/lib/tool_provider.py" "from c35.parts.agent.lib.agent_session import AgentSessionTier"
+
+if python3 -c "
+import sys
+sys.path.insert(0, '$tmp')
+from c35.parts.sandbox.lib.tool_provider import IdentityParameterType
+ipt = IdentityParameterType(str)
+assert ipt.actual_type is str
+assert ipt.convert('abc') == 'abc'
+"; then
+    echo "PASS: c35 generated skeleton executes and instantiates correctly"
+else
+    echo "FAIL: c35 generated skeleton failed execution" >&2
+    fail=1
+fi
+
+# Case 36: scaffold and verify assembly module (*_asm.py) from *_asm.pyi specification
+mkdir -p "$tmp/c36/parts/demo/low" "$tmp/c36/parts/demo/lib"
+cat > "$tmp/c36/parts/demo/low/demo_asm.pyi" <<'EOF'
+def __initialize__() -> None:
+    """Demo assembly.
+
+    CONSTITUENTS:
+    - demo_worker_impl
+    """
+    ...
+EOF
+
+# 1. Uninitialized / empty assembly is rejected
+touch "$tmp/c36/parts/demo/lib/demo_asm.py"
+if ( cd "$tmp/c36" && python3 "$bin/lib_lint.py" parts/demo/lib/demo_asm.py --pyi parts/demo/low/demo_asm.pyi 2>"$tmp/c36/uninit.log" ); then
+    echo "FAIL: c36 expected rejection of empty assembly without --scaffold" >&2
+    fail=1
+else
+    echo "PASS: c36 rejected empty assembly without --scaffold"
+fi
+
+# 2. Assembly with empty CONSTITUENTS = () is rejected
+cat > "$tmp/c36/parts/demo/lib/demo_asm.py" <<'EOF'
+CONSTITUENTS = ()
+def __initialize__(registry=None): pass
+_initialize_ = __initialize__
+EOF
+if ( cd "$tmp/c36" && python3 "$bin/lib_lint.py" parts/demo/lib/demo_asm.py --pyi parts/demo/low/demo_asm.pyi 2>"$tmp/c36/empty_constituents.log" ); then
+    echo "FAIL: c36 expected rejection of empty CONSTITUENTS" >&2
+    fail=1
+else
+    echo "PASS: c36 rejected empty CONSTITUENTS"
+fi
+
+# 3. Scaffold creates assembly populated from demo_asm.pyi
+(
+    cd "$tmp/c36"
+    python3 "$bin/lib_lint.py" --scaffold parts/demo/lib/demo_asm.py --pyi parts/demo/low/demo_asm.pyi
+)
+check "c36 scaffold import" "$tmp/c36/parts/demo/lib/demo_asm.py" "from . import demo_worker_impl"
+check "c36 scaffold constituent" "$tmp/c36/parts/demo/lib/demo_asm.py" "demo_worker_impl,"
+check "c36 scaffold __initialize__" "$tmp/c36/parts/demo/lib/demo_asm.py" "def __initialize__"
+
+# 4. Mock constituent file so lib_lint passes
+touch "$tmp/c36/parts/demo/lib/demo_worker_impl.py"
+if ( cd "$tmp/c36" && python3 "$bin/lib_lint.py" parts/demo/lib/demo_asm.py --pyi parts/demo/low/demo_asm.pyi ); then
+    echo "PASS: c36 scaffolded assembly passed lib_lint verification"
+else
+    echo "FAIL: c36 scaffolded assembly failed lib_lint verification" >&2
+    fail=1
+fi
+
+# Case 37: interface module public functions must align with grounding specification
+mkdir -p "$tmp/c37/lib" "$tmp/c37/low"
+
+# 37a: uncontracted public function in interface module -> rejected
+cat > "$tmp/c37/low/calc.pyi" <<'EOF'
+from typing import Protocol
+from support.lib.framework import poly_type
+
+@poly_type
+class Calculator(Protocol):
+    def add(self, a: int, b: int) -> int:
+        ...
+EOF
+
+cat > "$tmp/c37/lib/calc.py" <<'EOF'
+from typing import Protocol
+
+class Calculator(Protocol):
+    def add(self, a: int, b: int) -> int:
+        ...
+
+def compute_sum(a: int, b: int) -> int:
+    return a + b
+EOF
+
+if ( cd "$tmp/c37" && python3 "$bin/lib_lint.py" lib/calc.py --pyi low/calc.pyi 2>"$tmp/c37/err_37a.log" ); then
+    echo "FAIL: c37a expected rejection of uncontracted public function in interface module" >&2
+    fail=1
+else
+    echo "PASS: c37a rejected uncontracted public function in interface module"
+fi
+check "c37a uncontracted function diagnostic" "$tmp/c37/err_37a.log" "public function 'compute_sum' is defined in interface module but is not declared in grounding specification 'calc.pyi'; interface modules must not contain uncontracted runtime functions"
+
+# 37b: contracted public function declared in .pyi -> accepted
+cat > "$tmp/c37/low/calc_with_func.pyi" <<'EOF'
+def compute_sum(a: int, b: int) -> int:
+    ...
+EOF
+
+cat > "$tmp/c37/lib/calc_with_func.py" <<'EOF'
+def compute_sum(a: int, b: int) -> int:
+    return a + b
+EOF
+
+if ( cd "$tmp/c37" && python3 "$bin/lib_lint.py" lib/calc_with_func.py --pyi low/calc_with_func.pyi ); then
+    echo "PASS: c37b accepted contracted public function in interface module"
+else
+    echo "FAIL: c37b expected success for contracted public function in interface module" >&2
+    fail=1
+fi
+
+# 37c: spec declares public function missing in interface module -> rejected
+cat > "$tmp/c37/lib/calc_missing.py" <<'EOF'
+class Other:
+    pass
+EOF
+
+cat > "$tmp/c37/low/calc_missing.pyi" <<'EOF'
+class Other:
+    ...
+
+def required_func() -> None:
+    ...
+EOF
+
+if ( cd "$tmp/c37" && python3 "$bin/lib_lint.py" lib/calc_missing.py --pyi low/calc_missing.pyi 2>"$tmp/c37/err_37c.log" ); then
+    echo "FAIL: c37c expected failure when function declared in spec is missing" >&2
+    fail=1
+else
+    echo "PASS: c37c rejected interface module missing declared spec function"
+fi
+check "c37c missing function diagnostic" "$tmp/c37/err_37c.log" "function 'required_func' declared in grounding specification 'calc_missing.pyi' is not defined in library code"
+
+# 37d: signature mismatch in top-level function -> rejected
+cat > "$tmp/c37/low/calc_sig.pyi" <<'EOF'
+def compute_value(x: int) -> int:
+    ...
+EOF
+
+cat > "$tmp/c37/lib/calc_sig.py" <<'EOF'
+def compute_value(x: str) -> int:
+    return 0
+EOF
+
+if ( cd "$tmp/c37" && python3 "$bin/lib_lint.py" lib/calc_sig.py --pyi low/calc_sig.pyi 2>"$tmp/c37/err_37d.log" ); then
+    echo "FAIL: c37d expected rejection of top-level function parameter type mismatch" >&2
+    fail=1
+else
+    echo "PASS: c37d rejected top-level function parameter type mismatch"
+fi
+check "c37d sig mismatch diagnostic" "$tmp/c37/err_37d.log" "parameter 'x' type mismatch in 'compute_value': specification 'calc_sig.pyi' declares 'int', implementation defines 'str'"
+
+# 37e: implementation module with top-level helper -> not rejected by check_public_functions
+cat > "$tmp/c37/low/worker_impl.pyi" <<'EOF'
+from support.lib.lifecycle import system
+from support.lib.framework import singleton_type
+
+@singleton_type("system")
+class Worker:
+    def run(self) -> None:
+        ...
+EOF
+
+cat > "$tmp/c37/lib/worker_impl.py" <<'EOF'
+from support.lib.lifecycle import Singleton, LifecycleRegistry, get_default_registry, system
+from typing import Optional
+
+class Worker:
+    tier = system
+    def run(self) -> None:
+        pass
+
+def helper_util(x: int) -> int:
+    return x + 1
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(Worker, keys=[Worker], tier=system)
+
+_initialize_ = __initialize__
+EOF
+
+if ( cd "$tmp/c37" && python3 "$bin/lib_lint.py" lib/worker_impl.py --pyi low/worker_impl.pyi 2>"$tmp/c37/err_37e.log" ); then
+    echo "PASS: c37e implementation module with top-level helper accepted"
+else
+    echo "FAIL: c37e failed unexpectedly on implementation module helper" >&2
+    cat "$tmp/c37/err_37e.log" >&2
+    fail=1
+fi
+
+# Case 38: implementation module lifecycle maintenance (auto-generation and migration)
+mkdir -p "$tmp/c38/lib" "$tmp/c38/low"
+cat > "$tmp/c38/low/service_impl.pyi" <<'EOF'
+from support.lib.lifecycle import system
+from support.lib.framework import singleton_type
+
+@singleton_type("system")
+class Service:
+    def run(self) -> None:
+        ...
+EOF
+
+# 38a: missing __initialize__ is auto-generated
+cat > "$tmp/c38/lib/service_impl.py" <<'EOF'
+from support.lib.lifecycle import Singleton, system
+
+class Service:
+    tier = system
+    def run(self) -> None:
+        pass
+EOF
+
+if ( cd "$tmp/c38" && python3 "$bin/lib_lint.py" lib/service_impl.py --pyi low/service_impl.pyi 2>"$tmp/c38/err_38a.log" ); then
+    echo "PASS: c38a missing __initialize__ auto-generated"
+else
+    echo "FAIL: c38a failed on missing __initialize__ auto-generation" >&2
+    cat "$tmp/c38/err_38a.log" >&2
+    fail=1
+fi
+check "c38a auto-gen marker start" "$tmp/c38/lib/service_impl.py" "# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---"
+check "c38a auto-gen marker end" "$tmp/c38/lib/service_impl.py" "# --- END CLEANROOM AUTO-GENERATED ---"
+check "c38a initialize func" "$tmp/c38/lib/service_impl.py" "def __initialize__"
+check "c38a register singleton" "$tmp/c38/lib/service_impl.py" "reg\.register_singleton("
+check "c38a initialize alias" "$tmp/c38/lib/service_impl.py" "_initialize_ = __initialize__"
+
+# 38b: legacy un-delimited block is migrated and deduplicated
+cat > "$tmp/c38/lib/service_impl.py" <<'EOF'
+from support.lib.lifecycle import Singleton, LifecycleRegistry, get_default_registry, system
+from typing import Optional
+
+class Service:
+    tier = system
+    def run(self) -> None:
+        pass
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(Service, keys=[Service], tier=system)
+
+_initialize_ = __initialize__
+EOF
+
+if ( cd "$tmp/c38" && python3 "$bin/lib_lint.py" lib/service_impl.py --pyi low/service_impl.pyi 2>"$tmp/c38/err_38b.log" ); then
+    echo "PASS: c38b legacy __initialize__ migrated"
+else
+    echo "FAIL: c38b failed on legacy __initialize__ migration" >&2
+    cat "$tmp/c38/err_38b.log" >&2
+    fail=1
+fi
+
+init_count=$(grep -c "def __initialize__" "$tmp/c38/lib/service_impl.py" || true)
+alias_count=$(grep -c "_initialize_ = __initialize__" "$tmp/c38/lib/service_impl.py" || true)
+if [ "$init_count" -eq 1 ] && [ "$alias_count" -eq 1 ]; then
+    echo "PASS: c38b no duplicate __initialize__ or alias"
+else
+    echo "FAIL: c38b found duplicate __initialize__ (count: $init_count) or alias (count: $alias_count)" >&2
+    fail=1
+fi
+
+# 38c: idempotent re-run leaves exactly one delimited block
+if ( cd "$tmp/c38" && python3 "$bin/lib_lint.py" lib/service_impl.py --pyi low/service_impl.pyi 2>"$tmp/c38/err_38c.log" ); then
+    echo "PASS: c38c idempotent re-run succeeded"
+else
+    echo "FAIL: c38c failed on idempotent re-run" >&2
+    cat "$tmp/c38/err_38c.log" >&2
+    fail=1
+fi
+
+init_count=$(grep -c "def __initialize__" "$tmp/c38/lib/service_impl.py" || true)
+if [ "$init_count" -eq 1 ]; then
+    echo "PASS: c38c exactly one __initialize__ after re-run"
+else
+    echo "FAIL: c38c found $init_count __initialize__ after re-run" >&2
+    fail=1
+fi
+
+# Case 39: class defining uncontracted public method -> rejected
+mkdir -p "$tmp/c39/lib" "$tmp/c39/low"
+cat > "$tmp/c39/low/service_impl.pyi" <<'EOF'
+from typing import Protocol
+from support.lib.framework import singleton_type
+from support.lib.lifecycle import InTier
+from session import AgentSessionTier
+
+class Service(InTier[AgentSessionTier], Protocol):
+    def process(self) -> None: ...
+EOF
+cat > "$tmp/c39/lib/service_impl.py" <<'EOF'
+from typing import Optional
+from support.lib.lifecycle import InTier, LifecycleRegistry, Singleton
+from session import AgentSessionTier, agent_session
+import service_impl as _spec
+
+class Service(_spec.Service, Singleton):
+    tier = agent_session
+
+    def process(self) -> None:
+        pass
+
+    def configure(self) -> None:
+        pass
+
+# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    if registry is None:
+        from support.lib.lifecycle import get_default_registry
+        registry = get_default_registry()
+    registry.register_singleton(Service, tier=Service.tier)
+
+_initialize_ = __initialize__
+# --- END CLEANROOM AUTO-GENERATED ---
+EOF
+if ( cd "$tmp/c39" && python3 "$bin/lib_lint.py" lib/service_impl.py --pyi low/service_impl.pyi 2>"$tmp/c39/err_39.log" ); then
+    echo "FAIL: c39 expected rejection of uncontracted public method configure()" >&2
+    fail=1
+else
+    if grep -q "defines uncontracted public method 'configure()'" "$tmp/c39/err_39.log"; then
+        echo "PASS: c39 rejected uncontracted public method and reported contract error"
+    else
+        echo "FAIL: c39 did not report uncontracted method error in err_39.log" >&2
+        cat "$tmp/c39/err_39.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 40: broad exception eating (bare pass) -> rejected by lib_lint
+mkdir -p "$tmp/c40/lib" "$tmp/c40/low"
+cat > "$tmp/c40/low/runner.pyi" <<'EOF'
+def run_task() -> None:
+    ...
+EOF
+cat > "$tmp/c40/lib/runner.py" <<'EOF'
+def run_task() -> None:
+    try:
+        pass
+    except Exception:
+        pass
+EOF
+if ( cd "$tmp/c40" && python3 "$bin/lib_lint.py" lib/runner.py --pyi low/runner.pyi 2>"$tmp/c40/err_40.log" ); then
+    echo "FAIL: c40 expected rejection of broad exception eating" >&2
+    fail=1
+else
+    if grep -q "broad exception eating detected" "$tmp/c40/err_40.log"; then
+        echo "PASS: c40 rejected broad exception eating without re-raise"
+    else
+        echo "FAIL: c40 missing broad exception eating diagnostic in err_40.log" >&2
+        cat "$tmp/c40/err_40.log" >&2
+        fail=1
+    fi
+fi
+
+# Case 41: exception reification into result attribute / structure -> accepted by lib_lint
+mkdir -p "$tmp/c41/lib" "$tmp/c41/low"
+cat > "$tmp/c41/low/runner.pyi" <<'EOF'
+class Result:
+    error: object
+
+def run_task() -> Result:
+    ...
+EOF
+cat > "$tmp/c41/lib/runner.py" <<'EOF'
+class Result:
+    error: object
+
+def run_task() -> Result:
+    res = Result()
+    try:
+        pass
+    except Exception as exc:
+        res.error = exc
+    return res
+EOF
+if ( cd "$tmp/c41" && python3 "$bin/lib_lint.py" lib/runner.py --pyi low/runner.pyi ); then
+    echo "PASS: c41 accepted exception reification into result attribute"
+else
+    echo "FAIL: c41 expected success for legitimate exception reification" >&2
+    fail=1
+fi
+
+# Case 42: broad exception with pragma directive -> accepted by lib_lint
+mkdir -p "$tmp/c42/lib" "$tmp/c42/low"
+cat > "$tmp/c42/low/runner.pyi" <<'EOF'
+def run_task() -> None:
+    ...
+EOF
+cat > "$tmp/c42/lib/runner.py" <<'EOF'
+def run_task() -> None:
+    try:
+        pass
+    except Exception:  # cleanroom: allow-broad-exception
+        pass
+EOF
+if ( cd "$tmp/c42" && python3 "$bin/lib_lint.py" lib/runner.py --pyi low/runner.pyi ); then
+    echo "PASS: c42 accepted broad exception with cleanroom: allow-broad-exception pragma"
+else
+    echo "FAIL: c42 expected success for broad exception with pragma directive" >&2
+    fail=1
+fi
+
+# Case 43: broad exception with intentional-catch pragma -> accepted by lib_lint
+mkdir -p "$tmp/c43/lib" "$tmp/c43/low"
+cat > "$tmp/c43/low/runner.pyi" <<'EOF'
+def run_task() -> int:
+    ...
+EOF
+cat > "$tmp/c43/lib/runner.py" <<'EOF'
+def run_task() -> int:
+    try:
+        return 1
+    except Exception:
+        # intentional-catch
+        return 0
+EOF
+if ( cd "$tmp/c43" && python3 "$bin/lib_lint.py" lib/runner.py --pyi low/runner.pyi ); then
+    echo "PASS: c43 accepted broad exception with intentional-catch pragma"
+else
+    echo "FAIL: c43 expected success for broad exception with intentional-catch pragma" >&2
+    fail=1
+fi
+
+exit "$fail"
+
+

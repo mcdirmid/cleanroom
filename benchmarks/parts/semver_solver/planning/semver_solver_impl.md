@@ -45,21 +45,32 @@ By enforcing grammar validation, compiling ranges into normalized comparator set
 
 ### Knowledge Provisions
 
+- Concrete version engine tokenization, precedence evaluation, and range matching. [concrete_version_engine_service]
+- Concrete package repository storage and descending precedence indexing. [concrete_package_repository_service]
+- Concrete backtracking dependency resolution solver. [concrete_dependency_solver_service]
 - Concrete version engine, package repository, and backtracking dependency solver. [concrete_semver_solver_realization]
 
 ### Inherited Deferred Requirements
 
-- Parsing regexes, precedence ordering algorithms, range expression compilation, repository indexing, and backtracking constraint satisfaction.
-  - Grounded: [concrete_semver_solver_realization]
+- Version parsing regular expression tokenization and SemVer 2.0.0 precedence ordering algorithms.
+  - Grounded: [concrete_version_engine_service]
+- Version range syntax parsing and constraint satisfiability algorithms.
+  - Grounded: [concrete_version_engine_service]
+- Package release storage and descending precedence indexing.
+  - Grounded: [concrete_package_repository_service]
+- Backtracking search heuristics, variable ordering, and conflict trail collection.
+  - Grounded: [backtracking_solver_ext: [backtracking_search_heuristics]]
 
 ### Knowledge Requirements
 
+- Algorithmic mechanics for depth-first dependency search, Minimum Remaining Values variable ordering, descending precedence value exploration, and conflict trail collection.
+  - Grounded: [backtracking_solver_ext: [backtracking_search_heuristics]]
 - Semantic versioning models, precedence comparison, range matching, package repository, and backtracking solver.
   - Grounded: [semver_solver: [semver_solver_core_service]]
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-27T03:48:22Z
-LAST_CHANGED: 2026-10-27T22:30:00Z
-CHANGE: Remove exact equality formatting, self-contain all backtracking search contracts
-SPEC_QA_AUDIT: 2026-10-27T03:48:22Z
+LAST_CLEANED: 2026-10-30T19:20:00Z
+LAST_CHANGED: 2026-10-30T19:20:00Z
+CHANGE: Ground inherited deferred requirements with factored provisions and connect backtracking_solver_ext search heuristics
+SPEC_QA_AUDIT: 2026-10-30T19:20:00Z
 -->

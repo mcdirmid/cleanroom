@@ -188,3 +188,7 @@ class DAGRunner(Singleton[SystemTier], Protocol):
     def cancel(self) -> None:
         # TODO_cancel_body
         ...
+
+    def is_cancelled(self) -> bool:
+        # TODO_is_cancelled_body
+        ...

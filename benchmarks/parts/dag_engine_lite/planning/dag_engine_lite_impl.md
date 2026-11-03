@@ -17,6 +17,7 @@ By encapsulating adjacency index management, employing Kahn's algorithm for dete
 ### Contracts
 
 - A concrete directed acyclic graph indexes node definitions in an internal node registry. [maintain_node_registry]
+- A concrete directed acyclic graph raises duplicate node error when adding a node whose identifier already exists in the node registry. [raise_duplicate_node_error_on_existing_node]
 - A concrete directed acyclic graph maintains an adjacency index partitioning upstream prerequisite neighbor sets and downstream dependent neighbor sets. [maintain_adjacency_maps]
 - A concrete directed acyclic graph updates upstream and downstream neighbor sets during node registration and edge addition. [update_neighbor_sets_on_registration]
 - A concrete directed acyclic graph tests node presence directly against the node registry. [test_node_registry_membership]
@@ -44,7 +45,7 @@ By encapsulating adjacency index management, employing Kahn's algorithm for dete
 
 ### Woven Contracts
 
-- Node registry indexing, adjacency maintenance, depth-first cycle detection, Kahn topological sorting, wave state transitions, and sequential runners coordinate to execute task graphs safely and deterministically. [maintain_node_registry, maintain_adjacency_maps, enforce_node_presence, detect_graph_cycles, execute_deterministic_topological_sort, compute_critical_path_dp, initialize_scheduler_states, filter_and_order_ready_wave, promote_unblocked_dependents, apply_fail_fast_cancellation, apply_skip_downstream_marking, verify_scheduler_completion, pre_validate_graph_before_run, dispatch_sequential_waves, execute_node_action_with_retries, propagate_runner_failure_policy, compile_dag_run_report]
+- Node registry indexing, adjacency maintenance, depth-first cycle detection, Kahn topological sorting, wave state transitions, and sequential runners coordinate to execute task graphs safely and deterministically. [maintain_node_registry, raise_duplicate_node_error_on_existing_node, maintain_adjacency_maps, enforce_node_presence, detect_graph_cycles, execute_deterministic_topological_sort, compute_critical_path_dp, initialize_scheduler_states, filter_and_order_ready_wave, promote_unblocked_dependents, apply_fail_fast_cancellation, apply_skip_downstream_marking, verify_scheduler_completion, pre_validate_graph_before_run, dispatch_sequential_waves, execute_node_action_with_retries, propagate_runner_failure_policy, compile_dag_run_report]
 - Pre-execution invariant validation, wave extraction ordering, and retry-bearing action execution compose so that failure policy propagation determines which terminal outcomes the run report consolidates. [pre_validate_graph_before_run, filter_and_order_ready_wave, execute_node_action_with_retries, propagate_runner_failure_policy, apply_fail_fast_cancellation, apply_skip_downstream_marking, apply_continue_on_error_eligibility, compile_dag_run_report]
 
 ## Grounding
@@ -65,7 +66,7 @@ By encapsulating adjacency index management, employing Kahn's algorithm for dete
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-26T20:55:00Z
-LAST_CHANGED: 2026-10-26T20:55:00Z
-CHANGE: Specify dynamic scheduler state synchronization on remove_node, ascending alphabetical tie-breaking, and SKIP state for blocked dependents
+LAST_CHANGED: 2026-11-02T19:35:00Z
+CHANGE: Specify duplicate node error on add_node for already registered node identifiers
 SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 -->

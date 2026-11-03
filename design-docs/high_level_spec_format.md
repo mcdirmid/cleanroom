@@ -2,7 +2,7 @@
 
 ## 1. Overview & Core Philosophy
 
-The Cleanroom specification language defines software components declaratively through their types, capabilities, and lifecycles in a **literate, high-level prose format**.
+The Autofab specification language defines software components declaratively through their types, capabilities, and lifecycles in a **literate, high-level prose format**.
 
 Its primary objective is **judging the quality of satisfiability**: given the types and capabilities declared in an architecture, can an LLM (using its weights and semantic reasoning) compose available operations to fulfill an implementation requirement without guesswork or ungrounded dependencies?
 

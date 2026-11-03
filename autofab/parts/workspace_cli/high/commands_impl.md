@@ -1,0 +1,41 @@
+# commands_impl implementation component
+
+imports: session, autofab_files_ext, attribution, submit, coverage, check, commands, pending, provision, role_registry, sync
+implements: commands
+
+## Purpose
+
+The commands_impl implementation component realizes substantive command execution workflows for Autofab role workspaces, including work evaluation, verification, submission, attribution, coverage, commissioning, and system refresh.
+
+Operating command-line subagents in isolated workspaces requires domain logic that synchronizes working trees with canonical repositories, validates file boundaries, invokes submission coordinators, attributes defect critiques, measures statement test coverage, and provisions role workspaces. The commands_impl implementation component consolidates these operational workflows into a singleton command handler operating within the agent session lifecycle tier.
+
+**Out of scope:** The commands_impl implementation component does not parse command-line argument strings; argument parsing is handled by cli_tool_impl.
+
+**Delegated:** Session tier scoping is delegated to agent_session; workspace discovery and role definitions are delegated to role_registry; workspace commissioning is delegated to provision; file harvesting, system refresh, and pulling are delegated to sync; work discovery and file verification runners are delegated to check; pending work buffer tracking is delegated to pending; event log file naming conventions are delegated to autofab_files_ext; target submission gating and code hash validation are delegated to submit; defect blame attribution and failure marking are delegated to attribution; statement test coverage analysis is delegated to coverage.
+
+## Types and Behavior
+
+The workspace command handler realization implements the domain workflows for all Autofab role workspace operations.
+
+The realization:
+
+- Delegates work queue discovery and actionable task presentation in the local role workspace to the workspace checker.
+
+- Delegates file verification checks, linters, and type checking to the workspace checker.
+
+- Evaluates role verification checks on the target file during submit execution, enforcing that modified targets have been verified via check_files since their latest modifications unless bypassed, rejecting submission when verification fails unless bypassed, delegates file validation and metadata stamping to the submission coordinator, reflects stamped files into the role workspace, appends submission records to the event log, and clears the target from pending work on success.
+
+- Auto-sanitizes multi-line critiques into a single continuous paragraph during blame and feedback execution, enforcing that modified workspace targets have been verified via check_files since their latest modifications, delegates attribution to the attribution coordinator, records blamed culprit targets into the workspace blame buffer, appends blame records to the event log, and clears the matching target or single pending workspace target from pending work on success, emitting a prominent directive instructing the worker to call bin/get_work to inspect remaining units and conclude their round immediately with summary text and zero tool calls if all ready targets are resolved.
+
+- Enforces that modified target files have been verified via check_files since their latest modifications, delegates failure tagging and diagnostic recording to the attribution coordinator during fail execution, clearing the matching target or single pending workspace target from pending work on success.
+
+- Delegates statement coverage evaluation to the coverage evaluator during coverage execution, using local workspace files when present, and formats diagnostic span reports.
+
+- Delegates workspace provisioning, registration, and system synchronization across active role workspaces during commission and refresh system execution, dynamically discovering or requiring the directory scope without hardcoded defaults, mapping directory scope arguments when provisioning across all declared roles, supporting resetting stale work buffers and stamping model execution profiles into role descriptors, and supporting provisioning across all declared roles within a directory scope when requested.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-30T11:00:00Z
+LAST_CHANGED: 2026-10-30T11:00:00Z
+CHANGE: Auto-sanitize blame critiques and direct post-completion get_work verification
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->

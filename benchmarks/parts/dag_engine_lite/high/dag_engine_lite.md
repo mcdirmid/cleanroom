@@ -12,9 +12,11 @@ Orchestrating task pipelines requires formal representation of task dependencies
 
 A *DAG error* serves as the base error for graph operations, carrying a diagnostic *error message*. Graph operation failures are categorized into:
 
-- A *cycle error* indicating a directed dependency cycle within a graph, carrying a *cycle sequence* of node identifiers.
+- A *cycle error* indicating a directed dependency cycle within a graph, carrying a *cycle sequence* of node identifiers. Cycle error designates an untestable checked precondition contract violation when a caller constructs or validates a graph containing cyclic dependencies.
 
-- A *node not found error* indicating a referenced node is absent from a graph, carrying a missing *node identifier*.
+- A *node not found error* indicating a referenced node is absent from a graph, carrying a missing *node identifier*. Node not found error designates an untestable checked precondition contract violation when a caller violates API preconditions by referencing an unregistered node identifier.
+
+- A *duplicate node error* indicating a node identifier being added already exists in the graph, carrying the conflicting *node identifier*. Duplicate node error designates an untestable checked precondition contract violation when a caller violates API preconditions by attempting to register an already-registered node identifier.
 
 - A *node execution error* indicating an unhandled exception occurred during task execution, carrying a failed node identifier and a caught *underlying cause*.
 
@@ -28,7 +30,7 @@ A *DAG run report* summarizes an entire graph execution run, carrying a *total n
 
 A *directed acyclic graph* maintains task nodes and directed dependency edges between prerequisites and dependents. Graph modification operations provide:
 
-- Adding nodes with callable actions, dependency identifiers, scheduling priorities, and retry counts, deferring missing dependency validation to graph validation and topological sort rather than eagerly failing upon node registration.
+- Adding nodes with callable actions, dependency identifiers, scheduling priorities, and retry counts, ensuring the node identifier is not already registered in the graph (raising duplicate node error on caller violation), and deferring missing dependency validation to graph validation and topological sort rather than eagerly failing upon node registration.
 
 - Adding edges from upstream prerequisites to downstream dependents, raising node not found error when either node is missing.
 
@@ -54,13 +56,13 @@ The scheduler supports marking nodes running, marking nodes succeeded and promot
 
 - Leaving unblocked independent nodes eligible for execution under the continue on error policy, while transitioning blocked dependents that cannot execute due to upstream failure to skipped.
 
-The scheduler tests whether execution is finished when all registered nodes in the graph have reached terminal states (succeeded, failed, cancelled, or skipped), or when no unblocked nodes remain and any remaining nodes cannot execute due to prerequisite failures, or when the graph contains no nodes, and supports retrieving node states individually and across all nodes.
+The scheduler tests whether execution is finished when all registered nodes in the graph have reached terminal states (succeeded, failed, cancelled, or skipped), or when no unblocked nodes remain and any remaining nodes cannot execute due to prerequisite failures, or when the graph contains no nodes, and supports retrieving node states individually (raising node not found error when retrieving an unregistered node) and across all nodes.
 
 A *DAG runner* coordinates sequential graph execution under failure policies. The runner supports running graphs to completion under an assigned failure policy defaulting to fail fast, validating graph invariants prior to execution, dispatching ready waves sequentially, executing configured retries upon action failures, and compiling execution results into a DAG run report.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-26T20:55:00Z
 LAST_CHANGED: 2026-10-26T20:55:00Z
-CHANGE: Clarify deferred dependency validation on add_node, scheduler purge on remove_node, tie-breaking lexicographical ordering, and terminal state transitions under continue on error
+CHANGE: Specify duplicate node error on add_node for already registered node identifiers
 SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 -->

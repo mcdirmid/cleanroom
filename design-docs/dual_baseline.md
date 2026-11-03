@@ -3,9 +3,9 @@
 ## 1. Executive Summary
 
 As AI code generation models scale in raw capability, an architectural question arises in automated software engineering:
-> **Can we achieve correctness more efficiently by generating two independent baseline implementations from an interface specification and cross-checking them differentially, rather than routing a single implementation through a multi-stage double-blind Cleanroom pipeline?**
+> **Can we achieve correctness more efficiently by generating two independent baseline implementations from an interface specification and cross-checking them differentially, rather than routing a single implementation through a multi-stage double-blind Autofab pipeline?**
 
-This document establishes the formal design, economic trade-offs, and verification mechanics of **Dual-Baseline Synthesis with Differential Hypothesis Fuzzing**, comparing it directly against the **Cleanroom Double-Blind Pipeline** on an **equal footing**.
+This document establishes the formal design, economic trade-offs, and verification mechanics of **Dual-Baseline Synthesis with Differential Hypothesis Fuzzing**, comparing it directly against the **Autofab Double-Blind Pipeline** on an **equal footing**.
 
 ### The Equal-Footing Benchmark Scope
 To evaluate both paradigms rigorously without confounding variables:
@@ -17,7 +17,7 @@ To evaluate both paradigms rigorously without confounding variables:
 
 ## 2. The Twin Inherent Vulnerabilities of Both Approaches
 
-A critical theoretical finding of this architecture is that **neither approach is immune to fundamental cognitive limitations of large language models**. Both Cleanroom and Dual Baseline face two shared failure modes:
+A critical theoretical finding of this architecture is that **neither approach is immune to fundamental cognitive limitations of large language models**. Both Autofab and Dual Baseline face two shared failure modes:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -26,13 +26,13 @@ A critical theoretical finding of this architecture is that **neither approach i
 │                                                                                        │
 │   1. SHARED OMISSION VULNERABILITY (Coincident Failures / Knight-Leveson)              │
 │      * Models trained on similar open-source corpora share cognitive blind spots.      │
-│      * In Cleanroom: Lib author and Test author both omit edge-case invariants.        │
+│      * In Autofab: Lib author and Test author both omit edge-case invariants.        │
 │      * In Dual Baseline: Base 1 and Base 2 both omit edge-case logic and rules.        │
 │      * Outcome: 100% false agreement and green test passes on broken code!             │
 │                                                                                        │
 │   2. SHARED UNDERSPECIFICATION VULNERABILITY (Ambiguity & Silence)                     │
 │      * Specs inevitably have gaps (e.g. exception propagation on task failure).        │
-│      * In Cleanroom: Single interpretation chosen silently; may be fragile.           │
+│      * In Autofab: Single interpretation chosen silently; may be fragile.           │
 │      * In Dual Baseline: Independent models interpret gaps differently, causing        │
 │        divergences that force Arbiter adjudication to lock down the spec.              │
 │                                                                                        │
@@ -43,7 +43,7 @@ A critical theoretical finding of this architecture is that **neither approach i
 In 1986, Knight and Leveson empirically disproved the independence assumption in N-version programming: independently written software systems fail on the exact same inputs because human engineers share cognitive models.
 
 With LLMs, this problem is amplified by shared pre-training corpora (The Stack, GitHub, common tutorials):
-* **In Cleanroom ($W_{\text{lib}} \parallel W_{\text{test}}$)**:
+* **In Autofab ($W_{\text{lib}} \parallel W_{\text{test}}$)**:
   Even though the Lib author and Test author work in strict physical double-blind isolation ($\mathcal{I} = 0$), both models may share the same conceptual bias (e.g. conceiving of DAG operations as strictly linear, forward sequences). The Test author fails to author an invariant for node re-registration edge clearance, and the Lib author fails to implement it. Statement coverage reaches 95%, branch coverage reaches 90%, all tests pass, but a critical soundness defect escapes.
 * **In Dual Baseline ($Base_1 \parallel Base_2$)**:
   Baseline 1 and Baseline 2 are prompted independently. If both models share the same training prior regarding DAG data structures, *both* will omit node re-registration edge clearance in their implementations, and *both* will omit it from their Hypothesis rules.
@@ -52,7 +52,7 @@ With LLMs, this problem is amplified by shared pre-training corpora (The Stack, 
 
 ### B. Shared Underspecification Vulnerability
 Specifications, no matter how detailed, occasionally leave peripheral details ungrounded or ambiguous (e.g. whether a failed task raises `TaskExecutionError` or returns `TaskReport(status=FAILED)`, or tie-breaking order in topological sorts):
-* **In Cleanroom**:
+* **In Autofab**:
   The Lib author picks an interpretation. The Test author, reading the same text, may pick the same interpretation or fail during QA. If both pick the same interpretation, the uncontracted behavior becomes de facto production logic without ever being formalized.
 * **In Dual Baseline**:
   Because $Base_1$ and $Base_2$ generate code independently, they frequently make **different interpretations** of underspecified areas.
@@ -61,7 +61,7 @@ Specifications, no matter how detailed, occasionally leave peripheral details un
 
 ---
 
-## 3. Architecture Comparison: Cleanroom vs. Dual-Baseline
+## 3. Architecture Comparison: Autofab vs. Dual-Baseline
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -96,7 +96,7 @@ Specifications, no matter how detailed, occasionally leave peripheral details un
 
 ### Detailed Operational Topologies:
 
-#### Cleanroom (`lib` + `test` + `auditor` with Hypothesis)
+#### Autofab (`lib` + `test` + `auditor` with Hypothesis)
 1. **$W_{\text{lib}}$ Workspace**: Receives `low/*.pyi` and planning grounding. Synthesizes `lib/*.py`. Has zero visibility into test code.
 2. **$W_{\text{test}}$ Workspace**: Receives `low/*.pyi` and planning grounding. Synthesizes example-based unit tests (`tests/*_impl_test.py`) and a Hypothesis state machine (`tests/*_state_machine_test.py`). Has zero visibility into implementation code.
 3. **Execution & Blame Loop**:
@@ -126,7 +126,7 @@ A rigorous comparison must evaluate the actual token consumption and wall-clock 
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                     RESOURCE CONSUMPTION MATRIX (BENCHMARKED PHASE)                    │
 ├───────────────────────────────┬────────────────────────────┬───────────────────────────┤
-│ Metric                        │ Cleanroom Pipeline         │ Dual-Baseline Cross-Check │
+│ Metric                        │ Autofab Pipeline         │ Dual-Baseline Cross-Check │
 ├───────────────────────────────┼────────────────────────────┼───────────────────────────┤
 │ Synthesis Track 1             │ W_lib (lib/*.py): ~10k tok │ Base 1 (Lib_1 + Test_1):  │
 │                               │                            │ ~15k tokens               │
@@ -149,7 +149,7 @@ A rigorous comparison must evaluate the actual token consumption and wall-clock 
 
 ### Key Economic Takeaways:
 1. **Dual Baseline Consumes 30%–50% MORE Synthesis Tokens**:
-   Because Dual Baseline produces two complete production libraries and two complete test suites, it burns significantly more raw output tokens on clean runs than Cleanroom (which produces one production library and one test suite).
+   Because Dual Baseline produces two complete production libraries and two complete test suites, it burns significantly more raw output tokens on clean runs than Autofab (which produces one production library and one test suite).
 2. **Wall-Clock Latency Is Nearly Identical**:
    Both architectures run their synthesis tracks in parallel. Even though a baseline prompt generates both code and tests in a single step, modern high-throughput inference engines complete both tracks in roughly 60 seconds.
 3. **The Cognitive Distribution Dividend**:
@@ -243,9 +243,9 @@ The Arbiter operates under a deterministic decision protocol:
 
 ---
 
-## 7. Comparison Matrix: Cleanroom vs. Dual Baseline
+## 7. Comparison Matrix: Autofab vs. Dual Baseline
 
-| Evaluation Dimension | Cleanroom Pipeline (`lib` + `test`) | Dual-Baseline Cross-Check (`base_1` + `base_2`) | Pretense Baseline (Single Agent) |
+| Evaluation Dimension | Autofab Pipeline (`lib` + `test`) | Dual-Baseline Cross-Check (`base_1` + `base_2`) | Pretense Baseline (Single Agent) |
 | :--- | :---: | :---: | :---: |
 | **Token Efficiency** | Moderate ($\sim$11M–20M net tokens) | Lower ($\sim$15M–25M tokens) | **Highest** ($\sim$5.7M–6.9M tokens; 37%–74% cheaper) |
 | **Wall Clock Latency** | Higher (1100s–1200s; multi-round dispatch) | Moderate ($\approx$ 600s–800s) | **Lowest** (260s–490s; 2.4x–4.2x faster) |
@@ -260,7 +260,7 @@ The Arbiter operates under a deterministic decision protocol:
 
 Recent empirical benchmarks on `dag_engine_lite` reveal that arming a single-agent baseline with **Pretense** fundamentally shifts the cost/quality boundary:
 
-| Metric | DeepSeek-Flash Cleanroom (Net) | DeepSeek-Flash Pretense Baseline | Gemini-3.8-Flash Cleanroom (Net) | Gemini-3.8-Flash Pretense Baseline | Qwen-MoE Cleanroom | Qwen-MoE Pretense Baseline |
+| Metric | DeepSeek-Flash Autofab (Net) | DeepSeek-Flash Pretense Baseline | Gemini-3.8-Flash Autofab (Net) | Gemini-3.8-Flash Pretense Baseline | Qwen-MoE Autofab | Qwen-MoE Pretense Baseline |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Passing Tests** | **49P / 0F** | **33P / 0F** | **60P / 0F** | **57P / 0F** | **98P / 0F** | **92P / 0F** |
 | **Pyright (Lib)** | **0 errors** | **0 errors** | **0 errors** | **0 errors** | **0 errors** | **0 errors** |
@@ -268,7 +268,7 @@ Recent empirical benchmarks on `dag_engine_lite` reveal that arming a single-age
 | **Wall Clock** | 1180.9s | **492.3s** (2.4x) | 1135.0s | **266.4s** (**4.2x**) | 2223.8s | **1151.5s** (1.9x) |
 
 #### Rationale for the Cost Advantage:
-1. **Zero Multi-Agent Overhead**: Cleanroom incurs dispatch, workspace provisioning, and arbiter review rounds. The baseline completes in exactly one round.
+1. **Zero Multi-Agent Overhead**: Autofab incurs dispatch, workspace provisioning, and arbiter review rounds. The baseline completes in exactly one round.
 2. **Pretense Replaces Ad-Hoc Test Scaffolding**: Rather than wasting thousands of tokens writing fragile mock frameworks and AST test helpers, Pretense gives the model an executable transition proto and automatic fake synthesizer.
 3. **Execution Watchdogs Eliminate Hangs**: With `PYTHONFAULTHANDLER=1` and `PRETENSE_TIMEOUT=45.0s`, infinite loops and stalls dump immediate stack traces, keeping single-agent iterations lean and deterministic.
 
@@ -278,7 +278,7 @@ Recent empirical benchmarks on `dag_engine_lite` reveal that arming a single-age
 
 To empirically validate the theoretical trade-offs codified in this document, the upcoming `semver_solver` benchmark will be executed under three experimental arms:
 
-1. **Arm 1: Canonical Cleanroom (`lib` + `test` + Hypothesis)**:
+1. **Arm 1: Canonical Autofab (`lib` + `test` + Hypothesis)**:
    $W_{\text{lib}}$ and $W_{\text{test}}$ dispatched under physical double-blind isolation, audited by $W_{\text{qa}}$.
 2. **Arm 2: Dual Baseline with Differential Fuzzing**:
    Two parallel baseline runs prompted with `low/semver_solver.pyi`, evaluated via cross-test execution and lockstep Hypothesis differential state fuzzing.

@@ -7,6 +7,7 @@ import enum
 from typing import Any, Callable, Collection, FrozenSet, Generic, List, Mapping, Optional, Protocol, Sequence, Set, Tuple, TypeVar
 from support.lib.framework import data_type, operation, singleton_type
 from support.lib.lifecycle import Singleton, SystemTier
+from pretense import test_only
 
 T = TypeVar("T")
 
@@ -168,10 +169,10 @@ class DAG(Singleton[SystemTier], Protocol):
         self,
         node_id: str,
         action: Callable[[], Any],
-        dependencies: Optional[Collection[str]] = None,
-        priority: int = 0,
-        timeout_seconds: Optional[float] = None,
-        retries: int = 0,
+        dependencies: Optional[Collection[str]],
+        priority: int,
+        timeout_seconds: Optional[float],
+        retries: int,
     ) -> None:
         """Adds a task node to the graph.
 
@@ -356,7 +357,7 @@ class DAG(Singleton[SystemTier], Protocol):
     @operation
     def compute_critical_path(
         self,
-        estimated_durations: Optional[Mapping[str, float]] = None,
+        estimated_durations: Optional[Mapping[str, float]],
     ) -> Tuple[List[str], float]:
         """Computes the longest weighted dependency path through the graph.
 
@@ -421,13 +422,13 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
     def mark_failed(
         self,
         node_id: str,
-        failure_policy: FailurePolicy = FailurePolicy.FAIL_FAST,
+        failure_policy: FailurePolicy,
     ) -> None:
         """Transitions a node to the FAILED state and applies failure policies.
 
         Args:
             node_id: Identifier of the failed node.
-            failure_policy: Failure policy applied upon failure. Defaults to FAIL_FAST.
+            failure_policy: Failure policy applied upon failure.
 
         POSTCONDITIONS:
         - MUST update the node state to FAILED.
@@ -480,16 +481,16 @@ class DAGRunner(Singleton[SystemTier], Protocol):
     @operation
     def run(
         self,
-        timeout_seconds: Optional[float] = None,
-        failure_policy: FailurePolicy = FailurePolicy.FAIL_FAST,
-        max_concurrency: int = 4,
+        timeout_seconds: Optional[float],
+        failure_policy: FailurePolicy,
+        max_concurrency: int,
     ) -> DAGRunReport:
         """Executes the entire DAG to completion or failure.
 
         Args:
             timeout_seconds: Optional overall execution timeout in seconds.
-            failure_policy: Failure policy applied upon node action failure. Defaults to FAIL_FAST.
-            max_concurrency: Maximum number of worker threads for concurrent wave execution. Defaults to 4.
+            failure_policy: Failure policy applied upon node action failure.
+            max_concurrency: Maximum number of worker threads for concurrent wave execution.
 
         Returns:
             Consolidated DAGRunReport recording all node outcomes and metrics.
@@ -517,9 +518,23 @@ class DAGRunner(Singleton[SystemTier], Protocol):
         """
         ...
 
+    @operation
+    @test_only
+    def is_cancelled(self) -> bool:
+        """Query accessor verifying whether cancellation has been signaled.
+
+        Returns:
+            True if cancellation status has been set, False otherwise.
+
+        POSTCONDITIONS:
+        - WHEN cancel() has been called, MUST return True.
+        - WHEN cancel() has not been called, MUST return False.
+        """
+        ...
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T21:35:31Z
-# LAST_CHANGED: 2026-10-22T10:20:00Z
-# CHANGE: Model DAG, WaveScheduler, and DAGRunner as system tier singletons
+# LAST_CHANGED: 2026-11-02T19:55:00Z
+# CHANGE: Add is_cancelled @test_only observability query to DAGRunner
 # SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
 # --- END CLEANROOM METADATA ---

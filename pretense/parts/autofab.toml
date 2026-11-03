@@ -1,0 +1,4 @@
+# autofab.toml
+# Methodology binding for pretense/parts
+
+methodology = "//autofab_python"

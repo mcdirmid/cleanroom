@@ -1,8 +1,8 @@
-# Cleanroom Subsystems & Modular Architecture Design Document
+# Autofab Subsystems & Modular Architecture Design Document
 
 ## 1. Executive Summary & Vision
 
-The Cleanroom codebase (`update_with_ai/parts`) embodies a formal, specification-driven software engineering paradigm designed for autonomous AI multi-agent development. Across its 15 constituent parts and 108 high-level specifications, Cleanroom solves critical, universal challenges in:
+The Autofab codebase (`autofab/parts`) embodies a formal, specification-driven software engineering paradigm designed for autonomous AI multi-agent development. Across its 15 constituent parts and 108 high-level specifications, Autofab solves critical, universal challenges in:
 - Autonomous code editing and agent sandboxing.
 - Deterministic directed acyclic graph (DAG) scheduling and wave extraction.
 - Closed-loop upstream defect feedback routing.
@@ -10,19 +10,19 @@ The Cleanroom codebase (`update_with_ai/parts`) embodies a formal, specification
 - Anti-stall agent execution governance.
 - Multi-platform subagent process orchestration.
 
-However, in Cleanroom's current implementation, these general-purpose capabilities are entangled with Cleanroom-specific constructs (`DagNode`, `role_registry`, and hardcoded orchestrator imports). 
+However, in Autofab's current implementation, these general-purpose capabilities are entangled with Autofab-specific constructs (`DagNode`, `role_registry`, and hardcoded orchestrator imports). 
 
 This design document establishes:
-1. **An Architectural Analysis** of Cleanroom's 7 generally useful domain subsystems.
+1. **An Architectural Analysis** of Autofab's 7 generally useful domain subsystems.
 2. **A Dependency Graph Audit** analyzing why naive structural refactorings fail and trigger circular dependencies.
-3. **An Ideal Greenfield Architecture**: a strictly acyclic, 5-layer system decoupling 10 standalone, publishable libraries from the Cleanroom methodology application layer using Dependency Inversion.
+3. **An Ideal Greenfield Architecture**: a strictly acyclic, 5-layer system decoupling 10 standalone, publishable libraries from the Autofab methodology application layer using Dependency Inversion.
 4. **A Practical Migration Roadmap** for progressively extracting these components while preserving continuous build verification.
 
 ---
 
 ## 2. Analysis of Generally Useful Subsystems
 
-Beyond Cleanroom's specific multi-role software engineering pipeline (HLS $\to$ Planning $\to$ Scenarios $\to$ Low $\to$ Lib $\to$ Tests), the specifications define 7 substantive subsystems that address universal problems in AI engineering:
+Beyond Autofab's specific multi-role software engineering pipeline (HLS $\to$ Planning $\to$ Scenarios $\to$ Low $\to$ Lib $\to$ Tests), the specifications define 7 substantive subsystems that address universal problems in AI engineering:
 
 ```mermaid
 flowchart TD
@@ -59,7 +59,7 @@ flowchart TD
   2. *Line-Bounded Replacement with Fuzzy Matching*: Edits are bounded to line intervals. If character-exact matching fails due to whitespace, it falls back to whitespace-normalized line matching and attaches a unified diff directly to the tool response.
   3. *Context Suppression Keys*: Repeated tool outputs (e.g. reading sections of code) collapse earlier outputs carrying the same suppression key, conserving thousands of context tokens.
   4. *Progressive Milestone Gating*: Multi-step instructions are delivered incrementally, gating milestone progression until automated verification checks pass.
-- **Utility Outside Cleanroom**: A drop-in execution sandbox for autonomous coding assistants (Cursor background agents, Claude Code, SWE-bench solvers).
+- **Utility Outside Autofab**: A drop-in execution sandbox for autonomous coding assistants (Cursor background agents, Claude Code, SWE-bench solvers).
 
 ### 2.2 Dynamic DAG Task Engine & Wave Scheduler
 - **Constituent Parts**: `dag` (`subgraph`, `dag_storage`) + `control` (`work_scheduler`) + `core` (`topological_order_ext`).
@@ -68,7 +68,7 @@ flowchart TD
   1. *Deterministic Topological Engine*: Computes linear extensions with deterministic lexical tie-breaking and safe cycle termination.
   2. *Dynamic Ready Batching*: Evaluates dirty nodes whose upstream dependencies are clean, grouping them by topological tier depth for parallel wave execution.
   3. *Visit Count Circuit Breakers*: Enforces visit limits per node across iterative rework cycles, preventing infinite rework loops.
-- **Utility Outside Cleanroom**: An incremental task runner for data pipelines (Airflow/Prefect DAGs), monorepo build tools, or asynchronous agent task pools.
+- **Utility Outside Autofab**: An incremental task runner for data pipelines (Airflow/Prefect DAGs), monorepo build tools, or asynchronous agent task pools.
 
 ### 2.3 Closed-Loop Defect Attribution & Blame Feedback Router
 - **Constituent Parts**: `control` (`attribution`, `submit`, `verification`).
@@ -77,7 +77,7 @@ flowchart TD
   1. *Upstream-Only Blame Validation*: Enforces that blamed culprits must be declared upstream dependencies in the graph.
   2. *Single-Paragraph Critique Constraint*: Restricts blame feedback strictly to a single continuous paragraph without newlines and capped at a maximum character limit (e.g., 2,000 characters).
   3. *Automated Invalidation & Rework Prompt Injection*: Injects the feedback message into the culprit node, marks it dirty, blocks downstream dependents, and automatically injects the critique into the upstream agent's prompt during the next wave.
-- **Utility Outside Cleanroom**: Converts raw error traces into structured iterative refinement across multi-stage code and document generation pipelines.
+- **Utility Outside Autofab**: Converts raw error traces into structured iterative refinement across multi-stage code and document generation pipelines.
 
 ### 2.4 Multi-Platform Subagent Execution & Process Harness
 - **Constituent Parts**: `subagent` (`subagent_harness`, `subagent_coordinator`) + platform adapters (`antigravity`, `dsh`).
@@ -89,7 +89,7 @@ flowchart TD
   4. *Normalized Round Outcomes*: Synthesizes outcomes into standard records (`clean`, `blamed`, `failed`).
   5. *Native IDE Desktop IPC (`agentapi`)*: Uses direct JSON-RPC and CLI IPC (`agentapi send-message`, `agentapi new-conversation`) to dispatch reactive wakeup events and spawn dedicated headless conversation tabs, preventing background process starvation.
   6. *Interruption Signal Trapping & Atomic Sandbox Cleanup*: Traps SIGINT/SIGTERM/KeyboardInterrupt to terminate child worker processes and atomically decommission ephemeral role sandboxes on disk.
-- **Utility Outside Cleanroom**: A universal driver for multi-agent benchmarks, coding swarms, and enterprise agent dispatchers.
+- **Utility Outside Autofab**: A universal driver for multi-agent benchmarks, coding swarms, and enterprise agent dispatchers.
 
 ### 2.5 AST Contract Testing & LLM-Optimized Statement Coverage Engine
 - **Constituent Parts**: `workspace` (`stub`) + `workspace_cli` (`coverage`).
@@ -98,16 +98,16 @@ flowchart TD
   1. *AST Read-Only Stub Synthesizer*: Parses `.pyi` interfaces using Python's AST and generates importable Python stubs raising `NotImplementedError`, preserving all signatures, type annotations, and docstrings with rewritten imports.
   2. *Syntax-Aware Statement Filtering*: Uses AST parsing to strip docstrings, function/class signature continuation lines, type comments, and pragma exclusions.
   3. *Contiguous Span Compression & Clamped Context Snippets*: Measures hits via `sys.settrace`, compresses uncovered lines into contiguous ranges (`lines 14-22, 38-45`), and generates clamped source code context snippets tailored for LLM prompts.
-- **Utility Outside Cleanroom**: Contract-first TDD tooling, automated test-generation bots, and low-overhead CI coverage checkers.
+- **Utility Outside Autofab**: Contract-first TDD tooling, automated test-generation bots, and low-overhead CI coverage checkers.
 
 ### 2.6 Distributed In-Band Metadata & Atomic Workspace Sync
 - **Constituent Parts**: `metadata` (`src_metadata`, `src_storage_impl`) + `workspace` (`provision`, `sync`).
 - **The Problem Solved**: Build/test cache databases easily drift out of sync across git checkouts. In addition, parallel workers in isolated directories risk merge conflicts and overwriting user edits.
 - **Core Mechanism**:
-  1. *Git-Native In-Band Metadata*: Embeds lifecycle state (`LAST_CLEANED`, `LAST_CHANGED`, `CODE_HASH`, audit stamps, unacted feedback) directly inside source comment blocks (`# --- CLEANROOM METADATA ---` for Python/Shell, `<!-- CLEANROOM METADATA -->` for Markdown).
+  1. *Git-Native In-Band Metadata*: Embeds lifecycle state (`LAST_CLEANED`, `LAST_CHANGED`, `CODE_HASH`, audit stamps, unacted feedback) directly inside source comment blocks (`# --- AUTOFAB METADATA ---` for Python/Shell, `<!-- AUTOFAB METADATA -->` for Markdown).
   2. *Code Body Isolation*: Computes deterministic SHA-256 hashes strictly over code content outside comments, ensuring timestamp updates do not invalidate code integrity.
   3. *Two-Phase Atomic Harvesting*: Validates code hashes before pulling or committing changes between isolated workspaces and the canonical repository, preventing clobbering.
-- **Utility Outside Cleanroom**: Database-free build caches, git-native compliance auditing, and conflict-free multi-worker sandbox synchronizers.
+- **Utility Outside Autofab**: Database-free build caches, git-native compliance auditing, and conflict-free multi-worker sandbox synchronizers.
 
 ### 2.7 Anti-Stall Agent Execution Governor & Loop Guard
 - **Constituent Parts**: `loop` (`guard`, `driver`, `conversation`, `logger`).
@@ -116,13 +116,13 @@ flowchart TD
   1. *Repetition & Oscillation Tracking*: Tracks consecutive identical tool calls and duplicate edits to identical file locations across conversation steps.
   2. *Two-Tier Intervention*: Emits a corrective "loop reminder" diagnostic at warning threshold $N_1$, and triggers a graceful fatal termination at threshold $N_2$.
   3. *Dynamic Progress Detection*: Automatically resets repetition counters whenever an operation achieves verifiable forward progress.
-- **Utility Outside Cleanroom**: A universal safety governor for any agent framework (LangChain, AutoGen, CrewAI, custom loops).
+- **Utility Outside Autofab**: A universal safety governor for any agent framework (LangChain, AutoGen, CrewAI, custom loops).
 
 ---
 
 ## 3. Dependency Graph Audit & Post-Mortem
 
-To determine why Cleanroom was partitioned into 15 parts and why naive consolidations fail, an automated cycle-detection graph traversal was executed across all High-Level Specifications and Python `lib/` files.
+To determine why Autofab was partitioned into 15 parts and why naive consolidations fail, an automated cycle-detection graph traversal was executed across all High-Level Specifications and Python `lib/` files.
 
 ### 3.1 The Flawed Proposals & Resulting Cycles
 
@@ -170,8 +170,8 @@ If re-implemented from scratch to allow every component to be reused independent
 
 ```mermaid
 flowchart TD
-    subgraph Layer4["Layer 4: Application Layer (Cleanroom Methodology)"]
-        cleanroom_app["11. cleanroom_app<br/>(Role manifests, workspace provision/sync, AGENTS.md, CLI)"]
+    subgraph Layer4["Layer 4: Application Layer (Autofab Methodology)"]
+        autofab_app["11. autofab_app<br/>(Role manifests, workspace provision/sync, AGENTS.md, CLI)"]
     end
 
     subgraph Layer3["Layer 3: Workflow & Orchestration Engine"]
@@ -197,10 +197,10 @@ flowchart TD
     end
 
     %% Dependencies (Strictly Downward)
-    cleanroom_app --> task_engine
-    cleanroom_app --> pyi_stubgen
-    cleanroom_app --> syntax_coverage
-    cleanroom_app --> agent_sandbox
+    autofab_app --> task_engine
+    autofab_app --> pyi_stubgen
+    autofab_app --> syntax_coverage
+    autofab_app --> agent_sandbox
 
     task_engine --> dag_core
     task_engine --> inband_metadata
@@ -247,7 +247,7 @@ To achieve complete independence, the greenfield architecture introduces three c
 - **Greenfield Design**: 
   - `pyi_stubgen` is a pure compiler: `def synthesize_stub(pyi_content: str, module_name: str) -> str`.
   - `inband_metadata` is a pure comment parser and SHA-256 code body hasher.
-  Neither has any awareness of Cleanroom roles, directory hierarchies, or workspaces.
+  Neither has any awareness of Autofab roles, directory hierarchies, or workspaces.
 
 ---
 
@@ -265,7 +265,7 @@ To achieve complete independence, the greenfield architecture introduces three c
 | **`loop_governor`** | Layer 2 | Anti-stall repetition and oscillation detector with two-tier progressive intervention (reminder $\to$ failure). | Drop-in safety governor for LangChain, AutoGen, CrewAI, or raw LLM loops. |
 | **`process_harness`** | Layer 2 | Process runner for subagents with streaming telemetry parsing, monetary cost accounting, and crash log tail extraction. | Multi-agent benchmarks (SWE-bench), agent swarm orchestrators. |
 | **`task_engine`** | Layer 3 | Incremental task executor with closed-loop defect attribution (validating upstream culprits, enforcing single-paragraph critiques). | Multi-stage AI pipelines (Requirements $\to$ Architecture $\to$ Code $\to$ Test). |
-| **`cleanroom_app`** | Layer 4 | Cleanroom methodology implementation: role manifests, workspace provisioning/sync, `AGENTS.md`, and CLI commands. | Complete Cleanroom autonomous software engineering platform. |
+| **`autofab_app`** | Layer 4 | Autofab methodology implementation: role manifests, workspace provisioning/sync, `AGENTS.md`, and CLI commands. | Complete Autofab autonomous software engineering platform. |
 
 ---
 
@@ -306,10 +306,10 @@ flowchart LR
 ### Phase 5: Unified Process Harness (`process_harness`)
 - Unify `subagent`, `dsh`, and `antigravity` into `process_harness`.
 - Keep in-process LLM API loop drivers (`openai`) inside `loop_governor`, preventing cross-tier entanglement.
-- The Cleanroom CLI and orchestrators call `process_harness` as an external execution service.
+- The Autofab CLI and orchestrators call `process_harness` as an external execution service.
 
 ---
 
 ## 6. Conclusion
 
-By shifting from thematic grouping to **directional dependency layering** and applying **Dependency Inversion**, Cleanroom can be transformed from a tightly coupled 15-part monorepo into an ecosystem of **10 high-value, general-purpose software components** topped by a thin Cleanroom methodology application layer. Each component becomes independently testable, maintainable, and publishable, unlocking massive reusability across the broader AI engineering landscape.
+By shifting from thematic grouping to **directional dependency layering** and applying **Dependency Inversion**, Autofab can be transformed from a tightly coupled 15-part monorepo into an ecosystem of **10 high-value, general-purpose software components** topped by a thin Autofab methodology application layer. Each component becomes independently testable, maintainable, and publishable, unlocking massive reusability across the broader AI engineering landscape.

@@ -1,7 +1,7 @@
 """Hypothesis stateful test case generation for Pretense prototypes."""
 
 from typing import Any, List, Optional
-import update_python_with_ai.parts.pretense.lib.pretense_impl as _impl
+import pretense.parts.pretense.lib.pretense_impl as _impl
 
 _ACTIVE_STEP: Any = None
 _ACTIVE_TRACE: List[Any] = []

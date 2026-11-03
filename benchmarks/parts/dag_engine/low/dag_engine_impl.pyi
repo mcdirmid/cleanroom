@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Collection, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
 from support.lib.framework import operation, override, singleton_type
 from support.lib.lifecycle import Singleton, SystemTier
+from pretense import test_only
 import dag_engine
 
 
@@ -23,10 +24,10 @@ class DAG(dag_engine.DAG):
         self,
         node_id: str,
         action: Callable[[], Any],
-        dependencies: Optional[Collection[str]] = None,
-        priority: int = 0,
-        timeout_seconds: Optional[float] = None,
-        retries: int = 0,
+        dependencies: Optional[Collection[str]],
+        priority: int,
+        timeout_seconds: Optional[float],
+        retries: int,
     ) -> None:
         """Adds a task node to the graph.
 
@@ -166,7 +167,7 @@ class DAG(dag_engine.DAG):
     @override
     def compute_critical_path(
         self,
-        estimated_durations: Optional[Mapping[str, float]] = None,
+        estimated_durations: Optional[Mapping[str, float]],
     ) -> Tuple[List[str], float]:
         """Computes the longest weighted dependency path through the graph.
 
@@ -231,7 +232,7 @@ class WaveScheduler(dag_engine.WaveScheduler):
     def mark_failed(
         self,
         node_id: str,
-        failure_policy: dag_engine.FailurePolicy = dag_engine.FailurePolicy.FAIL_FAST,
+        failure_policy: dag_engine.FailurePolicy,
     ) -> None:
         """Transitions a node to the FAILED state and applies failure policies.
 
@@ -291,9 +292,9 @@ class DAGRunner(dag_engine.DAGRunner):
     @override
     def run(
         self,
-        timeout_seconds: Optional[float] = None,
-        failure_policy: dag_engine.FailurePolicy = dag_engine.FailurePolicy.FAIL_FAST,
-        max_concurrency: int = 4,
+        timeout_seconds: Optional[float],
+        failure_policy: dag_engine.FailurePolicy,
+        max_concurrency: int,
     ) -> dag_engine.DAGRunReport:
         """Executes the entire DAG to completion or failure.
 
@@ -324,10 +325,22 @@ class DAGRunner(dag_engine.DAGRunner):
         """
         ...
 
+    @operation
+    @override
+    @test_only
+    def is_cancelled(self) -> bool:
+        """Query accessor verifying whether cancellation has been signaled.
+
+        GROUNDING:
+        - Acquires _lock or checks _cancelled event flag.
+        - Returns True if _cancelled event is set, False otherwise.
+        """
+        ...
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T21:35:31Z
-# LAST_CHANGED: 2026-10-22T10:20:00Z
-# CHANGE: Model concrete DAG, WaveScheduler, and DAGRunner as system tier singletons
+# LAST_CHANGED: 2026-11-02T19:55:00Z
+# CHANGE: Implement is_cancelled @test_only query in DAGRunner
 # CODE_HASH: 24331ee38a0f
 # SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
 # --- END CLEANROOM METADATA ---

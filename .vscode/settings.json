@@ -29,5 +29,6 @@
   "editor.wordWrap": "on",
   "files.associations": {
     "*.gt": "prolog"
-  }
+  },
+  "python.terminal.useEnvFile": true
 }

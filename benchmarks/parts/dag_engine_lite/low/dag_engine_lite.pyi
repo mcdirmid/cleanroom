@@ -25,7 +25,9 @@ class DAGError(Exception):
 @data_type
 @dataclass(frozen=True)
 class CycleError(DAGError):
-    """Raised when a dependency cycle is detected within the DAG.
+    """Precondition contract violation error raised when a dependency cycle is detected within the DAG.
+
+    Designates an untestable checked precondition violation when caller constructs or validates a cyclic graph.
 
     Args:
         message: Diagnostic description of the error.
@@ -37,11 +39,27 @@ class CycleError(DAGError):
 @data_type
 @dataclass(frozen=True)
 class NodeNotFoundError(DAGError):
-    """Raised when a referenced node identifier does not exist in the DAG.
+    """Precondition contract violation error raised when a referenced node identifier does not exist in the DAG.
+
+    Designates an untestable checked precondition violation when caller references an unregistered node.
 
     Args:
         message: Diagnostic description of the error.
         node_id: Identifier of the missing node.
+    """
+    node_id: str
+
+
+@data_type
+@dataclass(frozen=True)
+class DuplicateNodeError(DAGError):
+    """Precondition contract violation error raised when attempting to add a node identifier that already exists in the DAG.
+
+    Designates an untestable checked precondition violation when caller attempts to add a duplicate node.
+
+    Args:
+        message: Diagnostic description of the error.
+        node_id: Identifier of the duplicate node.
     """
     node_id: str
 
@@ -152,9 +170,9 @@ class DAG(Singleton[SystemTier], Protocol):
         self,
         node_id: str,
         action: Callable[[], Any],
-        dependencies: Optional[Collection[str]] = None,
-        priority: int = 0,
-        retries: int = 0,
+        dependencies: Optional[Collection[str]],
+        priority: int,
+        retries: int,
     ) -> None:
         """Adds a task node to the graph.
 
@@ -164,6 +182,9 @@ class DAG(Singleton[SystemTier], Protocol):
             dependencies: Optional collection of upstream node identifiers.
             priority: Scheduling priority (higher executes earlier).
             retries: Number of permitted retry attempts upon exception.
+
+        PRECONDITIONS:
+        - MUST ensure node_id is not already registered in the graph (checked precondition; raises DuplicateNodeError on caller violation).
 
         POSTCONDITIONS:
         - MUST register the node definition into the graph.
@@ -180,12 +201,11 @@ class DAG(Singleton[SystemTier], Protocol):
             upstream_id: Identifier of the prerequisite node.
             downstream_id: Identifier of the dependent node.
 
-        Raises:
-            NodeNotFoundError: If either node identifier is missing from the graph.
+        PRECONDITIONS:
+        - MUST ensure upstream_id and downstream_id exist in the graph (checked precondition; raises NodeNotFoundError on caller violation).
 
         POSTCONDITIONS:
         - MUST establish a directed dependency edge from upstream_id to downstream_id.
-        - WHEN upstream_id or downstream_id does not exist, MUST raise NodeNotFoundError.
         """
         ...
 
@@ -196,12 +216,11 @@ class DAG(Singleton[SystemTier], Protocol):
         Args:
             node_id: Identifier of the node to remove.
 
-        Raises:
-            NodeNotFoundError: If node_id does not exist in the graph.
+        PRECONDITIONS:
+        - MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
 
         POSTCONDITIONS:
         - MUST remove the node and its incident edges.
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
         - MUST purge the node identifier from wave scheduler state tracking.
         """
         ...
@@ -228,12 +247,11 @@ class DAG(Singleton[SystemTier], Protocol):
         Returns:
             The registered NodeDefinition.
 
-        Raises:
-            NodeNotFoundError: If node_id is not in the graph.
+        PRECONDITIONS:
+        - MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
 
         POSTCONDITIONS:
         - MUST return the NodeDefinition matching node_id.
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
         """
         ...
 
@@ -247,12 +265,11 @@ class DAG(Singleton[SystemTier], Protocol):
         Returns:
             Set of upstream node identifiers.
 
-        Raises:
-            NodeNotFoundError: If node_id is not in the graph.
+        PRECONDITIONS:
+        - MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
 
         POSTCONDITIONS:
         - MUST return all direct upstream dependencies.
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
         """
         ...
 
@@ -266,12 +283,11 @@ class DAG(Singleton[SystemTier], Protocol):
         Returns:
             Set of downstream node identifiers.
 
-        Raises:
-            NodeNotFoundError: If node_id is not in the graph.
+        PRECONDITIONS:
+        - MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
 
         POSTCONDITIONS:
         - MUST return all direct downstream dependents.
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
         """
         ...
 
@@ -288,14 +304,12 @@ class DAG(Singleton[SystemTier], Protocol):
     def validate(self) -> None:
         """Validates graph consistency, completeness, and acyclicity.
 
-        Raises:
-            NodeNotFoundError: If any node references a dependency not in the graph.
-            CycleError: If any directed cycle exists in the graph.
+        PRECONDITIONS:
+        - MUST ensure all referenced dependencies across registered nodes exist in the graph (checked precondition; raises NodeNotFoundError on caller violation).
+        - MUST ensure the graph contains no directed cycles (checked precondition; raises CycleError on caller violation).
 
         POSTCONDITIONS:
         - WHEN all referenced nodes exist and no cycle exists, MUST complete without error.
-        - WHEN a dependency node is missing, MUST raise NodeNotFoundError.
-        - WHEN a cycle exists, MUST raise CycleError containing the cycle sequence.
         """
         ...
 
@@ -309,13 +323,12 @@ class DAG(Singleton[SystemTier], Protocol):
         Returns:
             List of node identifiers in topological order.
 
-        Raises:
-            CycleError: If the graph contains a directed cycle.
+        PRECONDITIONS:
+        - MUST ensure the graph contains no directed cycles (checked precondition; raises CycleError on caller violation).
 
         POSTCONDITIONS:
         - MUST return a valid topological ordering where every prerequisite precedes its dependents.
         - MUST break ties between concurrent ready nodes using priority descending and lexicographical node_id ascending.
-        - WHEN a cycle exists, MUST raise CycleError.
         """
         ...
 
@@ -340,7 +353,7 @@ class DAG(Singleton[SystemTier], Protocol):
     @operation
     def compute_critical_path(
         self,
-        estimated_durations: Optional[Mapping[str, float]] = None,
+        estimated_durations: Optional[Mapping[str, float]],
     ) -> Tuple[List[str], float]:
         """Computes the longest weighted dependency path through the graph.
 
@@ -405,13 +418,13 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
     def mark_failed(
         self,
         node_id: str,
-        failure_policy: FailurePolicy = FailurePolicy.FAIL_FAST,
+        failure_policy: FailurePolicy,
     ) -> None:
         """Transitions a node to the FAILED state and applies failure policies.
 
         Args:
             node_id: Identifier of the failed node.
-            failure_policy: Failure policy applied upon failure. Defaults to FAIL_FAST.
+            failure_policy: Failure policy applied upon failure.
 
         POSTCONDITIONS:
         - MUST update the node state to FAILED.
@@ -445,6 +458,9 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
 
         Returns:
             Current NodeState.
+
+        PRECONDITIONS:
+        - MUST ensure node_id is registered in the scheduled DAG (checked precondition; raises NodeNotFoundError on caller violation).
         """
         ...
 
@@ -465,19 +481,19 @@ class DAGRunner(Singleton[SystemTier], Protocol):
     @operation
     def run(
         self,
-        failure_policy: FailurePolicy = FailurePolicy.FAIL_FAST,
+        failure_policy: FailurePolicy,
     ) -> DAGRunReport:
         """Executes the entire DAG sequentially to completion or failure.
 
         Args:
-            failure_policy: Failure policy applied upon node action failure. Defaults to FAIL_FAST.
+            failure_policy: Failure policy applied upon node action failure.
 
         Returns:
             Consolidated DAGRunReport recording all node outcomes and metrics.
 
-        Raises:
-            NodeNotFoundError: When graph validation detects referenced dependencies not present in the graph.
-            CycleError: When graph validation detects directed cycles in the graph.
+        PRECONDITIONS:
+        - MUST ensure all referenced dependencies across registered nodes exist in the graph (checked precondition; raises NodeNotFoundError on caller violation).
+        - MUST ensure the graph contains no directed cycles (checked precondition; raises CycleError on caller violation).
 
         POSTCONDITIONS:
         - MUST validate graph invariants before commencing wave execution.
@@ -491,6 +507,6 @@ class DAGRunner(Singleton[SystemTier], Protocol):
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T20:55:00Z
 # LAST_CHANGED: 2026-10-26T20:55:00Z
-# CHANGE: Specify deferred missing dependency validation, ascending alphabetical tie-breaking, and SKIP state for blocked dependents
+# CHANGE: Specify duplicate node error on add_node for already registered node identifiers
 # SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
 # --- END CLEANROOM METADATA ---

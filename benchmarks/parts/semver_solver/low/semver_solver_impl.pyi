@@ -74,7 +74,7 @@ class VersionEngine(semver_solver.VersionEngine):
         self,
         version: semver_solver.Version,
         range_constraint: semver_solver.VersionRange,
-        include_prerelease: bool = False,
+        include_prerelease: bool,
     ) -> bool:
         """Evaluates whether a semantic version satisfies a range constraint.
 
@@ -170,7 +170,7 @@ class DependencySolver(semver_solver.DependencySolver):
         - Executes recursive backtracking depth-first search to assign package releases.
         - Selects unassigned package with fewest candidate releases satisfying current accumulated constraints.
         - Iterates through available releases in descending version precedence order.
-        - Verifies that candidate release satisfies all accumulated constraints for that package.
+        - Verifies that candidate release satisfies all accumulated constraints for that package using semver_solver.VersionEngine.satisfies.
         - Merges candidate dependencies into accumulated constraint mapping.
         - Detects unsatisfiable empty intersections and backtracks to try alternative release candidates.
         - Records conflict details in conflict trail when backtracking occurs.
@@ -180,9 +180,9 @@ class DependencySolver(semver_solver.DependencySolver):
         ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-27T03:48:22Z
-# LAST_CHANGED: 2026-10-27T22:35:00Z
-# CHANGE: Delegate search heuristics and conflict attribution to backtracking_solver_ext
-# CODE_HASH: 5d3abdbcce44
-# SPEC_QA_AUDIT: 2026-10-27T03:48:22Z
+# LAST_CLEANED: 2026-10-30T19:20:00Z
+# LAST_CHANGED: 2026-10-30T19:20:00Z
+# CHANGE: Clarify VersionEngine.satisfies collaborator in resolve grounding
+# CODE_HASH: 000000000000
+# SPEC_QA_AUDIT: 2026-10-30T19:20:00Z
 # --- END CLEANROOM METADATA ---

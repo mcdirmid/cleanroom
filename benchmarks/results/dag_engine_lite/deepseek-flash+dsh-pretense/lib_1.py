@@ -1,27 +1,27 @@
 # ==============================================================================
-# Cleanroom Empirical Benchmark Flight Metrics
-# Flight ID: flight_20261028_231540_deepseek-flash_dag_engine_lite_pretense
-# Timestamp: 2026-10-28T23:15:40.938416+00:00
+# Autofab Empirical Benchmark Flight Metrics
+# Flight ID: flight_20261103_003801_deepseek-flash_dag_engine_lite_pretense
+# Timestamp: 2026-11-03T00:38:01.151936+00:00
 # Benchmark Task: dag_engine_lite
 # Model: deepseek-flash (Tier 2)
 # Methodology: pretense
 # Harness: dsh
-# Run Index: 1
+# Run Index: 3
 #
 # Telemetry Measurements:
-#   Uncached Inbound Tokens: 346,483
-#   Cached Inbound Tokens:   29,426,560
-#   Outbound Tokens:         323,225
-#   Total Tokens:            30,096,268
-#   Financial Cost ($USD):   $0.3342
-#   Wall Clock Duration:     1784.95s
-#   Step Latencies (s):      [235.7, 551.4, 163.5, 340.3, 71.5, 81.8, 81.8, 51.1, 20.4, 204.2, 133.9, 154.3, 20.3, 40.9, 51.2, 20.3, 20.3]
-#   Role Execution Rounds:   lib: 2, pretense: 6, pretense_coverage: 3, pretense_qa: 6 (Total: 17)
+#   Uncached Inbound Tokens: 230,565
+#   Cached Inbound Tokens:   18,956,928
+#   Outbound Tokens:         223,065
+#   Total Tokens:            19,410,558
+#   Financial Cost ($USD):   $0.2253
+#   Wall Clock Duration:     1287.25s
+#   Step Latencies (s):      [199.4, 673.4, 22.8, 218.3, 176.3, 31.2, 72.6, 21.0, 20.7, 72.4, 21.0, 20.6]
+#   Role Execution Rounds:   lib: 2, pretense: 3, pretense_coverage: 3, pretense_qa: 4 (Total: 12)
 #
 # Verification Outcomes:
 #   Spec Linters Pass:       True
 #   Pyright Errors:          0
-#   Unit Tests Passed:       2
+#   Unit Tests Passed:       1
 #   Unit Tests Failed:       0
 #   Line Coverage:           100.0%
 #   Branch Coverage:         100.0%
@@ -29,27 +29,13 @@
 # ==============================================================================
 
 # === File: dag_engine_lite.py ===
-"""Library interface for the synchronous DAG execution and wave scheduling engine."""
+"""Low-level specification for the synchronous DAG execution and wave scheduling engine."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import enum
-from typing import (
-    Any,
-    Callable,
-    Collection,
-    FrozenSet,
-    Generic,
-    List,
-    Mapping,
-    Optional,
-    Protocol,
-    Set,
-    Tuple,
-    TypeVar,
-)
-
+from typing import Any, Callable, Collection, FrozenSet, Generic, List, Mapping, Optional, Protocol, Set, Tuple, TypeVar
 from support.lib.framework import data_type, operation, singleton_type
 from support.lib.lifecycle import Singleton, SystemTier
 
@@ -68,7 +54,6 @@ class DAGError(Exception):
     message: str
 
     def __str__(self) -> str:
-        """Returns the human-readable diagnostic message."""
         return self.message
 
 
@@ -216,13 +201,6 @@ class DAG(Singleton[SystemTier], Protocol):
     ) -> None:
         """Adds a task node to the graph.
 
-        Args:
-            node_id: Unique string identifier for the node.
-            action: Zero-argument callable representing node computation.
-            dependencies: Optional collection of upstream node identifiers.
-            priority: Scheduling priority (higher executes earlier).
-            retries: Number of permitted retry attempts upon exception.
-
         POSTCONDITIONS:
         - MUST register the node definition into the graph.
         - WHEN dependencies are provided, MUST add directed dependency edges from each dependency to node_id.
@@ -234,13 +212,6 @@ class DAG(Singleton[SystemTier], Protocol):
     def add_edge(self, upstream_id: str, downstream_id: str) -> None:
         """Adds a directed dependency edge where downstream depends on upstream.
 
-        Args:
-            upstream_id: Identifier of the prerequisite node.
-            downstream_id: Identifier of the dependent node.
-
-        Raises:
-            NodeNotFoundError: If either node identifier is missing from the graph.
-
         POSTCONDITIONS:
         - MUST establish a directed dependency edge from upstream_id to downstream_id.
         - WHEN upstream_id or downstream_id does not exist, MUST raise NodeNotFoundError.
@@ -251,12 +222,6 @@ class DAG(Singleton[SystemTier], Protocol):
     def remove_node(self, node_id: str) -> None:
         """Removes a node and all incident dependency edges from the graph.
 
-        Args:
-            node_id: Identifier of the node to remove.
-
-        Raises:
-            NodeNotFoundError: If node_id does not exist in the graph.
-
         POSTCONDITIONS:
         - MUST remove the node and its incident edges.
         - WHEN node_id is absent, MUST raise NodeNotFoundError.
@@ -266,28 +231,12 @@ class DAG(Singleton[SystemTier], Protocol):
 
     @operation
     def has_node(self, node_id: str) -> bool:
-        """Checks whether a node exists within the graph.
-
-        Args:
-            node_id: Identifier to check.
-
-        Returns:
-            True if the node exists, False otherwise.
-        """
+        """Checks whether a node exists within the graph."""
         ...
 
     @operation
     def get_node(self, node_id: str) -> NodeDefinition[Any]:
         """Retrieves the immutable definition of a registered node.
-
-        Args:
-            node_id: Identifier of the node to retrieve.
-
-        Returns:
-            The registered NodeDefinition.
-
-        Raises:
-            NodeNotFoundError: If node_id is not in the graph.
 
         POSTCONDITIONS:
         - MUST return the NodeDefinition matching node_id.
@@ -299,15 +248,6 @@ class DAG(Singleton[SystemTier], Protocol):
     def get_dependencies(self, node_id: str) -> Set[str]:
         """Returns direct upstream dependency identifiers for a node.
 
-        Args:
-            node_id: Identifier of the node.
-
-        Returns:
-            Set of upstream node identifiers.
-
-        Raises:
-            NodeNotFoundError: If node_id is not in the graph.
-
         POSTCONDITIONS:
         - MUST return all direct upstream dependencies.
         - WHEN node_id is absent, MUST raise NodeNotFoundError.
@@ -318,15 +258,6 @@ class DAG(Singleton[SystemTier], Protocol):
     def get_dependents(self, node_id: str) -> Set[str]:
         """Returns direct downstream dependent identifiers for a node.
 
-        Args:
-            node_id: Identifier of the node.
-
-        Returns:
-            Set of downstream node identifiers.
-
-        Raises:
-            NodeNotFoundError: If node_id is not in the graph.
-
         POSTCONDITIONS:
         - MUST return all direct downstream dependents.
         - WHEN node_id is absent, MUST raise NodeNotFoundError.
@@ -335,20 +266,12 @@ class DAG(Singleton[SystemTier], Protocol):
 
     @operation
     def all_nodes(self) -> Set[str]:
-        """Returns all node identifiers present in the graph.
-
-        Returns:
-            Set of all registered node identifiers.
-        """
+        """Returns all node identifiers present in the graph."""
         ...
 
     @operation
     def validate(self) -> None:
         """Validates graph consistency, completeness, and acyclicity.
-
-        Raises:
-            NodeNotFoundError: If any node references a dependency not in the graph.
-            CycleError: If any directed cycle exists in the graph.
 
         POSTCONDITIONS:
         - WHEN all referenced nodes exist and no cycle exists, MUST complete without error.
@@ -364,12 +287,6 @@ class DAG(Singleton[SystemTier], Protocol):
         Tie-breaking between independent nodes is resolved first by priority (descending),
         then alphabetically by node_id (ascending).
 
-        Returns:
-            List of node identifiers in topological order.
-
-        Raises:
-            CycleError: If the graph contains a directed cycle.
-
         POSTCONDITIONS:
         - MUST return a valid topological ordering where every prerequisite precedes its dependents.
         - MUST break ties between concurrent ready nodes using priority descending and lexicographical node_id ascending.
@@ -379,20 +296,12 @@ class DAG(Singleton[SystemTier], Protocol):
 
     @operation
     def find_roots(self) -> Set[str]:
-        """Returns all root nodes with in-degree zero (no dependencies).
-
-        Returns:
-            Set of root node identifiers.
-        """
+        """Returns all root nodes with in-degree zero (no dependencies)."""
         ...
 
     @operation
     def find_leaves(self) -> Set[str]:
-        """Returns all leaf nodes with out-degree zero (no dependents).
-
-        Returns:
-            Set of leaf node identifiers.
-        """
+        """Returns all leaf nodes with out-degree zero (no dependents)."""
         ...
 
     @operation
@@ -401,13 +310,6 @@ class DAG(Singleton[SystemTier], Protocol):
         estimated_durations: Optional[Mapping[str, float]] = None,
     ) -> Tuple[List[str], float]:
         """Computes the longest weighted dependency path through the graph.
-
-        Args:
-            estimated_durations: Optional mapping of node identifiers to duration weights.
-                Defaults to 1.0 per node if omitted.
-
-        Returns:
-            Tuple of (critical path node identifiers, total path weight).
 
         POSTCONDITIONS:
         - MUST return the sequence of nodes that forms the longest path through the DAG.
@@ -424,9 +326,6 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
     def next_wave(self) -> List[str]:
         """Resolves the next batch of ready nodes whose dependencies are satisfied.
 
-        Returns:
-            List of node identifiers ready for execution, ordered by priority descending.
-
         POSTCONDITIONS:
         - MUST return all nodes currently in READY state whose upstream dependencies are SUCCEEDED.
         - MUST order returned nodes by priority descending, then node_id ascending.
@@ -438,9 +337,6 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
     def mark_running(self, node_id: str) -> None:
         """Transitions a node to the RUNNING state.
 
-        Args:
-            node_id: Identifier of the executing node.
-
         POSTCONDITIONS:
         - MUST update the node state to RUNNING.
         """
@@ -449,9 +345,6 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
     @operation
     def mark_succeeded(self, node_id: str) -> None:
         """Transitions a node to the SUCCEEDED state and unlocks downstream dependents.
-
-        Args:
-            node_id: Identifier of the completed node.
 
         POSTCONDITIONS:
         - MUST update the node state to SUCCEEDED.
@@ -467,10 +360,6 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
     ) -> None:
         """Transitions a node to the FAILED state and applies failure policies.
 
-        Args:
-            node_id: Identifier of the failed node.
-            failure_policy: Failure policy applied upon failure. Defaults to FAIL_FAST.
-
         POSTCONDITIONS:
         - MUST update the node state to FAILED.
         - WHEN failure_policy is SKIP_DOWNSTREAM, MUST transition all transitive dependents to SKIPPED.
@@ -483,9 +372,6 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
     def is_finished(self) -> bool:
         """Determines whether all nodes have reached terminal states.
 
-        Returns:
-            True if all nodes in the DAG have reached terminal states.
-
         POSTCONDITIONS:
         - WHEN all nodes in the DAG have reached terminal states (SUCCEEDED, FAILED, SKIPPED, CANCELLED), MUST return True.
         - WHEN no ready nodes remain and unexecuted nodes are blocked by failed dependencies, MUST return True.
@@ -496,14 +382,7 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
 
     @operation
     def get_state(self, node_id: str) -> NodeState:
-        """Retrieves the current execution state of a node.
-
-        Args:
-            node_id: Identifier of the node.
-
-        Returns:
-            Current NodeState.
-        """
+        """Retrieves the current execution state of a node."""
         ...
 
     @operation
@@ -527,16 +406,6 @@ class DAGRunner(Singleton[SystemTier], Protocol):
     ) -> DAGRunReport:
         """Executes the entire DAG sequentially to completion or failure.
 
-        Args:
-            failure_policy: Failure policy applied upon node action failure. Defaults to FAIL_FAST.
-
-        Returns:
-            Consolidated DAGRunReport recording all node outcomes and metrics.
-
-        Raises:
-            NodeNotFoundError: When graph validation detects referenced dependencies not present in the graph.
-            CycleError: When graph validation detects directed cycles in the graph.
-
         POSTCONDITIONS:
         - MUST validate graph invariants before commencing wave execution.
         - MUST execute ready waves sequentially.
@@ -546,27 +415,30 @@ class DAGRunner(Singleton[SystemTier], Protocol):
         """
         ...
 
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-28T23:19:27Z
-# LAST_CHANGED: 2026-10-28T23:19:27Z
-# CHANGE: Implement DAG engine interface module: frozen data types (DAGError/CycleError/NodeNotFoundError/NodeExecutionError with __str__), NodeState/FailurePolicy enums, NodeDefinition/NodeResult/DAGRunReport records, and DAG/WaveScheduler/DAGRunner service protocols with SystemTier singleton inheritance and contract stubs.
-# --- END CLEANROOM METADATA ---
+# --- AUTOFAB METADATA ---
+# LAST_CLEANED: 2026-11-03T00:41:21Z
+# LAST_CHANGED: 2026-11-03T00:41:21Z
+# CHANGE: Author the dag_engine_lite interface module: frozen data records (NodeDefinition, NodeResult, DAGRunReport), non-frozen exception dataclasses (DAGError, CycleError, NodeNotFoundError, NodeExecutionError) with message-preserving __str__, NodeState/FailurePolicy enums, and @singleton_type('system') Protocol services (DAG, WaveScheduler, DAGRunner) with @operation stubs matching low/dag_engine_lite.pyi.
+# --- END AUTOFAB METADATA ---
 
 
 # === File: dag_engine_lite_impl.py ===
-"""Library implementation for the synchronous DAG execution and wave scheduling engine."""
+"""Concrete implementation of the synchronous DAG execution and wave scheduling engine."""
 
 from __future__ import annotations
 
-from support.lib.lifecycle import LifecycleRegistry, get_default_registry
-import time
 from typing import Any, Callable, Collection, Dict, FrozenSet, List, Mapping, Optional, Set, Tuple
+import heapq
+import time
 
 from support.lib.framework import operation, override, singleton_type
-from support.lib.lifecycle import get_singleton
-
+from support.lib.lifecycle import LifecycleRegistry, get_default_registry, get_singleton, system
 from . import dag_engine_lite
 
+# Requirements specified in dag_engine_lite_impl.pyi
+
+
+# Terminal node states: no further execution or state promotion may occur.
 _TERMINAL_STATES: FrozenSet[dag_engine_lite.NodeState] = frozenset(
     {
         dag_engine_lite.NodeState.SUCCEEDED,
@@ -585,9 +457,10 @@ class DAG(dag_engine_lite.DAG):
     - Maintains adjacency dictionaries _nodes, _upstream, and _downstream mapping node identifiers to definitions and sets.
     """
 
-    tier: str = "system"
+    tier = system
 
     def __init__(self) -> None:
+        # Concrete backing storage for node definitions and directed adjacency sets.
         self._nodes: Dict[str, dag_engine_lite.NodeDefinition[Any]] = {}
         self._upstream: Dict[str, Set[str]] = {}
         self._downstream: Dict[str, Set[str]] = {}
@@ -602,54 +475,74 @@ class DAG(dag_engine_lite.DAG):
         priority: int = 0,
         retries: int = 0,
     ) -> None:
-        """Adds a task node to the graph."""
-        dependency_set = frozenset(dependencies) if dependencies is not None else frozenset()
-        definition = dag_engine_lite.NodeDefinition(
+        """Adds a task node to the graph.
+
+        GROUNDING:
+        - Constructs immutable dag_engine_lite.NodeDefinition with frozen dependency set without eagerly checking dependency existence.
+        - Inserts definition into _nodes, registering empty neighbor sets in _upstream and _downstream if absent.
+        - Adds directed edges from each dependency to node_id, deferring existence validation.
+        """
+        frozen_dependencies: FrozenSet[str] = frozenset(dependencies) if dependencies is not None else frozenset()
+        # MUST register the node definition into the graph.
+        definition: dag_engine_lite.NodeDefinition[Any] = dag_engine_lite.NodeDefinition(
             node_id=node_id,
             action=action,
-            dependencies=dependency_set,
+            dependencies=frozen_dependencies,
             priority=priority,
             retries=retries,
         )
-        # POSTCONDITION: register the node definition into the graph.
         self._nodes[node_id] = definition
         self._upstream.setdefault(node_id, set())
         self._downstream.setdefault(node_id, set())
-        # POSTCONDITION: add directed dependency edges, deferring existence validation.
-        for dependency in dependency_set:
-            self._upstream[node_id].add(dependency)
+        # WHEN dependencies are provided, add edges from each dependency to node_id,
+        # deferring existence validation to validate()/topological_sort().
+        for dependency in frozen_dependencies:
             self._downstream.setdefault(dependency, set()).add(node_id)
+            self._upstream[node_id].add(dependency)
 
     @operation
     @override
     def add_edge(self, upstream_id: str, downstream_id: str) -> None:
-        """Adds a directed dependency edge where downstream depends on upstream."""
-        # POSTCONDITION: WHEN either identifier is missing, raise NodeNotFoundError.
+        """Adds a directed dependency edge where downstream depends on upstream.
+
+        GROUNDING:
+        - Verifies presence of upstream_id and downstream_id in _nodes.
+        - Raises dag_engine_lite.NodeNotFoundError if either identifier is missing.
+        - Updates _upstream and _downstream sets.
+        """
+        # WHEN upstream_id or downstream_id does not exist, raise NodeNotFoundError.
         if upstream_id not in self._nodes:
             raise dag_engine_lite.NodeNotFoundError(
-                f"Node '{upstream_id}' does not exist in the DAG",
+                f"Upstream node '{upstream_id}' does not exist in the graph.",
                 upstream_id,
             )
         if downstream_id not in self._nodes:
             raise dag_engine_lite.NodeNotFoundError(
-                f"Node '{downstream_id}' does not exist in the DAG",
+                f"Downstream node '{downstream_id}' does not exist in the graph.",
                 downstream_id,
             )
-        # POSTCONDITION: establish the directed edge from upstream to downstream.
-        self._upstream[downstream_id].add(upstream_id)
-        self._downstream[upstream_id].add(downstream_id)
+        # MUST establish a directed dependency edge from upstream_id to downstream_id.
+        self._downstream.setdefault(upstream_id, set()).add(downstream_id)
+        self._upstream.setdefault(downstream_id, set()).add(upstream_id)
 
     @operation
     @override
     def remove_node(self, node_id: str) -> None:
-        """Removes a node and all incident dependency edges from the graph."""
-        # POSTCONDITION: WHEN node_id is absent, raise NodeNotFoundError.
+        """Removes a node and all incident dependency edges from the graph.
+
+        GROUNDING:
+        - Verifies presence of node_id in _nodes.
+        - Raises dag_engine_lite.NodeNotFoundError if absent.
+        - Removes node_id from all incident upstream and downstream neighbor sets.
+        - Deletes node_id from _nodes, _upstream, and _downstream.
+        """
+        # WHEN node_id is absent, raise NodeNotFoundError.
         if node_id not in self._nodes:
             raise dag_engine_lite.NodeNotFoundError(
-                f"Node '{node_id}' does not exist in the DAG",
+                f"Node '{node_id}' does not exist in the graph.",
                 node_id,
             )
-        # POSTCONDITION: remove the node and all its incident edges.
+        # MUST remove the node and its incident edges.
         for upstream_id in self._upstream.get(node_id, set()):
             self._downstream.get(upstream_id, set()).discard(node_id)
         for downstream_id in self._downstream.get(node_id, set()):
@@ -657,125 +550,218 @@ class DAG(dag_engine_lite.DAG):
         del self._nodes[node_id]
         self._upstream.pop(node_id, None)
         self._downstream.pop(node_id, None)
+        # Wave scheduler state tracking is purged dynamically: the scheduler
+        # synchronizes its _states mapping against all_nodes() on every query.
 
     @operation
     @override
     def has_node(self, node_id: str) -> bool:
-        """Checks whether a node exists within the graph."""
+        """Checks whether a node exists within the graph.
+
+        GROUNDING:
+        - Checks membership of node_id in _nodes.
+        """
         return node_id in self._nodes
 
     @operation
     @override
     def get_node(self, node_id: str) -> dag_engine_lite.NodeDefinition[Any]:
-        """Retrieves the immutable definition of a registered node."""
-        # POSTCONDITION: WHEN node_id is absent, raise NodeNotFoundError.
-        if node_id not in self._nodes:
+        """Retrieves the immutable definition of a registered node.
+
+        GROUNDING:
+        - Looks up node_id in _nodes.
+        - Raises dag_engine_lite.NodeNotFoundError if node_id is not present.
+        """
+        # WHEN node_id is absent, raise NodeNotFoundError.
+        definition = self._nodes.get(node_id)
+        if definition is None:
             raise dag_engine_lite.NodeNotFoundError(
-                f"Node '{node_id}' does not exist in the DAG",
+                f"Node '{node_id}' does not exist in the graph.",
                 node_id,
             )
-        return self._nodes[node_id]
+        # MUST return the NodeDefinition matching node_id.
+        return definition
 
     @operation
     @override
     def get_dependencies(self, node_id: str) -> Set[str]:
-        """Returns direct upstream dependency identifiers for a node."""
+        """Returns direct upstream dependency identifiers for a node.
+
+        GROUNDING:
+        - Verifies node_id in _nodes, raising dag_engine_lite.NodeNotFoundError if missing.
+        - Returns a copy of _upstream[node_id].
+        """
         if node_id not in self._nodes:
             raise dag_engine_lite.NodeNotFoundError(
-                f"Node '{node_id}' does not exist in the DAG",
+                f"Node '{node_id}' does not exist in the graph.",
                 node_id,
             )
+        # MUST return all direct upstream dependencies as a defensive copy.
         return set(self._upstream.get(node_id, set()))
 
     @operation
     @override
     def get_dependents(self, node_id: str) -> Set[str]:
-        """Returns direct downstream dependent identifiers for a node."""
+        """Returns direct downstream dependent identifiers for a node.
+
+        GROUNDING:
+        - Verifies node_id in _nodes, raising dag_engine_lite.NodeNotFoundError if missing.
+        - Returns a copy of _downstream[node_id].
+        """
         if node_id not in self._nodes:
             raise dag_engine_lite.NodeNotFoundError(
-                f"Node '{node_id}' does not exist in the DAG",
+                f"Node '{node_id}' does not exist in the graph.",
                 node_id,
             )
+        # MUST return all direct downstream dependents as a defensive copy.
         return set(self._downstream.get(node_id, set()))
 
     @operation
     @override
     def all_nodes(self) -> Set[str]:
-        """Returns all node identifiers present in the graph."""
+        """Returns all node identifiers present in the graph.
+
+        GROUNDING:
+        - Returns a copy of set(_nodes.keys()).
+        """
         return set(self._nodes.keys())
 
     @operation
     @override
     def validate(self) -> None:
-        """Validates graph consistency, completeness, and acyclicity."""
-        # POSTCONDITION: WHEN a dependency node is missing, raise NodeNotFoundError.
-        known = set(self._nodes)
-        for node_id, definition in self._nodes.items():
-            referenced = set(definition.dependencies) | self._upstream.get(node_id, set())
-            for dependency in sorted(referenced):
-                if dependency not in known:
+        """Validates graph consistency, completeness, and acyclicity.
+
+        GROUNDING:
+        - Verifies that every dependency in every node definition exists in _nodes, raising dag_engine_lite.NodeNotFoundError if missing.
+        - Executes depth-first search cycle detection with active recursion path tracking.
+        - Raises dag_engine_lite.CycleError containing the cycle sequence upon detecting any directed cycle.
+        """
+        # WHEN a dependency node is missing, raise NodeNotFoundError.
+        for node_id in sorted(self._nodes):
+            for dependency in sorted(self._upstream.get(node_id, set())):
+                if dependency not in self._nodes:
                     raise dag_engine_lite.NodeNotFoundError(
-                        f"Node '{node_id}' references missing dependency '{dependency}'",
+                        f"Node '{node_id}' depends on unknown node '{dependency}'.",
                         dependency,
                     )
-        # POSTCONDITION: WHEN a cycle exists, raise CycleError containing the cycle.
+        # WHEN a cycle exists, raise CycleError containing the cycle sequence.
         cycle = self._find_cycle()
-        if cycle is not None:
+        if cycle:
             raise dag_engine_lite.CycleError(
-                "Cycle detected: " + " -> ".join(cycle),
+                f"Dependency cycle detected: {' -> '.join(cycle)}.",
                 tuple(cycle),
             )
+        # WHEN all referenced nodes exist and no cycle exists, complete without error.
 
     @operation
     @override
     def topological_sort(self) -> List[str]:
-        """Computes a deterministic topological ordering of all nodes."""
-        # Missing dependencies are reported here as NodeNotFoundError.
-        known = set(self._nodes)
-        for node_id in self._nodes:
-            for dependency in sorted(self._upstream.get(node_id, set())):
-                if dependency not in known:
-                    raise dag_engine_lite.NodeNotFoundError(
-                        f"Node '{node_id}' references missing dependency '{dependency}'",
-                        dependency,
-                    )
+        """Computes a deterministic topological ordering of all nodes.
+
+        GROUNDING:
+        - Computes in-degree counts from _upstream mapping.
+        - Initializes ready list with nodes having in-degree zero, sorted by priority descending then node_id ascending.
+        - Iteratively extracts candidate with highest priority, appends to order, and decrements downstream in-degrees.
+        - Inserts newly zero in-degree nodes maintaining priority descending then node_id ascending order.
+        - Raises dag_engine_lite.CycleError containing the cycle sequence if ordered count does not equal len(_nodes).
+        - Returns computed topological order list.
+        """
+        # In-degree counts derive from the upstream adjacency mapping.
         in_degree: Dict[str, int] = {
             node_id: len(self._upstream.get(node_id, set())) for node_id in self._nodes
         }
-        ready = [node_id for node_id in self._nodes if in_degree[node_id] == 0]
-        ready.sort(key=self._order_key)
+        # Ready heap ordered by priority descending, then node_id ascending.
+        ready: List[Tuple[int, str]] = [
+            (-definition.priority, node_id)
+            for node_id, definition in self._nodes.items()
+            if in_degree[node_id] == 0
+        ]
+        heapq.heapify(ready)
         order: List[str] = []
         while ready:
-            # Highest priority first, ties broken by ascending node identifier.
-            node_id = ready.pop(0)
+            _, node_id = heapq.heappop(ready)
             order.append(node_id)
-            # Every registered downstream identifier is itself a registered node, so it has
-            # an entry in the in-degree map (add_edge validates both endpoints eagerly).
-            for dependent in sorted(self._downstream.get(node_id, set())):
-                in_degree[dependent] -= 1
-                if in_degree[dependent] == 0:
-                    ready.append(dependent)
-            ready.sort(key=self._order_key)
-        # POSTCONDITION: WHEN a cycle exists, raise CycleError.
+            for downstream_id in sorted(self._downstream.get(node_id, set())):
+                in_degree[downstream_id] -= 1
+                if in_degree[downstream_id] == 0:
+                    heapq.heappush(
+                        ready,
+                        (-self._nodes[downstream_id].priority, downstream_id),
+                    )
         if len(order) != len(self._nodes):
-            cycle = self._find_cycle() or []
+            # Missing dependency references surface as NodeNotFoundError (deferred check).
+            for node_id in sorted(self._nodes):
+                for dependency in sorted(self._upstream.get(node_id, set())):
+                    if dependency not in self._nodes:
+                        raise dag_engine_lite.NodeNotFoundError(
+                            f"Node '{node_id}' depends on unknown node '{dependency}'.",
+                            dependency,
+                        )
+            # Otherwise the unorderable remainder must contain a directed cycle.
+            cycle = self._find_cycle()
             raise dag_engine_lite.CycleError(
-                "Cycle detected: " + " -> ".join(cycle),
+                f"Dependency cycle detected: {' -> '.join(cycle)}.",
                 tuple(cycle),
             )
+        # MUST return a valid topological ordering with deterministic tie-breaking.
         return order
+
+    def _find_cycle(self) -> List[str]:
+        """Depth-first search returning one directed cycle sequence, if any."""
+        visited: Set[str] = set()
+        active_path: List[str] = []
+        active: Set[str] = set()
+
+        def visit(node_id: str) -> Optional[List[str]]:
+            visited.add(node_id)
+            active.add(node_id)
+            active_path.append(node_id)
+            for dependency in sorted(self._upstream.get(node_id, set())):
+                # Callers report missing dependencies before invoking cycle detection,
+                # so cycle search traverses only registered nodes.
+                if dependency in active:
+                    start = active_path.index(dependency)
+                    return active_path[start:] + [dependency]
+                if dependency not in visited:
+                    found = visit(dependency)
+                    if found is not None:
+                        return found
+            active_path.pop()
+            active.discard(node_id)
+            return None
+
+        for node_id in sorted(self._nodes):
+            if node_id not in visited:
+                found = visit(node_id)
+                if found is not None:
+                    return found
+        return []
 
     @operation
     @override
     def find_roots(self) -> Set[str]:
-        """Returns all root nodes with in-degree zero."""
-        return {node_id for node_id in self._nodes if not self._upstream.get(node_id)}
+        """Returns all root nodes with in-degree zero.
+
+        GROUNDING:
+        - Iterates over _nodes, collecting node identifiers whose _upstream set is empty.
+        - Returns set of root node identifiers.
+        """
+        return {
+            node_id for node_id in self._nodes if not self._upstream.get(node_id)
+        }
 
     @operation
     @override
     def find_leaves(self) -> Set[str]:
-        """Returns all leaf nodes with out-degree zero."""
-        return {node_id for node_id in self._nodes if not self._downstream.get(node_id)}
+        """Returns all leaf nodes with out-degree zero.
+
+        GROUNDING:
+        - Iterates over _nodes, collecting node identifiers whose _downstream set is empty.
+        - Returns set of leaf node identifiers.
+        """
+        return {
+            node_id for node_id in self._nodes if not self._downstream.get(node_id)
+        }
 
     @operation
     @override
@@ -783,68 +769,48 @@ class DAG(dag_engine_lite.DAG):
         self,
         estimated_durations: Optional[Mapping[str, float]] = None,
     ) -> Tuple[List[str], float]:
-        """Computes the longest weighted dependency path through the graph."""
+        """Computes the longest weighted dependency path through the graph.
+
+        GROUNDING:
+        - Computes topological order using topological_sort().
+        - Resolves duration weights mapping defaulting to 1.0 for unspecified nodes.
+        - Computes earliest completion times using dynamic programming.
+        - Identifies terminal node with maximum completion time.
+        - Backtracks through upstream dependencies selecting predecessor yielding maximum earliest time.
+        - Returns reversed path list and total path duration weight.
+        """
         order = self.topological_sort()
         if not order:
-            return ([], 0.0)
-        durations = estimated_durations or {}
-        # Dynamic programming over the topological order: earliest completion time.
-        # Every prerequisite of an ordered node precedes it and thus has an earliest entry.
+            return [], 0.0
+        # Default duration weight is 1.0 for every node lacking an explicit estimate.
+        durations: Dict[str, float] = {node_id: 1.0 for node_id in self._nodes}
+        if estimated_durations is not None:
+            for node_id, duration in estimated_durations.items():
+                if node_id in durations:
+                    durations[node_id] = float(duration)
         earliest: Dict[str, float] = {}
+        predecessor: Dict[str, Optional[str]] = {}
         for node_id in order:
-            weight = float(durations.get(node_id, 1.0))
-            predecessors = self._upstream.get(node_id, set())
+            upstream = sorted(self._upstream.get(node_id, set()))
+            best_predecessor: Optional[str] = None
+            if upstream:
+                # Deterministic tie-break: highest earliest completion, then node_id.
+                best_predecessor = sorted(
+                    upstream, key=lambda upstream_id: (-earliest[upstream_id], upstream_id)
+                )[0]
             earliest[node_id] = (
-                max((earliest[p] for p in predecessors), default=0.0) + weight
-            )
-        # Terminal node with the maximum completion time (ties broken alphabetically).
-        terminal = min(order, key=lambda candidate: (-earliest[candidate], candidate))
+                earliest[best_predecessor] if best_predecessor is not None else 0.0
+            ) + durations[node_id]
+            predecessor[node_id] = best_predecessor
+        # Terminal node with maximum completion time (deterministic tie-break).
+        terminal = sorted(order, key=lambda node_id: (-earliest[node_id], node_id))[0]
         path: List[str] = []
-        current = terminal
-        while True:
+        current: Optional[str] = terminal
+        while current is not None:
             path.append(current)
-            predecessors = list(self._upstream.get(current, set()))
-            if not predecessors:
-                break
-            current = min(
-                predecessors,
-                key=lambda candidate: (-earliest[candidate], candidate),
-            )
+            current = predecessor[current]
         path.reverse()
-        return (path, earliest[terminal])
-
-    def _find_cycle(self) -> Optional[List[str]]:
-        """Returns one directed cycle as a node sequence, or None if acyclic."""
-        white, gray, black = 0, 1, 2
-        color: Dict[str, int] = {node_id: white for node_id in self._nodes}
-        stack: List[str] = []
-
-        def visit(node_id: str) -> Optional[List[str]]:
-            color[node_id] = gray
-            stack.append(node_id)
-            # validate()/topological_sort() reject missing prerequisites before cycle
-            # detection, so every traversed dependency has a color entry.
-            for dependency in sorted(self._upstream.get(node_id, set())):
-                if color[dependency] == gray:
-                    return list(stack[stack.index(dependency):])
-                if color[dependency] == white:
-                    found = visit(dependency)
-                    if found is not None:
-                        return found
-            stack.pop()
-            color[node_id] = black
-            return None
-
-        for node_id in sorted(self._nodes):
-            if color[node_id] == white:
-                found = visit(node_id)
-                if found is not None:
-                    return found
-        return None
-
-    def _order_key(self, node_id: str) -> Tuple[int, str]:
-        """Sort key realizing priority descending then node_id ascending."""
-        return (-self._nodes[node_id].priority, node_id)
+        return path, earliest[terminal]
 
 
 @singleton_type("system")
@@ -854,57 +820,94 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
     GROUNDING:
     - Resolves the active DAG service via get_singleton(dag_engine_lite.DAG).
     - Maintains scheduling state across _dag and _states dictionary mapping node identifiers to dag_engine_lite.NodeState.
+    - Synchronizes dynamic node state by discovering registered nodes from _dag.all_nodes(), initializing root nodes to dag_engine_lite.NodeState.READY and non-root nodes to dag_engine_lite.NodeState.PENDING.
     """
 
-    tier: str = "system"
+    tier = system
 
     def __init__(self) -> None:
-        self._dag: dag_engine_lite.DAG = get_singleton(dag_engine_lite.DAG)
+        # Phase-local scheduling state; the peer DAG service is resolved on demand.
         self._states: Dict[str, dag_engine_lite.NodeState] = {}
+
+    def _resolve_dag(self) -> dag_engine_lite.DAG:
+        """Resolves the active DAG service on demand."""
+        return get_singleton(dag_engine_lite.DAG)
+
+    def _dependencies_succeeded(self, dag: dag_engine_lite.DAG, node_id: str) -> bool:
+        """Checks whether every upstream dependency of a node has SUCCEEDED."""
+        for dependency in dag.get_dependencies(node_id):
+            if self._states.get(dependency) is not dag_engine_lite.NodeState.SUCCEEDED:
+                return False
+        return True
+
+    def _synchronize(self) -> dag_engine_lite.DAG:
+        """Synchronizes _states with nodes currently registered in the DAG."""
+        dag = self._resolve_dag()
+        nodes = dag.all_nodes()
+        # Purge state tracking for nodes removed from the graph.
+        for stale_id in [node_id for node_id in self._states if node_id not in nodes]:
+            del self._states[stale_id]
+        # Initialize newly discovered nodes: roots READY, non-roots PENDING.
+        for node_id in nodes:
+            if node_id not in self._states:
+                if dag.get_dependencies(node_id):
+                    self._states[node_id] = dag_engine_lite.NodeState.PENDING
+                else:
+                    self._states[node_id] = dag_engine_lite.NodeState.READY
+        return dag
 
     @operation
     @override
     def next_wave(self) -> List[str]:
-        """Resolves the next batch of ready nodes whose dependencies are satisfied."""
-        nodes = self._sync_states()
-        candidates: List[str] = []
-        for node_id in nodes:
-            if self._states.get(node_id) is not dag_engine_lite.NodeState.READY:
-                continue
-            dependencies = self._dag.get_dependencies(node_id)
-            # POSTCONDITION: only nodes whose upstream dependencies all SUCCEEDED.
-            if all(
-                self._states.get(dependency) is dag_engine_lite.NodeState.SUCCEEDED
-                for dependency in dependencies
-            ):
-                candidates.append(node_id)
-        # POSTCONDITION: priority descending, then node_id ascending.
-        candidates.sort(key=self._order_key)
+        """Resolves the next batch of ready nodes whose dependencies are satisfied.
+
+        GROUNDING:
+        - Ensures _states contains all nodes from _dag.
+        - Gathers all nodes currently in dag_engine_lite.NodeState.READY whose upstream dependencies are all dag_engine_lite.NodeState.SUCCEEDED.
+        - Sorts candidate nodes by definition priority descending, then node_id ascending.
+        - Returns ordered list of ready node identifiers.
+        """
+        dag = self._synchronize()
+        candidates = [
+            node_id
+            for node_id in dag.all_nodes()
+            if self._states.get(node_id) is dag_engine_lite.NodeState.READY
+            and self._dependencies_succeeded(dag, node_id)
+        ]
+        # MUST order returned nodes by priority descending, then node_id ascending.
+        candidates.sort(key=lambda node_id: (-dag.get_node(node_id).priority, node_id))
         return candidates
 
     @operation
     @override
     def mark_running(self, node_id: str) -> None:
-        """Transitions a node to the RUNNING state."""
-        self._sync_states()
+        """Transitions a node to the RUNNING state.
+
+        GROUNDING:
+        - Sets _states[node_id] to dag_engine_lite.NodeState.RUNNING.
+        """
+        self._synchronize()
+        # MUST update the node state to RUNNING.
         self._states[node_id] = dag_engine_lite.NodeState.RUNNING
 
     @operation
     @override
     def mark_succeeded(self, node_id: str) -> None:
-        """Transitions a node to the SUCCEEDED state and unlocks downstream dependents."""
-        self._sync_states()
+        """Transitions a node to the SUCCEEDED state and unlocks downstream dependents.
+
+        GROUNDING:
+        - Sets _states[node_id] to dag_engine_lite.NodeState.SUCCEEDED.
+        - Inspects downstream dependents of node_id.
+        - Promotes any dependent currently PENDING to READY if all its upstream dependencies are SUCCEEDED.
+        """
+        dag = self._synchronize()
+        # MUST update the node state to SUCCEEDED.
         self._states[node_id] = dag_engine_lite.NodeState.SUCCEEDED
-        # POSTCONDITION: promote newly unblocked dependents to READY.
-        for dependent in sorted(self._dag.get_dependents(node_id)):
-            if self._states.get(dependent) is not dag_engine_lite.NodeState.PENDING:
-                continue
-            dependencies = self._dag.get_dependencies(dependent)
-            if all(
-                self._states.get(dependency) is dag_engine_lite.NodeState.SUCCEEDED
-                for dependency in dependencies
-            ):
-                self._states[dependent] = dag_engine_lite.NodeState.READY
+        # MUST promote newly unblocked dependents to READY.
+        for dependent_id in dag.get_dependents(node_id):
+            if self._states.get(dependent_id) is dag_engine_lite.NodeState.PENDING:
+                if self._dependencies_succeeded(dag, dependent_id):
+                    self._states[dependent_id] = dag_engine_lite.NodeState.READY
 
     @operation
     @override
@@ -913,129 +916,94 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
         node_id: str,
         failure_policy: dag_engine_lite.FailurePolicy = dag_engine_lite.FailurePolicy.FAIL_FAST,
     ) -> None:
-        """Transitions a node to the FAILED state and applies failure policies."""
-        self._sync_states()
+        """Transitions a node to the FAILED state and applies failure policies.
+
+        GROUNDING:
+        - Sets _states[node_id] to dag_engine_lite.NodeState.FAILED.
+        - Transitions all non-terminal nodes to CANCELLED if failure_policy is FAIL_FAST.
+        - Traverses transitive downstream dependents and marks non-terminal dependents as SKIPPED if failure_policy is SKIP_DOWNSTREAM.
+        - Retains non-terminal states for unblocked independent nodes if failure_policy is CONTINUE_ON_ERROR, transitioning blocked dependents of failed nodes to SKIPPED.
+        """
+        dag = self._synchronize()
+        # MUST update the node state to FAILED.
         self._states[node_id] = dag_engine_lite.NodeState.FAILED
-        if failure_policy is dag_engine_lite.FailurePolicy.SKIP_DOWNSTREAM:
-            # POSTCONDITION: transitive dependents become SKIPPED.
-            for dependent in self._transitive_dependents(node_id):
-                self._mark_skipped(dependent)
-        elif failure_policy is dag_engine_lite.FailurePolicy.FAIL_FAST:
-            # POSTCONDITION: all remaining non-terminal nodes become CANCELLED. The failed
-            # node was just set to FAILED (terminal), so it is not re-cancelled here.
-            for other_id, state in self._states.items():
-                if state not in _TERMINAL_STATES:
+        if failure_policy is dag_engine_lite.FailurePolicy.FAIL_FAST:
+            # WHEN FAIL_FAST, cancel every remaining non-terminal node.
+            for other_id in list(self._states):
+                if self._states[other_id] not in _TERMINAL_STATES:
                     self._states[other_id] = dag_engine_lite.NodeState.CANCELLED
-        else:
-            # POSTCONDITION: blocked dependents are SKIPPED while independent nodes stay eligible.
-            for dependent in self._transitive_dependents(node_id):
-                self._mark_skipped(dependent)
-            for other_id, state in self._states.items():
-                if state is not dag_engine_lite.NodeState.PENDING:
-                    continue
-                dependencies = self._dag.get_dependencies(other_id)
-                if all(
-                    self._states.get(dependency) is dag_engine_lite.NodeState.SUCCEEDED
-                    for dependency in dependencies
-                ):
-                    self._states[other_id] = dag_engine_lite.NodeState.READY
+            return
+        # Collect transitive downstream dependents (all are permanently blocked).
+        blocked: Set[str] = set(dag.get_dependents(node_id))
+        pending: List[str] = list(blocked)
+        while pending:
+            dependent_id = pending.pop()
+            # Each transitive dependent is enqueued at most once via the blocked set.
+            for downstream_id in dag.get_dependents(dependent_id):
+                if downstream_id not in blocked:
+                    blocked.add(downstream_id)
+                    pending.append(downstream_id)
+        for dependent_id in blocked:
+            if self._states.get(dependent_id) not in _TERMINAL_STATES:
+                # WHEN SKIP_DOWNSTREAM or CONTINUE_ON_ERROR, blocked dependents are SKIPPED.
+                self._states[dependent_id] = dag_engine_lite.NodeState.SKIPPED
+        if failure_policy is dag_engine_lite.FailurePolicy.CONTINUE_ON_ERROR:
+            # Leave unblocked independent nodes eligible for execution.
+            for other_id in dag.all_nodes():
+                if self._states.get(other_id) is dag_engine_lite.NodeState.PENDING:
+                    if self._dependencies_succeeded(dag, other_id):
+                        self._states[other_id] = dag_engine_lite.NodeState.READY
 
     @operation
     @override
     def is_finished(self) -> bool:
-        """Determines whether all nodes have reached terminal states."""
-        nodes = self._sync_states()
-        # POSTCONDITION: WHEN the DAG contains no nodes, return True.
+        """Determines whether all nodes have reached terminal states.
+
+        GROUNDING:
+        - Synchronizes _states with all nodes currently registered in _dag.all_nodes().
+        - Checks whether every node in the DAG is present in _states and in a terminal state.
+        - Returns True if all registered DAG nodes have reached terminal states or if no ready nodes remain and unexecuted nodes are blocked by failed dependencies, or if DAG is empty; False otherwise.
+        """
+        dag = self._synchronize()
+        nodes = dag.all_nodes()
+        # WHEN the DAG contains no nodes, return True.
         if not nodes:
             return True
-        memo: Dict[str, bool] = {}
-        for node_id in nodes:
-            if self._states.get(node_id) in _TERMINAL_STATES:
-                continue
-            if self._can_progress(node_id, memo):
-                return False
-        # All remaining nodes are terminal or blocked by failed/missing dependencies.
-        return True
+        # WHEN all nodes reached terminal states, return True.
+        if all(self._states.get(node_id) in _TERMINAL_STATES for node_id in nodes):
+            return True
+        # WHEN no ready nodes remain, unexecuted nodes are blocked by failed dependencies.
+        if not any(
+            self._states.get(node_id) is dag_engine_lite.NodeState.READY
+            for node_id in nodes
+        ):
+            return True
+        # Otherwise a node remains non-terminal and eligible to execute.
+        return False
 
     @operation
     @override
     def get_state(self, node_id: str) -> dag_engine_lite.NodeState:
-        """Retrieves the current execution state of a node."""
-        self._sync_states()
+        """Retrieves the current execution state of a node.
+
+        GROUNDING:
+        - Ensures _states contains node_id by synchronizing with _dag.all_nodes() if absent.
+        - Returns _states[node_id].
+        """
+        self._synchronize()
         return self._states[node_id]
 
     @operation
     @override
     def get_all_states(self) -> Mapping[str, dag_engine_lite.NodeState]:
-        """Returns the execution state of every node in the graph."""
-        nodes = self._sync_states()
-        return {node_id: self._states[node_id] for node_id in nodes}
+        """Returns the execution state of every node in the graph.
 
-    def _sync_states(self) -> Set[str]:
-        """Synchronizes state tracking with the currently registered DAG nodes."""
-        nodes = self._dag.all_nodes()
-        # Purge identifiers removed from the DAG (remove_node state tracking clean-up).
-        for stale_id in [node_id for node_id in self._states if node_id not in nodes]:
-            del self._states[stale_id]
-        # Discover newly registered nodes: roots start READY, dependents PENDING.
-        for node_id in nodes:
-            if node_id in self._states:
-                continue
-            dependencies = self._dag.get_dependencies(node_id)
-            self._states[node_id] = (
-                dag_engine_lite.NodeState.PENDING
-                if dependencies
-                else dag_engine_lite.NodeState.READY
-            )
-        return nodes
-
-    def _transitive_dependents(self, node_id: str) -> List[str]:
-        """Collects all transitive downstream dependents of a node."""
-        visited: Set[str] = set()
-        frontier: List[str] = [node_id]
-        while frontier:
-            current = frontier.pop()
-            for dependent in sorted(self._dag.get_dependents(current)):
-                if dependent not in visited:
-                    visited.add(dependent)
-                    frontier.append(dependent)
-        return sorted(visited)
-
-    def _mark_skipped(self, node_id: str) -> None:
-        """Transitions a non-terminal node to the SKIPPED state."""
-        if self._states.get(node_id) not in _TERMINAL_STATES:
-            self._states[node_id] = dag_engine_lite.NodeState.SKIPPED
-
-    def _can_progress(
-        self,
-        node_id: str,
-        memo: Dict[str, bool],
-    ) -> bool:
-        """Determines whether a node can still reach a terminal success/failure state."""
-        if node_id in memo:
-            return memo[node_id]
-        state = self._states.get(node_id)
-        if state is dag_engine_lite.NodeState.SUCCEEDED:
-            memo[node_id] = True
-            return True
-        if state is dag_engine_lite.NodeState.READY or state is dag_engine_lite.NodeState.RUNNING:
-            memo[node_id] = True
-            return True
-        if state is not dag_engine_lite.NodeState.PENDING:
-            memo[node_id] = False
-            return False
-        # The DAG contract forbids cycles and validate()/run() reject them before
-        # completion analysis, so recursion over prerequisites always terminates.
-        result = all(
-            self._can_progress(dependency, memo)
-            for dependency in self._dag.get_dependencies(node_id)
-        )
-        memo[node_id] = result
-        return result
-
-    def _order_key(self, node_id: str) -> Tuple[int, str]:
-        """Sort key realizing priority descending then node_id ascending."""
-        return (-self._dag.get_node(node_id).priority, node_id)
+        GROUNDING:
+        - Ensures _states contains all nodes from _dag.all_nodes().
+        - Returns a shallow copy of _states mapping filtered to only include nodes currently present in _dag.all_nodes().
+        """
+        dag = self._synchronize()
+        return {node_id: self._states[node_id] for node_id in dag.all_nodes()}
 
 
 @singleton_type("system")
@@ -1047,13 +1015,10 @@ class DAGRunner(dag_engine_lite.DAGRunner):
     - Coordinates execution using _dag, _scheduler, and _results mapping.
     """
 
-    tier: str = "system"
+    tier = system
 
     def __init__(self) -> None:
-        self._dag: dag_engine_lite.DAG = get_singleton(dag_engine_lite.DAG)
-        self._scheduler: dag_engine_lite.WaveScheduler = get_singleton(
-            dag_engine_lite.WaveScheduler
-        )
+        # Consolidated execution outcomes accumulated across the current run.
         self._results: Dict[str, dag_engine_lite.NodeResult[Any]] = {}
 
     @operation
@@ -1062,110 +1027,110 @@ class DAGRunner(dag_engine_lite.DAGRunner):
         self,
         failure_policy: dag_engine_lite.FailurePolicy = dag_engine_lite.FailurePolicy.FAIL_FAST,
     ) -> dag_engine_lite.DAGRunReport:
-        """Executes the entire DAG sequentially to completion or failure."""
-        # POSTCONDITION: validate graph invariants before commencing wave execution.
-        self._dag.validate()
+        """Executes the entire DAG sequentially to completion or failure.
+
+        GROUNDING:
+        - Validates _dag using _dag.validate(), allowing cycle or missing dependency exceptions to raise immediately.
+        - Initializes start wall-clock time and empty _results mapping.
+        - Loops while _scheduler.is_finished() returns False and retrieves the next wave from _scheduler.next_wave().
+        - Halts wave loop when next wave is empty.
+        - Dispatches each ready wave node sequentially, marking it RUNNING in _scheduler.
+        - Executes node action with retry attempts up to definition.retries upon exception.
+        - Records dag_engine_lite.NodeResult(SUCCEEDED) and marks SUCCEEDED in _scheduler on success.
+        - Records dag_engine_lite.NodeResult(FAILED) and marks FAILED in _scheduler with failure_policy on failure after retries.
+        - Halts further wave execution when failure_policy is FAIL_FAST and a node has failed.
+        - Populates _results with default unexecuted dag_engine_lite.NodeResult records for terminal skipped or cancelled nodes from _scheduler states.
+        - Computes critical path using _dag.compute_critical_path().
+        - Gathers succeeded, failed, skipped, and cancelled node tuples from _results and _scheduler states.
+        - Returns consolidated dag_engine_lite.DAGRunReport.
+        """
+        dag = get_singleton(dag_engine_lite.DAG)
+        scheduler = get_singleton(dag_engine_lite.WaveScheduler)
+        # MUST validate graph invariants before commencing wave execution.
+        dag.validate()
+        start_time = time.monotonic()
         self._results = {}
-        started = time.perf_counter()
-        fail_fast_triggered = False
-        while not fail_fast_triggered and not self._scheduler.is_finished():
-            wave = self._scheduler.next_wave()
-            # Defensive termination: run() never mutates the DAG itself, so a non-finished
-            # acyclic graph always yields at least one runnable node.
-            if not wave:  # pragma: no cover (assumption: is_finished() is False only while next_wave() returns a non-empty wave)
-                break
+        halted = False
+        # MUST execute ready waves sequentially until the scheduler is finished.
+        while not halted and not scheduler.is_finished():
+            wave = scheduler.next_wave()
+            # Halts the wave loop when no further nodes are ready.
+            if not wave:
+                break  # pragma: no cover (assumption: an unfinished scheduler always yields a non-empty ready wave)
             for node_id in wave:
-                if fail_fast_triggered:
-                    break
-                # Defensive guard: next_wave() only emits READY nodes, and same-wave
-                # failures only skip transitive dependents, never independent members.
-                if self._scheduler.get_state(node_id) is not dag_engine_lite.NodeState.READY:  # pragma: no cover (assumption: wave members stay READY because they are mutually independent)
-                    continue
-                definition = self._dag.get_node(node_id)
-                self._scheduler.mark_running(node_id)
-                node_started = time.perf_counter()
-                attempts = 0
+                definition = dag.get_node(node_id)
+                scheduler.mark_running(node_id)
+                attempt_start = time.monotonic()
+                retries_attempted = 0
                 value: Any = None
                 error: Optional[Exception] = None
                 succeeded = False
-                while True:
+                for attempt in range(definition.retries + 1):
                     try:
                         value = definition.action()
-                    except Exception as exc:  # cleanroom: allow-broad-exception (reified into error result)
-                        error = exc
-                        # POSTCONDITION: retry up to the configured retry count.
-                        if attempts < definition.retries:
-                            attempts += 1
-                            continue
-                        break
-                    else:
                         succeeded = True
                         break
-                duration = time.perf_counter() - node_started
+                    # cleanroom: allow-broad-exception - failure is reified into NodeResult.error
+                    except Exception as exc:
+                        error = exc
+                        retries_attempted = attempt
+                duration_seconds = time.monotonic() - attempt_start
                 if succeeded:
+                    # Success: record SUCCEEDED outcome and unlock dependents.
                     self._results[node_id] = dag_engine_lite.NodeResult(
                         node_id=node_id,
                         state=dag_engine_lite.NodeState.SUCCEEDED,
                         value=value,
-                        duration_seconds=duration,
-                        retries_attempted=attempts,
+                        duration_seconds=duration_seconds,
+                        retries_attempted=retries_attempted,
                     )
-                    self._scheduler.mark_succeeded(node_id)
+                    scheduler.mark_succeeded(node_id)
                 else:
+                    # Failure: record FAILED outcome and apply the failure policy.
                     self._results[node_id] = dag_engine_lite.NodeResult(
                         node_id=node_id,
                         state=dag_engine_lite.NodeState.FAILED,
                         error=error,
-                        duration_seconds=duration,
-                        retries_attempted=attempts,
+                        duration_seconds=duration_seconds,
+                        retries_attempted=retries_attempted,
                     )
-                    # POSTCONDITION: apply the configured failure policy to the scheduler.
-                    self._scheduler.mark_failed(node_id, failure_policy)
+                    scheduler.mark_failed(node_id, failure_policy)
                     if failure_policy is dag_engine_lite.FailurePolicy.FAIL_FAST:
-                        fail_fast_triggered = True
-        # Populate default records for nodes that never executed (skipped/cancelled).
-        states = self._scheduler.get_all_states()
-        for node_id, state in states.items():
-            if node_id in self._results:
-                continue
-            self._results[node_id] = dag_engine_lite.NodeResult(
-                node_id=node_id,
-                state=state,
-            )
-        wall_clock = time.perf_counter() - started
-        critical_path, _ = self._dag.compute_critical_path()
-        succeeded = tuple(
-            node_id
-            for node_id, result in self._results.items()
-            if result.state is dag_engine_lite.NodeState.SUCCEEDED
-        )
-        failed = tuple(
-            node_id
-            for node_id, result in self._results.items()
-            if result.state is dag_engine_lite.NodeState.FAILED
-        )
-        skipped = tuple(
-            sorted(
-                node_id
-                for node_id, result in self._results.items()
-                if result.state is dag_engine_lite.NodeState.SKIPPED
-            )
-        )
-        cancelled = tuple(
-            sorted(
-                node_id
-                for node_id, result in self._results.items()
-                if result.state is dag_engine_lite.NodeState.CANCELLED
-            )
-        )
-        # POSTCONDITION: return a consolidated report of states, durations, and critical path.
+                        # Halt further wave execution on the first failure.
+                        halted = True
+                        break
+        wall_clock_seconds = time.monotonic() - start_time
+        # Populate default result records for nodes never dispatched.
+        states = scheduler.get_all_states()
+        for node_id in dag.all_nodes():
+            if node_id not in self._results:
+                self._results[node_id] = dag_engine_lite.NodeResult(
+                    node_id=node_id,
+                    state=states.get(node_id, dag_engine_lite.NodeState.PENDING),
+                )
+        # MUST capture the critical path of the executed graph.
+        critical_path, _ = dag.compute_critical_path()
+        # Gather outcome tuples from the consolidated results mapping.
+        succeeded_nodes: List[str] = []
+        failed_nodes: List[str] = []
+        skipped_nodes: List[str] = []
+        cancelled_nodes: List[str] = []
+        for node_id, result in self._results.items():
+            if result.state is dag_engine_lite.NodeState.SUCCEEDED:
+                succeeded_nodes.append(node_id)
+            elif result.state is dag_engine_lite.NodeState.FAILED:
+                failed_nodes.append(node_id)
+            elif result.state is dag_engine_lite.NodeState.SKIPPED:
+                skipped_nodes.append(node_id)
+            elif result.state is dag_engine_lite.NodeState.CANCELLED:
+                cancelled_nodes.append(node_id)
         return dag_engine_lite.DAGRunReport(
-            total_nodes=len(self._dag.all_nodes()),
-            succeeded_nodes=succeeded,
-            failed_nodes=failed,
-            skipped_nodes=skipped,
-            cancelled_nodes=cancelled,
-            wall_clock_seconds=wall_clock,
+            total_nodes=len(dag.all_nodes()),
+            succeeded_nodes=tuple(succeeded_nodes),
+            failed_nodes=tuple(failed_nodes),
+            skipped_nodes=tuple(skipped_nodes),
+            cancelled_nodes=tuple(cancelled_nodes),
+            wall_clock_seconds=wall_clock_seconds,
             critical_path=tuple(critical_path),
             results=dict(self._results),
         )
@@ -1178,27 +1143,27 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         DAG,
         keys=[DAG, dag_engine_lite.DAG],
-        tier=DAG.tier,
+        tier=system,
     )
     reg.register_singleton(
         WaveScheduler,
         keys=[WaveScheduler, dag_engine_lite.WaveScheduler],
-        tier=WaveScheduler.tier,
+        tier=system,
     )
     reg.register_singleton(
         DAGRunner,
         keys=[DAGRunner, dag_engine_lite.DAGRunner],
-        tier=DAGRunner.tier,
+        tier=system,
     )
 
 
 _initialize_ = __initialize__
 # --- END CLEANROOM AUTO-GENERATED ---
 
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-28T23:45:14Z
-# LAST_CHANGED: 2026-10-28T23:42:48Z
-# CHANGE: Resolve unreachable-branch feedback: removed the impossible downstream in-degree guard and missing-color cycle-walk guard (both endpoints are validated/registered before these walks), and dropped the cyclic-graph revisiting guard from completion analysis since the contract forbids cycles and validate()/run() reject them first; annotated the runner's defensive empty-wave break and non-ready wave-member guard with '# pragma: no cover (assumption: ...)' explaining the acyclic, unmutated-DAG invariant; also pruned the analogous redundant 'p in earliest' critical-path filters and the redundant 'other_id != node_id' FAIL_FAST condition. Behavior re-verified against contracts for topological ordering, cycles, missing dependencies, policies, retries, and empty graphs.
-# PRETENSE_COVERAGE_AUDIT: 2026-10-28T23:45:14Z
-# PRETENSE_QA_AUDIT: 2026-10-28T23:44:55Z
-# --- END CLEANROOM METADATA ---
+# --- AUTOFAB METADATA ---
+# LAST_CLEANED: 2026-11-03T00:59:15Z
+# LAST_CHANGED: 2026-11-03T00:58:51Z
+# CHANGE: Resolve coverage feedback on unreachable defensive branches: drop the missing-dependency skip in the private cycle-detection helper (both contracted entry points already raise NodeNotFoundError before cycle detection), restructure the transitive blocked-dependent traversal to seed the blocked set up front and discover each dependent exactly once, removing the duplicate-visit skip, and annotate the empty-wave halt with '# pragma: no cover (assumption: an unfinished scheduler always yields a non-empty ready wave)' since completion reporting guarantees ready nodes remain. No functional behavior change; verified static checks plus runtime smoke tests for cycles, missing dependencies, diamond skip-downstream/continue policies, and retries.
+# PRETENSE_COVERAGE_AUDIT: 2026-11-03T00:59:15Z
+# PRETENSE_QA_AUDIT: 2026-11-03T00:59:04Z
+# --- END AUTOFAB METADATA ---

@@ -1,9 +1,10 @@
 """State machine prototype and instance abstractions for Pretense."""
 
-from update_python_with_ai.parts.pretense.lib.pretense import (
+from pretense.parts.pretense.lib.pretense import (
+    CheckedAdapter,
     FakeAdapter,
     StateMachine,
     StateMachineProto,
 )
 
-__all__ = ["FakeAdapter", "StateMachine", "StateMachineProto"]
+__all__ = ["CheckedAdapter", "FakeAdapter", "StateMachine", "StateMachineProto"]

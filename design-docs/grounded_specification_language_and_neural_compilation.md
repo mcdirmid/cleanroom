@@ -1,13 +1,13 @@
 # Grounded Specification Language (GSL): Declarative Front-End for Statistically Independent Neural Compilation
 
 **Document Status:** Architectural Design & Theoretical Specification  
-**Canonical Path:** [`design-docs/grounded_specification_language_and_neural_compilation.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/grounded_specification_language_and_neural_compilation.md)  
+**Canonical Path:** [`design-docs/grounded_specification_language_and_neural_compilation.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/grounded_specification_language_and_neural_compilation.md)  
 **Related Documents:**
-- [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md): Theoretical foundation for double-blind neural cleanroom synthesis.
-- [`high_level_spec_format.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/high_level_spec_format.md): Literate high-level specification format and semantic markers.
-- [`planning_format.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/planning_format.md): Factored contracts and epistemic grounding DAGs.
-- [`low_level_spec_format.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/low_level_spec_format.md): Typed Python interface stubs and Design-by-Contract constraints.
-- [`toolchain_and_verification.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md): Deterministic verification pipelines, type-checkers, and test coverage engines.
+- [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/paper_submission_design_doc.md): Theoretical foundation for double-blind neural autofab synthesis.
+- [`high_level_spec_format.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/high_level_spec_format.md): Literate high-level specification format and semantic markers.
+- [`planning_format.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/planning_format.md): Factored contracts and epistemic grounding DAGs.
+- [`low_level_spec_format.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/low_level_spec_format.md): Typed Python interface stubs and Design-by-Contract constraints.
+- [`toolchain_and_verification.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/toolchain_and_verification.md): Deterministic verification pipelines, type-checkers, and test coverage engines.
 
 ---
 
@@ -165,11 +165,11 @@ Literal           ::= StringLiteral | IntLiteral | BoolLiteral | "nil" ;
 
 ### 3.3 Concrete Syntax Example: Autonomous Workspace Manager
 
-The following snippet illustrates a complete, modular GSL component specifying a Cleanroom-style isolated workspace manager:
+The following snippet illustrates a complete, modular GSL component specifying a Autofab-style isolated workspace manager:
 
 ```gsl
-module cleanroom.workspace_manager {
-    import cleanroom.filesystem_ext as fs;
+module autofab.workspace_manager {
+    import autofab.filesystem_ext as fs;
 
     entity WorkspaceId {
         value: String;
@@ -291,7 +291,7 @@ Once `gslc` certifies that the AST is 100% grounded, the compiler deterministica
 Taking the GSL example from Section 3.3, the transpiler emits the following exact Markdown artifact:
 
 ````markdown
-# Specification Module: `cleanroom.workspace_manager`
+# Specification Module: `autofab.workspace_manager`
 
 ## 1. Declarative Entities & Structural Typings
 
@@ -301,8 +301,8 @@ Taking the GSL example from Section 3.3, the transpiler emits the following exac
 ### Entity: `WorkspaceDescriptor`
 - **Field `id`**: Type `WorkspaceId`. Mandatory reference to the owning workspace identity.
 - **Field `role_name`**: Type `String`. Identifies the assigned agent or system role.
-- **Field `root_path`**: Type `cleanroom.filesystem_ext.DirectoryPath`. The host filesystem root.
-- **Field `isolated_mounts`**: Type `Set<cleanroom.filesystem_ext.DirectoryPath>`. Explicit set of mount paths.
+- **Field `root_path`**: Type `autofab.filesystem_ext.DirectoryPath`. The host filesystem root.
+- **Field `isolated_mounts`**: Type `Set<autofab.filesystem_ext.DirectoryPath>`. Explicit set of mount paths.
 - **Field `is_read_only`**: Type `Boolean`. Defaults to `false`.
 
 ### Lifecycle State Machine: `WorkspaceLifecycle` for `WorkspaceDescriptor`
@@ -320,12 +320,12 @@ Taking the GSL example from Section 3.3, the transpiler emits the following exac
 - **Invariants**:
   - The root path `ws.root_path.exists` MUST be `true`.
   - For every path `mount` in `ws.isolated_mounts`, `mount.is_absolute` MUST be `true`.
-  - If `ws.is_read_only` is `true`, then for every path `mount` in `ws.isolated_mounts`, `mount.permissions` MUST equal `cleanroom.filesystem_ext.ReadOnly`.
+  - If `ws.is_read_only` is `true`, then for every path `mount` in `ws.isolated_mounts`, `mount.permissions` MUST equal `autofab.filesystem_ext.ReadOnly`.
 
 ## 3. Operations & Behavioral Contracts
 
 ### Operation: `provision_workspace`
-- **Signature**: `provision_workspace(id: WorkspaceId, role: String, target_dir: cleanroom.filesystem_ext.DirectoryPath) -> WorkspaceDescriptor`
+- **Signature**: `provision_workspace(id: WorkspaceId, role: String, target_dir: autofab.filesystem_ext.DirectoryPath) -> WorkspaceDescriptor`
 - **Preconditions**:
   - `[target_directory_vacant]`: `target_dir.exists` MUST be `false` prior to invocation.
   - `[role_identifier_nonempty]`: `role.length` MUST be strictly greater than `0`.
@@ -338,8 +338,8 @@ Taking the GSL example from Section 3.3, the transpiler emits the following exac
   - `[result_grounded]`: Invariant `HasValidIsolation(result)` MUST evaluate to `true`.
   - `[directory_created]`: `target_dir.exists` MUST evaluate to `true`.
 - **Operational Grounding**:
-  - The implementation MUST execute `cleanroom.filesystem_ext.create_directory(target_dir)`.
-  - The implementation MUST execute `cleanroom.filesystem_ext.set_permissions(target_dir, cleanroom.filesystem_ext.OwnerReadWrite)`.
+  - The implementation MUST execute `autofab.filesystem_ext.create_directory(target_dir)`.
+  - The implementation MUST execute `autofab.filesystem_ext.set_permissions(target_dir, autofab.filesystem_ext.OwnerReadWrite)`.
 
 ### Operation: `isolate_workspace`
 - **Signature**: `isolate_workspace(ws: WorkspaceDescriptor) -> WorkspaceDescriptor`
@@ -351,18 +351,18 @@ Taking the GSL example from Section 3.3, the transpiler emits the following exac
   - `[marked_readonly]`: `result.is_read_only` MUST be `true`.
   - `[isolation_perserved]`: Invariant `HasValidIsolation(result)` MUST evaluate to `true`.
 - **Operational Grounding**:
-  - The implementation MUST execute `cleanroom.filesystem_ext.apply_chroot(ws.root_path, ws.isolated_mounts)`.
+  - The implementation MUST execute `autofab.filesystem_ext.apply_chroot(ws.root_path, ws.isolated_mounts)`.
 ````
 
 ---
 
 ## 6. Statistically Independent Neural Compilation Pipeline
 
-### 6.1 The Dual-Agent Cleanroom Architecture
+### 6.1 The Dual-Agent Autofab Architecture
 
 A single LLM prompted to generate both code and tests exhibits **confirmation bias**: if the model misunderstands an invariant, it generates a bug in `lib.py` and simultaneously writes a flawed test in `test.py` that confirms the bug.
 
-To achieve sound compilation, GSL employs **Double-Blind Neural Cleanroom Synthesis**:
+To achieve sound compilation, GSL employs **Double-Blind Neural Autofab Synthesis**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -430,7 +430,7 @@ Because the tasks are asymmetric (program construction vs. property-based falsif
 
 $$P(\text{Coincident Acceptance}) = P(\mathcal{E}_A \mid S) \cdot P(\mathcal{E}_B \mid S) \ll \epsilon$$
 
-Where $\epsilon \to 0$ as test coverage and property density increase. This breaks Knight & Leveson's classic multi-version programming critique: coincident human errors stemmed from common human mental models reading vague prose requirements; neural cleanroom agents reading **deterministically grounded specifications** with orthogonal roles do not share human cognitive shortcuts.
+Where $\epsilon \to 0$ as test coverage and property density increase. This breaks Knight & Leveson's classic multi-version programming critique: coincident human errors stemmed from common human mental models reading vague prose requirements; neural autofab agents reading **deterministically grounded specifications** with orthogonal roles do not share human cognitive shortcuts.
 
 ### 6.3 Convergence and Diagnostic Blame Attribution
 
@@ -527,9 +527,9 @@ The following table contrasts GSL with classical specification systems, post-hoc
 
 ---
 
-## 9. Implementation Roadmap & Integration into Cleanroom
+## 9. Implementation Roadmap & Integration into Autofab
 
-The GSL compiler and transpilation pipeline integrate directly into the existing Cleanroom architecture (`update_with_ai` and `update_python_with_ai`), advancing Cleanroom's 5-stage pipeline into a unified formal toolchain:
+The GSL compiler and transpilation pipeline integrate directly into the existing Autofab architecture (`autofab` and `autofab_python`), advancing Autofab's 5-stage pipeline into a unified formal toolchain:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -557,7 +557,7 @@ The GSL compiler and transpilation pipeline integrate directly into the existing
 │              │                                         │                               │
 │              └────────────────────┬────────────────────┘                               │
 │                                   ▼                                                    │
-│                        [ Double-Blind Cleanroom ]                                      │
+│                        [ Double-Blind Autofab ]                                      │
 │                        [ lib.py  vs  test.py    ]                                      │
 │                                                                                        │
 └────────────────────────────────────────────────────────────────────────────────────────┘
@@ -577,22 +577,22 @@ The GSL compiler and transpilation pipeline integrate directly into the existing
   - State variant exhaustiveness checker.
   - Finite quantifier domain verification.
   - Acyclic module dependency graph validator.
-- Expose deterministic CLI: `cleanroom gsl check <file.gsl>`.
+- Expose deterministic CLI: `autofab gsl check <file.gsl>`.
 
 #### Phase 3: Deterministic Natural Language Transpiler (`parts/gsl/transpiler`)
 - Implement deterministic Markdown code generator from validated GSL AST.
 - Enforce strict typesetting standards: italic semantic markers, bulleted contract items, bracketed slug generation (`[slug]`).
 - Validate round-trip semantic fidelity.
 
-#### Phase 4: Cleanroom Orchestrator Binding (`parts/systems`)
-- Integrate GSL compilation into `bin/cleanroom` and `cleanroom_roles.toml`.
+#### Phase 4: Autofab Orchestrator Binding (`parts/systems`)
+- Integrate GSL compilation into `bin/autofab` and `autofab_roles.toml`.
 - Configure `Option 1` (headless CI loop) and `Option 4` (subagent-driven workspaces) to accept `.gsl` files as upstream root targets.
 - Enable automatic dispatch of the transpiled prose to double-blind roles:
-  - `role_workspaces/<ws>_lib` receives transpiled prose with constructive synthesis system prompt.
-  - `role_workspaces/<ws>_test` receives transpiled prose with property-based falsification prompt.
+  - `autofab_autofab_role_workspaces/<ws>_lib` receives transpiled prose with constructive synthesis system prompt.
+  - `autofab_autofab_role_workspaces/<ws>_test` receives transpiled prose with property-based falsification prompt.
 
 #### Phase 5: Empirical Verification & Benchmarking
-- Benchmark GSL against standard natural language prompts on HumanEval, SWE-bench, and Cleanroom domain modules.
+- Benchmark GSL against standard natural language prompts on HumanEval, SWE-bench, and Autofab domain modules.
 - Measure:
   - Rate of coincident hallucinations ($P(\mathcal{E}_A \cap \mathcal{E}_B)$).
   - First-pass compilation success rate.

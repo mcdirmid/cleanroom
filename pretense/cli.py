@@ -4,8 +4,15 @@ import os
 import sys
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-for _p in (_REPO_ROOT, _REPO_ROOT / "update_python_with_ai", _REPO_ROOT / "update_with_ai"):
+_curr = Path(__file__).resolve().parent.parent
+_REPO_ROOT = _curr
+while _curr and _curr != _curr.parent:
+    if (_curr / "pyproject.toml").is_file():
+        _REPO_ROOT = _curr
+        break
+    _curr = _curr.parent
+
+for _p in (_REPO_ROOT, _REPO_ROOT / "autofab_python", _REPO_ROOT / "autofab"):
     _str_p = str(_p)
     if _p.is_dir() and _str_p not in sys.path:
         sys.path.insert(0, _str_p)
@@ -20,7 +27,7 @@ while _curr and _curr != _curr.parent:
         break
     _curr = _curr.parent
 
-from update_python_with_ai.parts.pretense.lib.pretense_impl import main, run_pretense_cli
+from pretense.parts.pretense.lib.pretense_impl import main, run_pretense_cli
 
 if __name__ == "__main__":
     sys.exit(main())

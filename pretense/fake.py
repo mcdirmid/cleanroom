@@ -1,5 +1,6 @@
 """In-memory Fake adapter synthesis."""
 
-from update_python_with_ai.parts.pretense.lib.pretense import FakeAdapter
+from pretense.parts.pretense.lib.pretense import FakeAdapter, synthesize_fake
 
-__all__ = ["FakeAdapter"]
+__all__ = ["FakeAdapter", "synthesize_fake"]
+

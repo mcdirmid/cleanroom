@@ -1,6 +1,6 @@
 """Sentinels and result wrappers for Pretense state machines."""
 
-from update_python_with_ai.parts.pretense.lib.pretense import (
+from pretense.parts.pretense.lib.pretense import (
     AmbiguousTransitionError,
     NoMatchingTransitionError,
     NotBound,

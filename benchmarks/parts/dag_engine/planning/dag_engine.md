@@ -54,10 +54,11 @@ By factoring graph construction, topological sorting, failure propagation polici
 - A DAG runner executes graph waves concurrently under an assigned failure policy defaulting to fail fast and a maximum concurrency limit defaulting to four, applies retries, and returns a DAG run report. [run_graph_execution]
 - When execution exceeds an allocated timeout, the DAG runner raises DAG timeout error. [handle_execution_timeout]
 - When active execution is cancelled, the DAG runner transitions non-terminal nodes to cancelled and raises DAG cancelled error. [cancel_graph_execution]
+- A DAG runner provides a test-only query accessor indicating whether execution cancellation has been signaled. [observe_runner_cancellation]
 
 ### Woven Contracts
 
-- Graph construction, validation, topological evaluation, and critical path analysis coordinate with wave scheduling, failure propagation, and concurrent execution. [add_node_to_graph, add_edge_between_nodes, validate_graph_invariants, compute_topological_sort, compute_critical_path, resolve_next_execution_wave, mark_node_succeeded, mark_node_failed, apply_fail_fast_policy, apply_skip_downstream_policy, apply_continue_on_error_policy, check_execution_finished, run_graph_execution, handle_execution_timeout, cancel_graph_execution]
+- Graph construction, validation, topological evaluation, and critical path analysis coordinate with wave scheduling, failure propagation, and concurrent execution. [add_node_to_graph, add_edge_between_nodes, validate_graph_invariants, compute_topological_sort, compute_critical_path, resolve_next_execution_wave, mark_node_succeeded, mark_node_failed, apply_fail_fast_policy, apply_skip_downstream_policy, apply_continue_on_error_policy, check_execution_finished, run_graph_execution, handle_execution_timeout, cancel_graph_execution, observe_runner_cancellation]
 
 ## Grounding
 
@@ -72,7 +73,7 @@ By factoring graph construction, topological sorting, failure propagation polici
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-26T21:35:31Z
-LAST_CHANGED: 2026-10-21T18:13:00Z
-CHANGE: Align planning contracts with operation-driven failure policies and continue on error contract
+LAST_CHANGED: 2026-11-02T19:55:00Z
+CHANGE: Specify test-only observe_runner_cancellation contract on DAGRunner
 SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
 -->

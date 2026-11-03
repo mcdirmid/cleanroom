@@ -1,8 +1,8 @@
-# Cleanroom Empirical Benchmark Suite & Cross-Model Evaluation Design Document
+# Autofab Empirical Benchmark Suite & Cross-Model Evaluation Design Document
 
 > **Authoritative Technical & Empirical Benchmarking Specification**  
-> This document specifies the comprehensive benchmarking architecture, cross-model evaluation framework, and empirical verification suite for Cleanroom.
-> It operationalizes **Task 2 (Cross-Model Empirical Benchmarking Suite)** from [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md) and provides the complete experimental methodology required by the research paper: [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md).
+> This document specifies the comprehensive benchmarking architecture, cross-model evaluation framework, and empirical verification suite for Autofab.
+> It operationalizes **Task 2 (Cross-Model Empirical Benchmarking Suite)** from [`todo.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/todo.md) and provides the complete experimental methodology required by the research paper: [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/paper_submission_design_doc.md).
 
 ---
 
@@ -53,8 +53,8 @@
      - [Ephemeral Scope Isolation & Telemetry Invariants](#ephemeral-scope-isolation--telemetry-invariants)
      - [The Single Source of Truth & Scientific Fairness (Steel-Manning the Baseline)](#the-single-source-of-truth--scientific-fairness-steel-manning-the-baseline)
      - [The Contamination Trap: Cognitive Bias vs. Structural Independence](#the-contamination-trap-cognitive-bias-vs-structural-independence)
-   - [Baseline 3: Cleanroom Single-Model ($\mathcal{I} = 0$, Task Asymmetry)](#baseline-3-cleanroom-single-model-mathcali--0-task-asymmetry)
-   - [Baseline 4: Cleanroom Heterogeneous Cross-Tier Ensembles](#baseline-4-cleanroom-heterogeneous-cross-tier-ensembles)
+   - [Baseline 3: Autofab Single-Model ($\mathcal{I} = 0$, Task Asymmetry)](#baseline-3-autofab-single-model-mathcali--0-task-asymmetry)
+   - [Baseline 4: Autofab Heterogeneous Cross-Tier Ensembles](#baseline-4-autofab-heterogeneous-cross-tier-ensembles)
 7. [Unified Metrics, Measurement Instruments & Telemetry](#7-unified-metrics-measurement-instruments--telemetry)
    - [Correctness, Defect Escape & Soundness Metrics](#correctness-defect-escape--soundness-metrics)
    - [Operational Economics, Token Efficiency & KV Cache Metrics](#operational-economics-token-efficiency--kv-cache-metrics)
@@ -78,9 +78,9 @@
 
 ## 1. Executive Summary & Core Objectives
 
-The Cleanroom empirical evaluation must establish two decisive contributions:
-1. **Academic & Theoretical Rigor (The Research Paper)**: Provide empirical validation for the seven core Research Questions (RQ1–RQ7) articulated in [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md), demonstrating that double-blind isolation ($\mathcal{I} = 0$), task asymmetry, and bipartite boundary contracts eliminate coincident errors, defeat Goodhart's Law, and guarantee a 100% fail-stop safety invariant without human code inspection.
-2. **Industrial & Operational Economics (The Production Framework)**: Operationalize Task 2 from [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md) by implementing an automated, reproducible benchmarking harness (`bin/evaluate_model_efficiency.py`) that profiles token expenditure, prompt-cache hit rates, step latencies, and monetary costs across a heterogeneous 4-tier model spectrum—from free local consumer hardware to frontier cloud reasoning engines.
+The Autofab empirical evaluation must establish two decisive contributions:
+1. **Academic & Theoretical Rigor (The Research Paper)**: Provide empirical validation for the seven core Research Questions (RQ1–RQ7) articulated in [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/paper_submission_design_doc.md), demonstrating that double-blind isolation ($\mathcal{I} = 0$), task asymmetry, and bipartite boundary contracts eliminate coincident errors, defeat Goodhart's Law, and guarantee a 100% fail-stop safety invariant without human code inspection.
+2. **Industrial & Operational Economics (The Production Framework)**: Operationalize Task 2 from [`todo.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/todo.md) by implementing an automated, reproducible benchmarking harness (`bin/evaluate_model_efficiency.py`) that profiles token expenditure, prompt-cache hit rates, step latencies, and monetary costs across a heterogeneous 4-tier model spectrum—from free local consumer hardware to frontier cloud reasoning engines.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -117,7 +117,7 @@ The Cleanroom empirical evaluation must establish two decisive contributions:
 
 ### Formal Information Confinement & Double-Blind Invariant
 
-The fundamental theorem of Cleanroom synthesis asserts that the mutual information between the synthesized implementation code ($P$) and the synthesized verification test suite ($V$), conditioned on the low-level typed specification ($S = \langle \Sigma, \mathcal{C} \rangle$), must be strictly zero:
+The fundamental theorem of Autofab synthesis asserts that the mutual information between the synthesized implementation code ($P$) and the synthesized verification test suite ($V$), conditioned on the low-level typed specification ($S = \langle \Sigma, \mathcal{C} \rangle$), must be strictly zero:
 
 $$\mathcal{I}(P; V \mid S) = 0$$
 
@@ -131,7 +131,7 @@ The empirical benchmark harness must physically enforce this condition via ephem
 
 Classical N-Version Programming (NVP) (Avizienis 1985) failed because independent human teams sharing problem requirements still committed identical, coincident errors (Knight & Leveson 1986). In neural code generation, generating multiple implementations ($P_1, P_2, \dots$) or voting across models repeats the Knight-Leveson trap.
 
-Cleanroom breaks coincident errors through **Task Asymmetry**:
+Autofab breaks coincident errors through **Task Asymmetry**:
 - The **Primal Task** (Library Code Synthesizer $\mathcal{S}$) executes a constructive synthesis mapping:
   $$\mathcal{S}: S \longrightarrow P \quad \left(X \to Y\right)$$
 - The **Dual Task** (Verification Certifier $\mathcal{D}$) executes a predicate refutation mapping:
@@ -145,9 +145,9 @@ Because the output spaces, prompt templates, and computational tasks are fundame
 
 ### The Fail-Safe Invariant: Non-Convergence as a Safety Victory
 
-A central tenet of Cleanroom is the shift from **Liveness** to **Safety**:
+A central tenet of Autofab is the shift from **Liveness** to **Safety**:
 - Traditional DevAI loops prioritize liveness: forcing a conversation to output code at all costs, resulting in silent defect escapes.
-- Cleanroom prioritizes safety: when specifications are contradictory, ambiguous, or ungrounded, the system must **fail-stop** via deterministic non-convergence:
+- Autofab prioritizes safety: when specifications are contradictory, ambiguous, or ungrounded, the system must **fail-stop** via deterministic non-convergence:
 
 $$P(\text{Compile to } \mathbf{CLEAN} \mid S \text{ is Contradictory}) = 0.0$$
 
@@ -157,7 +157,7 @@ The benchmark suite must empirically measure this invariant by injecting broken,
 
 When LLM coding agents are exposed to raw execution profiles, flame graphs, or benchmark scores, they act as adversarial Goodhart optimizers: hardcoding inputs, stripping bounds checks, and omitting safety validations to minimize the proxy metric.
 
-Cleanroom introduces the **Hidden Benchmark Firewall**:
+Autofab introduces the **Hidden Benchmark Firewall**:
 $$\mathcal{I}(\text{Synthesis Agent}; \text{Profiler Harness}) = 0$$
 
 Performance auditing is mediated exclusively through the Phase 2 Stateful Performance Auditor, which translates physical runtime bottlenecks into abstract architectural advice expressed strictly in declarative specification data invariants (e.g., zero-copy ring buffers, generator pipelines). The benchmark suite evaluates this via the **Goodhart Divergence Index ($GDI$)**:
@@ -194,15 +194,15 @@ The empirical benchmarking framework evaluates models across four distinct opera
 
 ### Tier 1: Free Local Tier ($0 in Token Costs)
 
-Designed for zero-marginal-cost execution, local continuous integration, air-gapped development, and stress-testing Cleanroom's architectural gatekeeper invariants against smaller parameter models.
+Designed for zero-marginal-cost execution, local continuous integration, air-gapped development, and stress-testing Autofab's architectural gatekeeper invariants against smaller parameter models.
 
 > [!IMPORTANT]
-> **Strict Local Runtime Standard**: Cleanroom relies **exclusively on `omlx`** for all local model execution on Apple Silicon. External inference engines (such as vLLM, llama.cpp, or Ollama) are omitted to maximize Apple Silicon unified memory bandwidth, native Metal acceleration, and seamless local OpenAI-compatible endpoint compatibility.
+> **Strict Local Runtime Standard**: Autofab relies **exclusively on `omlx`** for all local model execution on Apple Silicon. External inference engines (such as vLLM, llama.cpp, or Ollama) are omitted to maximize Apple Silicon unified memory bandwidth, native Metal acceleration, and seamless local OpenAI-compatible endpoint compatibility.
 
 1. **Qwen 3.6 35B A3B (6-bit Quantization / Multi-Token Prediction - MTP)**:
    - *Architecture*: Sparse Mixture-of-Experts (MoE) running locally via **`omlx`** on Apple Silicon (M-series with 64GB+ unified memory).
    - *Framework Role*: Primary local orchestrator, multi-step planner, and local subagent driver. Preserves history traces, enforces structured function calling, and executes terminal workflows efficiently without memory overflow.
-   - *Paper Significance*: Proves that Cleanroom's kernel-enforced double-blind isolation and two-pass verification gateway force even resource-constrained local models to converge on verified, zero-defect code without human developer intervention.
+   - *Paper Significance*: Proves that Autofab's kernel-enforced double-blind isolation and two-pass verification gateway force even resource-constrained local models to converge on verified, zero-defect code without human developer intervention.
 
 2. **Qwen 27B (4-bit Quantization / MTP)**:
    - *Architecture*: Dense local model running locally via **`omlx`** on Apple Silicon, optimized for high-speed local inference (> 45 tokens/sec).
@@ -264,7 +264,7 @@ State-of-the-art enterprise frontier engines defining the theoretical performanc
 
 ### Three-Tier Target Size Hierarchy & Model Capacity Frontiers
 
-Cleanroom calibrates benchmark task sizes across three distinct code-scale tiers, matching the empirical capability boundaries of local versus frontier models:
+Autofab calibrates benchmark task sizes across three distinct code-scale tiers, matching the empirical capability boundaries of local versus frontier models:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -284,14 +284,14 @@ Cleanroom calibrates benchmark task sizes across three distinct code-scale tiers
 │   • Model Scope: Empirical capacity ceiling for Tier 1 Local Models (omlx Qwen 35B/27B)│
 │     and Tier 2 Budget Cloud (DeepSeek V4.1 / Gemini 3.8 Flash).                        │
 │   • Purpose: Empirically proving that local 35B models on Apple Silicon can compile    │
-│     ~1,000 LOC production systems without regression when isolated by Cleanroom.       │
+│     ~1,000 LOC production systems without regression when isolated by Autofab.       │
 │                                                                                        │
 │   TIER C: HEAVYWEIGHT FRONTIER STRESS BENCHMARKS (2,000+ LOC Lib Code)                 │
 │   • Target: Complete Transactional Storage / Distributed Node Engine (2,000+ LOC)      │
 │   • Model Scope: Exclusively Tier 3 (o3-mini, Sonnet 3.7) & Tier 4 (Argon, Opus, Sol)  │
 │   • Purpose: Pushing models to the context limit; evaluating whether deep reasoning   │
 │     trees prevent attention degradation and instruction drift on 2,000+ line monoliths │
-│     versus Cleanroom's factored modular units (RQ3 Modularity Strategy).               │
+│     versus Autofab's factored modular units (RQ3 Modularity Strategy).               │
 │                                                                                        │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -307,7 +307,7 @@ Cleanroom calibrates benchmark task sizes across three distinct code-scale tiers
    - *Domain*: Complex, stateful, multi-component systems software (e.g. transactional storage engine or end-to-end workspace lifecycle pipeline).
    - *Evaluates*: **RQ3 (Modularity Strategy)**:
      - *Monolith Condition*: Synthesizing the entire 2,000+ LOC system in a single shot. Local models fail; frontier models are stress-tested for attention dilution, CUJ edge-case omission, and regression churn.
-     - *Modular Cleanroom Condition*: The 2,000+ LOC system is decomposed into 4–5 decoupled units (~400–600 LOC each), enabling even Tier 1 local models to compile every component cleanly!
+     - *Modular Autofab Condition*: The 2,000+ LOC system is decomposed into 4–5 decoupled units (~400–600 LOC each), enabling even Tier 1 local models to compile every component cleanly!
    - *Models Tested*: Claude 3.5/3.7 Sonnet, OpenAI o3-mini, Gemini 4 Argon, Claude Opus 5.5, OpenAI gpt-6.1-sol, Meta Muse Wonder Full.
 2. **Anchor Target 2: CPython Algorithmic Systems Module (`heapq` & `graphlib`)**
    - *Domain*: Pure algorithmic contracts, cycle detection, and tie-breaking invariants.
@@ -338,7 +338,7 @@ The following matrix standardizes the operational role, execution harness, and f
 
 ### Operational Harness Mapping
 
-To execute benchmarks deterministically across diverse platforms, Cleanroom maps models to runtime harnesses:
+To execute benchmarks deterministically across diverse platforms, Autofab maps models to runtime harnesses:
 
 1. **Option 1: Custom In-Process Loop Harness (`--harness loop`) with `omlx`**:
    - Universal adapter for **Local Models (Qwen 35B / 27B)** via the local **`omlx`** server on Apple Silicon.
@@ -353,17 +353,17 @@ To execute benchmarks deterministically across diverse platforms, Cleanroom maps
 
 ### Dynamic Model Catalog & Declarative Configuration
 
-To avoid code staleness, rate card hardcoding, or artificial vendor lock-in, Cleanroom decouples all model specifications, endpoint URLs, and token rate cards into declarative configuration files:
-- **Primary Source**: `~/.config/cleanroom/model_configs.toml` (managed via `app_info_ext` and user preferences).
+To avoid code staleness, rate card hardcoding, or artificial vendor lock-in, Autofab decouples all model specifications, endpoint URLs, and token rate cards into declarative configuration files:
+- **Primary Source**: `~/.config/autofab/model_configs.toml` (managed via `app_info_ext` and user preferences).
 - **Fallback Candidate**: Repository-level candidate files (`model_configs.toml`) or environment overrides (`CLEANROOM_MODEL_CONFIG_FILE`).
-- **Canonical Starter Template & Schema**: `update_python_with_ai/templates/model_configs.toml` serves as the authoritative template and schema definition for initial provisioning via `cleanroom configure`.
+- **Canonical Starter Template & Schema**: `autofab_python/templates/model_configs.toml` serves as the authoritative template and schema definition for initial provisioning via `autofab configure`.
 - **Dynamic Resolution (`model_config_ext`)**: The benchmark evaluator invokes `load_model_catalog()` to dynamically extract model profiles, pricing rates ($R_{\text{in}}^{\text{uncached}}$, $R_{\text{in}}^{\text{cached}}$, $R_{\text{out}}$), capability tiers (Tier 1 Local, Tier 2 Budget, Tier 3 Mid-Tier, Tier 4 Frontier), and default execution harnesses without modifying library code or AST signatures.
 
 ---
 
 ## 4. Paper Research Question (RQ) Alignment Matrix
 
-The benchmark suite directly implements the experimental evaluation protocols required by the 7 Research Questions in [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md).
+The benchmark suite directly implements the experimental evaluation protocols required by the 7 Research Questions in [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/paper_submission_design_doc.md).
 
 > [!TIP]
 > **Time-Calibrated Lean Experimental Matrix**: To ensure benchmark flights finish quickly within practical time and API credit budgets while preserving full academic rigor, task scales are calibrated to **lean, high-leverage unit counts**:
@@ -399,13 +399,13 @@ The benchmark suite directly implements the experimental evaluation protocols re
 - **Objective**: Empirically prove that:
   1. Unconfined LLMs ($\mathcal{I}(P; V \mid S) > 0$) replicate coincident errors on edge cases;
   2. Task asymmetry under double-blind isolation ($\mathcal{I} = 0$, `chmod 444`) breaks error correlation, even with a single foundation model;
-  3. Smaller local models (Qwen 35B / 27B via `omlx`) achieve near-zero defect escape rates under Cleanroom gatekeeping.
+  3. Smaller local models (Qwen 35B / 27B via `omlx`) achieve near-zero defect escape rates under Autofab gatekeeping.
 - **Lean Scale**: **8 curated test units** (4 from CPython `heapq`/`graphlib`, 4 from SemVer 2.0 solver).
 - **Conditions**:
   - *Condition 1 (Task Homogeneity)*: Model generates two implementations $P_1, P_2$ from spec $S$ (classical N-version programming).
   - *Condition 2 (Joint Context / Baseline 2)*: Single agent generates both `lib.py` and `test.py` in the same conversational context ($\mathcal{I} > 0$).
-  - *Condition 3 (Cleanroom Single-Model)*: Same model assigned to asymmetric tasks in physically isolated workspaces ($W_{\text{lib}}, W_{\text{test}}$) under `chmod 444` ($\mathcal{I} = 0$).
-  - *Condition 4 (Cleanroom Heterogeneous)*: Different models assigned to primal and dual roles (e.g., DeepSeek for $P$, Gemini for $V$).
+  - *Condition 3 (Autofab Single-Model)*: Same model assigned to asymmetric tasks in physically isolated workspaces ($W_{\text{lib}}, W_{\text{test}}$) under `chmod 444` ($\mathcal{I} = 0$).
+  - *Condition 4 (Autofab Heterogeneous)*: Different models assigned to primal and dual roles (e.g., DeepSeek for $P$, Gemini for $V$).
 - **Experiment 1 (The Attractor State Ambiguity Test)**:
   - **8 curated tasks** containing deliberate specification ambiguities (e.g., `<` vs. `<=`, empty collection returns, semver pre-release precedence).
   - Measures the shift from silent false convergence (shipping buggy code) to deterministic non-convergence / fail-stop with diagnostic blame.
@@ -418,7 +418,7 @@ The benchmark suite directly implements the experimental evaluation protocols re
 - **Lean Scale**: **10 curated boundary edge cases** (5 in CPython algorithmic modules, 5 in Generalized DAG Wave Engine).
 - **Conditions**:
   - *Regimen A (Directional / One-Sided)*: Contracts specify only the positive condition ($\Phi(x) \implies \text{SuccessResult}(x)$).
-  - *Regimen B (Cleanroom Bipartite)*: Contracts mandate dual atomic slugs ($\langle [s^+]: \Phi(x) \implies \text{Success}, [s^-]: \neg \Phi(x) \implies \text{Error} \rangle$).
+  - *Regimen B (Autofab Bipartite)*: Contracts mandate dual atomic slugs ($\langle [s^+]: \Phi(x) \implies \text{Success}, [s^-]: \neg \Phi(x) \implies \text{Error} \rangle$).
 - **Experiment 2 (Weight Suppression Baseline / Algorithmic Guidance $\mathcal{G}$)**:
   - Evaluated on **2 classic algorithms** known to exhibit bugs in open-source training data:
     1. Tarjan's Strongly Connected Components (SCC) cycle detection in `graphlib`.
@@ -436,7 +436,7 @@ The benchmark suite directly implements the experimental evaluation protocols re
   5. *Democratization of Large-Scale Synthesis*: Proving that while 2,000+ LOC monolithic targets cause failure or severe regression churn even on frontier models, decomposing the system into 4–5 units (~400–600 LOC each) allows **Tier 1 Local Models (`omlx` Qwen 35B / 27B)** to compile the entire 2,000+ LOC system cleanly without cloud API costs!
 - **Subject System**: Evaluated on a **Heavyweight Systems Subsystem (2,000+ LOC)**:
   - *Condition Monolith*: 1 massive single-file implementation (~2,000+ LOC lib + 1,200 LOC test). Tier 1 local models fail; Tier 3 & 4 frontier models suffer context degradation and high regression churn.
-  - *Condition Modular Cleanroom*: 4–5 Decoupled Units (~400–600 LOC each), each realizing a typed interface stub (`*.pyi`). Tier 1 local models succeed with 100% normalized coverage and 0% regression churn.
+  - *Condition Modular Autofab*: 4–5 Decoupled Units (~400–600 LOC each), each realizing a typed interface stub (`*.pyi`). Tier 1 local models succeed with 100% normalized coverage and 0% regression churn.
 - **Edge-Case Evaluation**: **12 high-impact domain boundary edge cases** verifying stateful recovery, boundary invariants, and inter-unit handoffs.
 
 ### RQ4: Compositional Soundness, Non-Contaminating Blame, & Fail-Safe Invariant
@@ -458,7 +458,7 @@ The benchmark suite directly implements the experimental evaluation protocols re
   - *4 Feature Additions*: e.g., adding hyphenated version range matching, priority wave weighting.
   - *3 Contract Modifications*: e.g., changing tie-breaking precedence, altering cycle-detection error reporting format.
   - *3 Modularity Refactorings*: e.g., extracting version constraint tokenizers into a distinct protocol.
-- **Protocol**: Human edits strictly `low/*.pyi`; Cleanroom DAG detects dirty nodes; workers converge to `CLEAN`; verify 0 manual edits in `lib/` or `tests/`.
+- **Protocol**: Human edits strictly `low/*.pyi`; Autofab DAG detects dirty nodes; workers converge to `CLEAN`; verify 0 manual edits in `lib/` or `tests/`.
 
 ### RQ6: Concurrency Soundness: Adversarial Interleaving & Specialized Triage
 
@@ -484,25 +484,25 @@ The benchmark suite directly implements the experimental evaluation protocols re
 ## 5. Subject Systems & Specification-Grounded Benchmark Corpora
 
 > [!IMPORTANT]
-> **The Specification Primacy Invariant**: Having an external binary oracle (such as native `git` CLI) is meaningless without a formal, machine-checkable specification ($S = \langle \Sigma, \mathcal{C} \rangle$). Cleanroom does not generate code from thin air against test binaries; it compiles typed specifications. Therefore, benchmark targets are selected where specifications are **grounded in established standards (PEPs, RFCs, and formal contracts)** rather than requiring ad-hoc manual specification writing for synthetic toy problems.
+> **The Specification Primacy Invariant**: Having an external binary oracle (such as native `git` CLI) is meaningless without a formal, machine-checkable specification ($S = \langle \Sigma, \mathcal{C} \rangle$). Autofab does not generate code from thin air against test binaries; it compiles typed specifications. Therefore, benchmark targets are selected where specifications are **grounded in established standards (PEPs, RFCs, and formal contracts)** rather than requiring ad-hoc manual specification writing for synthetic toy problems.
 
 | Benchmark Suite | Code Size (Lib LOC) | Target Model Tiers | Specification Authority | Key System Invariants |
 | :--- | :---: | :---: | :--- | :--- |
 | **CPython `graphlib` & `heapq`** | **~280–350 LOC** | Universal (All Tiers) | PEP 603 / CPython Standard Library Spec | Cycle detection, dynamic node readiness, heap tie-breakers |
-| **Synchronous DAG Wave Engine (`dag_engine_lite`)** | **~280–350 LOC** | Universal (All Tiers) | Cleanroom Synchronous DAG Spec | Deterministic Kahn's sort, DP critical path, failure policies without concurrency |
-| **Concurrent DAG Wave Engine (`dag_engine`)** | **~480–520 LOC** | Universal (All Tiers) | Cleanroom Concurrent DAG Spec | Thread pool dispatch, barriers, async timeouts, cancellation sweeps |
+| **Synchronous DAG Wave Engine (`dag_engine_lite`)** | **~280–350 LOC** | Universal (All Tiers) | Autofab Synchronous DAG Spec | Deterministic Kahn's sort, DP critical path, failure policies without concurrency |
+| **Concurrent DAG Wave Engine (`dag_engine`)** | **~480–520 LOC** | Universal (All Tiers) | Autofab Concurrent DAG Spec | Thread pool dispatch, barriers, async timeouts, cancellation sweeps |
 | **Option A: SemVer 2.0 & Backtracking Solver**| **~700–900 LOC** | Universal (All Tiers) | SemVer 2.0.0 RFC & PubGrub Spec | Caret/tilde range matching (`^0.0.x`), numeric/ASCII precedence, conflict graph |
 | **Option B: RFC 6902 JSON Patch & Merge Patch**| **~580–780 LOC** | Universal (All Tiers) | RFC 6902, RFC 6901, RFC 7396 | Pointer unescape order (`~1` before `~0`), cyclic move cycles, atomic rollback |
 | **Option C: Interval Set Algebra & Calendar**| **~620–860 LOC** | Universal (All Tiers) | ISO 8601 & RFC 5545 Recurrence | Abutting intervals `[a,b) ∪ [b,c)`, century leap rules, month-end clamping |
 | **Option D: Unified Diff & 3-Way Merge Engine**| **~650–900 LOC** | Universal (All Tiers) | Unified Diff (POSIX) & Git 3-Way Merge | Myers SES, false conflict deduplication, line offset drift, fuzzy context |
-| **Workspace Sandboxing Subsystem**| **~900–1,100 LOC**| **Tier 1 Local Ceiling (`omlx`)** & Tier 2 | Cleanroom Workspace & Isolation Spec | Ephemeral worktrees, POSIX `chmod 444` masks, process drains |
+| **Workspace Sandboxing Subsystem**| **~900–1,100 LOC**| **Tier 1 Local Ceiling (`omlx`)** & Tier 2 | Autofab Workspace & Isolation Spec | Ephemeral worktrees, POSIX `chmod 444` masks, process drains |
 | **Heavyweight Systems Engine** | **2,000+ LOC** | **Tier 3 & 4 Stress Ceiling** | Transactional Storage / Pipeline Spec | Multi-component transactions, B-tree balancing, WAL recovery |
 
 ### CPython Standard Library Benchmark Suite (`graphlib` & `heapq`)
 - **`graphlib.TopologicalSorter` (~280 LOC)**: Evaluates dynamic graph dependency scheduling, cycle detection, and state machine transitions (`prepare()`, `get_ready()`, `done()`, `is_active()`).
 - **`heapq` (~350 LOC)**: Evaluates binary heap invariants, custom comparator tie-breaks, and bisection search.
 - **Verification**: Evaluated directly against CPython's official test suites (`test.test_graphlib`, `test.test_heapq`).
-- **Specification Gap Analysis**: Demonstrates how formal bi-conditional Cleanroom contracts eliminate unstated boundary assumptions found in informal human documentation.
+- **Specification Gap Analysis**: Demonstrates how formal bi-conditional Autofab contracts eliminate unstated boundary assumptions found in informal human documentation.
 
 ### Generalized DAG Wave Processing Engines (`dag_engine` vs. `dag_engine_lite`)
 - **`dag_engine_lite` (~280–350 LOC, Synchronous Baseline)**:
@@ -522,7 +522,7 @@ The benchmark suite directly implements the experimental evaluation protocols re
 
 A critical limitation of conventional software engineering and LLM evaluation is the **Code Coverage Illusion**: a test suite can effortlessly attain 100% executable statement and branch coverage while leaving the system completely broken on subtle domain boundary invariants, precedence rules, and edge-case combinations.
 
-To rigorously stress-test Cleanroom's Bipartite Boundary Principle ($\langle [s^+], [s^-] \rangle$), task asymmetry, and dual verification certifier ($\mathcal{D}: S \to V$), Cleanroom evaluates four specification-grounded benchmark corpora targeting **500 to 1,000 lines of `lib/*_impl.py` code**:
+To rigorously stress-test Autofab's Bipartite Boundary Principle ($\langle [s^+], [s^-] \rangle$), task asymmetry, and dual verification certifier ($\mathcal{D}: S \to V$), Autofab evaluates four specification-grounded benchmark corpora targeting **500 to 1,000 lines of `lib/*_impl.py` code**:
 
 #### Option A: SemVer 2.0 Package Constraint & Backtracking Solver (~700–900 LOC)
 - **Specification Authority**: [SemVer 2.0.0 RFC](https://semver.org) and Cargo/npm SemVer Range Specification.
@@ -582,7 +582,7 @@ To rigorously stress-test Cleanroom's Bipartite Boundary Principle ($\langle [s^
   - Multi-tenant directory isolation and ephemeral branch setup.
   - POSIX file permission masking (`chmod 444`) to enforce double-blind purity.
   - Subprocess execution containment, asynchronous stream drains, timeout enforcement, and SIGINT/SIGTERM process tree cleanup.
-- Proves that local consumer models running under Cleanroom can reliably author ~1,000 LOC production systems with zero regression.
+- Proves that local consumer models running under Autofab can reliably author ~1,000 LOC production systems with zero regression.
 
 ### Heavyweight Frontier Stress Benchmark (2,000+ LOC)
 - Reserved exclusively for **Tier 3 (o3-mini, Claude Sonnet 3.5/3.7)** and **Tier 4 (Gemini 4 Argon, Claude Opus 5.5, OpenAI gpt-6.1-sol, Meta Muse)**:
@@ -596,9 +596,9 @@ To separate production compiler tools from empirical research subjects, the benc
 ```
 benchmarks/
 ├── __init__.py
-├── cleanroom_roles.toml           # Lean methodology: low -> spec_qa -> lib / test -> qa -> coverage
+├── autofab_roles.toml           # Lean methodology: low -> spec_qa -> lib / test -> qa -> coverage
 └── parts/
-    ├── cleanroom.toml             # Target methodology: //benchmarks
+    ├── autofab.toml             # Target methodology: //benchmarks
     └── dag_engine/
         ├── __init__.py
         ├── description.md         # Component overview & scope
@@ -607,7 +607,7 @@ benchmarks/
             └── dag_engine_impl.pyi # Implementation Specification (Realizations, @override, GROUNDING algorithms)
 ```
 
-#### The Cleanroom Dual-Specification Pattern
+#### The Autofab Dual-Specification Pattern
 Each benchmark unit requires two complementary typed stubs under `low/`:
 1. **Interface Specification (`<unit>.pyi`)**:
    - Declares the public structural surface: abstract protocols, frozen parameter/result dataclasses, enums, and structured exception hierarchies.
@@ -625,21 +625,21 @@ Each benchmark unit requires two complementary typed stubs under `low/`:
 
 To isolate specification grounding from pre-training memorization:
 1. **Unconditioned Prior Probing**: Query model without specs: *"Provide exact method signatures, exceptions, and edge-case behaviors for module X."* Quantify weight hallucinations and unstated assumptions.
-2. **Conditioned Cleanroom Synthesis**: Provide formal Cleanroom specification $S = \langle \Sigma, \mathcal{C} \rangle$ under Double Hermetic Confinement.
+2. **Conditioned Autofab Synthesis**: Provide formal Autofab specification $S = \langle \Sigma, \mathcal{C} \rangle$ under Double Hermetic Confinement.
 3. **Adherence & Disproof of Contamination**: Verify that synthesized implementation $P$ and certifier $V$ conform 100% to provided contracts, abandoning hallucinated priors. Inject arbitrary contract mutations (e.g., inverting comparison tie-breaking) and confirm models adhere strictly to the mutated spec.
 
 ### Principle of Domain-Specific Generator Preemption (Anti-Parser Rule)
 
-A foundational architectural policy in Cleanroom:
+A foundational architectural policy in Autofab:
 > **Rule**: *Whenever a deterministic domain-specific compiler or generator exists (e.g., ANTLR for grammars, RE2 for regexes, protobuf compilers for IDLs), developers MUST use it.*
 
-Synthesizing parser tables or regex engines with an LLM is an anti-pattern. Therefore, **grammar parsers are explicitly excluded from the benchmark suite**. Cleanroom benchmarks focus exclusively on stateful systems software that cannot be generated by classical domain-specific compilers.
+Synthesizing parser tables or regex engines with an LLM is an anti-pattern. Therefore, **grammar parsers are explicitly excluded from the benchmark suite**. Autofab benchmarks focus exclusively on stateful systems software that cannot be generated by classical domain-specific compilers.
 
 ---
 
 ## 6. Experimental Conditions & Baseline Controls
 
-To evaluate Cleanroom's contributions rigorously against standard industry practices, all benchmark tasks are evaluated across four comparative conditions:
+To evaluate Autofab's contributions rigorously against standard industry practices, all benchmark tasks are evaluated across four comparative conditions:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -656,12 +656,12 @@ To evaluate Cleanroom's contributions rigorously against standard industry pract
 │   • Tests execute in loop; model self-patches until tests pass.                       │
 │   • Subject to coincident errors and tautological self-affirmation.                    │
 │                                                                                        │
-│   BASELINE 3: Cleanroom Single-Model (I = 0, Task Asymmetry)                           │
+│   BASELINE 3: Autofab Single-Model (I = 0, Task Asymmetry)                           │
 │   • Same model assigned to asymmetric tasks in isolated sibling workspaces.            │
 │   • Synthesizer (X -> Y) in W_lib; Certifier (X x Y -> B) in W_test (chmod 444).       │
 │   • Gateway enforces AST coverage, closed-world Pyright, and blame isolation.          │
 │                                                                                        │
-│   BASELINE 4: Cleanroom Heterogeneous Cross-Tier Ensembles                             │
+│   BASELINE 4: Autofab Heterogeneous Cross-Tier Ensembles                             │
 │   • Frontier model as Coordinator / Spec QA Arbiter.                                   │
 │   • Budget Cloud or Local models as Implementation & Test Workers.                     │
 │   • Maximizes cost efficiency while guaranteeing zero defect escape.                   │
@@ -675,17 +675,17 @@ To evaluate Cleanroom's contributions rigorously against standard industry pract
 2. **Baseline 2: Single-Agent Joint Context TDD ($\mathcal{I} > 0$)**:
    - Reflects modern agentic coding benchmarks (e.g., SWE-bench, Devin-style loops) where a single agent authors both code and tests.
    - Captures the Fatal Contamination Trap: mutual confirmation bias where the test suite certifies the implementation's flawed assumptions.
-3. **Baseline 3: Cleanroom Single-Model ($\mathcal{I} = 0$, Task Asymmetry)**:
-   - Evaluates Cleanroom's pure architectural mechanism by holding the model constant.
+3. **Baseline 3: Autofab Single-Model ($\mathcal{I} = 0$, Task Asymmetry)**:
+   - Evaluates Autofab's pure architectural mechanism by holding the model constant.
    - Demonstrates that physical isolation and task asymmetry alone suppress coincident errors and enforce the fail-safe invariant.
-4. **Baseline 4: Cleanroom Heterogeneous Cross-Tier Ensembles**:
+4. **Baseline 4: Autofab Heterogeneous Cross-Tier Ensembles**:
    - Evaluates real-world production deployment: pairing cost-effective models (Tier 1 Local or Tier 2 Budget Cloud) with Tier 3/4 Arbiters.
    - Quantifies the optimal frontier-to-worker economic trade-off.
 
 #### Operational Mechanics & The `--baseline` Architecture
-To establish an empirical baseline representing traditional single-agent software engineering within the benchmark suite, Cleanroom provides native baseline execution via the `--baseline` CLI option (`uv run cleanroom benchmark --baseline` or `uv run bin/evaluate_model_efficiency.py --baseline`). 
+To establish an empirical baseline representing traditional single-agent software engineering within the benchmark suite, Autofab provides native baseline execution via the `--baseline` CLI option (`uv run autofab benchmark --baseline` or `uv run bin/evaluate_model_efficiency.py --baseline`). 
 
-Instead of orchestrating a multi-agent bipartite DAG across Cleanroom roles (`high` $\to$ `planning` $\to$ `scenarios` $\to$ `low` $\to$ `spec_qa` $\to$ `lib` $\to$ `test` $\to$ `qa` $\to$ `coverage`), the baseline evaluator dispatches an autonomous developer agent granted **exactly ONE continuous round** to implement the library, author unit tests, and perform iterative self-verification using standard developer tooling.
+Instead of orchestrating a multi-agent bipartite DAG across Autofab roles (`high` $\to$ `planning` $\to$ `scenarios` $\to$ `low` $\to$ `spec_qa` $\to$ `lib` $\to$ `test` $\to$ `qa` $\to$ `coverage`), the baseline evaluator dispatches an autonomous developer agent granted **exactly ONE continuous round** to implement the library, author unit tests, and perform iterative self-verification using standard developer tooling.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -711,7 +711,7 @@ Instead of orchestrating a multi-agent bipartite DAG across Cleanroom roles (`hi
 │                 │                                                                      │
 │                 ▼                                                                      │
 │   ┌────────────────────────────────────────────────────────────────────────────────┐   │
-│   │ Autonomous Baseline Developer Agent (cleanroom_baseline_worker)                │   │
+│   │ Autonomous Baseline Developer Agent (autofab_baseline_worker)                │   │
 │   │ • Inspects low/*.pyi contract stubs                                            │   │
 │   │ • Implements two-file lib: <unit>.py (interfaces) & <unit>_impl.py (concrete)  │   │
 │   │ • Authors unit tests: tests/<unit>_impl_test.py                                │   │
@@ -738,35 +738,35 @@ The agent is instructed to self-verify code and tests prior to completing the ro
 4. **Legitimate Coverage Opt-Outs**: For defensive assertion fallbacks or unreachable platform branches that cannot be exercised under unit test execution, the agent annotates those lines with `# pragma: no cover`.
 
 #### Harness Constraints & Loop Harness Prohibition
-1. **Prohibition of `loop` Harness**: The baseline condition evaluates autonomous agentic development. The deterministic Cleanroom `loop` harness relies on Cleanroom role micro-binaries (`bin/get_work`, `bin/submit`, `bin/check_files`) and does not provision general-purpose developer tool loops. Therefore, `--baseline` strictly rejects `--harness loop` with an immediate failure diagnostic.
+1. **Prohibition of `loop` Harness**: The baseline condition evaluates autonomous agentic development. The deterministic Autofab `loop` harness relies on Autofab role micro-binaries (`bin/get_work`, `bin/submit`, `bin/check_files`) and does not provision general-purpose developer tool loops. Therefore, `--baseline` strictly rejects `--harness loop` with an immediate failure diagnostic.
 2. **Permitted Harnesses**: Baseline flights require autonomous subagent harnesses equipped with general development tooling:
-   - **Google Antigravity**: Uses the specialized `cleanroom_baseline_worker` subagent equipped with standard tools: `run_command` (terminal commands for `pytest` and `pyright`), `read_file` (`view_file`), `write_file` (`write_to_file`), `edit_file` (`replace_file_content`, `multi_replace_file_content`), and `send_message`.
+   - **Google Antigravity**: Uses the specialized `autofab_baseline_worker` subagent equipped with standard tools: `run_command` (terminal commands for `pytest` and `pyright`), `read_file` (`view_file`), `write_file` (`write_to_file`), `edit_file` (`replace_file_content`, `multi_replace_file_content`), and `send_message`.
    - **DeepSeek Harness (DSH)**: Dispatches via direct JSON-RPC socket session with terminal bash tool and file editing capabilities.
 
 #### Ephemeral Scope Isolation & Telemetry Invariants
 1. **Zero Contamination in `benchmark_N`**: The baseline runs entirely within an ephemeral, indexed flight scope directory (`benchmark_N/parts/<task_id>/`). Canonical `benchmarks/` remains completely pristine and read-only.
-2. **No Role Workspaces Overhead**: Unlike Cleanroom multi-agent flights, no `role_workspaces/<repo>_<role>_benchmark_N` sibling sandboxes are provisioned; the baseline developer works directly inside `benchmark_N/parts/<task_id>/` and the entire scope is wiped cleanly in `finally:`.
+2. **No Role Workspaces Overhead**: Unlike Autofab multi-agent flights, no `autofab_autofab_role_workspaces/<repo>_<role>_benchmark_N` sibling sandboxes are provisioned; the baseline developer works directly inside `benchmark_N/parts/<task_id>/` and the entire scope is wiped cleanly in `finally:`.
 3. **Telemetry Parity**: Identical telemetry metrics are harvested ($T_{\text{in}}^{\text{uncached}}, T_{\text{in}}^{\text{cached}}, T_{\text{out}}$, step latencies, wall-clock time, financial costs). Role rounds are recorded as `role_rounds={"baseline": 1}`.
 4. **Two-Pass Verification & Archival**: Evaluates the identical two-pass verification gate. Passing flights are archived to `<results_dir>/<benchmark-id>/<model+harness>-baseline/` with embedded metrics comments and `# Methodology: baseline`.
 
 #### The Single Source of Truth & Scientific Fairness (Steel-Manning the Baseline)
-In empirical software engineering and AI evaluation, comparative baselines are frequently vulnerable to criticism if they are artificially crippled, denied standard tooling, or provided vague prompts. To guarantee scientific rigor and defensibility, the Cleanroom baseline control is deliberately **steel-manned**:
+In empirical software engineering and AI evaluation, comparative baselines are frequently vulnerable to criticism if they are artificially crippled, denied standard tooling, or provided vague prompts. To guarantee scientific rigor and defensibility, the Autofab baseline control is deliberately **steel-manned**:
 
 1. **Identical Single Source of Truth**:
-   The baseline agent is not given an informal or degraded requirements document. It is granted direct access to the **exact same formal Low-Level Specification (`low/*.pyi`)** utilized by Cleanroom workers, containing complete type signatures, class declarations, and formal behavioral contracts with preconditions and postconditions.
+   The baseline agent is not given an informal or degraded requirements document. It is granted direct access to the **exact same formal Low-Level Specification (`low/*.pyi`)** utilized by Autofab workers, containing complete type signatures, class declarations, and formal behavioral contracts with preconditions and postconditions.
 2. **Identical Verification Tools**:
-   The baseline agent possesses full shell execution rights to run the exact same type checker (`pyright`) and test runner (`pytest --cov`) used by Cleanroom's verification gates.
+   The baseline agent possesses full shell execution rights to run the exact same type checker (`pyright`) and test runner (`pytest --cov`) used by Autofab's verification gates.
 3. **Full Iterative Autonomy**:
    The agent is granted an unconstrained, continuous single session to author code, write tests, inspect compiler diagnostics and runtime tracebacks, and iteratively refine its implementation.
 
-Consequently, this comparison is exceptionally fair: if an LLM possessed sufficient internal cognitive discipline to hold the formal specification invariant in memory, verify every line against `low/*.pyi`, and arbitrate test failures exclusively by referencing the specification truth rather than its own code, it could theoretically achieve Cleanroom's verification standards.
+Consequently, this comparison is exceptionally fair: if an LLM possessed sufficient internal cognitive discipline to hold the formal specification invariant in memory, verify every line against `low/*.pyi`, and arbitrate test failures exclusively by referencing the specification truth rather than its own code, it could theoretically achieve Autofab's verification standards.
 
 #### The Contamination Trap: Cognitive Bias vs. Structural Independence
 Because the single source of truth is held strictly constant across both conditions, the benchmark isolates and tests a single theoretical variable: **statistical independence ($\mathcal{I} = 0$) versus shared context ($\mathcal{I} > 0$)**.
 
 In theory, **even if the baseline agent hallucinates or makes a mistake during initial synthesis, as long as it diligently double-checks its work against the source of truth (`low/*.pyi`), it should be fine.** The specification contains all required ground truths, types, and behavioral contracts.
 
-In practice, however, the baseline consistently fails to achieve Cleanroom's defect suppression due to three cognitive blindspots inherent in single-agent joint context:
+In practice, however, the baseline consistently fails to achieve Autofab's defect suppression due to three cognitive blindspots inherent in single-agent joint context:
 
 1. **Proxy Substitution (Green Tests as False Truth)**:
    When an agent implements both code and unit tests, it naturally substitutes *test execution* for *specification verification*. Once `pytest` runs green with zero errors, the agent's completion heuristics fire: it concludes its work is certified and complete, bypassing any subsequent double-checking against the original `low/*.pyi` source of truth.
@@ -777,8 +777,8 @@ In practice, however, the baseline consistently fails to achieve Cleanroom's def
    - *Disciplined Specification Recalibration*: The developer re-reads `low/*.pyi`, re-anchors to the formal postcondition, and rewrites the implementation.
    - *Actual LLM Behavior (The Contamination Trap)*: The model takes the path of least cognitive resistance—it modifies the test assertion to conform to whatever output the implementation currently emits, or introduces an ad-hoc conditional. The test suite and implementation enter a state of **tautological mutual confirmation**.
 
-#### Cleanroom's Structural Guarantee
-Cleanroom does not rely on an LLM's self-discipline, memory retention, or proofreading vigilance. By enforcing double-blind physical isolation between the Synthesizer ($W_{\text{lib}}$) and Certifier ($W_{\text{test}}$), the test worker *cannot inspect the implementation code*. It has zero knowledge of what the library author hallucinated or assumed; its tests are derived strictly, independently, and adversarially from the specification contract. Any divergence between the code and specification is flagged unconditionally.
+#### Autofab's Structural Guarantee
+Autofab does not rely on an LLM's self-discipline, memory retention, or proofreading vigilance. By enforcing double-blind physical isolation between the Synthesizer ($W_{\text{lib}}$) and Certifier ($W_{\text{test}}$), the test worker *cannot inspect the implementation code*. It has zero knowledge of what the library author hallucinated or assumed; its tests are derived strictly, independently, and adversarially from the specification contract. Any divergence between the code and specification is flagged unconditionally.
 
 ### 6.2 Differential Cross-Testing Protocol & Runner Tooling (`bin/run_cross_tests.py`)
 
@@ -789,9 +789,9 @@ When evaluating AI-generated code against AI-generated tests, 100% test pass rat
 │                        DIFFERENTIAL CROSS-TESTING ARCHITECTURE                         │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                        │
-│     Cleanroom Environment (I = 0)                   Baseline Environment (I > 0)       │
+│     Autofab Environment (I = 0)                   Baseline Environment (I > 0)       │
 │   ┌───────────────────────────────┐               ┌───────────────────────────────┐    │
-│   │ P_clean (Cleanroom Library)   │               │ P_base (Baseline Library)     │    │
+│   │ P_clean (Autofab Library)   │               │ P_base (Baseline Library)     │    │
 │   │ V_clean (Independent Tests)   │               │ V_base (Self-Authored Tests)  │    │
 │   └──────────────┬────────────────┘               └──────────────┬────────────────┘    │
 │                  │                                               │                     │
@@ -809,7 +809,7 @@ When evaluating AI-generated code against AI-generated tests, 100% test pass rat
 ```
 
 #### 1. Execution Protocol & Architecture
-The differential cross-test runner (`bin/run_cross_tests.py`) executes an exhaustive pairwise evaluation matrix across all archived Cleanroom and Baseline runs:
+The differential cross-test runner (`bin/run_cross_tests.py`) executes an exhaustive pairwise evaluation matrix across all archived Autofab and Baseline runs:
 
 1. **Artifact Extraction & Multi-File Unbundling**:
    Extracts bundled library files (`lib_1.py`) and test suites (`test_1.py`) using `# === File: <name> ===` demarcations into ephemeral sandboxes (`/tmp/cross_eval_matrix/<test>_on_<lib>/`).
@@ -818,11 +818,11 @@ The differential cross-test runner (`bin/run_cross_tests.py`) executes an exhaus
 3. **Module Identity Harmonization & Conftest Injection**:
    In Python, importing a module via a qualified package path (`benchmark_1.parts.<unit>.lib.<unit>`) versus an unqualified name (`<unit>`) creates distinct module instances in `sys.modules`, which breaks enum identity checks (`Enum.A != Enum.A`). The runner automatically injects a localized `conftest.py` into the target test directory to alias `sys.modules` mappings to identical module objects.
 4. **Lifecycle Container Bridge**:
-   For baseline libraries that omitted Cleanroom's auto-generated lifecycle registration function, the runner safely injects `__initialize__(registry=None)` to bind `@singleton_type` implementations to the dependency injection registry.
+   For baseline libraries that omitted Autofab's auto-generated lifecycle registration function, the runner safely injects `__initialize__(registry=None)` to bind `@singleton_type` implementations to the dependency injection registry.
 5. **Phase 1: Self-Consistency Gate ($V_{\text{self}} \to P_{\text{self}}$)**:
    Verifies that each flight passes its own test suite 100%. Any failure here invalidates the flight.
 6. **Phase 2: Pairwise Cross-Evaluation ($V_{\text{test}} \to P_{\text{target}}$)**:
-   Executes independent Cleanroom tests against Baseline libraries (Forward Cross-Check) and Baseline tests against Cleanroom libraries (Reverse Cross-Check).
+   Executes independent Autofab tests against Baseline libraries (Forward Cross-Check) and Baseline tests against Autofab libraries (Reverse Cross-Check).
 
 #### 2. CLI Tooling Usage (`bin/run_cross_tests.py`)
 ```bash
@@ -857,7 +857,7 @@ Every cross-check divergence is categorized into one of three empirical failure 
    - *Condition*: Failures caused by packaging or environment conventions rather than semantic logic.
    - *Interpretation*: Module identity splits in `sys.modules` across flat vs. qualified package roots, or discrepancies in framework bootstrapping hooks. Handled systematically via sandboxed test harness normalization.
 
-For a comprehensive deep dive into the empirical case study where foreign models exposed soundness gaps in Qwen3.6-35B-A3B-oQ6-mtp's Cleanroom library, see [Pretense Section 2: Empirical Genesis — Cross-Model Differential Defect Analysis & Coincident Cognitive Blind Spots](pretense.md#2-empirical-genesis-cross-model-differential-defect-analysis--coincident-cognitive-blind-spots).
+For a comprehensive deep dive into the empirical case study where foreign models exposed soundness gaps in Qwen3.6-35B-A3B-oQ6-mtp's Autofab library, see [Pretense Section 2: Empirical Genesis — Cross-Model Differential Defect Analysis & Coincident Cognitive Blind Spots](pretense.md#2-empirical-genesis-cross-model-differential-defect-analysis--coincident-cognitive-blind-spots).
 
 #### 4. The Edge-Case Frontier: Commission vs. Omission & Roadmap to `semver_solver`
 
@@ -865,7 +865,7 @@ Empirical findings from the `dag_engine_lite` cross-testing matrix established a
 - **Errors of Commission (Faulty AST Logic)**: Inverted operators, wrong variable bindings, or flawed arithmetic. Mutation testing (`mutmut`) excels at measuring test suite sensitivity to these defects and preventing "rubber-stamp" assertions.
 - **Errors of Omission (Missing Code / Unhandled State Transitions)**: Omitted cleanup loops, missing dynamic synchronization, or ignored recovery branches. Mutation testing is blind to errors of omission because there is no AST syntax to mutate.
 
-To solve the edge-case challenge systematically without relying on expensive frontier models, Cleanroom combines:
+To solve the edge-case challenge systematically without relying on expensive frontier models, Autofab combines:
 1. **Contract Slug Traceability (`[slug:...]`)**: Forces 100% test coverage over every granular postcondition clause in `low/*.pyi`.
 2. **Stateful Property-Based Testing (`hypothesis.stateful.RuleBasedStateMachine`)**: Generates bounded random walks over API state machines to discover unhandled state interleavings (see [`hypothesis_todo.md`](hypothesis_todo.md)).
 3. **Targeted Boundary Mutants**: Replaces slow, brute-force `mutmut` runs with fast first-order operator and return-value mutations to verify assertion rigor.
@@ -909,15 +909,15 @@ The edge-case challenge will be comprehensively revisited and evaluated on the u
 
 ### Distinction Between Steps and Rounds (Strict Elimination of "Turn")
 
-To eliminate ambiguity between low-level model interactions and macro convergence cycles, Cleanroom standardizes exclusively on **steps** and **rounds**, strictly deprecating and prohibiting the ambiguous term **"turn"**:
+To eliminate ambiguity between low-level model interactions and macro convergence cycles, Autofab standardizes exclusively on **steps** and **rounds**, strictly deprecating and prohibiting the ambiguous term **"turn"**:
 - **Step**: A single prompt $\leftrightarrow$ tool-call interaction cycle between the harness and the agent/model (prompt $\to$ reasoning / tool invocation $\to$ tool response $\to$ completion).
-- **Round**: A full Cleanroom role dispatch wave or execution pass across assigned targets (from role dispatch into a role workspace until completion, submission, blame, or exhaustion). A round encompasses all model steps executed within that role dispatch pass. If a role is re-entered (e.g. after downstream `qa` or `coverage` rejection, or re-run due to dirty loop propagation), that re-entry initiates a subsequent round.
+- **Round**: A full Autofab role dispatch wave or execution pass across assigned targets (from role dispatch into a role workspace until completion, submission, blame, or exhaustion). A round encompasses all model steps executed within that role dispatch pass. If a role is re-entered (e.g. after downstream `qa` or `coverage` rejection, or re-run due to dirty loop propagation), that re-entry initiates a subsequent round.
 
 ### Role Execution Rounds & Convergence Efficiency
 
 Benchmark telemetry focuses strictly on **rounds** and **steps**:
 - **Role Short Name Normalization**: Roles are dynamically identified by their short names (e.g., `lib`, `test`, `qa`, `coverage`, `low`, `spec_qa`) rather than static enumerations.
-- **Harvesting Sources**: Parsed from runner execution logs (`Starting cleaning pass for root ...#<role>`, `.cleanroom_round_task_<role>_<counter>_<ts>.log`, `.cleanroom_round_dsh_<role>_<ts>.log`, `.cleanroom_round_<role>_<ts>.log`, with backward compatibility for `.cleanroom_turn_*`) and task prompt headers (`- Role: <role>`).
+- **Harvesting Sources**: Parsed from runner execution logs (`Starting cleaning pass for root ...#<role>`, `.autofab_round_task_<role>_<counter>_<ts>.log`, `.autofab_round_dsh_<role>_<ts>.log`, `.autofab_round_<role>_<ts>.log`, with backward compatibility for `.autofab_turn_*`) and task prompt headers (`- Role: <role>`).
 - **Telemetry Metric**: Expressed as `role_rounds: Dict[str, int]` (e.g., `{"lib": 2, "test": 1, "qa": 2, "coverage": 1}`) with total rounds $\sum R_{\text{role}}$, enabling cross-model comparisons of where reasoning effort and token budgets are expended during convergence.
 - **Baseline Role Round Invariant**: For baseline methodology flights (`--baseline`), role rounds are recorded strictly as `role_rounds={"baseline": 1}`, reflecting the single continuous round execution constraint without multi-role sub-workspaces.
 
@@ -954,7 +954,7 @@ Every interaction step and benchmark flight emits a structured JSON event record
     "spec_loc": 180,
     "target_lib_loc": 310
   },
-  "methodology": "cleanroom",
+  "methodology": "autofab",
   "stages_executed": [
     "high", "planning", "scenarios", "low", "spec_qa", "lib", "test", "qa", "coverage"
   ],
@@ -989,7 +989,7 @@ Every interaction step and benchmark flight emits a structured JSON event record
 
 ## 8. Automated Benchmark Tooling Architecture (`bin/evaluate_model_efficiency.py`)
 
-The automated benchmarking toolchain operationalizes Task 2 from [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md) as a production CLI utility:
+The automated benchmarking toolchain operationalizes Task 2 from [`todo.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/todo.md) as a production CLI utility:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -1001,7 +1001,7 @@ The automated benchmarking toolchain operationalizes Task 2 from [`todo.md`](fil
 │                                                                                        │
 │   1. MATRIX INITIALIZATION & TARGET PROVISIONING                                       │
 │      - Discovers active target specifications (e.g., parts/storage, cpython_heapq)     │
-│      - Provisions ephemeral sandboxes (../role_workspaces/bench_<run_id>/)             │
+│      - Provisions ephemeral sandboxes (../autofab_autofab_role_workspaces/bench_<run_id>/)             │
 │      - Applies OS chmod 444 masks to upstream stubs; sets isolated PYTHONPATH          │
 │                                                                                        │
 │   2. MULTI-MODEL ADAPTER DISPATCH                                                      │
@@ -1025,22 +1025,22 @@ The automated benchmarking toolchain operationalizes Task 2 from [`todo.md`](fil
 
 ### CLI Interface & Execution Modes
 
-The benchmarking CLI provides fine-grained controls for time-calibrated experimental flights:
+The benchmarking CLI provides fine-grained controls for time-calibrated experimental flights. Every flight targets exactly one model via `--model <name>` (or `--models <name>`); multi-model comma-separated arguments are strictly prohibited and rejected to ensure deterministic, isolated evaluation:
 
 ```bash
-# High-volume execution across budget and local models on CPython Standard Library
+# Execution targeting a specific model on CPython Standard Library
 uv run bin/evaluate_model_efficiency.py \
   --suite=cpython \
-  --models=qwen-moe-q6,deepseek-v41-flash,gemini-3.8-flash \
+  --model=deepseek-flash \
   --rq=rq1 \
   --units=8 \
-  --output=reports/cpython_rq1_budget.md
+  --output=reports/cpython_rq1_deepseek.md
 
 # Targeted Anchor Run for Tier 3 & Tier 4 on Heavyweight Systems Engine (Anchor Target 1)
 uv run bin/evaluate_model_efficiency.py \
   --suite=heavyweight-systems \
   --anchor=systems \
-  --models=o3-mini,sonnet-3.7,gemini-4-argon,claude-opus \
+  --model=gemini-4-argon \
   --rq=rq3 \
   --compare-monolith \
   --measure-cache-hits
@@ -1049,7 +1049,7 @@ uv run bin/evaluate_model_efficiency.py \
 uv run bin/evaluate_model_efficiency.py \
   --suite=cpython \
   --anchor=algorithmic \
-  --models=o3-mini,sonnet-3.7,gpt-6.1-sol,meta-muse \
+  --model=sonnet-3.7 \
   --rq=rq2 \
   --units=10 \
   --mutation-testing
@@ -1069,18 +1069,18 @@ uv run bin/evaluate_model_efficiency.py \
   --mutation-testing
 
 # Traditional Single-Agent Baseline Flight (Autonomous Subagent Harness, 1 Round)
-uv run cleanroom benchmark \
+uv run autofab benchmark \
   --baseline \
   --suite=dag_engine \
-  --models=gemini-3.8-flash \
+  --model=gemini-3.8-flash \
   --harness=antigravity \
   --units=1
 
 # Baseline Execution via DeepSeek Harness (DSH)
-uv run cleanroom benchmark \
+uv run autofab benchmark \
   --baseline \
   --suite=dag_engine_lite \
-  --models=deepseek-flash \
+  --model=deepseek-flash \
   --harness=dsh \
   --units=1
 ```
@@ -1088,7 +1088,7 @@ uv run cleanroom benchmark \
 ### Pipeline Orchestration & Sandboxed Runner
 
 1. **Workspace Assembly (`parts/workspace`)**:
-   - Provisions isolated sibling directories under `../role_workspaces/bench_<timestamp>_<target>/`.
+   - Provisions isolated sibling directories under `../autofab_autofab_role_workspaces/bench_<timestamp>_<target>/`.
    - Mounts upstream specifications as read-only copies (`chmod 444`).
    - Ensures strict double-blind isolation ($\mathcal{I}(P; V \mid S) = 0$): implementation workers cannot see test files, and test workers cannot see implementation files.
 2. **Deterministic Verification Gate (`parts/tools`)**:
@@ -1110,12 +1110,12 @@ The adapter engine abstracts underlying model communication protocols:
 
 ### Run Archival & Workspace Draining Protocol (`benchmarks/results/`)
 
-To prevent cross-flight cache contamination, state bleed, or accidental reuse of synthesized code across model runs, Cleanroom enforces a strict archival and draining lifecycle around every benchmark flight:
+To prevent cross-flight cache contamination, state bleed, or accidental reuse of synthesized code across model runs, Autofab enforces a strict archival and draining lifecycle around every benchmark flight:
 
 ```
 benchmarks/results/
 └── <benchmark-id>/
-    ├── <model-name+harness-name>/             # Cleanroom multi-role runs (Methodology: cleanroom)
+    ├── <model-name+harness-name>/             # Autofab multi-role runs (Methodology: autofab)
     │   ├── lib_1.py                           # Run 1 synthesized library implementation (with empirical comment header)
     │   ├── test_1.py                          # Run 1 synthesized candidate test suite
     │   ├── lib_2.py                           # Run 2 synthesized library implementation
@@ -1123,12 +1123,12 @@ benchmarks/results/
     └── <model-name+harness-name>-baseline/    # Baseline single-agent runs (Methodology: baseline)
         ├── lib_1.py                           # Run 1 baseline library implementation (# Methodology: baseline)
         ├── test_1.py                          # Run 1 baseline unit test suite
-        └── cleanroom_1.log                    # Run 1 event log (when present)
+        └── autofab_1.log                    # Run 1 event log (when present)
 ```
 
 1. **Pre-Flight Workspace Drain (`drain_unit_workspace`)**:
-   - Before executing a benchmark flight, `drain_unit_workspace()` wipes any pre-existing code and tests under `unit_dir/lib` and `unit_dir/tests`, and purges any ephemeral `role_workspaces/` matching the unit.
-   - This marks the unit `DIRTY` in the Cleanroom DAG and forces synthesis strictly from typed specifications under `low/*.pyi`.
+   - Before executing a benchmark flight, `drain_unit_workspace()` wipes any pre-existing code and tests under `unit_dir/lib` and `unit_dir/tests`, and purges any ephemeral `autofab_autofab_role_workspaces/` matching the unit.
+   - This marks the unit `DIRTY` in the Autofab DAG and forces synthesis strictly from typed specifications under `low/*.pyi`.
 2. **Post-Flight Sequential Archival (`archive_flight_artifacts`)**:
    - Synthesized candidate files are saved to `benchmarks/results/<benchmark-id>/<model-name+harness-name>/` (or appending `-baseline` for baseline methodology flights).
    - The evaluator dynamically resolves the next sequential run index $N \in \{1, 2, \dots\}$.
@@ -1136,7 +1136,7 @@ benchmarks/results/
    - `lib_<N>.py` prepends a comprehensive, machine-readable metrics comment block directly above the synthesized library code (incorporating `# Methodology: baseline` and single-round `role_rounds: baseline: 1` when evaluated under `--baseline`):
      ```python
      # ==============================================================================
-     # Cleanroom Empirical Benchmark Flight Metrics
+     # Autofab Empirical Benchmark Flight Metrics
      # Flight ID: flight_20261019_210821_Qwen3_6-35B-A3B-oQ6-mtp_dag_engine
      # Timestamp: 2026-10-19T21:08:21.124681+00:00
      # Benchmark Task: dag_engine
@@ -1178,7 +1178,7 @@ Every benchmarking run produces:
 
 ## 9. Empirical Case Study & Code Quality Analysis: Generalized DAG Wave Processing Engine
 
-To validate Cleanroom's empirical benchmarking suite and evaluate code generation fidelity under double-blind isolation ($\mathcal{I} = 0$), a comprehensive benchmark flight was executed across four distinct model configurations on the **Generalized DAG Wave Processing Engine (`benchmarks/parts/dag_engine`)**. 
+To validate Autofab's empirical benchmarking suite and evaluate code generation fidelity under double-blind isolation ($\mathcal{I} = 0$), a comprehensive benchmark flight was executed across four distinct model configurations on the **Generalized DAG Wave Processing Engine (`benchmarks/parts/dag_engine`)**. 
 
 The subject system comprises ~500 LOC of formal specification under `low/dag_engine.pyi`, declaring three primary service protocols:
 - `DAG`: Directed acyclic graph structure, edge validation, cycle detection (Tarjan/DFS), root/leaf discovery, and critical path calculation.
@@ -1212,7 +1212,7 @@ The four evaluated model configurations span Tier 1 (Free Local) and Tier 2 (Bud
 
 #### 1. Gemini 3.8 Flash (`gemini-3.8-flash+antigravity`) — Gold Standard Exemplar
 - **Architectural & Contract Fidelity**: Gemini 3.8 Flash exhibited exemplary architectural discipline. Target classes (`DAG`, `WaveScheduler`, `DAGRunner`) adhered strictly to `low/dag_engine.pyi`. Zero uncontracted public methods or properties were hallucinated.
-- **Dependency & Lifecycle Resolution**: Correctly resolved inter-singleton dependencies via constructor injection and the Cleanroom lifecycle registry (`get_singleton`). `DAGRunner` obtained `WaveScheduler` dynamically respecting lifecycle tier boundaries, without requiring artificial configuration methods.
+- **Dependency & Lifecycle Resolution**: Correctly resolved inter-singleton dependencies via constructor injection and the Autofab lifecycle registry (`get_singleton`). `DAGRunner` obtained `WaveScheduler` dynamically respecting lifecycle tier boundaries, without requiring artificial configuration methods.
 - **Test Suite Purity (True Black-Box)**: `test_1.py` contains 51 unit test cases derived purely from contractual invariants (`INVARIANTS:`) and operational postconditions (`POSTCONDITIONS:`). Tests interacted with targets exclusively through public typed protocols.
   - **Zero `cast(Any, ...)` bypasses**: All arguments and assertions used nominal domain types.
   - **Zero private member accesses**: No inspection or mutation of `obj._*` attributes.
@@ -1221,7 +1221,7 @@ The four evaluated model configurations span Tier 1 (Free Local) and Tier 2 (Bud
 
 #### 2. DeepSeek Flash (`deepseek-flash+dsh`) — High Algorithmic Competence with Encapsulation Leak
 - **Algorithmic Quality**: DeepSeek synthesized mathematically elegant, robust implementations of Tarjan's cycle detection, dynamic critical path memoization, and thread-pooled wave execution.
-- **Scaffolding & Import Fragility**: Exposed a defect in early Cleanroom scaffolding: test scaffolding emitted unrooted imports (`from lib import dag_engine_impl`), which worked in single-directory test runners but raised `ModuleNotFoundError` during repo-wide collection. Once the framework was hardened to mandate package-qualified imports (`from benchmarks.parts.dag_engine.lib.dag_engine_impl import DAG`), the module passed cleanly.
+- **Scaffolding & Import Fragility**: Exposed a defect in early Autofab scaffolding: test scaffolding emitted unrooted imports (`from lib import dag_engine_impl`), which worked in single-directory test runners but raised `ModuleNotFoundError` during repo-wide collection. Once the framework was hardened to mandate package-qualified imports (`from benchmarks.parts.dag_engine.lib.dag_engine_impl import DAG`), the module passed cleanly.
 - **Test Encapsulation Leak**: In `test_1.py`, to test the `CONTINUE_ON_ERROR` failure policy, the test worker used dynamic reflection (`getattr(runner, '_scheduler')`) to inspect private runner state rather than observing public return values or querying the shared lifecycle scope. While functional, this breached strict black-box encapsulation.
 
 #### 3. Qwen 3.6 35B MoE (`Qwen3.6-35B-A3B-oQ6-mtp+dsh`) — Severe Interface Hallucination & Auditor Collapse
@@ -1251,7 +1251,7 @@ The four evaluated model configurations span Tier 1 (Free Local) and Tier 2 (Bud
 
 ### Pathological Anti-Patterns: Interface Hallucination, White-Box Evasions & Auditor Contamination
 
-The empirical analysis of the Qwen benchmark flight surfaced three interconnected failure modes that threaten automated cleanroom software engineering:
+The empirical analysis of the Qwen benchmark flight surfaced three interconnected failure modes that threaten automated autofab software engineering:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -1295,67 +1295,67 @@ The empirical analysis of the Qwen benchmark flight surfaced three interconnecte
 
 ### Architectural Hardening & Framework Gates Derived from Findings
 
-To permanently eradicate these failure modes across all model tiers, Cleanroom was hardened with five deterministic gates:
+To permanently eradicate these failure modes across all model tiers, Autofab was hardened with five deterministic gates:
 
 1. **Lib Linter Protocol Hierarchy Gate (`check_signature_alignment`)**:
-   - In [`build_lint_common.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/support/lib/build_lint_common.py), classes implementing `.pyi` specifications recursively collect all declared methods and properties across their base protocol hierarchy.
+   - In [`build_lint_common.py`](file:///Users/seanmcdirmid/projects/autofab/autofab_python/support/lib/build_lint_common.py), classes implementing `.pyi` specifications recursively collect all declared methods and properties across their base protocol hierarchy.
    - Any public method defined in `lib/*.py` that is not declared in `low/*.pyi` (excluding Python dunders and the lifecycle `initialize(self)` hook) is rejected deterministically during `lib_lint.py`.
 2. **Test Linter Contract Discipline Gate (`check_test_getattr`)**:
    - **`cast(Any, ...)` Attribute Access Ban**: Prohibits `ast.Attribute` where the value is a `cast(Any, ...)` call. Models can no longer use `cast(Any, obj).uncontracted_method()` to bypass type checking.
    - **Private Member Access Ban**: Rejects any non-dunder private member access (`obj._*`) on collaborator or target objects where `obj` is not `self` or `cls`. White-box mutation of internal state collections is blocked.
    - **Dynamic Reflection Ban**: Rejects `setattr()` and `hasattr()` calls alongside `getattr()`.
 3. **QA Arbiter Specification Grounding & Anti-Leakage Invariant**:
-   - Updated [`update_python_with_ai/guides/qa.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/guides/qa.md) to mandate that all test failures be audited strictly against `low/*.pyi` before attributing blame.
+   - Updated [`autofab_python/guides/qa.md`](file:///Users/seanmcdirmid/projects/autofab/autofab_python/guides/qa.md) to mandate that all test failures be audited strictly against `low/*.pyi` before attributing blame.
    - Strictly prohibited citing, suggesting, or naming uncontracted symbols in blame feedback.
    - Mandated that singleton initialization failures caused by missing ad-hoc configuration be blamed on `lib`, never `test`.
 4. **Library Singleton Lifecycle Clarification**:
-   - Updated [`update_python_with_ai/guides/low_to_lib.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/guides/low_to_lib.md) to formalize the three legitimate lifecycle mechanisms:
+   - Updated [`autofab_python/guides/low_to_lib.md`](file:///Users/seanmcdirmid/projects/autofab/autofab_python/guides/low_to_lib.md) to formalize the three legitimate lifecycle mechanisms:
      1. Module-level `__initialize__(registry)` for registration;
      2. Instance-level `initialize(self)` post-instantiation hook for self-registration with managers;
      3. Phase-level `enter_phase(phase, setup=...)` for parameterizing contracted singletons (e.g. `RoleConfig.set_role(...)`).
    - Explicitly prohibited ad-hoc multi-phase configuration methods (`configure()`, `setup()`).
 5. **Coverage Arbiter Assumption Pragma Attribution**:
-   - Updated [`update_python_with_ai/guides/coverage.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_python_with_ai/guides/coverage.md) to prohibit demanding white-box tests that manipulate private state to reach defensive branches.
+   - Updated [`autofab_python/guides/coverage.md`](file:///Users/seanmcdirmid/projects/autofab/autofab_python/guides/coverage.md) to prohibit demanding white-box tests that manipulate private state to reach defensive branches.
    - Unreachable defensive branches must be attributed to `lib` for annotation with `# pragma: no cover (assumption: <reason>)` or dead code elimination, preventing coverage deadlocks.
 
 ---
 
-### 9.2 Pretense Benchmark Suite on `dag_engine_lite`: Baseline vs. Cleanroom Efficiency Analysis
+### 9.2 Pretense Benchmark Suite on `dag_engine_lite`: Baseline vs. Autofab Efficiency Analysis
 
-To evaluate the impact of Pretense (Hypothesis state-machine verification, bidirectional fake synthesis, and property fuzzing) on both the **Cleanroom Double-Blind Pipeline** and the **Autonomous Single-Agent Baseline**, comprehensive benchmark flights were executed across three model architectures on the `dag_engine_lite` benchmark unit.
+To evaluate the impact of Pretense (Hypothesis state-machine verification, bidirectional fake synthesis, and property fuzzing) on both the **Autofab Double-Blind Pipeline** and the **Autonomous Single-Agent Baseline**, comprehensive benchmark flights were executed across three model architectures on the `dag_engine_lite` benchmark unit.
 
 #### Empirical Results Matrix (`dag_engine_lite` with Pretense)
 
 | Configuration | Model & Harness | Unit / Fuzz Tests | Pyright Errors (Lib) | Wall Clock (s) | Financial Cost ($USD) | Total Tokens | Net Rounds |
 | :--- | :--- | :---: | :---: | ---: | ---: | ---: | :---: |
-| **Cleanroom (Gross)** | **DeepSeek-Flash** (DSH) | **49P / 0F** | **0 errors** | 1180.9s | $0.2438 | 13,511,994 | 16 |
-| **Cleanroom (Net Code/Test)** | **DeepSeek-Flash** (DSH) | **49P / 0F** | **0 errors** | 1180.9s | **$0.1779** | 11,088,411 | 8 |
+| **Autofab (Gross)** | **DeepSeek-Flash** (DSH) | **49P / 0F** | **0 errors** | 1180.9s | $0.2438 | 13,511,994 | 16 |
+| **Autofab (Net Code/Test)** | **DeepSeek-Flash** (DSH) | **49P / 0F** | **0 errors** | 1180.9s | **$0.1779** | 11,088,411 | 8 |
 | **Pretense Baseline** | **DeepSeek-Flash** (DSH) | **33P / 0F** | **0 errors** | 492.3s | **$0.1332** | 6,932,259 | 1 |
-| **Cleanroom (Gross)** | **Gemini-3.8-Flash** (Antigravity) | **60P / 0F** | **0 errors** | 1135.0s | $0.8764 | 22,987,541 | 21 |
-| **Cleanroom (Net Code/Test)** | **Gemini-3.8-Flash** (Antigravity) | **60P / 0F** | **0 errors** | 1135.0s | **$0.7487** | 20,750,091 | 16 |
+| **Autofab (Gross)** | **Gemini-3.8-Flash** (Antigravity) | **60P / 0F** | **0 errors** | 1135.0s | $0.8764 | 22,987,541 | 21 |
+| **Autofab (Net Code/Test)** | **Gemini-3.8-Flash** (Antigravity) | **60P / 0F** | **0 errors** | 1135.0s | **$0.7487** | 20,750,091 | 16 |
 | **Pretense Baseline** | **Gemini-3.8-Flash** (Antigravity) | **57P / 0F** | **0 errors** | 266.4s | **$0.1972** | 5,747,750 | 1 |
-| **Cleanroom (Gross)** | **Qwen-MoE** (DSH / Local) | **98P / 0F** | **0 errors** | 2223.8s | $0.0000 | 12,852,569 | 14 |
+| **Autofab (Gross)** | **Qwen-MoE** (DSH / Local) | **98P / 0F** | **0 errors** | 2223.8s | $0.0000 | 12,852,569 | 14 |
 | **Pretense Baseline** | **Qwen-MoE** (DSH / Local) | **92P / 0F** | **0 errors** | 1151.5s | **$0.0000** | 6,719,320 | 1 |
 
-*(Notes: Gross Cleanroom includes specification authoring/alignment rounds [`high`, `planning`, `scenarios`, `low`, `spec_qa`]. Net Cleanroom isolates pure implementation and testing rounds [`lib`, `pretense`, `pretense_qa`, `pretense_coverage`].)*
+*(Notes: Gross Autofab includes specification authoring/alignment rounds [`high`, `planning`, `scenarios`, `low`, `spec_qa`]. Net Autofab isolates pure implementation and testing rounds [`lib`, `pretense`, `pretense_qa`, `pretense_coverage`].)*
 
 #### Key Empirical Finding: Pretense as a Baseline Equalizer
 
 A decisive empirical discovery emerges from this comparison:
 
-1. **Pretense Enables the Baseline to Compete Directly with Cleanroom**:
+1. **Pretense Enables the Baseline to Compete Directly with Autofab**:
    In conventional benchmarks (without Pretense), single-agent baselines often succumb to the *Contamination Trap*—writing shallow, tautological tests that pass trivial cases while missing subtle state-machine regressions, cycle conditions, or edge interleavings.
    With Pretense, the model is provided with a formal state transition protocol (`Transition`, `@proto.transition`, `FakeAdapter`). This acts as an **executable behavioral oracle**, compelling the single-agent baseline to author comprehensive stateful verification suites (33 to 92 passing tests, 98%–100% statement coverage, and 0 Pyright errors).
 
 2. **Substantially Lower Cost & Wall-Clock Latency**:
    Because the Pretense Baseline operates in a single, un-fragmented developer round without the coordination overhead of multi-role dispatch waves:
-   - **DeepSeek-Flash**: Pretense Baseline cost **$0.1332** vs. Net Cleanroom **$0.1779** (25% cheaper than Net, 45% cheaper than Gross) and completed in **492.3s** vs. 1180.9s (2.4x faster).
-   - **Gemini-3.8-Flash**: Pretense Baseline cost **$0.1972** vs. Net Cleanroom **$0.7487** (**3.8x cheaper** than Net, 4.4x cheaper than Gross) and completed in **266.4s** vs. 1135.0s (**4.2x faster**).
-   - **Qwen-MoE (Local)**: Pretense Baseline consumed **6.72M tokens** vs. Cleanroom **12.85M tokens** (**48% reduction** in token expenditure) and finished in **1151.5s** vs. 2223.8s (**1.9x faster**).
+   - **DeepSeek-Flash**: Pretense Baseline cost **$0.1332** vs. Net Autofab **$0.1779** (25% cheaper than Net, 45% cheaper than Gross) and completed in **492.3s** vs. 1180.9s (2.4x faster).
+   - **Gemini-3.8-Flash**: Pretense Baseline cost **$0.1972** vs. Net Autofab **$0.7487** (**3.8x cheaper** than Net, 4.4x cheaper than Gross) and completed in **266.4s** vs. 1135.0s (**4.2x faster**).
+   - **Qwen-MoE (Local)**: Pretense Baseline consumed **6.72M tokens** vs. Autofab **12.85M tokens** (**48% reduction** in token expenditure) and finished in **1151.5s** vs. 2223.8s (**1.9x faster**).
 
 3. **Architectural Trade-Off Analysis**:
    - **Where Baseline + Pretense Dominates**: For isolated, single-unit modules with clean interfaces, Pretense gives the baseline model the structural discipline of property-based testing without paying the multi-agent coordination tax. It achieves near-parity quality at a dramatically lower price point.
-   - **Where Cleanroom Double-Blind Pipeline Remains Essential**: In complex multi-component systems, ungrounded specifications, or cross-module boundary interactions, single-agent baselines can still suffer from coincident blind spots (e.g. omitting an invariant from both implementation and test). Cleanroom's independent roles (`spec_qa`, `pretense_qa`, `pretense_coverage`) provide external arbitration and blaming that prevent mutual confirmation bias from escaping into production.
+   - **Where Autofab Double-Blind Pipeline Remains Essential**: In complex multi-component systems, ungrounded specifications, or cross-module boundary interactions, single-agent baselines can still suffer from coincident blind spots (e.g. omitting an invariant from both implementation and test). Autofab's independent roles (`spec_qa`, `pretense_qa`, `pretense_coverage`) provide external arbitration and blaming that prevent mutual confirmation bias from escaping into production.
 
 ---
 
@@ -1414,5 +1414,5 @@ The cross-model benchmarking suite will be executed in five sequential phases:
   - Concurrency triage precision and deadlock cycle extraction verified on 6 concurrency defects.
   - Goodhart Divergence Index ($GDI \approx 1.04$) validated on 25k event stream workload.
 - [ ] **Milestone 5: Authoritative Paper Tables & Documentation Completed**
-  - All empirical evaluation sections in [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/paper_submission_design_doc.md) populated with verified metrics.
-  - Master operational documentation updated in [`todo.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/todo.md) and [`design-docs/README.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/README.md).
+  - All empirical evaluation sections in [`paper_submission_design_doc.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/paper_submission_design_doc.md) populated with verified metrics.
+  - Master operational documentation updated in [`todo.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/todo.md) and [`design-docs/README.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/README.md).
