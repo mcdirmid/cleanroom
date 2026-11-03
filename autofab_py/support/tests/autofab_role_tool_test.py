@@ -13,10 +13,10 @@ import unittest
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 for _p in [
     _repo_root,
-    os.path.join(_repo_root, "autofab_python"),
+    os.path.join(_repo_root, "autofab_py"),
     os.path.join(_repo_root, "autofab"),
     os.path.join(_repo_root, "autofab/support/lib"),
-    os.path.join(_repo_root, "autofab_python/support/lib"),
+    os.path.join(_repo_root, "autofab_py/support/lib"),
 ]:
     if _p not in sys.path and os.path.isdir(_p):
         sys.path.insert(0, _p)
@@ -62,20 +62,20 @@ class CleanroomRoleToolTest(unittest.TestCase):
         os.makedirs(self.fake_repo, exist_ok=True)
         os.environ["BUILD_WORKSPACE_DIRECTORY"] = self.fake_repo
         with open(os.path.join(self.fake_repo, "autofab.toml"), "w", encoding="utf-8") as f:
-            f.write('methodology = "//autofab_python"\n')
+            f.write('methodology = "//autofab_py"\n')
         with open(os.path.join(self.fake_repo, "cleanroom.toml"), "w", encoding="utf-8") as f:
-            f.write('methodology = "//autofab_python"\n')
-        roles_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../autofab_python/autofab_roles.toml"))
+            f.write('methodology = "//autofab_py"\n')
+        roles_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../autofab_py/autofab_roles.toml"))
         if not os.path.isfile(roles_src):
-            roles_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../autofab_python/cleanroom_roles.toml"))
+            roles_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../autofab_py/cleanroom_roles.toml"))
         if os.path.isfile(roles_src):
             shutil.copyfile(roles_src, os.path.join(self.fake_repo, "autofab_roles.toml"))
             shutil.copyfile(roles_src, os.path.join(self.fake_repo, "cleanroom_roles.toml"))
-            py_dir = os.path.join(self.fake_repo, "autofab_python")
+            py_dir = os.path.join(self.fake_repo, "autofab_py")
             os.makedirs(py_dir, exist_ok=True)
             shutil.copyfile(roles_src, os.path.join(py_dir, "autofab_roles.toml"))
             shutil.copyfile(roles_src, os.path.join(py_dir, "cleanroom_roles.toml"))
-            sup_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../autofab_python/support"))
+            sup_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../autofab_py/support"))
             if os.path.isdir(sup_src):
                 shutil.copytree(sup_src, os.path.join(py_dir, "support"), dirs_exist_ok=True)
         self.orig_cwd = os.getcwd()

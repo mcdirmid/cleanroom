@@ -11,11 +11,11 @@ import unittest
 
 def find_repo_root() -> str:
     ws = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-    if ws and os.path.isdir(os.path.join(ws, "autofab_python")):
+    if ws and os.path.isdir(os.path.join(ws, "autofab_py")):
         return ws
     cur = os.path.abspath(os.path.dirname(__file__))
     while cur and cur != os.path.dirname(cur):
-        if os.path.isdir(os.path.join(cur, "autofab_python")):
+        if os.path.isdir(os.path.join(cur, "autofab_py")):
             return cur
         cur = os.path.dirname(cur)
     return os.getcwd()
@@ -24,13 +24,13 @@ def find_repo_root() -> str:
 REPO_ROOT = find_repo_root()
 for p in [
     REPO_ROOT,
-    os.path.join(REPO_ROOT, "autofab_python"),
-    os.path.join(REPO_ROOT, "autofab_python", "support", "lib"),
+    os.path.join(REPO_ROOT, "autofab_py"),
+    os.path.join(REPO_ROOT, "autofab_py", "support", "lib"),
 ]:
     if p not in sys.path and os.path.isdir(p):
         sys.path.insert(0, p)
 
-from autofab_python.support.lib.pretense_lint import (
+from autofab_py.support.lib.pretense_lint import (
     check_lifted_expr_usage,
     check_multi_transition_disambiguation,
     check_no_relative_parent_imports,
@@ -172,7 +172,7 @@ class PretenseLintTest(unittest.TestCase):
     def test_residual_notbound_sentinel_detected(self) -> None:
         import io
         from unittest.mock import patch
-        from autofab_python.support.lib.pretense_lint import main
+        from autofab_py.support.lib.pretense_lint import main
 
         code = (
             "from dataclasses import dataclass\n"
@@ -208,7 +208,7 @@ class PretenseLintTest(unittest.TestCase):
     def test_multi_transition_disambiguation_detected(self) -> None:
         import io
         from unittest.mock import patch
-        from autofab_python.support.lib.pretense_lint import main
+        from autofab_py.support.lib.pretense_lint import main
 
         code = (
             "from dataclasses import dataclass\n"
@@ -252,7 +252,7 @@ class PretenseLintTest(unittest.TestCase):
     def test_multi_transition_differentiated_permitted(self) -> None:
         import io
         from unittest.mock import patch
-        from autofab_python.support.lib.pretense_lint import main
+        from autofab_py.support.lib.pretense_lint import main
 
         code = (
             "from dataclasses import dataclass\n"
@@ -293,7 +293,7 @@ class PretenseLintTest(unittest.TestCase):
     def test_state_machine_instantiating_target_service_detected(self) -> None:
         import io
         from unittest.mock import patch
-        from autofab_python.support.lib.pretense_lint import main
+        from autofab_py.support.lib.pretense_lint import main
 
         code = (
             "from dataclasses import dataclass\n"
@@ -333,7 +333,7 @@ class PretenseLintTest(unittest.TestCase):
     def test_state_machine_algorithmic_solver_detected(self) -> None:
         import io
         from unittest.mock import patch
-        from autofab_python.support.lib.pretense_lint import main
+        from autofab_py.support.lib.pretense_lint import main
 
         code = (
             "from dataclasses import dataclass\n"
@@ -374,7 +374,7 @@ class PretenseLintTest(unittest.TestCase):
     def test_state_machine_while_in_transition_detected(self) -> None:
         import io
         from unittest.mock import patch
-        from autofab_python.support.lib.pretense_lint import main
+        from autofab_py.support.lib.pretense_lint import main
 
         code = (
             "from dataclasses import dataclass\n"
@@ -582,7 +582,7 @@ class PretenseLintTest(unittest.TestCase):
             )
             f_path = f.name
         try:
-            lint_mod = os.path.join(REPO_ROOT, "autofab_python", "support", "lib", "pretense_lint.py")
+            lint_mod = os.path.join(REPO_ROOT, "autofab_py", "support", "lib", "pretense_lint.py")
             res = subprocess.run([sys.executable, lint_mod, f_path], capture_output=True, text=True)
             self.assertNotEqual(res.returncode, 0)
             self.assertIn("'# type: ignore' is prohibited", res.stderr)
@@ -614,7 +614,7 @@ class PretenseLintTest(unittest.TestCase):
                     "        self.assertIsNotNone(Foo)\n"
                     "FooFuzzTest = compile_hypothesis_test_case(proto=None, sut_factory=lambda: None, initial_state_factory=lambda: None)\n"
                 )
-            lint_mod = os.path.join(REPO_ROOT, "autofab_python", "support", "lib", "pretense_lint.py")
+            lint_mod = os.path.join(REPO_ROOT, "autofab_py", "support", "lib", "pretense_lint.py")
             res = subprocess.run(
                 [sys.executable, lint_mod, pret_path, "--lib-pkg", os.path.join(parts_dir, "lib")],
                 capture_output=True,
@@ -792,7 +792,7 @@ class PretenseLintTest(unittest.TestCase):
         self.assertEqual(len(check_pretense_imports(valid_iface_import, is_impl=False)), 0)
 
     def test_banned_skips_rejected(self) -> None:
-        from autofab_python.support.lib.build_lint_common import check_banned_skips
+        from autofab_py.support.lib.build_lint_common import check_banned_skips
 
         code_skip_unless = (
             "import unittest\n"

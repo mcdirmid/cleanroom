@@ -4,7 +4,7 @@ import sys
 import unittest
 from unittest import mock
 
-from autofab_python.support.lib import app_info
+from autofab_py.support.lib import app_info
 
 
 class AppInfoTest(unittest.TestCase):

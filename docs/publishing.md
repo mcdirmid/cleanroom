@@ -11,7 +11,7 @@ The repository produces three distinct packages published to PyPI:
 | Package Name | Scope / Directory | Configuration | Description |
 | :--- | :--- | :--- | :--- |
 | **`autofab`** | Repository root (`.`) | [`pyproject.toml`](file:///Users/seanmcdirmid/projects/cleanroom/pyproject.toml) | Primary CLI framework, DAG orchestrator, and runtime runner (`autofab`, `pretense` CLIs) |
-| **`autofab-py`** | [`autofab_python/`](file:///Users/seanmcdirmid/projects/cleanroom/autofab_python/) | [`autofab_python/pyproject.toml`](file:///Users/seanmcdirmid/projects/cleanroom/autofab_python/pyproject.toml) | Python methodology definitions, specification linters, arbiters, and guides |
+| **`autofab-py`** | [`autofab_py/`](file:///Users/seanmcdirmid/projects/cleanroom/autofab_py/) | [`autofab_py/pyproject.toml`](file:///Users/seanmcdirmid/projects/cleanroom/autofab_py/pyproject.toml) | Python methodology definitions, specification linters, arbiters, and guides |
 | **`pretense-py`** | [`pretense/`](file:///Users/seanmcdirmid/projects/cleanroom/pretense/) | [`pretense/pyproject.toml`](file:///Users/seanmcdirmid/projects/cleanroom/pretense/pyproject.toml) | Standalone stateful property testing and behavioral contract framework |
 
 ---
@@ -45,7 +45,7 @@ Because PyPI distribution releases are immutable, new releases require increment
 1. **Root package (`autofab`)**:
    In `pyproject.toml`, update `version = "<new_version>"`.
 2. **Methodology package (`autofab-py`)**:
-   In `autofab_python/pyproject.toml`, update `version = "<new_version>"`.
+   In `autofab_py/pyproject.toml`, update `version = "<new_version>"`.
 3. **Pretense package (`pretense-py`)**:
    In `pretense/pyproject.toml`, update `version = "<new_version>"`.
    In `pretense/__init__.py`, update `__version__ = "<new_version>"`.
@@ -58,8 +58,8 @@ Update lockfiles in root and constituent scopes, then execute repository test va
 # Update root lockfile
 uv lock
 
-# Update autofab_python lockfile
-(cd autofab_python && uv lock)
+# Update autofab_py lockfile
+(cd autofab_py && uv lock)
 
 # Run full repository test and specification linter suite
 bin/test
@@ -74,13 +74,13 @@ Remove stale artifacts and build fresh wheels and source distributions using `uv
 
 ```bash
 # Clean previous dist directories
-rm -rf dist autofab_python/dist pretense/dist
+rm -rf dist autofab_py/dist pretense/dist
 
 # Build root package (autofab)
 uv build
 
 # Build methodology package (autofab-py)
-(cd autofab_python && uv build)
+(cd autofab_py && uv build)
 
 # Build pretense package (pretense-py)
 (cd pretense && uv build)
@@ -88,7 +88,7 @@ uv build
 
 Verify that wheel and sdist files exist:
 - `dist/autofab-<version>-py3-none-any.whl` and `.tar.gz`
-- `autofab_python/dist/autofab_py-<version>-py3-none-any.whl` and `.tar.gz`
+- `autofab_py/dist/autofab_py-<version>-py3-none-any.whl` and `.tar.gz`
 - `pretense/dist/pretense_py-<version>-py3-none-any.whl` and `.tar.gz`
 
 ### Step 4: Publish to PyPI
@@ -109,7 +109,7 @@ env["UV_PUBLISH_TOKEN"] = token
 subprocess.run(["uv", "publish"], env=env, check=True)
 
 # 2. Publish autofab-py
-subprocess.run(["uv", "publish"], cwd="autofab_python", env=env, check=True)
+subprocess.run(["uv", "publish"], cwd="autofab_py", env=env, check=True)
 
 # 3. Publish pretense-py
 subprocess.run(["uv", "publish"], cwd="pretense", env=env, check=True)
@@ -121,7 +121,7 @@ Alternatively, from the shell:
 export UV_PUBLISH_TOKEN="$(python3 -c "import tomllib, os; print(tomllib.load(open(os.path.expanduser('~/.config/autofab/credentials.toml'), 'rb'))['UV_PUBLISH_TOKEN'])")"
 
 uv publish
-(cd autofab_python && uv publish)
+(cd autofab_py && uv publish)
 (cd pretense && uv publish)
 ```
 
@@ -146,7 +146,7 @@ for pkg in ['autofab', 'autofab-py', 'pretense-py']:
 Upon explicit user confirmation, stage, commit, and push the version bump and lockfile updates to the git repository:
 
 ```bash
-git add pyproject.toml uv.lock autofab_python/pyproject.toml autofab_python/uv.lock pretense/pyproject.toml pretense/__init__.py
+git add pyproject.toml uv.lock autofab_py/pyproject.toml autofab_py/uv.lock pretense/pyproject.toml pretense/__init__.py
 git commit -m "chore(release): bump packages to <version>"
 git push
 ```

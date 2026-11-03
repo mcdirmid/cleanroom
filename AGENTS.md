@@ -5,12 +5,12 @@
 - **NEVER modify or rely on the `staging/` directory**: The `staging/` directory is an ephemeral test consumer directory that can be deleted or wiped at any time. Running `bin/sync_staging.sh` counts as modifying the `staging/` directory.
 - **Canonical Codebase**: All production specifications, library implementations, and builds live exclusively in:
   - `autofab/`
-  - `autofab_python/`
+  - `autofab_py/`
   - `pretense/`
 
 ## Strict Prohibition on Hardcoding Specific Paths, Directory Names, and Role Names
 
-- **NO Hardcoded Directory Names or Paths**: Specific directory names, package scopes, or ephemeral workspace paths (such as `staging`, `autofab`, `autofab_python`, `pretense`, `autofab_role_workspaces`, `role_workspaces`, or temporary directories) must NEVER be hardcoded into tools, linters, runners, verifiers, test assertions, or library implementations.
+- **NO Hardcoded Directory Names or Paths**: Specific directory names, package scopes, or ephemeral workspace paths (such as `staging`, `autofab`, `autofab_py`, `pretense`, `autofab_role_workspaces`, `role_workspaces`, or temporary directories) must NEVER be hardcoded into tools, linters, runners, verifiers, test assertions, or library implementations.
 - **NO Hardcoded Role Names**: Role names (such as `high`, `planning`, `low`, `spec_qa`, `lib`, `test`, `qa`, `coverage`, `scenario`, `pretense`, `pretense_qa`, `pretense_coverage`, etc.) must NEVER be hardcoded into core tools, workspace provisioners, runners, orchestrators, or library logic. Roles must be discovered dynamically from the active methodology configuration (e.g., `autofab_roles.toml`, `cleanroom_roles.toml`, `autofab.toml`, `cleanroom.toml`) and target definitions.
 - **Dynamic Scoping and Target Derivation**: Package scopes, workspace roots, role definitions, and directory paths must always be derived dynamically from the target address (e.g., `//<scope>/parts/...#<role>`), active configuration files (e.g., `autofab.toml`, `autofab_roles.toml`), environment variables (e.g., `BUILD_WORKSPACE_DIRECTORY`), or passed explicitly as arguments without hardcoded directory or role defaults.
 - **Agnostic Linters, Runners, and Verifiers**: Linters, runners, and verification tools must verify imports, package structures, and role execution relative to the active target's resolved package root, methodology manifest, and declared dependencies, rather than asserting against hardcoded directory strings or static role enumerations.
@@ -55,16 +55,16 @@
 
 ## Required Guides for Alignments & Tasks
 
-Always read and maintain in context the relevant guide from `autofab_python/guides/` when modifying specs, implementations, tests, or doing alignments:
+Always read and maintain in context the relevant guide from `autofab_py/guides/` when modifying specs, implementations, tests, or doing alignments:
 
-- **High-Level Specs (HLS)**: `autofab_python/guides/high_level_spec.md`
-- **HLS to Planning Alignment**: `autofab_python/guides/high_to_planning.md`
-- **Planning to Low Alignment**: `autofab_python/guides/planning_to_low.md`
-- **Spec QA Arbiter**: `autofab_python/guides/spec_qa.md`
-- **Low-Level Specification to Library Code Alignment**: `autofab_python/guides/low_to_lib.md`
-- **Low-Level Specification to Unit Tests Alignment**: `autofab_python/guides/low_to_test.md`
-- **QA Verification**: `autofab_python/guides/qa.md`
-- **Coverage Arbiter**: `autofab_python/guides/coverage.md`
+- **High-Level Specs (HLS)**: `autofab_py/guides/high_level_spec.md`
+- **HLS to Planning Alignment**: `autofab_py/guides/high_to_planning.md`
+- **Planning to Low Alignment**: `autofab_py/guides/planning_to_low.md`
+- **Spec QA Arbiter**: `autofab_py/guides/spec_qa.md`
+- **Low-Level Specification to Library Code Alignment**: `autofab_py/guides/low_to_lib.md`
+- **Low-Level Specification to Unit Tests Alignment**: `autofab_py/guides/low_to_test.md`
+- **QA Verification**: `autofab_py/guides/qa.md`
+- **Coverage Arbiter**: `autofab_py/guides/coverage.md`
 
 ## Test Execution (bin/test)
 
@@ -73,7 +73,7 @@ Always read and maintain in context the relevant guide from `autofab_python/guid
 
 ## Local Python Linter Invocations (test_lint.py)
 
-- **Required PYTHONPATH**: When running `test_lint.py` directly (such as during dry-run collection verification), ensure `PYTHONPATH` includes `autofab_python`, `pretense`, and all constituent library directories (`autofab/parts/*/lib`, `pretense/parts/*/lib`, or package roots) to prevent cross-package `ModuleNotFoundError` during test module dry runs.
+- **Required PYTHONPATH**: When running `test_lint.py` directly (such as during dry-run collection verification), ensure `PYTHONPATH` includes `autofab_py`, `pretense`, and all constituent library directories (`autofab/parts/*/lib`, `pretense/parts/*/lib`, or package roots) to prevent cross-package `ModuleNotFoundError` during test module dry runs.
 
 ## DO NOT EDIT pyrightconfig.json to fix type problems!
 
@@ -101,4 +101,4 @@ If a test doesn't matter, don't run the test! Do not edit pyrightconfig.json to 
 
 - **Credentials Location**: External service and publishing credentials live in `~/.config/autofab/credentials.toml` outside the working tree (contains `UV_PUBLISH_TOKEN`, `OPENAI_API_KEY`, etc.). NEVER log, commit, or duplicate tokens from this file.
 - **Publishing Instructions**: Detailed procedures for bumping versions, building wheels/sdists, and publishing the three repository packages (`autofab`, `autofab-py`, and `pretense-py`) to PyPI are maintained in [`docs/publishing.md`](file:///Users/seanmcdirmid/projects/cleanroom/docs/publishing.md).
-- **Publishing Execution**: When directed to update or publish PyPI packages, extract `UV_PUBLISH_TOKEN` from `~/.config/autofab/credentials.toml`, build all distributions with `uv build` in their respective package directories (`.`, `autofab_python`, `pretense`), and publish via `uv publish`.
+- **Publishing Execution**: When directed to update or publish PyPI packages, extract `UV_PUBLISH_TOKEN` from `~/.config/autofab/credentials.toml`, build all distributions with `uv build` in their respective package directories (`.`, `autofab_py`, `pretense`), and publish via `uv publish`.

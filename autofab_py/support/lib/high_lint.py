@@ -3,8 +3,8 @@
 high_lint.py — lightweight structural and boundary linter for High-Level Specifications.
 
 Usage:
-    python3 autofab_python/support/lib/high_lint.py [files...]
-    python3 autofab_python/support/lib/high_lint.py [--deps dep1 dep2 ...] -- [target files...]
+    python3 autofab_py/support/lib/high_lint.py [files...]
+    python3 autofab_py/support/lib/high_lint.py [--deps dep1 dep2 ...] -- [target files...]
 
 Checks:
   1. Header matches filename (# <name>).
@@ -28,7 +28,7 @@ try:
     from support.lib import app_info
 except Exception:
     try:
-        from autofab_python.support.lib import app_info
+        from autofab_py.support.lib import app_info
     except Exception:
         import app_info  # type: ignore
 

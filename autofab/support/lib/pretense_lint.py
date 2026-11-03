@@ -41,7 +41,7 @@ try:
         write_text,
     )
 except ImportError:
-    from autofab_python.support.lib.build_lint_common import (  # type: ignore
+    from autofab_py.support.lib.build_lint_common import (  # type: ignore
         check_banned_skips,
         check_no_bare_parts_imports,
         check_no_frozen_exceptions,
@@ -2105,7 +2105,7 @@ def _resolve_lib_dir_and_pkg(module_path: str, user_lib_pkg: str | None = None) 
         from support.lib import app_info
     except Exception:
         try:
-            from autofab_python.support.lib import app_info
+            from autofab_py.support.lib import app_info
         except Exception:
             import app_info  # type: ignore
     markers = getattr(app_info, "get_config_filenames", lambda: ())() + getattr(app_info, "get_roles_filenames", lambda: ())() + ("pyproject.toml",)
@@ -2241,7 +2241,7 @@ def main() -> int:
     if is_uninitialized_pretense_module(content) and "_unimplemented_transition" not in content:
         sys.stderr.write(
             f"{args.module_path} is uninitialized (missing State dataclass or TestCase classes). "
-            f"Consult your Companion Guide (autofab_python/guides/pretense.md) for required structure.\n"
+            f"Consult your Companion Guide (autofab_py/guides/pretense.md) for required structure.\n"
         )
         return 1
 

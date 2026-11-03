@@ -3,8 +3,8 @@
 spec_lint.py — structural, epistemic grounding, and contract linter for Planning Canvases (planning/*.md).
 
 Usage:
-    python3 autofab_python/support/lib/spec_lint.py [files...]
-    python3 autofab_python/support/lib/spec_lint.py [--deps dep1 dep2 ...] -- [target files...]
+    python3 autofab_py/support/lib/spec_lint.py [files...]
+    python3 autofab_py/support/lib/spec_lint.py [--deps dep1 dep2 ...] -- [target files...]
 
 Checks:
   1. Header matches pattern: '# <unit_name> <component_type> component'.
@@ -45,7 +45,7 @@ try:
     from support.lib import app_info
 except Exception:
     try:
-        from autofab_python.support.lib import app_info
+        from autofab_py.support.lib import app_info
     except Exception:
         import app_info  # type: ignore
 

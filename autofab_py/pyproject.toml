@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-only-include = ["support", "guides", "autofab_roles.toml", "pyright_spec.json"]
+only-include = ["__init__.py", "support", "guides", "autofab_roles.toml", "pyright_spec.json", "templates"]
 
 [tool.hatch.build.targets.wheel.sources]
-"" = "autofab_python"
+"" = "autofab_py"

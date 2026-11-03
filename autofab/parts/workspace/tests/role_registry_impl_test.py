@@ -59,7 +59,7 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
     def test_load_roles_from_toml_and_build_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:
             # 1. Fallback to BUILD.bazel when TOML is missing
-            build_dir = os.path.join(tmp_root, "autofab_python")
+            build_dir = os.path.join(tmp_root, "autofab_py")
             os.makedirs(build_dir, exist_ok=True)
             build_file = os.path.join(build_dir, "BUILD.bazel")
             with open(build_file, "w", encoding="utf-8") as f:

@@ -356,7 +356,7 @@ To execute benchmarks deterministically across diverse platforms, Autofab maps m
 To avoid code staleness, rate card hardcoding, or artificial vendor lock-in, Autofab decouples all model specifications, endpoint URLs, and token rate cards into declarative configuration files:
 - **Primary Source**: `~/.config/autofab/model_configs.toml` (managed via `app_info_ext` and user preferences).
 - **Fallback Candidate**: Repository-level candidate files (`model_configs.toml`) or environment overrides (`CLEANROOM_MODEL_CONFIG_FILE`).
-- **Canonical Starter Template & Schema**: `autofab_python/templates/model_configs.toml` serves as the authoritative template and schema definition for initial provisioning via `autofab configure`.
+- **Canonical Starter Template & Schema**: `autofab_py/templates/model_configs.toml` serves as the authoritative template and schema definition for initial provisioning via `autofab configure`.
 - **Dynamic Resolution (`model_config_ext`)**: The benchmark evaluator invokes `load_model_catalog()` to dynamically extract model profiles, pricing rates ($R_{\text{in}}^{\text{uncached}}$, $R_{\text{in}}^{\text{cached}}$, $R_{\text{out}}$), capability tiers (Tier 1 Local, Tier 2 Budget, Tier 3 Mid-Tier, Tier 4 Frontier), and default execution harnesses without modifying library code or AST signatures.
 
 ---
@@ -1298,24 +1298,24 @@ The empirical analysis of the Qwen benchmark flight surfaced three interconnecte
 To permanently eradicate these failure modes across all model tiers, Autofab was hardened with five deterministic gates:
 
 1. **Lib Linter Protocol Hierarchy Gate (`check_signature_alignment`)**:
-   - In [`build_lint_common.py`](file:///Users/seanmcdirmid/projects/autofab/autofab_python/support/lib/build_lint_common.py), classes implementing `.pyi` specifications recursively collect all declared methods and properties across their base protocol hierarchy.
+   - In [`build_lint_common.py`](file:///Users/seanmcdirmid/projects/autofab/autofab_py/support/lib/build_lint_common.py), classes implementing `.pyi` specifications recursively collect all declared methods and properties across their base protocol hierarchy.
    - Any public method defined in `lib/*.py` that is not declared in `low/*.pyi` (excluding Python dunders and the lifecycle `initialize(self)` hook) is rejected deterministically during `lib_lint.py`.
 2. **Test Linter Contract Discipline Gate (`check_test_getattr`)**:
    - **`cast(Any, ...)` Attribute Access Ban**: Prohibits `ast.Attribute` where the value is a `cast(Any, ...)` call. Models can no longer use `cast(Any, obj).uncontracted_method()` to bypass type checking.
    - **Private Member Access Ban**: Rejects any non-dunder private member access (`obj._*`) on collaborator or target objects where `obj` is not `self` or `cls`. White-box mutation of internal state collections is blocked.
    - **Dynamic Reflection Ban**: Rejects `setattr()` and `hasattr()` calls alongside `getattr()`.
 3. **QA Arbiter Specification Grounding & Anti-Leakage Invariant**:
-   - Updated [`autofab_python/guides/qa.md`](file:///Users/seanmcdirmid/projects/autofab/autofab_python/guides/qa.md) to mandate that all test failures be audited strictly against `low/*.pyi` before attributing blame.
+   - Updated [`autofab_py/guides/qa.md`](file:///Users/seanmcdirmid/projects/autofab/autofab_py/guides/qa.md) to mandate that all test failures be audited strictly against `low/*.pyi` before attributing blame.
    - Strictly prohibited citing, suggesting, or naming uncontracted symbols in blame feedback.
    - Mandated that singleton initialization failures caused by missing ad-hoc configuration be blamed on `lib`, never `test`.
 4. **Library Singleton Lifecycle Clarification**:
-   - Updated [`autofab_python/guides/low_to_lib.md`](file:///Users/seanmcdirmid/projects/autofab/autofab_python/guides/low_to_lib.md) to formalize the three legitimate lifecycle mechanisms:
+   - Updated [`autofab_py/guides/low_to_lib.md`](file:///Users/seanmcdirmid/projects/autofab/autofab_py/guides/low_to_lib.md) to formalize the three legitimate lifecycle mechanisms:
      1. Module-level `__initialize__(registry)` for registration;
      2. Instance-level `initialize(self)` post-instantiation hook for self-registration with managers;
      3. Phase-level `enter_phase(phase, setup=...)` for parameterizing contracted singletons (e.g. `RoleConfig.set_role(...)`).
    - Explicitly prohibited ad-hoc multi-phase configuration methods (`configure()`, `setup()`).
 5. **Coverage Arbiter Assumption Pragma Attribution**:
-   - Updated [`autofab_python/guides/coverage.md`](file:///Users/seanmcdirmid/projects/autofab/autofab_python/guides/coverage.md) to prohibit demanding white-box tests that manipulate private state to reach defensive branches.
+   - Updated [`autofab_py/guides/coverage.md`](file:///Users/seanmcdirmid/projects/autofab/autofab_py/guides/coverage.md) to prohibit demanding white-box tests that manipulate private state to reach defensive branches.
    - Unreachable defensive branches must be attributed to `lib` for annotation with `# pragma: no cover (assumption: <reason>)` or dead code elimination, preventing coverage deadlocks.
 
 ---

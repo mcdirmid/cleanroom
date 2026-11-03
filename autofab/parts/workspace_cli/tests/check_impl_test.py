@@ -507,7 +507,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.fake_reg.roles = [
             role_registry.RoleDefinition(
                 role_name="lib",
-                guide_path="autofab_python/guides/lib.md",
+                guide_path="autofab_py/guides/lib.md",
                 writable_file_patterns=["lib/*.py"],
                 readonly_file_patterns=["low/*.pyi"],
                 feedback_role_deps=[],
@@ -528,7 +528,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
             out = mock_out.getvalue()
         self.assertIn("Companion Guide to Follow:", out)
         self.assertIn("guides/lib.md", out)
-        self.assertNotIn("autofab_python/guides/lib.md", out)
+        self.assertNotIn("autofab_py/guides/lib.md", out)
 
     def test_run_get_work_fails_when_gemini_argon_mismatched_in_antigravity(self) -> None:
         with open(os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR), "w", encoding="utf-8") as f:

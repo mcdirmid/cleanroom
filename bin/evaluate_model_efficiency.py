@@ -13,10 +13,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 for p in [
     REPO_ROOT,
     REPO_ROOT / "autofab",
-    REPO_ROOT / "autofab_python",
+    REPO_ROOT / "autofab_py",
     REPO_ROOT / "pretense",
     REPO_ROOT / "autofab" / "support" / "lib",
-    REPO_ROOT / "autofab_python" / "support" / "lib",
+    REPO_ROOT / "autofab_py" / "support" / "lib",
     REPO_ROOT / "pretense" / "support" / "lib",
 ]:
     p_str = str(p)

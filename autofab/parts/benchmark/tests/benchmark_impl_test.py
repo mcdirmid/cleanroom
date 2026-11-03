@@ -525,7 +525,7 @@ class BenchmarkImplTest(unittest.TestCase):
             repo_root = Path(tmp_dir)
             orig_scope_dir = repo_root / "benchmarks" / "parts"
             orig_scope_dir.mkdir(parents=True, exist_ok=True)
-            (orig_scope_dir / app_info.DEFAULT_CONFIG_FILE).write_text('methodology = "//autofab_python"\n', encoding="utf-8")
+            (orig_scope_dir / app_info.DEFAULT_CONFIG_FILE).write_text('methodology = "//autofab_py"\n', encoding="utf-8")
             (repo_root / "benchmarks" / "__init__.py").write_text("", encoding="utf-8")
 
             unit_dir = orig_scope_dir / "sample_part"
@@ -658,7 +658,7 @@ class BenchmarkImplTest(unittest.TestCase):
             repo_root = Path(tmp_dir)
             orig_scope_dir = repo_root / "benchmarks" / "parts"
             orig_scope_dir.mkdir(parents=True, exist_ok=True)
-            (orig_scope_dir / app_info.DEFAULT_CONFIG_FILE).write_text('methodology = "//autofab_python"\n', encoding="utf-8")
+            (orig_scope_dir / app_info.DEFAULT_CONFIG_FILE).write_text('methodology = "//autofab_py"\n', encoding="utf-8")
 
             unit_dir = orig_scope_dir / "sample_part"
             (unit_dir / "high").mkdir(parents=True, exist_ok=True)
@@ -1227,7 +1227,7 @@ class BenchmarkImplTest(unittest.TestCase):
             (low_dir / "dag_engine.pyi").write_text("class DAG: ...\n", encoding="utf-8")
 
             # Provision guides in repo_root
-            guides_dir = repo_root / "autofab_python" / "guides"
+            guides_dir = repo_root / "autofab_py" / "guides"
             guides_dir.mkdir(parents=True, exist_ok=True)
             (guides_dir / "pretense.md").write_text("# Pretense Guide\n", encoding="utf-8")
             (guides_dir / "low_to_lib.md").write_text("# Low to Lib Guide\n", encoding="utf-8")

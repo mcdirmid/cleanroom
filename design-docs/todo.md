@@ -520,8 +520,8 @@ In Google Antigravity environments:
   - Redesigned Pretense state machines from verbose 4-function `StateMachineProto` definitions into an ergonomic class-based DSL (`class TargetStateMachine(StateMachine[StateT]): ...`) with single decorated methods (`@transition(Target.method)` or `@transition.seeding()`).
   - Implemented generic `TransitionContext[Target, P, R]` with `ctx.antecedent()`, `ctx.arguments(generate=..., recognize=...)`, `ctx.returns(...)`, `ctx.consequent(...)`, and `ctx.raises(...)`, keeping the reference model pure by decoupling concrete target instances from transition lambdas.
   - Supported dual-role execution: underneath target singleton dispatch via `singletons={Target: instance}` during test runs, and dynamic in-memory fake synthesis via `sm.as_fake(Target)`.
-  - Migrated 100% of all Pretense test suites repo-wide: 54 canonical suites across `autofab/parts/` and `autofab_python/parts/`, and 18 historical benchmark suites in `benchmarks/results/` (`dag_engine_lite` and `semver_solver`).
-  - Updated Pretense scaffolding tooling and templates (`autofab_python/templates/pretense_template.py`, `pretense/support/lib/pretense_lint.py`, verified with `autofab_python/support/tests/pretense_lint_test.py`).
+  - Migrated 100% of all Pretense test suites repo-wide: 54 canonical suites across `autofab/parts/` and `autofab_py/parts/`, and 18 historical benchmark suites in `benchmarks/results/` (`dag_engine_lite` and `semver_solver`).
+  - Updated Pretense scaffolding tooling and templates (`autofab_py/templates/pretense_template.py`, `pretense/support/lib/pretense_lint.py`, verified with `autofab_py/support/tests/pretense_lint_test.py`).
 - [x] **Phase 12: Stdlib Module Shadowing Elimination & Canonical Environment Discovery**
   - Permanently eliminated Python standard library module shadowing by renaming `pretense/collections.py` to `pretense/collection_utils.py` and updating all internal imports across `pretense/__init__.py`, `pretense/parts/`, and tests.
   - Centralized environment discovery and `PYTHONPATH` construction across all runners, linters, and verifiers into canonical helpers (`get_cleanroom_pythonpath_entries` in `autofab/parts/workspace/lib/file_paths_impl.py` and `autofab/support/lib/app_info.py`).
@@ -589,7 +589,7 @@ The following prioritized roadmap outlines the active forward engineering tasks 
 
 ### Task 3: Contract Slug Integration in Low-Level Specifications & Test Requirement Traceability
 - **Priority**: High
-- **Component**: `autofab_python/` (`support/tools/`), `autofab/guides/low_to_test.md`
+- **Component**: `autofab_py/` (`support/tools/`), `autofab/guides/low_to_test.md`
 - **Design Specification**: [`pretense.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/pretense.md) Section 6 & Section 2
 - **Objective**: Eliminate errors of omission and test suite blind spots without requiring expensive frontier models by formalizing requirement slugs in Low-Level Specifications (`low/*.pyi`) and asserting that every postcondition clause has matching comment/docstring slug tags in tests (`# [slug:<id>]`) verified via zero-token AST/regex linters, avoiding runtime decorators or metadata overhead.
 - **Problem Statement**:
@@ -603,10 +603,10 @@ The following prioritized roadmap outlines the active forward engineering tasks 
   2. **Test Comment Tagging Convention**:
      - Test methods document covered requirements using standard comments or docstring tags (e.g. `# [slug:<slug_id>]` or `"""[slug:<slug_id>]"""`), keeping tests clean and free of runtime decorator dependencies.
   3. **Deterministic Traceability Linter**:
-     - Implement a zero-token Python linter in `autofab_python/` that parses all `[slug:...]` declarations from `low/*.pyi` and scans `tests/*_test.py` comments/docstrings for matching slug references.
+     - Implement a zero-token Python linter in `autofab_py/` that parses all `[slug:...]` declarations from `low/*.pyi` and scans `tests/*_test.py` comments/docstrings for matching slug references.
      - Integrate into `bin/check_files`: fail Pass 1 if any slug declared in `low/*.pyi` lacks a corresponding test comment reference.
   4. **Guide & Prompt Alignment**:
-     - Update `autofab_python/guides/low_to_test.md` to instruct the Certifier ($W_{\text{test}}$) to systematically enumerate and tag test methods with the exact slug comments matching specification clauses.
+     - Update `autofab_py/guides/low_to_test.md` to instruct the Certifier ($W_{\text{test}}$) to systematically enumerate and tag test methods with the exact slug comments matching specification clauses.
   5. **Corpus Migration**:
      - Retrofit contract slugs into benchmark suites (`benchmarks/parts/dag_engine_lite/low/`), establishing the baseline for the upcoming `semver_solver` benchmark.
 
@@ -630,7 +630,7 @@ The following prioritized roadmap outlines the active forward engineering tasks 
 
 ### Task 5: 100% Statement & Branch Coverage Enforcement in Property Fuzzing
 - **Priority**: High
-- **Component**: `autofab_python/` (`pretense/`, `support/tools/`), `autofab_python/guides/pretense_coverage.md`
+- **Component**: `autofab_py/` (`pretense/`, `support/tools/`), `autofab_py/guides/pretense_coverage.md`
 - **Design Specification**: [`pretense.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/pretense.md) Section 5 & Section 11
 - **Objective**: Ensure that Hypothesis stateful property fuzzing suites (`Test<Target>Fuzz` / `compile_hypothesis_test_case`) achieve 100% statement and branch coverage across the library implementation under test, independently from or combined with fixed/deterministic unit tests (`Test<Target>Unit` / `Test<Target>ImplReal`).
 - **Problem Statement**:
@@ -645,11 +645,11 @@ The following prioritized roadmap outlines the active forward engineering tasks 
      - Update the `pretense_coverage` role verifier (`bin/check_files`) to enforce that the SUT achieves 100% statement and branch coverage under the fuzzing pass.
      - When unreached branches remain during property fuzzing, `pretense_coverage` blames the test author (`pretense`) to broaden transition argument strategies (`ctx.arguments(generate=...)`) with generative combinators (`st.integers`, `st.sampled_from`, `st.builds`) rather than blaming `lib` to prune defensive code.
   3. **Guide Alignment**:
-     - Update `autofab_python/guides/pretense.md` and `autofab_python/guides/pretense_coverage.md` with explicit criteria requiring 100% branch coverage from state-machine fuzz transitions.
+     - Update `autofab_py/guides/pretense.md` and `autofab_py/guides/pretense_coverage.md` with explicit criteria requiring 100% branch coverage from state-machine fuzz transitions.
 
 ### Task 6: Contracted Operational Exceptions (Category 2 Exceptions)
 - **Priority**: Medium
-- **Component**: `pretense/`, `autofab_python/guides/`
+- **Component**: `pretense/`, `autofab_py/guides/`
 - **Objective**: Design and implement support for true expected operational exceptions in the contract and property fuzzing pipeline.
 - **Problem Statement**:
   - In Pretense Next, exceptions are categorized into:

@@ -1085,7 +1085,7 @@ def _provision_flight_scope(
         if not any((toml_dir / cfg).is_file() for cfg in app_info.get_config_filenames()):
             try:
                 pipe_line = f'\npipeline = "{pipe_name}"\n' if pipe_name else '\n'
-                (toml_dir / app_info.DEFAULT_CONFIG_FILE).write_text(f'methodology = "//autofab_python"{pipe_line}', encoding="utf-8")
+                (toml_dir / app_info.DEFAULT_CONFIG_FILE).write_text(f'methodology = "//autofab_py"{pipe_line}', encoding="utf-8")
             except OSError:
                 pass
 

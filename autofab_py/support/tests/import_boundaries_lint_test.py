@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """import_boundaries_lint_test.py — Automated verification of Cleanroom import boundaries.
 
-Guarantees across the canonical codebase (autofab and autofab_python):
+Guarantees across the canonical codebase (autofab and autofab_py):
 1. Zero staging imports in any Python or specification file.
 2. Library encapsulation: Non-assembly modules (lib/*.py) never import foreign *_impl modules.
 3. Test isolation: Test modules (tests/*_test.py) only import their target under test.
@@ -45,10 +45,10 @@ def find_repo_root() -> str:
 REPO_ROOT = find_repo_root()
 for p in [
     REPO_ROOT,
-    os.path.join(REPO_ROOT, "autofab_python"),
+    os.path.join(REPO_ROOT, "autofab_py"),
     os.path.join(REPO_ROOT, "autofab"),
     os.path.join(REPO_ROOT, "pretense"),
-    os.path.join(REPO_ROOT, "autofab_python", "support", "lib"),
+    os.path.join(REPO_ROOT, "autofab_py", "support", "lib"),
     os.path.join(REPO_ROOT, "autofab", "support", "lib"),
     os.path.join(REPO_ROOT, "pretense", "support", "lib"),
 ]:
@@ -102,7 +102,7 @@ class ImportBoundariesLintTest(unittest.TestCase):
     def test_no_staging_imports_in_canonical_code(self) -> None:
         """Rule 1: Prohibit any static or dynamic import of staging/ in canonical code."""
         errors: list[str] = []
-        for root_dir in ["autofab", "autofab_python", "pretense"]:
+        for root_dir in ["autofab", "autofab_py", "pretense"]:
             abs_root = os.path.join(REPO_ROOT, root_dir)
             if not os.path.isdir(abs_root):
                 continue
@@ -122,7 +122,7 @@ class ImportBoundariesLintTest(unittest.TestCase):
     def test_library_implementation_encapsulation(self) -> None:
         """Rule 2: Interface modules and non-assembly implementation modules must not import foreign *_impl."""
         errors: list[str] = []
-        for root_dir in ["autofab", "autofab_python", "pretense"]:
+        for root_dir in ["autofab", "autofab_py", "pretense"]:
             pattern = os.path.join(REPO_ROOT, root_dir, "parts", "*", "lib", "*.py")
             for file_path in glob.glob(pattern):
                 errors.extend(check_impl_imports(file_path))
@@ -136,7 +136,7 @@ class ImportBoundariesLintTest(unittest.TestCase):
     def test_test_implementation_isolation(self) -> None:
         """Rule 3: Unit tests must only import their target under test and never foreign *_impl."""
         errors: list[str] = []
-        for root_dir in ["autofab", "autofab_python", "pretense"]:
+        for root_dir in ["autofab", "autofab_py", "pretense"]:
             pattern = os.path.join(REPO_ROOT, root_dir, "parts", "*", "tests", "*_test.py")
             for file_path in glob.glob(pattern):
                 part_dir = os.path.dirname(os.path.dirname(file_path))

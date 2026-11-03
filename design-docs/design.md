@@ -468,11 +468,11 @@ The `parts/workspace` module provisions isolated sibling sandboxes:
 To prevent context pollution, token waste, and agent distraction during autonomous multi-agent execution, Autofab enforces strict hermetic minimalism when provisioning role workspaces (`parts/workspace/` via `provision_impl.py`, `sync_impl.py`, `scaffold_impl.py`, and `roles_impl.py`).
 
 #### 1. Problem: Monolithic Workspace Clutter
-In earlier designs, workspace provisioners naively copied entire methodology directories (`autofab_python/`) into the sibling sandbox:
+In earlier designs, workspace provisioners naively copied entire methodology directories (`autofab_py/`) into the sibling sandbox:
 - Dumping full configuration manifests (`autofab_roles.toml`, `pyright_spec.json`) into the sandbox root.
 - Dumping all 8 methodology guides into `guides/` and all starter templates into `templates/`.
 - Creating redundant methodology subdirectories in the workspace root.
-- Searching for non-existent legacy ghost files (such as `autofab_python_roles.toml`).
+- Searching for non-existent legacy ghost files (such as `autofab_py_roles.toml`).
 
 When LLM agents inspected their directory via tools (`ls`, file readers), these irrelevant files distracted the model, induced repetitive inspection loops, bloated input contexts, and consumed tokens unnecessarily.
 
@@ -480,7 +480,7 @@ When LLM agents inspected their directory via tools (`ls`, file readers), these 
 Autofab eliminates workspace clutter through five architectural controls:
 
 1. **Purging Ghost Manifest References**:
-   - `autofab_roles.toml` is the sole canonical manifest. All fallback loops to `autofab_python_roles.toml` were completely purged across `roles_impl.py`, `provision_impl.py`, `role_registry_impl.py`, `manifest_loader_impl.py`, and `benchmark_impl.py`.
+   - `autofab_roles.toml` is the sole canonical manifest. All fallback loops to `autofab_py_roles.toml` were completely purged across `roles_impl.py`, `provision_impl.py`, `role_registry_impl.py`, `manifest_loader_impl.py`, and `benchmark_impl.py`.
 
 2. **Zipapp Bundling of Role Configurations**:
    - `scaffold_impl.py` packages `autofab_roles.toml` directly inside the standalone runner zipapps (`bin/*`).
@@ -488,7 +488,7 @@ Autofab eliminates workspace clutter through five architectural controls:
 
 3. **Workspace Root Stripping**:
    - `provision_impl.py` and `sync_impl.py` strictly prohibit copying `autofab_roles.toml`, `pyright_spec.json`, or starter templates into the workspace root.
-   - Redundant methodology directories (`autofab_python/`) are never created in the sandbox root.
+   - Redundant methodology directories (`autofab_py/`) are never created in the sandbox root.
 
 4. **Selective Single-Guide Provisioning**:
    - The provisioned `guides/` directory contains **strictly the single companion guide designated for the assigned role** (e.g., `guides/low_to_test.md` for `test`, `guides/low_to_lib.md` for `lib`, `guides/spec_qa.md` for `spec_qa`).

@@ -5,7 +5,7 @@ set -euo pipefail
 
 if [ -n "${TEST_SRCDIR:-}" ]; then
     ws="${TEST_SRCDIR}/${TEST_WORKSPACE:-_main}"
-    bin="$ws/autofab_python/support/lib"
+    bin="$ws/autofab_py/support/lib"
 else
     bin="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 fi
@@ -416,7 +416,7 @@ else
     fail=1
 fi
 check "c17 rewritten lifecycle" "$tmp/c17/tests/widget_impl_test.py" 'from support\.lib\.lifecycle import LifecycleRegistry'
-check "c17 lifecycle in BUILD" "$tmp/c17/tests/BUILD.bazel" '"//autofab_python/support/lib:lifecycle"'
+check "c17 lifecycle in BUILD" "$tmp/c17/tests/BUILD.bazel" '"//autofab_py/support/lib:lifecycle"'
 
 # Case 18: dependency header maintained at top of test file.
 mkdir -p "$tmp/c18/lib" "$tmp/c18/tests"

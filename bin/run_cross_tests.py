@@ -409,7 +409,7 @@ except ImportError:
     env = os.environ.copy()
     env["PYTHONPATH"] = (
         f"{target_lib_dir}:{sandbox}:{REPO_ROOT}:"
-        f"{REPO_ROOT / 'autofab'}:{REPO_ROOT / 'autofab_python'}:{REPO_ROOT / 'pretense'}"
+        f"{REPO_ROOT / 'autofab'}:{REPO_ROOT / 'autofab_py'}:{REPO_ROOT / 'pretense'}"
     )
 
     cmd = [sys.executable, "-m", "pytest", "-q", "--tb=short"]

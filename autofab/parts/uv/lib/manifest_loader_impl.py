@@ -139,7 +139,7 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
         """Discovers parts workspace roots under the workspace root.
 
         Parts packages live under a scope directory that contains a `parts` child
-        (e.g. `autofab_python/parts` in the canonical repository and
+        (e.g. `autofab_py/parts` in the canonical repository and
         `staging/parts` in a role workspace), so the scope directories present on
         the host are derived first; the conventional layouts remain as fallbacks.
         """

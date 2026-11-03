@@ -1,4 +1,4 @@
 # autofab.toml
 # Methodology binding for parts
 
-methodology = "//autofab_python"
+methodology = "//autofab_py"

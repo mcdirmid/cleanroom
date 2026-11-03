@@ -326,7 +326,7 @@ def ensure_companion_lib_scaffolded(
                 try:
                     from lib_lint import is_uninitialized_module
                 except ImportError:
-                    from autofab_python.support.lib.lib_lint import (
+                    from autofab_py.support.lib.lib_lint import (
                         is_uninitialized_module,
                     )
                 if not is_uninitialized_module(content):
@@ -338,7 +338,7 @@ def ensure_companion_lib_scaffolded(
         from lib_lint import generate_asm_content, generate_lib_skeleton
     except ImportError:
         try:
-            from autofab_python.support.lib.lib_lint import (
+            from autofab_py.support.lib.lib_lint import (
                 generate_asm_content,
                 generate_lib_skeleton,
             )
@@ -413,7 +413,7 @@ def main() -> int:
                 from support.lib import app_info
             except Exception:
                 try:
-                    from autofab_python.support.lib import app_info
+                    from autofab_py.support.lib import app_info
                 except Exception:
                     import app_info  # type: ignore
             markers = getattr(app_info, "get_config_filenames", lambda: ())() + getattr(app_info, "get_roles_filenames", lambda: ())() + ("pyproject.toml",)

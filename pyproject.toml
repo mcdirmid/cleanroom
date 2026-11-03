@@ -13,6 +13,8 @@ authors = [
     { name = "Sean McDirmid", email = "mcdirmid@outlook.com" }
 ]
 dependencies = [
+    "autofab-py>=0.2.4",
+    "pretense-py>=0.2.4",
     "pydantic>=2.5.0",
     "pyright>=1.1.350",
     "pytest>=8.0.0",
@@ -32,12 +34,20 @@ dependencies = [
 autofab = "autofab.support.lib.autofab_role_tool:main"
 pretense = "pretense.cli:main"
 
+[tool.uv.workspace]
+members = [
+    "autofab_py",
+    "pretense",
+]
+
+[tool.uv.sources]
+autofab-py = { workspace = true, editable = false }
+pretense-py = { workspace = true, editable = false }
+
 [tool.hatch.build.targets.wheel]
 packages = [
     "autofab",
-    "autofab_python",
     "benchmarks",
-    "pretense",
 ]
 
 [tool.pytest.ini_options]
@@ -45,7 +55,7 @@ testpaths = [
     "autofab/parts",
     "pretense/parts",
     "autofab/support/tests",
-    "autofab_python/support/tests",
+    "autofab_py/support/tests",
     "pretense/support/tests",
 ]
 norecursedirs = [
@@ -59,8 +69,8 @@ norecursedirs = [
 pythonpath = [
     ".",
     "autofab",
-    "autofab_python",
-    "autofab_python/support/lib",
+    "autofab_py",
+    "autofab_py/support/lib",
     "autofab/support/lib",
     "benchmarks",
 ]
@@ -74,8 +84,8 @@ extraPaths = [
     ".",
     "autofab",
     "autofab/support/lib",
-    "autofab_python",
-    "autofab_python/support/lib",
+    "autofab_py",
+    "autofab_py/support/lib",
     "pretense",
 ]
 exclude = [

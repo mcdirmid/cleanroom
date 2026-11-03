@@ -72,9 +72,12 @@ class UvTarget(target.UvTarget):
                     from support.lib import app_info
                 except ImportError:
                     try:
-                        from autofab_python.support.lib import app_info
+                        from autofab_py.support.lib import app_info
                     except ImportError:
-                        import app_info  # type: ignore
+                        try:
+                            from autofab_python.support.lib import app_info  # type: ignore
+                        except ImportError:
+                            import app_info  # type: ignore
                 r_files = app_info.get_roles_filenames()
                 c_files = app_info.get_config_filenames()
                 ws_containers = app_info.get_role_workspaces_containers()

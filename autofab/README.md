@@ -169,7 +169,7 @@ Autofab targets can be addressed using multiple canonical notations:
 Autofab resolves model profiles and rate cards from:
 1. Local workspace: `./model_configs.toml`
 2. User global configuration: `~/.config/autofab/model_configs.toml` (default)
-3. Canonical starter template: `autofab_python/templates/model_configs.toml`
+3. Canonical starter template: `autofab_py/templates/model_configs.toml`
 
 Run `uv run autofab configure` to scaffold `~/.config/autofab/model_configs.toml`.
 

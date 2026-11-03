@@ -6,6 +6,13 @@ resolution-markers = [
     "python_full_version < '3.12' or sys_platform != 'emscripten'",
 ]
 
+[manifest]
+members = [
+    "autofab",
+    "autofab-py",
+    "pretense-py",
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.8.0"
@@ -33,9 +40,11 @@ name = "autofab"
 version = "0.2.4"
 source = { editable = "." }
 dependencies = [
+    { name = "autofab-py" },
     { name = "coverage" },
     { name = "hypothesis" },
     { name = "openai" },
+    { name = "pretense-py" },
     { name = "pydantic" },
     { name = "pyright" },
     { name = "pytest" },
@@ -50,9 +59,11 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "autofab-py", directory = "autofab_py" },
     { name = "coverage", specifier = ">=7.0.0" },
     { name = "hypothesis", specifier = ">=6.100.0" },
     { name = "openai", specifier = ">=1.0.0" },
+    { name = "pretense-py", directory = "pretense" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pyright", specifier = ">=1.1.350" },
     { name = "pytest", specifier = ">=8.0.0" },
@@ -63,6 +74,21 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "tqdm", specifier = ">=4.66.0" },
     { name = "typing-extensions", specifier = ">=4.8.0" },
+]
+
+[[package]]
+name = "autofab-py"
+version = "0.2.4"
+source = { directory = "autofab_py" }
+dependencies = [
+    { name = "pyright" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pyright", specifier = ">=1.1.350" },
+    { name = "pytest", specifier = ">=8.0.0" },
 ]
 
 [[package]]
@@ -523,6 +549,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
+name = "pretense-py"
+version = "0.2.4"
+source = { directory = "pretense" }
+dependencies = [
+    { name = "hypothesis" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "hypothesis", specifier = ">=6.100.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
 ]
 
 [[package]]

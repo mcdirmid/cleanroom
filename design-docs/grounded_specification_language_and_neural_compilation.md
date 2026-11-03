@@ -529,7 +529,7 @@ The following table contrasts GSL with classical specification systems, post-hoc
 
 ## 9. Implementation Roadmap & Integration into Autofab
 
-The GSL compiler and transpilation pipeline integrate directly into the existing Autofab architecture (`autofab` and `autofab_python`), advancing Autofab's 5-stage pipeline into a unified formal toolchain:
+The GSL compiler and transpilation pipeline integrate directly into the existing Autofab architecture (`autofab` and `autofab_py`), advancing Autofab's 5-stage pipeline into a unified formal toolchain:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐

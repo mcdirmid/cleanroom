@@ -2360,7 +2360,39 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
     mod_stem = os.path.splitext(os.path.basename(module_path))[0]
 
     ws_root = os.path.abspath(".")
-    repo_root = str(Path(__file__).resolve().parents[3])
+
+    try:
+        from support.lib import app_info
+        descriptors = app_info.get_role_descriptors()
+    except Exception:
+        try:
+            from autofab_py.support.lib import app_info
+            descriptors = app_info.get_role_descriptors()
+        except Exception:
+            descriptors = (".autofab_role.json", ".cleanroom_role.json")
+
+    parent_name = os.path.basename(os.path.dirname(ws_root))
+    is_role_ws = (
+        any(os.path.isfile(os.path.join(ws_root, d)) for d in descriptors)
+        or "role_workspaces" in parent_name
+    )
+
+    repo_root: Optional[str] = (
+        os.environ.get("AUTOFAB_MAIN_ROOT")
+        or os.environ.get("CLEANROOM_MAIN_ROOT")
+        or os.environ.get("BUILD_WORKSPACE_DIRECTORY")
+    )
+    if not repo_root or not os.path.isdir(repo_root) or "site-packages" in repo_root:
+        repo_root = None
+        cand_p = Path(__file__).resolve().parent
+        while cand_p and cand_p != cand_p.parent:
+            if cand_p.name in ("site-packages", "dist-packages", ".venv", "venv"):
+                cand_p = cand_p.parent
+                continue
+            if (cand_p / ".git").is_dir() or any((cand_p / m).is_file() for m in ("autofab.toml", "cleanroom.toml")):
+                repo_root = str(cand_p)
+                break
+            cand_p = cand_p.parent
 
     # Prioritize workspace paths (test directory, workspace root, and workspace packages)
     prioritized_dirs: list[str] = [
@@ -2377,33 +2409,39 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
                 if os.path.isdir(sup) and sup not in prioritized_dirs:
                     prioritized_dirs.append(sup)
 
-    is_role_ws = (
-        os.path.isfile(os.path.join(ws_root, ".cleanroom_role.json"))
-        or os.path.basename(os.path.dirname(ws_root)) == "role_workspaces"
-    )
-
     # Append fallback paths from canonical repository root only when NOT in an isolated role workspace
-    if not is_role_ws and os.path.isdir(repo_root) and repo_root != ws_root:
+    if not is_role_ws and repo_root and os.path.isdir(repo_root) and repo_root != ws_root:
         if repo_root not in prioritized_dirs:
             prioritized_dirs.append(repo_root)
-        for entry in os.listdir(repo_root):
-            cand = os.path.join(repo_root, entry)
-            if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv", "__pycache__")):
-                if cand not in prioritized_dirs:
-                    prioritized_dirs.append(cand)
-                sup = os.path.join(cand, "support", "lib")
-                if os.path.isdir(sup) and sup not in prioritized_dirs:
-                    prioritized_dirs.append(sup)
+        try:
+            for entry in os.listdir(repo_root):
+                cand = os.path.join(repo_root, entry)
+                if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv", "__pycache__")):
+                    has_parts = os.path.isdir(os.path.join(cand, "parts"))
+                    sup = os.path.join(cand, "support", "lib")
+                    has_sup = os.path.isdir(sup)
+                    if has_parts or has_sup:
+                        if cand not in prioritized_dirs:
+                            prioritized_dirs.append(cand)
+                        if has_sup and sup not in prioritized_dirs:
+                            prioritized_dirs.append(sup)
+        except OSError:
+            pass
 
     dirs_repr = repr([os.path.abspath(d) for d in prioritized_dirs])
     if is_role_ws:
+        repo_abs = os.path.abspath(repo_root) if repo_root else ""
+        repo_filter = (
+            f"and ('site-packages' in p or '.venv' in p or (os.path.abspath(p) != {repr(repo_abs)} and not os.path.abspath(p).startswith({repr(repo_abs)} + os.sep)))"
+            if repo_abs
+            else ""
+        )
         cmd = [
             sys.executable,
             "-c",
             (
                 f"import sys, os, unittest; "
-                f"repo = {repr(os.path.abspath(repo_root))}; "
-                f"sys.path = {dirs_repr} + [p for p in sys.path if p not in {dirs_repr} and os.path.abspath(p) != repo and not os.path.abspath(p).startswith(repo + os.sep)]; "
+                f"sys.path = {dirs_repr} + [p for p in sys.path if p not in {dirs_repr} {repo_filter}]; "
                 f"import importlib; "
                 f"mod = importlib.import_module('{mod_stem}'); "
                 f"suite = unittest.defaultTestLoader.loadTestsFromModule(mod)"
@@ -3180,9 +3218,9 @@ def build_module_resolution_map(
 
     # 1. Standard lifecycle & framework
     import_map["lifecycle"] = "support.lib.lifecycle"
-    label_map["lifecycle"] = "//autofab_python/support/lib:lifecycle"
+    label_map["lifecycle"] = "//autofab_py/support/lib:lifecycle"
     import_map["framework"] = "support.lib.framework"
-    label_map["framework"] = "//autofab_python/support/lib:framework"
+    label_map["framework"] = "//autofab_py/support/lib:framework"
 
     # 2. Local package directory (modules_dir)
     if os.path.isdir(modules_dir):
@@ -4857,12 +4895,12 @@ def compute_lib_derived_info(
             lib_deps.append(f":{d}")
             allowed_deps.add(d)
 
-    framework_label = "//autofab_python/support/lib:framework"
+    framework_label = "//autofab_py/support/lib:framework"
     if framework_label not in lib_deps:
         lib_deps.append(framework_label)
     allowed_deps.add("framework")
 
-    lifecycle_label = "//autofab_python/support/lib:lifecycle"
+    lifecycle_label = "//autofab_py/support/lib:lifecycle"
     if lifecycle_label not in lib_deps:
         lib_deps.append(lifecycle_label)
     allowed_deps.add("lifecycle")
@@ -5071,11 +5109,11 @@ def compute_test_derived_info(
         if s in reachable_map and reachable_map[s] not in test_lib_deps:
             test_lib_deps.append(reachable_map[s])
 
-    framework_label = "//autofab_python/support/lib:framework"
+    framework_label = "//autofab_py/support/lib:framework"
     if framework_label not in test_lib_deps:
         test_lib_deps.append(framework_label)
 
-    lifecycle_label = "//autofab_python/support/lib:lifecycle"
+    lifecycle_label = "//autofab_py/support/lib:lifecycle"
     if lifecycle_label not in test_lib_deps:
         test_lib_deps.append(lifecycle_label)
 
@@ -5248,7 +5286,7 @@ def generate_lib_build_content(
     header = (
         f"# {lib_pkg}/BUILD.bazel\n\n"
         'load("//bin:pyright_library.bzl", "pyright_library")\n'
-        'load("//autofab_python/support/lib:build_derived_test.bzl", "build_derived_test")\n'
+        'load("//autofab_py/support/lib:build_derived_test.bzl", "build_derived_test")\n'
     )
     if has_pip:
         header += 'load("@pip//:requirements.bzl", "requirement")\n'

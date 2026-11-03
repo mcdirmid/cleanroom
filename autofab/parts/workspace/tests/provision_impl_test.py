@@ -675,16 +675,16 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             parts_d = os.path.join(repo_root, "test_scope", "parts")
             os.makedirs(parts_d, exist_ok=True)
             with open(os.path.join(parts_d, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
-                f.write('methodology = "autofab_python"\n')
+                f.write('methodology = "autofab_py"\n')
 
-            meth_d = os.path.join(repo_root, "autofab_python")
+            meth_d = os.path.join(repo_root, "autofab_py")
             os.makedirs(os.path.join(meth_d, "guides"), exist_ok=True)
             os.makedirs(os.path.join(meth_d, "templates"), exist_ok=True)
             os.makedirs(os.path.join(meth_d, "support", "lib"), exist_ok=True)
 
             with open(os.path.join(meth_d, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
                 f.write(
-                    "[methodology]\nname = 'autofab_python'\n\n"
+                    "[methodology]\nname = 'autofab_py'\n\n"
                     "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
                     "guide = 'guides/low_to_lib.md'\n\n"
                     "[roles.qa]\nname = 'qa'\naudit_tag = 'QA_AUDIT'\nguide = 'guides/qa.md'\n"
@@ -723,7 +723,7 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "templates")))
 
             # 3. No redundant methodology directory in workspace root
-            self.assertFalse(os.path.exists(os.path.join(ws_dir, "autofab_python")))
+            self.assertFalse(os.path.exists(os.path.join(ws_dir, "autofab_py")))
 
             # 4. Selective single-guide provisioning: only qa.md, not low_to_lib.md
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, "guides", "qa.md")))

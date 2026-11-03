@@ -5,7 +5,7 @@
 #   1. Explicit override via AUTOFAB_MODEL_CONFIG_FILE or --model flag
 #   2. Local workspace repository: ./model_configs.toml
 #   3. User global configuration: ~/.config/autofab/model_configs.toml (default)
-#   4. Canonical starter template: autofab_python/templates/model_configs.toml
+#   4. Canonical starter template: autofab_py/templates/model_configs.toml
 #
 # ==============================================================================
 # Global Configuration

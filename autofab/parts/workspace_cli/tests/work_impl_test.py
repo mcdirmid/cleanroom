@@ -348,7 +348,7 @@ class WorkspaceWorkImplTest(unittest.TestCase):
     def test_evaluate_work(self) -> None:
         node = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("scope/lib/foo.py"),
-            role_address=dag_storage.RoleAddress("//autofab_python:lib"),
+            role_address=dag_storage.RoleAddress("//autofab_py:lib"),
         )
         task = work_scheduler.ScheduledTask(
             node=node,
@@ -788,7 +788,7 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             work_scheduler.ScheduledTask(
                 node=dag_storage.DagNode(
                     unit_address=dag_storage.UnitAddress(f"staging/parts/sample/lib/unit_{i}.py"),
-                    role_address=dag_storage.RoleAddress("//autofab_python:lib"),
+                    role_address=dag_storage.RoleAddress("//autofab_py:lib"),
                 ),
                 task_prompt=f"Implement unit_{i}.py",
                 dependency_paths=[],

@@ -3,8 +3,8 @@
 low_lint.py — structural and contract linter for Low-Level Specifications (low/*.pyi).
 
 Usage:
-    python3 autofab_python/support/lib/low_lint.py [files...]
-    python3 autofab_python/support/lib/low_lint.py [--deps dep1 dep2 ...] -- [target files...]
+    python3 autofab_py/support/lib/low_lint.py [files...]
+    python3 autofab_py/support/lib/low_lint.py [--deps dep1 dep2 ...] -- [target files...]
 
 Checks:
   1. File type handling:
@@ -38,7 +38,7 @@ try:
     from support.lib import app_info
 except Exception:
     try:
-        from autofab_python.support.lib import app_info
+        from autofab_py.support.lib import app_info
     except Exception:
         import app_info  # type: ignore
 

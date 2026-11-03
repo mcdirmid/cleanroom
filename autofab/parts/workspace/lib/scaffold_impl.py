@@ -429,7 +429,7 @@ def _find_roles_toml_content(bin_dir: str) -> Optional[bytes]:
                 pass
 
     for fname in app_info.get_roles_filenames():
-        for pkg in ("autofab_python", "autofab", "support"):
+        for pkg in ("autofab_py", "autofab_python", "autofab", "support"):
             try:
                 import importlib.resources
                 data = importlib.resources.files(pkg).joinpath(fname).read_bytes()

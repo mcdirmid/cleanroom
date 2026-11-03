@@ -514,13 +514,13 @@ class TestLifecycle(unittest.TestCase):
             self.assertIs(svc1, svc2)
 
     def test_module_identity_and_cross_aliasing(self) -> None:
-        """CUJ: Module identity is preserved across support.lib and autofab_python.support.lib aliases.
+        """CUJ: Module identity is preserved across support.lib and autofab_py.support.lib aliases.
 
-        Verifies that importing lifecycle via support.lib.lifecycle and autofab_python.support.lib.lifecycle
+        Verifies that importing lifecycle via support.lib.lifecycle and autofab_py.support.lib.lifecycle
         returns the exact same module object in sys.modules, sharing the global default registry.
         """
         import support.lib.lifecycle as mod1
-        import autofab_python.support.lib.lifecycle as mod2
+        import autofab_py.support.lib.lifecycle as mod2
 
         self.assertIs(mod1, mod2)
         self.assertIs(mod1.get_default_registry(), mod2.get_default_registry())

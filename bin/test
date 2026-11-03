@@ -14,7 +14,7 @@ from pathlib import Path
 
 repo_root = Path(".").resolve()
 sys.path.insert(0, str(repo_root))
-sys.path.insert(0, str(repo_root / "autofab_python"))
+sys.path.insert(0, str(repo_root / "autofab_py"))
 try:
     from support.lib import app_info
     c_names = app_info.get_config_filenames()
@@ -86,7 +86,7 @@ from pathlib import Path
 
 repo_root = Path(".").resolve()
 sys.path.insert(0, str(repo_root))
-sys.path.insert(0, str(repo_root / "autofab_python"))
+sys.path.insert(0, str(repo_root / "autofab_py"))
 try:
     from support.lib import app_info
     c_names = app_info.get_config_filenames()
@@ -191,7 +191,7 @@ if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
             ;;
         *.pyi)
             echo "=== Type Checking Specification Stub: $TARGET ==="
-            SPEC_PROJ="autofab_python/pyright_spec.json"
+            SPEC_PROJ="autofab_py/pyright_spec.json"
             if [ ! -f "$SPEC_PROJ" ]; then
                 SPEC_PROJ="update_python_with_ai/pyright_spec.json"
             fi
@@ -239,7 +239,7 @@ if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
     esac
 else
     echo "=== Type Checking (pyright) ==="
-    uv run pyright autofab autofab_python pretense
+    uv run pyright autofab autofab_py pretense
     echo ""
     echo "=== Tests (pytest) ==="
     uv run pytest -q --tb=short -n auto --testmon "$@"

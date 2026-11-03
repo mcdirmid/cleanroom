@@ -329,6 +329,7 @@ def _load_roles_from_zipapp() -> Optional[Dict[str, roles.RoleDefinition]]:
                 with zipfile.ZipFile(sys.argv[0], "r") as zf:
                     cand_names = list(app_info.get_roles_filenames())
                     cand_names.extend([f"support/{r}" for r in app_info.get_roles_filenames()])
+                    cand_names.extend([f"autofab_py/{r}" for r in app_info.get_roles_filenames()])
                     cand_names.extend([f"autofab_python/{r}" for r in app_info.get_roles_filenames()])
                     for cand in cand_names:
                         if cand in zf.namelist():
@@ -342,7 +343,7 @@ def _load_roles_from_zipapp() -> Optional[Dict[str, roles.RoleDefinition]]:
     try:
         import pkgutil
         for rname in app_info.get_roles_filenames():
-            for pkg in ("support", "autofab_python", "autofab"):
+            for pkg in ("support", "autofab_py", "autofab_python", "autofab"):
                 try:
                     data = pkgutil.get_data(pkg, rname)
                     if data:
@@ -598,7 +599,7 @@ def _find_pipeline_for_scope(root: str, dir_scope: str) -> Optional[str]:
 def _load_roles_from_methodology(
     root: str, methodology: str
 ) -> Optional[Dict[str, roles.RoleDefinition]]:
-    """Loads role definitions from a bound methodology string (e.g. '//autofab_python')."""
+    """Loads role definitions from a bound methodology string (e.g. '//autofab_py')."""
     if methodology.startswith("//") or methodology.startswith("./"):
         rel_pkg = methodology.lstrip("./").lstrip("/")
         pkg_dir = os.path.join(root, rel_pkg)

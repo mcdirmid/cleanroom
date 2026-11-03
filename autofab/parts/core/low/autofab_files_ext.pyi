@@ -8,7 +8,7 @@ The `autofab_files_ext` external component specifies the filesystem schema, stan
 - `AUTOFAB_CONFIG_FILE: str = "autofab.toml"`:
   Scoped methodology configuration file present in the `parts` directory of an Autofab project (not workspace), binding that package hierarchy to its methodology specification package.
   - Schema:
-    - `methodology: str`: Canonical target address or package path to the methodology defining the roles (e.g. `"//autofab_python"`).
+    - `methodology: str`: Canonical target address or package path to the methodology defining the roles (e.g. `"//autofab_py"`).
 
 - `AUTOFAB_ROLES_FILE: str = "autofab_roles.toml"`:
   Canonical role definitions file located within methodology packages or at repository root.

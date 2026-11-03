@@ -8,7 +8,7 @@ set -euo pipefail
 
 if [ -n "${TEST_SRCDIR:-}" ]; then
     ws="${TEST_SRCDIR}/${TEST_WORKSPACE:-_main}"
-    bin="$ws/autofab_python/support/lib"
+    bin="$ws/autofab_py/support/lib"
 else
     bin="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 fi

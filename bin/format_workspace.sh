@@ -54,12 +54,12 @@ fi
 echo "==> Formatting Python files (ruff)..."
 RUFF_ARGS=(
     format
-    --exclude "autofab_python/templates"
+    --exclude "autofab_py/templates"
     --exclude "*.pyi"
     --exclude "staging"
     --exclude "testing"
     autofab
-    autofab_python
+    autofab_py
     pretense
 )
 
@@ -75,7 +75,7 @@ MD_FILES=()
 # AGENTS.md and READMEs
 [ -f "AGENTS.md" ] && MD_FILES+=("AGENTS.md")
 [ -f "autofab/README.md" ] && MD_FILES+=("autofab/README.md")
-[ -f "autofab_python/README.md" ] && MD_FILES+=("autofab_python/README.md")
+[ -f "autofab_py/README.md" ] && MD_FILES+=("autofab_py/README.md")
 [ -f "pretense/README.md" ] && MD_FILES+=("pretense/README.md")
 
 # High-level specs in parts
@@ -86,7 +86,7 @@ done < <(find autofab/parts -name "*.md" 2>/dev/null | sort)
 # Active guides
 while IFS= read -r f; do
     [ -n "$f" ] && MD_FILES+=("$f")
-done < <(find autofab_python/guides -maxdepth 1 -name "*.md" 2>/dev/null | sort)
+done < <(find autofab_py/guides -maxdepth 1 -name "*.md" 2>/dev/null | sort)
 
 while IFS= read -r f; do
     [ -n "$f" ] && MD_FILES+=("$f")

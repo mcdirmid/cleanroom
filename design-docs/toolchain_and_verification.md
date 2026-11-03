@@ -9,8 +9,8 @@ Autofab software engineering eliminates hallucinations, ambiguity, and implement
 This document describes the complete toolchain architecture implemented in Autofab:
 1. **The Modular Coverage Evaluation Engine (`autofab/parts/tools/`)**: Modular single-target test tracing, AST statement normalization, and contiguous span deficit reporting ([`tool_coverage.py`](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/lib/tool_coverage.py), [`tool_coverage_impl.py`](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/lib/tool_coverage_impl.py)), executed natively via `bin/check_files` under the `coverage` role.
 2. **The Modular Workspace & Tools Engine (`autofab/parts/workspace/` & `autofab/parts/tools/`)**: Pure Python workspace lifecycle management (`workspace_roles`, `workspace_scaffold`, `workspace_stub`, `workspace_provision`, `workspace_registry`, `workspace_sync`), convention-based role provisioning, Git-backed pre-tool checkpointing and rollback (`bin/revert`, `bin/checkpoint`), and in-band work queue evaluation (`workspace_tool.py`, `workspace_work.py`, `workspace_check.py`, `workspace_dirtiness.py`).
-3. **The Specification Linters (`autofab_python/support/lib/`)**: AST-based prose validation (`high_lint.py`), planning canvas structure validation (`spec_lint.py`), and pure interface stub verification (`low_lint.py`).
-4. **The Code & Test Linters (`autofab_python/support/lib/`)**: Concrete implementation compliance (`lib_lint.py`), requirement comment citation validation (`test_lint.py`), and exception suppression vs. reification analysis (`build_lint_common.py: check_exception_eating`).
+3. **The Specification Linters (`autofab_py/support/lib/`)**: AST-based prose validation (`high_lint.py`), planning canvas structure validation (`spec_lint.py`), and pure interface stub verification (`low_lint.py`).
+4. **The Code & Test Linters (`autofab_py/support/lib/`)**: Concrete implementation compliance (`lib_lint.py`), requirement comment citation validation (`test_lint.py`), and exception suppression vs. reification analysis (`build_lint_common.py: check_exception_eating`).
 5. **Native Type Verification (`uv run pyright`)**: Hermetic, sub-second static type analysis driven by dynamic `PYTHONPATH` construction and package-level `pyproject.toml` configurations.
 
 ```
@@ -68,7 +68,7 @@ Autofab establishes a strict architectural boundary between **production domain 
 │  • parts/systems: Unified system assembly initialization                               │
 │    (uv_autofab_asm.py, uv_openai_loop_asm.py)                                        │
 │                                                                                        │
-│  [autofab_python/support/lib/*] (Meta-Framework & Procedural Linters)           │
+│  [autofab_py/support/lib/*] (Meta-Framework & Procedural Linters)           │
 │  ───────────────────────────────────────────────────────────────────────────           │
 │  • Metaclass Runtime Primitives: framework.py, lifecycle.py                            │
 │    (Foundational spec decorators: @singleton_type, @data_type, @variant, @operation)   │
@@ -161,9 +161,9 @@ Uncovered statement spans in sandbox_file_reader_impl.py:
 
 ---
 
-## 4. The Specification & Code Linters: `autofab_python/support/lib/`
+## 4. The Specification & Code Linters: `autofab_py/support/lib/`
 
-Autofab provides specialized deterministic AST linters in `autofab_python/support/lib/` that validate specification authoring and code alignment:
+Autofab provides specialized deterministic AST linters in `autofab_py/support/lib/` that validate specification authoring and code alignment:
 
 ### 4.1 `high_lint.py`: High-Level Specification Linter
 - Validates Markdown structure under `## Purpose` and `## Types and Behavior`.
@@ -172,7 +172,7 @@ Autofab provides specialized deterministic AST linters in `autofab_python/suppor
 - Enforces component dependency rules: front-matter `imports:` and component isolation.
 
 ### 4.2 `spec_lint.py`: Planning Canvas Linter
-- Enforces the requirements of `autofab_python/guides/spec_qa.md`.
+- Enforces the requirements of `autofab_py/guides/spec_qa.md`.
 - Verifies `## Intent` prose separation from `## Factored Contracts`.
 - Enforces the Zero-Conjunction Rule on atomic contract statements (`[slug]`).
 - Validates epistemic grounding completeness under `## Grounding`, verifying that all `### Knowledge Requirements` are grounded against imported capability provisions.
@@ -188,7 +188,7 @@ Autofab provides specialized deterministic AST linters in `autofab_python/suppor
 - Enforces strict boundary rules preventing framework imports (`framework.py`) inside consumer library implementations.
 
 ### 4.5 `test_lint.py`: Unit Test Alignment Linter
-- Enforces the requirements of `autofab_python/guides/low_to_test.md`.
+- Enforces the requirements of `autofab_py/guides/low_to_test.md`.
 - Verifies that test assertions carry `# Requirement: <exact text>` comments matching canonical contract statements.
 - Verifies that every test file concludes with `# Untested requirements: None` or an explicit bulleted list of untestable requirements.
 

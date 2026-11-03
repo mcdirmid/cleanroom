@@ -12,7 +12,7 @@ while _curr and _curr != _curr.parent:
         break
     _curr = _curr.parent
 
-for _p in (_REPO_ROOT, _REPO_ROOT / "autofab_python", _REPO_ROOT / "autofab"):
+for _p in (_REPO_ROOT, _REPO_ROOT / "autofab_py", _REPO_ROOT / "autofab"):
     _str_p = str(_p)
     if _p.is_dir() and _str_p not in sys.path:
         sys.path.insert(0, _str_p)

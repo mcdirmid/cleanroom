@@ -21,7 +21,7 @@ The worked example in Section 6 uses three hand-written scenario files for `work
 
 ## 2. Why the Existing Gate Is Insufficient
 
-The `spec_qa` arbiter is the only semantic bridge between HLS and LLS. Its current contract is stated in [spec_qa.md](file:///Users/seanmcdirmid/projects/autofab/autofab_python/guides/spec_qa.md): the arbiter evaluates low against high "as if a hypothetical direct `high_to_low.md` guide governed the relationship", triages a missing requirement between `planning/<name>.md` and `low/<name>.pyi`, and delivers non-prescriptive blame to one culprit file per turn.
+The `spec_qa` arbiter is the only semantic bridge between HLS and LLS. Its current contract is stated in [spec_qa.md](file:///Users/seanmcdirmid/projects/autofab/autofab_py/guides/spec_qa.md): the arbiter evaluates low against high "as if a hypothetical direct `high_to_low.md` guide governed the relationship", triages a missing requirement between `planning/<name>.md` and `low/<name>.pyi`, and delivers non-prescriptive blame to one culprit file per turn.
 
 That gate is holistic in ways a scenario-based evaluation is not.
 
@@ -253,5 +253,5 @@ The same isolation holds one tier up, between the scenario and the translation a
 - [paper_submission_design_doc.md §2.6](file:///Users/seanmcdirmid/projects/autofab/design-docs/paper_submission_design_doc.md) — the CUJ trap, the code coverage illusion, and branch mining.
 - [Auditor Roles & Verification Dirtiness Architecture](file:///Users/seanmcdirmid/projects/autofab/design-docs/auditor_roles_and_dirtiness_architecture.md) — in-band attestations and auditor dirtiness.
 - [In-Band Source Metadata & State Persistence](file:///Users/seanmcdirmid/projects/autofab/design-docs/in_band_source_metadata.md) — source hashes and forward dirty evaluation.
-- [spec_qa arbiter guide](file:///Users/seanmcdirmid/projects/autofab/autofab_python/guides/spec_qa.md) — the existing HLS-to-LLS semantic gate.
+- [spec_qa arbiter guide](file:///Users/seanmcdirmid/projects/autofab/autofab_py/guides/spec_qa.md) — the existing HLS-to-LLS semantic gate.
 - Working example: [high/workspace_work.md](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/high/workspace_work.md), [high/workspace_work_impl.md](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/high/workspace_work_impl.md), [low/workspace_work.pyi](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/low/workspace_work.pyi), [low/workspace_work_impl.pyi](file:///Users/seanmcdirmid/projects/autofab/autofab/parts/tools/low/workspace_work_impl.pyi).

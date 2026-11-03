@@ -6,7 +6,7 @@ import os
 import tempfile
 import unittest
 
-from autofab_python.support.lib.build_lint_common import (
+from autofab_py.support.lib.build_lint_common import (
     check_banned_skips,
     check_exception_eating,
     check_no_error_testing,

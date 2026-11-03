@@ -319,13 +319,13 @@ _active_scope: ContextVar[Optional[LifecycleScope]] = ContextVar(
 )
 
 # Guarantee module identity across import alias variations
-# (support.lib.lifecycle, autofab_python.support.lib.lifecycle)
+# (support.lib.lifecycle, autofab_py.support.lib.lifecycle)
 import types as _types
 
 _MODULE_ALIASES = (
     "lifecycle",
     "support.lib.lifecycle",
-    "autofab_python.support.lib.lifecycle",
+    "autofab_py.support.lib.lifecycle",
     "autofab.support.lib.lifecycle",
 )
 

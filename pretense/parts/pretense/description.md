@@ -1,4 +1,4 @@
-# Pretense Part (`autofab_python/parts/pretense`)
+# Pretense Part (`pretense/parts/pretense`)
 
 ## Purpose
 
@@ -8,13 +8,13 @@ Software verification driven purely by example-based testing or AST statement co
 
 ## Key Components & Specifications
 
-- [`pretense.md`](file:///Users/seanmcdirmid/projects/cleanroom/autofab_python/parts/pretense/high/pretense.md): Defines the core state machine abstractions, sentinels, outcome descriptors, transition models, stateful collection structures, hypothesis draw contexts, fake adapter contracts, and the `PretenseEngine` interface.
-- [`pretense_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/autofab_python/parts/pretense/high/pretense_impl.md): Realizes the dynamic Hypothesis state machine compiler, active step diagnostic tracking, minimal counterexample unit test synthesis, watchdog timeout enforcement, test discovery, and the `pretense` command-line test runner.
+- [`pretense.md`](file:///Users/seanmcdirmid/projects/cleanroom/pretense/parts/pretense/high/pretense.md): Defines the core state machine abstractions, sentinels, outcome descriptors, transition models, stateful collection structures, hypothesis draw contexts, fake adapter contracts, and the `PretenseEngine` interface.
+- [`pretense_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/pretense/parts/pretense/high/pretense_impl.md): Realizes the dynamic Hypothesis state machine compiler, active step diagnostic tracking, minimal counterexample unit test synthesis, watchdog timeout enforcement, test discovery, and the `pretense` command-line test runner.
 
 ## How It Is Used by Other Parts
 
 Pretense serves as Autofab's primary state-machine testing and contract verification engine:
 - **`autofab_roles.toml`**: Configures the `pretense`, `pretense_qa`, and `pretense_coverage` roles to invoke `uv run pretense ...` across all parts.
-- **`autofab_python/support`**: `pretense_lint.py` enforces structural rules on `*_pretense.py` files and validates that state machines conform to Pretense contracts.
+- **`autofab_py/support`**: `pretense_lint.py` enforces structural rules on `*_pretense.py` files and validates that state machines conform to Pretense contracts.
 - **`benchmark`**: Provisions `.env` watchdogs (`PYTHONFAULTHANDLER=1`, `PRETENSE_TIMEOUT=45.0`) and provides baseline developer models with Pretense verification tools.
 - **All constituent parts**: Every Autofab part maintains executable state machine specifications under `parts/<name>/pretense/` targeting the part's implementation modules.

@@ -317,8 +317,8 @@ def get_template_model_config_file() -> str:
     curr = os.path.dirname(os.path.abspath(__file__))
     candidates = [
         os.path.abspath(os.path.join(curr, "..", "..", "templates", "model_configs.toml")),
-        os.path.abspath(os.path.join(curr, "..", "..", "..", "autofab_python", "templates", "model_configs.toml")),
-        os.path.abspath(os.path.join(curr, "..", "..", "..", "autofab_python", "templates", "model_configs.toml")),
+        os.path.abspath(os.path.join(curr, "..", "..", "..", "autofab_py", "templates", "model_configs.toml")),
+        os.path.abspath(os.path.join(curr, "..", "..", "..", "autofab_py", "templates", "model_configs.toml")),
         os.path.abspath(os.path.join(curr, "..", "..", "..", "templates", "model_configs.toml")),
     ]
     for cand in candidates:

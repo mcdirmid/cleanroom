@@ -60,7 +60,7 @@
 ### Stage 2: Concrete Scenarios (`scenarios/*.md`)
 - **Role**: Behavioral scenario grounding and end-to-end interface walkthroughs.
 - **Key Concepts**:
-  - Authored by `scenario` role via [`high_to_scenario.md`](file:///Users/seanmcdirmid/projects/autofab/autofab_python/guides/high_to_scenario.md).
+  - Authored by `scenario` role via [`high_to_scenario.md`](file:///Users/seanmcdirmid/projects/autofab/autofab_py/guides/high_to_scenario.md).
   - Concrete step-by-step journeys exercising operations with realistic inputs, state transitions, and observable outcomes.
   - Validates that high-level specifications contain no ungrounded or unreachable operations.
 - **Reference**: [`concrete_scenario_validation.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/concrete_scenario_validation.md)
@@ -84,7 +84,7 @@
   - Structural decorators: `@singleton_type`, `@poly_type`, `@data_type`, `@variant`, `@operation`, `@override`.
   - Design-by-Contract docstrings organizing obligations into `INVARIANTS:`, `PRECONDITIONS:`, and `POSTCONDITIONS:`.
   - Natural Language Grounding Arguments (`GROUNDING:`) in `low/*_impl.pyi` translating planning provisions into concrete collaborator classes and methods.
-  - Verified hermetically by native Pyright (via `autofab_python/pyright_spec.json`), `low_lint.py`, and `spec_lint.py` through the `spec_qa` arbiter (Gate 1).
+  - Verified hermetically by native Pyright (via `autofab_py/pyright_spec.json`), `low_lint.py`, and `spec_lint.py` through the `spec_qa` arbiter (Gate 1).
 - **Reference**: [`low_level_spec_format.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/low_level_spec_format.md)
 
 ### Stage 5: Library Code & Contract-Driven Tests
